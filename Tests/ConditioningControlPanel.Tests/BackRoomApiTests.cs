@@ -47,10 +47,14 @@ public class BackRoomApiTests
     [InlineData("slot", "state", "GET")]
     [InlineData("slot", "tape", "POST")]
     [InlineData("slot", "cursor", "POST")]
+    [InlineData("slot", "chase", "POST")]
     [InlineData("wheel", "state", "GET")]
     [InlineData("wheel", "spin", "POST")]
     [InlineData("counter", "state", "GET")]
     [InlineData("counter", "buy", "POST")]
+    [InlineData("decorations", "state", "GET")]
+    [InlineData("decorations", "buy", "POST")]
+    [InlineData("decorations", "layout", "POST")]
     public void Whitelist_ResolvesTheContractRows(string station, string op, string method)
     {
         Assert.True(BackRoomApi.TryResolve(station, op, out var m, out var path));
@@ -167,6 +171,21 @@ public class BackRoomApiTests
         Assert.Empty(sp);
     }
 
+    [Theory]
+    [InlineData("<!DOCTYPE html><html>Cannot POST /v2/backroom/slot/chase</html>")]
+    [InlineData("")]
+    public async Task Unworded404_IsBadOp_NotOffline(string body)
+    {
+        // A route the server does not have will not appear by retrying it. Wording that 'offline' put it
+        // in the page's RETRYABLE set, so the slot's undeployed optional chase route refused the whole
+        // sit-down after four retries and the cabinet read "closed for a moment".
+        var (api, h, sp) = Make();
+        h.Answer = _ => Json(404, body);
+        var r = await api.RelayAsync("slot", "chase", null, null, TestContext.Current.CancellationToken);
+        Assert.Equal((false, 404, "bad_op"), (r.Ok, r.Status, r.Reason));
+        Assert.Empty(sp);
+    }
+
     private static (BackRoomApi Api, FakeHandler H, List<(string Account, long Revision, string[] Grants)> Applied) MakeCounter()
     {
         var h = new FakeHandler();
@@ -221,5 +240,65 @@ public class BackRoomApiTests
         await api.RelayAsync("counter", "state", null, null, TestContext.Current.CancellationToken);
         Assert.Equal(5, ownership.Revision);
         Assert.True(ownership.IsGranted("fx.flash.pendulum"));
+    }
+    [Theory]
+    [InlineData("state", null, false)]
+    [InlineData("layout", null, false)]
+    [InlineData("buy", null, true)]
+    [InlineData("buy", "owned", true)]
+    [InlineData("buy", "insufficient", true)]
+    public async Task Decorations_OnlyPurchasesAdoptBalance(string op, string? reason, bool adopts)
+    {
+        var (api, h, sp) = Make();
+        var reply = new JObject { ["ok"] = reason == null, ["sp"] = 19,
+            ["catalogVersion"] = "v1", ["decorations"] = new JObject { ["revision"] = 4 } };
+        if (reason != null) reply["reason"] = reason;
+        h.Answer = _ => Json(200, reply.ToString());
+        var body = new JObject { ["decorationId"] = "plant", ["catalogVersion"] = "v1",
+            ["revision"] = 3, ["layout"] = new JObject { ["plant"] = "fern" }, ["unified_id"] = "forged" };
+        var result = await api.RelayAsync("decorations", op, "idem-decoration", body, TestContext.Current.CancellationToken);
+        Assert.Equal(reason, result.Reason);
+        Assert.Equal(4, (int)result.Body!["decorations"]!["revision"]!);
+        Assert.Equal(adopts ? new[] { 19 } : Array.Empty<int>(), sp);
+        if (op != "state")
+        {
+            var sent = JObject.Parse(Assert.Single(h.Seen).Body!);
+            Assert.Equal("uid-1", (string?)sent["unified_id"]);
+            Assert.Equal("idem-decoration", (string?)sent["idem"]);
+            Assert.True(JToken.DeepEquals(body["layout"], sent["layout"]));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AccountChangesDuringRequest_DropsBalanceAndOwnership(bool signOut)
+    {
+        (string UnifiedId, string Token)? identity = ("first", "token");
+        var h = new FakeHandler();
+        var sp = new List<int>();
+        int grants = 0;
+        var api = new BackRoomApi(new HttpClient(h), () => identity, sp.Add, (_, _, _) => grants++);
+        h.Answer = _ => {
+            identity = signOut ? null : ("second", "token2");
+            return Json(200, "{\"ok\":true,\"sp\":99," + Prizes + "}");
+        };
+        var result = await api.RelayAsync("counter", "buy", "idem-old", null, TestContext.Current.CancellationToken);
+        Assert.Equal("closed", result.Reason);
+        Assert.Null(result.Body);
+        Assert.Empty(sp);
+        Assert.Equal(0, grants);
+    }
+
+    [Fact]
+    public async Task AccountChangesAfterNetworkFailure_DoesNotRetryOldMutation()
+    {
+        (string UnifiedId, string Token)? identity = ("first", "token");
+        var h = new FakeHandler();
+        var api = new BackRoomApi(new HttpClient(h), () => identity, null);
+        h.Answer = _ => { identity = ("second", "token2"); throw new HttpRequestException("lost"); };
+        var result = await api.RelayAsync("decorations", "buy", "idem-old", null, TestContext.Current.CancellationToken);
+        Assert.Equal("closed", result.Reason);
+        Assert.Single(h.Seen);
     }
 }

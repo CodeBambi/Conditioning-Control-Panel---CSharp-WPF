@@ -16,6 +16,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createContactFx } from './contactFx.js';
 import { KART_BASE_SPEED, KART_MAX_SPEED, ROAD_HALF_W } from './consts.js';
 
 const STREAK_N = 56, WIND_N = 90;
@@ -25,6 +26,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createSpeedFx({ scene, camera, root, reducedMotion = false }) {
+  const contacts = createContactFx({ scene, reducedMotion });
   // ---- streaks (camera space) ----
   const streaks = [];
   for (let i = 0; i < STREAK_N; i++) streaks.push({ a: rand(0, Math.PI * 2), r0: rand(0.5, 0.95), p: Math.random(), spin: rand(0.6, 1.4) });
@@ -68,6 +70,7 @@ export function createSpeedFx({ scene, camera, root, reducedMotion = false }) {
 
   function update(dt, ks, layout) {
     if (!(dt > 0) || !ks) return;
+    contacts.update(dt, layout);
     const boostT = ks.boostSec > 0 ? 1 : 0;
     boost += (boostT - boost) * Math.min(1, dt * (boostT ? 8 : 1.6));
     // 0 a touch under cruise, 1 at the cap: cruise shows a whisper, boost the full streak
@@ -125,6 +128,7 @@ export function createSpeedFx({ scene, camera, root, reducedMotion = false }) {
   }
 
   function dispose() {
+    contacts.dispose();
     if (sLines.parent) sLines.parent.remove(sLines);
     if (cameraAdded && camera.parent === scene) scene.remove(camera);
     scene.remove(wLines);
@@ -132,7 +136,7 @@ export function createSpeedFx({ scene, camera, root, reducedMotion = false }) {
     if (vig) vig.remove();
   }
 
-  return { update, dispose };
+  return { update, dispose, beat: contacts.beat, clear: contacts.clear };
 }
 
 // self-check: node --check is the bar (the DOM vignette and the camera are only touched inside createSpeedFx).

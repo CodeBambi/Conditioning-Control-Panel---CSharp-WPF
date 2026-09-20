@@ -163,7 +163,7 @@ namespace ConditioningControlPanel
                         string.Equals(CanonicalSubmissionKey(en.FilePath), canonicalPath, StringComparison.OrdinalIgnoreCase));
                     if (match != null && !string.IsNullOrEmpty(match.Name)) name = match.Name;
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 var msg = Loc.GetF("deeper_submission_accepted_toast_fmt", name);
                 App.Notifications?.ShowSticky(

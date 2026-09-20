@@ -2,14 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>The Back Room</title>
   <link rel="stylesheet" href="room/room.css">
+  <link rel="stylesheet" href="room/intro.css">
+  <link rel="stylesheet" href="room/entry.css">
+  <link rel="stylesheet" href="room/welcome.css">
   <script type="importmap">
     { "imports": { "three": "/vendor/three/three.module.min.js", "three/addons/": "/vendor/three/addons/" } }
   </script>
 </head>
 <body>
+  <section id="br-intro" class="br-intro" aria-label="The Back Room" role="status">
+    <div class="br-intro-card">
+      <div class="br-intro-seal" aria-hidden="true"><canvas width="256" height="256"></canvas><span class="br-intro-gem">&#9670;</span></div>
+      <h1>The Back Room</h1><p>A little further in.</p>
+      <div class="br-intro-track" aria-hidden="true"><i></i></div>
+    </div>
+  </section>
+  <script type="module" src="room/intro.js"></script>
   <main id="br-stage" class="br-stage"></main>
   <div id="br-room-ui" class="br-room-ui"></div>
   <header class="br-hud">

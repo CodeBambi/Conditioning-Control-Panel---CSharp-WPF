@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as T from '../../../vendor/three/three.module.min.js';
 const url=new URL('../stations/wheel/room-reward.js',new URL('../',import.meta.url));
-const source=(await readFile(url,'utf8')).replace("from 'three'",`from '${new URL('../../../vendor/three/three.module.min.js',import.meta.url).href}'`);
+const source=(await readFile(url,'utf8')).replace("from 'three'",`from '${new URL('../../../vendor/three/three.module.min.js',import.meta.url).href}'`)
+ // the module is imported as a data: URL, which has no base to resolve a relative specifier against: absolutise its own siblings too.
+ .replace(/from '(\.\.?\/[^']+)'/g,(_,spec)=>`from '${new URL(spec,url).href}'`);
 const {createRoomReward}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 function fixture(){const scene=new T.Scene(),camera=new T.PerspectiveCamera(50,.5,.1,100);const model=new T.Group();model.name='prop_monstera';const geometry=new T.BoxGeometry(.5,1,.5),map=new T.Texture(),material=new T.MeshStandardMaterial({map});model.add(new T.Mesh(geometry,material));model.position.set(5,2,8);model.updateMatrix();model.matrixAutoUpdate=false;scene.add(model);let calls=0;const stage={scene,camera,emi:{trigger(){calls++;}}};return {stage,model,geometry,map,material,get calls(){return calls;}};}
 test('actual decoration miniature borrows resources and repeated cleanup never disposes the original',()=>{

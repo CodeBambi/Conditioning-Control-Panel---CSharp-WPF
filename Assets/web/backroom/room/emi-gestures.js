@@ -1,7 +1,7 @@
 /** Rigid mascot choreography, sampled on the paused room clock. */
-export const EMI_REACTIONS = Object.freeze({ greet: 3.2, wave: 3.2, look: 4.2, bow: 3.4, present: 4, dust: 6.8, handout: 5.2 });
+export const EMI_REACTIONS = Object.freeze({ greet: 3.2, wave: 3.2, look: 4.2, bow: 3.4, present: 4, dust: 6.8, handout: 5.2, cheer: 2.8, curious: 2.6, shrug: 2.4, anticipation: 3.6 });
 const REST = Object.freeze({ yaw: 0, pitch: 0, roll: 0, lift: 0, face: null, left: 0, right: 0, reach: 0, sweep: 0, tool: 0, dust: 0, brushX: 0 });
-const PERIOD = { counter: 27, wheel: 19, cards: 23, roulette: 25 };
+const PERIOD = { counter: 13, wheel: 9, cards: 11, roulette: 12 };
 const ROUTINES = { counter: ['look', 'dust', 'present'], wheel: ['wave', 'look', 'bow'], cards: ['present', 'look', 'bow'], roulette: ['bow', 'present', 'look'] };
 const smooth = v => { const x = Math.max(0, Math.min(1, v)); return x * x * (3 - 2 * x); };
 const hold = (t, a, b, fade = .5) => smooth((t-a)/fade) * (1-smooth((t-b)/fade));
@@ -9,6 +9,19 @@ export function sampleEmiReaction(kind, t) {
   const duration = EMI_REACTIONS[kind];
   if (!duration || !Number.isFinite(t) || t <= 0 || t >= duration) return REST;
   const e = hold(t, 0, duration-.65, .65), p = { ...REST };
+  if (kind === 'cheer') {
+    p.left = (1.8 + .22*Math.sin(t*9))*e; p.right = (2.1-.22*Math.sin(t*9))*e;
+    p.roll = .10*Math.sin(t*7)*e; p.pitch = -.06*e; p.face = 7;
+  } else if (kind === 'curious') {
+    p.roll = -.14*e; p.yaw = .24*e; p.right = .85*e; p.reach = -.22*e;
+  } else if (kind === 'shrug') {
+    p.left = .8*e; p.right = .8*e; p.reach = -.35*e; p.pitch = .06*e;
+    p.yaw = .14*Math.sin(t*5)*e;
+  } else if (kind === 'anticipation') {
+    p.pitch = .10*e; p.left = (.42+.1*Math.sin(t*6))*e;
+    p.right = (.42-.1*Math.sin(t*6))*e; p.reach = -.35*e;
+    p.yaw = .14*Math.sin(t*2.5)*e;
+  }
   if (kind === 'greet' || kind === 'wave') {
     p.right = (2.65 + .20 * Math.sin(t * 11)) * e; p.left = .13 * e;
     p.roll = -.045 * e; p.yaw = .12 * e; p.face = 3;
@@ -36,5 +49,5 @@ export function sampleEmiReaction(kind, t) {
 export function sampleEmiGesture(id, time) {
   if (!PERIOD[id] || !Number.isFinite(time) || time < 0) return REST;
   const cycle = Math.floor(time / PERIOD[id]), kind = ROUTINES[id][cycle % 3];
-  return sampleEmiReaction(kind, time % PERIOD[id] - 5);
+  return sampleEmiReaction(kind, time % PERIOD[id] - 1.4);
 }

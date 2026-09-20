@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.9.5</Version>
+    <Version>6.10.0</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -398,6 +398,9 @@
   <ItemGroup>
     <!-- Feature images - embedded as Resource for pack:// URIs to work -->
     <Resource Include="..\Assets\features\*.png" Link="Resources\features\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- The Sparkle wallet's croupier EMI (Controls/SparkleWallet.xaml): body + waving arm layers. -->
+    <Resource Include="..\Assets\emi\wallet_croupier_body.png" Link="Resources\emi\wallet_croupier_body.png" />
+    <Resource Include="..\Assets\emi\wallet_croupier_arm.png" Link="Resources\emi\wallet_croupier_arm.png" />
     <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
          MainWindow.xaml pack URIs - a missing file here crashes InitializeComponent. -->
     <Resource Include="..\Assets\nav\*.png" Link="Resources\nav\%(RecursiveDir)%(Filename)%(Extension)" />
@@ -558,6 +561,9 @@
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
          which re-globs Resources\web independently - miss the second one and the
          harness pages come straight back into the publish tree (and so the installer). -->
+    <!-- Breakout (stations\breakout) is web first and not in this release: its row is out of
+         stations.json and its folder rides this exclude, so neither the room nor the installer
+         carries it. Restore both when the cabinet ships. -->
     <ArcademyHarnessExclude>
       ..\Assets\web\arcademy\annex\demo.html;
       ..\Assets\web\arcademy\vn\demo.html;
@@ -566,7 +572,8 @@
       ..\Assets\web\arcademy\games\**\smoke\**\*;
       ..\Assets\web\backroom\smoke\**\*;
       ..\Assets\web\backroom\**\tests\**\*;
-      ..\Assets\web\backroom\shared\hypno\tests\**\*
+      ..\Assets\web\backroom\shared\hypno\tests\**\*;
+      ..\Assets\web\backroom\stations\breakout\**\*
     </ArcademyHarnessExclude>
     <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
          flash): its node tests ride along so the vendored copy stays checkable, but they are
@@ -585,7 +592,8 @@
       $(MSBuildProjectDirectory)\..\Assets\web\arcademy\games\**\smoke\**\*;
       $(MSBuildProjectDirectory)\..\Assets\web\backroom\smoke\**\*;
       $(MSBuildProjectDirectory)\..\Assets\web\backroom\**\tests\**\*;
-      $(MSBuildProjectDirectory)\..\Assets\web\backroom\shared\hypno\tests\**\*
+      $(MSBuildProjectDirectory)\..\Assets\web\backroom\shared\hypno\tests\**\*;
+      $(MSBuildProjectDirectory)\..\Assets\web\backroom\stations\breakout\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 
@@ -690,6 +698,178 @@
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
+
+  <!-- ==========================================================================================
+       CIRCE NEUTRAL HOTFIX OVERLAY - TEMPORARY. Remove once the rebuilt packs have shipped.
+
+       The gender-neutral pass on Circe's Lock re-rendered 109 builtin-locked bark mp3s and 5
+       intake VO clips. All of them are content-pack payload (stripped above by
+       $(ContentPackSoundsExclude) / $(ContentPackWebExclude)), and a pack a user already holds is
+       never refreshed on its own: startup only fetches MISSING packs, and NeedsUpdate is surfaced
+       in the Mod Manager alone. So without this block every existing Circe user keeps the old
+       audio indefinitely.
+
+       These exact files are therefore shipped in-box AS WELL AS in their packs, on purpose. The
+       install dir wins over the downloaded copy (ContentLocator.Resolve for the bark audio; the
+       intake page's core/audioSrc.js carries the same five paths so it asks ccp.game first). An
+       Exclude glob only filters the Include on its own element, so a separate <Content> item
+       re-adds a stripped file without touching the strip set itself.
+
+       Scripts\build-content-packs.ps1 reads THIS property (it does not mirror it) and treats its
+       entries as a deliberate packed-and-in-box allowlist: it hard-fails if an entry is missing,
+       is not stripped, or is not packed. installer-content-deletions.iss still names these files;
+       [InstallDelete] runs before [Files], so they are deleted and reinstalled fresh.
+
+       LockedMod\overrides\ is the other half: 25 flash voice lines and 4 PNGs that live INSIDE the
+       extracted locked-resources.ccpmod tree, copied over it at runtime by
+       Services\Migrations\CirceNeutralPackPatch.cs (the .ccpmod itself is not build output).
+       Those are copied by the two targets below rather than declared as <Content>: several voice
+       line names contain a comma, and VideoLAN.LibVLC.Windows.targets batches %(FullPath) over
+       every Content item into a MakeRelative call that a comma breaks (MSB4186).
+
+       TO REMOVE (after the rebuilt packs are published and have had a full release cycle): delete
+       this comment, the property, the ItemGroup and the two targets below, LockedMod\overrides\,
+       CirceNeutralPackPatch.cs and its call in ModService, the in-box set in intake\core\audioSrc.js
+       and the LockedId case in ReleaseContentService.HasModMediaOnDisk. The generated
+       [InstallDelete] list then removes the in-box copies from upgraders automatically.
+       ========================================================================================== -->
+  <PropertyGroup>
+    <CirceNeutralInBoxOverride>
+      Resources\sounds\companion_audio\mods\builtin-locked\achievement_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\activity_change_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\activity_change_6.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\attention_lost_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\attention_lost_deep_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\blink_t1_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\blink_t1_5.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\blink_t2_5.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\blink_t3_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\blink_t4_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\blink_t5_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\braindrain_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\bubble_game_done_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\bubble_game_fail_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\bubble_miss_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\bubble_pop_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\bubble_pop_13.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\bubble_pop_7.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\cam_denied_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\chaos_pick_gg_rabbits_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\chaos_pick_gg_rabbits_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\chaos_wave_cleared_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\chaos_wave_cleared_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\egg_discord_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\egg_marathon_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\egg_maxlevel_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\egg_mute_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\egg_patreon_up_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\egg_streaming_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\egg_tutorial_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\face_found_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\flash_24.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\flash_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\gaze_reward_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\hold_success_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\hold_success_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\idle_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\idle_resume_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\kw_offlimits_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\kw_offlimits_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\kw_reinforce_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\kw_reinforce_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\level_up_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\lockcard_clean_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\lockcard_sloppy_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\lockdown_off_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\lockdown_on_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\lockdown_tick_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\lucky_proc_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mantra_circe_36_resp.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mantra_done_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\memory_recall_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mindwipe_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_chat_reply_affection_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_chat_reply_affection_6.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_chat_reply_generic_12.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_chat_reply_generic_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_chat_reply_generic_7.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_chat_reply_question_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_greeting_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_idle_phone_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_idle_phone_8.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_session_nudge_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mobile_voicenote_intro_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mod_change_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\mouth_open_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\ms_session_60_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\phase_deepen_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\phase_deepen_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\phase_deepen_8.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\pinkrush_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\quest_done_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\quest_progress_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\quiz_done_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\remote_cmd_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\remote_cmd_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\remote_connect_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\roadmap_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\session_complete_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\session_start_absence_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\session_start_absence_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\session_start_latenight_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\session_start_latenight_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\session_start_long_absence_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\session_start_recent_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\session_start_recent_6.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\session_stopped_early_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\skill_unlock_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\still_10_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\still_5_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\streak_break_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\streak_up_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\subliminal_20.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\subliminal_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\subliminal_9.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\tongue_out_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\tongue_out_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_check_fail_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_check_fail_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_check_pass_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_end_1.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_end_4.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_pre_2.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_pre_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_pre_6.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_pre_7.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_start_3.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\video_start_6.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\xp_gain_2.mp3;
+      Resources\web\intake\assets\vo\q_crc_h3_betaplace.mp3;
+      Resources\web\intake\assets\vo\q_crc_h3_ci_betacomfort.mp3;
+      Resources\web\intake\assets\vo\q_crc_h3_mantra_beta.mp3;
+      Resources\web\intake\assets\vo\q_crc_h3_yn_betaadmit.mp3;
+      Resources\web\intake\assets\vo\sure_circe_16.mp3
+    </CirceNeutralInBoxOverride>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="$(CirceNeutralInBoxOverride)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
+  <Target Name="CopyCirceNeutralOverridesAfterBuild" AfterTargets="Build">
+    <ItemGroup>
+      <CirceNeutralOverrideFiles Include="$(MSBuildProjectDirectory)\LockedMod\overrides\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CirceNeutralOverrideFiles)" DestinationFolder="$(OutDir)LockedMod\overrides\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyCirceNeutralOverridesAfterPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <CirceNeutralOverrideFiles Include="$(MSBuildProjectDirectory)\LockedMod\overrides\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CirceNeutralOverrideFiles)" DestinationFolder="$(PublishDir)LockedMod\overrides\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
 
   <!-- Bundled built-in mod packages — REMOVED FROM THE BUILD (docs/CONTENT_PACKS_PLAN.md §1/§6).
        DroneMod\drone-mode.ccpmod (184 MB) and LockedMod\locked-resources.ccpmod (125 MB) used to

@@ -308,7 +308,7 @@ internal static class EmergencyExitHostService
                 honorific = "good girl"; subject = "Bambi"; break;
             case "builtin-sissyhypno":
                 honorific = "sissy"; subject = "sissy"; break;
-            // builtin-locked's warden calls the user "pet" / "good boy" / "sweet thing" in every
+            // builtin-locked's warden calls the user "pet" / "good pet" / "sweet thing" in every
             // lockdown_on/off/tick line; "pet" is the one that is gender-neutral and reads as a
             // NAME in "Confirm you are NOT a pet", which is what the captcha needs it for.
             case "builtin-locked":

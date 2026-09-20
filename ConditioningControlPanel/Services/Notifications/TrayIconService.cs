@@ -98,6 +98,18 @@ namespace ConditioningControlPanel.Services;
             showItem.Click += (s, e) => ShowWindow();
             contextMenu.Items.Add(showItem);
 
+            // The way back to the launcher, for the tester who tucked the panel away and lost
+            // the title-bar door. Only while the launcher is part of this run, and greyed under
+            // Lockdown, which BackToLauncher refuses anyway.
+            var backItem = new ToolStripMenuItem(Loc.Get("launcher_back_to_client"));
+            backItem.Click += (s, e) => Launcher.LauncherHost.BackToLauncher();
+            contextMenu.Items.Add(backItem);
+            contextMenu.Opening += (s, e) =>
+            {
+                backItem.Visible = Launcher.LauncherHost.SurfaceInPlay;
+                backItem.Enabled = App.Lockdown?.IsActive != true;
+            };
+
             var wakeLabel = Loc.Get(App.Mods?.IsBambiMode == true ? "tray_wake_bambi" : "tray_wake");
             var wakeBambiItem = new ToolStripMenuItem(wakeLabel);
             wakeBambiItem.Click += (s, e) => OnWakeBambiRequested?.Invoke();
@@ -143,14 +155,16 @@ namespace ConditioningControlPanel.Services;
         }
     }
 
-    public void MinimizeToTray()
+    /// <param name="balloon">False to skip the one-time "minimized to tray" balloon. The launcher
+    /// tucks the panel away at boot before the user has seen it, and a balloon there is noise.</param>
+    public void MinimizeToTray(bool balloon = true)
     {
         _mainWindow.Hide();
         Show();
 
         // Only show the balloon tip notification on first minimize
         // This prevents annoying repeated notifications (which can stay visible indefinitely on some systems)
-        if (!_hasShownFirstMinimizeNotification)
+        if (balloon && !_hasShownFirstMinimizeNotification)
         {
             _hasShownFirstMinimizeNotification = true;
             _notifyIcon?.ShowBalloonTip(2000, Loc.Get("app_title"),

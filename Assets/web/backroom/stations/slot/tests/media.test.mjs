@@ -14,11 +14,13 @@ test('fx carry dealt KEYS for the symbols they are about, never urls', () => {
   assert.deepEqual(fxSymbols('fx.gif_storm', { symbols: ['gif2', 'gif2', 'gif2'] }, media), ['g2']);
 });
 
-test('10.14: fewer than four of the player\'s GIFs cycle (gifs[i % n]), never padded, none dealt is none', async () => {
+test('specific GIF identities never alias when fewer than four sources are available', async () => {
   const { createMedia } = await import('../media.js');
   const m = createMedia({ append() {} });
   await m.deal({ gifs: [{ key: 'g0', url: 'https://ccp.assets/a.gif' }, { key: 'g1', url: 'https://ccp.assets/b.gif' }], words: [] });
-  assert.deepEqual(['gif0', 'gif1', 'gif2', 'gif3'].map((id) => m.keyFor(id)), ['g0', 'g1', 'g0', 'g1']);
+  assert.deepEqual(['gif0', 'gif1', 'gif2', 'gif3'].map((id) => m.keyFor(id)), ['g0', 'g1', null, null]);
+  await m.deal({ gifs: [{key:'g0',url:'https://ccp.assets/a.gif'},{key:'g1',url:'https://ccp.assets/a.gif'}], words:[] });
+  assert.equal(m.keyFor('gif1'), null, 'duplicate art uses the distinct built-in symbol');
   await m.deal({ gifs: [], words: [] });
   assert.equal(m.keyFor('gif3'), null);
   assert.equal(m.gif(3), null);

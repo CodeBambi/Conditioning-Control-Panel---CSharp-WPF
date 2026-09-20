@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import { createPauseGate } from '../pauseGate.js';
+import { createResolutionGovernor } from '../resolutionGovernor.js';
+
+const messages = [], gate = createPauseGate(on => messages.push(on));
+gate.update({ brake: true }); gate.update({ host: true });
+gate.update({ host: false });
+assert.equal(gate.paused, true, 'a finished host video cannot resume an open Brake');
+assert.deepEqual(messages, [true], 'overlapping pauses send no early audio resume');
+gate.update({ host: true }); gate.update({ brake: false });
+assert.equal(gate.paused, true, 'Brake resume cannot release the host');
+gate.update({ host: false });
+assert.deepEqual(messages, [true, false], 'resume happens once, after the last owner');
+gate.update({ host: false });
+assert.deepEqual(messages, [true, false], 'duplicate host replies are idempotent');
+gate.update({ brake: true }); gate.update({ brake: false, host: true });
+assert.deepEqual(messages, [true, false, true], 'atomic ownership handoff never resumes');
+
+const desktop = createResolutionGovernor();
+assert.equal(desktop.sample(35, 0, 30, 1.5), Infinity, 'warm-up needs enough samples');
+assert.equal(desktop.sample(35, 2, 120, 1.5), 1, 'slow high-DPI frame drops resolution');
+for (let t=4;t<12;t+=2) assert.equal(desktop.sample(1000/60, t, 120, 1.5), 1, 'brief healthy frames do not bounce back');
+assert.equal(desktop.sample(1000/60, 12, 120, 1.5), Infinity, 'steady 60 Hz restores native resolution');
+const phone = createResolutionGovernor({ touch: true });
+assert.equal(phone.sample(40, 2, 120, 1.5), 1);
+assert.equal(phone.sample(40, 4, 120, 1.5), 0.8, 'phone has a second load-shedding rung');
+phone.sample(16.7, 6, 120, 1.5); phone.sample(22, 10, 120, 1.5);
+assert.equal(phone.sample(16.7, 14, 120, 1.5), 0.8, 'middling frames reset the healthy hold');
+assert.equal(phone.sample(16.7, 22, 120, 1.5), 1, 'first recovery step preserves headroom');
+assert.equal(phone.sample(16.7, 24, 120, 1.5), 1, 'each rung earns its own recovery hold');
+assert.equal(phone.sample(16.7, 32, 120, 1.5), Infinity);
+const lite = createResolutionGovernor({ touch: true, lite: true });
+for (const t of [0,10,20,30]) assert.equal(lite.sample(8,t,300,1.5),0.6,'Lighter remains fixed');
+const lowDpi = createResolutionGovernor();
+assert.equal(lowDpi.sample(40,0,120,1),Infinity,'desktop at DPR 1 has no lower rung');
+console.log('reliability-rules-check: pause ownership and 60 Hz recovery passed');

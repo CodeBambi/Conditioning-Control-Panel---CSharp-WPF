@@ -135,7 +135,8 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         var iterator = (string?)sub["children"]?["iterator"];
         var entries = new List<FypAssetManifest.Entry>();
         // GifStill consumers ask the GIF filter but can only RENDER a still, so their
-        // pages map to image entries (the post's poster) instead of video entries.
+        // pages map to image entries (the post's poster) instead of video entries. GifClip
+        // asks the same filter and takes the other half of the post, so it is NOT in this test.
         bool stills = filter == "PICTURE" || kind == FeedMediaKind.GifStill;
         if (items != null)
         {
@@ -220,6 +221,12 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             // GIF pages only (the web feed's exact GalleryFilter for "GIFs") — the caller
             // renders the still poster each GIF post carries. Never PICTURE, never VIDEO.
             case FeedMediaKind.GifStill:
+                return channel.GifFilterDead ? null : "GIF";
+
+            // The same GIF pages, taken as clips (the Back Room). Never VIDEO: those are
+            // full-length uploads a 384 px surface cannot use, and an empty VIDEO page on a
+            // gif-only sub used to exhaust the channel for the whole tenant.
+            case FeedMediaKind.GifClip:
                 return channel.GifFilterDead ? null : "GIF";
 
             // VIDEO and GIF alternate so gif-heavy subreddits still produce (scrolller

@@ -1298,7 +1298,7 @@ namespace ConditioningControlPanel
         /// the user also presses "Save Selection". Settings.Save() is debounced (500ms), so a
         /// rapid run of checkbox clicks still costs one disk write.
         /// </summary>
-        private void InvalidateAssetPoolsAfterSelectionChange()
+        internal void InvalidateAssetPoolsAfterSelectionChange()
         {
             App.Flash?.ClearFileCache();
             App.Video?.ReloadAssets();
@@ -1539,11 +1539,28 @@ namespace ConditioningControlPanel
         {
             if (_isLoadingPreset) return;
             if (AssetsTab.CmbAssetPresets.SelectedItem is not Models.AssetPreset preset) return;
+            ApplyAssetPresetAndRepaint(preset.Id);
+        }
 
-            // Apply preset's disabled paths
+        /// <summary>
+        /// The launcher's Media dialog switched presets while the panel was tray-hidden. Same
+        /// write and the same repaint as the combo above, plus the combo itself is moved so the
+        /// panel agrees the moment it comes up.
+        /// </summary>
+        internal void ApplyAssetPresetFromLauncher(string presetId)
+        {
+            ApplyAssetPresetAndRepaint(presetId);
+            try { RefreshAssetPresetsComboBox(); }
+            catch (Exception ex) { App.Logger?.Debug("Asset preset combo refresh after launcher switch: {E}", ex.Message); }
+        }
+
+        private void ApplyAssetPresetAndRepaint(string presetId)
+        {
+            // The write is the service's (AssetPresetService.Apply), so the launcher and this
+            // combo cannot drift; everything below is the panel's own repaint.
+            var preset = Services.AssetPresetService.Apply(App.Settings.Current, presetId);
+            if (preset == null) return;
             var presetDisabledCount = preset.DisabledAssetPaths?.Count ?? 0;
-            preset.ApplyToSettings();
-            App.Settings.Current.CurrentAssetPresetId = preset.Id;
 
             // Refresh tree to show new state
             RefreshAssetTree();

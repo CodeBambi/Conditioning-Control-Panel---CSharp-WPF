@@ -18,9 +18,10 @@ export const RUN_SPEED = 4.8;
 /** Walls (inner faces less the radius) and the architecture no fixture bounds cover. */
 export const WALLS = Object.freeze({ x: 6.65, z: 7.55 });
 export const BLOCKERS = Object.freeze([
+  Object.freeze({ min: [3.4, -7.5], max: [5.75, -6.2] }), // arcade placeholder and owned expansion shelf
   Object.freeze({ min: [6.35, 5.35], max: [7.95, 7.72] }), // customization cabinet
   Object.freeze({ min: [-4.6, -7.4], max: [-3.6, -6.3] }), // northwest sculpture
-  Object.freeze({ min: [3.6, -7.4], max: [4.6, -6.3] }), // northeast sculpture
+  Object.freeze({ min: [5.4, 4.8], max: [6.4, 5.9] }), // east-wall sculpture
   Object.freeze({ min: [3.2, 6.7], max: [4.2, 7.75] }), // entrance sculpture
   Object.freeze({ min: [-3.24, -7.44], max: [3.24, -4.06] }),   // prize counter platform
   Object.freeze({ min: [-6.54, -3.94], max: [-4.46, -0.06] }),  // wheel plinth
@@ -32,6 +33,7 @@ const ID = /^[a-z0-9_]{1,24}$/;
 const FILE = /^[a-z0-9_-]{1,40}\.glb$/;
 const ENTRY = /^stations\/[a-z0-9_/-]+\.js$/;
 const vec3 = (v) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
+const NODE = /^[A-Za-z0-9_.-]{1,48}$/;
 
 /**
  * Validate stations.json (CONTRACT 7, 3D shape). A row with a bad id or no
@@ -69,6 +71,10 @@ export function normaliseStations(rows) {
         omitPrefixes: Array.isArray(f.omitPrefixes) ? f.omitPrefixes.filter((p) => typeof p === 'string') : [],
         labels: f.labels && typeof f.labels === 'object' ? { ...f.labels } : {},
         faces: !!f.faces, reels: !!f.reels, hub: !!f.hub,
+        // A fixture borrowed out of another glb (the breakout row stands counter.glb's arcade cabinet on
+        // its own): `node` names the subtree, `glow` the screen mesh that breathes (room/fixtures.js).
+        node: typeof f.node === 'string' && NODE.test(f.node) ? f.node : null,
+        glow: typeof f.glow === 'string' && NODE.test(f.glow) ? f.glow : null,
         bounds: { min: f.bounds.min.slice(), max: f.bounds.max.slice() },
       },
     });

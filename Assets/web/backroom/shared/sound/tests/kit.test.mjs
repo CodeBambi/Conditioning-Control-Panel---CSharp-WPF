@@ -219,6 +219,8 @@ test('THE LEVER: four voices, each a whole gesture in 500-700 ms', () => {
   const chime = parts(score('lever', { variant: 'B' }), 'chime').sort((a, b) => a.at - b.at);
   assert.ok(chime.length >= 2 && chime[chime.length - 1].at > chime[0].at, 'B ends on a two-note chime');
   assert.ok(parts(score('lever', { variant: 'B' }), 'whoosh')[0].hzTo > parts(score('lever', { variant: 'B' }), 'whoosh')[0].hz, 'B strokes on an opening whoosh');
+  assert.equal(parts(score('lever', { variant: 'B' }), 'catch').length, 1, 'B catches on the grab, so the pull is heard on its own frame');
+  for (const v of LEVER_VARIANTS) assert.ok(score('lever', { variant: v }).notes.some(n => n.at <= 0.03), v + ' makes a sound on the frame the stroke starts');
   assert.ok(parts(score('lever', { variant: 'C' }), 'boing').length >= 2, 'C springs back on a boing');
   assert.ok(score('lever', { variant: 'C' }).tail < score('lever', { variant: 'D' }).tail, 'the toy lever is shorter than the vintage one');
   assert.equal(parts(score('lever', { variant: 'D' }), 'krrr').length, 1, 'D hands the beat over to the reels');
@@ -249,8 +251,8 @@ test('THE ROLL: the tick rate is the drum speed, and the drums sit over the bed 
   assert.ok(near(tickGap(1), 0.038), '38 ms a tick at full blur');
   assert.ok(tickGap(0) <= 0.27, 'and about a quarter second crawling into the stop');
   assert.equal(tickGap('nonsense'), tickGap(1), 'nonsense is full speed');
-  assert.ok(ROLL_TICK > BED_LEVEL * 0.7 && ROLL_TICK < 0.12, 'a tick reads over the bed without being harsh (the owner took the drums down 35% on 2026-09-15)');
-  assert.ok(ROLL_BED > BED_LEVEL * 0.7 && ROLL_BED <= ROLL_TICK, 'the purr sits around the bed, under the ticks (the owner took the drums down 35% on 2026-09-15)');
+  assert.ok(ROLL_TICK > BED_LEVEL * 0.4 && ROLL_TICK < 0.12, 'a tick reads through the bed without being harsh (the owner took the drums down 35% twice on 2026-09-15)');
+  assert.ok(ROLL_BED > BED_LEVEL * 0.4 && ROLL_BED <= ROLL_TICK, 'the purr sits under the bed and under the ticks (the owner took the drums down 35% twice on 2026-09-15)');
 });
 
 test('THE THROW: the wheel has no lever, so the spin-up and the rotor loop are its gesture', () => {
@@ -509,4 +511,64 @@ test('trim: Calm turns the whole room down without touching the master setting',
   assert.ok(master.gain.calls.some(c => c[0] === 'linearRampToValueAtTime' && near(c[1], 0.25)));
   assert.equal(k.master, 0.5);
   assert.equal(k.debug().trim, 0.5);
+});
+
+// Sample loading must never move an action's sound to a later frame.
+const flushSamples = () => new Promise(resolve => setImmediate(resolve));
+test('foley plays its fallback immediately, then replaces it after one bounded preload', async () => {
+  const { AC, log } = makeMock(); let calls = 0;
+  const buffer = { duration: 0.5 };
+  const k = createKit({ AudioContext: AC, loadSample: async () => { calls++; return buffer; } });
+  assert.equal(k.play('card-slide'), 0);
+  assert.equal(calls, 0, 'no fetch before the first gesture');
+  k.arm();
+  assert.equal(k.play('cabinet-knock'), score('cabinet-knock').notes.length, 'fallback on the current frame');
+  await flushSamples();
+  assert.equal(calls, 3);
+  k.arm(); await flushSamples(); assert.equal(calls, 3, 'one preload per context');
+  k.stopAll();
+  assert.equal(k.play('cabinet-knock', { at: 0.1, level: 0.5 }), 1, 'sample replaces, not layers over, synth');
+  const source = log.sources.at(-1);
+  assert.equal(source.buffer, buffer); assert.equal(source.startedAt, 0.1);
+  assert.ok(source.playbackRate.value >= 0.98 && source.playbackRate.value <= 1.02);
+  k.stop('cabinet-knock'); assert.equal(k.debug().live, 0);
+  k.dispose();
+});
+test('failed or oversized-duration sample falls back without delayed playback', async () => {
+  const { AC, log } = makeMock();
+  const k = createKit({ AudioContext: AC, loadSample: async name => {
+    if (name === 'card-slide') throw new Error('offline');
+    return { duration: 30 };
+  }});
+  k.arm(); await flushSamples();
+  assert.equal(log.started, 0, 'preloading never starts a voice');
+  for (const name of ['card-slide', 'cabinet-knock', 'chip-place']) {
+    assert.equal(k.play(name), score(name).notes.length);
+  }
+  k.dispose();
+});
+test('sample voices share master mute, suspend and teardown', async () => {
+  const { AC, log } = makeMock();
+  const k = createKit({ AudioContext: AC, loadSample: async () => ({ duration: 0.5 }) });
+  k.arm(); await flushSamples(); k.play('card-slide');
+  const masterGain = log.nodes.find(n => n.kind === 'gain');
+  k.mute(true); assert.equal(masterGain.gain.calls.at(-1)[1], 0);
+  k.mute(false); k.setTrim(0.6);
+  assert.ok(near(masterGain.gain.calls.at(-1)[1], DEFAULT_MASTER * 0.6));
+  k.suspend(true); assert.equal(k.debug().live, 0);
+  assert.equal(k.play('chip-place'), 0);
+  const count = log.started;
+  k.suspend(false); assert.equal(log.started, count, 'one-shots never replay on resume');
+  k.play('chip-place'); assert.equal(k.debug().live, 1);
+  k.dispose(); assert.equal(k.debug().live, 0); assert.equal(log.closes, 1);
+});
+test('late decode cannot populate a replaced audio context', async () => {
+  const { AC } = makeMock(); let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const k = createKit({ AudioContext: AC, loadSample: () => pending });
+  k.arm(); await flushSamples(); k.dispose();
+  release({ duration: 0.5 }); await flushSamples();
+  k.arm();
+  assert.equal(k.play('chip-place'), score('chip-place').notes.length, 'fresh context starts with fallback');
+  k.dispose();
 });

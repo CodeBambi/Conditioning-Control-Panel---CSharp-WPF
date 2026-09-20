@@ -9,8 +9,11 @@
  * ==========================================================================*/
 
 import { createCounter, LEX } from './cards.js';
-import { demoKind, demoFrame } from './demo.js';
+import { demoKind, demoFrame, demoLabel } from './demo.js';
+import { prizeState } from '../../shared/prize-state.js';
 import { kit } from '../../shared/sound/kit.js';
+
+export const roomBehind = true;
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 let cssLink = null;
@@ -33,13 +36,12 @@ function h(tag, cls, text) {
   return e;
 }
 
-/** THE BUY's chime (Brake 1: one small earned moment), on the room's kit: three chips into the tray and the small
- *  win's two notes, synthesised, no clip. The kit is armed inside the Confirm press. */
+/** One delivery cue per successful buy. The kit is armed inside the Confirm press. */
 function createChime(k = kit) {
   let off = false;
   return {
     arm() { if (!off) k.arm(); },
-    play() { if (off) return; k.play('chips', { n: 3, gap: 0.05 }); k.play('win', { tier: 'small', at: 0.12 }); },
+    play() { if (off) return; k.play('prize-drop'); },
     suspend(on) { off = !!on; },
     dispose() { off = true; },
   };
@@ -67,7 +69,7 @@ export async function mount(ctx) {
 
   function still() {
     const pr = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    return !!ctx.reduced || pr || String(ctx.intensity || '').toLowerCase() === 'calm';
+    return ['off','still','reduced'].includes(String(ctx.motion||'').toLowerCase()) || !!ctx.reduced || pr || String(ctx.intensity || '').toLowerCase() === 'calm';
   }
   function back() { if (typeof ctx.standUp === 'function') ctx.standUp(); else close(); }
   const backButton = (cls) => { const b = h('button', cls, t('br_back', 'Back')); b.type = 'button'; b.onclick = back; b.hidden = hostBack; return b; };
@@ -97,12 +99,13 @@ export async function mount(ctx) {
     img.alt = ''; img.decoding = 'async';
     img.onerror = () => { img.remove(); art.dataset.plate = ''; };
     img.src = new URL(`./art/${row.id}.webp`, import.meta.url).href;
-    art.append(plate, img);
+    const sold = h('span', 'counter-sold', t('br_counter_sold', 'SOLD'));
+    art.append(plate, img, sold);
     const body = h('div', 'counter-body');
     body.append(h('h3', 'counter-name', t(row.nameKey, LEX[row.nameKey] || row.id)), h('p', 'counter-blurb', t(row.blurbKey, LEX[row.blurbKey] || '')));
     const detailKey = `br_prize_${row.id}_details`;
     if (LEX[detailKey]) {
-      const details = h('details', 'counter-details');
+      const details = h('details', 'counter-details'); details.open = true;
       details.append(h('summary', null, L('br_counter_details')), h('p', null, L(detailKey)));
       body.append(details);
     }
@@ -131,7 +134,13 @@ export async function mount(ctx) {
   function askMedia() {
     if (media) return;
     media = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media({ count: 4 }) : null))
-      .then((m) => { if (alive) dealt = m && Array.isArray(m.gifs) ? m.gifs.slice(0, 4) : []; })
+      .then((m) => {
+        if (!alive) return;
+        dealt = m && Array.isArray(m.gifs) ? m.gifs.slice(0, 4) : [];
+        if (typeof Image === 'function') for (const g of dealt) {
+          if (g && allowedUrl(g.url)) { const img = new Image(); img.src = g.url; }
+        }
+      })
       .catch(() => { dealt = []; });
   }
   function stopDemo() {
@@ -150,29 +159,37 @@ export async function mount(ctx) {
     const stage = h('div', 'counter-demo');
     const pics = [];
     for (let i = 0; i < 4; i++) {
-      const p = h('img', 'counter-demo-pic'); p.alt = ''; p.decoding = 'async'; p.dataset.pic = String(i); p.hidden = true;
+      const p = h(kind === 'bubbles' ? 'span' : 'img', 'counter-demo-pic'); p.alt = ''; p.decoding = 'async'; p.dataset.pic = String(i); p.hidden = true;
       pics.push(p); stage.append(p);
     }
+    const caption = h('span', 'counter-demo-caption'); stage.append(caption);
     c.art.append(stage);
     c.art.dataset.demo = kind;
     demos++;
-    demo = { id, kind, art: c.art, stage, pics, t0: nowMs(), raf: 0 };
+    demo = { id, kind, art: c.art, stage, pics, t0: nowMs(), waitingSince: nowMs(), raf: 0 };
     const tick = () => {
       if (!demo) return;
       const gates = ctx.gates || {}, pictures = gates.flash !== false;
+      if (demo.kind !== 'bubbles' && pictures && nowMs() - demo.waitingSince < 3500 &&
+          (!dealt || (typeof Image === 'function' && !demo.pics.some(p => p.complete && p.naturalWidth > 0)))) demo.t0 = nowMs();
       const frame = demoFrame(demo.kind, nowMs() - demo.t0, { still: still() });
       if (!frame.length) { stopDemo(); return; }
+      const label = demoLabel(demo.kind, still() ? 0 : nowMs() - demo.t0);
+      caption.textContent = label ? L('br_counter_demo_' + label) : '';
       demo.pics.forEach((p, i) => {
         const s = frame[i];
         p.hidden = !s;
         if (!s) return;
-        const g = pictures && dealt ? dealt[s.pic % Math.max(1, dealt.length)] : null;
-        const url = g && typeof g.url === 'string' && allowedUrl(g.url) ? g.url : '';
+        const g = demo.kind !== 'bubbles' && pictures && dealt ? dealt[s.pic % Math.max(1, dealt.length)] : null;
+        const url = g && typeof g.url === 'string' && allowedUrl(g.url) ? g.url
+          : pictures && demo.kind !== 'bubbles' ? new URL('../slot/fallback/gif' + (s.pic % 4) + '.webp', import.meta.url).href : '';
         if (url && p.dataset.url !== url) { p.dataset.url = url; p.src = url; }
         if (!url && p.dataset.url) { delete p.dataset.url; p.removeAttribute && p.removeAttribute('src'); }
-        p.dataset.kind = s.kind;
+        p.dataset.kind = s.kind; p.dataset.variant = s.variant || '';
+        stage.dataset.variant = s.variant || '';
         if (s.pivot) p.dataset.pivot = s.pivot; else delete p.dataset.pivot;
         const st = p.style;
+        st.clipPath = s.kind === 'shard' ? ['polygon(0 0,100% 0,50% 50%)','polygon(100% 0,100% 100%,50% 50%)','polygon(100% 100%,0 100%,50% 50%)','polygon(0 100%,0 0,50% 50%)'][s.shard] : '';
         st.left = (s.x * 100).toFixed(2) + '%';
         st.top = (s.y * 100).toFixed(2) + '%';
         st.width = (s.scale * 100).toFixed(2) + '%';
@@ -233,13 +250,22 @@ export async function mount(ctx) {
     grid.hidden = phase === 'closed';
     chipEl.textContent = L('br_counter_price', fmt(counter.sp()));
     if (phase === 'closed') return;
+    const snapshot = counter.state && { ok:true, catalog:counter.state.catalog, prizes:{grants:counter.state.grants} };
+    const unlocked = prizeState(snapshot)?.demo;
     for (const v of counter.view()) {
       let c = cards.get(v.id);
       if (!c) { c = makeCard(v); cards.set(v.id, c); grid.append(c.card); }
+      c.card.hidden = v.id === 'rt_demo' && unlocked;
       c.card.dataset.face = v.face;
       c.price.textContent = L('br_counter_price', fmt(v.priceSp));
       if (c.tryBtn) c.tryBtn.hidden = v.face === 'soon';   // under the dust sheet nothing is tried
-      if (v.flip && !flipped.has(v.id)) { flipped.add(v.id); if (!still()) c.card.classList.add('is-flip'); }
+      if (still() || suspended) c.card.classList.remove('is-flip');
+      if (phase === 'ready' && v.flip && !flipped.has(v.id)) {
+        flipped.add(v.id);
+        if (demo?.id === v.id) stopDemo();
+        ctx.prizesChanged?.(snapshot, v.id);
+        if (!still() && !suspended) c.card.classList.add('is-flip');
+      }
       const sig = JSON.stringify([v.face, v.short, v.deliveryKey, v.confirm, v.priceSp]);
       if (sig !== c.sig) { c.sig = sig; actFor(v, c); }
     }
@@ -259,14 +285,20 @@ export async function mount(ctx) {
     alive = true; suspended = false; cards = new Map(); flipped.clear();
     el = build();
     ctx.root.append(el);
+    ctx.root.addEventListener?.("click", outside);
+    if(!still())el.animate?.([{transform:"translateY(-115%)",opacity:0},{transform:"translateY(0)",opacity:1}],{duration:460,easing:"cubic-bezier(.18,.8,.24,1)"});
     globalThis.addEventListener('keydown', onKey);
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(() => paint());
     if (typeof ctx.onSettings === 'function') unSet = ctx.onSettings(() => paint());
     paint();
+    askMedia();
     await counter.open();
+    if (alive && counter.state) ctx.prizesChanged?.({ok:true, catalog:counter.state.catalog, prizes:{grants:counter.state.grants}});
   }
 
-  function close() {
+  function outside(e){if(e.target===ctx.root)back();}
+
+  async function close() {
     if (!alive) return Promise.resolve();
     alive = false;
     stopDemo();
@@ -277,14 +309,17 @@ export async function mount(ctx) {
     if (typeof unSet === 'function') unSet();
     unSp = null; unSet = null;
     chime.dispose(); chime = createChime();
-    if (el) el.remove();
+    ctx.root.removeEventListener?.("click", outside);
+    const retiring=el;
+    if(retiring&&!still()&&retiring.animate){retiring.style.pointerEvents="none";await retiring.animate([{transform:"translateY(0)",opacity:1},{transform:"translateY(-115%)",opacity:0}],{duration:300,easing:"ease-in",fill:"forwards"}).finished.catch(()=>{});}
+    if (retiring) retiring.remove();
     el = null; grid = null; chipEl = null; closedEl = null; cards = new Map();
     return Promise.resolve();
   }
 
   return {
     open, close,
-    suspend(on) { suspended = !!on; chime.suspend(suspended); if (suspended) stopDemo(); },
+    suspend(on) { suspended = !!on; chime.suspend(suspended); if (suspended) { stopDemo(); for (const c of cards.values()) c.card.classList.remove('is-flip'); } },
     destroy() { close(); if (cssLink) { cssLink.remove(); cssLink = null; } },
     /** For dev.html and the checks only. */
     debug: () => ({ alive, suspended, hostBack, still: still(), phase: counter.phase, sp: counter.sp(), confirm: counter.confirm,

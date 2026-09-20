@@ -553,7 +553,7 @@ public class ProgramKeptTests
     public void NoAuthoredNameTripsAnAchievementSubstring()
     {
         // Worth checking carefully here rather than assuming: Circe's vocabulary is full of "GOOD
-        // BOY" and "GOOD BOYS DON'T DECIDE.", one letter away from the reserved "good girls".
+        // PET" and "GOOD PETS DON'T DECIDE.", close cousins of the reserved "good girls".
         var program = Program();
 
         var candidates = new List<string> { program.Title, program.Subtitle };
@@ -613,7 +613,7 @@ public class ProgramKeptTests
         Assert.Contains("body", lower);
 
         // Out of character means out of character: none of her pet names belong in this string.
-        foreach (var petName in new[] { "pet", "good boy", "sweet thing" })
+        foreach (var petName in new[] { "pet", "good pet", "sweet thing" })
         {
             Assert.False(lower.Contains(petName, StringComparison.Ordinal),
                 $"the safety note slipped into Circe's voice with '{petName}'");
@@ -900,7 +900,7 @@ public class ProgramKeptTests
         // Five days name a specific lock card in their copy. Asserted against the *built session*
         // rather than the template, because that is what reaches the user: the day-1 vow and the
         // day-28 finale are pinned with per-day overrides, and a promise like "Complete 3 lock cards
-        // - GOOD BOYS DON'T DECIDE." has to be certain rather than a one-in-27 shuffle.
+        // - GOOD PETS DON'T DECIDE." has to be certain rather than a one-in-27 shuffle.
         //
         // This test caught the real thing it was written for: day 3 originally named the gratitude
         // line while running a template pool narrowed to the vow alone, so its copy named a sentence
@@ -921,7 +921,7 @@ public class ProgramKeptTests
 
         AssertRuns(1, "CIRCE HOLDS MY KEY.");
         AssertRuns(3, "I AM KEPT, AND I AM GRATEFUL.");
-        AssertRuns(9, "GOOD BOYS DON'T DECIDE.");
+        AssertRuns(9, "GOOD PETS DON'T DECIDE.");
         AssertRuns(20, "I DON'T NEED CONTROL. SHE HAS IT.");
         AssertRuns(28, "I EXIST TO BE HERS.");
     }

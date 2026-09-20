@@ -8,8 +8,8 @@ export const REQUIRED = ['cabinet', 'reel_1', 'reel_2', 'reel_3', 'lever', 'cam_
 /** These degrade quietly with a console warning. */
 export const OPTIONAL = [
   'reel_window', 'freeze_1', 'freeze_2', 'freeze_3', 'screen_jackpot', 'screen_status', 'marquee',
-  'marquee_glow', 'payout_tray', 'payout_spawn', 'emi_topper', 'wand_head', 'wand_switch',
-  ...Array.from({ length: 30 }, (_, i) => `lights_chase_${String(i).padStart(2, '0')}`),
+  'apron_display', 'marquee_glow', 'payout_tray', 'payout_spawn', 'emi_topper', 'wand_head', 'wand_switch',
+  ...Array.from({ length: 34 }, (_, i) => `lights_chase_${String(i).padStart(2, '0')}`),
 ];
 
 /** Material the EMI face texture binds to (inside emi_topper). */

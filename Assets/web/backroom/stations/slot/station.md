@@ -8,8 +8,8 @@ The Candy cabinet (CONTRACT.md sections 2-7). Entry `station.js`, loaded by the 
 | `tape.js` | Pure tape client: state, buys, idem reuse, freeze, shownSp. No DOM. |
 | `scene.js` | three.js cabinet. One WebGL context per `open`, freed in `close`. Plays the moves `feel.js` picks. |
 | `pace.js` | THE PACE: about 4 s an outcome (spin, staggered stops, reveal, breath). Reduced motion keeps every duration. |
-| `feel.js` | THE HOUSE BOOK, pure: tiers, the Brake's recipe per outcome, the chime ladder, glance chain, token counts. |
-| `bank.js` | THE BANK tokens (DOM, rAF): payout_spawn -> SP readout, reversed for a debit. |
+| `feel.js` | THE HOUSE BOOK, pure: tiers, the Brake's recipe per outcome, the glance chain, the playbook's Tiers A/B/C. The chime ladder and the bank maths are re-exported from `shared/win/` (10.22.C), not written here. |
+| `bank.js` | THE BANK tokens: the `slot-token` elements, the layer, the rect and the rAF. The clock, the value ladder, the merge and the skip are `shared/win/bank.js`'s `createBankRun`. payout_spawn -> SP readout, reversed for a debit. |
 | `sound.js` | The cues, from the race's existing clips (`dtrh/assets/bubbles/sfx`) with a synth fallback. No new files. |
 | `symbols.js` / `media.js` | Reel cell art and the sit-down deal (keys only leave the page). |
 | `nodes.js` | The glb node names the page drives. |
@@ -92,6 +92,31 @@ Back (left) and EMI's HUD face sits under the room's SP chip (right), so the mar
   from the 40th a thud and tokens; melted = no ceremonies, ladder down an octave, EMI slows; the jackpot REVEAL
   once per sit-down; a no-pay spin gets THE SHIVER (+-4 px, 250 ms) and a muted last thud; no move over 620 ms
   but the jackpot hero; chase steps never faster than 6 Hz; every value is also text.
+- **THE SPINE** (CONTRACT 10.22.C, the reward pass). Every sentence above still holds; what changed is WHERE it
+  is decided. `shared/win/plan.js` owns Law IX and Brakes 2, 3 and 5 for all four stations, and this one asks
+  rather than re-derives:
+  - `land()` builds ONE plan a landing: `sitPlan(houseTier({ station: 'slot', tier: tierOf(o) }), sit, { reduced,
+    lite, still, melted })`. `plan.bank` is the token count, `plan.partyMs` the rollup AND the ladder's span,
+    `plan.shower` what `ctx.revealedWin` is told, `plan.sparkle` and `plan.glow` the two new moves. The station
+    may spend LESS than the plan; it may never spend more.
+  - Brake 3's memory is the spine's `freshSit()` ledger, one per `open()`, `seen` per RUNG. `afterParty` replaces
+    it (never mutates) for every party that played, and counts a hero only when THE REVEAL actually fired - so a
+    jackpot that was quieted does not spend the sit-down's one.
+  - `feel.recipe` still says what the CABINET does, and asks `winPlan` BARE (no reduced, no Calm, no lite) for
+    which restraint applies. A motion level strips the decoration on top of the recipe; it does not change it.
+  - `reduced` and `still` are two flags. Reduced motion is the settled state, `bank: 0` and `partyMs: 0`. Calm
+    (`stillFx()`) strips the shower and the sparks and KEEPS the tokens flying: a number that just changes is a
+    Law XII break at every motion level.
+- **10.22.B the announcement**: `ctx.revealedWin(o.pay, plan.shower, 'WIN +N')`, once, on the landed line's own
+  frame. It is SKIPPED when `plan.shower` is 0 - a tier 1, a melt, Calm, reduced motion - because
+  `room/coin-shower.js` clamps 1..4 and would otherwise throw a shower at a two-spiral line (Law IX).
+- **10.22.D THE SPARKLE BURST**: `counterfx.sparkBurst('.slot-callout', { count: plan.sparkle })` on the first
+  callout of the landing frame, 7 sparks at tier 3 and 9 at the jackpot. One burst a moment (Brake 2), never on
+  a small win, never on Calm, lite, a melt or reduced motion - `plan.sparkle` is 0 for every one of those.
+- **10.22.D THE GLOW**: `counterfx.warmGlow` on the SP chip as THE BANK's last token lands, sharing the
+  mini-thud's frame (Law X), for `plan.glow` (480 ms). Calm keeps it - a warm cut is not travel - and it is 0
+  while melted (Brake 5) and under reduced motion. A spend never glows: Law IX sizes a party, and money leaving
+  is not one.
 - **Law VI**: reduced motion takes the state (reels on their stop at the thud frame, no tokens: the readout is on
   the settled value with a lit ring, no shiver, heat steps; no rollup, so no chime climb either, and the payline
   frame is steady for the reveal beat with no pulse). Back and suspend skip every ceremony to settled.
@@ -215,7 +240,7 @@ text, so there is nothing for a label to add. It is left to the integration pass
 | `?reduced` `?variant=violet\|mint` | as before |
 | `?jar=97` | seeds the stored spiral jar (0 .. size - 1, clamped like `ensureSlot`) |
 | `?comp=1` | mints a welcome-back comp; `?comp=3` mints one of 3 spins |
-| `?lever=A..D` `?reel=A..D` | the lever and the drum voice (shared/sound/README.md); without them, the saved `br.sfx.variant` pair, else lever B over reel C |
+| `?lever=A..D` `?reel=A..D` | the lever and the drum voice (shared/sound/README.md); without them, the saved `br.sfx.variant` pair, else lever B over reel A |
 
 Dev buttons: **next: 2 EMI (re-spin)** scripts `emi, emi, melt` (the chase that does not start the melt),
 **next: 2 EMI, re-spin hits** also forces reel 3 back as EMI, **jar to 99** puts the jar one spiral from

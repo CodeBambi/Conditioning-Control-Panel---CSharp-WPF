@@ -11,7 +11,7 @@ namespace ConditioningControlPanel.Services.Possession.Effects;
 /// own voice here gets it the day toasts move into the packs.
 ///
 /// <para>Voice per pool is taken from each pack's existing <c>lockdown_on / lockdown_tick</c> lines:
-/// Bambi is bubbly and second-person ("Bambi", "~"), Locked is the keeper ("pet", "good boy"), Sissy is
+/// Bambi is bubbly and second-person ("Bambi", "~"), Locked is the keeper ("pet", "good pet"), Sissy is
 /// soft and coaxing ("lovely", "sweetie"). Vanilla is the same joke with no persona and no gendered
 /// word: flat system-voice lines that name the companion as "your companion". No em-dashes.</para>
 /// </summary>
@@ -56,7 +56,7 @@ public static class ToastLines
         "progress saved to: my collection",
         "undo is not available to you.",
         "your permissions have been reviewed. denied.",
-        "obedience: verified. good boy.",
+        "obedience: verified. good pet.",
         "the door was checked at your request. still locked.",
     };
 

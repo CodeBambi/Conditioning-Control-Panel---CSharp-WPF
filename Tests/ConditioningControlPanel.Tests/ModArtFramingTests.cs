@@ -336,19 +336,6 @@ public class ModArtFramingTests
     // here. The rail went on 2026-09-11 (favorites + recent took the column), so the registry
     // is the only copy of those rects now and there is nothing left to compare them with.
 
-    [Fact]
-    public void GoonViewboxInXaml_MatchesTheRegistrysShippedRect()
-    {
-        var xaml = ReadSource("Views", "Tabs", "PlayTabView.xaml");
-        var literal = ExtractViewbox(xaml, "x:Name=\"PlayGoonHeroBrush\"");
-        Assert.NotNull(literal);
-
-        var shipped = ModArtFramingRegistry.ShippedViewbox("features/goon_game.png",
-                                                           ModArtFramingRegistry.SurfacePlayCardTall);
-        Assert.NotNull(shipped);
-        AssertRectsMatch(shipped!.Value, literal!.Value, "PlayGoonHeroBrush");
-    }
-
     // ─── The declared shape has to be the REAL frame's shape ─────────
     //
     // A binding pointed at a surface whose aspect does not match its actual frame does not merely

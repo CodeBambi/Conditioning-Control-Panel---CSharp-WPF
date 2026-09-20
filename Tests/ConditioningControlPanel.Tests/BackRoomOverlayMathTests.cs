@@ -175,13 +175,35 @@ public class BackRoomOverlayMathTests
         Assert.Equal(640, BackRoomLoomSpiralOverlay.FitLongSide(null));
     }
 
+    /// <summary>
+    /// THE ENVELOPE THE OWNER CHOSE, 2026-09-17: 1250 ms in, 500 ms out. It blooms and snaps away.
+    ///
+    /// <para>This was a live collision. `feat/casino-batch-0917` (#1340) retuned the same two
+    /// constants to 600 / 900 - a fast arrival and a lingering exit - and grew
+    /// <c>BackRoomFxPlan.SpiralBriefMs</c> 1500 -> 2000 and <c>SpiralFullMs</c> 4000 -> 5000 to pay
+    /// for it, because the fade-IN is spent inside the hold. The owner picked THIS side with both
+    /// envelopes in front of them, so #1340's spiral hunk and its two grown holds are the side that
+    /// loses. When that PR is merged, take ours on all four constants - and note that its test
+    /// changes will conflict here, which is the point of this file.</para>
+    ///
+    /// <para>ARITHMETIC THE OWNER SHOULD SEE, because it is the consequence of taking one side's
+    /// envelope with the other side's holds. The fade-in runs INSIDE the hold, so a BRIEF spiral
+    /// (1500 ms) spends 1250 ms rising and only the last 250 ms at full alpha. That is a bloom that
+    /// barely arrives before it leaves. It is asserted below rather than quietly corrected: growing
+    /// the holds to suit is a second authored decision and not one that was made.</para>
+    /// </summary>
     [Fact]
-    public void Spiral_FadesIn250_HoldsThenOut500_OrOutFromARelease_NeverPops()
+    public void Spiral_FadesIn1250_HoldsThenOut500_OrOutFromARelease_NeverPops()
     {
-        Assert.Equal((250, 500), (BackRoomOverlayMath.SpiralFadeInMs, BackRoomOverlayMath.SpiralFadeOutMs));
+        Assert.Equal((1250, 500), (BackRoomOverlayMath.SpiralFadeInMs, BackRoomOverlayMath.SpiralFadeOutMs));
+        // The holds #1340 would have grown, held at main's values on purpose (see the summary).
+        Assert.Equal((1500, 4000), (BackRoomFxPlan.SpiralBriefMs, BackRoomFxPlan.SpiralFullMs));
+        // A brief spiral reaches full alpha at 1250 of its 1500 ms hold: 250 ms at the top, no more.
+        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(1250, BackRoomFxPlan.SpiralBriefMs, null));
+        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(1499, BackRoomFxPlan.SpiralBriefMs, null));
         Assert.Equal(0, BackRoomOverlayMath.SpiralEnvelope(0, 4000, null));
-        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(125, 4000, null), 6);
-        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(250, 4000, null));
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(625, 4000, null), 6);
+        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(1250, 4000, null));
         Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(4000, 4000, null));
         Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(4250, 4000, null), 6);
         Assert.False(BackRoomOverlayMath.SpiralDone(4499, 4000, null));
@@ -194,7 +216,7 @@ public class BackRoomOverlayMathTests
         Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(2250, 20000, 2000), 6);
         Assert.True(BackRoomOverlayMath.SpiralDone(2500, 20000, 2000));
         // Released during the fade in: both curves multiply, as the mockup draws it.
-        Assert.Equal(0.8 * 0.8, BackRoomOverlayMath.SpiralEnvelope(200, 20000, 100), 6);
+        Assert.Equal((.16 * .16 * (3 - 2 * .16)) * .8, BackRoomOverlayMath.SpiralEnvelope(200, 20000, 100), 6);
     }
 
     // ---- tunnel ----------------------------------------------------------------------------------

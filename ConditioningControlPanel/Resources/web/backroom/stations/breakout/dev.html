@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Breakout station - dev harness</title>
+<!-- Dev harness only: a mock ctx stands in for the room and the host. Serve Resources/web as the root:
+       node ConditioningControlPanel/Resources/web/backroom/shared/sound/serve.mjs
+       http://127.0.0.1:8940/backroom/stations/breakout/dev.html
+     Query: ?sat=0.6 (starting saturation)  &still (reduced motion, gifs on frame one)  &bpm=100  &n=12 (breakout N)
+            &speed=0.8 (ball speed scale)  &nosub (gates.subliminal = false)  &words=a,b,c (override the dealt words)
+            &hostback (pretend the host draws its own Back, so the chevron is hidden)
+     Standalone, so no ctx.hostBack by default: the station shows its own chevron Back here. -->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #160e20; font: 12px Segoe UI, Arial, sans-serif; color: #fce5f3; }
+  #root { position: fixed; inset: 0; }
+  #sit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 22px; border-radius: 20px;
+         background: #28172fea; color: inherit; border: 1px solid #edb1d177; font: inherit; font-size: 14px; cursor: pointer; }
+  #log { position: fixed; left: 8px; bottom: 8px; max-width: 46vw; max-height: 30vh; overflow: auto; font: 11px Consolas, monospace;
+         color: #f5cfe7aa; pointer-events: none; white-space: pre; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<button id="sit" type="button" hidden>Sit down again</button>
+<div id="log"></div>
+<script type="module">
+import { mount } from './station.js';
+
+const q = new URLSearchParams(location.search);
+const gif = name => `/emotes/${name}.gif`;   // serve.mjs maps /emotes/ to Resources/avatar0_emotes
+const names = ['cheer', 'giggle', 'flirt', 'adoring', 'blowkiss', 'entrancing', 'sultry', 'praise'];
+// An older serve.mjs has no /emotes/ route. Probe once and fall back to the slot's bundled animated webps so GIF
+// bricks and colliders still have faces.
+const emotesReachable = await fetch(gif('cheer'), { method: 'HEAD' }).then(r => r.ok).catch(() => false);
+const gifUrl = (i) => emotesReachable ? gif(names[i % names.length]) : `../slot/fallback/gif${i % 4}.webp`;
+// Twelve niche-safe generic words so the mantra wall and the word trail have material; ?words=a,b,c overrides.
+const WORDS = ['DROP', 'RELAX', 'LET GO', 'SINK', 'OBEY', 'FOCUS', 'BLANK', 'SOFT', 'EMPTY', 'GOOD', 'DEEPER', 'STILL'];
+const words = (q.get('words') || '').split(',').map(w => w.trim()).filter(Boolean).length
+  ? q.get('words').split(',').map(w => w.trim()).filter(Boolean) : WORDS;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const logEl = document.getElementById('log');
+const log = (...a) => { console.log(...a); logEl.textContent = (a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n' + logEl.textContent).slice(0, 4000); };
+const sent = [];
+const spFns = new Set();
+let sp = 57;
+
+const ctx = {
+  root: document.getElementById('root'),
+  bridge: { send: m => { sent.push(m); log('[bridge]', m); } },
+  request: async (op, body) => { await wait(120); log('[request]', op, body || ''); return { ok: true }; },
+  fx: async (fxId, symbols, args) => { sent.push({ type: 'fx', fxId, symbols }); log('[fx]', fxId, symbols || '', args || ''); return { fired: [], skipped: [] }; },
+  media: async ({ count = 8 } = {}) => {
+    await wait(120);
+    return { seed: 918273,
+      gifs: names.slice(0, count).map((n, i) => ({ key: 'g' + i, url: gifUrl(i), src: emotesReachable ? 'pool' : 'fallback' })),
+      words: words.map((w, i) => ({ key: 's' + i, text: w, src: 'preset' })) };
+  },
+  sp: () => sp,
+  onSp: fn => { spFns.add(fn); return () => spFns.delete(fn); },
+  reduced: q.has('still'), motion: q.has('still') ? 'Reduced' : 'Full', intensity: 'Normal',
+  lex: (key, fallback) => fallback,
+  gates: { subliminal: !q.has('nosub') },
+  variant: null,
+  hostBack: q.has('hostback') ? true : null,
+  standUp: () => stand(),
+};
+
+const station = await mount(ctx);
+const sit = document.getElementById('sit');
+async function stand() { await station.close(); sit.hidden = false; sit.focus(); log('[station] closed'); }
+async function open() { sit.hidden = true; await station.open(); log('[station] open'); }
+sit.onclick = open;
+await open();
+
+window.dev = { station, ctx, sent, open, stand, words, get game() { return station.game; }, get audio() { return station.audio; }, get media() { return station.media; } };
+</script>
+</body>
+</html>

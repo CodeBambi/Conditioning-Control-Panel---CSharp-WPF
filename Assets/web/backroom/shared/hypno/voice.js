@@ -48,12 +48,14 @@ export function createVoice({ bridge = defaultBridge, hosted = defaultHosted } =
   if (!hosted || !bridge || typeof bridge.request !== 'function') return null;
   return {
     available: true,
-    speak({ text, reversed = false, seed = 0 } = {}) {
+    speak({ text, reversed = false, seed = 0, volume } = {}) {
       const token = typeof bridge.mintId === 'function' ? bridge.mintId() : mintId();
       const msg = {
         type: 'word.speak', token, text: String(text == null ? '' : text),
         reversed: reversed === true, seed: (Number(seed) || 0) >>> 0,
       };
+      // Optional level 0..1 (Breakout speaks at half); a host that does not know it plays at its own level.
+      if (Number.isFinite(volume)) msg.volume = Math.max(0, Math.min(1, volume));
       return bridge
         .request(msg, 'word-ack', (m) => m && m.token === token, ACK_MS, { source: 'none', durationMs: 0 })
         .then(readAck)

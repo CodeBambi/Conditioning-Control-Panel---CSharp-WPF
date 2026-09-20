@@ -107,6 +107,25 @@ export function planLanding({ from, omega, landing, minMs = 3200, maxMs = 5600, 
 
 export const rotationAt = (plan, elapsedMs) => plan.from + (plan.to - plan.from) * easeOutQuart(elapsedMs / plan.ms);
 
+/** THE SETTLE (the landing's dead tail). A quartic ease-out spends the last stretch of its own clock moving
+ *  less than the eye can read, and hypno.js's warped clock then stretches that stretch into a second and more
+ *  of real time: the wheel LOOKED stopped on its slice while the plan was still officially running, so the
+ *  landing beat (the thud, the party, the callout) was waiting on the clock instead of on the picture. A plan
+ *  therefore ends when its remaining travel is under SETTLE_EPS_RAD, which is a fiftieth of the narrowest
+ *  drawn slice and under 3 px at the rim, so the snap onto `to` is invisible and rides in under THE THUD's
+ *  own flash on the same frame. Do not raise it back toward plan.ms: that IS the 1 to 2 second dead wait. */
+export const SETTLE_EPS_RAD = (0.5 * Math.PI) / 180;
+
+/** The plan-clock time (ms) at which `plan` is within `eps` radians of its landing: where the landing beat
+ *  fires. easeOutQuart leaves (1 - u)^4 of the travel, so this solves dist * (1 - u)^4 = eps for u. A plan
+ *  shorter than `eps` (a wind-down nudge) has no dead tail to trim and keeps its whole duration. */
+export function settleMs(plan, eps = SETTLE_EPS_RAD) {
+  const ms = Number(plan && plan.ms), dist = Math.abs(Number(plan && plan.to) - Number(plan && plan.from));
+  if (!(ms > 0)) return 0;
+  if (!(dist > eps) || !(eps > 0)) return ms;
+  return ms * (1 - (eps / dist) ** 0.25);
+}
+
 /** Time to `nextResetAt` (ISO UTC) at client time `nowMs`. Display only: the server owns the day. */
 export function countdown(nextResetAt, nowMs) {
   const at = Date.parse(nextResetAt);
@@ -122,3 +141,10 @@ export function shownSp(serverSp, owed = 0, flying = null) {
   const floor = Math.max(0, server - Math.max(0, Math.trunc(Number(owed) || 0)));
   return flying == null || !Number.isFinite(Number(flying)) ? floor : Math.min(server, Math.max(0, Math.trunc(Number(flying))));
 }
+
+/** Daily allowance and earned credits are independent. Legacy servers have no credits. */
+export function bonusSpinsOf(state) {
+  const n = Number(state?.bonusSpins);
+  return Number.isSafeInteger(n) && n > 0 ? n : 0;
+}
+export function canSpinWheel(state) { return !!state && (!state.spun || bonusSpinsOf(state) > 0); }

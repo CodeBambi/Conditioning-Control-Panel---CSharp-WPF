@@ -340,27 +340,9 @@ namespace ConditioningControlPanel
             _trayIcon = new TrayIconService(this);
             // Let the bark system observe tray-driven events (e.g. "wake Bambi").
             App.Bark?.AttachTray(_trayIcon);
-            _trayIcon.OnExitRequested += () =>
-            {
-                if (App.Lockdown?.IsActive == true) return;
-
-                _exitRequested = true;
-                if (_isRunning) StopEngine();
-
-                // Kill all audio and effects - ensures clean exit with audio unducked
-                App.KillAllAudio();
-
-                // Explicitly dispose overlay
-                try
-                {
-                    App.Overlay?.Dispose();
-                }
-                catch { }
-
-                EnsureSessionRestoredForExit();
-                SaveSettings();
-                Application.Current.Shutdown();
-            };
+            // The one real exit path lives in MainWindow.Launcher.cs (RequestExit) so the tray
+            // and the launcher leave through the same door.
+            _trayIcon.OnExitRequested += RequestExit;
             _trayIcon.OnShowRequested += () =>
             {
                 ShowAvatarTube();
@@ -393,6 +375,7 @@ namespace ConditioningControlPanel
             // BEFORE OnXPChanged tweens the counter it means to withhold. It also takes XPAwarded,
             // the delta-and-provenance event that XPChanged deliberately is not.
             InitializeBankFx();
+            InitializeSparkleWallet();
             App.Progression.XPChanged += OnXPChanged;
             App.Progression.LevelUp += OnLevelUp;
 
@@ -717,9 +700,8 @@ namespace ConditioningControlPanel
                         return false;
                     }
                     // captures MainWindow as owner; valid since this opener is registered during MainWindow's lifetime
-                    var win = new Views.Deeper.EnhancementPlayerWindow(
-                        App.DeeperPlayer, App.DeeperHost, enhancement, "catalogue") { Owner = this };
-                    win.Show();
+                    Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this,
+                        w => w.LoadEnhancementFromMemory(enhancement, "catalogue"));
                     return true;
                 }
                 catch (Exception ex)
@@ -2709,7 +2691,6 @@ namespace ConditioningControlPanel
                 {
                     ("features/lab_gaze_hero.png",      PlayTab?.PlayGazeHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/lab_focusgaze_hero.png", PlayTab?.PlayFocusHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
-                    ("features/goon_game.png",          PlayTab?.PlayGoonHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCardTall),
                     ("features/lab_quiz_hero.png",      PlayTab?.PlayIntakeHeroBrush,   512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/blink_trainer.png",      PlayTab?.PlayBlinkHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
                     // Its art plate overrides PlayCardArtPlate's 138 to 168, so it frames against
@@ -2717,14 +2698,10 @@ namespace ConditioningControlPanel
                     ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768, ModArtFramingRegistry.SurfacePlayCardTall),
                     ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512, ModArtFramingRegistry.SurfacePlayCard),
                     ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024, ModArtFramingRegistry.SurfacePlayCard),
-                    // The page hero and the Loom strip. Both brushes were named and left mutable
-                    // by the 0812 remake but never fed, so a .ccpmod overriding features/dtrh.png
-                    // or features/loom.png repainted every OTHER surface that uses those files and
-                    // left the two biggest ones on the embedded art. 1024 for the hero because it
-                    // is the full-width banner at the top of the wall; 512 for the strip.
-                    // dtrh is the full-width banner at the top of the wall, not a card header, so
-                    // it frames against a much wider box (playHero).
-                    ("features/dtrh.png",               PlayTab?.PlayDtrhHeroBrush,     1024, ModArtFramingRegistry.SurfacePlayHero),
+                    // The Loom strip. Named and left mutable by the 0812 remake but never fed, so
+                    // a .ccpmod overriding features/loom.png repainted every OTHER surface that
+                    // uses the file and left the strip on the embedded art. (The Rabbit Hole hero,
+                    // Goon and Back Room brushes left this map on 2026-09-18 with their cards.)
                     // The Loom strip is a FIXED 216-wide column, not a card plate. Framed as a
                     // 2.85:1 plate, an author's 16:9 file was cropped to a 2.85 window and then
                     // re-cropped by UniformToFill to the column's 1.83 - about 64% x 62% of their
@@ -2893,6 +2870,27 @@ namespace ConditioningControlPanel
             App.Mods.ActivateMod(newModId);
             ApplyActiveModChange();
         }
+
+        /// <summary>
+        /// The launcher's title-bar mod switcher. Deliberately the SAME two steps as the top-bar
+        /// combo above (ActivateMod + <see cref="ApplyActiveModChange"/>), so the launcher is a
+        /// second door onto the one switching path and never a second path. Works with the panel
+        /// tray-hidden: everything ApplyActiveModChange repaints exists from construction.
+        /// </summary>
+        internal void SwitchActiveModFromLauncher(string modId)
+        {
+            if (_isLoading || App.Mods == null || string.IsNullOrWhiteSpace(modId)) return;
+            if (string.Equals(App.Mods.ActiveModId, modId, StringComparison.OrdinalIgnoreCase)) return;
+
+            App.Mods.ActivateMod(modId);
+            if (!string.Equals(App.Mods.ActiveModId, modId, StringComparison.OrdinalIgnoreCase)) return;
+            ApplyActiveModChange();
+        }
+
+        /// <summary>The launcher's "Manage mods" row: the panel's own Mod Manager, through the one
+        /// launcher the rail entry and the combo's footer row use. The panel must be on screen
+        /// first (the dialog is owned by it); LauncherHost.OpenPanelModManager sees to that.</summary>
+        internal void OpenModManagerFromLauncher() => BtnManageMods_Click(this, new RoutedEventArgs());
 
         /// <summary>
         /// The last row of the mod drop-down is a verb, not a mod. Put the selection back on the

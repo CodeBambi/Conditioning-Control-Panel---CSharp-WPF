@@ -3,9 +3,22 @@
  *
  * The shared atoms (THE THUD, THE SHIVER, THE GLOW, THE BANK's timings) come from arcademy/shell/counterfx.js,
  * the same stable path the slot's feel pass reads, so a thud is a thud in every room. The slot's own feel.js is
- * not imported: its tiers are paylines, the wheel's are one landing a day. */
+ * not imported: its tiers are paylines, the wheel's are one landing a day.
+ *
+ * THE REWARD PASS (CONTRACT 10.22). Three things that were written twice now come from shared/win/: THE BANK's
+ * token count and value ladder (`shared/win/bank.js`), and THE CHIME LADDER's cap and 6 Hz floor
+ * (`shared/win/ladder.js`). They are RE-EXPORTED from here, not re-implemented, so every caller and every
+ * check that already reads them off feel.js keeps reading them off feel.js. What this file still owns is what
+ * is the wheel's alone: `tierOf`, the landing rows, the peg-tick gate, the poses and the recipe - and the
+ * recipe now sizes itself off the PLAN's `spent`, never off its own rung, because Law IX and Brakes 2, 3 and 5
+ * live in shared/win/plan.js and nowhere else. */
 
 import { CFX } from '../../../arcademy/shell/counterfx.js';
+import { LADDER } from '../../shared/win/ladder.js';
+
+/** THE BANK's count and its value ladder, one copy, in shared/win/bank.js (10.22.C). Re-exported unchanged:
+ *  the arithmetic here was identical to the shared engine's, down to the lite cap. */
+export { winTokens, tickValues } from '../../shared/win/bank.js';
 
 export const FEEL = Object.freeze({
   ANSWER_MS: 100,                 // Law VIII: every input answers inside this, before any network reply
@@ -23,8 +36,8 @@ export const FEEL = Object.freeze({
   BANK_MAX_LITE: CFX.BANK_MAX_LITE,
   GLANCE_HOLD_MS: 600,            // THE MASCOT GLANCE holds 400-800 ms
   BREATH_MS: 3200,                // THE BREATH: one element (the jackpot star), 2.6-4 s ease-in-out
-  LADDER_CAP: 7,                  // THE CHIME LADDER: +1 semitone a step, 7 at most
-  STROBE_MIN_MS: 1000 / 6,        // no light or tick changes faster than 6 Hz
+  LADDER_CAP: LADDER.CAP,         // THE CHIME LADDER: +1 semitone a step, 7 at most (shared/win/ladder.js)
+  STROBE_MIN_MS: LADDER.STROBE_MIN_MS,   // Brake 7: no light or tick changes faster than 6 Hz
   PARTY_MS: [900, 700, 900, 1000, 2400],   // per tier: how long the wheel celebrates (THE BREATH waits it out)
 });
 
@@ -40,29 +53,45 @@ export function tierOf(r) {
 }
 
 /**
+ * THE PRIZE MOMENT's rung (CONTRACT 10.22, Law IX). A real decoration and Seeing Double are the only rewards
+ * in the whole room that are a THING and not a number, and until the reward pass they had the smallest party
+ * in the building: a cloche and a sentence. `tierOf` calls them a 2 because that is what they are worth in
+ * SP - nothing - and `shared/win/tier.js` pins that table against this one, so it does not move. The ARRIVAL
+ * of the thing is a separate beat and it is a big one, so the station asks for it separately and Brake 2
+ * merges the two into the higher (`mergePlans`): one party, never two.
+ *
+ * A fallback decoration is NOT a prize: the collection was already complete and it paid SP instead, so it
+ * rides its pay's own rung like any other win.
+ */
+export const PRIZE_TIER = 3;
+export function prizeTier(r) {
+  const kind = r && r.reward ? r.reward.kind : null;
+  if (kind === 'double') return PRIZE_TIER;
+  if (kind === 'decoration' && !r.reward.fallback) return PRIZE_TIER;
+  return 0;
+}
+
+/**
  * The party for one landing. `still` = reduced motion or Calm (Law VI: the settled state, no travel).
  *   sound: 'snooze' (a muted thud and a yawn, Brake 6) | 'chime' | 'two' | 'thud' | 'reveal'
+ *
+ * `plan` is the spine's (shared/win/plan.js) and, when it is handed in, it OWNS the sizing: everything below
+ * reads `plan.spent`, the rung actually paid out after Law IX and Brakes 2, 3 and 5, never `tierOf`'s own
+ * rung. That is the whole point of the reward pass - a station asks for a rung and obeys what comes back, and
+ * a second jackpot in one sit-down or a melted win shrinks HERE without this file knowing why. With no plan
+ * (the checks, dev.html) it falls back to its own rung, exactly as before.
  */
-export function recipe(r, { still = false } = {}) {
+export function recipe(r, { still = false, plan = null } = {}) {
   const tier = tierOf(r);
-  const base = { tier, heat: tier, tokens: tier > 0, gold: tier === 4, jolt: tier >= 2, reveal: false, sparks: false,
-                 shiver: false, sleepy: false, partyMs: FEEL.PARTY_MS[tier] };
-  const sound = ['snooze', 'chime', 'two', 'thud', 'reveal'][tier];
-  if (tier === 0) return { ...base, sound, heat: 0, tokens: false, shiver: !still, sleepy: true };
-  if (tier === 4) return { ...base, sound, reveal: !still, sparks: !still };
-  return { ...base, sound };
-}
-
-/** THE BANK token count for a pay tier. */
-export function winTokens(tier, lite) {
-  const hi = lite ? FEEL.BANK_MAX_LITE : FEEL.BANK_MAX;
-  return Math.max(FEEL.BANK_MIN, Math.min(hi, tier >= 4 ? FEEL.BANK_MAX : tier + 2));
-}
-
-/** The readout value after each token lands: evenly stepped, the last one exactly `to` (Law X). */
-export function tickValues(from, to, n) {
-  const a = Math.round(Number(from) || 0), b = Math.round(Number(to) || 0), k = Math.max(1, n | 0);
-  return Array.from({ length: k }, (_, i) => (i === k - 1 ? b : Math.round(a + (b - a) * ((i + 1) / k))));
+  const spent = plan ? plan.spent : tier;
+  const partyMs = plan ? plan.partyMs : FEEL.PARTY_MS[tier];
+  const sparks = plan ? plan.sparkle > 0 : false;
+  const base = { tier: spent, heat: spent, tokens: spent > 0, gold: spent === 4, jolt: spent >= 2, reveal: false,
+                 sparks, shiver: false, sleepy: false, partyMs };
+  const sound = ['snooze', 'chime', 'two', 'thud', 'reveal'][spent];
+  if (spent === 0) return { ...base, sound, heat: 0, tokens: false, shiver: !still, sleepy: true };
+  if (spent === 4) return { ...base, sound, reveal: plan ? plan.reveal : !still, sparks: plan ? sparks : !still };
+  return { ...base, sound, reveal: plan ? plan.reveal : false };
 }
 
 /**

@@ -108,6 +108,11 @@ test('the rows carry no em dash and sit in the br_ block after the wheel', () =>
 const read = (rel) => readFileSync(join(BACKROOM, rel), 'utf8');
 const stationIds = () => new Set(JSON.parse(read('stations.json')).map((r) => r.id));
 
+/** The picture picker's source values, read from room/hud.js so a new source with no string fails here. */
+const mediaSources = () => new Set([...read('room/hud.js')
+  .slice(read('room/hud.js').indexOf('MEDIA_SOURCES = ['))
+  .slice(0, 200).matchAll(/\['([a-z]+)',/g)].map((m) => m[1]));
+
 const FAMILIES = [
   // room/customization-panel.js: 'br_custom_' + a key from the panel's own item and control tables.
   { prefix: 'br_custom_', suffixes: () => {
@@ -124,6 +129,13 @@ const FAMILIES = [
     .matchAll(/\['([a-z0-9_]+)',\s*'/g)].map((m) => m[1].replace(/_[a-z]$/, ''))) },
   // room/walk.js: 'br_station_' + the row id, for a row that carries no labelKey of its own.
   { prefix: 'br_station_', suffixes: stationIds },
+  // room/hud.js: 'br_opt_vol_' + one of the three level keys the Options card builds its sliders from.
+  { prefix: 'br_opt_vol_', suffixes: () => new Set([...read('room/hud.js')
+    .matchAll(/\['(sub|sfx|music)',\s*'/g)].map((m) => m[1])) },
+  // room/hud.js: 'br_media_' + a source from MEDIA_SOURCES, and 'br_media_note_' + the same minus
+  // 'auto' - 'auto' is what the player picks, never what the host resolves it to, so it has no note.
+  { prefix: 'br_media_', suffixes: mediaSources },
+  { prefix: 'br_media_note_', suffixes: () => new Set([...mediaSources()].filter((v) => v !== 'auto')) },
 ];
 
 test('every br_* row in en.json is asked for by somebody', () => {

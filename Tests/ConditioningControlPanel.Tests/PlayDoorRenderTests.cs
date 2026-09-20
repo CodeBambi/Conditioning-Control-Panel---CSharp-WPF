@@ -126,8 +126,8 @@ public class PlayDoorRenderTests
 
                 var floor = name switch
                 {
-                    "SlotDtrh" or "SlotWebcamChip" or "SlotLoom" => 900.0,
-                    "SlotGoon" or "SlotRemoteControl" => 640.0,
+                    "SlotWebcamChip" or "SlotLoom" => 900.0,
+                    "SlotRemoteControl" => 640.0,
                     _ => 400.0,
                 };
 
@@ -158,9 +158,10 @@ public class PlayDoorRenderTests
                 .Where(f => typeof(DependencyObject).IsAssignableFrom(f.FieldType))
                 .ToList();
 
-            // ~57 named elements since the 0812 remake dropped five cards; the floor exists to
-            // catch the sweep silently seeing zero BAML fields, not to pin the exact count.
-            Assert.True(fields.Count >= 50,
+            // ~30 named elements since the games left for the launcher (2026-09-18; ~57 before
+            // that); the floor exists to catch the sweep silently seeing zero BAML fields, not to
+            // pin the exact count.
+            Assert.True(fields.Count >= 24,
                 $"only {fields.Count} named elements found on PlayTabView — the sweep is not seeing the BAML fields");
 
             var broken = fields.Where(f => f.GetValue(page) == null).Select(f => f.Name).ToList();
@@ -180,7 +181,7 @@ public class PlayDoorRenderTests
     /// </summary>
     private static readonly string[] SlotNames =
     {
-        "SlotDtrh", "SlotGoon", "SlotRemoteControl", "SlotWebcamChip",
+        "SlotRemoteControl", "SlotWebcamChip",
         "SlotGaze", "SlotFocusGaze", "SlotBlinkTrainer",
         "SlotGradedIntake", "SlotFyp", "SlotLockdown", "SlotLoom",
     };
@@ -207,11 +208,10 @@ public class PlayDoorRenderTests
     {
         // A card whose button is disabled is a dead door: the Play wall's contract is that the
         // click ALWAYS reaches the handler and TierGate does the refusing, so nothing on this
-        // surface may be disabled up front. (The Goon perk sub-lines are dimmed, never disabled —
-        // they are TextBlocks, not buttons, so they are not in this set.)
+        // surface may be disabled up front.
         var buttons = new[]
         {
-            "BtnPlayFallIn", "BtnPlayQuickDrop", "BtnPlayGoon", "BtnPlayRemoteControl",
+            "BtnPlayRemoteControl",
             "BtnPlayGazeMinigame", "BtnPlayGradedIntake", "BtnPlayBlinkTrainer",
             "BtnPlayFyp", "BtnPlayLockdown", "BtnPlayLoom",
         };
@@ -242,11 +242,11 @@ public class PlayDoorRenderTests
     //  lockbands
     // =====================================================================================
 
-    /// <summary>Every band <c>RefreshPlayCards</c> paints. The seven TierGate ones plus the
+    /// <summary>Every band <c>RefreshPlayCards</c> paints. The six TierGate ones plus the
     /// intake's, which is driven by pass state rather than tier.</summary>
     private static readonly string[] LockbandNames =
     {
-        "PlayLockDtrh", "PlayLockGaze", "PlayLockFocusGaze", "PlayLockRemote",
+        "PlayLockGaze", "PlayLockFocusGaze", "PlayLockRemote",
         "PlayLockLockdown", "PlayLockBlink", "PlayLockFyp", "PlayLockIntake",
     };
 
@@ -320,18 +320,13 @@ public class PlayDoorRenderTests
     {
         ("PlayGazeHeroBrush",     "features/lab_gaze_hero.png"),
         ("PlayFocusHeroBrush",    "features/lab_focusgaze_hero.png"),
-        ("PlayGoonHeroBrush",     "features/goon_game.png"),
         ("PlayIntakeHeroBrush",   "features/lab_quiz_hero.png"),
         ("PlayBlinkHeroBrush",    "features/blink_trainer.png"),
         ("PlayRemoteHeroBrush",   "features/remote_control.png"),
         ("PlayFypHeroBrush",      "features/fyp.png"),
         ("PlayLockdownHeroBrush", "lockdown_icon.png"),
-        // 0812 remake: the hero and the Loom strip carry art too. The named-and-mutable contract
-        // was already in place then; the mod-awareness sweep (0813) spent it, so playHeroMap now
-        // mutates these two on every mod switch like the eight above it. Before that, a .ccpmod
-        // overriding features/dtrh.png repainted every OTHER surface using that file and left the
-        // biggest one on the embedded art.
-        ("PlayDtrhHeroBrush",     "features/dtrh.png"),
+        // 0812 remake: the Loom strip carries art too, mutated on every mod switch like the
+        // cards above it. (The Rabbit Hole hero and the Goon plate left on 2026-09-18.)
         ("PlayLoomHeroBrush",     "features/loom.png"),
     };
 
@@ -503,7 +498,9 @@ public class PlayDoorRenderTests
         Assert.NotEmpty(rows);
         Assert.DoesNotContain(SettingsPaletteIndex.All, e => e.TabKey == "lab");
 
-        foreach (var term in new[] { "lab", "gaze", "rabbit hole", "bureau", "mantra" })
+        // "rabbit hole" left this list with the games (2026-09-18): the palette must not send
+        // a search for a game to a wall that no longer has it.
+        foreach (var term in new[] { "lab", "gaze", "blink", "lockdown", "loom" })
             Assert.True(SettingsPaletteIndex.Search(term).Any(e => e.TabKey == "play"),
                 $"searching the palette for \"{term}\" no longer finds the Play door");
     }
@@ -536,7 +533,7 @@ public class PlayDoorRenderTests
     public void TheLabViewTypeNoLongerExists()
     {
         // A leftover compiled LabTabView would mean the view is still mounted somewhere, which is
-        // how a second RabbitHoleFx canvas ends up running behind a hidden tab.
+        // how a second ambient canvas ends up running behind a hidden tab.
         var lab = typeof(PlayTabView).Assembly.GetType("ConditioningControlPanel.Views.Tabs.LabTabView", throwOnError: false);
         Assert.True(lab == null, "LabTabView is still compiled into the assembly");
     }
@@ -605,11 +602,10 @@ public class PlayDoorRenderTests
             var page = new PlayTabView();
             Realize(page);
 
-            // Gold on the two premium cards, diamond on the door's one Lab hero. A sign wearing
-            // the wrong tier is a price tag quoting the wrong price.
+            // Gold on the two premium cards. A sign wearing the wrong tier is a price tag quoting
+            // the wrong price. (The diamond Rabbit Hole hero left for the launcher, 2026-09-18.)
             Assert.Equal(1, page.PlayBadgeFyp.Tier);
             Assert.Equal(1, page.PlayBadgeRemote.Tier);
-            Assert.Equal(2, page.PlayBadgeDtrh.Tier);
         });
     }
 
@@ -685,7 +681,7 @@ public class PlayDoorRenderTests
             var page = new PlayTabView();
             Realize(page);
 
-            foreach (var badge in new[] { page.PlayBadgeFyp, page.PlayBadgeRemote, page.PlayBadgeDtrh })
+            foreach (var badge in new[] { page.PlayBadgeFyp, page.PlayBadgeRemote })
             {
                 Assert.False(badge.FreeToday);
                 Assert.Equal(Visibility.Collapsed, badge.StampImage.Visibility);

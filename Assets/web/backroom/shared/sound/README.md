@@ -1,7 +1,8 @@
 # shared/sound - the Back Room's one kit
 
-Every sound the Back Room makes comes out of `kit.js`: one AudioContext for the whole room, one master gain, one small
-delay-feedback room on a send bus, and a table of cues that are scored first (pure data) and rendered second. It is
+Every sound the Back Room makes comes out of `kit.js`: one AudioContext for the whole room, one master gain over three
+buses, one small delay-feedback room tapped once per bus, and a table of cues that are scored first (pure data) and
+rendered second. It is
 synth-first (oscillators, filtered noise, a delay line) so the room owns every sound it makes and ships no licensed
 samples. The race's mp3 chimes the stations used to borrow are retired.
 
@@ -11,6 +12,7 @@ kit.arm();                              // inside a gesture; builds the context 
 kit.play('win', { tier: 'big' });       // a cue at the frame; returns the notes scheduled (0 = traced only)
 kit.stop('ladder');                     // take a cue back, scheduled-ahead notes included
 kit.setMaster(0.8);                     // 0..1, the default; there is no volume setting of its own in the room
+kit.setSfx(0.5);                        // the three buses, 0..1 each, under the master: setSfx / setSub / setBed
 kit.suspend(true);                      // Law VI: every voice and bed hold; the ambience comes back on resume
 kit.dispose();                          // the room settles: the context closes, the next arm() builds a new one
 ```
@@ -25,11 +27,41 @@ kit.dispose();                          // the room settles: the context closes,
 - The ambient bed never stops while the room is open (it holds on suspend and comes back on resume).
 - Every win tier has a longer and richer tail than the one below.
 
+## The three buses
+
+One master over three buses, so a lane can be turned down without touching the rest of the floor:
+
+| bus | cues | what it is |
+|---|---|---|
+| `sub` | `word`, `breath` | the subliminal lane: the whisper shimmer under a spoken word, and the melt's deep breath |
+| `bed` | `ambience`, `spiral` | the loops that hold behind everything while the room is open |
+| `sfx` | everything else | the floor: all the foley, the ticks and the drums, the lever, the bells, every win tier |
+
+`CUE_BUS` in `kit.js` is that mapping as data, and the two loops under the table throw at load if a cue in `SCORES`
+lands on no bus: a cue with no bus is a silent cue, and silence is the one bug the floor cannot hear.
+
+```js
+kit.setSub(0.4); kit.setSfx(1); kit.setBed(0.6);   // 0..1 each, on the same 50 ms ramp the master uses
+kit.debug().bus;                                   // { sub: 0.4, sfx: 1, bed: 0.6 }
+```
+
+All three buses hang under the master gain, so `setMaster`, `setTrim` and `mute` still scale the whole room from
+above and no bus is a second volume control. Every bus starts at 1, so a kit nobody has mixed is the mix the room
+already had: `BED_LEVEL` (0.0126) and the rolls' own levels are untouched, with the bus a multiplier over them.
+
+**The room is tapped once per bus, not one room per bus.** The delay line is linear, so three taps of 0.22 into the
+one line sum to exactly the tail the single send gave, and because a bus moves its dry leg and its tap together a
+lane turned down takes its own reverb with it instead of leaving a tail ringing over a lane asked for quiet. The
+per-note `dry` flag still decides whether a note reaches the room at all.
+
+`shared/hypno/callout.js` keeps a three-cue graph of its own, straight to the destination, for a page where `kit.js`
+failed to import. It is a documented bypass: no master, no trim, no buses.
+
 ## The palette
 
 | cue | what it is | length | opts |
 |---|---|---|---|
-| `ambience` | bed: a low warm hum (55 Hz pair under a 220 Hz lowpass) and a very slow shimmer, -24 dB under master, loops | until stop | |
+| `ambience` | bed: a low warm hum (55 Hz pair under a 220 Hz lowpass) and a very slow shimmer, -38 dB under master, loops | until stop | |
 | `spiral` | bed: two slow-beating pairs (110/114, 220/224.5 Hz), in 250 ms, out 500 ms | until stop, or `ms` | `ms` |
 | `tick` / `ticks` | a reel's filtered click, rising ladder per reel; `ticks` is the whole decelerating train | 22 ms / travel | `reel` 0..4, `step`, `ms` |
 | `lever` | THE LEVER PULL, one whole gesture: the stroke, the stop at the bottom, the spring back. Four voices (below) | 0.51-0.70 s | `variant` A-D, `level` |
@@ -60,7 +92,7 @@ kit.dispose();                          // the room settles: the context closes,
 ## The lever and the drum
 
 The two loudest gestures in the room come in four voices each, so they can be picked by ear. `LEVER_VARIANTS`
-and `REEL_VARIANTS` are A-D; `DEFAULT_SFX` is the owner's pair, **lever B over reel C**.
+and `REEL_VARIANTS` are A-D; `DEFAULT_SFX` is the owner's pair, **lever B over reel A**.
 
 | lever | what it sounds like |
 |---|---|
@@ -80,8 +112,8 @@ The roll is not scored like the one-shots: it is a live loop per reel, one gain 
 a tick train scheduled a beat ahead on a timer. `tickGap(speed)` is the whole trick: 38 ms a tick at full blur,
 260 ms crawling into the stop. `setRollSpeed` is untraced on purpose, because the reels call it every frame.
 
-Levels: a tick peaks at `ROLL_TICK` 0.09 and the purr and hum together at `ROLL_BED` 0.08, both over the
-ambient bed's 0.063 (-24 dB), both on the same master and trim chain as everything else, and both held by
+Levels: a tick peaks at `ROLL_TICK` 0.038 and the purr and hum together at `ROLL_BED` 0.034, both over the
+ambient bed's 0.0126 (-38 dB), both on the same master and trim chain as everything else, and both held by
 `kit.suspend` and `kit.mute` like every other voice.
 
 ### Picking a pair
@@ -160,7 +192,13 @@ station.js and the checks are unchanged; their `trace` still lists the cues with
 `shared/sound/tests/kit.test.mjs` (node --test, a mocked AudioContext): tier -> tail and voices, the rising
 invariants, loss silence, the riser's shape, the three named cues, the four levers and the four reel stops, the tick rate,
 the drums on a context, ambience and spiral beds, suspend/resume, stop by name, no node leaks over 200 plays,
-dedupe, dispose and re-arm, trim. From `Resources/web/backroom`:
+dedupe, dispose and re-arm, trim.
+
+`shared/sound/tests/buses.test.mjs` (the same, on a mock that remembers what connected to what): the cue-to-bus table
+covers every cue and nothing else, the taxonomy, a voice hanging on the bus its cue names, the beds and the drums, a
+sample voice, the room's per-bus taps and the `dry` flag, the three setters moving one bus each, the master and the
+trim still scaling all three, the defaults reproducing the old mix, and the mix surviving a dispose. From
+`Resources/web/backroom`:
 
 ```
 node --test $(find . -name '*.test.mjs')

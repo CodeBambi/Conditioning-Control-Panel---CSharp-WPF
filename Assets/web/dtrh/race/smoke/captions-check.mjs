@@ -325,9 +325,12 @@ ok(air.plate.y > air.vh * 0.15 && air.plate.y + air.plate.h < air.vh * 0.55, 'an
 const WANT_HOLD = { pop: 660, almost: 700, jackpot: 1080, bank: 960, item: 840, effect: 840, recipe: 1020 };
 const WAS_HOLD = { pop: 1100, almost: 1300, jackpot: 1800, bank: 1600, item: 1400, effect: 1400, recipe: 1700 };
 for (const kind of Object.keys(WANT_HOLD)) {
-  await ev(`window.__race.race.hud.toast(${JSON.stringify(kind === 'bank' ? 'kept 40' : '+10')}, '${kind}')`);
-  await sleep(260);                  // longer than the chatter gap, so every kind gets its turn
-  const hold = await ev(`(()=>{const t=[...document.querySelectorAll('.rh-toast--${kind}')].pop();
+  await sleep(260); // keep independent duration samples outside the chatter gap
+  // Measure ordinary duration outside speech and reward priority, in one frame.
+  // The polish check separately verifies that priority suppresses these toasts.
+  const hold = await ev(`(()=>{const hud=window.__race.race.hud; hud.resetPolish();
+    hud.toast(${JSON.stringify(kind === 'bank' ? 'kept 40' : '+10')}, '${kind}');
+    const t=[...document.querySelectorAll('.rh-toast--${kind}')].pop();
     return t ? t.style.getPropertyValue('--rh-hold') : null;})()`);
   eq(hold, `${WANT_HOLD[kind]}ms`, `a ${kind === 'bank' ? 'kept' : kind} toast holds ${WANT_HOLD[kind]}ms`);
   ok(WANT_HOLD[kind] <= Math.round(WAS_HOLD[kind] * 0.6), `and that is 40 percent off the wave 2 hold (${WAS_HOLD[kind]}ms)`);

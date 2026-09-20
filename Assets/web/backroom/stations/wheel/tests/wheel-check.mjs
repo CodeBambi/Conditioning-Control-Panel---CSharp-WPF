@@ -107,7 +107,7 @@ const boxOk = from => !!from && from.w === 60 && from.h === 44 && Number.isInteg
 const waitLanded = (ms = 16000) => until('!window.dev.station.debug().busy', ms, 20);
 
 /** The hub disc measured ON SCREEN (law 3): two lossless screenshots, ring shifts around the projected hub centre.
- *  turn > 0 = the pattern moved clockwise; rim > 0 = its arms lead at the rim, so a clockwise turn reads inward. */
+ *  turn > 0 = the pattern moved clockwise; rim < 0 = the wheel-specific mirrored arms; turn > 0 remains clockwise. */
 async function hubHandedness(gapMs) {
   const r0 = (await hyp()).hubRot;
   const A = await shot('png'); await sleep(gapMs); const B = await shot('png');
@@ -135,7 +135,7 @@ ok(d.feel.scene.hypno.hub === 'loom' && d.feel.scene.hypno.hubRadius > 0.1 && d.
 await sleep(500);
 ok(((await dbg()).hypno.kit || {}).draws > 5, 'the kit paints the hub every frame');
 const handRest = await hubHandedness(400);
-ok(handRest.turn.every(v => v > 0) && handRest.rim.every(v => v > 0), `hub on screen at rest: turns clockwise ${handRest.turn.map(v => v.toFixed(1))} deg, arms lead at the rim ${handRest.rim.map(v => v.toFixed(1))} deg`);
+ok(handRest.turn.every(v => v > 0) && handRest.rim.every(v => v < 0), `hub on screen at rest: turns clockwise ${handRest.turn.map(v => v.toFixed(1))} deg, arms wind the opposite way at the rim ${handRest.rim.map(v => v.toFixed(1))} deg`);
 await still('st-wheel-01-idle-loom-hub.jpg', 'Loom hub at rest, moire rim (Full)');
 const hubRate = async (ms = 1000) => { const a = (await hyp()).hubRot, t = Date.now(); await sleep(ms); return ((await hyp()).hubRot - a) / ((Date.now() - t) / 1000); };
 summary.hubRateFull = await hubRate();
@@ -211,7 +211,7 @@ await ev('window.dev.open()');
 for (let i = 0; i < 80 && (await ev("window.dev.station.debug().phase")) !== 'play'; i++) await sleep(100);
 d = await dbg();
 ok(d.state.spun && d.feel.scene.landed === 'glow' && d.feel.scene.under === 'glow' && (await fxCalls()).length === 0 && d.feel.scene.hypno.quiet === null, 'reopen: the day\'s landing, no party, no moment, no quiet room');
-ok((await ev('window.dev.host.media.at(-1).count')) === 4, 'each sit-down deals count 4');
+ok((await ev('window.dev.host.media.at(-1).count')) === 8, 'each sit-down deals count 8');
 const c1 = await ev("document.querySelector('.wheel-spin small').textContent");
 await sleep(2100);
 const c2 = await ev("document.querySelector('.wheel-spin small').textContent");
@@ -363,7 +363,7 @@ for (const [dir, next] of [[1, 'dazzle'], [-1, 'sip_b']]) {
   const slow = await until('(() => { const h = window.dev.station.debug().feel.scene.hypno; return h.slowing && h.speed < 1.2 && h.speed > 0.2; })()', 15000, 20);
   const hand = slow ? await hubHandedness(200) : null;
   summary.hubAfterDrag[dir > 0 ? 'anticlockwise' : 'clockwise'] = hand;
-  ok(slow && hand.turn.every(v => v > 0) && hand.rim.every(v => v > 0), `hub in the long last turn after a${dir > 0 ? 'n anticlockwise' : ' clockwise'} drag: turns clockwise ${hand ? hand.turn.map(v => v.toFixed(1)) : '-'} deg, arms lead at the rim ${hand ? hand.rim.map(v => v.toFixed(1)) : '-'} deg (reads inward)`);
+  ok(slow && hand.turn.every(v => v * -dir > 0) && hand.rim.every(v => v < 0), `hub in the long last turn after a${dir > 0 ? 'n anticlockwise' : ' clockwise'} drag: follows the wheel ${hand ? hand.turn.map(v => v.toFixed(1)) : '-'} deg, arms wind the opposite way at the rim ${hand ? hand.rim.map(v => v.toFixed(1)) : '-'} deg (reads inward)`);
   if (dir > 0 && hand) await still('st-wheel-17-anticlockwise-last-turn-hub.jpg', 'After an anticlockwise drag: the Loom hub still turns clockwise in the long last turn');
   await waitLanded(20000);
   d = await dbg();
@@ -436,7 +436,7 @@ summary.hubRateCalm = await hubRate();
 ok((await dbg()).hypno.kit && !(await dbg()).hypno.kit.still && summary.hubRateCalm > 0.175 * 0.7 && summary.hubRateCalm < 0.175 * 1.3,
    `Calm: the Loom hub keeps turning clockwise at half strength, ${summary.hubRateCalm.toFixed(3)} rad/s (0.175)`);
 const handCalm = await hubHandedness(700);
-ok(handCalm.turn.every(v => v > 0) && handCalm.rim.every(v => v > 0), `Calm hub on screen: turns clockwise ${handCalm.turn.map(v => v.toFixed(1))} deg, arms lead at the rim`);
+ok(handCalm.turn.every(v => v > 0) && handCalm.rim.every(v => v < 0), `Calm hub on screen: turns clockwise ${handCalm.turn.map(v => v.toFixed(1))} deg, arms wind the opposite way at the rim`);
 await still('st-wheel-19-calm-hub-turning.jpg', 'Calm: the Loom hub still turning, at half strength');
 await ev('window.dev.host.clear()');
 await ev("document.querySelector('.wheel-spin').click()");

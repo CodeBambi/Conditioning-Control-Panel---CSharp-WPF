@@ -1,3 +1,6 @@
+import { intro } from './intro.js';
+import { createWelcome, shouldShow } from './welcome.js';
+import { createRacePortal, consumeRoomPose } from './race-portal.js';
 import { sliceText } from '../stations/wheel/rewards.js';
 import { setWheelFace } from './wheel-face.js';
 /* ============================================================================
@@ -29,14 +32,19 @@ import { setWheelFace } from './wheel-face.js';
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
+import { prizeState } from '../shared/prize-state.js';
 import { normaliseStations } from './walk.js';
 import { createScene } from './scene.js';
 import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 import { createRoomRewards, createDoubleCharm } from './rewards.js';
 import { kit } from '../shared/sound/kit.js';
+import { getMusic } from '../shared/sound/music.js';
+import { quality } from '../shared/quality.js';
+import { spendFlight, clearSpendFlights } from './spend-flight.js';
+import { createBalanceFeedback } from './balance-feedback.js';
 const rewards = createRoomRewards();
-let doubleCharm = null;
+let doubleCharm = null, music = null;
 function applyRewards(body) { if (leaving) return; if (rewards.apply(body)) { scene?.setRewards(rewards.snapshot()); doubleCharm?.paint(); } }
 
 const PAGE_SETTLE_MS = 300;
@@ -61,12 +69,59 @@ const readGates = (g) => {
 const INTENSITIES = ['calm', 'normal', 'full'];
 const readChoice = (v, fallback) => (INTENSITIES.includes(v) ? v : fallback);
 
-const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false };
+const state = { sp: 0, reduced: false, invertLook: false, motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false,
+  // The room's own picture source and mix, both owned by the host. These defaults only hold for the
+  // few frames before init lands, and they are the quiet ones on purpose.
+  media: { source: 'auto', effective: 'local', subs: [], off: [], cap: 8, consented: false },
+  levels: { sub: 1, sfx: 1, music: 0.15 } };
 /** The floor bell: what the last `bell/state` said. Never a timer, never a poll. */
 const bell = { entries: [], optIn: false, mustHit: false, fetching: false, fetches: 0 };
 const spListeners = new Set();
 const settingsListeners = new Set();
 let scene = null, loader = null, hud = null, leaving = false, visiting = false;
+let welcome = null;   // the first-visit card (welcome.js), null once dismissed or when the host says it was seen
+
+let racingOwnership = null, raceOpening = false;
+const previewHost = typeof window.__brSettings === 'object' && typeof window.__hostEmit === 'function';
+const racePortal = createRacePortal({
+  hosted: !previewHost, send: bridge.send, on: bridge.on, getOwnership: () => racingOwnership,
+  getPose: () => scene?.navigationPose(), racePath: '/backroom/racing/race.html',
+  beforeNavigate: () => { leaving = true; hud?.stop(); doubleCharm?.dispose(); scene?.halt(); kit.dispose(); window.__fxCancelAll?.(); },
+  onRefused: m => { raceOpening = false; scene?.release(); if (m.reason === 'locked') visit(window.__backroom.stations.find(r => r.id === 'counter')); },
+});
+function applyPrizes(body, bought) {
+  const snapshot = prizeState(body);
+  if (!snapshot) return;
+  racingOwnership = snapshot;
+  scene?.setPrizes(snapshot, bought);
+}
+async function openRace() {
+  if (leaving || visiting || raceOpening || !scene || scene.seated || scene.transitioning || loader?.current) return false;
+  raceOpening = true;
+  if (!previewHost) {
+    // Native access is canonical even when the prize counter is temporarily closed.
+    scene.hold();
+    if (!racePortal.open()) { scene.release(); raceOpening = false; return false; }
+    return true;
+  }
+  try {
+    // Refresh access before leaving; no station can be abandoned with a paid result pending.
+    const reqId = bridge.mintId();
+    const res = await bridge.request({type:'station-request', reqId, station:'counter', op:'state', body:{}},
+      'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
+    if (leaving || visiting || scene.seated || loader?.current) return false;
+    const freshOwnership = res?.ok ? prizeState(res.body) : null;
+    if (freshOwnership) applyPrizes(res.body);
+    if (!freshOwnership?.racing) {
+      raceOpening = false;
+      await visit(window.__backroom.stations.find(r => r.id === 'counter'));
+      return false;
+    }
+    scene.hold();
+    if (!racePortal.open()) { scene.release(); return false; }
+    return true;
+  } finally { if (!racePortal.pending) raceOpening = false; }
+}
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -79,6 +134,7 @@ const forcedStill = () => !!state.reduced || state.intensity === 'calm';
 const still = () => forcedStill() || state.userStill;
 
 function paintChrome() {
+  intro.configure(lex, still() || state.motion === 'off' || state.motion === 'still' || state.motion === 'reduced');
   const back = $('#br-back');
   back.textContent = lex('br_back', 'Back');
   back.setAttribute('aria-label', lex('br_back', 'Back'));
@@ -95,6 +151,7 @@ function paintChrome() {
  * balance frame, a station-result that moved state.sp, a closed station and a reopened one. */
 const chip = { owed: 0, shown: null };
 let chipFrame = 0;
+const balanceFeedback = createBalanceFeedback({ target: () => $('.br-sp'), still: () => still() || state.motion === 'off' });
 function owedNow() {
   let n = chip.owed;
   if (typeof n === 'function') { try { n = n(); } catch (e) { n = 0; } }
@@ -105,13 +162,26 @@ function paintSpChip() {
   const node = $('#br-sp-value');
   const v = String(chip.shown != null ? chip.shown : Math.max(0, state.sp - owedNow()));
   if (node && node.textContent !== v) node.textContent = v;
+  balanceFeedback.update(Number(v));
 }
 const spReadout = Object.freeze({
   /** A number shown as is (a BANK tick), or null to go back to the rule. */
   set(value) { const n = Number(value); chip.shown = value == null || !Number.isFinite(n) ? null : n; paintSpChip(); },
   /** The pays still on the tape: a number, or a reader the room calls on each repaint while the station is open. */
   owe(n) { chip.owed = typeof n === 'function' ? n : (Number(n) || 0); paintSpChip(); },
-  /** THE THUD: a bank token landing on the chip. Reduced motion lights it instead of scaling it. */
+  /**
+   * THE THUD: a bank token landing on the chip. Reduced motion lights it instead of scaling it.
+   *
+   * THE GLOW IS NOT HERE, and the integration pass took it back out (CONTRACT 10.22.D). The room lane
+   * put a warmGlow on this chip; all four stations already fire their own, gated on `plan.glow`, and
+   * three of them fire it on THIS VERY NODE (`spReadout.target()` is `.br-sp`). Doing it here as well
+   * is both a double call on one frame and a law leak, because .thud() is NOT a win channel:
+   * stations/cards/station.js thuds on a LOSS, stations/counter/cards.js thuds on a PRIZE PURCHASE,
+   * and Brake 5 puts `plan.glow` at 0 for a melted win that still thuds. A warm gold cut on any of
+   * those says LOOK, YOU WON to a player who did not. The plan decides the glow; the chip does not.
+   * The roulette is the one station that glows its own +N badge instead, which is its answer to
+   * 10.22.D and not an omission.
+   */
   thud() {
     const box = $('.br-sp');
     if (!box || typeof box.animate !== 'function') return;
@@ -121,9 +191,11 @@ const spReadout = Object.freeze({
   },
   /** The chip's box, where THE BANK's tokens fly to and from. */
   target() { return $('.br-sp'); },
+  spend(amount, target) { spendFlight({from:$('.br-sp'), to:target, amount, still:still() || state.motion==='off'}); },
 });
 /** A station is gone: a reader freezes to its last answer and any flight value is dropped. */
 function chipSettle() {
+  clearSpendFlights();
   chip.owed = owedNow();
   chip.shown = null;
   paintSpChip();
@@ -135,10 +207,13 @@ function spChanged() {
 }
 
 function paintMotion() {
+  intro.configure(lex, still() || state.motion === 'off' || state.motion === 'still' || state.motion === 'reduced');
+  if(still() || state.motion==='off')clearSpendFlights();
   if (scene) scene.setStill(still());
   if (!hud) return;
   hud.motion(still(), forcedStill());
-  hud.options({ intensityChoice: state.intensityChoice, forcedCalm: !!state.reduced, tunnel: state.gates.tunnel, melt: state.gates.melt });
+  hud.options({ intensityChoice: state.intensityChoice, forcedCalm: !!state.reduced, tunnel: state.gates.tunnel,
+                melt: state.gates.melt, invertLook: state.invertLook, media: state.media, levels: state.levels });
 }
 
 /** The room's Options (10.14): tell the host and show the press at once; the host's settings frame has the last word. */
@@ -148,9 +223,90 @@ function setOption(key, value) {
     state.intensityChoice = value;
   } else if (key === 'tunnel' || key === 'melt') {
     state.gates = readGates({ ...state.gates, [key]: !!value });
+  } else if (key === 'welcomeSeen') {
+    // The first-visit card was dismissed (welcome.js). Nothing to paint: the card is already gone, and the
+    // host's write is what keeps it gone on the next open.
+    state.welcomeSeen = true;
+  } else if (key === 'invertLook') {
+    // Invert camera (owner, 2026-09-18): a drag moves the world instead of the camera. Applied at once
+    // through the scene's getter; the host persists it and its frame has the last word like the switches.
+    state.invertLook = !!value;
+  } else if (key === 'mediaSource') {
+    // Optimistic, like the switches: paint the press now, let the settings frame correct it. The host
+    // resolves 'auto' and refuses online without consent, so `effective` can come back as something
+    // else entirely and the picker will say so.
+    state.media = { ...state.media, source: String(value) };
+  } else if (key === 'mediaSubAdd' || key === 'mediaSubRemove' || key === 'mediaSubToggle') {
+    // No optimism here: the host validates the name and owns the list, and a wrong guess would show
+    // a niche that is not really there. The frame comes straight back.
+  } else if (key === 'subVolume' || key === 'sfxVolume' || key === 'musicVolume') {
+    // Already applied by levels.preview(); this is the persist.
   } else return;
   bridge.send({ type: 'room-option', key, value });
   paintMotion();
+}
+
+/* ------------------------------------------------------------------ the room's own three levels
+ * The kit carries the buses (subliminal / sfx / bed); the soundtrack is its own element; the spoken
+ * word is the host's, on the app's output device. This is the one place that knows all three, so the
+ * HUD gets a flat {sub, sfx, music} and does not have to.
+ *
+ * `music` drives two things that want different curves. The soundtrack sits at .15 because the mp3s
+ * are loud; the ambience and spiral beds already sit at BED_LEVEL, 24 dB under everything. Scaling
+ * both by the same number would leave the beds inaudible at the default. So the beds take the slider
+ * normalised against that default: at .15 the mix is exactly what the room has always played, below
+ * it everything fades together, above it the soundtrack keeps climbing and the beds stay put. */
+const MUSIC_BASE = 0.15;
+const bedFactor = (v) => Math.max(0, Math.min(1, v / MUSIC_BASE));
+
+function applyLevel(key, v) {
+  const level = Math.max(0, Math.min(1, Number(v) || 0));
+  if (key === 'sub') kit.setSub?.(level);
+  else if (key === 'sfx') kit.setSfx?.(level);
+  else if (key === 'music') { music?.setVolume(level); kit.setBed?.(bedFactor(level)); }
+}
+
+function applyLevels() {
+  for (const key of ['sub', 'sfx', 'music']) applyLevel(key, state.levels[key]);
+}
+
+const LEVEL_OPTION = { sub: 'subVolume', sfx: 'sfxVolume', music: 'musicVolume' };
+const levels = {
+  get sub() { return state.levels.sub; },
+  get sfx() { return state.levels.sfx; },
+  get music() { return state.levels.music; },
+  /** Dragging: hear it immediately, tell nobody. */
+  preview(key, v) { if (LEVEL_OPTION[key]) { state.levels[key] = v; applyLevel(key, v); } },
+  /** Let go: now it is a setting. 0..100 on the wire, because that is how the host stores it. */
+  commit(key, v) {
+    if (!LEVEL_OPTION[key]) return;
+    this.preview(key, v);
+    setOption(LEVEL_OPTION[key], Math.round(Math.max(0, Math.min(1, v)) * 100));
+  },
+};
+
+/** init.audio / settings.audio: three 0..1 numbers, anything else left as it was. */
+function readLevels(a) {
+  const out = { ...state.levels };
+  for (const key of ['sub', 'sfx', 'music']) {
+    const v = a?.[key];
+    if (Number.isFinite(v)) out[key] = Math.max(0, Math.min(1, v));
+  }
+  return out;
+}
+
+/** init.media / settings.media, shape-checked; an absent field keeps what the room had. */
+function readMedia(m) {
+  if (!m || typeof m !== 'object') return state.media;
+  const names = (v) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string') : state.media.subs);
+  return {
+    source: typeof m.source === 'string' ? m.source : state.media.source,
+    effective: typeof m.effective === 'string' ? m.effective : state.media.effective,
+    subs: names(m.subs),
+    off: Array.isArray(m.off) ? m.off.filter((s) => typeof s === 'string') : state.media.off,
+    cap: Number.isFinite(m.cap) ? m.cap : state.media.cap,
+    consented: typeof m.consented === 'boolean' ? m.consented : state.media.consented,
+  };
 }
 
 function setSp(sp) {
@@ -162,6 +318,8 @@ function setSp(sp) {
 
 async function visit(row) {
   if (leaving || visiting || !scene || !loader || scene.overview || scene.transitioning || scene.seated) return;
+  if(row?.key==='race'){await openRace();return;}
+  if(raceOpening)return;
   if(row?.key==='customization'){scene.customization.open();return;}
   visiting = true;
   scene.prepareVisit();
@@ -174,12 +332,15 @@ async function returnToRoom() {
   if (leaving || visiting) return;
   hud.hideWhileVisiting(false);
   if (scene) scene.release();
+  refreshPrizes();
   refreshBell('station-close');   // the only other time the bell is read (10.16.B)
 }
 
 /** Back, from anywhere. A station closes first, then the room view; an empty room is left. */
 async function back(reason) {
   if (leaving) return;
+  if (scene?.documents.close()) return;
+  if (loader?.canLeave?.() === false) return;
   if(scene?.customization?.dismiss())return;
   if (loader && (loader.current || visiting)) { await returnToRoom(); return; }
   if (hud && hud.optionsOpen) { hud.closeOptions(); return; }
@@ -188,6 +349,8 @@ async function back(reason) {
 }
 
 async function settle() {
+  intro.finish(true);
+  music?.dispose();
   if (hud) hud.stop();
   doubleCharm?.dispose(); doubleCharm = null;
   if (scene) scene.halt();
@@ -238,12 +401,24 @@ function wireAmbience() {
   window.addEventListener('keydown', wake, { once: true, capture: true });
 }
 
+/** The first-visit card from a placard on the counter (welcome-placards.js): the room holds still behind it,
+ * the card opens at that page in read mode, and closing it releases the room to the same spot. Nothing is
+ * remembered: the dismissal that matters was the first visit's. */
+function openCard(page) {
+  if (welcome || leaving || !scene) return;
+  scene.hold();
+  welcome = createWelcome({ layer: $('#br-layer'), lex, page, read: true, onDone: () => { welcome = null; scene?.release(); } });
+}
+
 function wireExits() {
   wireHudKeys();
   wireAmbience();
   $('#br-back').addEventListener('click', () => back('back'));
   window.addEventListener('keydown', (e) => {
+    if (scene?.documents.opened) return;
     if (e.key !== 'Escape') return;
+    // The first-visit card is the top rung: Escape closes it and nothing else in the room hears the press.
+    if (welcome?.dismiss()) { e.preventDefault(); return; }
     e.preventDefault();
     if (scene?.dismissEmi()) return;
     back('key');
@@ -329,23 +504,53 @@ async function setBellOptIn(on) {
 /** The wall pictures' deal, under its own station id so it never replaces a sit-down deal. */
 function media() {
   const reqId = bridge.mintId();
-  return bridge.request({ type: 'media-request', reqId, station: 'room' }, 'media', (m) => m.reqId === reqId, 6000,
+  return bridge.request({ type: 'media-request', reqId, station: 'room', count: 8 }, 'media', (m) => m.reqId === reqId, 6000,
     { reqId, seed: 0, gifs: [], words: [], timeout: true });
 }
 
+/** Room Service uses the same authenticated station relay and balance as the games. */
+async function requestDecorations(op, body = {}) {
+  if (leaving) return { ok: false, reason: 'closed' };
+  const reqId = bridge.mintId();
+  const res = await bridge.request({ type: 'station-request', reqId, station: 'decorations', op,
+    body, ...(body.idem ? { idem: body.idem } : {}) }, 'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
+  if (leaving) return { ok: false, reason: 'closed' };
+  if (res?.body && typeof res.body === 'object' && ('ok' in res.body || 'decorations' in res.body)) return res.body;
+  return { ok: false, reason: res?.reason || 'offline' };
+}
+
+async function refreshPrizes() {
+  const reqId = bridge.mintId();
+  const res = await bridge.request({type:'station-request', reqId, station:'counter', op:'state', body:{}},
+    'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
+  // applyPrizes, not scene.setPrizes: the counter's reply is also where the racing cabinet learns
+  // whether to stand up, so the snapshot has to reach racingOwnership and not only the display.
+  if (!leaving && !seated() && res?.ok) applyPrizes(res.body);
+}
+
 async function start(init) {
+  if (leaving) return;
   rewards.reset();
+  const ownedTracks = Array.isArray(init.racingTracks) ? init.racingTracks.filter(n => Number.isInteger(n) && n >= 0 && n <= 10) : [];
+  if (ownedTracks.length) racingOwnership = { owned: [], tracks: ownedTracks, demo: ownedTracks.includes(0), racing: true };
   Object.assign(state, {
     sp: Number.isFinite(init.sp) ? init.sp : 0,
     reduced: !!init.reduced,
+    invertLook: init.invertLook === true,
     motion: String(init.motion || 'full'),
     intensity: String(init.intensity || 'normal'),
     gates: readGates(init.gates),
     intensityChoice: readChoice(init.intensityChoice, readChoice(init.intensity, 'normal')),
     lex: (init.lex && typeof init.lex === 'object') ? init.lex : {},
     open: typeof init.open === 'boolean' ? init.open : null,
+    welcomeSeen: init.welcomeSeen === true,
   });
+  state.levels = readLevels(init.audio);
+  state.media = readMedia(init.media);
+  music = getMusic({ master: 1 });
+  applyLevels();   // the host's stored levels win over whatever the music element remembered locally
   bridge.markInitialized();
+  balanceFeedback.reset(state.sp);
   paintChrome();
 
   bridge.on('balance', (m) => setSp(m.sp));
@@ -353,16 +558,38 @@ async function start(init) {
     state.motion = String(m.motion || state.motion);
     state.intensity = String(m.intensity || state.intensity);
     state.reduced = !!m.reduced;
+    if (typeof m.invertLook === 'boolean') state.invertLook = m.invertLook;
     if (m.gates && typeof m.gates === 'object') state.gates = readGates(m.gates);
     state.intensityChoice = readChoice(m.intensityChoice, state.intensityChoice);
+    if (m.audio) { state.levels = readLevels(m.audio); applyLevels(); }
+    // THE LIVE SOURCE SWITCH (10.13.C). room/screens.js and stations/slot/station.js have listened for
+    // this event since the phone build; on desktop nothing ever fired it, so the picker could not have
+    // worked even once it existed. Only a change in the EFFECTIVE source counts: flipping between two
+    // settings that resolve to the same pool must not throw away a dealt wall.
+    if (m.media) {
+      const was = state.media.effective;
+      state.media = readMedia(m.media);
+      if (state.media.effective !== was) {
+        try { window.dispatchEvent(new Event('br-media-changed')); }
+        catch (e) { bridge.log('warn', 'media change event threw: ' + e); }
+      }
+    }
     paintChrome();
     paintMotion();
-    kit.setTrim(state.intensity === 'calm' ? 0.6 : 1);   // a quieter floor under Calm; no volume setting of its own
+    kit.setTrim(state.intensity === 'calm' ? 0.6 : 1);   // a quieter floor under Calm, over the three buses
     const frame = { motion: state.userStill ? 'off' : state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
     for (const fn of Array.from(settingsListeners)) { try { fn(frame); } catch (e) { bridge.log('warn', 'onSettings threw: ' + e); } }
   });
+  // THE COLD-OPEN SWAP (2026-09-18). The host posts this once the remote batch behind a short deal has
+  // landed; the web shim dispatches the same event when its own warm ends. screens.js re-deals at once,
+  // a seated station on its next sit-down - the same two speeds a source switch has.
+  bridge.on('media-warm', () => {
+    try { window.dispatchEvent(new Event('br-media-changed')); }
+    catch (e) { bridge.log('warn', 'media warm event threw: ' + e); }
+  });
   bridge.on('suspend', (m) => {
     state.suspended = !!m.on;
+    music?.suspend(state.suspended);
     kit.suspend(state.suspended);   // Law VI: every voice and the ambience hold; the ambience comes back on resume
     if (scene) scene.pause(state.suspended);   // a held room stays held either way
     if (loader) loader.suspend(state.suspended);
@@ -370,7 +597,7 @@ async function start(init) {
   });
 
   hud = createHud({
-    root: $('#br-room-ui'), lex, label,
+    root: $('#br-room-ui'), lex, label, music, quality, levels,
     onVisit: (row) => visit(row),
     onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
     onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },
@@ -402,7 +629,7 @@ async function start(init) {
     approach:row=>{
       scene.release();const trip=scene.stage(row);if(!trip){scene.hold();return null;}
       hud.hideWhileVisiting(false);hud.seated(true);
-      return {arrived:trip.arrived.then(ok=>{if(ok){scene.hold();hud.hideWhileVisiting(true);}return ok;}),
+      return {arrived:trip.arrived.then(ok=>{if(ok){if(row.id!=="counter")scene.hold();hud.hideWhileVisiting(row.id!=="counter");}return ok;}),
         dispose(){scene.release();trip.dispose();hud.seated(false);}};
     },
     lex,
@@ -411,13 +638,14 @@ async function start(init) {
     spReadout,
     spChanged,
     chipSettle,
+    prizesChanged: (body, bought) => scene?.setPrizes(prizeState(body), bought),
     rewardLanded: body => applyRewards(body),
     revealedWin: (key,amount,tier,text)=>scene?.celebrate(key,amount,tier,text),
     standUp: () => back('back'),
     log: (level, msg) => bridge.log(level, msg),
   });
   // Test seam for the smoke checks (never read by the room itself).
-  window.__backroom = { state, stations, loader, back, lex, visit, bell, refreshBell, rewards, get hud() { return hud; }, get scene() { return scene; } };
+  window.__backroom = { openRace, state, stations, loader, back, lex, visit, bell, refreshBell, rewards, levels, get hud() { return hud; }, get scene() { return scene; } };
 
   try {
     scene = await createScene({
@@ -430,25 +658,40 @@ async function start(init) {
       media, lex,
       still: still(),
       cameraMotion:()=>({off:state.userStill||state.motion==='off'||state.motion==='still',reduced:state.reduced||state.motion==='reduced'||state.intensity==='calm'}),
-      onProgress: (f) => hud.progress(f),
+      invertLook: () => state.invertLook,
+      onProgress: (f) => { hud.progress(f); intro.progress(f); },
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),
+      // A tap on one of the counter's placards: the first-visit card again, at that page, to read and close.
+      onCard: (page) => openCard(page),
       // The room asking to stand up (a tap on the floor, a step back): the Back path, so the station settles first.
       onLeave: () => back('room'),
+      canLeave: () => loader?.canLeave?.() !== false,
       log: (msg) => bridge.log('warn', msg),
     });
   } catch (e) {
     bridge.log('error', 'room build failed: ' + ((e && e.stack) || e));
+    intro.finish(true);
     hud.failed(lex('br_station_closed', 'Closed for a moment.'));
     return;
   }
   if (leaving) { scene.halt(); return; }
+  // Loading the shop is independent of the room reveal; unavailable servers leave the furnished room usable.
+  scene.customization.configureShop({ request: requestDecorations, getBalance: () => state.sp,
+    onBalance: sp => { if (!leaving) setSp(sp); } }).catch(e => bridge.log('warn', 'Room Service unavailable: ' + e));
   // M toggles the view inside the scene; keep the HUD in step after it has.
   window.addEventListener('keydown', (e) => { if (e.code === 'KeyM') setTimeout(() => hud.overview(scene.overview), 0); });
+  if (racingOwnership) scene.setPrizes(racingOwnership);
+  const returnPose = consumeRoomPose();
+  if (returnPose) scene.pose(returnPose.position, returnPose.yaw, returnPose.pitch);
   if (state.suspended) scene.pause(true);
   paintMotion();
   hud.ready();
+  // The first-visit card, over the room the moment the veil lifts. The host remembers the dismissal
+  // (room-option welcomeSeen -> AppSettings.BackRoomWelcomeSeen -> init.welcomeSeen), so it shows once per account.
+  if (shouldShow(state)) welcome = createWelcome({ layer: $('#br-layer'), lex, onDone: () => { welcome = null; setOption('welcomeSeen', true); } });
   paintMustHit();
+  refreshPrizes();
   refreshBell('room-open');
   // One read on room entry paints the fixture from the same table used when seated.
   if (stations.some(row => row.id === 'wheel' && row.state === 'live') && !seated()) {
@@ -459,6 +702,7 @@ async function start(init) {
       }).catch(() => {});
   }
   document.documentElement.classList.add('br-ready');
+  intro.finish();
   bridge.log('info', 'room up: ' + stations.length + ' fixtures, ' + stations.filter((s) => s.state === 'live').length
     + ' live, built in ' + Math.round(scene.buildMs) + ' ms');
 }
@@ -466,6 +710,6 @@ async function start(init) {
 wireExits();
 paintChrome();
 bridge.once('init', (m) => {
-  start(m).catch((e) => bridge.log('error', 'boot failed: ' + ((e && e.stack) || e)));
+  start(m).catch((e) => { intro.finish(true); bridge.log('error', 'boot failed: ' + ((e && e.stack) || e)); });
 });
 bridge.announceReady();

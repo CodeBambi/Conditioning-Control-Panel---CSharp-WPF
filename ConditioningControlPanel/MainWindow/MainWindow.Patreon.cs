@@ -2029,12 +2029,22 @@ namespace ConditioningControlPanel
         /// </summary>
         public void AdjustMasterVolume(int delta)
         {
-            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => AdjustMasterVolume(delta))); return; }
+            var current = App.Settings?.Current?.MasterVolume;
+            if (current == null) return;
+            SetMasterVolume(current.Value + delta);
+        }
+
+        /// <summary>Sets the master volume outright (0..100), mirrors it into the Settings
+        /// slider so a later ApplySettingsLive cannot read a stale value back, and saves. The
+        /// launcher's Media and sound dialog uses this; the hotkeys go through AdjustMasterVolume.</summary>
+        public void SetMasterVolume(int value)
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => SetMasterVolume(value))); return; }
             try
             {
                 var s = App.Settings?.Current;
                 if (s == null) return;
-                s.MasterVolume = Math.Clamp(s.MasterVolume + delta, 0, 100);
+                s.MasterVolume = Math.Clamp(value, 0, 100);
                 _isLoading = true;
                 try
                 {
@@ -2046,7 +2056,7 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "AdjustMasterVolume failed");
+                App.Logger?.Warning(ex, "SetMasterVolume failed");
             }
         }
 

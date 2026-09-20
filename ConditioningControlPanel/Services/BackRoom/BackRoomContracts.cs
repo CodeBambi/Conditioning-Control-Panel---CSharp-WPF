@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ConditioningControlPanel.Services.BackRoom;
 
@@ -16,14 +18,25 @@ namespace ConditioningControlPanel.Services.BackRoom;
 /// <param name="Seed">Shuffle seed echoed to the page in the <c>media</c> message.</param>
 /// <param name="Gifs">Up to the requested count of pool GIFs, or the four fallback loops when the pool has none.</param>
 /// <param name="Words">Up to four words, shortfall filled from the presets.</param>
-public sealed record BackRoomMediaDeal(int Seed, IReadOnlyList<BackRoomGif> Gifs, IReadOnlyList<BackRoomWord> Words);
+/// <param name="Source">Where the pictures actually came from once <c>auto</c> and the consent collapse
+/// were resolved: <c>local</c>, <c>online</c>, <c>mixed</c> or <c>bundled</c> (10.13.C). Echoed to the
+/// page in the <c>media</c> message so the room's Options can show what it GOT rather than what it
+/// asked for - a player who picked online with a dry warm pool is looking at their own folders and
+/// deserves to be told so. Defaulted, so a host or a rig that predates the amendment still compiles.</param>
+public sealed record BackRoomMediaDeal(int Seed, IReadOnlyList<BackRoomGif> Gifs, IReadOnlyList<BackRoomWord> Words,
+    string Source = "local");
 
 /// <summary>One dealt GIF. <see cref="Url"/> is only ever on <c>https://ccp.assets/</c> (the user's
 /// folders, read-only) or <c>https://ccp.game/</c> (fallback art), never a file path.</summary>
 /// <param name="Key">Opaque key the page hands back (<c>g0</c>).</param>
 /// <param name="W">Pixel width, 0 when unknown.</param>
 /// <param name="H">Pixel height, 0 when unknown.</param>
-/// <param name="Src"><c>pool</c> or <c>fallback</c>.</param>
+/// <param name="Src"><c>pool</c> (a file in the user's folders), <c>online</c> (remote content,
+/// materialized under the assets temp folder so it carries a <c>ccp.assets</c> url like any other) or
+/// <c>fallback</c> (built-in art). The page's wall filter keys off <c>fallback</c> and nothing else.
+/// An <c>online</c> item is a still at a station and may be a CLIP on the wall (a <c>.webm</c> /
+/// <c>.mp4</c> url): the page routes it on the extension (<c>room\gif.js</c> -> <c>room\clip-source.js</c>,
+/// WebView2 decodes it natively), so a clip needed no fourth <c>Src</c> and no change to this wire.</param>
 public sealed record BackRoomGif(string Key, string Url, int W, int H, string Src);
 
 /// <summary>One dealt subliminal word. For <c>preset</c> words <see cref="Text"/> is already
@@ -90,15 +103,44 @@ public interface IBackRoomFx
 }
 
 /// <summary>
-/// The media feed (C4, <c>BackRoomMedia.cs</c>). Deals local animated GIFs, deduped by full path,
-/// plus pool words. With no pool GIF at all it deals the four fallback loops; with at least one it
-/// deals only real ones (10.13.C). Words fill from the presets.
+/// The media feed (C4, <c>BackRoomMedia.cs</c>). Deals animated GIFs from the user's folders, deduped
+/// by full path, or remote content from a warm pool, or the built-in loops, depending on the
+/// effective media source (10.13.C). With nothing real to deal it deals the four fallback loops; with
+/// at least one real picture it deals only real ones. Words fill from the presets.
+///
+/// <para>Remote content splits on the station: the WALL (<c>station: "room"</c>) is dealt playable
+/// clips topped up with stills, and a chair is dealt stills only - thirteen video decoders for one
+/// sit-down is reckless and the slot's reel textures cannot take a webm anyway. The ladder only ever
+/// goes one way: clips, then stills, then the user's folders, then the bundled loops, never an empty
+/// deal.</para>
 /// </summary>
 public interface IBackRoomMedia
 {
     /// <summary>Deal the sit-down media for <paramref name="station"/>, shuffled with <paramref name="seed"/>:
-    /// up to <paramref name="count"/> GIFs (1..13, the cards table asks for 13) and four words.</summary>
+    /// up to <paramref name="count"/> GIFs (1..13, the cards table asks for 13) and four words. The
+    /// synchronous deal: it serves whatever a warm remote pool already holds and never waits on one.</summary>
     BackRoomMediaDeal Deal(string station, int seed, int count = 4);
+
+    /// <summary>As <see cref="Deal"/>, and what the protocol calls. <paramref name="source"/> is the
+    /// optional <c>media-request.source</c> override, already whitelisted by the bridge; null or
+    /// <c>auto</c> means the room's own setting decides. An implementation may top a remote pool up
+    /// here, which is why this is the async one; the default just runs the sync deal.</summary>
+    Task<BackRoomMediaDeal> DealAsync(string station, int seed, int count = 4, string? source = null,
+        CancellationToken ct = default) => Task.FromResult(Deal(station, seed, count));
+
+    /// <summary>Room open: start filling whatever pool the feed warms, so the first sit-down is a
+    /// memory read rather than a network round trip. Safe to call when the room is local-only.</summary>
+    void WarmForRoomOpen() { }
+
+    /// <summary>Room closed: hand back anything the warm pool materialized.</summary>
+    void ReleaseWarmPool() { }
+
+    /// <summary>After a deal that could not use the remote pool (cold, or short of <c>count</c>): wait,
+    /// unbounded but cancellable, for the batch in flight to finish, and say whether the pool now holds
+    /// anything. False at once when nothing is warming. The bridge turns a true into a <c>media-warm</c>
+    /// frame so the page re-deals the moment the pictures exist, the way the web shim's
+    /// <c>br-media-changed</c> does after its warm - the alternative was the wall's own 72 s refresh.</summary>
+    Task<bool> WaitForWarmAsync(CancellationToken ct = default) => Task.FromResult(false);
 }
 
 /// <summary>What the host did with one <c>word.speak</c> (CONTRACT 10.21). Becomes the

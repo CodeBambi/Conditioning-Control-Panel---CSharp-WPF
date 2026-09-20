@@ -235,6 +235,11 @@ namespace ConditioningControlPanel.Services
                     settings.MigrateArcademyFxLevel();
                         settings.MigrateArcademyFxLevel();
 
+                        // Circe's Lock went gender-neutral: rewrite the old defaults this file saved
+                        // (pool backups, phrase toggles, a pasted prompt). One-shot, exact matches
+                        // only; runs before ModService applies any pool.
+                        RunCirceNeutralMigration(settings);
+
                         return settings;
                     }
                 }
@@ -276,6 +281,25 @@ namespace ConditioningControlPanel.Services
             var fresh = new AppSettings();
             MergeBuiltInAwarenessPresets(fresh);
             return fresh;
+        }
+
+        /// <summary>
+        /// Runs <see cref="Migrations.CirceNeutralMigration"/> and files its one summary line. Never
+        /// throws: a failed rewrite leaves the old text, which is what the user had anyway, and the
+        /// flag unlatched so the next launch tries again.
+        /// </summary>
+        private static void RunCirceNeutralMigration(AppSettings settings)
+        {
+            try
+            {
+                var result = Migrations.CirceNeutralMigration.Apply(settings);
+                if (result != null)
+                    App.Logger?.Information("Circe neutral text migration: {Summary}", result.ToString());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Circe neutral text migration failed; old text kept");
+            }
         }
 
         /// <summary>
@@ -354,6 +378,7 @@ namespace ConditioningControlPanel.Services
                     settings.MigrateEnableUnifiedOverlayHost();
                     settings.MigrateEnableCompositorOffThreadPresent();
                     settings.MigrateRemoteSubLibrary();
+                    RunCirceNeutralMigration(settings);
 
                     // Record the restore: the backup restores progression wholesale, so sync must
                     // reconcile with the server before pushing any of it back up (#761).
@@ -1003,6 +1028,10 @@ namespace ConditioningControlPanel.Services
         public void RestoreFrom(AppSettings settings)
         {
             Current = settings ?? throw new ArgumentNullException(nameof(settings));
+            // A cloud backup taken before the Circe neutral pass carries the old pools and an unset
+            // flag. Migrate it here, before ModService re-derives the pools from it, or the old
+            // text is live until the next launch.
+            RunCirceNeutralMigration(settings);
             // Notify listeners (ModService re-binds its per-mod pool sync + re-derives the
             // active pools) BEFORE we persist, so any backups they seed get written too.
             try { CurrentReplaced?.Invoke(); } catch (Exception ex) { Log.Warning("CurrentReplaced handler failed: {Error}", ex.Message); }

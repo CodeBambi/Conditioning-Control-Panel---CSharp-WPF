@@ -9,7 +9,7 @@ test('state has the 10.17.C shape; everything is soon until switched on', async 
   const s = createMockServer();
   const b = (await s.handle('state')).body;
   for (const k of ['ok', 'open', 'sp', 'catalogVersion', 'discordLinked', 'prizes', 'catalog', 'delivery']) assert.ok(k in b, k);
-  assert.equal(CATALOG_V1.reduce((t, r) => t + r.priceSp, 0), 14355, 'whole shelf');
+  assert.equal(CATALOG_V1.reduce((t, r) => t + r.priceSp, 0), 13935, 'whole shelf');
   assert.ok(b.catalog.every((r) => r.sale === 'soon'));
   s.setOn('*');
   assert.ok((await s.handle('state')).body.catalog.every((r) => r.sale === 'on'));

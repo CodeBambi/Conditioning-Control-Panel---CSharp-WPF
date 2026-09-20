@@ -58,9 +58,9 @@ public class BackRoomHypnoFxTests
         Fire(fx, "fx.gif_from", "wheel", "g", new BackRoomFxArgs(Ms: 4600, Scale: 0.46));
         Fire(fx, "fx.wash", "wheel", "w", new BackRoomFxArgs(Color: "#e8c27a", Strength: 1));
         clock.Advance(10_000);
-        Assert.Contains((4000L, "spiral:screen.gif:4200:0.9:False:False"), sink.Calls);
-        Assert.Contains(sink.Calls, c => c.At == 4000 && c.Call.StartsWith("giffrom:") && c.Call.Contains(":4600:0.46:"));
-        Assert.Contains(sink.Calls, c => c.At == 4000 && c.Call.StartsWith("wash:#"));
+        Assert.Contains((5000L, "spiral:screen.gif:5200:0.9:False:False"), sink.Calls);
+        Assert.Contains(sink.Calls, c => c.At == 5000 && c.Call.StartsWith("giffrom:") && c.Call.Contains(":4600:0.46:"));
+        Assert.Contains(sink.Calls, c => c.At == 5000 && c.Call.StartsWith("wash:#"));
     }
 
     [Fact]

@@ -10,13 +10,20 @@
 
 import * as T from 'three';
 import { decodedSource, canAnimate, MAX_FPS, MAX_EDGE } from './gif-decode.js';
+import { clipSource, isClip } from './clip-source.js';
 
 export { canAnimate, MAX_FPS, MAX_EDGE };
 
 /** Decode `url` into a playable texture source, or null when this page cannot (caller uses a still). */
-export async function animatedSource(url) {
+export async function animatedSource(url, { signal } = {}) {
   let texture = null;
-  const src = await decodedSource(url, { onFrame: () => { if (texture) texture.needsUpdate = true; } });
+  const onFrame = () => { if (texture) texture.needsUpdate = true; };
+  // A webm or mp4 from the clip feed is played, not decoded: WebView2 is Chromium and does it in
+  // hardware, so the desktop needs no transcode hop. clip-source.js hands back the same shape a
+  // decoded GIF does, so everything below this line is unchanged.
+  const src = isClip(url)
+    ? await clipSource(url, { signal, onFrame })
+    : await decodedSource(url, { signal, onFrame });
   if (!src) return null;
   texture = new T.CanvasTexture(src.canvas);
   texture.colorSpace = T.SRGBColorSpace; texture.flipY = false;

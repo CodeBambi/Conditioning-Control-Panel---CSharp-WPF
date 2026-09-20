@@ -7,7 +7,7 @@
  * banner rides in as a left ribbon under the score block once per gate in the
  * room's colour, the passive chips (THE PICKUPS, below) drain bottom-left,
  * speed is a gauge with a boost state. Toasts each carry their own motion (ALMOST shivers,
- * JACKPOT is a gold flash and a REVEAL, BANK flies tokens into the score and
+ * JACKPOT is a gold flash and a REVEAL, BANK flies tokens into the kept balance and
  * ticks the counter as they land). flicker() is the Stat Flicker: the face
  * lies for 450 ms, the ledger never does (Law I). The Brake and the End card
  * are the chrome's own pointer targets; since the touch pass they are no longer
@@ -43,7 +43,7 @@ const FLICK_MS = 450;
  * honestly (Law I); a toast is only the noise it makes on the way there.
  */
 const CHATTER_MAX_MS = 700;
-const TOAST_HOLD = { pop: 660, almost: CHATTER_MAX_MS, jackpot: 1080, bank: 960, item: 840, effect: 840, recipe: 1020 };
+const TOAST_HOLD = { phrase: 1500, guidance: 2600, pop: 660, almost: CHATTER_MAX_MS, jackpot: 1080, bank: 960, item: 840, effect: 840, recipe: 1020 };
 /** Two "+N" pops inside this window merge into one counting toast ("+30 x3"). */
 const POP_MERGE_MS = 600;
 /** Two "almost +N" inside this window merge the same way ("almost +50 x2"). */
@@ -59,8 +59,8 @@ const NEW_LADDER = [[0, 1], [3, 2], [8, 3], [15, 4], [25, 6], [40, 8]];
 const okLadder = (l) => Array.isArray(l) && l.length > 1
   && l.every((r) => Array.isArray(r) && r.length > 1 && isFinite(r[0]) && isFinite(r[1]));
 
-export function createRaceHud(root) {
-  const reduced = !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+export function createRaceHud(root, { reducedMotion } = {}) {
+  const reduced = reducedMotion != null ? !!reducedMotion : !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const timers = new Set();
   let raf = 0;
   let disposed = false;
@@ -151,6 +151,13 @@ export function createRaceHud(root) {
   let speedHot = false;
 
   const toasts = el('rh-toasts', chrome);
+  let phraseLive = false, priorityUntil = 0, guidanceUntil = 0, lastStreakHint = -Infinity;
+  let learnedPhrase = false;
+  try { learnedPhrase = localStorage.getItem('race.phrase-learned') === '1'; } catch (e) { /* storage unavailable */ }
+  const guide = el('rh-phrase-guide', chrome);
+  guide.hidden = true;
+  let guideStarted = false;
+  const now = () => performance.now();
   const strobeEl = el('rh-strobe', chrome);
 
   // ---- THE MIXER: the live ingredients, one chip per category, above the chips ----
@@ -190,11 +197,6 @@ export function createRaceHud(root) {
       if (Math.abs(scoreTarget - scoreShown) < 0.5) scoreShown = scoreTarget; else busy = true;
       if (performance.now() > flickUntil) scoreEl.textContent = fmt(scoreShown);
     }
-    if (Math.abs(bankTarget - bankShown) > 0.5) {
-      bankShown += (bankTarget - bankShown) * (reduced ? 1 : 0.2);
-      if (Math.abs(bankTarget - bankShown) < 0.5) bankShown = bankTarget; else busy = true;
-      bankEl.textContent = `kept ${fmt(bankShown)}`;
-    }
     if (busy && !disposed) raf = requestAnimationFrame(tick);
   }
   const wake = () => { if (!raf && !disposed) raf = requestAnimationFrame(tick); };
@@ -221,22 +223,67 @@ export function createRaceHud(root) {
     run.kill = later(() => { node.remove(); if (run.el === node) run.el = null; }, TOAST_HOLD[run.kind] + 60);
   }
 
-  // ---- BANK: tokens fly from low centre into the score; the counter ticks per landing ----
-  function bankTokens(text) {
-    const n = Math.min(7, 3 + Math.floor(Math.abs(bankTarget - bankShown) / 40));
-    const s = scoreEl.getBoundingClientRect();
-    const w = window.innerWidth, h = window.innerHeight;
-    for (let i = 0; i < n; i++) {
-      const tk = el('rh-token', chrome);
-      const x0 = w * 0.5 + (Math.random() - 0.5) * 60, y0 = h * 0.66;
-      tk.style.left = `${x0}px`;
-      tk.style.top = `${y0}px`;
-      tk.style.setProperty('--dx', `${s.left + s.width / 2 - x0}px`);
-      tk.style.setProperty('--dy', `${s.top + s.height / 2 - y0}px`);
-      later(() => tk.classList.add('is-fly'), reduced ? 0 : i * 70);
-      later(() => { tk.remove(); hit(bankEl, 'is-pop'); if (i === n - 1) hit(scoreEl, 'is-pop'); }, reduced ? 120 : i * 70 + 640);
+  // ---- BANK: arrivals own the readout, with one final confirmation beat. ----
+  const bankTimers = new Set(), bankFlights = new Set();
+  let bankGeneration = 0;
+  function bankLater(fn, ms) {
+    const id = later(() => { bankTimers.delete(id); fn(); }, ms);
+    bankTimers.add(id);
+    return id;
+  }
+  function showBank(n) { bankShown = n; bankEl.textContent = `kept ${fmt(n)}`; }
+  function settleBankTransfer() {
+    bankGeneration++;
+    for (const id of bankTimers) { clearTimeout(id); timers.delete(id); }
+    bankTimers.clear();
+    for (const tk of bankFlights) tk.remove();
+    bankFlights.clear();
+    showBank(bankTarget); // Cancellation changes presentation, never the authoritative balance.
+  }
+  function bankTransfer(total) {
+    if (disposed) return;
+    settleBankTransfer();
+    const start = bankShown;
+    bankTarget = Math.max(0, Math.round(Number(total) || 0));
+    const amount = bankTarget - start;
+    scoreTarget = scoreShown = 0; flickUntil = 0; scoreEl.textContent = '0';
+    if (reduced || amount <= 0) {
+      showBank(bankTarget);
+      if (amount > 0) hud.toast(`kept +${fmt(amount)}`, 'bank');
+      return;
     }
-    return text;
+    const generation = bankGeneration;
+    const n = Math.min(amount, 7, 3 + Math.floor(amount / 40));
+    const target = bankEl.getBoundingClientRect(), bounds = chrome.getBoundingClientRect();
+    const w = bounds.width || window.innerWidth, h = bounds.height || window.innerHeight;
+    let remaining = n;
+    for (let i = 0; i < n; i++) {
+      const tk = el('rh-token', chrome); bankFlights.add(tk);
+      const x0 = w * 0.5 + (Math.random() - 0.5) * 60, y0 = h * 0.66;
+      tk.style.left = `${x0}px`; tk.style.top = `${y0}px`;
+      tk.style.setProperty('--dx', `${target.left + target.width / 2 - bounds.left - x0}px`);
+      tk.style.setProperty('--dy', `${target.top + target.height / 2 - bounds.top - y0}px`);
+      const share = Math.round(amount * (i + 1) / n) - Math.round(amount * i / n);
+      let landed = false, fallback = 0;
+      const arrive = () => {
+        if (landed || disposed || generation !== bankGeneration) return;
+        landed = true; tk.remove(); bankFlights.delete(tk);
+        if (fallback) { clearTimeout(fallback); timers.delete(fallback); bankTimers.delete(fallback); }
+        showBank(Math.min(bankTarget, bankShown + share));
+        hit(bankEl, 'is-pop');
+        if (--remaining === 0) {
+          showBank(bankTarget);
+          hud.toast(`kept +${fmt(amount)}`, 'bank');
+        }
+      };
+      tk.addEventListener('transitionend', e => { if (e.propertyName === 'transform') arrive(); });
+      // Commit the origin before requesting travel, including the first token.
+      void tk.offsetWidth;
+      bankLater(() => {
+        tk.classList.add('is-fly');
+        fallback = bankLater(arrive, 700); // Missing transition events still finish the balance.
+      }, i * 70);
+    }
   }
 
   // ---- screens (z20, the only pointer targets) ----
@@ -266,7 +313,7 @@ export function createRaceHud(root) {
   const end = el('rh-screen', root);
   const endCard = el('rh-card', end);
   const endTitle = endCard.appendChild(Object.assign(document.createElement('h2'), { textContent: 'the tea party' }));
-  endCard.appendChild(Object.assign(document.createElement('p'), { textContent: 'everybody has won.' }));
+  const endNote = endCard.appendChild(Object.assign(document.createElement('p'), { textContent: 'everybody has won.' }));
   const pbEl = el('rh-pb', endCard, 'personal best');
   const rows = document.createElement('dl');
   rows.className = 'rh-rows';
@@ -278,6 +325,32 @@ export function createRaceHud(root) {
   const fmtDur = (sec) => { const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return `${m}:${s < 10 ? '0' : ''}${s}`; };
 
   const hud = {
+    resetPolish() {
+      phraseLive = false; priorityUntil = 0; guidanceUntil = 0; lastStreakHint = -Infinity;
+      guideStarted = false; guide.hidden = true;
+      toasts.textContent = '';
+      for (const r of Object.values(runs)) r.el = null;
+    },
+    phraseFocus(on) {
+      phraseLive = !!on;
+      if (on && !learnedPhrase && !guideStarted) {
+        guideStarted = true; guidanceUntil = now() + 12000;
+        guide.textContent = 'steer through the words. a whole phrase builds your combo.';
+        guide.hidden = false;
+      }
+      if (now() >= guidanceUntil) guide.hidden = true;
+    },
+    phraseCaught() {
+      learnedPhrase = true; guide.hidden = true;
+      try { localStorage.setItem('race.phrase-learned', '1'); } catch (e) { /* storage unavailable */ }
+      priorityUntil = now() + 1500;
+      hud.toast('whole phrase caught · combo +1', 'phrase');
+    },
+    streakLost(reason) {
+      if (now() - lastStreakHint < 8000) return;
+      lastStreakHint = now();
+      hud.toast(reason === 'miss' ? 'bubble missed · streak reset. score kept.' : 'gap between catches · streak reset. score kept.', 'guidance');
+    },
     setScore(n) { scoreTarget = Math.max(0, n || 0); wake(); },
     setCombo(combo, mult) {
       combo = combo | 0; mult = mult || 1;
@@ -315,7 +388,8 @@ export function createRaceHud(root) {
       const hot = boosting != null ? !!boosting : v > KART_BASE_SPEED + 0.4;
       if (hot !== speedHot) { speedHot = hot; speed.classList.toggle('is-boost', hot); }
     },
-    setBank(n) { bankTarget = Math.max(0, n || 0); wake(); },
+    setBank(n) { settleBankTransfer(); bankTarget = Math.max(0, n || 0); showBank(bankTarget); },
+    bankTransfer, settleBankTransfer,
     /** THE THOUGHTS LINE: `popped 12 / 560` under the kept line. No total is no line (race/popped.js). */
     setPopped(n, total) {
       const line = poppedLine(n, total);
@@ -374,6 +448,13 @@ export function createRaceHud(root) {
     },
     toast(text, kind) {
       kind = TOAST_HOLD[kind] ? kind : 'pop';
+      const routine = ['pop', 'almost', 'effect', 'item'].includes(kind);
+      if (routine && (phraseLive || performance.now() < priorityUntil)) return;
+      if (kind === 'phrase' || kind === 'jackpot') {
+        priorityUntil = performance.now() + TOAST_HOLD[kind];
+        for (const node of [...toasts.children]) if (!node.classList.contains('rh-toast--jackpot')) node.remove();
+        for (const r of Object.values(runs)) if (r.el && !r.el.parentNode) r.el = null;
+      }
       let body = String(text == null ? '' : text);
       // COALESCE: dense chatter used to stack toasts on one spot and read as
       // flicker (the owner counted ~10 a second). Inside its merge window a
@@ -388,7 +469,6 @@ export function createRaceHud(root) {
       const liveRun = !!(m && run.el && run.el.parentNode);
       if (liveRun && now - run.at < run.merge) { fold(run, +m[1], now); return; }
       if (run && now - lastChatterAt < CHATTER_GAP_MS) { if (liveRun) fold(run, +m[1], now); return; }
-      if (kind === 'bank') body = bankTokens(body);
       if (kind === 'jackpot') hit(gold, 'is-on');
       const t = el(`rh-toast rh-toast--${kind}`, toasts, body);
       t.style.setProperty('--rh-hold', `${TOAST_HOLD[kind]}ms`);
@@ -478,7 +558,18 @@ export function createRaceHud(root) {
       end.classList.toggle('is-beside', !!opts.beside);   // the card slides in beside her instead of over her
       settleBrake('resume');
       endTitle.textContent = s.title || 'the tea party';
-      pbEl.style.display = s.personalBest ? '' : 'none';
+      guide.hidden = true;
+      const wordRun = s.thoughtsTotal > 0;
+      pbEl.style.display = (wordRun ? s.trackFinished && s.thoughtsRecord : s.personalBest) ? '' : 'none';
+      pbEl.textContent = wordRun ? 'track best' : 'personal best';
+      if (!wordRun) endNote.textContent = 'everybody has won.';
+      else if (!s.trackFinished) endNote.textContent = 'run ended early · your track best stays.';
+      else if (s.previousThoughts == null) endNote.textContent = 'a finished run. your next one has a target.';
+      else {
+        const delta = (s.thoughts || 0) - s.previousThoughts;
+        endNote.textContent = delta > 0 ? `${fmt(delta)} more than your previous best.`
+          : delta === 0 ? 'matched your best.' : `${fmt(-delta)} thoughts to your best.`;
+      }
       rows.textContent = '';
       const line = (k, v) => {
         rows.appendChild(Object.assign(document.createElement('dt'), { textContent: k }));
@@ -502,6 +593,7 @@ export function createRaceHud(root) {
       return new Promise((res) => { endResolve = res; });
     },
     dispose() {
+      settleBankTransfer();
       disposed = true;
       for (const k of Object.keys(runs)) Object.assign(runs[k], { el: null, at: 0, sum: 0, n: 0, kill: 0 });
       settleBrake('resume');

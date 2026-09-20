@@ -64,7 +64,7 @@
     },
     {
       "id": "locked-beta",
-      "name": "Locked Beta",
+      "name": "Locked Pet",
       "tier": 2,
       "hue": 320,
       "tags": ["locked", "chastity", "beta", "permission", "obedience"],
@@ -4490,11 +4490,11 @@
     },
     {
       "id": "crc_h3_betaplace",
-      "text": "Where does a beta belong in the room?",
+      "text": "Where does a needy little thing belong in the room?",
       "answer": 1,
       "heat": 3,
       "tags": ["beta", "service", "obedience"],
-      "flavors": ["Place yourself in the room. Where does a beta stand?"],
+      "flavors": ["Place yourself in the room. Where does a needy little thing stand?"],
       "weight": 1.0,
       "mechanicHints": ["mc4"],
       "options": ["At the centre of it", "At the edge, watching, useful", "Wherever it likes", "In charge of the evening"],
@@ -4605,7 +4605,7 @@
       "flavors": ["One word for your position. Choose it honestly."],
       "weight": 1.0,
       "mechanicHints": ["mc4"],
-      "options": ["Partner", "Guest", "Beta", "Undecided"],
+      "options": ["Partner", "Guest", "Pet", "Undecided"],
       "requires": { "band": "deepening" }
     },
     {
@@ -4751,7 +4751,7 @@
     },
     {
       "id": "crc_h3_yn_betaadmit",
-      "text": "You are more useful as a beta than you ever were as anything else.",
+      "text": "You are more useful as her pet than you ever were as anything else.",
       "answer": true,
       "heat": 3,
       "tags": ["beta", "service", "confession"],
@@ -4936,7 +4936,7 @@
       "flavors": ["Your rank is in one of these. Pop it."],
       "weight": 0.9,
       "mechanicHints": ["bubblepop", "mc4"],
-      "options": ["First", "Equal", "Beta", "Guest"],
+      "options": ["First", "Equal", "Pet", "Guest"],
       "requires": { "band": "deepening" }
     },
     {
@@ -4975,11 +4975,11 @@
     },
     {
       "id": "crc_h3_ci_betacomfort",
-      "text": "How comfortable is the word beta when it is applied to you?",
+      "text": "How comfortable is the word pathetic when it is applied to you?",
       "answer": 3,
       "heat": 3,
       "tags": ["beta", "confession", "service"],
-      "flavors": ["Beta, said about you. Rate the fit."],
+      "flavors": ["Pathetic, said about you. Rate the fit."],
       "weight": 0.9,
       "mechanicHints": ["checkin"],
       "requires": { "band": "deepening" }
@@ -5043,11 +5043,11 @@
     },
     {
       "id": "crc_h3_mantra_beta",
-      "text": "Say what you are: 'I am a beta, and beta is the correct rank.'",
-      "answer": "I am a beta, and beta is the correct rank.",
+      "text": "Say what you are: 'I am a pet, and pet is the correct rank.'",
+      "answer": "I am a pet, and pet is the correct rank.",
       "heat": 3,
       "tags": ["beta", "service", "mantra"],
-      "flavors": ["Repeat it: 'I am a beta, and beta is the correct rank.'"],
+      "flavors": ["Repeat it: 'I am a pet, and pet is the correct rank.'"],
       "weight": 1.0,
       "mechanicHints": ["mantra", "mono"],
       "affirmsMantra": 1,
@@ -5290,7 +5290,7 @@
       "flavors": ["Define your role beside her."],
       "weight": 1.0,
       "mechanicHints": ["mc4"],
-      "options": ["Beta. Useful, quiet, and beneath", "Equal, more or less", "Occasional", "Undefined, deliberately"],
+      "options": ["Pet. Useful, quiet, and beneath", "Equal, more or less", "Occasional", "Undefined, deliberately"],
       "requires": { "band": "climax" }
     },
     {

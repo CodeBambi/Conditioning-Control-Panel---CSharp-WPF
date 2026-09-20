@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FLICK, wrapDelta, flickStart, flickMove, flickSpeed, flickRelease } from '../flick.js';
-import { planRun, FEEL } from '../feel.js';
+import { planRun, FEEL, nextLaunchAt } from '../feel.js';
 
 /** A swing of `turn` radians in `steps` samples over `ms`, from angle 0. */
 function swing(turn, ms, steps = 8, { hold = 0 } = {}) {
@@ -72,7 +72,7 @@ test('strength is clamped into the band, and never leaves it however wild the sw
 test('harder is faster, and the house kick sits inside the band', () => {
   const soft = swing(0.4, 260), hard = swing(2.4, 110);
   assert.equal(soft.ok, true); assert.equal(hard.ok, true);
-  assert.ok(hard.rotVel > soft.rotVel, `${hard.rotVel} > ${soft.rotVel}`);
+  assert.ok(hard.rotVel > soft.rotVel * 4, `${hard.rotVel} is visibly faster than ${soft.rotVel}`);
   assert.ok(FEEL.ROTOR_KICK > FLICK.VEL_MIN && FEEL.ROTOR_KICK < FLICK.VEL_MAX);
 });
 
@@ -102,4 +102,18 @@ test('LAW I: the run is no longer or shorter for a paying pocket than a losing o
     assert.equal(plan.restAt, first.restAt, 'the pocket never shows in the timing');
     assert.equal(plan.landAt, first.landAt);
   }
+});
+
+
+test('hard throws keep their extra travel in the rendered first second without changing the result or floor',()=>{
+  const slow=planRun({index:18,seed:721,rotVel0:FLICK.VEL_MIN});
+  const fast=planRun({index:18,seed:721,rotVel0:FLICK.VEL_MAX});
+  const step=Math.round(1/FEEL.DT);
+  assert.ok(Math.abs(fast.rot[step])>Math.abs(slow.rot[step])*4);
+  assert.equal(slow.index,18);assert.equal(fast.index,18);
+  assert.ok(nextLaunchAt(0,fast.restAt*1000)>=8000);
+  const validated=planRun({index:18,seed:721,rotVel0:2});
+  assert.equal(fast.restAt,validated.restAt);
+  assert.deepEqual(fast.rel,validated.rel);
+  assert.deepEqual(fast.sparks,validated.sparks);
 });

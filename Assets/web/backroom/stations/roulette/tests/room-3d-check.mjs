@@ -130,6 +130,31 @@ for (const [width, height] of SIZES) {
   ok(await until('!!document.querySelector(".roul-station[data-phase=bet]")', 12000, 100), `${name}: the room mounts and opens the roulette through the loader`);
   ok(await until('!window.__backroom.scene.transitioning', 5000), `${name}: the seat camera has arrived`);
   await sleep(300);
+  if(process.argv.includes('--look-only')) {
+    const cells=await ev(RECTS);
+    const candidates=await ev(`(()=>{const s=window.__backroom.scene,f=s.scene.getObjectByName('station_roulette'),out=[];
+      for(let y=100;y<${height}-100;y+=12)for(let x=30;x<${width}-30;x+=12){
+        if(s.pickAt({clientX:x,clientY:y},[f]).some(h=>h.object.name==='betting_mat'))out.push({x,y});
+      }return out;})()`);
+    const p=candidates.find(p=>Object.values(cells).every(r=>p.x<r.x-24||p.x>r.x+r.w+24||p.y<r.y-24||p.y>r.y+r.h+24));
+    ok(!!p,'roulette has empty felt outside betting targets');
+    if(p){
+      const before=await ev('window.__backroom.scene.camera.rotation.y');
+      await cdp('Input.dispatchMouseEvent',{type:'mousePressed',x:p.x,y:p.y,button:'left',clickCount:1});
+      await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:p.x+80,y:p.y+20,button:'left',buttons:1});
+      await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:p.x+80,y:p.y+20,button:'left',clickCount:1});
+      await sleep(500);
+      ok(await ev(`Math.abs(window.__backroom.scene.camera.rotation.y-(${before}))>.005 && window.__backroom.scene.debug().seated`),'roulette look moves camera without leaving');
+      ok((await ev(CHIP)).count===0,'looking places no wager');
+      await shot('roulette-look.png');
+      await ev("document.querySelector('.br-seat-center').click()");await sleep(800);
+      ok(await ev(`Math.abs(window.__backroom.scene.camera.rotation.y-(${before}))<.002`),'roulette recenter restores its view');
+    }
+    await ev("document.querySelector('#br-back').click()");await sleep(100);
+    ok(await ev("!document.querySelector('.br-seat-center')"),'leaving removes look controls');
+    ok(errs.length===0,'no page exceptions: '+errs.join(' | '));
+    await done(fails?1:0);
+  }
   ok(await ev("document.querySelectorAll('canvas').length === 1 && !document.querySelector('.roul-mat-strip') && getComputedStyle(document.querySelector('.roul-stage')).display === 'none'"), `${name}: one room canvas, no DOM betting grid: the 3D mat takes the bets`);
   ok(await ev("(() => { const f = window.__backroom.scene.scene.getObjectByName('station_roulette'); return f.getObjectByName('bet_number_assembly').visible === false && !!f.getObjectByName('roulette_mat_prints'); })()"), `${name}: the authored cream glyphs give way to the printed atlas`);
   const rects = await ev(RECTS), list = Object.entries(rects || {});

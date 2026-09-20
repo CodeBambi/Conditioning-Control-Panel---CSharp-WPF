@@ -106,7 +106,7 @@ public class BackRoomHypnoPlanTests
         Assert.Equal(@"C:\woven\wake.gif", hold.SpiralPath);
 
         var timed = Step(Plan("fx.loom_spiral", new { preset = "../../evil", ms = 4200, alpha = 0.99 }));
-        Assert.Equal((4200, 0.9, "screen"), (timed.DurationMs, timed.Level, timed.Look!.Preset));
+        Assert.Equal((5200, 0.9, "screen"), (timed.DurationMs, timed.Level, timed.Look!.Preset));
         Assert.Equal(0.85, Step(Plan("fx.loom_spiral")).Level);
         Assert.Equal(20000, Step(Plan("fx.loom_spiral", new { ms = 60000 })).DurationMs);
     }
@@ -115,7 +115,7 @@ public class BackRoomHypnoPlanTests
     public void LoomSpiral_Calm_HalvesAlpha_KeepsTheTime_AndTheHoldCap()
     {
         var calm = Step(Plan("fx.loom_spiral", new { ms = 4200, alpha = 0.9 }, BackRoomFxIntensity.Calm));
-        Assert.Equal((4200, 0.45), (calm.DurationMs, calm.Level));
+        Assert.Equal((5200, 0.45), (calm.DurationMs, calm.Level));
         Assert.Equal(20000, Step(Plan("fx.loom_spiral", new { hold = true }, BackRoomFxIntensity.Calm)).DurationMs);
         // Reduced motion plays the slow variant (the plan's flag), never a still.
         Assert.True(Plan("fx.loom_spiral", m: MotionLevel.Off).Reduced);
