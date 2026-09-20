@@ -39,6 +39,27 @@ internal static class TestProfile
         Directory.CreateDirectory(DirectoryPath);
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", DirectoryPath);
 
+        // [lang-probe] Unconditional record of the ACTUAL testhost runtime and the profile this
+        // process owns, written on every start so a pass (or a failure elsewhere) still has it.
+        try
+        {
+            var recordDir = Environment.GetEnvironmentVariable("CCP_PROBE_LOG_DIR");
+            if (!string.IsNullOrEmpty(recordDir))
+            {
+                Directory.CreateDirectory(recordDir);
+                File.AppendAllText(Path.Combine(recordDir, "testhost-runtime.log"),
+                    $"{DateTime.UtcNow:O} pid={Environment.ProcessId}"
+                    + $" runtime={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}"
+                    + $" os={System.Runtime.InteropServices.RuntimeInformation.OSDescription}"
+                    + $" arch={System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}"
+                    + $" owned-profile={DirectoryPath}" + Environment.NewLine);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[lang-probe] runtime record unavailable: {ex.GetType().Name}: {ex.Message}");
+        }
+
         // [lang-probe] Diagnostics only: route the production Serilog statics into an in-memory
         // ring buffer so a persistence timeout can say WHICH of the three things happened —
         // the debounce callback never ran, SaveImmediate threw (sharing violation / HResult),
@@ -55,7 +76,19 @@ internal sealed class SaveProbeSink : Serilog.Core.ILogEventSink
 {
     internal static SaveProbeSink Instance { get; } = new();
 
+    private const string MarkPrefix = "---- mutation window: ";
+
     private readonly System.Collections.Generic.Queue<string> _lines = new();
+
+    /// <summary>[lang-probe] Opens a mutation window so later lines can be attributed to it.</summary>
+    internal void Mark(string label)
+    {
+        lock (_lines)
+        {
+            _lines.Enqueue($"{MarkPrefix}{label} ({DateTime.Now:HH:mm:ss.fff}) ----");
+            while (_lines.Count > 200) _lines.Dequeue();
+        }
+    }
 
     public void Emit(Serilog.Events.LogEvent logEvent)
     {
@@ -75,9 +108,15 @@ internal sealed class SaveProbeSink : Serilog.Core.ILogEventSink
         }
     }
 
-    internal string[] Recent(int count)
+    /// <summary>[lang-probe] Only the lines emitted after the most recent mutation marker.</summary>
+    internal string[] SinceLastMark()
     {
-        lock (_lines) return _lines.Reverse().Take(count).Reverse().ToArray();
+        lock (_lines)
+        {
+            var all = _lines.ToArray();
+            var mark = Array.FindLastIndex(all, line => line.StartsWith(MarkPrefix, StringComparison.Ordinal));
+            return all.Skip(mark + 1).ToArray();
+        }
     }
 }
 
@@ -427,6 +466,7 @@ public sealed class LanguageSelectorTests
 
     private static void WaitForPersistedSetting(string settingsPath, string property, string expected)
     {
+        SaveProbeSink.Instance.Mark($"wait {property}={expected}");
         var stopwatch = Stopwatch.StartNew();
         var actual = ReadSetting(settingsPath, property);
         while (!string.Equals(actual, expected, StringComparison.Ordinal)
@@ -437,32 +477,41 @@ public sealed class LanguageSelectorTests
             actual = ReadSetting(settingsPath, property);
         }
 
-        Assert.True(string.Equals(actual, expected, StringComparison.Ordinal),
+        var persisted = string.Equals(actual, expected, StringComparison.Ordinal);
+        Assert.True(persisted,
             $"Timed out waiting for {property}={expected}; last disk value was {actual} after {stopwatch.Elapsed.TotalMilliseconds:0}ms"
-                + ProbeDiagnostics(property));
+                // Evaluated only when the wait already failed: a pass adds no read and no service.
+                + (persisted ? string.Empty : ProbeDiagnostics(settingsPath, property)));
     }
 
     /// <summary>[lang-probe] Diagnostics-only detail appended to an existing failure message.</summary>
-    private static string ProbeDiagnostics(string property)
+    private static string ProbeDiagnostics(string settingsPath, string property)
     {
         try
         {
             var inMemory = CoreSettings.Current.GetType().GetProperty(property)?
                 .GetValue(CoreSettings.Current)?.ToString() ?? "<no-such-property>";
-            var reloaded = new SettingsService().Current.GetType().GetProperty(property)?
-                .GetValue(new SettingsService().Current)?.ToString() ?? "<no-such-property>";
+            // No extra SettingsService here: the polling loop's own disk read is the disk evidence.
+            var onDisk = ReadSetting(settingsPath, property);
             var leftoverTemps = Directory.Exists(TestProfile.DirectoryPath)
                 ? Directory.GetFiles(TestProfile.DirectoryPath, "settings.json.*.tmp").Length
                 : -1;
-            var log = SaveProbeSink.Instance.Recent(25);
+            var log = SaveProbeSink.Instance.SinceLastMark();
             return "\n[lang-probe] os=" + System.Runtime.InteropServices.RuntimeInformation.OSDescription
                 + "; runtime=" + System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription
                 + "; profile=" + TestProfile.DirectoryPath
                 + "\n[lang-probe] in-memory " + property + "=" + inMemory
-                + "; reloaded-from-disk " + property + "=" + reloaded
+                + "; last disk read " + property + "=" + onDisk
                 + "; leftover settings temp files=" + leftoverTemps
-                + "\n[lang-probe] save log (" + log.Length + " of the last settings lines; empty means no save ran):\n  "
-                + (log.Length == 0 ? "<none>" : string.Join("\n  ", log));
+                + "\n[lang-probe] settings log lines inside this mutation window (" + log.Length + "):\n  "
+                + (log.Length == 0 ? "<none observed>" : string.Join("\n  ", log))
+                + "\n[lang-probe] reading these lines: no save entry means SAVE ENTRY NOT OBSERVED in this"
+                + " window — NOT proof the debounce callback never executed (the callback can run without"
+                + " saving, or stall before its first log); an entry line can come from an immediate save"
+                + " as well as a debounce callback; an exception HResult identifies an error CLASS only and"
+                + " does not prove File.Move failed because of this test's polling reader; and a successful"
+                + " save line with stale disk contents does not uniquely identify a wrong snapshot, since a"
+                + " later write could have intervened.";
         }
         catch (Exception ex)
         {
