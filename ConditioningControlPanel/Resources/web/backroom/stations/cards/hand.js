@@ -168,3 +168,13 @@ export function owedFor(body) {
   return Math.max(0, Math.min(hand.result.returned, credited));
 }
 export const shownSp = (sp, owed) => Math.max(0, int(sp) - Math.max(0, int(owed)));
+
+/**
+ * THE BANK's flight value: the number the chip says while tokens are in the air, or `null` to RELEASE it
+ * back to the room's Law I rule. Only a real finite number pins the chip; everything else releases it.
+ *
+ * Coercing first is the trap this guards. `Number(null)`, `Number('')` and `Number([])` are all 0 and all
+ * pass `Number.isFinite`, so a coerce-then-test rule turned every release call into a pin at zero and the
+ * room's SP chip read 0 from the end of one paid hand to the middle of the next (tester, 2026-09-19).
+ */
+export const flightValue = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null);
