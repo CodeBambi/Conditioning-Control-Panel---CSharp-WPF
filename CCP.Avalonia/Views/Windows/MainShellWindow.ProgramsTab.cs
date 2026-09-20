@@ -1,65 +1,66 @@
-// NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.ProgramsTab.cs (2312 lines).
-// THE OLD BLOCKER IS GONE. This header used to say the program model itself was still in the WPF
-// head; it is not. ProgramDefinition, ProgramDay, ProgramEnrollment, ProgramService,
-// ProgramSessionBuilder and the whole BuiltInPrograms library are in CCP.Core (Models/Program/ and
-// Services/Program/), and this head references them. Only ProgramArt (WPF ImageSource) and
-// ProgramRewardService (App.MainWindowRef, the sessions list) stayed behind.
-//
-// What blocks this file now is smaller and dumber: NOTHING ON THIS HEAD CONSTRUCTS A ProgramService.
-// CCP.Avalonia/App.axaml.cs builds SettingsService and nothing else, so there is no instance to
-// read Today off, no events to subscribe to and no ledger to command. Constructing one here before
-// the builders below exist would start a day clock and write programs.json for a tab that cannot
-// show the run - which is why it is deliberately not done yet. The instance and the builders are
-// one job, not two.
-//
-// What that leaves, grouped so the eventual port can be taken in bites:
-//
-//   THE BUILDERS - RebuildProgramsTab, BuildProgramBrowseList, BuildProgramRunPanel,
-//   BuildProgramDayStrip, BuildProgramTodayPanel, BuildProgramTodayLayers, BuildProgramUpNext,
-//   BuildProgramLapsedPanel, BuildProgramGraduatedPanel, RefreshProgramsUI, RefreshProgramTodayCard,
-//   UpdateProgramSessionRow, ProgramTodayCard_Loaded, ProgramTodayCard_Click. Code-built panels over
-//   ProgramService state; they also want the tab's own ControlThemes, which is a second job.
-//
-//   THE COMMANDS - BtnProgramEnroll_Click, BtnProgramPauseResume_Click, BtnProgramWithdraw_Click,
-//   BtnProgramRestart_Click, BtnProgramDismissGraduated_Click, BtnProgramSubmitRitual_Click,
-//   BtnStartTodaySession_Click, StartProgramSession, AnnounceProgramSessionStarted /
-//   AnnounceProgramSessionEnded. Every one of these now HAS a service to call - what they lack is
-//   an instance and a run panel to switch to. BtnProgramEnroll_Click is the one with a lie-risk:
-//   its gate is ProgramService.CanEnroll(def, out reason) BEFORE ProgramEnrollDialog opens, and
-//   Enroll(...) only on an awaited true. Enrolling with the run panel still unbuilt would leave the
-//   tab on the browse list while a real run ticked underneath it.
-//
-//   THE SUBSCRIPTIONS - EnsureProgramsSubscribed, EnsureProgramsAppHooks, OnProgramTodayChanged,
-//   OnProgramLapsed, OnProgramGraduated, MarshalProgramRefresh, _programsSubscribed,
-//   _programsAppHooked. Events on ProgramService; MarshalProgramRefresh's WPF Dispatcher.Invoke is
-//   Dispatcher.UIThread.Post here.
-//
-//   THE PAINT HELPERS - ProgramThemeBrush, ProgramAccentBrush, ProgramContrastForeground,
-//   SrgbToLinear, ProgramRailFillBrush, ProgramRadialGlowBrush, ApplyProgramArtMask,
-//   ProgramTaskIconPath, ProgramTaskHowTo, ProgramRunKey, FormatProgramClock, ProgramDaySettings,
-//   ProgramHasPremium. Two of these - SrgbToLinear (the sRGB->linear curve behind the WCAG
-//   luminance pick) and FormatProgramClock - are pure and portable TODAY. They are left out because
-//   they are orphans: every caller is a builder above, and a lone contrast helper with nothing to
-//   contrast is padding, not a port. ProgramRailFillBrush and ProgramRadialGlowBrush additionally
-//   call Freeze(), which Avalonia has no equivalent for; ProgramHasPremium is App.Patreon;
-//   ProgramDaySettings is ProgramSessionBuilder, which is in Core now.
-//
-//   THE FX - EnsureProgramsFxHooked, OnProgramsTabVisibleChanged, StartProgramRunEntrance,
-//   AnimateProgramPanelIn, EnsureProgramSessionSheen, StopProgramSessionSheen, PopProgramScale,
-//   StartProgramsTabPulse, StopProgramsTabPulse, ResetProgramRunPopsIfRunChanged and their seven
-//   state flags. WPF storyboards; the keyframe-Animation recipe in CLAUDE.md covers the shapes, but
-//   there is nothing on screen to animate until the builders land.
-//
-// Checked and NOT the blocker here: CoreProgression and CoreSession. Programs are their own
-// enrollment ledger - CoreProgression answers XP and level, CoreSession answers the running
-// session, and no member of this file reads either. Do not wire them expecting the tab to fill.
-//
-// No member of this partial is referenced from MainShellWindow.axaml. The rail's Programs button is
-// BtnPrograms_Click, which already ships in MainShellWindow.TabNavigation.cs:205.
+using System;
+using System.Collections.Generic;
+using Avalonia.Media;
+using ConditioningControlPanel.Avalonia.Views.Tabs;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models.Program;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
+        /// <summary>
+        /// Maps the Core catalogue to browse-only rows. No ProgramService is constructed here: this
+        /// layer must not start the program clock or write a ledger merely to show the library.
+        /// </summary>
+        internal static IReadOnlyList<ProgramBrowseItem> BuildProgramBrowseItems(
+            IReadOnlyList<ProgramDefinition> library)
+        {
+            var items = new List<ProgramBrowseItem>(library.Count);
+            foreach (var definition in library)
+            {
+                var premium = definition.Tier == ProgramTier.Premium;
+                var accent = AccentBrush(definition.AccentColor);
+                items.Add(new ProgramBrowseItem
+                {
+                    Definition = definition,
+                    ProgramId = definition.Id,
+                    Icon = definition.Icon,
+                    Title = definition.Title,
+                    Subtitle = definition.Subtitle,
+                    Pitch = definition.Pitch,
+                    LengthLabel = Loc.GetF("programs_length_days", definition.LengthDays),
+                    TierLabel = Loc.Get(premium ? "programs_tier_premium" : "programs_tier_free"),
+                    TierBrush = premium ? accent : new SolidColorBrush(Color.Parse("#FFA9A3C2")),
+                    TierBackground = premium
+                        ? new SolidColorBrush(Color.Parse("#33FF69B4"))
+                        : new SolidColorBrush(Color.Parse("#332DFF9E")),
+                    AccentBrush = accent,
+                    IsLocked = premium,
+                    ActionText = Loc.Get(premium ? "btn_program_locked" : "btn_program_enroll"),
+                    IsActionEnabled = false,
+                    ActionOpacity = 0.5,
+                    ReasonText = Loc.Get(premium ? "programs_locked_hint" : "programs_unavailable"),
+                    ReasonVisible = true,
+                    CardOpacity = premium ? 0.72 : 1.0
+                });
+            }
+
+            return items;
+        }
+
+        private static IBrush AccentBrush(string? hex)
+        {
+            try
+            {
+                return string.IsNullOrWhiteSpace(hex)
+                    ? new SolidColorBrush(Color.Parse("#FFFF69B4"))
+                    : new SolidColorBrush(Color.Parse(hex));
+            }
+            catch (FormatException)
+            {
+                return new SolidColorBrush(Color.Parse("#FFFF69B4"));
+            }
+        }
     }
 }
