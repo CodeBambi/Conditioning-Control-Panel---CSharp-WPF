@@ -1,0 +1,139 @@
+# Diagnostic-only, branch-scoped red/green for the Windows settings-publication repair.
+#
+# It answers exactly one question the repair review left open: do the UNCHANGED new
+# Tests/CCP.Core.Settings.Tests sources fail against the baseline production code and pass
+# against the candidate production code, on real Windows and the real .NET 8 runtime?
+#
+# Rules this file exists to enforce, all of them deliberate:
+#   * two fresh checkouts at pinned SHAs; the test sources are copied from the candidate into
+#     the baseline and hash-compared, so both revisions run byte-identical test code;
+#   * one invocation per revision, no retry loop - a timing artefact must NOT be retried green;
+#   * the baseline run is allowed to fail without cancelling the candidate run;
+#   * every exit code, raw xunit XML and log is uploaded whatever happens;
+#   * the test DLL is executed explicitly on an installed 8.0.x runtime via `dotnet exec
+#     --fx-version`, with the resolved version and banner recorded (SDK 10 does the building).
+# It does NOT build the WPF head or the solution - PR CI owns that gate.
+name: verify-settings-publication
+
+on:
+  push:
+    branches: [avalonia-port/verify-windows-settings-publication]
+
+permissions:
+  contents: read
+
+env:
+  BASELINE_SHA: 80632299102f079116587fe2f626f769a9f1eee9
+  CANDIDATE_SHA: 60b54c224913b7b0782a9f866837788a428e7146
+  TEST_DIR: Tests/CCP.Core.Settings.Tests
+
+jobs:
+  red-green:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout this branch (harness only - the gate script)
+        uses: actions/checkout@v4
+        with:
+          path: harness
+
+      - name: Checkout baseline (production before the repair)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASELINE_SHA }}
+          path: baseline
+
+      - name: Checkout candidate (the reviewed repair)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          path: candidate
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Record source pins and environment
+        run: |
+          mkdir -p artifacts
+          {
+            echo "baseline HEAD: $(git -C baseline rev-parse HEAD)"
+            echo "candidate HEAD: $(git -C candidate rev-parse HEAD)"
+            echo "expected baseline: $BASELINE_SHA"
+            echo "expected candidate: $CANDIDATE_SHA"
+          } | tee artifacts/source-pins.txt
+          test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
+          dotnet --info > artifacts/dotnet-info.txt
+          dotnet --list-runtimes > artifacts/dotnet-runtimes.txt
+          dotnet --list-sdks > artifacts/dotnet-sdks.txt
+
+      - name: Plant identical test sources in the baseline checkout
+        run: |
+          test ! -e "baseline/$TEST_DIR"   # the baseline must not already own this project
+          mkdir -p "baseline/$TEST_DIR"
+          cp "candidate/$TEST_DIR"/*.cs "candidate/$TEST_DIR"/*.csproj "baseline/$TEST_DIR"/
+          # Only the test project moves; baseline production code stays untouched.
+          git -C baseline status --porcelain | tee artifacts/baseline-worktree.txt
+          hashes() { (cd "$1" && sha256sum "$TEST_DIR"/*.cs "$TEST_DIR"/*.csproj | sort); }
+          hashes candidate | sed 's#^#candidate #' >  artifacts/test-source-hashes.txt
+          hashes baseline  | sed 's#^#baseline  #' >> artifacts/test-source-hashes.txt
+          cat artifacts/test-source-hashes.txt
+          diff <(hashes candidate) <(hashes baseline)
+
+      - name: Resolve the .NET 8 runtime to execute on
+        run: |
+          fx=$(dotnet --list-runtimes | grep '^Microsoft.NETCore.App 8\.' | awk '{print $2}' | sort -V | tail -1)
+          test -n "$fx"
+          echo "FX_VERSION=$fx" >> "$GITHUB_ENV"
+          echo "selected Microsoft.NETCore.App $fx" | tee artifacts/runtime-selection.txt
+
+      - name: Build baseline (SDK 10, net8.0)
+        timeout-minutes: 8
+        run: dotnet build "baseline/$TEST_DIR/CCP.Core.Settings.Tests.csproj" -c Release 2>&1 | tee artifacts/baseline-build.log
+
+      - name: Build candidate (SDK 10, net8.0)
+        timeout-minutes: 8
+        run: dotnet build "candidate/$TEST_DIR/CCP.Core.Settings.Tests.csproj" -c Release 2>&1 | tee artifacts/candidate-build.log
+
+      # One invocation each, no retries. `set +e` keeps a red baseline from cancelling the
+      # candidate run; the exit code is recorded rather than swallowed.
+      - name: Run tests on baseline production code
+        timeout-minutes: 5
+        run: |
+          set +e
+          dotnet exec --fx-version "$FX_VERSION" \
+            "baseline/$TEST_DIR/bin/Release/net8.0/CCP.Core.Settings.Tests.dll" \
+            -xml "$PWD/artifacts/baseline-results.xml" 2>&1 | tee artifacts/baseline-test.log
+          echo "${PIPESTATUS[0]}" > artifacts/baseline-exit.txt
+          echo "baseline exit: $(cat artifacts/baseline-exit.txt)"
+
+      - name: Run tests on candidate production code
+        timeout-minutes: 5
+        run: |
+          set +e
+          dotnet exec --fx-version "$FX_VERSION" \
+            "candidate/$TEST_DIR/bin/Release/net8.0/CCP.Core.Settings.Tests.dll" \
+            -xml "$PWD/artifacts/candidate-results.xml" 2>&1 | tee artifacts/candidate-test.log
+          echo "${PIPESTATUS[0]}" > artifacts/candidate-exit.txt
+          echo "candidate exit: $(cat artifacts/candidate-exit.txt)"
+
+      - name: Classify (red baseline, green candidate, or INCONCLUSIVE)
+        run: |
+          bash harness/.github/scripts/verify-settings-publication-gate.sh \
+            artifacts/baseline-results.xml artifacts/candidate-results.xml \
+            "$(cat artifacts/baseline-exit.txt)" "$(cat artifacts/candidate-exit.txt)" \
+            | tee artifacts/verdict.txt
+
+      # always(): the raw evidence matters MOST when the gate went red or inconclusive.
+      - name: Upload raw evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: settings-publication-red-green
+          path: artifacts/
