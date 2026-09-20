@@ -238,6 +238,30 @@ test('tempo changes keep beat helpers consistent', () => {
   assert.equal(beat.spb,.625);
 });
 
+test('browser beat-only integration plays finale static, metal and scene changes exactly once',()=>{
+ const {audio,ctx}=make();audio.start();
+ const calls=[];const routed={...audio};
+ for(const name of ['finaleInterrupt','finaleGrey','metal'])routed[name]=(...args)=>{calls.push([name,...args]);return audio[name](...args);};
+ const game=createGame({rng:()=>.5,audio:{beat:audio.beat,now:audio.now},onEvent:(n,d)=>routeFinaleAudio(n,d,routed,1280)});
+ const advance=t=>{for(let i=0;i<Math.ceil(t/.05);i++)game.step(.05);};
+ game.jumpToWall(8);advance(2);game.step(.02,{launch:true});
+ let start=ctx().log.starts.length;game.breakBrick(0);
+ assert.equal(calls.filter(c=>c[0]==='finaleInterrupt').length,1);
+ assert.ok(ctx().log.starts.slice(start).some(n=>n.k==='noise'),'freeze schedules audible static');
+ advance(4.05);assert.equal(game.snapshot().finale.phase,'locked');
+ assert.ok(calls.some(c=>c[0]==='finaleGrey'&&c[1]===true));
+ assert.ok(Math.abs(audio.beat.spb-60/(96*.72))<1e-9);
+ start=ctx().log.starts.length;game.breakBrick(0);
+ assert.equal(calls.filter(c=>c[0]==='metal').length,1);
+ assert.ok(ctx().log.starts.slice(start).filter(n=>n.k==='tone').length>=3,'sealed brick schedules metallic partials');
+ const defense=game.snapshot().bricks.findIndex(b=>b.finaleDefense);game.breakBrick(defense);
+ assert.equal(calls.filter(c=>c[0]==='metal').length,1,'defensive row has ordinary hits');
+ game.breakoutNow();advance(.6);
+ assert.ok(calls.some(c=>c[0]==='finaleGrey'&&c[1]===false));assert.equal(audio.beat.spb,.625);
+ audio.destroy();
+});
+
+
 test('every ordinary grey entry slows the existing music scene and colour restores it',()=>{
  const {audio}=make({bpm:120});
  audio.setState('colour');assert.equal(audio.beat.spb,.5);
