@@ -420,7 +420,7 @@ test('mixed landscape caches its shards and native size without consuming gamepl
   } finally { globalThis.document = oldDocument; }
 });
 
-for (const reduced of [false, true]) test(`finale suction preserves simulation and finishes on black, reduced=${reduced}`, () => {
+for (const reduced of [false, true]) test(`finale suction preserves simulation and finishes on the ending card, reduced=${reduced}`, () => {
   const oldDocument=globalThis.document;
   let surfaces=0;
   globalThis.document={createElement:()=>{surfaces++;return canvasStub();}};
@@ -438,7 +438,7 @@ for (const reduced of [false, true]) test(`finale suction preserves simulation a
     snap.finale.outroAge=3.2;renderer.draw(snap,{now:3,dt:.016});
     assert.equal(surfaces,shutdownSurfaces,'shutdown reuses a single small frame');
     log.length=0;snap.finale.outroAge=3.8;renderer.draw(snap,{now:4,dt:.016});
-    assert.equal(log.some(op=>op[0]==='drawImage'||op[0]==='fillText'),false,'ending stays black without overlays');
+    assert.equal(log.some(op=>op[0]==='drawImage'),true,'ending card replaces the indefinite black screen');
     assert.ok(log.some(op=>op[0]==='fillRect'&&op[1]===0&&op[2]===0));
     renderer.dispose();
   } finally {globalThis.document=oldDocument;}

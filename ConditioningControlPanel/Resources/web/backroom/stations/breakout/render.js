@@ -1,3 +1,4 @@
+import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups} from './powerups-render.js';
 import { junctionProtected } from './junction-shield.js';
 import { shieldY as junctionShieldY } from './words/let-go.js';
@@ -85,7 +86,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   const finaleEye = { x: 0, y: 0, r: 40, pull: 44, persistent: true, age: 0, born: 1, fade: .7, rot: 0 };
   let finaleTarget=null, pupilOffsetX=0, pupilOffsetY=0;
   let finaleOwner = null, finaleFreezeFrame = null, finaleFreezeAge = -1;
-  let finaleOutroFrame = null, finaleOutroOwner = null;
+  let finaleOutroFrame = null, finaleOutroOwner = null; const endingCard = createEndingCard();
   let frameNo = 0;
   let noisePat = null, vignette = null, ambient = null;
 
@@ -1125,7 +1126,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     if(foreground){foreground.remove();foreground=null;}
     g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';
     g.fillStyle='#000';g.fillRect(0,0,cw,ch);
-    if(t>=3.8)return;
+    if(t>=3.8){endingCard.draw(g,cw,ch,t,reduced);return;}
     if(t<2.9 || !finaleOutroFrame) {
       g.save();g.translate(ox,oy);g.scale(scale,scale);
       const cx=f.centreX ?? W/2,cy=f.centreY ?? H*.28,p=clamp(t/2.9,0,1);
@@ -1392,7 +1393,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   }
 
   const r = { resize, draw, onEvent, onGameEvent: onEvent, toField,
-    dispose() { letterFaces.clear();greyMetalFace=null; toughFaces.clear(); brickPictures.clear(); wordFaces.clear(); plainFaces.clear(); tierGlows.clear(); foreground?.remove(); foreground = null; spellFx.reset(); bubbleRewards.length = 0; P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); wellFx.dispose(); irisFx.dispose(); finaleFx.dispose(); finaleFreezeFrame=null; finaleOutroFrame=null; finaleOutroOwner=null; irisBuffer=null; off = null; },
+    dispose() { endingCard.reset();letterFaces.clear();greyMetalFace=null; toughFaces.clear(); brickPictures.clear(); wordFaces.clear(); plainFaces.clear(); tierGlows.clear(); foreground?.remove(); foreground = null; spellFx.reset(); bubbleRewards.length = 0; P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); wellFx.dispose(); irisFx.dispose(); finaleFx.dispose(); finaleFreezeFrame=null; finaleOutroFrame=null; finaleOutroOwner=null; irisBuffer=null; off = null; },
     particleCount: () => P.count() };
   return r;
 }

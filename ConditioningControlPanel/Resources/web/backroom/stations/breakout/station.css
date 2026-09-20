@@ -171,3 +171,18 @@
 .bo-audio-options label span { display:flex;align-items:center;gap:10px; }
 .bo-audio-options input { min-width:0;flex:1; }
 .bo-audio-options output { width:40px;text-align:right;font-size:12px; }
+
+.bo-ending-actions {position:absolute;z-index:12;bottom:7%;left:50%;transform:translateX(-50%);display:flex;gap:14px;}
+.bo-ending-actions[hidden] {display:none;}
+.bo-ending-actions button {font:14px ui-monospace,Consolas,monospace;color:#ead5f2;background:#21122e;border:1px solid #aa76bf;border-radius:4px;padding:10px 22px;cursor:pointer;}
+.bo-ending-actions button:hover,.bo-ending-actions button:focus-visible {background:#4c265e;outline:2px solid #e4b4ee;outline-offset:3px;}
+.bo-ending-status {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+.is-ending .bo-hud,.is-ending .bo-pause-button,.is-ending .bo-hint,.is-ending .bo-ghost-hint {visibility:hidden;}
+.bo-office-ending {position:absolute;inset:0;z-index:10;background:#000;}
+.bo-office-ending[hidden],.bo-office-ending [hidden] {display:none;}
+.bo-office-film,.bo-office-still {position:absolute;width:100%;height:100%;object-fit:contain;}
+.bo-office-skip {position:absolute;right:24px;bottom:24px;padding:9px 18px;background:#1c1b20cc;color:#ddd;border:1px solid #777;border-radius:3px;cursor:pointer;}
+.bo-office-skip:focus-visible {outline:2px solid #e6b5f2;outline-offset:3px;}
+.is-office-glitch .bo-stage {animation:bo-ending-glitch .3s steps(2,end) both;}
+@keyframes bo-ending-glitch {0%,100%{filter:none;transform:none}30%{filter:brightness(.75);transform:translateX(2px)}65%{filter:brightness(.2);transform:translateX(-2px)}}
+@media(prefers-reduced-motion:reduce){.is-office-glitch .bo-stage{animation:none}}
