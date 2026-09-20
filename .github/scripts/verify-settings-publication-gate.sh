@@ -5,13 +5,17 @@
 #
 # PASS  - baseline failed the release-recovery regression for a POSITIVELY identified reason
 #   (the post-release `Assert.Equal("fr", …)` publication assertion, attributed by stack trace to
-#   that test) AND candidate is 5/5.
+#   that test) AND candidate is 5 passed / 0 failed / 1 skipped, the single skip being the one
+#   approved Linux-only case. The baseline is INSTRUMENTED (observer seam only, no retry), so its
+#   persistent-hold attempt-count failures are expected - but they can never substitute for the
+#   release assertion. Any other skip, a missing/misnamed skip, or an absent release record is
+#   INCONCLUSIVE, never PASS.
 # INCONCLUSIVE (exit 2) - baseline passed unexpectedly, failed only because the test never
 #   observed the transient temp file (the timing hole called out in the repair review), failed for
 #   any setup/seed/profile/open/cancel/timeout or otherwise unrecognized reason, produced an
 #   incomplete or self-inconsistent summary, produced a zero/absent exit code, or the host died
 #   before producing results. That is a failed validation gate, not a retry signal.
-# FAIL (exit 1) - candidate did not reach 5 passed / 0 failed / 0 skipped.
+# FAIL (exit 1) - candidate did not reach 5 passed / 0 failed / 1 approved skip.
 # Missing exit files are passed in as anything non-numeric (e.g. "missing") and are never treated
 # as valid evidence.
 set -uo pipefail
@@ -23,7 +27,12 @@ candidate_exit=$4
 
 # The release-recovery regression: the reader is released mid-publication, so a bounded retry
 # must succeed. This is the one case whose baseline failure is the point of the exercise.
-release_test='HeldReaderReleaseAllowsPublicationAndCleansItsTempFile'
+release_test='ObservedPublicationFailureThatReleasesTheReaderRecoversAndPublishes'
+# The ONE skip either revision may report: the directory-target proof is Linux-only by review.
+approved_skip='NonTransientPublicationFailureNotifiesOnceAndStaysObservable'
+# The whole suite: 5 Windows-executable cases plus that one approved skip.
+expected_total=6
+expected_pass=5
 # Emitted by WaitForPublicationTemp; means the test never saw contention, i.e. proves nothing.
 missed_temp='did not leave its flushed temp file behind'
 # The ONLY baseline failure this gate accepts: after the reader is released the baseline never
@@ -62,6 +71,7 @@ for t in tests:
 out("n_tests", len(tests))
 out("n_pass", seen["Pass"]); out("n_fail", seen["Fail"])
 out("n_skip", seen["Skip"]); out("n_unknown", seen["unknown"])
+out("skip_names", ",".join(sorted((t.get("method") or "?") for t in tests if t.get("result") == "Skip")))
 hits = [t for t in tests if t.get("method") == rel]
 out("n_release", len(hits))
 if len(hits) == 1:
@@ -91,7 +101,7 @@ fi
 parse_xml() { # var-prefix file -> sets <prefix>_ok/_total/.../_release_text
   local prefix=$1 file=$2 k v
   for k in ok error total passed failed skipped errors environment \
-           n_tests n_pass n_fail n_skip n_unknown n_release release_result release_text; do
+           n_tests n_pass n_fail n_skip n_unknown n_release release_result release_text skip_names; do
     printf -v "${prefix}_${k}" '%s' ''
   done
   # Python on Windows opens stdout in text mode, so every line arrives CRLF-terminated and an
@@ -127,9 +137,9 @@ else
        ! is_count "$b_skipped" || ! is_count "$b_errors"; then
     verdict=INCONCLUSIVE
     notes+=("baseline summary is incomplete: totals/passed/failed/skipped/errors must all be present")
-  elif (( b_passed + b_failed + b_skipped != b_total )) || (( b_total != 5 )); then
+  elif (( b_passed + b_failed + b_skipped != b_total )) || (( b_total != expected_total )); then
     verdict=INCONCLUSIVE
-    notes+=("baseline summary is inconsistent or not the whole 5-case suite: $b_passed+$b_failed+$b_skipped vs total $b_total")
+    notes+=("baseline summary is inconsistent or not the whole $expected_total-case suite: $b_passed+$b_failed+$b_skipped vs total $b_total")
   elif (( b_n_tests != b_total )) || (( b_n_pass != b_passed )) || (( b_n_fail != b_failed )) ||
        (( b_n_skip != b_skipped )) || (( b_n_unknown != 0 )); then
     verdict=INCONCLUSIVE
@@ -140,15 +150,15 @@ else
   elif (( b_errors != 0 )); then
     verdict=INCONCLUSIVE
     notes+=("baseline reported $b_errors assembly-level error(s): host/collection failure, not the regression")
-  elif (( b_skipped != 0 )); then
+  elif [[ $b_skip_names != "$approved_skip" ]]; then
     verdict=INCONCLUSIVE
-    notes+=("baseline skipped $b_skipped case(s): Windows-only regressions did not execute")
+    notes+=("baseline skips are not exactly the one approved Linux-only case: got '${b_skip_names:-<none>}', expected '$approved_skip' (a Windows-only regression that did not execute proves nothing)")
   elif (( b_failed == 0 )); then
     verdict=INCONCLUSIVE
     notes+=("baseline reported no failures despite a nonzero exit: nothing was proven")
   elif [[ $b_release != Fail ]]; then
     verdict=INCONCLUSIVE
-    notes+=("baseline release-recovery regression did not fail: unexpected pass needs timing investigation, not a weaker assertion")
+    notes+=("baseline release-recovery regression did not fail (result: ${b_release:-<absent>}): an unexpected pass, skip or absence needs investigation, not a weaker assertion")
   elif grep -qF "$missed_temp" <<<"$b_fail_text"; then
     verdict=INCONCLUSIVE
     notes+=("baseline failure is only a missed transient-temp observation: no contention was proven")
@@ -158,7 +168,7 @@ else
        ! grep -qE 'Actual: +\\?"?ja\\?"?' <<<"$b_fail_text" ||
        ! grep -qE "at CCP\.Core\.Settings\.Tests\.SettingsPublicationTests\.$release_test" <<<"$b_fail_text"; then
     verdict=INCONCLUSIVE
-    notes+=("baseline failure is not the expected post-release publication assertion (EqualException fr vs ja attributed to $release_test): setup/seed/profile/open/cancel/timeout or unrecognized signature")
+    notes+=("baseline failure is not the expected post-release publication assertion (EqualException fr vs ja attributed to $release_test): setup failure, absent observer notification, persistent-hold attempt-count failure, open/cancel/timeout or unrecognized signature - none of which substitutes for it")
   else
     notes+=("baseline failure is the expected post-release publication regression: Assert.Equal expected \"fr\", actual \"ja\" in $release_test")
   fi
@@ -172,6 +182,7 @@ else
   notes+=("candidate runtime banner: $c_environment")
   notes+=("candidate exit=$candidate_exit total=$c_total passed=$c_passed failed=$c_failed skipped=$c_skipped errors=$c_errors")
   notes+=("candidate parsed test records: $c_n_tests (pass=$c_n_pass fail=$c_n_fail skip=$c_n_skip unknown=$c_n_unknown)")
+  notes+=("candidate skips: ${c_skip_names:-<none>}; $release_test = ${c_release_result:-<absent>}")
   if [[ $c_ok != 1 ]]; then
     verdict=INCONCLUSIVE
     notes+=("candidate results XML is not a complete well-formed xunit document: ${c_error:-unparseable}")
@@ -186,9 +197,15 @@ else
        (( c_n_skip != c_skipped )) || (( c_n_unknown != 0 )) || (( c_n_release != 1 )); then
     verdict=INCONCLUSIVE
     notes+=("candidate summary does not reconcile with its actual test records: claimed $c_total/$c_passed/$c_failed/$c_skipped vs parsed $c_n_tests/$c_n_pass/$c_n_fail/$c_n_skip (unknown=$c_n_unknown, $release_test records=$c_n_release)")
-  elif [[ $candidate_exit != 0 || $c_total != 5 || $c_passed != 5 || $c_failed != 0 || $c_skipped != 0 || $c_errors != 0 || $c_n_pass != 5 ]]; then
+  elif [[ $c_skip_names != "$approved_skip" || $c_release_result == Skip || -z $c_release_result ]]; then
+    # An extra, missing or misnamed skip - or a release regression that never executed - is
+    # unexplained evidence rather than a red: report it as inconclusive, never as PASS.
+    verdict=INCONCLUSIVE
+    notes+=("candidate skips are not exactly the one approved Linux-only case, or the release regression did not execute: skips='${c_skip_names:-<none>}' (expected '$approved_skip'), $release_test=${c_release_result:-<absent>}")
+  elif [[ $candidate_exit != 0 || $c_total != $expected_total || $c_passed != $expected_pass ||
+          $c_failed != 0 || $c_skipped != 1 || $c_errors != 0 || $c_n_pass != $expected_pass ]]; then
     [[ $verdict == PASS ]] && verdict=FAIL
-    notes+=("candidate did not reach 5 passed / 0 failed / 0 skipped on Windows")
+    notes+=("candidate did not reach $expected_pass passed / 0 failed / 1 approved skip on Windows")
   fi
 fi
 

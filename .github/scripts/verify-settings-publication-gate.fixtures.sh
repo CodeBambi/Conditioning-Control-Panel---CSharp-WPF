@@ -7,7 +7,8 @@ set -uo pipefail
 
 gate="$(cd "$(dirname "$0")" && pwd)/verify-settings-publication-gate.sh"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-release=HeldReaderReleaseAllowsPublicationAndCleansItsTempFile
+release=ObservedPublicationFailureThatReleasesTheReaderRecoversAndPublishes
+approved_skip=NonTransientPublicationFailureNotifiesOnceAndStaysObservable
 fails=0
 
 # $1 file, $2 assembly attrs, $3.. test elements
@@ -37,20 +38,25 @@ Expected: "fr"
 Actual:   "ja"' \
   "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release() in D:\\a\\x\\SettingsPublicationTests.cs:line 118")
 
+# The four non-release executable records: one no-reader case, the two persistent-hold theory
+# rows, and the later-save case.
 others_pass() {
   test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass
   test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass
+  test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass
   test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Pass
-  test_el ConcurrentSavesPublishOnceAndLeaveNoTempFiles Pass
 }
 
-green() { xml "$1" 'total="5" passed="5" failed="0" skipped="0" errors="0"' \
-  "$(others_pass)" "$(test_el "$release" Pass)"; }
+# The one approved skip: the directory-target non-transient proof is Linux-only by review.
+skip_el() { test_el "${1:-$approved_skip}" Skip; }
+
+green() { xml "$1" 'total="6" passed="5" failed="0" skipped="1" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" Pass)" "$(skip_el)"; }
 
 # baseline_xml, with the release test failing for $1 reason
 red_with() { # target-file failure-xml [assembly-attrs]
-  xml "$1" "${3:-total=\"5\" passed=\"4\" failed=\"1\" skipped=\"0\" errors=\"0\"}" \
-    "$(others_pass)" "$(test_el "$release" Fail "$2")"
+  xml "$1" "${3:-total=\"6\" passed=\"4\" failed=\"1\" skipped=\"1\" errors=\"0\"}" \
+    "$(others_pass)" "$(test_el "$release" Fail "$2")" "$(skip_el)"
 }
 
 check() { # label expected-verdict expected-exit baseline_xml candidate_xml baseline_exit candidate_exit
@@ -128,19 +134,24 @@ check "failing XML but baseline exit 0" INCONCLUSIVE 2 \
 check "baseline exit file missing" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/candidate.xml" missing 0
 
-red_with "$tmp/b-nosummary.xml" "$expected_failure" 'total="5" passed="4" failed="1" errors="0"'
+red_with "$tmp/b-nosummary.xml" "$expected_failure" 'total="6" passed="4" failed="1" errors="0"'
 check "baseline summary missing skipped" INCONCLUSIVE 2 \
   "$tmp/b-nosummary.xml" "$tmp/candidate.xml" 1 0
 
-red_with "$tmp/b-inconsistent.xml" "$expected_failure" 'total="5" passed="1" failed="1" skipped="0" errors="0"'
+red_with "$tmp/b-inconsistent.xml" "$expected_failure" 'total="6" passed="1" failed="1" skipped="1" errors="0"'
 check "baseline summary inconsistent" INCONCLUSIVE 2 \
   "$tmp/b-inconsistent.xml" "$tmp/candidate.xml" 1 0
 
-red_with "$tmp/b-errors.xml" "$expected_failure" 'total="5" passed="4" failed="1" skipped="0" errors="1"'
+red_with "$tmp/b-errors.xml" "$expected_failure" 'total="6" passed="4" failed="1" skipped="1" errors="1"'
 check "baseline assembly-level errors" INCONCLUSIVE 2 \
   "$tmp/b-errors.xml" "$tmp/candidate.xml" 1 0
 
-red_with "$tmp/b-skips.xml" "$expected_failure" 'total="5" passed="0" failed="1" skipped="4" errors="0"'
+xml "$tmp/b-skips.xml" 'total="6" passed="0" failed="1" skipped="5" errors="0"' \
+  "$(skip_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile)" \
+  "$(skip_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile)" \
+  "$(skip_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile)" \
+  "$(skip_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader)" \
+  "$(test_el "$release" Fail "$expected_failure")" "$(skip_el)"
 check "baseline skipped the Windows-only cases" INCONCLUSIVE 2 \
   "$tmp/b-skips.xml" "$tmp/candidate.xml" 1 0
 
@@ -163,21 +174,21 @@ check "both revisions produced nothing" INCONCLUSIVE 2 \
 
 # header-only: the exact raw artefact the review quoted, never closed.
 printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<assemblies>' \
-  '<assembly environment="64-bit .NET 8.0.21" total="5" passed="5" failed="0" skipped="0" errors="0">' \
+  '<assembly environment="64-bit .NET 8.0.21" total="6" passed="5" failed="0" skipped="1" errors="0">' \
   >"$tmp/c-headeronly.xml"
 check "candidate header-only XML (unclosed)" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-headeronly.xml" 1 0
 printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<assemblies>' \
-  '<assembly environment="64-bit .NET 8.0.21" total="5" passed="4" failed="1" skipped="0" errors="0">' \
+  '<assembly environment="64-bit .NET 8.0.21" total="6" passed="4" failed="1" skipped="1" errors="0">' \
   >"$tmp/b-headeronly.xml"
 check "baseline header-only XML (unclosed)" INCONCLUSIVE 2 \
   "$tmp/b-headeronly.xml" "$tmp/candidate.xml" 1 0
 
 # closed but empty: well-formed, claims five results, carries none.
-xml "$tmp/c-emptyassembly.xml" 'total="5" passed="5" failed="0" skipped="0" errors="0"'
+xml "$tmp/c-emptyassembly.xml" 'total="6" passed="5" failed="0" skipped="1" errors="0"'
 check "candidate claims 5 passed with no test records" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-emptyassembly.xml" 1 0
-xml "$tmp/b-emptyassembly.xml" 'total="5" passed="4" failed="1" skipped="0" errors="0"'
+xml "$tmp/b-emptyassembly.xml" 'total="6" passed="4" failed="1" skipped="1" errors="0"'
 check "baseline claims a failure with no test records" INCONCLUSIVE 2 \
   "$tmp/b-emptyassembly.xml" "$tmp/candidate.xml" 1 0
 
@@ -191,25 +202,26 @@ check "candidate truncated before its close" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-truncated.xml" 1 0
 
 # fewer real records than the summary claims, and unknown/absent result values.
-xml "$tmp/c-short.xml" 'total="5" passed="5" failed="0" skipped="0" errors="0"' \
+xml "$tmp/c-short.xml" 'total="6" passed="5" failed="0" skipped="1" errors="0"' \
   "$(test_el "$release" Pass)" "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)"
-check "candidate has 2 records but claims 5" INCONCLUSIVE 2 \
+check "candidate has 2 records but claims 6" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-short.xml" 1 0
-xml "$tmp/c-unknown.xml" 'total="5" passed="5" failed="0" skipped="0" errors="0"' \
-  "$(others_pass)" "$(test_el "$release" NotRun)"
+xml "$tmp/c-unknown.xml" 'total="6" passed="5" failed="0" skipped="1" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" NotRun)" "$(skip_el)"
 check "candidate record with an unknown result" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-unknown.xml" 1 0
-xml "$tmp/b-unknown-result.xml" 'total="5" passed="4" failed="1" skipped="0" errors="0"' \
-  "$(others_pass)" "<test name=\"x\" method=\"$release\">$expected_failure</test>"
+xml "$tmp/b-unknown-result.xml" 'total="6" passed="4" failed="1" skipped="1" errors="0"' \
+  "$(others_pass)" "<test name=\"x\" method=\"$release\">$expected_failure</test>" "$(skip_el)"
 check "baseline release record with no result attribute" INCONCLUSIVE 2 \
   "$tmp/b-unknown-result.xml" "$tmp/candidate.xml" 1 0
 
 # ambiguous duplicate evidence: the same test reported twice.
-xml "$tmp/b-dup.xml" 'total="5" passed="3" failed="2" skipped="0" errors="0"' \
+xml "$tmp/b-dup.xml" 'total="6" passed="3" failed="2" skipped="1" errors="0"' \
   "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
   "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
   "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Pass)" \
-  "$(test_el "$release" Fail "$expected_failure")" "$(test_el "$release" Fail "$expected_failure")"
+  "$(test_el "$release" Fail "$expected_failure")" "$(test_el "$release" Fail "$expected_failure")" \
+  "$(skip_el)"
 check "baseline reports the release test twice" INCONCLUSIVE 2 \
   "$tmp/b-dup.xml" "$tmp/candidate.xml" 1 0
 
@@ -222,9 +234,96 @@ check "baseline artefact has the wrong root element" INCONCLUSIVE 2 \
   "$tmp/b-wrongroot.xml" "$tmp/candidate.xml" 1 0
 
 # 5. a genuinely red candidate is still a FAIL, not an INCONCLUSIVE.
-xml "$tmp/c-red.xml" 'total="5" passed="4" failed="1" skipped="0" errors="0"' \
-  "$(others_pass)" "$(test_el "$release" Fail "$expected_failure")"
+xml "$tmp/c-red.xml" 'total="6" passed="4" failed="1" skipped="1" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" Fail "$expected_failure")" "$(skip_el)"
 check "candidate 4/5" FAIL 1 "$tmp/baseline-good.xml" "$tmp/c-red.xml" 1 1
+
+# 5b. the skip contract: exactly one skip, exactly the approved case, on BOTH revisions. An
+# extra, missing, misnamed or duplicated skip is unexplained evidence - never a PASS.
+xml "$tmp/c-noskip.xml" 'total="6" passed="6" failed="0" skipped="0" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" Pass)" "$(test_el "$approved_skip" Pass)"
+check "candidate has no skip at all" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-noskip.xml" 1 0
+
+xml "$tmp/c-misnamed-skip.xml" 'total="6" passed="5" failed="0" skipped="1" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" Pass)" \
+  "$(skip_el NonTransientPublicationFailureNotifiesOnce)"
+check "candidate skip has a different name" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-misnamed-skip.xml" 1 0
+
+xml "$tmp/c-extra-skip.xml" 'total="6" passed="4" failed="0" skipped="2" errors="0"' \
+  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
+  "$(test_el "$release" Pass)" \
+  "$(skip_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader)" "$(skip_el)"
+check "candidate skipped an extra Windows case" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-extra-skip.xml" 1 0
+
+xml "$tmp/c-skipped-release.xml" 'total="6" passed="4" failed="0" skipped="2" errors="0"' \
+  "$(others_pass)" "$(skip_el "$release")" "$(skip_el)"
+check "candidate skipped the release regression" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-skipped-release.xml" 1 0
+
+xml "$tmp/c-dup-skip.xml" 'total="6" passed="4" failed="0" skipped="2" errors="0"' \
+  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
+  "$(test_el "$release" Pass)" "$(skip_el)" "$(skip_el)"
+check "candidate reports the approved skip twice" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-dup-skip.xml" 1 0
+
+xml "$tmp/b-misnamed-skip.xml" 'total="6" passed="4" failed="1" skipped="1" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" Fail "$expected_failure")" \
+  "$(skip_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader)"
+check "baseline skip has a different name" INCONCLUSIVE 2 \
+  "$tmp/b-misnamed-skip.xml" "$tmp/candidate.xml" 1 0
+
+# 5c. the INSTRUMENTED baseline: the observer seam is applied, no retry. Its persistent-hold
+# attempt-count failures are expected - and cannot stand in for the fr/ja release assertion.
+hold_failure=$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Values differ
+Expected: 6
+Actual:   1' \
+  '   at CCP.Core.Settings.Tests.SettingsPublicationTests.PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile(FileShare share)')
+
+xml "$tmp/b-instrumented.xml" 'total="6" passed="2" failed="3" skipped="1" errors="0"' \
+  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Fail "$hold_failure")" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Fail "$hold_failure")" \
+  "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Pass)" \
+  "$(test_el "$release" Fail "$expected_failure")" "$(skip_el)"
+check "instrumented baseline: hold failures + fr/ja" PASS 0 \
+  "$tmp/b-instrumented.xml" "$tmp/candidate.xml" 1 0
+
+# same run WITHOUT the release failure: attempt-count reds alone prove nothing.
+xml "$tmp/b-holdonly.xml" 'total="6" passed="3" failed="2" skipped="1" errors="0"' \
+  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Fail "$hold_failure")" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Fail "$hold_failure")" \
+  "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Pass)" \
+  "$(test_el "$release" Pass)" "$(skip_el)"
+check "baseline: hold failures but release passed" INCONCLUSIVE 2 \
+  "$tmp/b-holdonly.xml" "$tmp/candidate.xml" 1 0
+
+# the observer never fired, so the test failed as a declared SETUP failure: not the regression.
+xml "$tmp/b-noobserver.xml" 'total="6" passed="4" failed="1" skipped="1" errors="0"' \
+  "$(others_pass)" \
+  "$(test_el "$release" Fail "$(failure_el 'Xunit.Sdk.TrueException' \
+     'setup failure: the held reader did not make any publication attempt fail, so this run proves nothing.' \
+     "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release()")")" "$(skip_el)"
+check "baseline observed no publication failure" INCONCLUSIVE 2 \
+  "$tmp/b-noobserver.xml" "$tmp/candidate.xml" 1 0
+
+# the old 5/0 shape (no skip record at all) must no longer be accepted on either side.
+xml "$tmp/b-oldshape.xml" 'total="5" passed="4" failed="1" skipped="0" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" Fail "$expected_failure")"
+xml "$tmp/c-oldshape.xml" 'total="5" passed="5" failed="0" skipped="0" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" Pass)"
+check "old 5/0 baseline shape" INCONCLUSIVE 2 \
+  "$tmp/b-oldshape.xml" "$tmp/candidate.xml" 1 0
+check "old 5/0 candidate shape" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-oldshape.xml" 1 0
 
 # 6. what the real Windows run actually emitted (run 35540142196), which the Linux-only fixtures
 # above did not reproduce.
@@ -253,10 +352,10 @@ check "escaped quotes but de/ja, not fr/ja" INCONCLUSIVE 2 \
 
 # the real observed pair: release test failed only on the transient temp (FailException), while a
 # DIFFERENT test carried the de/ja EqualException. Two failures, still no proven contention.
-xml "$tmp/b-real.xml" 'total="5" passed="3" failed="2" skipped="0" errors="0"' \
+xml "$tmp/b-real.xml" 'total="6" passed="3" failed="2" skipped="1" errors="0"' \
   "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
   "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
-  "$(test_el ConcurrentSavesPublishOnceAndLeaveNoTempFiles Pass)" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
   "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Fail "$(failure_el 'Xunit.Sdk.EqualException' \
       'Assert.Equal() Failure: Strings differ
 Expected: \"de\"
@@ -264,7 +363,7 @@ Actual:   \"ja\"' '   at CCP.Core.Settings.Tests.SettingsPublicationTests.LaterS
   "$(test_el "$release" Fail "$(failure_el 'Xunit.Sdk.FailException' \
       'SaveImmediate did not leave its flushed temp file behind while the settings reader was held.' \
       "   at CCP.Core.Settings.Tests.SettingsPublicationTests.WaitForPublicationTemp()
-   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release()")")"
+   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release()")")" "$(skip_el)"
 check "real run 35540142196 baseline shape" INCONCLUSIVE 2 \
   "$tmp/b-real.xml" "$tmp/candidate.xml" 1 0
 

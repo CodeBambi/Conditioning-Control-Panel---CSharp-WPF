@@ -1,0 +1,40 @@
+--- a/CCP.Core/Properties/AssemblyInfo.cs
++++ b/CCP.Core/Properties/AssemblyInfo.cs
+@@ -17,3 +17,4 @@
+ [assembly: InternalsVisibleTo("CCP.Core.Tests")]
+ [assembly: InternalsVisibleTo("CCP.Avalonia")]
+ [assembly: InternalsVisibleTo("CCP.Avalonia.Language.Tests")]
++[assembly: InternalsVisibleTo("CCP.Core.Settings.Tests")]
+--- a/CCP.Core/Services/Settings/SettingsService.cs
++++ b/CCP.Core/Services/Settings/SettingsService.cs
+@@ -39,6 +39,10 @@
+         // Per-instance seam for deterministic lifecycle proofs; production keeps the 500ms default.
+         internal int SaveDebounceDueTimeMilliseconds { get; set; } = 500;
+ 
++        // BASELINE INSTRUMENTATION ONLY: same per-instance internal seam as the candidate, so the
++        // identical test source compiles and runs against both variants.
++        internal Action<Exception, int>? AtomicPublishFailureObserver { get; set; }
++
+         public AppSettings Current { get; private set; }
+ 
+         /// <summary>
+@@ -905,7 +909,18 @@
+                             writer.Flush();
+                             stream.Flush(true);
+                         }
+-                        File.Move(tempPath, _settingsPath, overwrite: true);
++                        try
++                        {
++                            File.Move(tempPath, _settingsPath, overwrite: true);
++                        }
++                        catch (Exception publishEx)
++                        {
++                            // BASELINE INSTRUMENTATION ONLY: notify synchronously on the actual
++                            // failed publication attempt, then propagate exactly as before. No
++                            // retry is added - that is the candidate behaviour under test.
++                            AtomicPublishFailureObserver?.Invoke(publishEx, 0);
++                            throw;
++                        }
+                     }
+                     catch
+                     {

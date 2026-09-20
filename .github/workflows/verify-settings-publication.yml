@@ -7,6 +7,9 @@
 # Rules this file exists to enforce, all of them deliberate:
 #   * two fresh checkouts at pinned SHAs; the test sources are copied from the candidate into
 #     the baseline and hash-compared, so both revisions run byte-identical test code;
+#   * the baseline checkout is INSTRUMENTED, not pristine: the reviewed observer/friend seam
+#     (and nothing else - no retry) is applied from a committed patch whose hash, applied diff
+#     and resulting file hashes are all recorded as artifacts;
 #   * one invocation per revision, no retry loop - a timing artefact must NOT be retried green;
 #   * each runnable revision is attempted exactly once, independently: a baseline build failure
 #     or run timeout must not skip the candidate build/run, and classification always runs;
@@ -20,15 +23,17 @@ name: verify-settings-publication
 
 on:
   push:
-    branches: [avalonia-port/verify-windows-settings-publication]
+    branches: [avalonia-port/verify-deterministic-settings-publication]
 
 permissions:
   contents: read
 
 env:
   BASELINE_SHA: 80632299102f079116587fe2f626f769a9f1eee9
-  CANDIDATE_SHA: 60b54c224913b7b0782a9f866837788a428e7146
+  CANDIDATE_SHA: ba16a292376c446be49d082647018eb75457683e
   TEST_DIR: Tests/CCP.Core.Settings.Tests
+  INSTRUMENTATION_PATCH: .github/diagnostics/baseline-806322991-instrumentation.patch
+  INSTRUMENTATION_PATCH_SHA256: 12dfdc8ab48d192c681292d0af62c4e2f001b6d19718eed82e5bd54d2e565c2e
 
 jobs:
   red-green:
@@ -43,7 +48,7 @@ jobs:
         with:
           path: harness
 
-      - name: Checkout baseline (production before the repair)
+      - name: Checkout baseline (production before the repair, INSTRUMENTED below)
         uses: actions/checkout@v4
         with:
           ref: ${{ env.BASELINE_SHA }}
@@ -76,12 +81,29 @@ jobs:
           dotnet --list-runtimes > artifacts/dotnet-runtimes.txt
           dotnet --list-sdks > artifacts/dotnet-sdks.txt
 
+      # The baseline predates the internal observer/friend seam the shared test source binds to,
+      # so without this it would not compile and the run would prove nothing. Only the reviewed
+      # notification seam is applied - no retry, which is the candidate behaviour under test.
+      - name: Instrument the baseline with the reviewed observer seam (NOT pristine)
+        run: |
+          mkdir -p artifacts
+          sha256sum "harness/$INSTRUMENTATION_PATCH" | tee artifacts/instrumentation-patch-hash.txt
+          test "$(sha256sum < "harness/$INSTRUMENTATION_PATCH")" = "$INSTRUMENTATION_PATCH_SHA256  -"
+          cp "harness/$INSTRUMENTATION_PATCH" artifacts/instrumentation.patch
+          git -C baseline apply -p1 --check "$PWD/harness/$INSTRUMENTATION_PATCH"
+          git -C baseline apply -p1 "$PWD/harness/$INSTRUMENTATION_PATCH"
+          git -C baseline diff | tee artifacts/baseline-instrumentation-applied.diff
+          (cd baseline && sha256sum CCP.Core/Properties/AssemblyInfo.cs \
+                                    CCP.Core/Services/Settings/SettingsService.cs) \
+            | tee artifacts/baseline-instrumented-source-hashes.txt
+
       - name: Plant identical test sources in the baseline checkout
         run: |
           test ! -e "baseline/$TEST_DIR"   # the baseline must not already own this project
           mkdir -p "baseline/$TEST_DIR"
           cp "candidate/$TEST_DIR"/*.cs "candidate/$TEST_DIR"/*.csproj "baseline/$TEST_DIR"/
           # Only the test project moves; baseline production code stays untouched.
+          # Instrumented production files plus the planted test project - nothing else.
           git -C baseline status --porcelain | tee artifacts/baseline-worktree.txt
           hashes() { (cd "$1" && sha256sum "$TEST_DIR"/*.cs "$TEST_DIR"/*.csproj | sort); }
           hashes candidate | sed 's#^#candidate #' >  artifacts/test-source-hashes.txt
@@ -136,7 +158,7 @@ jobs:
 
       # always(): a skipped build/run or a step timeout must still produce a verdict. An exit file
       # that was never written is reported as "missing", which the classifier rejects outright.
-      - name: Classify (red baseline, green candidate, or INCONCLUSIVE)
+      - name: Classify (observed-failure baseline, green candidate, or INCONCLUSIVE)
         if: always()
         run: |
           mkdir -p artifacts
