@@ -1,0 +1,83 @@
+name: spiral-help-input-probe
+
+# DIAGNOSTIC TRIAL ONLY. This workflow is deliberately scoped to the owner-authorized probe
+# branch and is not a shipping fix or a coverage waiver.
+on:
+  push:
+    branches:
+      - avalonia-port/probe-spiral-help-input
+  workflow_dispatch:
+
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/avalonia-port/probe-spiral-help-input'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Build diagnostic test assembly
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $root = Join-Path $env:RUNNER_TEMP 'spiral-help-input-probe'
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          & dotnet build Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release *>&1 |
+            Tee-Object -FilePath (Join-Path $root 'build.log')
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Diagnostic test build failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+
+      - name: Run original and away-back variants once each
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $root = Join-Path $env:RUNNER_TEMP 'spiral-help-input-probe'
+          $variants = @('original', 'away-back')
+          $results = [System.Collections.Generic.List[string]]::new()
+          $overallExit = 0
+
+          foreach ($variant in $variants) {
+            # Each invocation gets a fresh process and a fresh Core profile. Do not retry either
+            # variant: the first result is the diagnostic observation we need.
+            $profile = Join-Path $root "profile-$variant"
+            $variantRoot = Join-Path $root $variant
+            if (Test-Path $profile) { Remove-Item -Recurse -Force $profile }
+            New-Item -ItemType Directory -Force -Path $profile, $variantRoot | Out-Null
+
+            $trace = Join-Path $variantRoot 'pointer-trace.log'
+            $console = Join-Path $variantRoot 'test.log'
+            $env:CCP_USERDATA_DIR = $profile
+            $env:CCP_SPIRAL_HELP_INPUT_VARIANT = $variant
+            $env:CCP_SPIRAL_HELP_INPUT_TRACE = $trace
+
+            & dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj `
+              -c Release --no-build `
+              --filter 'FullyQualifiedName~MountedSpiralHelpPreservesCallerLanguageStartingInGerman' *>&1 |
+              Tee-Object -FilePath $console
+            $exitCode = $LASTEXITCODE
+            $results.Add("variant=$variant exit=$exitCode profile=$profile trace=$trace")
+            if ($exitCode -ne 0) { $overallExit = 1 }
+          }
+
+          $results | Set-Content -Encoding utf8 (Join-Path $root 'summary.txt')
+          Remove-Item Env:CCP_USERDATA_DIR -ErrorAction SilentlyContinue
+          Remove-Item Env:CCP_SPIRAL_HELP_INPUT_VARIANT -ErrorAction SilentlyContinue
+          Remove-Item Env:CCP_SPIRAL_HELP_INPUT_TRACE -ErrorAction SilentlyContinue
+          if ($overallExit -ne 0) {
+            Write-Error 'One or more diagnostic variants failed; both first observations were preserved.'
+            exit $overallExit
+          }
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spiral-help-input-probe
+          path: ${{ runner.temp }}/spiral-help-input-probe/
+          if-no-files-found: warn

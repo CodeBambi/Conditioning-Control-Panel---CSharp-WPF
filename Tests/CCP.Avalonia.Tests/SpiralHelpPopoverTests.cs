@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -23,6 +24,16 @@ namespace CCP.Avalonia.Tests;
 
 public sealed class SpiralHelpPopoverTests
 {
+    // DIAGNOSTIC TRIAL ONLY: the away-back variant is owner-authorized probe input, not shipped behavior.
+    private const string InputVariantEnvironment = "CCP_SPIRAL_HELP_INPUT_VARIANT";
+    private const string TracePathEnvironment = "CCP_SPIRAL_HELP_INPUT_TRACE";
+
+    private static bool UseAwayBackVariant =>
+        string.Equals(
+            Environment.GetEnvironmentVariable(InputVariantEnvironment),
+            "away-back",
+            StringComparison.OrdinalIgnoreCase);
+
     [Fact]
     public async Task MountedSpiralHelpUsesLocalizedTopicAndCleansUpAcrossVisibilityAndReload()
     {
@@ -36,6 +47,10 @@ public sealed class SpiralHelpPopoverTests
             EnsureAvalonia();
             Window? host = null;
             SpiralTabView? view = null;
+            Button? button = null;
+            PointerTrace? trace = null;
+            EventHandler<PointerEventArgs>? pointerEntered = null;
+            EventHandler<PointerEventArgs>? pointerExited = null;
 
             try
             {
@@ -51,7 +66,7 @@ public sealed class SpiralHelpPopoverTests
                 };
 
                 view = new SpiralTabView { Width = 980, Height = 620 };
-                var button = view.FindControl<Button>("BtnSpiralHelp");
+                button = view.FindControl<Button>("BtnSpiralHelp");
                 Assert.NotNull(button);
                 host = new Window
                 {
@@ -60,14 +75,24 @@ public sealed class SpiralHelpPopoverTests
                     Content = view,
                 };
 
+                trace = PointerTrace.Start();
+                pointerEntered = (_, e) => trace.RecordPointerEvent("PointerEntered", e, host, view, button);
+                pointerExited = (_, e) => trace.RecordPointerEvent("PointerExited", e, host, view, button);
+                button.PointerEntered += pointerEntered;
+                button.PointerExited += pointerExited;
+                trace.State("constructed", host, view, button);
+
                 host.Show();
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-host-show", host, view, button);
                 Assert.True(view.IsShowingSpiral, "the mounted view did not enter its current spiral presentation path");
                 Assert.True(button!.IsVisible);
 
                 Move(host, button);
+                trace.State("after-initial-move", host, view, button);
                 await Task.Delay(150);
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-initial-delay", host, view, button);
                 Assert.True(HelpPopover.IsOpen(button));
                 var firstPopup = HelpPopover.PopupContent(button);
                 Assert.NotNull(firstPopup);
@@ -79,6 +104,7 @@ public sealed class SpiralHelpPopoverTests
                 // attachment or create a second popup.
                 view.OnTabShown();
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-tab-shown-open", host, view, button);
                 Assert.True(HelpPopover.IsOpen(button));
                 Assert.Same(firstPopup, HelpPopover.PopupContent(button));
 
@@ -89,6 +115,7 @@ public sealed class SpiralHelpPopoverTests
                 Assert.NotNull(applyHelp);
                 applyHelp!.Invoke(view, new object[] { false });
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-gate-false", host, view, button);
                 Assert.False(button.IsVisible);
                 Assert.False(HelpPopover.IsOpen(button));
                 Assert.Null(HelpPopover.PopupContent(button));
@@ -96,39 +123,57 @@ public sealed class SpiralHelpPopoverTests
                 // The normal entrypoint reattaches the topic after the gate opens again.
                 view.OnTabShown();
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-gate-reopen", host, view, button);
                 Assert.True(button.IsVisible);
                 host.MouseMove(new Point(1, 1), RawInputModifiers.None);
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-existing-gate-away-move", host, view, button);
                 Move(host, button);
+                trace.State("after-existing-gate-move", host, view, button);
                 await Task.Delay(150);
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-gate-reopen-delay", host, view, button);
                 Assert.True(HelpPopover.IsOpen(button));
                 Assert.NotSame(firstPopup, HelpPopover.PopupContent(button));
 
                 // The tab's own hidden lifecycle closes and clears an open card.
                 view.IsVisible = false;
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-view-hide", host, view, button);
                 Assert.False(button.IsVisible);
                 Assert.False(HelpPopover.IsOpen(button));
                 Assert.Null(HelpPopover.PopupContent(button));
                 view.IsVisible = true;
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-view-show", host, view, button);
+                if (UseAwayBackVariant)
+                {
+                    host.MouseMove(new Point(1, 1), RawInputModifiers.None);
+                    Dispatcher.UIThread.RunJobs();
+                    trace.State("after-diagnostic-away-move", host, view, button);
+                }
                 Move(host, button);
+                trace.State("after-failing-stage-move", host, view, button);
                 await Task.Delay(150);
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-failing-stage-delay", host, view, button);
                 Assert.True(HelpPopover.IsOpen(button));
 
                 // Unload/reload must close the old popup and reattach a fresh localized one.
                 host.Content = null;
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-unload", host, view, button);
                 Assert.False(HelpPopover.IsOpen(button));
                 Assert.Null(HelpPopover.PopupContent(button));
                 host.Content = view;
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-reload", host, view, button);
                 Assert.True(button.IsVisible);
                 Move(host, button);
+                trace.State("after-reload-move", host, view, button);
                 await Task.Delay(150);
                 Dispatcher.UIThread.RunJobs();
+                trace.State("after-reload-delay", host, view, button);
                 Assert.True(HelpPopover.IsOpen(button));
                 var reloadedPopup = HelpPopover.PopupContent(button);
                 Assert.NotNull(reloadedPopup);
@@ -148,11 +193,19 @@ public sealed class SpiralHelpPopoverTests
             }
             finally
             {
+                trace?.State("finally-before-cleanup", host, view, button);
                 HelpPopover.CloseActive();
                 if (view is not null)
                     HelpPopover.Clear(view.FindControl<Button>("BtnSpiralHelp")!);
                 host?.Close();
                 Dispatcher.UIThread.RunJobs();
+                trace?.State("finally-after-cleanup", host, view, button);
+                if (button is not null)
+                {
+                    if (pointerEntered is not null) button.PointerEntered -= pointerEntered;
+                    if (pointerExited is not null) button.PointerExited -= pointerExited;
+                }
+                trace?.Dispose();
             }
         });
         }
@@ -178,6 +231,102 @@ public sealed class SpiralHelpPopoverTests
         {
             if (localization.CurrentLanguage != previousLanguage)
                 localization.SetLanguage(previousLanguage);
+        }
+    }
+
+    private sealed class PointerTrace : IDisposable
+    {
+        private readonly StreamWriter? _writer;
+
+        private PointerTrace(StreamWriter? writer) => _writer = writer;
+
+        internal static PointerTrace Start()
+        {
+            StreamWriter? writer = null;
+            try
+            {
+                var path = Environment.GetEnvironmentVariable(TracePathEnvironment);
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    var fullPath = Path.GetFullPath(path);
+                    var directory = Path.GetDirectoryName(fullPath);
+                    if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+                    writer = new StreamWriter(fullPath, append: false) { AutoFlush = true };
+                }
+            }
+            catch
+            {
+                // Diagnostics must never change the test result or hide the lifecycle assertion.
+            }
+
+            var trace = new PointerTrace(writer);
+            trace.Write($"kind=runtime variant={Environment.GetEnvironmentVariable(InputVariantEnvironment) ?? "original"} " +
+                        $"framework={RuntimeInformation.FrameworkDescription} version={Environment.Version} " +
+                        $"os={RuntimeInformation.OSDescription} arch={RuntimeInformation.OSArchitecture} " +
+                        $"process={Environment.ProcessId}");
+            return trace;
+        }
+
+        internal void State(string stage, Window? host, SpiralTabView? view, Button? button)
+        {
+            try
+            {
+                var bounds = button is null
+                    ? "null"
+                    : $"{button.Bounds.X:R},{button.Bounds.Y:R},{button.Bounds.Width:R},{button.Bounds.Height:R}";
+                Write($"kind=state stage={stage} " +
+                     $"viewVisible={view?.IsVisible.ToString() ?? "null"} " +
+                     $"viewSpiral={view?.IsShowingSpiral.ToString() ?? "null"} " +
+                     $"buttonVisible={button?.IsVisible.ToString() ?? "null"} " +
+                     $"buttonPointerOver={button?.IsPointerOver.ToString() ?? "null"} " +
+                     $"popupOpen={(button is not null && HelpPopover.IsOpen(button)).ToString()} " +
+                     $"popupContent={(button is not null && HelpPopover.PopupContent(button) is not null).ToString()} " +
+                     $"hostVisible={host?.IsVisible.ToString() ?? "null"} " +
+                     $"hostHasContent={(host?.Content is not null).ToString()} bounds={bounds}");
+            }
+            catch (Exception ex)
+            {
+                Write($"kind=state-error stage={stage} error={ex.GetType().Name}:{ex.Message}");
+            }
+        }
+
+        internal void RecordPointerEvent(
+            string eventName,
+            PointerEventArgs e,
+            Window? host,
+            SpiralTabView? view,
+            Button? button)
+        {
+            try
+            {
+                Point? point = button is null ? null : e.GetCurrentPoint(button).Position;
+                var pointText = point is null ? "null" : $"{point.Value.X:R},{point.Value.Y:R}";
+                Write($"kind=pointer event={eventName} point={pointText}");
+                State($"event-{eventName}", host, view, button);
+            }
+            catch (Exception ex)
+            {
+                Write($"kind=pointer-error event={eventName} error={ex.GetType().Name}:{ex.Message}");
+            }
+        }
+
+        private void Write(string line)
+        {
+            try
+            {
+                _writer?.WriteLine($"{DateTimeOffset.UtcNow:O} {line}");
+                _writer?.Flush();
+            }
+            catch
+            {
+                // A failed diagnostic write cannot be allowed to replace the lifecycle result.
+            }
+        }
+
+        public void Dispose()
+        {
+            try { _writer?.Flush(); } catch { }
+            try { _writer?.Dispose(); } catch { }
         }
     }
 
