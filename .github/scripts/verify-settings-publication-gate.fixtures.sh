@@ -9,6 +9,9 @@ gate="$(cd "$(dirname "$0")" && pwd)/verify-settings-publication-gate.sh"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 release=ObservedPublicationFailureThatReleasesTheReaderRecoversAndPublishes
 approved_skip=NonTransientPublicationFailureNotifiesOnceAndStaysObservable
+hold=PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile
+later=LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader
+noreader=NoReaderPublishesTheLatestSettingsAndCleansItsTempFile
 fails=0
 
 # $1 file, $2 assembly attrs, $3.. test elements
@@ -23,8 +26,9 @@ xml() {
   } >"$f"
 }
 
-test_el() { # name(method) result [failure-xml]
-  echo "<test name=\"CCP.Core.Settings.Tests.SettingsPublicationTests.$1\" type=\"CCP.Core.Settings.Tests.SettingsPublicationTests\" method=\"$1\" result=\"$2\">${3:-}</test>"
+test_el() { # identity (method, optionally with "(params)") result [failure-xml]
+  local id=$1 m=${1%%(*}
+  echo "<test name=\"CCP.Core.Settings.Tests.SettingsPublicationTests.$id\" type=\"CCP.Core.Settings.Tests.SettingsPublicationTests\" method=\"$m\" result=\"$2\">${3:-}</test>"
 }
 
 failure_el() { # exception-type message stack
@@ -38,13 +42,28 @@ Expected: "fr"
 Actual:   "ja"' \
   "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release() in D:\\a\\x\\SettingsPublicationTests.cs:line 118")
 
-# The four non-release executable records: one no-reader case, the two persistent-hold theory
-# rows, and the later-save case.
+# The instrumented baseline has NO retries, so each persistent-hold theory row must fail on the
+# attempt count, exactly 6-vs-1, raised from its own method.
+hold_failure=$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Values differ
+Expected: 6
+Actual:   1' \
+  "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$hold(FileShare share) in D:\\a\\x\\SettingsPublicationTests.cs:line 183")
+
+# The four non-release executable records, all green: the CANDIDATE shape.
 others_pass() {
-  test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass
-  test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass
-  test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass
-  test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Pass
+  test_el "$noreader" Pass
+  test_el "$hold(share: Read)" Pass
+  test_el "$hold(share: Read | Delete)" Pass
+  test_el "$later" Pass
+}
+
+# The same four on the instrumented BASELINE: both hold rows carry the expected 6-vs-1 deficit.
+others_baseline() {
+  test_el "$noreader" Pass
+  test_el "$hold(share: Read)" Fail "$hold_failure"
+  test_el "$hold(share: Read | Delete)" Fail "$hold_failure"
+  test_el "$later" Pass
 }
 
 # The one approved skip: the directory-target non-transient proof is Linux-only by review.
@@ -55,8 +74,8 @@ green() { xml "$1" 'total="6" passed="5" failed="0" skipped="1" errors="0"' \
 
 # baseline_xml, with the release test failing for $1 reason
 red_with() { # target-file failure-xml [assembly-attrs]
-  xml "$1" "${3:-total=\"6\" passed=\"4\" failed=\"1\" skipped=\"1\" errors=\"0\"}" \
-    "$(others_pass)" "$(test_el "$release" Fail "$2")" "$(skip_el)"
+  xml "$1" "${3:-total=\"6\" passed=\"2\" failed=\"3\" skipped=\"1\" errors=\"0\"}" \
+    "$(others_baseline)" "$(test_el "$release" Fail "$2")" "$(skip_el)"
 }
 
 check() { # label expected-verdict expected-exit baseline_xml candidate_xml baseline_exit candidate_exit
@@ -142,15 +161,15 @@ red_with "$tmp/b-inconsistent.xml" "$expected_failure" 'total="6" passed="1" fai
 check "baseline summary inconsistent" INCONCLUSIVE 2 \
   "$tmp/b-inconsistent.xml" "$tmp/candidate.xml" 1 0
 
-red_with "$tmp/b-errors.xml" "$expected_failure" 'total="6" passed="4" failed="1" skipped="1" errors="1"'
+red_with "$tmp/b-errors.xml" "$expected_failure" 'total="6" passed="2" failed="3" skipped="1" errors="1"'
 check "baseline assembly-level errors" INCONCLUSIVE 2 \
   "$tmp/b-errors.xml" "$tmp/candidate.xml" 1 0
 
 xml "$tmp/b-skips.xml" 'total="6" passed="0" failed="1" skipped="5" errors="0"' \
-  "$(skip_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile)" \
-  "$(skip_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile)" \
-  "$(skip_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile)" \
-  "$(skip_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader)" \
+  "$(skip_el "$noreader")" \
+  "$(skip_el "$hold(share: Read)")" \
+  "$(skip_el "$hold(share: Read | Delete)")" \
+  "$(skip_el "$later")" \
   "$(test_el "$release" Fail "$expected_failure")" "$(skip_el)"
 check "baseline skipped the Windows-only cases" INCONCLUSIVE 2 \
   "$tmp/b-skips.xml" "$tmp/candidate.xml" 1 0
@@ -203,7 +222,7 @@ check "candidate truncated before its close" INCONCLUSIVE 2 \
 
 # fewer real records than the summary claims, and unknown/absent result values.
 xml "$tmp/c-short.xml" 'total="6" passed="5" failed="0" skipped="1" errors="0"' \
-  "$(test_el "$release" Pass)" "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)"
+  "$(test_el "$release" Pass)" "$(test_el "$noreader" Pass)"
 check "candidate has 2 records but claims 6" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-short.xml" 1 0
 xml "$tmp/c-unknown.xml" 'total="6" passed="5" failed="0" skipped="1" errors="0"' \
@@ -217,9 +236,9 @@ check "baseline release record with no result attribute" INCONCLUSIVE 2 \
 
 # ambiguous duplicate evidence: the same test reported twice.
 xml "$tmp/b-dup.xml" 'total="6" passed="3" failed="2" skipped="1" errors="0"' \
-  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
-  "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Pass)" \
+  "$(test_el "$noreader" Pass)" \
+  "$(test_el "$hold(share: Read)" Pass)" \
+  "$(test_el "$later" Pass)" \
   "$(test_el "$release" Fail "$expected_failure")" "$(test_el "$release" Fail "$expected_failure")" \
   "$(skip_el)"
 check "baseline reports the release test twice" INCONCLUSIVE 2 \
@@ -252,11 +271,11 @@ check "candidate skip has a different name" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-misnamed-skip.xml" 1 0
 
 xml "$tmp/c-extra-skip.xml" 'total="6" passed="4" failed="0" skipped="2" errors="0"' \
-  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
+  "$(test_el "$noreader" Pass)" \
+  "$(test_el "$hold(share: Read)" Pass)" \
+  "$(test_el "$hold(share: Read | Delete)" Pass)" \
   "$(test_el "$release" Pass)" \
-  "$(skip_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader)" "$(skip_el)"
+  "$(skip_el "$later")" "$(skip_el)"
 check "candidate skipped an extra Windows case" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-extra-skip.xml" 1 0
 
@@ -266,43 +285,30 @@ check "candidate skipped the release regression" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-skipped-release.xml" 1 0
 
 xml "$tmp/c-dup-skip.xml" 'total="6" passed="4" failed="0" skipped="2" errors="0"' \
-  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
+  "$(test_el "$noreader" Pass)" \
+  "$(test_el "$hold(share: Read)" Pass)" \
+  "$(test_el "$hold(share: Read | Delete)" Pass)" \
   "$(test_el "$release" Pass)" "$(skip_el)" "$(skip_el)"
 check "candidate reports the approved skip twice" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-dup-skip.xml" 1 0
 
 xml "$tmp/b-misnamed-skip.xml" 'total="6" passed="4" failed="1" skipped="1" errors="0"' \
   "$(others_pass)" "$(test_el "$release" Fail "$expected_failure")" \
-  "$(skip_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader)"
+  "$(skip_el "$later")"
 check "baseline skip has a different name" INCONCLUSIVE 2 \
   "$tmp/b-misnamed-skip.xml" "$tmp/candidate.xml" 1 0
 
 # 5c. the INSTRUMENTED baseline: the observer seam is applied, no retry. Its persistent-hold
 # attempt-count failures are expected - and cannot stand in for the fr/ja release assertion.
-hold_failure=$(failure_el 'Xunit.Sdk.EqualException' \
-  'Assert.Equal() Failure: Values differ
-Expected: 6
-Actual:   1' \
-  '   at CCP.Core.Settings.Tests.SettingsPublicationTests.PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile(FileShare share)')
-
 xml "$tmp/b-instrumented.xml" 'total="6" passed="2" failed="3" skipped="1" errors="0"' \
-  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Fail "$hold_failure")" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Fail "$hold_failure")" \
-  "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Pass)" \
+  "$(others_baseline)" \
   "$(test_el "$release" Fail "$expected_failure")" "$(skip_el)"
 check "instrumented baseline: hold failures + fr/ja" PASS 0 \
   "$tmp/b-instrumented.xml" "$tmp/candidate.xml" 1 0
 
 # same run WITHOUT the release failure: attempt-count reds alone prove nothing.
 xml "$tmp/b-holdonly.xml" 'total="6" passed="3" failed="2" skipped="1" errors="0"' \
-  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Fail "$hold_failure")" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Fail "$hold_failure")" \
-  "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Pass)" \
-  "$(test_el "$release" Pass)" "$(skip_el)"
+  "$(others_baseline)" "$(test_el "$release" Pass)" "$(skip_el)"
 check "baseline: hold failures but release passed" INCONCLUSIVE 2 \
   "$tmp/b-holdonly.xml" "$tmp/candidate.xml" 1 0
 
@@ -353,13 +359,13 @@ check "escaped quotes but de/ja, not fr/ja" INCONCLUSIVE 2 \
 # the real observed pair: release test failed only on the transient temp (FailException), while a
 # DIFFERENT test carried the de/ja EqualException. Two failures, still no proven contention.
 xml "$tmp/b-real.xml" 'total="6" passed="3" failed="2" skipped="1" errors="0"' \
-  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
-  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
-  "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Fail "$(failure_el 'Xunit.Sdk.EqualException' \
+  "$(test_el "$noreader" Pass)" \
+  "$(test_el "$hold(share: Read)" Pass)" \
+  "$(test_el "$hold(share: Read | Delete)" Pass)" \
+  "$(test_el "$later" Fail "$(failure_el 'Xunit.Sdk.EqualException' \
       'Assert.Equal() Failure: Strings differ
 Expected: \"de\"
-Actual:   \"ja\"' '   at CCP.Core.Settings.Tests.SettingsPublicationTests.LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader()')")" \
+Actual:   \"ja\"' "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$later()")")" \
   "$(test_el "$release" Fail "$(failure_el 'Xunit.Sdk.FailException' \
       'SaveImmediate did not leave its flushed temp file behind while the settings reader was held.' \
       "   at CCP.Core.Settings.Tests.SettingsPublicationTests.WaitForPublicationTemp()
@@ -392,6 +398,144 @@ EOF
 else
   echo "[FAIL] no python3/python available to build the CRLF shim"; fails=$((fails + 1))
 fi
+
+# 7. the identity/outcome MATRIX: counts plus a recognized release failure are not enough. Every
+# one of the six records must be the expected identity with the expected outcome, and any other
+# failure anywhere in the suite is unexplained evidence - never informational.
+
+matrix() { # target-file [hold_read-xml] [hold_read_delete-xml] [later-xml] [noreader-xml] [attrs]
+  xml "$1" "${6:-total=\"6\" passed=\"2\" failed=\"3\" skipped=\"1\" errors=\"0\"}" \
+    "${5:-$(test_el "$noreader" Pass)}" \
+    "${2:-$(test_el "$hold(share: Read)" Fail "$hold_failure")}" \
+    "${3:-$(test_el "$hold(share: Read | Delete)" Fail "$hold_failure")}" \
+    "${4:-$(test_el "$later" Pass)}" \
+    "$(test_el "$release" Fail "$expected_failure")" "$(skip_el)"
+}
+
+# 7a. Astra's exact counterexample: one hold row still Fail, but on an unrelated HoldReader
+# IOException instead of the attempt count. Counts and the release failure are untouched.
+matrix "$tmp/b-hold-io.xml" "$(test_el "$hold(share: Read)" Fail "$(failure_el 'System.IO.IOException' \
+  'The process cannot access the file settings.json because it is being used by another process.' \
+  "   at CCP.Core.Settings.Tests.SettingsPublicationTests.HoldReader(FileShare share)
+   at CCP.Core.Settings.Tests.SettingsPublicationTests.$hold(FileShare share)")")"
+check "hold row failed on a HoldReader IOException" INCONCLUSIVE 2 \
+  "$tmp/b-hold-io.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-hold-setup.xml" '' "$(test_el "$hold(share: Read | Delete)" Fail "$(failure_el 'System.InvalidOperationException' \
+  'CorePaths.UserData is not the owned settings-publication profile' \
+  '   at CCP.Core.Settings.Tests.SettingsPublicationTestProfile.AssertOwned()')")"
+check "hold row failed on a profile/setup error" INCONCLUSIVE 2 \
+  "$tmp/b-hold-setup.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-hold-timeout.xml" "$(test_el "$hold(share: Read)" Fail "$(failure_el 'System.TimeoutException' \
+  'The operation has timed out.' "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$hold(FileShare share)")")"
+check "hold row failed on a timeout" INCONCLUSIVE 2 \
+  "$tmp/b-hold-timeout.xml" "$tmp/candidate.xml" 1 0
+
+# 7b. the attempt counts themselves must be exactly 6-vs-1, on that method's own frame.
+matrix "$tmp/b-hold-counts.xml" "$(test_el "$hold(share: Read)" Fail "$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Values differ
+Expected: 5
+Actual:   1' "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$hold(FileShare share)")")"
+check "hold row reports 5-vs-1, not 6-vs-1" INCONCLUSIVE 2 \
+  "$tmp/b-hold-counts.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-hold-16.xml" "$(test_el "$hold(share: Read)" Fail "$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Values differ
+Expected: 61
+Actual:   16' "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$hold(FileShare share)")")"
+check "hold row counts 61-vs-16 must not match 6/1" INCONCLUSIVE 2 \
+  "$tmp/b-hold-16.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-hold-frame.xml" "$(test_el "$hold(share: Read)" Fail "$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Values differ
+Expected: 6
+Actual:   1' "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release()")")"
+check "hold row 6-vs-1 raised from another method" INCONCLUSIVE 2 \
+  "$tmp/b-hold-frame.xml" "$tmp/candidate.xml" 1 0
+
+# the baseline intentionally lacks retries, so a PASSING hold row is an unexplained shape here -
+# it is the CANDIDATE that must make those rows pass.
+matrix "$tmp/b-hold-pass.xml" "$(test_el "$hold(share: Read)" Pass)" '' '' '' \
+  'total="6" passed="3" failed="2" skipped="1" errors="0"'
+check "baseline hold row passed (no 6/1 deficit)" INCONCLUSIVE 2 \
+  "$tmp/b-hold-pass.xml" "$tmp/candidate.xml" 1 0
+
+# 7c. identity substitution and duplication: right counts, wrong records.
+matrix "$tmp/b-wrong-param.xml" "$(test_el "$hold(share: Read | Write)" Fail "$hold_failure")"
+check "hold row has a substituted parameter" INCONCLUSIVE 2 \
+  "$tmp/b-wrong-param.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-sub-identity.xml" '' '' "$(test_el "$noreader" Pass)"
+check "later-save record replaced by a duplicate" INCONCLUSIVE 2 \
+  "$tmp/b-sub-identity.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-noreader-fail.xml" '' '' '' "$(test_el "$noreader" Fail "$(failure_el 'System.IO.IOException' \
+  'Access to the path settings.json is denied.' \
+  "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$noreader()")")" \
+  'total="6" passed="1" failed="4" skipped="1" errors="0"'
+check "no-reader control failed" INCONCLUSIVE 2 \
+  "$tmp/b-noreader-fail.xml" "$tmp/candidate.xml" 1 0
+
+# 7d. LaterSaveWins…: Pass, or exactly the de-vs-ja loss on its own frame. Nothing else.
+later_de=$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Strings differ
+           ↓ (pos 0)
+Expected: \"de\"
+Actual:   \"ja\"
+           ↑ (pos 0)' \
+  "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$later() in D:\\a\\x\\SettingsPublicationTests.cs:line 226")
+matrix "$tmp/b-later-de.xml" '' '' "$(test_el "$later" Fail "$later_de")" '' \
+  'total="6" passed="1" failed="4" skipped="1" errors="0"'
+check "later-save recorded its de/ja loss (supported)" PASS 0 \
+  "$tmp/b-later-de.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-later-fr.xml" '' '' "$(test_el "$later" Fail "$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Strings differ
+Expected: \"fr\"
+Actual:   \"ja\"' "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$later()")")" '' \
+  'total="6" passed="1" failed="4" skipped="1" errors="0"'
+check "later-save failed on the wrong language" INCONCLUSIVE 2 \
+  "$tmp/b-later-fr.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-later-frame.xml" '' '' "$(test_el "$later" Fail "$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Strings differ
+Expected: \"de\"
+Actual:   \"ja\"' "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release()")")" '' \
+  'total="6" passed="1" failed="4" skipped="1" errors="0"'
+check "later-save de/ja raised from another method" INCONCLUSIVE 2 \
+  "$tmp/b-later-frame.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-later-setup.xml" '' '' "$(test_el "$later" Fail "$(failure_el 'System.InvalidOperationException' \
+  'CorePaths.UserData is not the owned settings-publication profile' \
+  '   at CCP.Core.Settings.Tests.SettingsPublicationTestProfile.AssertOwned()')")" '' \
+  'total="6" passed="1" failed="4" skipped="1" errors="0"'
+check "later-save failed during setup" INCONCLUSIVE 2 \
+  "$tmp/b-later-setup.xml" "$tmp/candidate.xml" 1 0
+
+matrix "$tmp/b-later-temp.xml" '' '' "$(test_el "$later" Fail "$(failure_el 'Xunit.Sdk.FailException' \
+  'SaveImmediate did not leave its flushed temp file behind while the settings reader was held.' \
+  '   at CCP.Core.Settings.Tests.SettingsPublicationTests.WaitForPublicationTemp()')")" '' \
+  'total="6" passed="1" failed="4" skipped="1" errors="0"'
+check "later-save lost its transient temp observation" INCONCLUSIVE 2 \
+  "$tmp/b-later-temp.xml" "$tmp/candidate.xml" 1 0
+
+# 7e. the candidate side of the matrix: those hold rows must PASS there, and its records must be
+# the same six identities.
+xml "$tmp/c-hold-red.xml" 'total="6" passed="4" failed="1" skipped="1" errors="0"' \
+  "$(test_el "$noreader" Pass)" \
+  "$(test_el "$hold(share: Read)" Fail "$hold_failure")" \
+  "$(test_el "$hold(share: Read | Delete)" Pass)" \
+  "$(test_el "$later" Pass)" "$(test_el "$release" Pass)" "$(skip_el)"
+check "candidate hold row still 6-vs-1 red" FAIL 1 \
+  "$tmp/baseline-good.xml" "$tmp/c-hold-red.xml" 1 1
+
+xml "$tmp/c-sub-identity.xml" 'total="6" passed="5" failed="0" skipped="1" errors="0"' \
+  "$(test_el "$noreader" Pass)" \
+  "$(test_el "$hold(share: Read)" Pass)" "$(test_el "$hold(share: Read)" Pass)" \
+  "$(test_el "$later" Pass)" "$(test_el "$release" Pass)" "$(skip_el)"
+check "candidate ran one theory row twice" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-sub-identity.xml" 1 0
 
 echo
 if (( fails )); then echo "$fails fixture(s) FAILED"; exit 1; fi
