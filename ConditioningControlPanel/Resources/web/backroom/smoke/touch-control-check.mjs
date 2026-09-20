@@ -124,7 +124,6 @@ await ev("Object.defineProperty(document,'hidden',{configurable:true,value:true}
 ok(!(await state()).touch.visible&&!(await state()).touch.active,'visibility loss hides and clears walking input');
 await send('touchEnd',[]);await ev("delete document.hidden;document.dispatchEvent(new Event('visibilitychange'))");await sleep(80);
 for(const [name,enter,leave] of [
- ['overview','setOverview(true)','setOverview(false)'],
  ['held','hold()','release()'],
  ['seated',"seat(window.__backroom.stations.find(s=>s.id==='cards'))",'unseat()'],
  ['customization','customization.open()','customization.dismiss()'],

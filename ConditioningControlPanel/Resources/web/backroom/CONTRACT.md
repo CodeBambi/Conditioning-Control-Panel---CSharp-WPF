@@ -1527,8 +1527,7 @@ texture and a new uniform per screen. The bell goes in the HUD.
 - Fetched by `room/main.js` on room open and again after each `station-close`. **Never polled while seated**,
   and never while a station holds the screen.
 - **One line on screen at a time**, rotating through the entries every **8,000 ms**, newest first, wrapping.
-  No sound at any intensity (Brake 1). Hidden under the existing `br-visiting` class and in the room view
-  (`br-overview`), exactly as the Visit prompt is. Reduced motion and Calm: the line still rotates (it is
+  No sound at any intensity (Brake 1). Hidden under the existing `br-visiting` class, exactly as the Visit prompt is. Reduced motion and Calm: the line still rotates (it is
   text, not motion) but it cross-fades in 0 ms instead of 200 ms.
 - Relative time comes from `entry.t` against the CLIENT clock, display only (Law I): under 60 s
   `br_bell_ago_now`, under 60 min `br_bell_ago_min`, under 24 h `br_bell_ago_hour`, else `br_bell_ago_day`.
