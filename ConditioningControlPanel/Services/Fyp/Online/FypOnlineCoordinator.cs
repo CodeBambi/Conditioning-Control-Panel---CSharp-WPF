@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -332,6 +332,7 @@ internal sealed class FypOnlineCoordinator
             _channels = next;
             foreach (var st in next.Values) st.ReviveIfDue();
             order = PickOrder(active);
+            if (_consumerId == "flashes") order = order.OrderBy(c => c.ServedIds.Count).ToList();
         }
 
         bool sawTransportFailure = false;
