@@ -228,13 +228,16 @@ public sealed class SettingsPublicationTests
     }
 
     /// <summary>
-    /// Portable (Linux-runnable) proof of the seam itself: a non-transient publication failure
+    /// Linux-only proof of the seam itself: a non-transient publication failure
     /// notifies exactly once and is still propagated to the existing "Could not save settings"
     /// error, with the temp file cleaned up. Says nothing about Windows retry behaviour.
     /// </summary>
     [Fact]
     public void NonTransientPublicationFailureNotifiesOnceAndStaysObservable()
     {
+        if (!OperatingSystem.IsLinux())
+            Assert.Skip("The directory-target non-transient failure classification is verified only on Linux.");
+
         var service = Seed("ja");
         var attempts = 0;
         var errors = new List<LogEvent>();
@@ -248,8 +251,8 @@ public sealed class SettingsPublicationTests
                 .CreateLogger();
             service.AtomicPublishFailureObserver = (_, _) => Interlocked.Increment(ref attempts);
 
-            // A directory where settings.json belongs makes the real File.Move fail for a reason
-            // that is not on the transient list, on every OS.
+            // On Linux, a directory where settings.json belongs makes the real File.Move fail
+            // without Windows retries. Windows may report retryable access denied instead.
             File.Delete(blocker);
             Directory.CreateDirectory(blocker);
 
