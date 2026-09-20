@@ -118,7 +118,7 @@ export async function mount(ctx) {
       </div>
       <p class="bo-hint">${t('br_breakout_hint_move', 'move to play')}</p>
       <p class="bo-ghost-hint" hidden></p>
-      <button class="bo-pause-button" type="button" aria-label="Pause game">ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦Ãƒâ€šÃ‚Â¡ Pause</button>
+      <button class="bo-pause-button" type="button" aria-label="Pause game">&#9208; Pause</button>
       <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="options">Options</button></div></div>
       <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><label>Colour intensity<input class="bo-option-colour" type="range" min="0" max="1" step="0.05"></label><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse or drag to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
       <button class="bo-gear" type="button" aria-label="${t('br_breakout_dev', 'dev toggles')}" aria-expanded="false"></button>
