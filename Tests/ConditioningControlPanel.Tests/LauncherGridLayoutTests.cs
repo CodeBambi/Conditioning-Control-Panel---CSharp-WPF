@@ -4,16 +4,16 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// The games column arithmetic behind "cards do not fit". Six tiles at the window's MinHeight
-/// used to leave two rows on screen and one below the fold; every row here is a size the
-/// launcher can be dragged to and the answer the grid has to give.
+/// The games column arithmetic. A card is sized by its WIDTH now - a 16:9 art plate plus a fixed
+/// text block - so these rows are the sizes the launcher can be dragged to and the card that
+/// comes out of each one.
 /// </summary>
 public class LauncherGridLayoutTests
 {
     // The games column at the launcher's default (1280 wide) and minimum (1000 wide) sizes:
     // window width minus the 28 px side margins, the 440 px panel card and the 28 px gutter.
-    private const double ColumnAtDefault = 1280 - 56 - 440 - 28;
-    private const double ColumnAtMin = 1000 - 56 - 440 - 28;
+    private const double ColumnAtDefault = 1280 - 56 - 440 - 28;   // 756
+    private const double ColumnAtMin = 1000 - 56 - 440 - 28;       // 476
 
     [Theory]
     [InlineData(ColumnAtMin, 6, 2)]
@@ -50,57 +50,82 @@ public class LauncherGridLayoutTests
     }
 
     [Fact]
-    public void Six_tiles_fit_the_default_window_without_scrolling()
+    public void The_text_block_is_the_sum_of_its_own_rows()
     {
-        // 1280 x 800: the scroller sees about 658 px (title row 48, footer 52, body margins 22,
-        // eyebrow 20). Two rows of three share it at 329 each, over the card floor, and the grid
-        // is exactly the viewport. The old fixed 156 px plate needed three rows of ~264 here.
+        // The one number LauncherWindow.Tiles.cs builds the card's lower half against.
+        Assert.Equal(136, LauncherGridLayout.TextHeight);
+        Assert.Equal(LauncherGridLayout.MinArtHeight + LauncherGridLayout.TextHeight,
+                     LauncherGridLayout.MinTileHeight);
+    }
+
+    [Fact]
+    public void A_cell_pays_for_its_margins_and_its_rim_before_the_art_gets_a_width()
+    {
+        // 756 / 3 = 252 a cell, less 9 px of margin and 1.5 px of rim on each side.
+        Assert.Equal(231, LauncherGridLayout.TileWidth(ColumnAtDefault, 3));
+        Assert.Equal(217, LauncherGridLayout.TileWidth(ColumnAtMin, 2));
+        Assert.Equal(0, LauncherGridLayout.TileWidth(0, 3));
+        Assert.Equal(0, LauncherGridLayout.TileWidth(756, 0));
+    }
+
+    [Fact]
+    public void The_art_plate_is_a_landscape_and_never_a_stripe()
+    {
+        Assert.Equal(180, LauncherGridLayout.ArtHeight(320));
+        // 16:9 of 160 is 90, under the floor, so the floor wins.
+        Assert.Equal(LauncherGridLayout.MinArtHeight, LauncherGridLayout.ArtHeight(160));
+        Assert.Equal(LauncherGridLayout.MinArtHeight, LauncherGridLayout.ArtHeight(0));
+        // Every piece of tile art is drawn 16:9, so the plate is too and nothing is cropped.
+        Assert.Equal(1376d / 768d, LauncherGridLayout.ArtAspect, 1);
+    }
+
+    [Fact]
+    public void A_card_is_its_landscape_plate_plus_the_text_block()
+    {
+        Assert.Equal(180 + LauncherGridLayout.TextHeight, LauncherGridLayout.TileHeight(320));
+        Assert.Equal(LauncherGridLayout.MinTileHeight, LauncherGridLayout.TileHeight(0));
+    }
+
+    [Fact]
+    public void Six_cards_fit_the_default_window_and_sit_in_the_middle_of_the_column()
+    {
+        // 1280 x 800: the scroller sees about 658 px. Three columns, two rows, each row a
+        // 231 x 130 plate plus the 136 text block plus 18 of margin = 284, so 568 in 658.
         int columns = LauncherGridLayout.Columns(ColumnAtDefault, 6);
         int rows = LauncherGridLayout.Rows(6, columns);
+        Assert.Equal(3, columns);
         Assert.Equal(2, rows);
-        Assert.Equal(329, LauncherGridLayout.TileHeight(658, rows));
-        Assert.False(LauncherGridLayout.NeedsScroll(658, rows));
-        Assert.Equal(658, LauncherGridLayout.GridHeight(658, rows));
+        double height = LauncherGridLayout.GridHeight(ColumnAtDefault, columns, rows);
+        Assert.Equal(567.875, height, 3);
+        Assert.False(LauncherGridLayout.NeedsScroll(658, height));
     }
 
     [Fact]
-    public void Six_tiles_at_the_minimum_window_fall_back_to_scrolling_at_the_floor()
+    public void Six_cards_at_the_minimum_window_overflow_and_the_column_scrolls()
     {
-        // 1000 x 680: two columns, three rows in about 538 px is 179 a row, under the floor.
-        // The grid grows to three rows at the floor and the scroller scrolls the rest.
+        // 1000 x 680: two columns, three rows of a 217 x 122 plate. 828 will not fit 538.
         int columns = LauncherGridLayout.Columns(ColumnAtMin, 6);
         int rows = LauncherGridLayout.Rows(6, columns);
+        Assert.Equal(2, columns);
         Assert.Equal(3, rows);
-        Assert.True(LauncherGridLayout.NeedsScroll(538, rows));
-        Assert.Equal(3 * LauncherGridLayout.MinTileHeight, LauncherGridLayout.GridHeight(538, rows));
+        double height = LauncherGridLayout.GridHeight(ColumnAtMin, columns, rows);
+        Assert.Equal(828.1875, height, 3);
+        Assert.True(LauncherGridLayout.NeedsScroll(538, height));
     }
 
     [Fact]
-    public void Art_takes_the_room_above_the_text_and_never_less_than_the_floor()
+    public void A_block_that_is_exactly_the_viewport_does_not_scroll()
     {
-        Assert.Equal(200, LauncherGridLayout.ArtHeight(350, 150));
-        Assert.Equal(LauncherGridLayout.MinArtHeight, LauncherGridLayout.ArtHeight(200, 150));
-        Assert.Equal(LauncherGridLayout.MinArtHeight, LauncherGridLayout.ArtHeight(0, 150));
-    }
-
-    [Fact]
-    public void Scrolling_is_the_fallback_when_a_row_would_drop_under_the_card_floor()
-    {
-        // Three rows in 540 px is 180 a row: under the 252 floor, so the grid grows to three
-        // rows at the floor and the scroller has the rest to scroll.
-        Assert.True(LauncherGridLayout.NeedsScroll(540, 3));
-        Assert.Equal(3 * LauncherGridLayout.MinTileHeight, LauncherGridLayout.GridHeight(540, 3));
-        // Two rows in 504 px is exactly the floor: no scroll, grid is the viewport.
-        Assert.False(LauncherGridLayout.NeedsScroll(504, 2));
-        Assert.Equal(504, LauncherGridLayout.GridHeight(504, 2));
+        Assert.False(LauncherGridLayout.NeedsScroll(600, 600));
+        Assert.True(LauncherGridLayout.NeedsScroll(600, 601));
+        // Nothing measured yet is not a reason to scroll.
+        Assert.False(LauncherGridLayout.NeedsScroll(0, 900));
     }
 
     [Fact]
     public void Nothing_to_lay_out_gives_zero_not_a_division_by_zero()
     {
-        Assert.Equal(0, LauncherGridLayout.TileHeight(540, 0));
-        Assert.Equal(0, LauncherGridLayout.GridHeight(540, 0));
-        Assert.False(LauncherGridLayout.NeedsScroll(540, 0));
-        Assert.Equal(0, LauncherGridLayout.TileHeight(0, 3));
+        Assert.Equal(0, LauncherGridLayout.GridHeight(756, 3, 0));
+        Assert.Equal(0, LauncherGridLayout.GridHeight(0, 0, 0));
     }
 }

@@ -4,8 +4,14 @@ namespace ConditioningControlPanel.Services.Launcher;
 
 /// <summary>
 /// The arithmetic behind the launcher's games column: how many columns the tiles take at a given
-/// width, how many rows that makes, how tall each tile can be, and whether the column has to fall
-/// back to scrolling because the tiles would shrink past what still reads as a card.
+/// width, how tall a card is at that width, how tall the grid is, and whether the column has to
+/// scroll because the cards no longer fit.
+///
+/// <para>A card is sized by its WIDTH, not by the room it is given. The art plate is a 16:9
+/// landscape - the shape every piece of tile art is drawn at - so the picture is shown whole
+/// instead of being cropped to whatever rectangle was left above the text; the text block under
+/// it is a fixed height, so a one-line blurb and a two-line blurb put their titles on the same
+/// line. Everything below follows from those two facts.</para>
 ///
 /// <para>Pure on purpose. The window feeds it the column's ActualWidth and the viewport's
 /// ActualHeight on SizeChanged and applies the answers; nothing here touches WPF, so the tester's
@@ -18,15 +24,33 @@ public static class LauncherGridLayout
     /// of three fit its height, three rows of two never did.</summary>
     public const double ThreeColumnWidth = 740;
 
+    /// <summary>The art plate's shape. Every tile picture is drawn 16:9 (1376x768, 1024x572), so
+    /// a plate of any other shape is a crop.</summary>
+    public const double ArtAspect = 16.0 / 9.0;
+
     /// <summary>The art plate never drops under this: below it the picture is a stripe.</summary>
     public const double MinArtHeight = 96;
 
-    /// <summary>
-    /// The smallest tile that still reads as a card: the art floor (96) plus the text block with
-    /// a two-line blurb (8 + 25 + 4 + 38 + 8 + 40 + 12 = 135) plus the tile's margin and rim (21).
-    /// Under this the column scrolls instead of squeezing.
-    /// </summary>
-    public const double MinTileHeight = 252;
+    // The text block, top to bottom. Fixed rather than measured so every card's title sits on
+    // the same line whatever its blurb wraps to.
+    public const double TextPadTop = 8;
+    public const double TitleHeight = 26;
+    public const double BlurbGap = 4;
+    public const double BlurbHeight = 38;   // two lines at 14 px
+    public const double PlayGap = 8;
+    public const double PlayHeight = 40;
+    public const double TextPadBottom = 12;
+
+    /// <summary>The whole text block under the art, margins included.</summary>
+    public const double TextHeight =
+        TextPadTop + TitleHeight + BlurbGap + BlurbHeight + PlayGap + PlayHeight + TextPadBottom;
+
+    /// <summary>The gap a tile keeps on each side, and the rim it draws inside it.</summary>
+    public const double TileMargin = 9;
+    public const double TileBorder = 1.5;
+
+    /// <summary>The shortest a card can be: the art floor plus the text block.</summary>
+    public const double MinTileHeight = MinArtHeight + TextHeight;
 
     /// <summary>Two columns by default, three once the column is wide enough, never more than
     /// there are tiles and never fewer than one.</summary>
@@ -44,32 +68,29 @@ public static class LauncherGridLayout
         return (count + columns - 1) / columns;
     }
 
-    /// <summary>The height each row gets when the whole column is shared out evenly.</summary>
-    public static double TileHeight(double available, int rows)
+    /// <summary>The art plate's width inside one cell: the cell less the tile's margins and rim.</summary>
+    public static double TileWidth(double columnWidth, int columns)
     {
-        if (rows <= 0 || available <= 0) return 0;
-        return available / rows;
+        if (columnWidth <= 0 || columns <= 0) return 0;
+        return Math.Max(0, columnWidth / columns - 2 * TileMargin - 2 * TileBorder);
     }
 
-    /// <summary>
-    /// The art plate's share of a tile: whatever is left above the text block, floored at
-    /// <see cref="MinArtHeight"/>.
-    /// </summary>
-    public static double ArtHeight(double tileHeight, double textHeight)
-        => Math.Max(MinArtHeight, tileHeight - textHeight);
+    /// <summary>The art plate at that width: 16:9, floored so a narrow column still shows a picture.</summary>
+    public static double ArtHeight(double tileWidth)
+        => tileWidth <= 0 ? MinArtHeight : Math.Max(MinArtHeight, tileWidth / ArtAspect);
 
-    /// <summary>True when sharing the column out evenly would make a tile shorter than
-    /// <see cref="MinTileHeight"/>: keep the tiles at the floor and let the column scroll.</summary>
-    public static bool NeedsScroll(double available, int rows)
-        => rows > 0 && TileHeight(available, rows) < MinTileHeight;
+    /// <summary>A whole card at that width: the landscape plate plus the fixed text block.</summary>
+    public static double TileHeight(double tileWidth) => ArtHeight(tileWidth) + TextHeight;
 
-    /// <summary>
-    /// The height to give the grid inside its scroller: the viewport when every tile fits,
-    /// otherwise rows at the floor so the scroller has something to scroll.
-    /// </summary>
-    public static double GridHeight(double available, int rows)
+    /// <summary>The grid's height: every row is exactly one card tall, margins included.</summary>
+    public static double GridHeight(double columnWidth, int columns, int rows)
     {
         if (rows <= 0) return 0;
-        return NeedsScroll(available, rows) ? rows * MinTileHeight : available;
+        return rows * (TileHeight(TileWidth(columnWidth, columns)) + 2 * TileMargin);
     }
+
+    /// <summary>True when the cards are taller than the viewport and the column has to scroll.
+    /// When they are not, the block is centred in the column instead of hanging from the top.</summary>
+    public static bool NeedsScroll(double available, double gridHeight)
+        => available > 0 && gridHeight > available + 0.5;
 }

@@ -20,23 +20,33 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.10.0";
+        public const string AppVersion = "6.10.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.10.0 - Let the games begin
+        public const string CurrentPatchNotes = @"v6.10.1 - Let the games begin
 
 CC LABS
 - the app now opens on a launcher, with the panel on one side and the games on the other: the Back Room, Down the Rabbit Hole, the Arcademy, Goon and the Graded Intake. you sign in there first, since every game wants an account, though the Back Room is happy with a free one.
-- the gear sets your media once for everything, whether that is your own library, online niches or a mix, and holds the master volume too.
+- the Media button sets your media once for everything, whether that is your own library, online niches or a mix, and holds your asset presets and the master volume too.
+- the mod you are wearing sits in the title bar, so you can swap one for another without going through the panel.
 
 THE BACK ROOM
 - a casino behind the panel that also plays on your phone at cclabs.app, with five tables to lose your evening at: Daily Daze, three Candy slots, Soft Hand and Velvet Vortex.
 - it runs on Sparkle Points, which you earn on every level up and every 100 bubbles you pop, and which the house tends to give back.
 - EMI works the counter, where she trades them for things you cannot get anywhere else, and the shelf keeps growing.
 - the pictures on the walls come from your library or your niches, following whatever you picked in the launcher.
+- click once and the room takes the mouse, so you look around by moving it. escape gives it back. walk up to a table and it tells you what it is and how to sit.
+- there is a list of tables behind a pill now, instead of the map. pick one and you walk to it.
+- the slot will keep spinning for free when you are out of Sparkles. nothing is paid out, everything still happens.
+- a door in the west wall opens on the Annex, which has the racing cabinet in it and two doors that do not open yet.
+
+FLASHES AND BUBBLES
+- online pictures that move now move. flashes and bubble faces play the real thing instead of a frozen first frame.
+- a picture on a bubble sits inside the glass and fades into it at the edge.
+- flashes stop drawing from the first page they ever loaded, so a niche you turn off actually goes away.
 
 ???
 - one card is a question mark, because something is waiting at the counter.
@@ -48,11 +58,17 @@ EMI
 - she has new lines on the marquee between announcements, and Circe speaks gender neutral.
 
 FIXES
+- clicking a file in the Deeper library opens it in the editor again.
+- the launcher fits all of its cards on the screen, and the way back to it is spelled out now, in the title bar and in the tray.
+- the launcher cards are landscape, so the art is shown whole instead of cropped at the sides, the Arcademy has a picture on it instead of a star, and every card's title sits on the same line.
+- the card table hands your Sparkle total back when it is done with it, instead of leaving it reading zero until the next hand.
+- every table draws its own way out, the card table says so when you lose, and reduced motion no longer swallows the payout.
+- the pictures on the walls run at their own speed rather than a third of it.
 - the streak and perfect week cards show their art again, and every help card marks its key words and says where Sparkle Points come from.
 - a blank second account from a mobile sign in is recovered rather than kept, free quests stop asking for premium, the nav rail no longer sticks open, and the Arcademy annex opens like it should.
 - the Graded Intake pass is weekly and says so, with unlimited runs at tier 2.
 
-full nerd changelog in pull requests 1107 through 1423.";
+full nerd changelog in pull requests 1107 through 1430.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
