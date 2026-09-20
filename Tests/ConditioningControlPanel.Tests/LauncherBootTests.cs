@@ -190,27 +190,22 @@ public class LauncherBootTests
     [Fact]
     public void Art_paths_point_at_files_that_ship()
     {
-        var root = RepoRoot();
+        // The art itself lives once at <repo>/Assets and every head LINKS what it needs, so the
+        // WPF head's pack URI (Resources/features/x.png) is an ALIAS of Assets/features/x.png --
+        // see the <Resource Include="..\Assets\features\*.png" Link="Resources\..."> item. Checking
+        // the shared source is what proves the byte ships; checking the head's aliased folder
+        // checked a directory that no longer exists on disk.
+        var assets = Path.Combine(SourceRoots.RepoRoot, "Assets");
         foreach (var g in LauncherCatalogue.Games.Where(g => g.ArtPath != null))
         {
-            var full = Path.Combine(root, "ConditioningControlPanel", "Resources",
-                g.ArtPath!.Replace('/', Path.DirectorySeparatorChar));
+            var full = Path.Combine(assets, g.ArtPath!.Replace('/', Path.DirectorySeparatorChar));
             Assert.True(File.Exists(full), $"{g.Id} art missing: {full}");
         }
     }
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "ConditioningControlPanel.csproj")))
-            dir = dir.Parent;
-        Assert.NotNull(dir);
-        return dir!.FullName;
-    }
-
     private static Dictionary<string, string> English()
     {
-        var path = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", "en.json");
+        var path = Path.Combine(SourceRoots.LanguagesDirectory, "en.json");
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         return doc.RootElement.EnumerateObject()
             .ToDictionary(p => p.Name, p => p.Value.GetString() ?? "", StringComparer.Ordinal);
