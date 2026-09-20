@@ -48,6 +48,12 @@ namespace ConditioningControlPanel.Services
         // Per-instance seam for deterministic lifecycle proofs; production keeps the 500ms default.
         internal int SaveDebounceDueTimeMilliseconds { get; set; } = 500;
 
+        // Per-instance seam for the deterministic publication regression. Invoked synchronously on
+        // an ACTUAL failed File.Move, before this attempt's retry/propagation decision, with the
+        // exception and the zero-based attempt index. Null in production, so the loop below behaves
+        // exactly as before for every non-test instance.
+        internal Action<Exception, int>? AtomicPublishFailureObserver { get; set; }
+
         public AppSettings Current { get; private set; }
 
         /// <summary>
@@ -971,9 +977,15 @@ namespace ConditioningControlPanel.Services
                     File.Move(tempPath, _settingsPath, overwrite: true);
                     return;
                 }
-                catch (Exception ex) when (retry < AtomicPublishMaxRetries &&
-                                            IsTransientAtomicPublishFailure(ex))
+                catch (Exception ex)
                 {
+                    // Notify BEFORE deciding to retry or propagate: a test that releases its held
+                    // reader here makes the next attempt deterministic instead of time-based.
+                    AtomicPublishFailureObserver?.Invoke(ex, retry);
+
+                    if (retry >= AtomicPublishMaxRetries || !IsTransientAtomicPublishFailure(ex))
+                        throw;
+
                     Thread.Sleep(AtomicPublishRetryDelay);
                 }
             }
