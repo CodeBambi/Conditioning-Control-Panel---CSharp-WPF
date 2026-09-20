@@ -26,6 +26,8 @@ jobs:
       # Core.Tests is the Linux-only behavior gate for the engine. Keep it separate from the
       # smoke runner so persistence/lifecycle regressions report as ordinary test failures.
       - run: dotnet test Tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release
+      - name: Test Core settings publication (isolated profile)
+        run: dotnet test Tests/CCP.Core.Settings.Tests/CCP.Core.Settings.Tests.csproj -c Release
 
       # Compiling for net8.0 proves the type system is satisfied. It does not prove the engine
       # BEHAVES off Windows. This step actually executes Core on Linux and asserts on the answers.
@@ -115,6 +117,8 @@ jobs:
         run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
       - name: Test Core suite
         run: dotnet test Tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release
+      - name: Test Core settings publication (isolated profile)
+        run: dotnet test Tests/CCP.Core.Settings.Tests/CCP.Core.Settings.Tests.csproj -c Release
       # Keep these as separate invocations: the language, notification and scheduler assemblies
       # need independent testhost processes and isolated process-immutable profiles.
       - name: Test Avalonia language suite
