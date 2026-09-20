@@ -29,6 +29,8 @@ missed_temp='did not leave its flushed temp file behind'
 # The ONLY baseline failure this gate accepts: after the reader is released the baseline never
 # publishes, so the re-read language is still the seeded "ja" where the test demands "fr".
 expected_exception='EqualException'
+# xunit v3 renders string diffs with the quotes backslash-escaped (Expected: \"fr\"), so the
+# value patterns below allow that one optional backslash. Nothing else about them is relaxed.
 
 is_count() { [[ ${1:-} =~ ^[0-9]+$ ]]; }
 
@@ -92,7 +94,10 @@ parse_xml() { # var-prefix file -> sets <prefix>_ok/_total/.../_release_text
            n_tests n_pass n_fail n_skip n_unknown n_release release_result release_text; do
     printf -v "${prefix}_${k}" '%s' ''
   done
+  # Python on Windows opens stdout in text mode, so every line arrives CRLF-terminated and an
+  # unstripped "1\r" compares unequal to "1". Strip the CR here, at the one place that reads it.
   while IFS='=' read -r k v; do
+    k=${k%$'\r'}; v=${v%$'\r'}
     [[ -n $k ]] && printf -v "${prefix}_${k}" '%s' "$v"
   done < <("$py" -c "$PARSER_PY" "$file" "$release_test" 2>/dev/null)
 }
@@ -149,8 +154,8 @@ else
     notes+=("baseline failure is only a missed transient-temp observation: no contention was proven")
   elif ! grep -qF "$expected_exception" <<<"$b_fail_text" ||
        ! grep -qE 'Assert\.Equal\(\) Failure' <<<"$b_fail_text" ||
-       ! grep -qE 'Expected: +"?fr"?' <<<"$b_fail_text" ||
-       ! grep -qE 'Actual: +"?ja"?' <<<"$b_fail_text" ||
+       ! grep -qE 'Expected: +\\?"?fr\\?"?' <<<"$b_fail_text" ||
+       ! grep -qE 'Actual: +\\?"?ja\\?"?' <<<"$b_fail_text" ||
        ! grep -qE "at CCP\.Core\.Settings\.Tests\.SettingsPublicationTests\.$release_test" <<<"$b_fail_text"; then
     verdict=INCONCLUSIVE
     notes+=("baseline failure is not the expected post-release publication assertion (EqualException fr vs ja attributed to $release_test): setup/seed/profile/open/cancel/timeout or unrecognized signature")

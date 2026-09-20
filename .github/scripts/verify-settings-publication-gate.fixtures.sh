@@ -226,6 +226,74 @@ xml "$tmp/c-red.xml" 'total="5" passed="4" failed="1" skipped="0" errors="0"' \
   "$(others_pass)" "$(test_el "$release" Fail "$expected_failure")"
 check "candidate 4/5" FAIL 1 "$tmp/baseline-good.xml" "$tmp/c-red.xml" 1 1
 
+# 6. what the real Windows run actually emitted (run 35540142196), which the Linux-only fixtures
+# above did not reproduce.
+
+# 6a. xunit v3 escapes the quotes in a string diff: `Expected: \"fr\"`, not `Expected: "fr"`.
+escaped_failure=$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Strings differ
+           ↓ (pos 0)
+Expected: \"fr\"
+Actual:   \"ja\"
+           ↑ (pos 0)' \
+  "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release() in D:\\a\\x\\SettingsPublicationTests.cs:line 114")
+red_with "$tmp/b-escaped.xml" "$escaped_failure"
+check "red baseline with xunit-escaped quotes" PASS 0 \
+  "$tmp/b-escaped.xml" "$tmp/candidate.xml" 1 0
+
+# and the escaping must not smuggle in a different expectation: the real baseline's OTHER failure
+# was de/ja in LaterSaveWins…, which is not the authorized substitute for the release assertion.
+red_with "$tmp/b-escaped-de.xml" "$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Strings differ
+Expected: \"de\"
+Actual:   \"ja\"' \
+  "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release()")"
+check "escaped quotes but de/ja, not fr/ja" INCONCLUSIVE 2 \
+  "$tmp/b-escaped-de.xml" "$tmp/candidate.xml" 1 0
+
+# the real observed pair: release test failed only on the transient temp (FailException), while a
+# DIFFERENT test carried the de/ja EqualException. Two failures, still no proven contention.
+xml "$tmp/b-real.xml" 'total="5" passed="3" failed="2" skipped="0" errors="0"' \
+  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
+  "$(test_el ConcurrentSavesPublishOnceAndLeaveNoTempFiles Pass)" \
+  "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Fail "$(failure_el 'Xunit.Sdk.EqualException' \
+      'Assert.Equal() Failure: Strings differ
+Expected: \"de\"
+Actual:   \"ja\"' '   at CCP.Core.Settings.Tests.SettingsPublicationTests.LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader()')")" \
+  "$(test_el "$release" Fail "$(failure_el 'Xunit.Sdk.FailException' \
+      'SaveImmediate did not leave its flushed temp file behind while the settings reader was held.' \
+      "   at CCP.Core.Settings.Tests.SettingsPublicationTests.WaitForPublicationTemp()
+   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release()")")"
+check "real run 35540142196 baseline shape" INCONCLUSIVE 2 \
+  "$tmp/b-real.xml" "$tmp/candidate.xml" 1 0
+
+# 6b. Windows Python writes stdout in text mode, so every parser line arrives CRLF-terminated.
+# Simulated with a python3 shim on PATH that appends CR; verdicts must be identical to 1 and 5.
+mkdir -p "$tmp/bin"
+real_py=$(command -v python3 || command -v python)
+if [[ -n ${real_py:-} ]]; then
+  cat >"$tmp/bin/python3" <<EOF
+#!/usr/bin/env bash
+"$real_py" "\$@" | sed -e 's/\$/\r/'
+exit \${PIPESTATUS[0]}
+EOF
+  chmod +x "$tmp/bin/python3"
+  "$tmp/bin/python3" -c 'print("x")' | grep -q $'\r' ||
+    { echo "[FAIL] CRLF shim does not actually emit CR"; fails=$((fails + 1)); }
+  crlf_check() { local old=$PATH; PATH="$tmp/bin:$PATH"; check "$@"; PATH=$old; }
+  crlf_check "CRLF parser output: genuine red + green" PASS 0 \
+    "$tmp/baseline-good.xml" "$tmp/candidate.xml" 1 0
+  crlf_check "CRLF parser output: real baseline shape" INCONCLUSIVE 2 \
+    "$tmp/b-real.xml" "$tmp/candidate.xml" 1 0
+  crlf_check "CRLF parser output: candidate 4/5" FAIL 1 \
+    "$tmp/baseline-good.xml" "$tmp/c-red.xml" 1 1
+  crlf_check "CRLF parser output: truncated baseline" INCONCLUSIVE 2 \
+    "$tmp/b-truncated.xml" "$tmp/candidate.xml" 1 0
+else
+  echo "[FAIL] no python3/python available to build the CRLF shim"; fails=$((fails + 1))
+fi
+
 echo
 if (( fails )); then echo "$fails fixture(s) FAILED"; exit 1; fi
 echo "all fixtures behaved as specified"
