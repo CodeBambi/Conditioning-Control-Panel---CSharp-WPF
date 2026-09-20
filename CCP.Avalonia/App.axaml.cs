@@ -186,7 +186,7 @@ namespace ConditioningControlPanel.Avalonia
             {
                 if (Directory.Exists(customPath)) return customPath;
                 if (Interlocked.Exchange(ref _warnedMissingCustomAssetsPath, 1) == 0)
-                    Serilog.Log.Warning("Custom assets folder is unavailable; falling back to the default assets folder");
+                    Serilog.Log.Warning("CustomAssetsPath '{Path}' does not exist — falling back to default assets folder. Imports/extractions will go to the default location.", customPath);
             }
             return Path.Combine(CorePaths.UserData, "assets");
         }
