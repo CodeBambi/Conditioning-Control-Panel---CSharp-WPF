@@ -38,6 +38,46 @@ internal static class TestProfile
     {
         Directory.CreateDirectory(DirectoryPath);
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", DirectoryPath);
+
+        // [lang-probe] Diagnostics only: route the production Serilog statics into an in-memory
+        // ring buffer so a persistence timeout can say WHICH of the three things happened —
+        // the debounce callback never ran, SaveImmediate threw (sharing violation / HResult),
+        // or the write succeeded with the wrong model value. Changes no production behaviour.
+        Serilog.Log.Logger = new Serilog.LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.Sink(SaveProbeSink.Instance)
+            .CreateLogger();
+    }
+}
+
+/// <summary>[lang-probe] Bounded capture of the settings-save log lines the product already emits.</summary>
+internal sealed class SaveProbeSink : Serilog.Core.ILogEventSink
+{
+    internal static SaveProbeSink Instance { get; } = new();
+
+    private readonly System.Collections.Generic.Queue<string> _lines = new();
+
+    public void Emit(Serilog.Events.LogEvent logEvent)
+    {
+        var message = logEvent.RenderMessage();
+        if (message.IndexOf("settings", StringComparison.OrdinalIgnoreCase) < 0) return;
+        // The polling reload logs a load per 25ms tick and would push the save lines out of the ring.
+        if (message.StartsWith("Settings loaded from", StringComparison.Ordinal)) return;
+
+        var text = $"{logEvent.Timestamp:HH:mm:ss.fff} {logEvent.Level} {message}";
+        if (logEvent.Exception is { } ex)
+            text += $" || {ex.GetType().Name}: {ex.Message} (HResult=0x{ex.HResult:X8})";
+
+        lock (_lines)
+        {
+            _lines.Enqueue(text);
+            while (_lines.Count > 200) _lines.Dequeue();
+        }
+    }
+
+    internal string[] Recent(int count)
+    {
+        lock (_lines) return _lines.Reverse().Take(count).Reverse().ToArray();
     }
 }
 
@@ -398,7 +438,36 @@ public sealed class LanguageSelectorTests
         }
 
         Assert.True(string.Equals(actual, expected, StringComparison.Ordinal),
-            $"Timed out waiting for {property}={expected}; last disk value was {actual} after {stopwatch.Elapsed.TotalMilliseconds:0}ms");
+            $"Timed out waiting for {property}={expected}; last disk value was {actual} after {stopwatch.Elapsed.TotalMilliseconds:0}ms"
+                + ProbeDiagnostics(property));
+    }
+
+    /// <summary>[lang-probe] Diagnostics-only detail appended to an existing failure message.</summary>
+    private static string ProbeDiagnostics(string property)
+    {
+        try
+        {
+            var inMemory = CoreSettings.Current.GetType().GetProperty(property)?
+                .GetValue(CoreSettings.Current)?.ToString() ?? "<no-such-property>";
+            var reloaded = new SettingsService().Current.GetType().GetProperty(property)?
+                .GetValue(new SettingsService().Current)?.ToString() ?? "<no-such-property>";
+            var leftoverTemps = Directory.Exists(TestProfile.DirectoryPath)
+                ? Directory.GetFiles(TestProfile.DirectoryPath, "settings.json.*.tmp").Length
+                : -1;
+            var log = SaveProbeSink.Instance.Recent(25);
+            return "\n[lang-probe] os=" + System.Runtime.InteropServices.RuntimeInformation.OSDescription
+                + "; runtime=" + System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription
+                + "; profile=" + TestProfile.DirectoryPath
+                + "\n[lang-probe] in-memory " + property + "=" + inMemory
+                + "; reloaded-from-disk " + property + "=" + reloaded
+                + "; leftover settings temp files=" + leftoverTemps
+                + "\n[lang-probe] save log (" + log.Length + " of the last settings lines; empty means no save ran):\n  "
+                + (log.Length == 0 ? "<none>" : string.Join("\n  ", log));
+        }
+        catch (Exception ex)
+        {
+            return $"\n[lang-probe] diagnostics unavailable: {ex.GetType().Name}: {ex.Message}";
+        }
     }
 
     private static string ReadSetting(string settingsPath, string property)
