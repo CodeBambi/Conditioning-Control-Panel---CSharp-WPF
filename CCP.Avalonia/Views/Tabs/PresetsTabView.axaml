@@ -612,31 +612,25 @@
                                     IsEnabled="False" Opacity="0.5"/>
                         </Grid>
 
-                        <!-- THE RACK TOOLBAR. 28px, one line, and every control here is a VIEW
-                             over the same list - none of them mutate a session. Source is
-                             single-select, difficulty is four independent toggles, and sort and search
-                             query the mounted available-only registry. The chips are built in code
-                             because each carries a live count; sort and search remain declared here
-                             so their localized faces stay in XAML. -->
-                        <Grid Grid.Row="1" Height="28" Margin="0,0,0,9">
-                            <!-- The empty rule column absorbs spare width. The search column has a
-                                 64px floor and 150px ceiling so the toolbar remains usable at the
-                                 1100px shell proof width while keeping the desktop face unchanged. -->
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*" MinWidth="64" MaxWidth="150"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" x:Name="RackSourceChips"
+                        <!-- THE RACK TOOLBAR. A WrapPanel keeps the live controls inside the rack
+                             when the shell is narrow or a translation makes a chip wider. At the
+                             normal shell width all four controls remain on the original single 28px
+                             line; when they no longer fit, sort and search move to the next line
+                             instead of extending past the SectionPanel's right edge. Every control
+                             here is a VIEW over the same list - none of them mutate a session. Source
+                             is single-select, difficulty is four independent toggles, and sort and
+                             search query the mounted available-only registry. The chips are built in
+                             code because each carries a live count; sort and search remain declared
+                             here so their localized faces stay in XAML. -->
+                        <WrapPanel Grid.Row="1" x:Name="RackToolbar" Orientation="Horizontal"
+                                   HorizontalAlignment="Stretch" Margin="0,0,0,9">
+                            <StackPanel x:Name="RackSourceChips"
                                         Orientation="Horizontal" VerticalAlignment="Center"/>
 
-                            <StackPanel Grid.Column="1" x:Name="RackDifficultyChips"
+                            <StackPanel x:Name="RackDifficultyChips"
                                         Orientation="Horizontal" VerticalAlignment="Center" Margin="9,0,0,0"/>
 
-                            <ComboBox Grid.Column="3" x:Name="CmbRackSort" SelectedIndex="0"
+                            <ComboBox x:Name="CmbRackSort" SelectedIndex="0"
                                       Width="128" Height="26" VerticalAlignment="Center" FontSize="11"
                                       Margin="8,0,7,0" Theme="{StaticResource DarkComboBoxStyle}"
                                       ToolTip.Tip="{loc:Str tooltip_rack_sort}">
@@ -655,13 +649,13 @@
                                  TextBlock (TxtRackSearchHint) and the code that collapses it are
                                  both gone. The live search handler trims the transient query and
                                  repaints the same available-only registry immediately. -->
-                            <TextBox Grid.Column="4" x:Name="TxtRackSearch"
-                                     Height="26" MinHeight="0" FontSize="11" Padding="7,0"
+                            <TextBox x:Name="TxtRackSearch"
+                                     Height="26" MinHeight="0" MinWidth="64" MaxWidth="150" FontSize="11" Padding="7,0"
                                      HorizontalAlignment="Stretch"
                                      VerticalContentAlignment="Center"
                                      VerticalAlignment="Center" Theme="{StaticResource FocusGlowTextBox}"
                                      PlaceholderText="{loc:Str rack_search_watermark}"/>
-                        </Grid>
+                        </WrapPanel>
 
                         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                             <!-- ONE panel. RepaintSessionRack clears and refills it; nothing else

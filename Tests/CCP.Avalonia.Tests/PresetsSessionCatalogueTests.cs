@@ -674,15 +674,11 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.True(sort.IsEnabled);
                 Assert.NotNull(search.Template);
                 Assert.NotNull(sort.Template);
-                var toolbar = Assert.IsType<Grid>(search.Parent);
                 Assert.True(search.IsVisible);
                 Assert.True(search.Bounds.Width >= 64);
                 Assert.True(search.Bounds.Height > 0);
                 Assert.True(search.Bounds.Left >= 0);
-                Assert.True(search.Bounds.Right <= toolbar.Bounds.Width + 0.5,
-                    $"search={search.Bounds}, toolbar={toolbar.Bounds}");
-                Assert.True(search.Bounds.Bottom <= toolbar.Bounds.Height + 0.5,
-                    $"search={search.Bounds}, toolbar={toolbar.Bounds}");
+                AssertToolbarControlsContained(view);
                 Assert.Equal(new[] { mode.Id, delta.Id, alpha.Id, zulu.Id }, RowIds(panel));
                 Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
                 Assert.Equal(new[] { "All  4", "Built-in  2", "Yours  1", "Catalogue  1" },
@@ -805,6 +801,25 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.Equal(new[] { mode.Id, delta.Id, alpha.Id, zulu.Id }, RowIds(panel));
                 Assert.False(CoreSettings.HasProvider);
                 Assert.Equal("recent", CoreSettings.Current.SessionRackSort);
+
+                // The normal shell proof above keeps the toolbar on one line. Resize the same
+                // mounted controls to a narrow rack and repeat the containment check in two
+                // localized metric sets; wrapping is the layout contract, not a test-only width.
+                view.Width = 900;
+                host.Width = 900;
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                AssertToolbarControlsContained(view);
+
+                LocalizationManager.Instance.SetLanguage("de");
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                AssertToolbarControlsContained(view);
+
+                LocalizationManager.Instance.SetLanguage("zh-CN");
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                AssertToolbarControlsContained(view);
             }
             finally
             {
@@ -831,6 +846,22 @@ public sealed class PresetsSessionCatalogueTests
 
     private static string SortFace(ComboBox combo) =>
         ((combo.SelectedItem as ComboBoxItem)?.Content as TextBlock)?.Text ?? "<missing>";
+
+    private static void AssertToolbarControlsContained(PresetsTabView view)
+    {
+        var search = view.FindControl<TextBox>("TxtRackSearch")!;
+        var sort = view.FindControl<ComboBox>("CmbRackSort")!;
+        var toolbar = Assert.IsType<WrapPanel>(search.Parent);
+        Assert.Same(toolbar, sort.Parent);
+        Assert.True(search.Bounds.Right <= toolbar.Bounds.Width + 0.5,
+            $"search={search.Bounds}, toolbar={toolbar.Bounds}");
+        Assert.True(search.Bounds.Bottom <= toolbar.Bounds.Height + 0.5,
+            $"search={search.Bounds}, toolbar={toolbar.Bounds}");
+        Assert.True(sort.Bounds.Right <= toolbar.Bounds.Width + 0.5,
+            $"sort={sort.Bounds}, toolbar={toolbar.Bounds}");
+        Assert.True(sort.Bounds.Bottom <= toolbar.Bounds.Height + 0.5,
+            $"sort={sort.Bounds}, toolbar={toolbar.Bounds}");
+    }
 
     [Fact]
     public async Task MountedCataloguePreservesCallerLanguageStartingInGerman()
