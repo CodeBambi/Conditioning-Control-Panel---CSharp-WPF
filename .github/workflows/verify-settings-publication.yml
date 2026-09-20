@@ -8,7 +8,10 @@
 #   * two fresh checkouts at pinned SHAs; the test sources are copied from the candidate into
 #     the baseline and hash-compared, so both revisions run byte-identical test code;
 #   * one invocation per revision, no retry loop - a timing artefact must NOT be retried green;
-#   * the baseline run is allowed to fail without cancelling the candidate run;
+#   * each runnable revision is attempted exactly once, independently: a baseline build failure
+#     or run timeout must not skip the candidate build/run, and classification always runs;
+#   * a missing exit file is reported as "missing" so the classifier rejects it as evidence
+#     rather than reading it as a valid zero;
 #   * every exit code, raw xunit XML and log is uploaded whatever happens;
 #   * the test DLL is executed explicitly on an installed 8.0.x runtime via `dotnet exec
 #     --fx-version`, with the resolved version and banner recorded (SDK 10 does the building).
@@ -87,6 +90,7 @@ jobs:
           diff <(hashes candidate) <(hashes baseline)
 
       - name: Resolve the .NET 8 runtime to execute on
+        id: runtime
         run: |
           fx=$(dotnet --list-runtimes | grep '^Microsoft.NETCore.App 8\.' | awk '{print $2}' | sort -V | tail -1)
           test -n "$fx"
@@ -94,16 +98,22 @@ jobs:
           echo "selected Microsoft.NETCore.App $fx" | tee artifacts/runtime-selection.txt
 
       - name: Build baseline (SDK 10, net8.0)
+        id: baseline_build
+        if: steps.runtime.outcome == 'success'
         timeout-minutes: 8
         run: dotnet build "baseline/$TEST_DIR/CCP.Core.Settings.Tests.csproj" -c Release 2>&1 | tee artifacts/baseline-build.log
 
+      # always(): a red or timed-out baseline build must not skip the candidate's own attempt.
       - name: Build candidate (SDK 10, net8.0)
+        id: candidate_build
+        if: always() && steps.runtime.outcome == 'success'
         timeout-minutes: 8
         run: dotnet build "candidate/$TEST_DIR/CCP.Core.Settings.Tests.csproj" -c Release 2>&1 | tee artifacts/candidate-build.log
 
       # One invocation each, no retries. `set +e` keeps a red baseline from cancelling the
       # candidate run; the exit code is recorded rather than swallowed.
       - name: Run tests on baseline production code
+        if: always() && steps.baseline_build.outcome == 'success'
         timeout-minutes: 5
         run: |
           set +e
@@ -114,6 +124,7 @@ jobs:
           echo "baseline exit: $(cat artifacts/baseline-exit.txt)"
 
       - name: Run tests on candidate production code
+        if: always() && steps.candidate_build.outcome == 'success'
         timeout-minutes: 5
         run: |
           set +e
@@ -123,11 +134,16 @@ jobs:
           echo "${PIPESTATUS[0]}" > artifacts/candidate-exit.txt
           echo "candidate exit: $(cat artifacts/candidate-exit.txt)"
 
+      # always(): a skipped build/run or a step timeout must still produce a verdict. An exit file
+      # that was never written is reported as "missing", which the classifier rejects outright.
       - name: Classify (red baseline, green candidate, or INCONCLUSIVE)
+        if: always()
         run: |
+          mkdir -p artifacts
+          exit_of() { [[ -s $1 ]] && cat "$1" || echo missing; }
           bash harness/.github/scripts/verify-settings-publication-gate.sh \
             artifacts/baseline-results.xml artifacts/candidate-results.xml \
-            "$(cat artifacts/baseline-exit.txt)" "$(cat artifacts/candidate-exit.txt)" \
+            "$(exit_of artifacts/baseline-exit.txt)" "$(exit_of artifacts/candidate-exit.txt)" \
             | tee artifacts/verdict.txt
 
       # always(): the raw evidence matters MOST when the gate went red or inconclusive.
