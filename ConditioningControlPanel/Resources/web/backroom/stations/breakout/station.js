@@ -1,3 +1,4 @@
+import { createOfficeEnding } from './office-ending.js';
 import {currentMusic} from '../../shared/sound/music.js';
 /* ============================================================================
  * stations/breakout/station.js - CONTRACT section 7 module for the Breakout
@@ -79,7 +80,7 @@ export async function mount(ctx) {
     lastSay = now;
     try { voice.speak({ text: String(text), volume: VOICE_LEVEL*audioLevels.sub }).catch(() => {}); } catch (e) { /* host gone */ }
   }
-  let shutdownCover = null;
+  let shutdownCover = null, officeEnding = null;
   let menuOpen = true;
   let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;
@@ -155,6 +156,10 @@ export async function mount(ctx) {
         <div class="bo-dev-row"><span class="bo-dev-lab">${t('br_breakout_dev_words', 'Words')}</span><div class="bo-words"></div></div>
       </div>`;
     root.appendChild(el);
+    const endingActions=document.createElement('div');endingActions.className='bo-ending-actions';endingActions.hidden=true;
+    endingActions.innerHTML='<span class="bo-ending-status" role="status">You broke out.</span><button type="button" data-ending="replay">Play again</button><button type="button" data-ending="menu">Menu</button>';
+    el.append(endingActions);ui.endingActions=endingActions;
+    officeEnding=createOfficeEnding(el,{reduced,actions:endingActions});
     const perfSlot=document.createElement('div');perfSlot.className='bo-perf-slot';
     el.querySelector('.bo-dev').append(perfSlot);
     canvas = el.querySelector('.bo-stage');
@@ -184,6 +189,7 @@ export async function mount(ctx) {
     lastCombo = c;
   }
   function setPaused(p) {
+    officeEnding?.suspend(p);
     if (paused === p) return;
     input.left = input.right = input.launch = false;
     paused = p; ui.paused.hidden = !p; el.classList.toggle('is-paused', p);
@@ -420,8 +426,9 @@ export async function mount(ctx) {
       const t=s.finale.outroAge,p=Math.max(0,Math.min(1,(t-2.9)/.63));
       const inset=(1-Math.pow(1-p,3))*50;
       shutdownCover.style.boxShadow=`inset 0 ${inset}vh #000,inset 0 -${inset}vh #000`;
-      if(t>=3.8)shutdownCover.style.background='#000';
+      if(t>=3.8){shutdownCover.remove();shutdownCover=null;}
     }
+    officeEnding.update(s.finale);
     focusMedia(s);
     if (!diagnostics?.flags.freezeMedia) media.tick(performance.now());
     const perfMedia = diagnostics ? performance.now() : 0;
@@ -481,6 +488,12 @@ export async function mount(ctx) {
     if (window.visualViewport) on(window.visualViewport, 'resize', resize);
     on(window, 'br-media-changed', () => { sourceChanged = true; });
     on(ui.play, 'click', beginGame);
+    on(ui.endingActions,'click',async e=>{
+      const button=e.target.closest('[data-ending]');if(!button||button.disabled)return;
+      const replay=button.dataset.ending==='replay';
+      for(const b of ui.endingActions.querySelectorAll('button'))b.disabled=true;
+      await close();audio?.destroy?.();audio=null;await open();if(replay)beginGame();
+    });
     const options=el.querySelector('.bo-options'),pace=el.querySelector('.bo-option-pace'),colour=el.querySelector('.bo-option-colour');
     let optionsFrom=null;
     on(el.querySelector('.bo-pause-button'),'click',()=>{setPaused(true);el.querySelector('[data-menu="resume"]').focus();});
@@ -519,7 +532,7 @@ export async function mount(ctx) {
       }
       if(paused)return;
       if(e.key==='Escape' && game.snapshot().finale?.phase==='outro') {
-        e.preventDefault();game.jumpToFinaleBeat('spiral');return;
+        e.preventDefault();if(game.snapshot().finale.outroAge>=3.8)officeEnding.skip();return;
       }
       if (menuOpen) {
         if (e.key === 'Escape') { e.preventDefault(); back(); }
@@ -560,6 +573,7 @@ export async function mount(ctx) {
   async function close() {
     running = false;
     shutdownCover?.remove();shutdownCover=null;
+    officeEnding?.dispose();officeEnding=null;
     game?.dispose();
     diagnostics?.dispose(); diagnostics = null;
     if (raf) cancelAnimationFrame(raf); raf = 0;
@@ -575,6 +589,7 @@ export async function mount(ctx) {
   }
   function suspend(onOff) {
     suspended = !!onOff;
+    officeEnding?.suspend(suspended);
     if (suspended) { try { voice && voice.stop(); } catch (e) { /* noop */ } }
     if (!audio) return;
     try { if (suspended) audio.stop(); else if (audioOn && !paused) audio.start(); } catch (e) { /* noop */ }
