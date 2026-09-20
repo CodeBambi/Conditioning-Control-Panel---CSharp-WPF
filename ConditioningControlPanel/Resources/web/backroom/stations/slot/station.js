@@ -33,6 +33,8 @@ import { createScene, FACES } from './scene.js';
 import { createCelebration, echoReels, rollEcho } from './celebration.js';
 import { createMedia, fxSymbols } from './media.js';
 import { mintId } from './tape.js';
+// "Keep playing" (freeplay.js): no-stake spins that run THE FLOW off a row dealt on the page, never off the server.
+import { createFreePlay, counterShown } from './freeplay.js';
 // One target and one GIF identity for this app/page lifetime, across cabinet visits.
 let chaseSession;
 let sessionMedia;
@@ -134,6 +136,10 @@ export async function mount(ctx) {
   // B1: the jar count the tube is currently showing, while the ticks run ahead of the tape's own count
   // (the same override `shown` is for the SP readout). null follows the tape (Law I).
   let jarShown = null;
+  // "Keep playing" (freeplay.js): the page's own dealer, whether the player chose free play this sit-down, and
+  // how many rows have landed (the choice is offered after the first). A press while `freeMode`, or while the
+  // player cannot buy another spin, plays a demo row: no tape, no server, no SP, no prize.
+  let freePlay = null, freeMode = false, spun = 0;
   // THE FLOW: the callout (one per open), the timers it and the fx ride on (cleared on suspend and close, Law VI),
   // when the next press may start after a landing, the host tunnel level A1 pulls, and the haze's idle timer.
   let celebration = null;
@@ -179,6 +185,8 @@ export async function mount(ctx) {
         <div class="slot-freeze">${[0, 1, 2].map(i => `<button type="button" data-col="${i}" aria-pressed="false"></button>`).join('')}</div>
       </div>
       <button class="slot-spin" type="button"><span></span><small></small></button>
+      <button class="slot-keep" type="button" hidden></button>
+      <span class="slot-freeplay" role="status" hidden>${t('br_slot_freeplay', 'Free play, nothing to win')}</span>
       <details class="slot-odds"><summary>${t('br_slot_paytable', 'Prizes')}</summary><table></table><p></p></details>
       <div class="slot-card" role="status" hidden><p></p><button class="slot-card-back" type="button">${t('br_slot_back', 'Back')}</button></div>
       <button class="slot-rotate" type="button" hidden><i aria-hidden="true">&#x21bb;</i>${t('br_slot_rotate', 'Turn your phone sideways for a bigger view')}</button>`;
@@ -194,6 +202,7 @@ export async function mount(ctx) {
     }
     root.addEventListener('pointerdown', onPoke, true);   // A4: any pointer press ends attract (the lever included)
     root.querySelector('.slot-spin').onclick = () => press();
+    root.querySelector('.slot-keep').onclick = toggleKeep;
     root.querySelectorAll('[data-col]').forEach(b => { b.onclick = () => toggleFreeze(Number(b.dataset.col)); });
     return root;
   }
@@ -285,17 +294,32 @@ export async function mount(ctx) {
     extraNote.textContent=[s.comp?t('br_slot_comp','On the house: {n} spins',{n:s.comp.spins}):'',s.free?t('br_slot_free_left','Free spins {n}',{n:s.free}):'',s.melt?t('br_slot_melt_left','Melt: {n} spins at half',{n:s.melt}):''].filter(Boolean).join(' · ');
     const playable = el.dataset.phase === 'play';
     el.dataset.pace = pace;
+    // "Keep playing": the next press is a demo row while the player chose free play, or when the tape is empty
+    // and another spin cannot be bought (no comp, no free spin, not even one affordable). Honest on the face:
+    // the key's own label and the cabinet's line both say it before the press, and freezes (a server buy) are
+    // off. Not while a paid tape, a comp or a free spin is still owed: those play first, as they always did.
+    const broke = !s.onTape && s.hold === null && !s.comp && !FREE_KINDS.has(s.nextKind) && s.tapeCount < 1;
+    const demoNext = freeMode || broke;
+    // THE ENDING is not advertised while a hold plays (freeplay.counterShown): the "spins left" line waits for idle.
+    const counting = counterShown({ pace, unlockAt, now: performance.now() });
+    if (counting) delete el.dataset.hold; else el.dataset.hold = '';
     el.querySelectorAll('[data-col]').forEach((b, i) => {
       const on = s.hold === i, roman = ['I', 'II', 'III'][i];
       b.setAttribute('aria-pressed', String(on));
       b.textContent = on ? t('br_slot_frozen', 'Frozen {n}', { n: roman }) : t('br_slot_freeze', 'Freeze {n}', { n: roman });
-      b.disabled = !playable || busy || !s.canFreeze;
+      b.disabled = !playable || busy || !s.canFreeze || demoNext;
     });
+    const keep = $('.slot-keep');
+    keep.hidden = !playable || busy || broke || spun < 1 || !counting;
+    keep.textContent = freeMode ? t('br_slot_keep_off', 'Play for SP') : t('br_slot_keep', 'Keep playing');
+    $('.slot-freeplay').hidden = !playable || !demoNext;
     const spin = $('.slot-spin');
     spin.disabled = !playable || (busy && pace !== 'reveal');   // a press in the reveal waits for the breath
     spin.querySelector('span').textContent = t('br_slot_spin', 'Spin');
     spin.querySelector('small').textContent =
-      s.hold !== null ? t('br_slot_cost', '{n} SP', { n: s.freezeCost })
+      !counting ? ''
+      : demoNext ? t('br_slot_freeplay', 'Free play, nothing to win')
+      : s.hold !== null ? t('br_slot_cost', '{n} SP', { n: s.freezeCost })
       : FREE_KINDS.has(s.nextKind) ? t('br_slot_free_spin', 'Free spin')
       : s.onTape ? t('br_slot_on_tape', '{n} prepaid spins left', { n: s.onTape })
       // 10.16.C: the next buy is the comp, at 0 SP. Every press after that is a normal paid tape.
@@ -489,9 +513,20 @@ export async function mount(ctx) {
     if (!reduced) payRaf = requestAnimationFrame(payFrame);
   }
 
-  function toggleFreeze(col) {
+  /** "Keep playing" on / "Play for SP" off. Entering free play drops any lit column: a freeze is a server buy. */
+  function toggleKeep() {
     endAttract(); armIdle();
     if (!alive || busy || !tape || el.dataset.phase !== 'play') return;
+    freeMode = !freeMode;
+    if (freeMode) tape.clearHold();
+    card(null);
+    note('keep', { on: freeMode });
+    sync();
+  }
+
+  function toggleFreeze(col) {
+    endAttract(); armIdle();
+    if (!alive || busy || !tape || freeMode || el.dataset.phase !== 'play') return;
     const previous = tape.snapshot().hold;
     tape.toggleHold(col);
     const held = tape.snapshot().hold;
@@ -554,6 +589,9 @@ export async function mount(ctx) {
     const echoDelay = Math.max(0, echoMs - FLOW.FX_DELAY_MS);
     unlockAt += echoDelay;
     flowLast.unlockMs += echoDelay;
+    // The counter and the ending copy come back on the frame the hold lifts (freeplay.counterShown), which
+    // is after press() has already marked idle: without this tick they would wait for the next input.
+    later(plan.unlockMs + echoDelay + 1, sync);
     if (el && plan.hits.length) { el.classList.add(GLYPH_HIT); later(FLOW.HIGHLIGHT_MS, () => { if (el) el.classList.remove(GLYPH_HIT); }); }
     const chain = plan.fx.some(f => /^fx.sub_/.test(f.id)) ? subWords(o, media).length : 0;   // a sub chain owns the centre first
     const wordsMs = chain ? WORD_MS + WORD_GAP_MS * (chain - 1) : 0;
@@ -584,7 +622,7 @@ export async function mount(ctx) {
 
   /** The landing beat (Law X): the party the Brake allows, the ladder, the tokens and EMI, all on one frame.
    *  Melt reads from the tape cursor, never a freeze outcome's own meltLeft (the stored tape's end melt). */
-  function land(landed, before) {
+  function land(landed, before, demo = false) {
     if (landed.wheelBonus > 0) {
       const bonus = $('.slot-wheel-bonus');
       bonus.textContent = t('br_slot_wheel_bonus', 'Free bonus Wheel of Fortune spin!');
@@ -617,8 +655,10 @@ export async function mount(ctx) {
     // tier, never the slot's own rung. 0 means no shower at all (Law IX: a small win is a close-up event and
     // does not show from across the room), and room/coin-shower.js clamps 1..4, so the call is SKIPPED
     // rather than made with a 0 - that guard is the station's, the spine cannot make it from here.
-    if (plan.shower > 0) ctx.revealedWin?.(o.pay, plan.shower, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
-    if (r.tokens) {
+    // "Keep playing": a demo row pays 0, so tierOf is 0 and neither branch below can open; the `demo` guard is
+    // belt and braces on top of that, so no free-play row ever flies THE BANK or rains the room's coins.
+    if (!demo && plan.shower > 0) ctx.revealedWin?.(o.pay, plan.shower, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
+    if (r.tokens && !demo) {
       flyBank('pay', before, tape.snapshot().shownSp, plan.bank, roll, plan.glow);
       // THE CHIME LADDER climbs while the readout counts. Law VI: reduced motion has no rollup to climb over
       // and THE BANK has already settled, so plan.partyMs is 0 and the ladder is the landing note alone.
@@ -692,8 +732,11 @@ export async function mount(ctx) {
    */
   let visualDealSpins = 0;
   async function beat(r, before, my) {
+    // "Keep playing" (freeplay.js): the row was dealt on the page. The reels and THE FLOW run as for any row;
+    // the tape is never told (it would refuse anyway), the jar does not tick and no host deal is asked for.
+    const demo = r.demo === true;
     // Refresh between ordinary spins, never midway through a result or free re-spin.
-    if (r.held == null && !playsWithoutPress(r.outcome.kind) && ++visualDealSpins % 3 === 0) {
+    if (!demo && r.held == null && !playsWithoutPress(r.outcome.kind) && ++visualDealSpins % 3 === 0) {
       try {
         const next = await dealtForSession(ctx);
         if (my !== session) return false;
@@ -715,7 +758,7 @@ export async function mount(ctx) {
     playing = { o, respin, keep, lastReel: respin ? 2 : [2, 1, 0].find(i => i !== r.held), ant,
                 near: respin ? null : almost(o, before.strips, { held: r.held }),
                 emi: emiLandings(o),                                  // A5: which reels wiggle
-                jar: jarPlan(o, before.jar, before.jarSize) };        // B1: which reels tick the tube
+                jar: demo ? null : jarPlan(o, before.jar, before.jarSize) };   // B1: which reels tick the tube (never a demo row)
     mark('spin'); sync();
     // Reel 3 is alone here, so the rising tone runs from the start of its travel: there is no reel 2 thud to
     // open it (A1's own tone still opens on that thud for every other spin, in stopFeel).
@@ -725,9 +768,10 @@ export async function mount(ctx) {
     if (my !== session || !alive) return false;
     const shownBefore = shownSp();
     const p = playing; playing = null;
-    tape.land(o);
+    if (!demo) tape.land(o);
+    spun++;
     flow(o, { respinRow: o.kind === 'respin', jarWord: !!(p && p.jarWord) });   // THE FLOW: hit now, word + fx at 400 ms
-    land(o, shownBefore);
+    land(o, shownBefore, demo);
     jarShown = null;                      // Law I: whatever the ticks showed, sync() below settles on the tape's count
     scene.reveal(o.pay > 0); mark('reveal'); sync();
     await wait(PACE.REVEAL_MS);
@@ -754,8 +798,13 @@ export async function mount(ctx) {
     note('answer', { pose });
     busy = true; queued = false; card(null); mark('breath'); sync();
     board(t('br_slot_marquee_spin', 'Spinning'));   // THE MARQUEE BOARD: the pull is on the sign before the tape answers
+    // "Keep playing": the same predicate sync() painted on the key, read off the same snapshot, so what the key
+    // said is what the press does. A demo row is dealt on the page and the tape is not asked (no server op).
+    const demo = freeMode || (!before.onTape && before.hold === null && !before.comp && !FREE_KINDS.has(before.nextKind) && before.tapeCount < 1);
+    if (demo) note('demo', { chosen: freeMode });
     // THE BREATH (PACE): the next spin starts no sooner than BREATH_MS after the last reveal; the buy runs meanwhile.
-    const [r] = await Promise.all([tape.press(), wait(breathEnds - performance.now())]);
+    const [r] = await Promise.all([demo ? Promise.resolve(freePlay.press({ strips: before.strips, melt: before.melt })) : tape.press(),
+                                   wait(breathEnds - performance.now())]);
     if (my !== session || !alive) return;
     if (r.kind !== 'play') {
       busy = false; mark('idle'); scene.letGo(); setFace(glance(pose, restPose(before.melt)));
@@ -769,6 +818,7 @@ export async function mount(ctx) {
       if (!(await beat(step, from, my))) return;
       // THE FLOW: a paid line holds the next spin to landing + UNLOCK_MS (the jackpot longer); a loss keeps the pace.
       breathEnds = Math.max(performance.now() + PACE.BREATH_MS, unlockAt);
+      if (step.demo) break;   // a demo row never queues a second beat: nothing is on the tape from it
       // C1 (10.16.D): the re-spin is the SECOND BEAT of this same press. The lever is never asked twice and
       // nothing is bought: the outcome is already on the tape, queued by the emi2 that just landed.
       if (!playsWithoutPress(tape.snapshot().nextKind)) break;
@@ -798,6 +848,7 @@ export async function mount(ctx) {
     if (alive) return;
     alive = true; busy = false; suspended = false; lastMelt = null; pace = 'idle'; queued = false; breathEnds = 0;
     shown = null; streak = 0; sit = freshSit(); landPlan = null; pose = 'idle0_0'; playing = null; jarShown = null;
+    freePlay = createFreePlay(); freeMode = false; spun = 0;
     flowLast = null; unlockAt = 0; tunnelLevel = 0; clearTimeout(hazeTimer); hazeTimer = 0;
     attracting = false; clearTimeout(idleTimer); clearTimeout(winkTimer); idleTimer = winkTimer = 0;
     const my = ++session;
@@ -946,6 +997,8 @@ export async function mount(ctx) {
                          on: !!(el && $('.slot-jar') && $('.slot-jar').dataset.on != null),
                          hidden: !!(el && $('.slot-jar') && $('.slot-jar').hidden) },
                   respin: playing ? !!playing.respin : false,
+                  freeplay: { on: freeMode, spun, dealt: freePlay ? freePlay.count() : 0, hold: !!(el && el.dataset.hold != null),
+                              keep: !!(el && $('.slot-keep') && !$('.slot-keep').hidden), line: !!(el && $('.slot-freeplay') && !$('.slot-freeplay').hidden) },
                   comp: { chip: !!(el && $('.slot-comp') && !$('.slot-comp').hidden),
                           label: el && $('.slot-spin small') ? $('.slot-spin small').textContent : null },
                     hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
