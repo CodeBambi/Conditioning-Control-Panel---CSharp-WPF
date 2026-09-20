@@ -1,5 +1,6 @@
 using System.Globalization;
 using ConditioningControlPanel.Models.Deeper;
+using static ConditioningControlPanel.Avalonia.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Avalonia.Views.Deeper
 {
@@ -11,35 +12,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     // render onto the single TimelineCanvas with the y-band layout below.
     public partial class DeeperEditorWindow
     {
-        // The timeline canvas is split into three equal horizontal lanes, top-to-bottom:
-        // Regions, Effects, Haptics. Rules are NOT a lane - they render as full-height pins
-        // layered across all three. This is the single source of truth for lane geometry;
-        // every Build*/hit-test path resolves its Y band through LaneBand().
-        private enum TimelineLane { Regions, Effects, Haptics }
-
-        private static (double top, double height) LaneBand(TimelineLane lane, double canvasHeight)
-        {
-            if (canvasHeight <= 0) return (0, 0);
-            double laneH = canvasHeight / 3.0;
-            double top = lane switch
-            {
-                TimelineLane.Regions => 0,
-                TimelineLane.Effects => laneH,
-                TimelineLane.Haptics => 2 * laneH,
-                _ => 0
-            };
-            return (top, laneH);
-        }
-
-        // Inset band rect for a lane (a few px of breathing room above/below so adjacent lanes
-        // read as distinct). Used by region/haptic/effect-segment bands.
-        private const double LaneInset = 2.0;
-
-        private static (double top, double height) LaneBandInset(TimelineLane lane, double canvasHeight)
-        {
-            var (top, height) = LaneBand(lane, canvasHeight);
-            return (top + LaneInset, System.Math.Max(0, height - 2 * LaneInset));
-        }
+        // Lane geometry (TimelineLane / LaneBand / LaneBandInset) lives in
+        // DeeperEditorGeometry so rendering and hit-testing share one tested source of truth.
 
         private void RefreshLaneCounts()
         {

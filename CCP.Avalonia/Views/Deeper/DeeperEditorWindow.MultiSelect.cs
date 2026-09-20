@@ -10,6 +10,7 @@ using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
 using Newtonsoft.Json;
 using Serilog;
+using static ConditioningControlPanel.Avalonia.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Avalonia.Views.Deeper
 {
@@ -252,16 +253,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
                 _selectionSet.Clear();
 
-                // Lane Y mapping goes through LaneBand so the hit math stays in lockstep with the
-                // rebuild methods (the WPF original hardcoded the old two-lane geometry here and
-                // had drifted from what it draws).
-                var (regionLaneTop, regionLaneH) = LaneBand(TimelineLane.Regions, canvasH);
-                var (effectLaneTop, effectLaneH) = LaneBand(TimelineLane.Effects, canvasH);
-                var (hapticLaneTop, hapticLaneH) = LaneBand(TimelineLane.Haptics, canvasH);
-
-                bool RangesOverlap(double a1, double a2, double b1, double b2) => a1 < b2 && a2 > b1;
-
-                if (RangesOverlap(yMin, yMax, regionLaneTop, regionLaneTop + regionLaneH))
+                // Resolve the same tested lane bands used by the renderers; the old WPF path
+                // hardcoded a different layout and selected the wrong item type.
+                if (BandHitsLane(TimelineLane.Regions, yMin, yMax, canvasH))
                 {
                     foreach (var r in _enhancement.Regions)
                     {
@@ -270,7 +264,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                             _selectionSet.Add(r);
                     }
                 }
-                if (RangesOverlap(yMin, yMax, hapticLaneTop, hapticLaneTop + hapticLaneH))
+                if (BandHitsLane(TimelineLane.Haptics, yMin, yMax, canvasH))
                 {
                     foreach (var track in _enhancement.HapticTracks)
                     {
@@ -283,7 +277,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                         }
                     }
                 }
-                if (RangesOverlap(yMin, yMax, effectLaneTop, effectLaneTop + effectLaneH))
+                if (BandHitsLane(TimelineLane.Effects, yMin, yMax, canvasH))
                 {
                     foreach (var item in _enhancement.TimelineItems)
                     {
