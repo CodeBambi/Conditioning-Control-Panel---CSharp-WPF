@@ -19,7 +19,12 @@ import { boundedStill } from './bounded-still.js';
 import { compatibilityDecoder } from './image-frames.js';
 import { MEDIA_LIMITS, MediaLimitError, refusedMedia, boundedImageBytes, imageDimensions, checkDimensions } from './media-limits.js';
 
-export const MAX_FPS = 12;
+/* 30, not 12 (2026-09-18, desktop testers: "framerate on the images on the monitors is awful, especially the
+ * spiral gifs"). A spiral is authored at 25-33 fps, so a 12 fps cap made it lurch, and the next frame was
+ * scheduled from decode COMPLETION rather than from the frame's own due time, so decode latency plus the
+ * 30 Hz render tick pushed a "12 fps" source to 8-9 uneven fps. The cap is the room's: the slot and the
+ * hypno deck pass their own maxFps. */
+export const MAX_FPS = 30;
 export const MAX_EDGE = 384;
 const EXT = { gif: 'image/gif', webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
 
@@ -83,7 +88,7 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
     if (count < 2) { try { decoder.close(); } catch (e) { /* noop */ } }   // a still needs no decoder kept open
     const minGap = 1000 / Math.max(1, maxFps);
     let index = 0, dueAt = 0, busy = false, closed = false, frames = 0;
-    const show = (i) => {
+    const show = (i, started) => {
       busy = true;
       return decoder.decode({ frameIndex: i }).then((r) => {
         if (closed) { r.image.close(); return; }
@@ -93,7 +98,11 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
           g.drawImage(r.image, 0, 0, canvas.width, canvas.height);
         } finally { r.image.close(); }
         index = i; frames++;
-        dueAt = performance.now() + Math.max(minGap, delay);
+        // Keep the file's own cadence: the next frame is due one delay after this one was DUE, not after
+        // its decode landed, so latency and tick quantisation stop compounding. More than one delay late
+        // (off-frustum, a held room) re-anchors to the tick that woke it rather than bursting to catch up.
+        const step = Math.max(minGap, delay);
+        dueAt = (started - dueAt > step ? started : dueAt) + step;
         if (typeof onFrame === 'function') { try { onFrame(i); } catch (e) { /* the caller's problem */ } }
       }).catch(() => { count = 1; }).finally(() => { busy = false; });
     };
@@ -105,9 +114,9 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
       /** Advance if due. `still` holds (and returns to) the first frame. Returns true when a decode started. */
       tick(now, still) {
         if (closed || busy || count < 2) return false;
-        if (still) { if (index !== 0) { show(0); return true; } return false; }
+        if (still) { if (index !== 0) { show(0, now); return true; } return false; }
         if (now < dueAt) return false;
-        show((index + 1) % count);
+        show((index + 1) % count, now);
         return true;
       },
       dispose() { closed = true; try { decoder.close(); } catch (e) { /* noop */ } },
