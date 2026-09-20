@@ -161,17 +161,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             Log.Information("Startup video set to {File} (Settings/General)", Path.GetFileName(localPath));
         }
 
+        // Tests replace this only while driving the real button handler; production uses the
+        // existing MessageDialog below. Keeping the seam here avoids inventing a second picker API.
+        internal static Func<Window, string, string, Task>? PickerFeedbackOverride { get; set; }
+
         private async void BtnSelectStartupVideo_Click(object? sender, RoutedEventArgs e)
         {
             var top = TopLevel.GetTopLevel(this);
-            if (top?.StorageProvider is not { CanOpen: true } provider)
+            await SelectStartupVideoAsync(top?.StorageProvider, top as Window);
+        }
+
+        /// <summary>Runs the native picker flow used by the button handler.</summary>
+        internal async Task SelectStartupVideoAsync(IStorageProvider? provider, Window? owner)
+        {
+            if (provider is not { CanOpen: true })
             {
                 Log.Warning("Startup video picker unavailable: this window has no file-opening storage provider");
-                if (top is Window unavailableOwner)
-                {
-                    await Dialogs.MessageDialog.ShowAsync(unavailableOwner, Loc.Get("title_select_startup_video"),
-                        "No file picker is available on this system, so a startup video can't be chosen here.");
-                }
+                if (owner is not null)
+                    await ShowPickerFeedbackAsync(owner, "msg_startup_video_picker_unavailable");
                 return;
             }
 
@@ -184,15 +191,46 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             }
             catch (Exception ex)
             {
-                // A failed picker must leave the stored startup video alone.
+                // A failed picker must leave the stored startup video alone, but the user needs to
+                // know why the button did not change it.
                 Log.Warning("Startup video picker failed: {E}", ex.Message);
+                if (owner is not null)
+                    await ShowPickerFeedbackAsync(owner, "msg_startup_video_picker_failed");
                 return;
             }
 
-            if (files.Count != 1) return;   // cancelled
-            var local = files[0].TryGetLocalPath();
-            if (local is null) Log.Warning("Startup video pick has no local path; keeping the previous selection");
+            if (files.Count != 1) return;   // genuine cancellation
+
+            string? local;
+            try
+            {
+                local = files[0].TryGetLocalPath();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("Startup video pick path could not be read: {E}", ex.Message);
+                if (owner is not null)
+                    await ShowPickerFeedbackAsync(owner, "msg_startup_video_picker_failed");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(local))
+            {
+                Log.Warning("Startup video pick has no local path; keeping the previous selection");
+                if (owner is not null)
+                    await ShowPickerFeedbackAsync(owner, "msg_startup_video_requires_local_file");
+                return;
+            }
+
             ApplyPickedStartupVideo(local);
+        }
+
+        private static Task ShowPickerFeedbackAsync(Window owner, string messageKey)
+        {
+            var title = Loc.Get("title_select_startup_video");
+            var message = Loc.Get(messageKey);
+            return PickerFeedbackOverride?.Invoke(owner, title, message)
+                ?? Dialogs.MessageDialog.ShowAsync(owner, title, message);
         }
 
         private static async Task<IStorageFolder?> TryGetStartFolderAsync(IStorageProvider provider)
