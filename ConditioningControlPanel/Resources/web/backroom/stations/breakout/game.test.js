@@ -1,13 +1,20 @@
 /* node --test game.test.js - the state machine and the saturation ladder, nothing visual. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
+import { createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
-function make(opts = {}) {
+// These scoring/state fixtures use one-hit walls; durability has its own integration suite.
+function make(opts = {}, colour = true) {
   const events = [], calls = [];
   const audio = new Proxy({ beat: { spb: 60 / 96 } }, { get: (t, k) => k in t ? t[k] : (...a) => calls.push([k, ...a]) });
-  const game = createGame({ rng: seeded(), audio, onEvent: (n, d) => events.push([n, d]), ...opts });
+  const game = createGame({ brickStrength: [], greyMetal: false, rng: seeded(), audio, onEvent: (n, d) => events.push([n, d]), ...opts });
+  if (colour) {
+    game.breakoutNow();
+    for (let i = 0; i < 4; i++) game.step(0.1);
+    game.snapshot().breakoutShield = null;
+    events.length = 0; calls.length = 0;
+  }
   return { game, events, calls, names: () => events.map(e => e[0]).filter(n => n !== 'hit') };
 }
 
@@ -21,12 +28,15 @@ test('rungs unlock at their thresholds and force overrides them', () => {
   assert.equal(RUNG_AT.length, 10);
 });
 
-test('a fresh session starts in COLOUR at 0.15 with a full wall and a stuck ball', () => {
-  const { game } = make();
+test('a fresh session starts in GREY with saved colour and a stuck ghost ball', () => {
+  const { game, calls } = make({}, false);
   const s = game.snapshot();
-  assert.equal(s.state, 'colour'); assert.equal(s.sat, 0.15);
+  assert.equal(s.state, 'grey'); assert.equal(s.sat, 0); assert.equal(s.savedSat, 0.15);
+  assert.equal(s.breakoutN, 20); assert.equal(s.greyBricks, 0);
+  assert.equal(s.rungs.filter(Boolean).length, 1);
+  assert.ok(calls.some(c => c[0] === 'setState' && c[1] === 'grey'));
   assert.equal(s.bricks.length, BRICK.cols * BRICK.rows);
-  assert.equal(s.balls.length, 1); assert.equal(s.balls[0].stuck, true); assert.equal(s.balls[0].ghost, false);
+  assert.equal(s.balls.length, 1); assert.equal(s.balls[0].stuck, true); assert.equal(s.balls[0].ghost, true);
 });
 
 test('bricks add 0.012 saturation and a wall clear adds 0.1 plus one SP', () => {
@@ -40,11 +50,11 @@ test('bricks add 0.012 saturation and a wall clear adds 0.1 plus one SP', () => 
   assert.equal(s.stats.walls, 1); assert.equal(s.stats.sp, 6, '1 SP for the wall plus 5 for the hidden jackpot brick');
   assert.equal(events.filter(e => e[0] === 'jackpot').length, 1, 'one jackpot per wall');
   assert.equal(s.bricks.filter(b => b.alive).length, BRICK.cols * BRICK.rows, 'a new wall descends');
-  assert.ok(Math.abs(s.sat - (0.05 + 60 * 0.012 + 0.1)) < 1e-9);
-  assert.equal(events.filter(e => e[0] === 'crack').length, 0, 'no crack yet at 0.87');
+  assert.ok(Math.abs(s.sat - Math.min(1, 0.05 + BRICK.cols * BRICK.rows * 0.012 + 0.1)) < 1e-9);
+  assert.equal(events.filter(e => e[0] === 'crack').length, 0, 'colour play never cracks the screen');
   for (let i = 0; i < 60; i++) game.breakBrick(i);
   assert.equal(game.snapshot().sat, 1, 'capped at 1');
-  assert.equal(events.filter(e => e[0] === 'crack').length, 1, 'the crack fires once past 0.9, once per session');
+  assert.equal(events.filter(e => e[0] === 'crack').length, 0, 'saturation never triggers cracks');
 });
 
 test('losing the ball in COLOUR is a RELAPSE: grey, saved saturation, ghost ball', () => {
@@ -72,7 +82,7 @@ test('losing the ball in COLOUR is a RELAPSE: grey, saved saturation, ghost ball
 test('N grey bricks is a BREAKOUT: 0.3 s rewind, 100 ms freeze, then the world snaps back', () => {
   const { game, names, calls } = make({ saturation: 0.55, breakoutN: 3 });
   game.loseBall(); for (let i = 0; i < 8; i++) game.step(0.1);
-  const plain = game.snapshot().bricks.map((b, i) => (b.gif < 0 && !b.split && !b.jackpot ? i : -1)).filter(i => i >= 0);
+  const plain = game.snapshot().bricks.map((b, i) => (b.gif < 0 && !b.spiral && !b.word && !b.split && !b.jackpot ? i : -1)).filter(i => i >= 0);
   game.breakBrick(plain[0]); game.breakBrick(plain[1]);
   assert.equal(game.snapshot().state, 'grey');
   game.breakBrick(plain[2]);
@@ -108,7 +118,7 @@ test('never lose (dev): the floor bounces the ball and no relapse starts', () =>
   game.setNoLose(true);
   const s = game.snapshot();
   const b = s.balls[0]; b.stuck = false; b.x = 40; b.y = s.paddle.y + 30; b.vx = 0; b.vy = 400;
-  for (let i = 0; i < 20; i++) game.step(0.05, { x: 440 });
+  for (let i = 0; i < 6; i++) game.step(0.05, { x: 440 });
   assert.equal(game.snapshot().state, 'colour');
   assert.ok(!names().includes('relapseStart'));
   assert.ok(game.snapshot().balls[0].vy < 0 && !game.snapshot().balls[0].lost, 'bounced back up');
@@ -127,13 +137,13 @@ test('dev hooks: relapseNow, breakoutNow and setSaturation', () => {
   assert.equal(game.snapshot().state, 'colour'); assert.equal(game.snapshot().sat, 0.8);
 });
 
-test('combo climbs on bricks, hit stop scales with it, and a paddle hit resets it', () => {
+test('combo climbs without pausing motion, and a paddle hit resets it', () => {
   const { game, events } = make({ saturation: 0.5, audio: { beat: { spb: 60 / 96, phase: () => 0.03 }, now: () => 0 } });
   for (let i = 0; i < 10; i++) game.breakBrick(i);
   let s = game.snapshot();
-  assert.equal(s.combo, 10); assert.equal(s.comboBest, 10); assert.equal(s.hitStopMs, 80);
+  assert.equal(s.combo, 10); assert.equal(s.comboBest, 10); assert.equal(s.hitStopMs, 0);
   assert.equal(events.filter(e => e[0] === 'hit' && e[1].combo === 10).length, 1);
-  game.step(0.05); assert.equal(game.snapshot().hitStopMs, 30, 'hit stop counts down in real time');
+  game.step(0.01); assert.equal(game.snapshot().hitStopMs, 0, 'routine hits do not freeze gameplay');
   // Drop the ball onto the paddle: combo resets, and the hit lands on phase 0 so it is a perfect.
   for (let i = 0; i < 20; i++) game.step(0.05);
   s = game.snapshot();
@@ -145,21 +155,77 @@ test('combo climbs on bricks, hit stop scales with it, and a paddle hit resets i
   assert.ok(events.some(e => e[0] === 'perfect')); assert.ok(s.lastPerfectAt > 0);
 });
 
-test('every fifth wall spells a dealt word in bricks', () => {
-  assert.equal(layoutWord('DROP').cells.length, 14 + 14 + 12 + 12);
-  assert.equal(layoutWord('DROP').cols, 23);
-  const { game, events } = make();
-  game.setWords(['DROP']);
-  for (let wall = 0; wall < 4; wall++) for (let i = game.snapshot().bricks.length - 1; i >= 0; i--) game.breakBrick(i);
+test('Spell is the third sequential wall and uses a varied word-shaped formation', () => {
+  const { game } = make();
   const s = game.snapshot();
-  assert.equal(s.stats.walls, 4); assert.equal(s.mantra, 'DROP');
-  assert.ok(s.bricks.length > 0 && s.bricks.every(b => b.letter && b.alive));
-  assert.ok(s.bricks.some(b => b.letter === 'D') && s.bricks.some(b => b.letter === 'P'));
-  assert.ok(s.bricks.every(b => b.x >= 0 && b.x + b.w <= 480));
-  assert.ok(events.some(e => e[0] === 'mantra' && e[1].word === 'DROP'));
-  assert.equal(s.bricks.filter(b => b.jackpot).length, 1);
-  for (let i = s.bricks.length - 1; i >= 0; i--) game.breakBrick(i);
-  assert.equal(game.snapshot().mantra, null, 'the next wall is plain again');
+  assert.equal(s.spell, null);
+  for (let wall = 0; wall < 2; wall++) {
+    assert.equal(s.spell, null);
+    for (let i = s.bricks.length - 1; i >= 0; i--) game.breakBrick(i);
+  }
+  assert.equal(s.stats.walls, 2); assert.ok(s.spell);
+  assert.equal(s.bricks.length, layoutWord(s.spell.word).cells.length);
+  assert.ok(s.bricks.every(b => b.letter && b.alive && b.x >= 0 && b.x + b.w <= s.w));
+  const targets = new Set();
+  for (let i = 0; i < 12; i++) { game.jumpToWall(3); targets.add(s.spell.word); }
+  assert.ok(targets.size > 1, 'entries vary instead of hardcoding DROP');
+  game.jumpToWall(4); assert.equal(s.spell, null);
+  game.jumpToWall(5); assert.equal(s.spell, null, 'old fifth-wall mantra retired');
+});
+
+test('Spell fills matching slots, cycles useful letters, completes once and resets without slowing play', () => {
+  const { game, events } = make(); game.jumpToWall(3);
+  const s = game.snapshot(), first = s.spell.word;
+  for (const index of Array.from(first).map((_, i) => i).reverse()) {
+    if (first[index] === ' ') continue;
+    const brick = s.bricks.findIndex(b => b.alive);
+    s.bricks[brick].letter = first[index];
+    const before = s.spell.filled.filter(Boolean).length;
+    game.breakBrick(brick); game.breakBrick(brick);
+    assert.equal(s.spell.filled.filter(Boolean).length, before + 1, 'one live brick fills only one matching slot');
+    assert.equal(s.hitStopMs, 0); assert.equal(s.freeze, 0); assert.equal(s.timeScale, 1);
+    const useful = Array.from(first).filter((letter, i) => !s.spell.filled[i]);
+    if (useful.length) assert.ok(s.bricks.filter(b => b.alive).every(b => useful.includes(b.letter)));
+  }
+  assert.equal(events.filter(e => e[0] === 'spellComplete').length, 1);
+  assert.ok(s.spell.complete); assert.equal(s.spell.celebrate, 1.6);
+  game.breakBrick(s.bricks.findIndex(b => b.alive));
+  assert.equal(events.filter(e => e[0] === 'spellComplete').length, 1);
+  // Park all balls, including split rewards, while advancing the celebration clock.
+  for (const ball of s.balls) { ball.stuck = true; ball.vx = ball.vy = 0; }
+  for (let i = 0; i < 16; i++) { s.launchTimer = 0; game.step(0.1); }
+  assert.equal(s.spell.round, 2); assert.notEqual(s.spell.word, first);
+  assert.equal(s.spell.complete, false);
+  assert.ok(s.spell.filled.every((value, i) => value === (s.spell.word[i] === ' ')));
+});
+
+test('two balls fill separate Spell slots in one step and grey hits do not reveal the target', () => {
+  const { game, events } = make(); game.jumpToWall(3);
+  const s = game.snapshot();
+  const targets = [s.bricks[0], s.bricks.find(b => b.row === 0 && b.x > s.bricks[0].x + 70)];
+  assert.ok(targets[1]);
+  s.balls = targets.map(br => ({ ...s.balls[0], stuck: false, trail: [], x: br.x + br.w / 2,
+    y: br.y + br.h + s.balls[0].r - 1, vx: 0, vy: -400 }));
+  game.step(1 / 120);
+  assert.equal(events.filter(e => e[0] === 'spellFill').length, 2);
+  assert.equal(s.spell.filled.filter(Boolean).length, 2 + (s.spell.word.includes(' ') ? 1 : 0));
+  const grey = make({}, false).game; grey.jumpToWall(3);
+  grey.breakBrick(0);
+  assert.equal(grey.snapshot().spell.filled.filter(Boolean).length, grey.snapshot().spell.word.includes(' ') ? 1 : 0);
+  assert.equal(grey.snapshot().greyBricks, (grey.snapshot().bricks[0].jackpot || grey.snapshot().bricks[0].split || grey.snapshot().bricks[0].spiral || grey.snapshot().bricks[0].gif >= 0) ? 3 : 1);
+});
+
+test('a last-brick Spell completion holds its celebration before the next wall', () => {
+  const { game, events } = make(); game.jumpToWall(3);
+  const s = game.snapshot(), last = s.bricks[0];
+  for (const brick of s.bricks) brick.alive = false;
+  last.alive = true; last.letter = s.spell.word[0];
+  s.spell.filled.fill(true); s.spell.filled[0] = false;
+  game.breakBrick(0);
+  assert.equal(s.stats.walls, 2); assert.ok(s.spell.complete);
+  for (let i = 0; i < 16; i++) { s.launchTimer = 0; game.step(0.1); }
+  assert.equal(s.stats.walls, 3); assert.equal(s.spell, null);
+  assert.equal(events.filter(e => e[0] === 'spellComplete').length, 1);
 });
 
 test('a brick hit pushes the brick and ripples jelly outward by ring', () => {
@@ -190,22 +256,24 @@ test('a SPIRAL brick broken in colour pops out and bursts into the well (rung 7,
   assert.equal(s.pops[0].gif, -1, 'no picture on a spiral pop');
   assert.ok(names().includes('popOut'));
   assert.equal(s.well, null, 'nothing spawns before the burst');
+  for (const ball of s.balls) { ball.stuck = true; ball.vx = ball.vy = 0; }
   for (let i = 0; i < 80; i++) game.step(1 / 60, {});
   assert.equal(game.snapshot().pops.length, 0, 'the pop has burst within 1.3 s');
   const burst = events.find(e => e[0] === 'burst');
   assert.ok(burst && burst[1].kind === 'well', 'it burst into the well');
   const w = game.snapshot().well;
-  assert.ok(w && w.r === 70 && w.pull === 110);
+  assert.ok(w && w.r === 70 * 1.33 && w.pull === 110 * 1.33);
   assert.equal(w.preset, brick.spiral, 'the well is the field the brick showed');
   assert.equal(w.hue, brick.hue); assert.equal(w.spin, brick.spin);
-  assert.ok(w.x >= 110 && w.x <= 370 && w.y >= 280 && w.y <= 520, 'inside the band');
+  assert.ok(w.x >= 110 && w.x <= s.w - 110 && w.y >= 280 && w.y <= 520, 'inside the band');
   assert.equal(burst[1].x, w.x); assert.equal(burst[1].y, w.y);
   assert.equal(events.filter(e => e[0] === 'brick').at(-1)[1].plus, 3, 'a spiral brick is a special');
   // A second spiral brick while the well is live and empty: the new well replaces it (one at a time, never a collider).
   const sp2 = s.bricks.findIndex((b, i) => b.alive && b.spiral && i !== sp);
   if (sp2 >= 0) {
     game.breakBrick(sp2);
-    for (let i = 0; i < 80; i++) game.step(1 / 60, {});
+    for (const ball of s.balls) { ball.stuck = true; ball.vx = ball.vy = 0; }
+  for (let i = 0; i < 80; i++) game.step(1 / 60, {});
     assert.equal(events.filter(e => e[0] === 'burst').at(-1)[1].kind, 'well', 'the new spiral takes over');
     assert.equal(game.snapshot().well.preset, s.bricks[sp2].spiral);
     assert.equal(game.snapshot().colliders.length, 0, 'a spiral never becomes a collider');
@@ -213,6 +281,7 @@ test('a SPIRAL brick broken in colour pops out and bursts into the well (rung 7,
   // A GIF brick is always a collider, well or no well.
   const gif = s.bricks.findIndex(b => b.alive && b.gif >= 0);
   game.breakBrick(gif);
+  for (const ball of s.balls) { ball.stuck = true; ball.vx = ball.vy = 0; }
   for (let i = 0; i < 80; i++) game.step(1 / 60, {});
   assert.equal(game.snapshot().colliders.length, 1, 'a picture brick is a collider');
   assert.equal(game.snapshot().colliders[0].gif, s.bricks[gif].gif);
@@ -272,7 +341,7 @@ test('in grey a special brick (gif, split, jackpot) is +3 on the counter, a plai
   game.loseBall(); for (let i = 0; i < 8; i++) game.step(0.1);
   const s = game.snapshot();
   const idx = (fn) => s.bricks.findIndex(b => b.alive && fn(b));
-  const plain = idx(b => b.gif < 0 && !b.split && !b.jackpot), gif = idx(b => b.gif >= 0 && !b.jackpot), jackpot = idx(b => b.jackpot);
+  const plain = idx(b => b.gif < 0 && !b.spiral && !b.word && !b.split && !b.jackpot), gif = idx(b => b.gif >= 0 && !b.jackpot), jackpot = idx(b => b.jackpot);
   game.breakBrick(plain);
   assert.equal(s.greyBricks, 1);
   assert.equal(events.at(-2)[1].plus, 1);
@@ -294,4 +363,285 @@ test('reduced motion: the well appears at once, no tumble', () => {
   game.breakBrick(sp);
   assert.equal(s.pops.length, 0); assert.ok(s.well, 'the well is there on the same tick');
   assert.equal(events.filter(e => e[0] === 'burst').length, 1);
+});
+
+
+test('grey costs shrink per completed breakout, survive misses and wall clears, and reset per sit-down', () => {
+  const { game } = make({ saturation: 0.42 }, false);
+  const s = game.snapshot();
+  for (const cost of [20, 15, 11, 8, 6, 5, 5]) {
+    // Exercise ordinary wall clears; the wall-7 finale gate has its own lifecycle tests.
+    game.jumpToWall(1);
+    assert.equal(s.state, 'grey'); assert.equal(s.breakoutN, cost);
+    // End a wall during grey, then miss: neither operation resets earned progress or cost.
+    for (const br of s.bricks) br.alive = false;
+    Object.assign(s.bricks[0], { alive: true, gif: -1, spiral: null, word: null, split: false, jackpot: false, irisCore: false });
+    game.breakBrick(0);
+    assert.equal(s.greyBricks, 1); assert.equal(s.breakoutN, cost);
+    game.loseBall();
+    assert.equal(s.greyBricks, 1); assert.equal(s.breakoutN, cost); assert.equal(s.savedSat, 0.42);
+    for (let i = 0; i < cost - 1; i++) {
+      Object.assign(s.bricks[i], { gif: -1, spiral: null, word: null, split: false, jackpot: false, irisCore: false });
+      game.breakBrick(i);
+      assert.equal(s.pendingBreakout, i === cost - 2, 'only the threshold starts breakout');
+    }
+    for (let i = 0; i < 4; i++) game.step(0.1);
+    assert.equal(s.state, 'colour'); assert.equal(s.sat, 0.42);
+    assert.equal(s.balls.length, 1, 'breakout adds no gameplay ball');
+    game.loseBall(); for (let i = 0; i < 7; i++) game.step(0.1);
+  }
+  assert.equal(make({}, false).game.snapshot().breakoutN, 20);
+});
+
+test('each grey special earns three and explicit debug N stays fixed across relapses', () => {
+  const { game } = make({ breakoutN: 40 }, false);
+  const s = game.snapshot();
+  for (const [i, special] of [{ gif: 0 }, { spiral: 'candy' }, { word: 'DROP' }, { split: true }, { jackpot: true }].entries()) {
+    Object.assign(s.bricks[i], { gif: -1, spiral: null, word: null, split: false, jackpot: false }, special);
+    game.breakBrick(i);
+    assert.equal(s.greyBricks, (i + 1) * 3);
+  }
+  game.breakoutNow(); for (let i = 0; i < 4; i++) game.step(0.1);
+  game.loseBall(); for (let i = 0; i < 7; i++) game.step(0.1);
+  assert.equal(s.breakoutN, 40);
+  game.setBreakoutN(2); assert.equal(s.breakoutN, 2);
+});
+
+
+test('bubble tier distribution uses 70/20/10 boundaries', () => {
+  assert.deepEqual([0, 0.6999, 0.7, 0.8999, 0.9, 0.9999].map(bubbleTier), [1, 1, 2, 2, 3, 3]);
+});
+for (const tier of [1, 2, 3]) test(`tier ${tier} requires exact hits and rewards only its final pop`, () => {
+  const { game, events } = make(); const s = game.snapshot();
+  s.bricks = []; game.launchNow();
+  const c = { x: 240, y: 400, r: 46, vx: 0, vy: 0, hits: 0, tier, gif: 0, age: 80, alpha: 1, pulse: 0, fading: false };
+  s.colliders = [c]; const initial = s.sat;
+  for (let hit = 1; hit <= tier; hit++) {
+    s.freeze = 0;
+    Object.assign(s.balls[0], { x: 187, y: 400, vx: 300, vy: 0, stuck: false, lost: false });
+    game.step(1 / 60);
+    assert.equal(c.hits, hit);
+    assert.equal(c.fading, hit === tier);
+    assert.equal(events.filter(e => e[0] === 'bubblePop').length, hit === tier ? 1 : 0);
+    assert.ok(Math.abs(s.sat - initial - (hit === tier ? [0, .03, .06, .10][tier] : 0)) < 1e-9);
+  }
+});
+
+
+test('Spell picture and spiral tiles retain normal payloads', () => {
+  const { game, events } = make();
+  game.jumpToWall(3);
+  const s = game.snapshot();
+  for (const kind of ['gif', 'spiral']) {
+    const index = s.bricks.findIndex(b => b.alive && (kind === 'gif' ? b.gif >= 0 : !!b.spiral));
+    assert.ok(index >= 0, `formation contains ${kind}`);
+    game.breakBrick(index);
+    const pop = events.filter(e => e[0] === 'popOut').at(-1)?.[1];
+    assert.ok(pop);
+    assert.ok(kind === 'gif' ? pop.gif >= 0 : !!pop.spiral);
+  }
+});
+
+
+test('landscape formations fit the arena and leave a clear play lane', () => {
+  const { game } = make();
+  for (const wall of [1, 3]) {
+    game.jumpToWall(wall);
+    const s = game.snapshot();
+    assert.equal(s.w / s.h, 16 / 9);
+    for (const b of s.bricks) {
+      assert.ok(b.x >= 0 && b.x + b.w <= s.w);
+      assert.ok(b.y + b.h < s.paddle.y - 250);
+    }
+  }
+});
+
+
+test('GIF growth starts smaller, reaches its cap at wall six and stays capped', () => {
+  assert.equal(gifScaleForWall(0), .8);
+  assert.ok(Math.abs(gifScaleForWall(5) - 1.7) < 1e-9);
+  assert.equal(gifScaleForWall(99), gifScaleForWall(5));
+  for (let wall = 1; wall <= 5; wall++) assert.ok(gifScaleForWall(wall) > gifScaleForWall(wall - 1));
+});
+
+
+test('breakout shield catches a miss and expires after its flicker', () => {
+  const { game } = make({}, false);
+  game.breakoutNow(); for (let i = 0; i < 4; i++) game.step(.1);
+  const s = game.snapshot(); assert.ok(s.breakoutShield);
+  const b = s.balls[0]; b.stuck = false; b.x = 20; b.y = s.paddle.y + 14; b.vx = 0; b.vy = 300;
+  game.step(.05, { x: s.w / 2 });
+  assert.ok(b.vy < 0); assert.equal(s.state, 'colour');
+  s.balls = [];
+  for (let i = 0; i < 19; i++) game.step(.1);
+  assert.ok(s.breakoutShield && s.mod.shield);
+  for (let i = 0; i < 8; i++) game.step(.1);
+  assert.equal(s.breakoutShield, null); assert.equal(s.mod.shield, false);
+});
+
+ test('grey fractures follow counter and shatter only on breakout', () => {
+  const { game, events } = make({ breakoutN: 20 }, false);
+  game.breakBrick(0);
+  const s = game.snapshot();
+  assert.equal(s.fractures, Math.min(1, s.greyBricks / 20));
+  assert.ok(s.fractures > 0);
+  assert.equal(events.filter(e => e[0] === 'shatterWall').length, 0);
+  game.breakoutNow();
+  for (let i = 0; i < 4; i++) game.step(.1);
+  assert.equal(s.state, 'colour');
+  assert.equal(s.fractures, 0);
+  assert.equal(events.filter(e => e[0] === 'shatterWall').length, 1);
+ });
+
+
+test('wall four is a separated dome with a persistent central well; wall seven replaces the dome with pendulums', () => {
+  const { game } = make(); game.jumpToWall(4);
+  const s = game.snapshot(), bricks = s.bricks;
+  assert.equal(s.dome, true); assert.equal(s.spell, null); assert.equal(bricks.length, 85);
+  assert.equal(s.well.persistent, true); assert.equal(s.well.x, s.w / 2); assert.equal(s.well.y, s.h / 2);
+  for (let i = 0; i < bricks.length; i++) for (let j = i + 1; j < bricks.length; j++) {
+    const a = bricks[i], b = bricks[j];
+    assert.ok(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y, 'no overlapping collision boxes');
+  }
+  const well = s.well; well.age = 100; s.balls = []; game.step(.1);
+  assert.equal(s.well, well); assert.equal(well.fade, 1);
+  game.jumpToWall(7); assert.equal(s.dome, false); assert.equal(s.well, null);
+  assert.equal(s.pendulums.length, 3); assert.equal(s.bricks.length, 171);
+});
+
+test('dome energy rises on hits, remains bounded, and falls between hits', () => {
+  const { game } = make(); game.jumpToWall(4);
+  const s = game.snapshot(), well = s.well; s.balls = [];
+  game.breakBrick(0); assert.ok(well.energy > 0);
+  for (let i = 1; i < 12; i++) game.breakBrick(i);
+  assert.equal(well.energy, 1);
+  const angle = well.rot; game.step(.1);
+  assert.ok(well.energy < 1 && well.energy > .95); assert.ok(well.rot < angle);
+  assert.ok(well.spin <= 3.2);
+});
+
+test('dome releases with a bounded boost and cannot immediately recapture or replace its held ball', () => {
+  const { game } = make(); game.jumpToWall(4);
+  const s = game.snapshot(), well = s.well, ball = s.balls[0];
+  well.energy = 1; ball.stuck = false; ball.x = well.x + 85; ball.y = well.y; ball.vx = 0; ball.vy = -300;
+  game.step(.01); assert.equal(well.captured, ball); assert.ok(ball.orbit.turns < 1.15);
+  const other = { ...ball, orbit: null, trail: [], x: well.x + 70 }; s.balls.push(other);
+  game.step(.01); assert.equal(well.captured, ball); assert.equal(other.orbit, null);
+  ball.orbit.done = 100; game.step(.01);
+  assert.equal(ball.orbit, null); assert.equal(well.captured, null); assert.equal(well.used, false);
+  assert.ok(ball.domeBoost > 0 && ball.domeBoost <= .25); assert.ok(ball.domeCooldown > 1);
+  game.step(.1); assert.equal(ball.orbit, null);
+});
+
+test('dome is absent in grey and restored by breakout on the same wall', () => {
+  const { game } = make({}, false); game.jumpToWall(4);
+  const s = game.snapshot(); assert.equal(s.well, null);
+  game.breakoutNow(); for (let i = 0; i < 5; i++) game.step(.1);
+  assert.equal(s.well.persistent, true);
+  game.relapseNow(); for (let i = 0; i < 8; i++) game.step(.1);
+  assert.equal(s.state, 'grey'); assert.equal(s.well, null);
+  game.breakoutNow(); for (let i = 0; i < 5; i++) game.step(.1);
+  assert.equal(s.well.persistent, true);
+});
+
+
+test('expired and barely visible wells cannot capture a passing ball', () => {
+  for (const state of [{ age: 6, fade: .05, born: 6 }, { age: 0, fade: 1, born: 0 }]) {
+    const { game } = make(); const s = game.snapshot(), b = s.balls[0];
+    b.stuck = false; b.x = 650; b.y = 420; b.vx = 100; b.vy = 200;
+    s.well = { x: 640, y: 420, r: 90, pull: 145, ttl: 6, rot: 0, used: false, captured: null, ...state };
+    game.step(.01);
+    assert.equal(b.orbit, null);
+    assert.ok(b.vx > 0 && b.vy > 0);
+  }
+});
+
+test('an exiting ball cannot start relapse while another ball survives, regardless of iteration order',()=>{
+ for(const reverse of [false,true]) for(const count of [2,3]) {
+  const {game,events}=make();const s=game.snapshot();
+  const base={...s.balls[0],stuck:false,falling:false,lost:false,orbit:null};
+  const gone={...base,x:50,y:740,vx:0,vy:200,trail:[]};
+  const survivors=Array.from({length:count-1},(_,i)=>({...base,x:600+i*60,y:500,vx:0,vy:-100,trail:[]}));
+  s.balls=reverse?[...survivors,gone]:[gone,...survivors];
+  game.step(.02);
+  assert.equal(s.state,'colour');assert.equal(s.transition,null);assert.equal(s.balls.length,count-1);
+  assert.equal(events.filter(e=>e[0]==='relapseStart').length,0);
+  while(s.balls.length>1)game.loseBall();
+  assert.equal(s.transition,null);game.loseBall();
+  assert.equal(s.transition.kind,'relapse');
+  assert.equal(events.filter(e=>e[0]==='relapseStart').length,1);
+ }
+});
+
+test('cleanup aim ramps through the last twenty percent only at paddle bounces',()=>{
+ let previous = Infinity;
+ for(const count of [1,8,16,17]) {
+  const {game}=make();const s=game.snapshot();s.wallAge=2;
+  s.bricks.forEach((br,i)=>Object.assign(br,{alive:i<count,x:800+i*20,y:100,angle:0,reformSafe:false}));
+  const b=s.balls[0];Object.assign(b,{stuck:false,x:s.paddle.x,y:s.paddle.y-s.paddle.h/2-b.r-1,vx:0,vy:220});
+  game.step(.02);
+  assert.ok(b.vy<0);
+  if(count<=16){const turn=Math.atan2(b.vx,-b.vy);assert.ok(turn>0);assert.ok(turn<=Math.PI/12+1e-8);assert.ok(turn<previous);previous=turn;}
+  else assert.equal(b.vx,0);
+  const direction=Math.atan2(b.vx,-b.vy);game.step(.02);
+  assert.ok(Math.abs(Math.atan2(b.vx,-b.vy)-direction)<1e-8,'no mid-flight steering');
+ }
+});
+
+
+test('Tide occupies wall two, keeps payloads while moving, and hands off to Spell', () => {
+  const { game } = make();
+  game.jumpToWall(2);
+  const s = game.snapshot(), bricks = s.bricks.slice();
+  assert.equal(s.stats.walls, 1); assert.ok(s.tide); assert.equal(bricks.length, 80);
+  assert.equal(s.dome, false); assert.equal(s.well, null);
+  for (const kind of ['gif', 'spiral', 'word', 'split']) {
+    assert.ok(bricks.some(b => kind === 'gif' ? b.gif >= 0 : b[kind]), kind + ' roster retained');
+  }
+  s.balls = [];
+  const dead = bricks.findIndex(b => b.gif < 0 && !b.spiral && !b.word && !b.split && !b.jackpot);
+  const first = bricks[dead === 0 ? 1 : 0], x = first.x;
+  const payloads = bricks.map(b => [b.gif, b.spiral, b.split]);
+  game.breakBrick(dead);
+  for (let i = 0; i < 100; i++) game.step(.05);
+  assert.notEqual(first.x, x); assert.equal(s.bricks.length, 80);
+  assert.equal(s.bricks[dead].alive, false, 'the current never refills destroyed pieces');
+  for (let i = 0; i < bricks.length; i++) {
+    assert.equal(s.bricks[i], bricks[i], 'surviving identities remain stable');
+    assert.deepEqual([bricks[i].gif, bricks[i].spiral, bricks[i].split], payloads[i]);
+  }
+  for (let i = 0; i < bricks.length; i++) game.breakBrick(i);
+  assert.equal(s.stats.walls, 2); assert.equal(s.tide, null); assert.ok(s.spell);
+});
+
+test('Tide reduced motion is still and its moving faces use oriented ball collision', () => {
+  const quiet = make({ reduced: true }).game; quiet.jumpToWall(2);
+  const qs = quiet.snapshot(); qs.balls = [];
+  const pose = qs.bricks.map(b => [b.x, b.y, b.angle]);
+  for (let i = 0; i < 20; i++) quiet.step(.05);
+  assert.deepEqual(qs.bricks.map(b => [b.x, b.y, b.angle]), pose);
+  const { game } = make(); game.jumpToWall(2);
+  const s = game.snapshot(), br = s.bricks[70], ball = s.balls[0];
+  Object.assign(br, { gif: -1, word: null, spiral: null, split: false, jackpot: false });
+  const nx = -Math.sin(br.angle), ny = Math.cos(br.angle), d = br.h / 2 + ball.r + 1;
+  Object.assign(ball, { stuck: false, x: br.x + br.w / 2 + nx * d, y: br.y + br.h / 2 + ny * d, vx: -nx * 300, vy: -ny * 300 });
+  game.step(.02);
+  assert.equal(br.alive, false);
+  assert.ok(ball.vx * nx + ball.vy * ny > 0, 'ball rebounds away from the visible face');
+});
+
+test('opening ball waits for wall arrival even when launch is pressed', () => {
+  const game = createGame(); game.replayEntrance();
+  for(let i=0;i<18;i++) game.step(.1,{launch:true});
+  assert.equal(game.snapshot().balls[0].stuck,true);
+  for(let i=0;i<3;i++) game.step(.1,{launch:true});
+  assert.equal(game.snapshot().balls[0].stuck,false);
+});
+
+
+test('loss recovery retains a short falling transition and relaunches within 1.2 seconds',()=>{
+ const {game}=make({saturation:.5});game.loseBall();
+ for(let i=0;i<4;i++)game.step(.1);assert.equal(game.snapshot().state,'colour');
+ game.step(.1);const s=game.snapshot();assert.equal(s.state,'grey');assert.equal(s.balls[0].stuck,true);
+ for(let i=0;i<7;i++)game.step(.1);assert.equal(s.balls[0].stuck,false);
 });

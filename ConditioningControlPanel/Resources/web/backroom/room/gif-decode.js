@@ -44,7 +44,7 @@ function whileLoading(promise, signal) {
  * `onFrame` (optional) runs after each frame lands in the canvas, the first one excluded.
  * @returns {Promise<{canvas, animated, frames, index, tick(now, still), dispose()} | null>}
  */
-export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS, onFrame = null, signal = null, maxBytes = MEDIA_LIMITS.bytes } = {}) {
+export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS, onFrame = null, signal = null, maxBytes = MEDIA_LIMITS.bytes, preferCanvas = false } = {}) {
   let decoder = null, data = null, type = '', validated = false;
   const controller = new AbortController();
   const abort = () => { controller.abort(); try { decoder?.close(); } catch {} };
@@ -52,7 +52,7 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
   if (signal?.aborted) abort();
   const timer = setTimeout(abort, MEDIA_LIMITS.loadMs);
   try {
-    const res = await whileLoading(fetch(url, { mode: 'cors', credentials: 'omit', signal: controller.signal }), controller.signal);
+    const res = await whileLoading(fetch(url, { mode: 'cors', credentials: 'same-origin', signal: controller.signal }), controller.signal);
     if (!res.ok) throw new MediaLimitError('Media transfer failed','transfer');
     const ext = (new URL(url, location.href).pathname.split('.').pop() || '').toLowerCase();
     type = (res.headers.get('content-type') || '').split(';')[0].trim() || EXT[ext] || '';
@@ -62,7 +62,7 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
     if (!dimensions) throw new MediaLimitError('Unsupported image header','transfer');   // our sniffer's gap, not the file's fault: the browser may still decode it
     checkDimensions(...dimensions); validated = true;
     controller.signal.throwIfAborted();
-    decoder = canAnimate() && await whileLoading(ImageDecoder.isTypeSupported(type), controller.signal)
+    decoder = !preferCanvas && canAnimate() && await whileLoading(ImageDecoder.isTypeSupported(type), controller.signal)
       ? new ImageDecoder({ data, type }) : await compatibilityDecoder(data, type);
     controller.signal.throwIfAborted();
     if (!decoder) return await boundedStill(data, type, maxEdge, controller.signal);

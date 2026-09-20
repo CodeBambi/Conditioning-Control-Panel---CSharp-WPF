@@ -13,12 +13,14 @@
  *
  * createWellFx({ reduced, rng, noiseTile }) -> { draw(g, well, opts), tile(preset, rot, hue, mix, size, frameNo), reset(), dispose() }
  * tile() is the same field in a small disc for a spiral BRICK (and its pop): one
- * offscreen per preset + hue + size, recomposed every third frame, staggered.
+ * retained image per preset, hue, size and colour step; callers rotate it smoothly.
  * opts: { mix, col, dt, particles, pink, violet, mint, spiral }
  * The sim gives us { x, y, r, pull, rot, age, ttl, fade, captured, preset, spin, hue }.
  * ==========================================================================*/
 
+import {createSoftwareFields} from './software-fields.js';
 import { createLoomKit, LOOM_PRESETS } from '../../shared/hypno/loom.js';
+import { randomParams2 } from '../../../arcademy/engine/loom/loomField.js';
 
 const TAU = Math.PI * 2;
 const IN_S = 0.4, FALLBACK_PRESET = 'whirl';
@@ -46,9 +48,67 @@ function makeTear(size, r, rng, noiseTile) {
   return c;
 }
 
-export function createWellFx({ reduced = false, rng = Math.random, noiseTile = null } = {}) {
+export function createWellFx({ reduced = false, rng = Math.random, noiseTile = null, software = false } = {}) {
   let disc = null, dg = null, tear = null, size = 0, half = 0, builtR = 0;
   let frames = 0, cap = 0, chunkAt = 0, kit = null, kitDead = false;
+  let composedAt = -Infinity, composedRot = 0, clock = 0, composedWell = null, composedOk = false;
+  let morphWell = null, morphAt = 0, morphA = 'dome-a', morphB = 'dome-b';
+  const softwareFields=createSoftwareFields();
+  const drawField=(k,name,d,rot,alpha=1)=>software
+    ? softwareFields.draw(k,dg,name,d,rot,alpha)
+    : k.draw(dg,name,-d/2,-d/2,d,d,{angle:rot,alpha,backing:'small'});
+  function recipe() {
+    const q = randomParams2();
+    q.layer.direction = q.layer2.direction = 1;
+    q.centerpiece.kind = 'none'; q.hueCycles = 0;
+    q.pulse.amp = 0; q.wobble.amp = Math.min(.08, q.wobble.amp);
+    return q;
+  }
+  function drawDome(k, well, d, rot) {
+    if (morphWell !== well) {
+      morphWell = well; morphAt = well.age;
+      k.setRecipe(morphA, recipe()); k.setRecipe(morphB, recipe());
+      softwareFields.invalidate(morphA);softwareFields.invalidate(morphB);
+    }
+    const elapsed = reduced ? 0 : well.age - morphAt;
+    if (elapsed >= 7) {
+      [morphA, morphB] = [morphB, morphA]; morphAt = well.age;
+      k.setRecipe(morphB, recipe());softwareFields.invalidate(morphB);
+    }
+    const t = reduced ? 0 : clamp((well.age - morphAt) / 7, 0, 1), blend = t * t * (3 - 2 * t);
+    const first = drawField(k,morphA,d,rot);
+    if (blend > 0) drawField(k,morphB,d,rot,blend);
+    return first;
+  }
+
+  // One small retained feather mask and one animated media surface, never a fullscreen blur.
+  let portrait=null, portraitMask=null, portraitAt=-Infinity, portraitWell=null, portraitCycle=-1;
+  function domePortrait(g,well,media,alpha) {
+    if (!well.persistent || reduced || !media?.keys || !media?.frame) return;
+    const age=well.born ?? well.age ?? 0, cycle=Math.floor(age/13), phase=age%13;
+    if (phase<6 || phase>10.5) return;
+    const opacity=Math.min(1,(phase-6)/.9,(10.5-phase)/1.1)*alpha;
+    const keys=media.keys();if(!keys.length || opacity<=0) return;
+    const frame=media.frame(cycle%keys.length);if(!frame) return;
+    if(!portrait) {
+      portrait=document.createElement('canvas');portrait.width=portrait.height=256;
+      portraitMask=document.createElement('canvas');portraitMask.width=portraitMask.height=256;
+      const m=portraitMask.getContext('2d'), fade=m.createRadialGradient(128,128,68,128,128,126);
+      fade.addColorStop(0,'#fff');fade.addColorStop(.5,'rgba(255,255,255,.85)');fade.addColorStop(1,'rgba(255,255,255,0)');
+      m.fillStyle=fade;m.fillRect(0,0,256,256);
+    }
+    if(portraitWell!==well || portraitCycle!==cycle || clock-portraitAt>=1/30) {
+      portraitAt=clock;portraitWell=well;portraitCycle=cycle;
+      const p=portrait.getContext('2d',{willReadFrequently:software});
+      const w=frame.videoWidth||frame.naturalWidth||frame.width,h=frame.videoHeight||frame.naturalHeight||frame.height;
+      if(!w||!h) return;
+      const k=Math.max(256/w,256/h);
+      p.clearRect(0,0,256,256);p.drawImage(frame,(256-w*k)/2,(256-h*k)/2,w*k,h*k);
+      p.globalCompositeOperation='destination-in';p.drawImage(portraitMask,0,0);p.globalCompositeOperation='source-over';
+    }
+    const radius=well.r*.76;
+    g.save();g.globalAlpha=opacity;g.drawImage(portrait,well.x-radius,well.y-radius,radius*2,radius*2);g.restore();
+  }
 
   /** The page's Loom context, made on the first well and freed on dispose. */
   function loom() {
@@ -58,12 +118,14 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
   }
 
   function ensure(r) {
+    r = Math.ceil(r / 4) * 4;
     const want = Math.ceil(r * 2) + 8;
     if (disc && want === size && builtR === r) return;
     size = want; half = size / 2; builtR = r;
     disc = document.createElement('canvas'); disc.width = disc.height = size;
-    dg = disc.getContext('2d');
+    dg = disc.getContext('2d', { willReadFrequently: software });
     tear = makeTear(size, r, rng, noiseTile);
+    composedAt = -Infinity;
   }
 
   /** Re-draw the field into the offscreen disc. Called every other frame (once in reduced motion). Returns false without the Loom. */
@@ -85,7 +147,8 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
     let drawn = false;
     try {
       if (well.hue && 'filter' in dg) dg.filter = `hue-rotate(${well.hue | 0}deg)`;
-      drawn = k.draw(dg, name, -d / 2, -d / 2, d, d, { angle: rot, alpha: 1, backing: 'small' });
+      drawn = well.persistent ? drawDome(k, well, d, rot)
+        : drawField(k,name,d,rot);
     } catch (e) { drawn = false; }
     try { dg.filter = 'none'; } catch (e) { /* no filter support */ }
     if (!drawn) { dg.restore(); return false; }
@@ -132,25 +195,37 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
     // used to leave the field near invisible until the release snapped it to full (owner, 2026-09-19).
     const fadeIn = clamp((typeof well.born === 'number' ? well.born : well.age || 0) / IN_S, 0, 1);
     const a = clamp(well.fade, 0, 1) * fadeIn;
+    const musicPulse = well.persistent && !reduced ? well.musicPulse || 0 : 0;
+    const hitPulse = well.persistent && !reduced ? well.hitPulse || 0 : 0;
+    const pulse = musicPulse * .025 + hitPulse * .065;
     if (a <= 0 || mix <= 0) return;
     cap += ((well.captured ? 1 : 0) - cap) * Math.min(1, dt * 6);
 
     g.save();
     // The pull radius reads as a soft dent in the field.
     const pull = g.createRadialGradient(well.x, well.y, r * 0.5, well.x, well.y, well.pull || 110);
-    pull.addColorStop(0, col(violet, mix, 0.2 * a)); pull.addColorStop(1, col(violet, mix, 0));
+    const tint = hitPulse > .05 ? pink : violet;
+    pull.addColorStop(0, col(tint, mix, (0.2 + musicPulse * .08 + hitPulse * .26) * a)); pull.addColorStop(1, col(tint, mix, 0));
     g.fillStyle = pull; g.beginPath(); g.arc(well.x, well.y, well.pull || 110, 0, 7); g.fill();
     // No halo, no rim, no glow (owner, 2026-09-19: "remove the pink circle, the edges faded directly on the screen"):
     // the disc's own feather (compose) is the only edge.
     ensure(r);
     frames++;
-    let ok = true;
-    if (frames % (reduced ? 30 : 2) === 1) ok = compose(well, r, well.rot || 0, mix, cap);
+    clock += Math.max(0, dt);
+    // Software Firefox must read the live WebGL field back to the CPU. Keep
+    // morphing at 15 Hz, while position, size, rotation and particles stay live.
+    const interval = reduced ? .5 : software ? 1 / 15 : 1 / 30;
+    if (composedWell !== well || clock - composedAt + 1e-6 >= interval) {
+      composedWell = well; composedAt = clock; composedRot = well.rot || 0;
+      composedOk = compose(well, builtR, composedRot, mix, cap);
+    }
+    const ok = composedOk;
     if (ok && !kitDead) {
-      const pop = 0.82 + 0.18 * fadeIn + cap * 0.04;
+      const pop = 0.82 + 0.18 * fadeIn + cap * 0.04 + pulse;
       g.save();
       g.globalAlpha = a;
-      g.translate(well.x, well.y); g.scale(pop, pop);
+      g.translate(well.x, well.y); g.scale(pop * r / builtR, pop * r / builtR);
+      if (!reduced) g.rotate((well.rot || 0) - composedRot);
       g.drawImage(disc, -half, -half);
       g.restore();
     } else {
@@ -160,6 +235,7 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
     // The faint procedural arms still ride on top, so the wind has visible lines.
     spiral(g, well.x, well.y, r * 0.7, (well.rot || 0) * 1.3, col(mint, mix), a * 0.22, 3);
     spiral(g, well.x, well.y, r * 0.45, (well.rot || 0) * 1.7, col(pink, mix), a * 0.26, 2);
+    domePortrait(g,well,o.media,a*mix);
     g.restore();
 
     if (reduced || !P || !ok) return;
@@ -175,22 +251,25 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
 
   /* ---- brick tiles: the field in a small disc, for the spiral bricks and their pops ---- */
   const tiles = new Map();
-  const TILE_CAP = 12;
+  const TILE_CAP = 96;
   /** A canvas of `size` px holding preset `preset` turned to `rot` (hue-shifted, grey-safe by `mix`), or null without the Loom.
-   *  Recomposed every third frame (once in reduced motion), each tile on its own frame so they never all render together. */
+   *  Retained until eviction. Rotation belongs to the caller, keeping tiny faces off the live WebGL readback path. */
   function tile(preset, rot, hue, mix, size, frameNo) {
     const k = loom();
     if (!k) return null;
     const name = LOOM_PRESETS[preset] ? preset : FALLBACK_PRESET;
-    const key = name + '|' + (hue | 0) + '|' + size;
+    const tone = Math.round(mix * 10) / 10;
+    const key = name + '|' + (hue | 0) + '|' + size + '|' + tone;
     let t = tiles.get(key);
     if (!t) {
       if (tiles.size >= TILE_CAP) tiles.delete(tiles.keys().next().value);
       const c = document.createElement('canvas'); c.width = c.height = size;
-      t = { c, x: c.getContext('2d'), ok: false, ever: false, ph: tiles.size % 3 };
+      t = { c, x: c.getContext('2d', { willReadFrequently: software }), ok: false, ever: false, ph: tiles.size % 3 };
       tiles.set(key, t);
     }
-    const due = !t.ever || (!reduced && ((frameNo | 0) + t.ph) % 3 === 0);
+    // Small brick faces retain their Loom image and rotate at draw time.
+    // Repainting WebGL into 2D for every brick stalls Firefox repeatedly.
+    const due = !t.ever;
     if (!due) return t.ok ? t.c : null;
     t.ever = true;
     const x = t.x, h = size / 2, r = h - 1;
@@ -202,11 +281,11 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
     let drawn = false;
     try {
       if (hue && 'filter' in x) x.filter = `hue-rotate(${hue | 0}deg)`;
-      drawn = k.draw(x, name, -d / 2, -d / 2, d, d, { angle: rot, alpha: 1, backing: 'small' });
+      drawn = k.draw(x, name, -d / 2, -d / 2, d, d, { angle: 0, alpha: 1, backing: software ? 128 : 'small' });
     } catch (e) { drawn = false; }
     try { x.filter = 'none'; } catch (e) { /* no filter support */ }
-    if (drawn && mix < 0.999) {
-      x.globalCompositeOperation = 'saturation'; x.globalAlpha = 1 - mix;
+    if (drawn && tone < 0.999) {
+      x.globalCompositeOperation = 'saturation'; x.globalAlpha = 1 - tone;
       x.fillStyle = '#808080'; x.fillRect(-h, -h, size, size);
       x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
     }
@@ -225,8 +304,8 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
   return {
     draw,
     tile,
-    reset() { cap = 0; chunkAt = 0; frames = 0; },
+    reset() { portraitWell=null;portraitAt=-Infinity; cap = 0; chunkAt = 0; frames = 0; morphWell = null; composedWell = null; composedAt = -Infinity; composedOk = false; },
     /** Free the Loom context (the station's close). A later draw makes a new one. */
-    dispose() { tiles.clear(); if (kit) { try { kit.dispose(); } catch (e) { /* noop */ } kit = null; } kitDead = false; },
+    dispose() { softwareFields.clear();tiles.clear(); if (kit) { try { kit.dispose(); } catch (e) { /* noop */ } kit = null; } kitDead = false; },
   };
 }

@@ -30,7 +30,7 @@
  * until the browser restores the context, then the field again.
  * ==========================================================================*/
 
-import { createFieldRenderer, normalizeParams2, loopMs2, drawFallbackFrame } from '../../../arcademy/engine/loom/loomField.js';
+import { createFieldRenderer, normalizeParams2, loopMs2, drawFallbackFrame, randomParams2 } from '../../../arcademy/engine/loom/loomField.js';
 
 const TWO_PI = Math.PI * 2;
 const FALLBACK_LONG = 256;   // the 2D wedge renderer is CPU work: never more than this
@@ -84,7 +84,7 @@ export function spanRad(l) {
 
 /** Clockwise screen radians -> phase 0..1 whose layer-1 rotation is `rad` (modulo the layer's symmetry). */
 export function phaseForAngle(presetName, rad) {
-  const q = LOOM_PRESETS[presetName];
+  const q = typeof presetName === 'object' ? presetName : LOOM_PRESETS[presetName];
   if (!q || !Number.isFinite(rad)) return 0;
   const p = rad / (q.layer.direction * spanRad(q.layer));
   const f = p - Math.floor(p);
@@ -93,7 +93,7 @@ export function phaseForAngle(presetName, rad) {
 
 /** Loop phase at clock `now` (ms): (now % loopMs2) / loopMs2. */
 export function phaseAt(presetName, now) {
-  const q = LOOM_PRESETS[presetName];
+  const q = typeof presetName === 'object' ? presetName : LOOM_PRESETS[presetName];
   if (!q || !Number.isFinite(now)) return 0;
   const loop = loopMs2(q);
   return (((now % loop) + loop) % loop) / loop;
@@ -160,7 +160,14 @@ function release(kit) {
  * @param {{still?: boolean, log?: (msg: string) => void}} [o]
  * @returns {{webgl: boolean, draw: Function, paint: Function, setStill: Function, dispose: Function, debug: Function}}
  */
-export function createLoomKit({ still = false, log = null } = {}) {
+let recipeId = 0;
+export function createLoomKit({ still = false, log = null, procedural = false } = {}) {
+  // Each fullscreen showing gets one stable recipe, shared across its frames.
+  const generated = procedural ? randomParams2() : null;
+  if (generated) { generated.layer.direction = 1; generated.layer2.direction = 1; }
+  const recipes = procedural ? { ...LOOM_PRESETS, screen: generated } : { ...LOOM_PRESETS };
+  let revision = 0;
+  let recipeKey = procedural ? `generated-${++recipeId}:` : "";
   const say = (m) => { if (typeof log === 'function') { try { log(m); } catch (e) { /* noop */ } } };
   let isStill = !!still, disposed = false, fb = null, fbKey = '';
   const held = new Map();   // preset -> the last angle it was given, held while still
@@ -170,9 +177,9 @@ export function createLoomKit({ still = false, log = null } = {}) {
   const ensure = () => (disposed ? null : acquire(kit, say));
 
   function phaseOf(name, o) {
-    if (isStill) return held.has(name) ? phaseForAngle(name, held.get(name)) : 0;
-    if (Number.isFinite(o.angle)) { held.set(name, o.angle); return phaseForAngle(name, o.angle); }
-    return phaseAt(name, Number.isFinite(o.now) ? o.now : taskClock());
+    if (isStill) return held.has(name) ? phaseForAngle(recipes[name], held.get(name)) : 0;
+    if (Number.isFinite(o.angle)) { held.set(name, o.angle); return phaseForAngle(recipes[name], o.angle); }
+    return phaseAt(recipes[name], Number.isFinite(o.now) ? o.now : taskClock());
   }
 
   /** The surface holding `name` at `phase` for a w x h draw, rendered only when it is not already there.
@@ -187,10 +194,10 @@ export function createLoomKit({ still = false, log = null } = {}) {
   function surface(name, phase, w, h, long) {
     const s = ensure();
     if (!s) return null;
-    const q = LOOM_PRESETS[name];
+    const q = recipes[name];
     if (s.field && !s.lost) {
       const b = backingFor(w, h, long);
-      const key = name + '|' + phase.toFixed(5) + '|' + b.w + 'x' + b.h;
+      const key = recipeKey + revision + ':' + name + '|' + phase.toFixed(5) + '|' + b.w + 'x' + b.h;
       if (s.key !== key) {
         if (s.canvas.width < b.w || s.canvas.height < b.h) { s.canvas.width = Math.max(s.canvas.width, b.w); s.canvas.height = Math.max(s.canvas.height, b.h); }
         try { s.field.render(q, phase, b.w, b.h); s.renders++; s.key = key; s.rect = b; }
@@ -200,7 +207,7 @@ export function createLoomKit({ still = false, log = null } = {}) {
       if (!s.lost) return { canvas: s.canvas, sx: 0, sy: s.canvas.height - s.rect.h, sw: s.rect.w, sh: s.rect.h };
     }
     const b = backingFor(w, h, Math.min(long, FALLBACK_LONG));
-    const key = name + '|' + phase.toFixed(5) + '|' + b.w + 'x' + b.h;
+    const key = recipeKey + revision + ':' + name + '|' + phase.toFixed(5) + '|' + b.w + 'x' + b.h;
     if (!fb) fb = document.createElement('canvas');
     if (fbKey !== key) {
       if (fb.width !== b.w || fb.height !== b.h) { fb.width = b.w; fb.height = b.h; }
@@ -220,12 +227,19 @@ export function createLoomKit({ still = false, log = null } = {}) {
   });
 
   Object.assign(kit, {
+    /** Replace one bounded dynamic recipe slot, invalidating the shared render cache. */
+    setRecipe(name, params) {
+      if (disposed || !name || Object.hasOwn(LOOM_PRESETS, name)) return false;
+      if (!Object.hasOwn(recipes, name) && Object.keys(recipes).length >= Object.keys(LOOM_PRESETS).length + 2) return false;
+      if (!revision) recipeKey += `dynamic-${++recipeId}:`;
+      recipes[name] = normalizeParams2(params); revision++; fbKey = ''; return true;
+    },
     /**
      * Draw preset `name` covering x, y, w, h of a 2D context. `angle` (clockwise rad) drives the spin, else `now`
      * (ms). Give every draw of a frame the same `now` so they share one render; without it the task's clock is used.
      */
     draw(ctx2d, name, x, y, w, h, { now, angle, alpha = 1, backing = 'long' } = {}) {
-      if (disposed || !ctx2d || !LOOM_PRESETS[name] || !(w > 0 && h > 0)) return false;
+      if (disposed || !ctx2d || !recipes[name] || !(w > 0 && h > 0)) return false;
       const src = surface(name, phaseOf(name, { now, angle }), w, h, longOf(backing));
       if (!src) return false;
       const a = Math.max(0, Math.min(1, Number.isFinite(alpha) ? alpha : 1));
@@ -240,7 +254,7 @@ export function createLoomKit({ still = false, log = null } = {}) {
 
     /** Fill a caller-owned canvas (a CanvasTexture's image) with preset `name`, rendered at no more than 512 px. */
     paint(canvas, name, { now, angle } = {}) {
-      if (disposed || !canvas || !LOOM_PRESETS[name] || !(canvas.width > 0 && canvas.height > 0)) return false;
+      if (disposed || !canvas || !recipes[name] || !(canvas.width > 0 && canvas.height > 0)) return false;
       const long = Math.min(LOOM_BACKING.long, Math.max(canvas.width, canvas.height));
       const src = surface(name, phaseOf(name, { now, angle }), canvas.width, canvas.height, long);
       const g = src && canvas.getContext('2d');
