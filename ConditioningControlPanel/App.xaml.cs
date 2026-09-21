@@ -2080,21 +2080,29 @@ namespace ConditioningControlPanel
             Services.Prizes.PrizeGrants.Attach(Ownership);
             // Buying a v2 prize from the options panel instead of the Back Room (owner decision,
             // 2026-09-19). Pure constructor: the counter is read only when a "Get it" row is put on
-            // screen. The relay is the room's own, so a reply adopts sp and applies its prizes block.
+            // screen. The relay is the room's own, so a reply applies its prizes block.
+            //
+            // adoptSp is NULL on the relay on purpose: it would adopt the `sp` in any reply,
+            // including a plain counter/state read, and a read must never lower a wallet a local
+            // level-up has already credited. The service knows which op answered and hands the
+            // balance here instead (V2WalletAdoption is the rule).
             V2Purchase = new Services.Prizes.V2PurchaseService(
-                new Services.BackRoom.BackRoomApi(null, Services.BackRoom.BackRoomApi.AppIdentity,
-                    // The receipt's balance IS the balance: the server debited it under its own
-                    // locks, and the counter's netSp keeps a later sync from refunding it. Saved at
-                    // once so a crash before the next save cannot leave a stale, higher local total.
-                    sp => Current?.Dispatcher?.BeginInvoke(new Action(() =>
-                    {
-                        if (Settings?.Current is not { } s || s.SkillPoints == sp) return;
-                        s.SkillPoints = sp;
-                        Settings.Save();
-                    }))),
+                new Services.BackRoom.BackRoomApi(null, Services.BackRoom.BackRoomApi.AppIdentity, adoptSp: null),
                 () => Services.BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
                 Services.Prizes.V2PurchaseRule.OwnsPrize,
-                () => Settings?.Current?.SkillPoints ?? 0);
+                () => Settings?.Current?.SkillPoints ?? 0,
+                // The account is captured when the reply lands and checked AGAIN inside the
+                // marshalled write, the `canAdopt` shape BackRoomBridge.AdoptSp uses: the write
+                // runs after an await, so the player may be somebody else by then.
+                (account, fromBuy, sp) => Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                {
+                    if (Settings?.Current is not { } s) return;
+                    var same = string.Equals(Services.BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
+                        account, StringComparison.Ordinal);
+                    if (!Services.Prizes.V2WalletAdoption.Decide(same, fromBuy, sp, s.SkillPoints, out var next)) return;
+                    s.SkillPoints = next;
+                    Settings.Save();
+                })));
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); Patreon is constructed above too.
             Programs = new Services.Program.ProgramService();

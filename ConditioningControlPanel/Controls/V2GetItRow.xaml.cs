@@ -103,10 +103,7 @@ public partial class V2GetItRow : UserControl
         PricePlate.Visibility = row.ShowsPrice ? Visibility.Visible : Visibility.Collapsed;
         TxtPrice.Text = row.PriceSp.ToString(System.Globalization.CultureInfo.CurrentCulture);
 
-        BtnGet.Visibility = row.State == V2PurchaseRowState.Hidden || row.State == V2PurchaseRowState.Loading
-            || row.State == V2PurchaseRowState.Unavailable
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        BtnGet.Visibility = row.ShowsBuyButton ? Visibility.Visible : Visibility.Collapsed;
         BtnGet.IsEnabled = row.State == V2PurchaseRowState.SignIn || row.BuyEnabled;
         BtnGet.Opacity = BtnGet.IsEnabled ? 1.0 : 0.5;
         BtnGet.Content = Loc.Get(row.State == V2PurchaseRowState.SignIn ? "v2_get_signin_button" : "v2_get_button");
@@ -134,19 +131,26 @@ public partial class V2GetItRow : UserControl
 
         if (row.State == V2PurchaseRowState.SignIn)
         {
-            (Application.Current?.MainWindow as MainWindow)?.OpenUnifiedLoginDialog(Window.GetWindow(this));
+            // Application.Current.MainWindow is null while the panel is tray-hidden and can be the
+            // launcher; MainWindowRef is the house pattern for reaching the real one.
+            (App.MainWindowRef ?? Application.Current?.MainWindow as MainWindow)
+                ?.OpenUnifiedLoginDialog(Window.GetWindow(this));
             return;
         }
-        if (!row.BuyEnabled) return;
+        // No price on the row means no press: a confirm reading "Spend 0 Sparkle Points" must never
+        // be shown, and the buy that followed it would charge whatever the counter says.
+        if (!row.BuyEnabled || !row.ShowsPrice) return;
 
+        var body = Loc.GetF("v2_get_confirm_body", row.PriceSp, Loc.Get(_nameKey));
+        var title = Loc.Get("v2_get_confirm_title");
         var owner = Window.GetWindow(this);
         var answer = owner == null
-            ? MessageBox.Show(Loc.GetF("v2_get_confirm_body", row.PriceSp, Loc.Get(_nameKey)),
-                Loc.Get("v2_get_confirm_title"), MessageBoxButton.YesNo, MessageBoxImage.Question)
-            : MessageBox.Show(owner, Loc.GetF("v2_get_confirm_body", row.PriceSp, Loc.Get(_nameKey)),
-                Loc.Get("v2_get_confirm_title"), MessageBoxButton.YesNo, MessageBoxImage.Question);
+            ? MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question)
+            : MessageBox.Show(owner, body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (answer != MessageBoxResult.Yes) return;
 
-        await svc.BuyAsync(_prizeId);
+        // The price that was confirmed travels with the request: if the counter has repriced in
+        // between, the service refuses rather than charging a number the player never saw.
+        await svc.BuyAsync(_prizeId, row.PriceSp);
     }
 }
