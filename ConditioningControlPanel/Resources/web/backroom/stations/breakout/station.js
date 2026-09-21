@@ -181,7 +181,7 @@ export async function mount(ctx) {
     for (const key of WORD_KEYS) { const b = document.createElement('button'); b.type = 'button'; b.dataset.word = key; b.textContent = key.toLowerCase(); wordsRow.appendChild(b); }
     // Hidden for now (owner, 2026-09-21): players see no gear and no panel, and a panel left open last time stays shut.
     // F2 still brings both back for whoever knows it; ?dev or the dev.html harness opens with them showing.
-    const tools = q.has('dev') || (typeof location !== 'undefined' && //dev.html$/.test(location.pathname));
+    const tools = q.has('dev') || (typeof location !== 'undefined' && location.pathname.endsWith('/dev.html'));
     ui.gear.hidden = !tools;
     setDevOpen(tools && store.get(DEV_KEY) === '1');
   }
