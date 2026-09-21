@@ -67,6 +67,17 @@ internal static class DtrhHostService
     /// falling, which is the one exit the page cannot report. See <see cref="DtrhRunCloseRule"/>.</summary>
     private static JObject? _lastRunProgress;
 
+    /// <summary>When the host saw run-started. The host has no clock inside the descent, so every
+    /// figure a payout rests on otherwise comes from the page - including the one that is worth
+    /// Sparks. This bounds it. MinValue means no descent has started this window.</summary>
+    private static DateTime _runStartedUtc = DateTime.MinValue;
+
+    /// <summary>Seconds since run-started by the host's own clock, or null when it never saw
+    /// one.</summary>
+    private static double? HostElapsedSec => _runStartedUtc == DateTime.MinValue
+        ? null
+        : (DateTime.UtcNow - _runStartedUtc).TotalSeconds;
+
     public static bool IsActive => _host != null;
 
     /// <summary>A DtRH descent is currently running (between run-started and run-ended). Used to
@@ -98,6 +109,7 @@ internal static class DtrhHostService
             _exiting = false;
             _runActive = false;
             _lastRunProgress = null;
+            _runStartedUtc = DateTime.MinValue;
             _worldFrozen = false;
             _testMode = testMode;
             _meta = new DtrhMetaBridge(testMode, msg => _host?.Post(msg));
@@ -305,6 +317,7 @@ internal static class DtrhHostService
             {
                 _runActive = true;
                 _lastRunProgress = null;
+                _runStartedUtc = DateTime.UtcNow;   // the host's only clock inside a descent
                 SeasonRecapService.TrackFeature(SeasonFeatureKeys.Dtrh);
                 _vnSpeaking = false;   // never carry a stale duck into a run
                 ApplyWorldFreeze(false);   // a stale freeze from a crashed prior run must not bleed into this descent's dedup state
@@ -598,8 +611,10 @@ internal static class DtrhHostService
         // queued on the dispatcher can be pumped after DisposeAll banked, and paying it again
         // would double the Sparks and the run counter.
         bool wasActive = _runActive;
+        var hostElapsed = HostElapsedSec;   // read before the claim clears the stamp
         _runActive = false;
         _lastRunProgress = null;   // banked: nothing left for the teardown to pay
+        _runStartedUtc = DateTime.MinValue;
         try { Haptics.DtrhHapticDirector.OnRunEnded(); } catch (Exception ex) { Diag.Swallowed(ex); }
         ApplyWorldFreeze(false);   // a run ending mid-freeze must resume native video + voice, not wedge them through the hub
         if (!DtrhRunCloseRule.ShouldPayBooking(wasActive))
@@ -619,9 +634,10 @@ internal static class DtrhHostService
             // A descent that was LEFT is paid for the seconds it really fell, and only counts as
             // a run once it lasted a minute. Both because AwardRunRewards scales its Spark floor
             // off the CONFIGURED length: an endless run is dealt 720s, so without this a
-            // hold-Escape one second in mints the fully maxed floor, repeatably.
+            // hold-Escape one second in mints the fully maxed floor, repeatably. The seconds
+            // themselves come from the page, so they are bounded by the host's own clock.
             bool abandoned = (bool?)o["abandoned"] ?? false;
-            var payout = DtrhRunPayoutRule.For(abandoned, configuredSec, elapsedSec);
+            var payout = DtrhRunPayoutRule.For(abandoned, configuredSec, elapsedSec, hostElapsed);
             double durationSec = Math.Max(1, payout.PaidDurationSec);
 
             double durMin = durationSec / 60.0;
@@ -670,7 +686,13 @@ internal static class DtrhHostService
                     if ((int)nowRank > ChaosMeta.State.LastRankSeen) rankUp = nowRank;
                 }
                 catch (Exception ex) { Diag.Swallowed(ex); }
-                try { App.Bark?.NotifyChaosRunCompleted((int)finalXp, diff); } catch (Exception ex) { Diag.Swallowed(ex); }
+                // Not on the teardown path: the window is closing, so a "nice descent" line has
+                // nowhere to land and arrives over whatever the player went back to. The reveal
+                // sync above is bookkeeping and still runs.
+                if (!fromTeardown)
+                {
+                    try { App.Bark?.NotifyChaosRunCompleted((int)finalXp, diff); } catch (Exception ex) { Diag.Swallowed(ex); }
+                }
                 // NOT on the teardown path: ChaosCrashSentinel.Recover("process-failed") and
                 // ("heartbeat-silent") both land in DisposeAll, and clearing the sentinel from
                 // there would report a genuine WebView2 crash as a clean run next launch.

@@ -90,4 +90,51 @@ public class DtrhRunPayoutRuleTests
         Assert.Equal(0, payout.PaidDurationSec);
         Assert.False(payout.CountsAsRun);
     }
+
+    [Fact]
+    public void ThePageCannotClaimMoreSecondsThanTheHostSatThrough()
+    {
+        // Every other figure the payout rests on comes from the page, so the one figure worth
+        // Sparks is bounded by the only clock the host owns: the wall time since run-started.
+        // Eight seconds in the room, six hundred claimed, paid on thirteen and not a descent.
+        var payout = DtrhRunPayoutRule.For(abandoned: true, EndlessConfigured, elapsedSec: 600,
+            hostElapsedSec: 8);
+
+        Assert.Equal(8 + DtrhRunPayoutRule.HostClockSlackSec, payout.PaidDurationSec);
+        Assert.False(payout.CountsAsRun);
+    }
+
+    [Fact]
+    public void AnHonestPageIsBelievedWhenItReportsLessThanTheHostSaw()
+    {
+        // The page's clock pauses for a covering video and an in-world freeze; the wall clock does
+        // not. Under the host's figure is the normal case and must not be topped up to it.
+        var payout = DtrhRunPayoutRule.For(abandoned: true, EndlessConfigured, elapsedSec: 90,
+            hostElapsedSec: 140);
+
+        Assert.Equal(90, payout.PaidDurationSec);
+        Assert.True(payout.CountsAsRun);
+    }
+
+    [Fact]
+    public void WithNoHostClockThePagesWordIsAllThereIs()
+    {
+        // No run-started was seen, so there is nothing to bound it with. The minute floor is still
+        // the backstop.
+        var payout = DtrhRunPayoutRule.For(abandoned: true, EndlessConfigured, elapsedSec: 600,
+            hostElapsedSec: null);
+
+        Assert.Equal(600, payout.PaidDurationSec);
+        Assert.True(payout.CountsAsRun);
+    }
+
+    [Fact]
+    public void ANegativeHostClockIsFlooredRatherThanTrusted()
+    {
+        var payout = DtrhRunPayoutRule.For(abandoned: true, EndlessConfigured, elapsedSec: 600,
+            hostElapsedSec: -30);
+
+        Assert.Equal(DtrhRunPayoutRule.HostClockSlackSec, payout.PaidDurationSec);
+        Assert.False(payout.CountsAsRun);
+    }
 }
