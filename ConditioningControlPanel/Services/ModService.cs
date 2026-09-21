@@ -820,6 +820,9 @@ namespace ConditioningControlPanel.Services
             var oldModId = _activeMod.Id;
             if (oldModId == modId) return;
 
+            // Read before _activeMod moves: the companion-changed test needs both names.
+            var oldCompanionName = SafeCompanionName();
+
             // DTRH snapshots the active mod's dtrh content (virtual-host mapping +
             // init payload) at launch - a mid-session mod switch would leave it
             // serving the OLD mod's descent. Close it; the next launch picks up
@@ -882,14 +885,30 @@ namespace ConditioningControlPanel.Services
             // fence deliberately keeps BarkEcho turns, so «OldName said aloud: …» would otherwise
             // sit next to the new mod's echoes and the model roleplays a two-speaker transcript
             // (observed 2026-08-13, Bambi → Drone).
+            //
+            // And when the mod changes WHO the companion is - a different name, not a different
+            // mood - the voice fence is not enough on its own: it keeps the user's own turns, so
+            // the window still opens with "hi Circe, ..." and the model reads one unbroken
+            // conversation with Circe under a CCP Default prompt (Kathryn, 2026-09-14). That case
+            // takes the whole pre-switch thread off the wire. Nothing is deleted.
             try
             {
+                var newCompanionName = SafeCompanionName();
+                bool personaChanged = Companion.Brain.PersonaSwitchRules.ChangesPersona(
+                    oldModId, modId, oldCompanionName, newCompanionName);
+
                 if (App.Settings?.Current != null)
                 {
-                    App.Settings.Current.PersonaVoiceFenceUtc = DateTime.UtcNow;
+                    var now = DateTime.UtcNow;
+                    App.Settings.Current.PersonaVoiceFenceUtc = now;
+                    if (personaChanged) App.Settings.Current.PersonaIdentityFenceUtc = now;
                     App.Settings.Save();
                 }
-                App.Brain?.OnModSwitched();
+                App.Brain?.OnModSwitched(personaChanged ? newCompanionName : null);
+
+                if (personaChanged)
+                    _log?.Information("ActivateMod: companion changed {Old} -> {New}; the chat thread before the switch is off the wire",
+                        oldCompanionName, newCompanionName);
             }
             catch (Exception ex) { _log?.Debug("ActivateMod: companion voice fence failed: {E}", ex.Message); }
 
@@ -1091,6 +1110,18 @@ namespace ConditioningControlPanel.Services
         // Identity
         public string GetCompanionName() =>
             GetStringValue(m => m.Identity?.CompanionName, m => m.Identity!.CompanionName!);
+
+        /// <summary>The active companion's name, or empty when the manifest cannot answer. Used by
+        /// the mod-switch persona test, which must not read a throw as "the name changed".</summary>
+        private string SafeCompanionName()
+        {
+            try { return GetCompanionName() ?? string.Empty; }
+            catch (Exception ex)
+            {
+                _log?.Debug("ActivateMod: companion name unavailable: {E}", ex.Message);
+                return string.Empty;
+            }
+        }
 
         public string GetUserTerm() =>
             GetStringValue(m => m.Identity?.UserTerm, m => m.Identity!.UserTerm!);
