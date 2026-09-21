@@ -37,7 +37,7 @@ public static class LauncherSfx
     /// one file a mod can drop in to take the hover cue over.</summary>
     private const string HoverCue = "launcher/hover.wav";
 
-    /// <summary>One rendered rung of the pluck (scripts/render-launcher-notes.mjs).</summary>
+    /// <summary>One rendered rung of the pluck (Scripts/render-launcher-notes.mjs).</summary>
     private static string NoteCue(int rung) => $"launcher/wood_{rung:00}.wav";
 
     /// <summary>The window coming up. The next hover opens a fresh phrase.</summary>

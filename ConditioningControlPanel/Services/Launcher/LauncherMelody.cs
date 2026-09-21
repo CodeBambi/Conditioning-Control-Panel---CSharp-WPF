@@ -10,7 +10,7 @@ namespace ConditioningControlPanel.Services.Launcher;
 /// player-driven sound musical instead of noisy:
 ///
 ///  * ONE KEY. Every note is a rung of C pentatonic, rendered one rung per file by
-///    <c>scripts/render-launcher-notes.mjs</c>. Pentatonic has no semitone clashes, so no order of
+///    <c>Scripts/render-launcher-notes.mjs</c>. Pentatonic has no semitone clashes, so no order of
 ///    tiles can sound wrong.
 ///  * SHAPES, NOT STEPS. A phrase is built from short motifs (a run, a turn, an arc, a leap that
 ///    settles) in scale degrees, so the line turns and breathes instead of walking up a ladder.
@@ -33,7 +33,11 @@ public sealed class LauncherMelody
     /// <summary>The rung that is C5, the room's key: the cue the launcher shipped with.</summary>
     public const int RootRung = 5;
 
-    /// <summary>Lowest and highest rung the pluck uses. Its ends of the ladder are not its own.</summary>
+    /// <summary>
+    /// Lowest and highest rung the pluck uses: the very bottom of the ladder booms on a dry voice
+    /// and the very top is a tick. All 18 rungs are rendered anyway, so moving this window is a
+    /// constant and not a re-render.
+    /// </summary>
     public const int Low = 2, High = 15;
 
     /// <summary>How many rungs one phrase roams over. About an octave.</summary>

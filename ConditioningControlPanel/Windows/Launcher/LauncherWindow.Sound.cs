@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Data;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Launcher;
 using Serilog;
@@ -49,6 +50,22 @@ public partial class LauncherWindow
         SoundWaves.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         SoundSlash.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         SoundCone.Opacity = on ? 1.0 : 0.45;
-        BtnSound.ToolTip = Loc.Get(on ? "launcher_sound_mute" : "launcher_sound_unmute");
+        BindSoundTooltip();
+    }
+
+    /// <summary>
+    /// The tooltip for the state the button is in. BOUND, not assigned: the launcher can send you
+    /// to the panel where the language picker lives and take you back without being rebuilt, and
+    /// LocalizationManager raises PropertyChanged("Item[]") on a switch, so an indexer binding
+    /// follows the new language by itself. Assigning the string would freeze it in the old one.
+    /// </summary>
+    private void BindSoundTooltip()
+    {
+        var key = (App.Settings?.Current?.LauncherSoundEnabled ?? true)
+            ? "launcher_sound_mute"
+            : "launcher_sound_unmute";
+
+        BindingOperations.SetBinding(BtnSound, FrameworkElement.ToolTipProperty,
+            new Binding($"[{key}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
     }
 }
