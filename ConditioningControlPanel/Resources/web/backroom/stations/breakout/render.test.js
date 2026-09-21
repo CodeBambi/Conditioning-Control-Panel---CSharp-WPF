@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRenderer, prefersSoftwareCanvas } from './render.js';
+import { postProcess, hitGlowAlpha, HIT_GLOW } from './render-fx.js';
 import { createGame } from './game.js';
 
 function canvasStub(log = []) {
@@ -549,5 +550,23 @@ test('the grey paddle is a dead slab: no face, no stretch, no bounce, no lean; c
     const grey = look('grey'), colour = look('colour');
     assert.deepEqual(grey, { slab: 1, eyes: 0, mouth: 0, shear: 0 }, 'grey: one flat rectangle at the rest size and place');
     assert.equal(colour.slab, 0); assert.equal(colour.eyes, 2); assert.ok(colour.mouth >= 1 && colour.shear >= 1, 'colour: the face and the lean are back');
+  } finally { globalThis.document = oldDocument; }
+});
+
+test('the hit glow is low, pink and fades from zero: never a white sheet', () => {
+  assert.equal(hitGlowAlpha(0), 0, 'no floor: it fades out, it does not cut off');
+  assert.ok(hitGlowAlpha(.35) * 2 < .05, 'an ordinary brick hit adds under 5 percent');
+  assert.ok(hitGlowAlpha(1) * 2 <= .12, 'the hardest hit stays under 12 percent (was 36)');
+  assert.ok(hitGlowAlpha(5) === hitGlowAlpha(1));
+  const oldDocument = globalThis.document;
+  const layerLog = [];
+  globalThis.document = { createElement: () => canvasStub(layerLog) };
+  try {
+    const log = [], offLog = [], canvas = canvasStub(log), off = canvasStub(offLog);
+    postProcess(canvas.getContext(), canvas, off, { aberr: .8 });
+    const fill = offLog.findIndex(op => op[0] === 'fillRect');
+    assert.ok(fill >= 0, 'the added light is tinted before it is screened on');
+    assert.ok(/^#ff[0-9a-f]{4}$/.test(HIT_GLOW.tint) && HIT_GLOW.tint !== '#ffffff');
+    assert.ok(log.some(op => op[0] === 'drawImage'), 'and then screened over the frame once');
   } finally { globalThis.document = oldDocument; }
 });
