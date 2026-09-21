@@ -34,8 +34,13 @@ public class SpeechModelFolderTests : IDisposable
         return dir;
     }
 
-    private string Under(params string[] parts) =>
-        Path.Combine(new[] { _root }.Concat2(parts));
+    private string Under(params string[] parts)
+    {
+        var all = new string[parts.Length + 1];
+        all[0] = _root;
+        parts.CopyTo(all, 1);
+        return Path.Combine(all);
+    }
 
     // ---- the three layouts --------------------------------------------------------------
 
@@ -138,16 +143,4 @@ public class SpeechModelFolderTests : IDisposable
     [Fact]
     public void TheFolderTheButtonOpensIsTheFolderTheAppSearches()
         => Assert.Equal(SpeechService.ModelRoot, SpeechModelFolder.Root);
-}
-
-internal static class PathJoin
-{
-    /// <summary>Path.Combine over a head and a tail, without a params-array dance at each call.</summary>
-    internal static string Concat2(this string[] head, string[] tail)
-    {
-        var all = new string[head.Length + tail.Length];
-        head.CopyTo(all, 0);
-        tail.CopyTo(all, head.Length);
-        return Path.Combine(all);
-    }
 }

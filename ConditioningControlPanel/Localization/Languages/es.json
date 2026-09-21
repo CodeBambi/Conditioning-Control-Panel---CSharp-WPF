@@ -3344,6 +3344,7 @@
   "takeover_voice_hint_model_missing": "Todavía no hay modelo de voz instalado. Los avisos por voz quedan apagados hasta que haya uno.",
   "btn_open_models_folder": "Abrir la carpeta de modelos",
   "tooltip_open_models_folder": "Abre la carpeta donde va el modelo de voz, y la crea si no existe. Descomprime el modelo de forma que am y conf queden dentro.",
+  "msg_open_models_folder_failed": "No se pudo abrir {0}. Ve ahí a mano y deja el modelo dentro.",
   "takeover_voice_hint_offline_mic": "Micro sin conexión. Solo se abre cuando la Toma de Control lo pide.",
   "takeover_countdown_bar_tooltip": "Pone una barra rosa fina bajo el avatar que se vacía a medida que se acerca la próxima Toma de Control sorpresa, para que la veas venir.",
   "guide_takeover_step1_title": "1. Marca tus límites",

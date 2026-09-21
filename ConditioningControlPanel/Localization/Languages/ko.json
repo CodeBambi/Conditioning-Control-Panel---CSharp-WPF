@@ -3344,6 +3344,7 @@
   "takeover_voice_hint_model_missing": "아직 음성 모델이 없어요. 하나 들어올 때까지 음성 프롬프트는 꺼진 채예요.",
   "btn_open_models_folder": "모델 폴더 열기",
   "tooltip_open_models_folder": "음성 모델을 넣는 폴더를 열어. 없으면 만들어. am과 conf가 그 안에 오도록 압축을 풀어 줘.",
+  "msg_open_models_folder_failed": "{0} 을(를) 열지 못했어. 직접 그 폴더로 가서 모델을 넣어 줘.",
   "takeover_voice_hint_offline_mic": "오프라인 마이크예요. 테이크오버가 물어볼 때만 열려요.",
   "takeover_countdown_bar_tooltip": "아바타 아래에 얇은 분홍 막대를 띄워, 다음 기습 테이크오버가 가까워질수록 줄어들어요. 오는 게 보여요.",
   "guide_takeover_step1_title": "1. 한계를 정하세요",

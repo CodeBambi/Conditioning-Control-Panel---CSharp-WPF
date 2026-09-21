@@ -560,18 +560,31 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Open <c>Resources\Models\vosk</c> in Explorer, creating it first.
+        /// Show the user where the speech model goes, by opening the folder rather than naming it.
         ///
-        /// <para>The folder does not exist on a fresh install, which is half of why "drop the
-        /// model in Resources\Models\vosk" has cost four forty-minute support threads: the
-        /// instruction names a path under %LOCALAPPDATA%\Programs that the user cannot find and
-        /// then cannot confidently create. An empty folder open in Explorer says it instead.</para>
+        /// <para>"Drop the model in Resources\Models\vosk" has cost four forty-minute support
+        /// threads, and the reason is that the path is ambiguous from where the user is standing:
+        /// the folder they reach from the Assets page is the user-data folder, and this one is
+        /// beside the executable. Opening it settles that in one click.</para>
+        ///
+        /// <para>A refusal is SHOWN, not just logged. The folder normally ships with the app, but
+        /// on an install the user cannot write to (Program Files) a missing one cannot be created
+        /// either, and a button that does nothing at all is worse than the hint it replaced - so
+        /// the toast names the resolved path and the user can go there by hand.</para>
         /// </summary>
         internal void OpenSpeechModelFolder()
         {
+            var root = Services.Speech.SpeechModelFolder.Root;
             if (Services.Speech.SpeechModelFolder.Open()) return;
-            App.Logger?.Warning("Could not open the speech model folder at {Root}",
-                                Services.Speech.SpeechModelFolder.Root);
+
+            App.Logger?.Warning("Could not open the speech model folder at {Root}", root);
+            try
+            {
+                App.Notifications?.Show(
+                    string.Format(Localization.Loc.Get("msg_open_models_folder_failed"), root),
+                    Services.NotificationType.Warning, TimeSpan.FromSeconds(12));
+            }
+            catch (Exception ex) { App.Logger?.Debug("Models-folder toast failed: {E}", ex.Message); }
         }
 
         internal void ChkAutonomyResume_Changed(object sender, RoutedEventArgs e)
