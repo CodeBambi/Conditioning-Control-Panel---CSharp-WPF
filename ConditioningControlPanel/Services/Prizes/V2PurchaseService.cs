@@ -70,7 +70,8 @@ public sealed class V2PurchaseService
     /// the row then offers the way in instead. It also pins the cache to one account.</param>
     /// <param name="owned">prizeId to ownership. The app reads <see cref="PrizeGrants"/>.</param>
     /// <param name="sp">The balance the wallet shows.</param>
-    /// <param name="adoptSp">(account the reply was for, it is a buy settlement, the balance). This
+    /// <param name="adoptSp">(the account the request went out UNDER, it is a debited receipt, the
+    /// balance). The account is captured before the await, never read back after it. This
     /// service does the adopting itself instead of letting <see cref="BackRoomApi"/> do it blindly,
     /// because only here is it known WHICH op answered - and a state read must never lower a wallet
     /// that a local level-up has already credited. See <see cref="V2WalletAdoption"/>.</param>
@@ -177,6 +178,12 @@ public sealed class V2PurchaseService
     {
         if (string.IsNullOrEmpty(prizeId) || confirmedPriceSp <= 0) return false;
 
+        // The account this request goes out UNDER, captured before any await. Reading it again
+        // after the relay answers would name whoever is signed in by then: sign out and back in as
+        // B while the buy is out and A's receipt would be handed on as B's, where the app's own
+        // re-check compares B with B and lets it lower B's wallet.
+        var sentFor = AccountSafe();
+
         int version;
         string idem;
         lock (_gate)
@@ -217,11 +224,17 @@ public sealed class V2PurchaseService
 
             var body = new JObject { ["prizeId"] = prizeId, ["catalogVersion"] = version };
             var res = await _relay.RelayAsync("counter", "buy", idem, body).ConfigureAwait(false);
-            // The relay applied the reply's prizes block; the balance is this service's to hand on,
-            // and a buy settlement is the one reply allowed to lower a wallet.
+            // The relay applied the reply's prizes block; the balance is this service's to hand on.
             var failure = V2PurchaseRule.FailureKeyFor(res.Ok, res.Reason);
             bought = res.Ok || res.Reason == "owned";
-            AdoptSp(AccountSafe(), fromBuy: true, (res.Body as JObject)?["sp"]);
+            // ONLY a debited receipt may lower a wallet, and `ok` is exactly that: the server sends
+            // the stored receipt raw when an idem replays, so our own replay is ok too
+            // (backroom-counter-routes.js `out.replay` -> sendRaw). Every refusal that carries an
+            // sp - insufficient, catalog_changed, busy, unavailable, closed - is a snapshot like
+            // any state read and may be behind a local level-up credit, so it may only raise.
+            // `owned` is a refusal AND it only fires when no receipt exists for this idem, so it is
+            // never our settlement; it carries no sp today either.
+            AdoptSp(sentFor, fromBuy: res.Ok, (res.Body as JObject)?["sp"]);
             lock (_gate)
             {
                 if (failure != null) _failures[prizeId] = failure;
