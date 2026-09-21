@@ -152,7 +152,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     fx: { active: [], lastHeavyAt: -99 }, mod: freshMod(),
     // door run (doors.js + twists/): null on the house game and nothing below reads it
     door: doorDef ? doorDef.id : null, doorName: doorDef ? doorDef.name : null,
-    doorColour: doorDef ? doorDef.colour : null, doorBoard: null, twist: null, doorDone: false,
+    doorColour: doorDef ? doorDef.colour : null, doorBoard: null, twist: null, twists: [], doorDone: false,
     doorClock: 0, doorTimers: [], paddleScale: 1,
   };
   /** A door board's bricks by cell, for the twists: `at(row, col)`, dead or alive. */
@@ -176,19 +176,31 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       jelly: 0, jellyIn: 0, push: { dx: 0, dy: 0 }, pushT: 0, push0: { dx: 0, dy: 0 }, ...extra };
   }
   /* ------------------------------------------------- the door's twist seam */
-  /** Call one hook of the board's twist. A twist's bug never stops the frame (twists/CONTRACT.md). */
+  /** Call one hook on EVERY twist the board runs, in order. A twist's bug never stops the frame (twists/CONTRACT.md). */
   function twistCall(hook, ...args) {
-    const twist = g.twist ? twistFor(g.twist) : null;
-    if (!twist || typeof twist[hook] !== 'function') return;
-    try { twist[hook](...args); } catch (e) { /* cosmetic to the sim: the board keeps playing */ }
+    for (const id of g.twists) {
+      const twist = twistFor(id);
+      if (!twist || typeof twist[hook] !== 'function') continue;
+      try { twist[hook](...args); } catch (e) { /* cosmetic to the sim: the board keeps playing */ }
+    }
   }
   /** `ctx`, exactly as twists/CONTRACT.md section 2 froze it. */
   const doorCtx = {
     emit, rng, w, h,
     get powers() { return powers; },
-    at: (row, col) => (doorGrid ? doorGrid.get(row * BOARD_COLS + col) || null : null),
-    // Steel and gate steel are cleared first: this is how a mirror twin and an opened gate come down.
-    breakBrick: (br, ball) => { if (!br || !br.alive) return; br.steel = false; br.gate = null; breakBrick(br, ball || null); },
+    // Off the edge is nothing, never the row next door: a flat index would wrap col -1 and col 16 onto the neighbours.
+    at: (row, col) => {
+      if (!doorGrid || !(row >= 0) || !(col >= 0) || col >= BOARD_COLS) return null;
+      return doorGrid.get(row * BOARD_COLS + col) || null;
+    },
+    // A true kill, whatever the armour: steel and gate steel are cleared and the hp ladder is spent, so this is
+    // how a mirror twin at strength 3 and an opened gate come down in one call rather than being chipped.
+    breakBrick: (br, ball) => {
+      if (!br || !br.alive) return;
+      br.steel = false; br.gate = null;
+      if (br.hp > 1) br.hp = 1;
+      breakBrick(br, ball || null);
+    },
     schedule(seconds, fn) {
       const timer = { at: g.doorClock + Math.max(0, Number(seconds) || 0), fn, dead: false };
       g.doorTimers.push(timer);
@@ -208,7 +220,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   /** One authored board on the ordinary 16-column grid. Never reached by the house game. */
   function authoredWall() {
     const board = doorBoards[doorBoards.length > 1 ? g.stats.walls % doorBoards.length : 0];
-    g.doorBoard = board.id; g.twist = board.twist || null;
+    g.doorBoard = board.id; g.twist = board.twist || null; g.twists = [];
     g.dome = false; g.mantra = null;
     g.spell = null; g.reform = null; g.iris = null; g.tide = null; g.finale = null; g.pendulums = null;
     g.doorTimers = []; g.doorClock = 0; g.paddleScale = 1;
@@ -239,6 +251,10 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     g.bricks = bricks; g.wallBrickCount = bricks.length;
     // No random strength, no random power-ups, no grey metal: every brick on an authored board is authored.
     g.fractures = g.state === 'grey' ? Math.min(1, g.greyBricks / g.breakoutN) : 0; g.shatterWall = false;
+    // A board runs a LIST of twists: its own, plus crumble wherever the board lays clay. The owner's cracked key
+    // ("hit a key to unlock a chain of precarious bricks") is exactly that case: lock_keys2 runs keys AND crumble.
+    if (g.twist) g.twists.push(g.twist);
+    if (g.twist !== 'crumble' && bricks.some(br => br.clay)) g.twists.push('crumble');
     twistCall('build', g, doorCtx);
   }
   function buildWall() {
@@ -1407,7 +1423,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     while (g.acc >= STEP && guard++ < 24) { g.acc -= STEP; tick(STEP, input); if (g.freeze > 0 || g.hitStopMs > 0 || ['interrupt','outro'].includes(g.finale?.phase)) { g.acc = 0; break; } }
     if (tr && tr.kind === 'relapse' && tr.t >= 1) relapse(g.balls[0] || g.smear);
     // The board's twist, last: the wall and the balls have already moved this frame.
-    if (g.twist) { runDoorTimers(dt); twistCall('update', g, dt, doorCtx); }
+    if (g.twists.length) { runDoorTimers(dt); twistCall('update', g, dt, doorCtx); }
   }
 
   const wordSim = createWordSim(g, { emit, au, rng, addSat, clamp, lerp, W: w, H: h });
