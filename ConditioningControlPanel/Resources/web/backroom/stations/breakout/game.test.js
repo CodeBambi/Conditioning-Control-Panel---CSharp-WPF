@@ -1,7 +1,7 @@
 /* node --test game.test.js - the state machine and the saturation ladder, nothing visual. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUBBLE_DRIFT, BUBBLE_PUSH, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
+import { BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 // These scoring/state fixtures use one-hit walls; durability has its own integration suite.
@@ -796,4 +796,16 @@ test('a hit bubble jiggles, is shoved away from the ball and settles back to its
   s.balls = [{ ...s.balls[0], x: 100, y: 650, vx: 0, vy: 0, stuck: true }];
   for (let i = 0; i < 240; i++) game.step(1 / 60);
   assert.equal(c.jelly, 0); assert.ok(Math.abs(Math.hypot(c.vx, c.vy) - BUBBLE_DRIFT) < .5, 'back to the resting drift');
+});
+
+test('a bubble hammered by several balls never leaves faster than its cap', () => {
+  const { game } = make({ saturation: 0.5 });
+  const s = game.snapshot();
+  s.colliders.push({ x: 600, y: 420, r: 50, vx: 0, vy: 0, hits: 0, pulse: 0, alpha: 1, fading: false, gif: 0, tier: 9, age: 1, jelly: 0, ph: 0 });
+  for (let i = 0; i < 6; i++) {
+    const c = s.colliders[0]; c.x = 600; c.y = 420;
+    s.balls = [{ ...s.balls[0], x: 600, y: 480, vx: 0, vy: -300, stuck: false, ghost: false, trail: [] }];
+    game.step(1 / 60); game.step(1 / 60);
+  }
+  assert.ok(s.colliders[0].hits >= 4); assert.ok(Math.hypot(s.colliders[0].vx, s.colliders[0].vy) <= BUBBLE_MAX + 1e-6);
 });

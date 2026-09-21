@@ -67,7 +67,7 @@ export const WORD_SWAP_S = 1.7, WORD_SWAP_J = 0.9, GLITCH_S = 0.36;
 export const ROW_COLORS = ['#ff5fa2', '#ff8ac4', '#c86bff', '#7fd6ff', '#ffd166', '#7bffb0'];
 const STEP = 1 / 120;
 /** Picture bubbles: resting drift (px/s), the shove a ball gives one (px/s, bled off in about a second), the jelly's length (s). */
-export const BUBBLE_DRIFT = 24, BUBBLE_PUSH = 95, BUBBLE_JELLY_S = .75;
+export const BUBBLE_DRIFT = 24, BUBBLE_PUSH = 95, BUBBLE_MAX = 170, BUBBLE_JELLY_S = .75;
 const TAU = Math.PI * 2;
 const RELAPSE_S = 0.5, BREAKOUT_S = 0.3, PUSH_S = 0.12, RING_S = 0.03, NEAR_MISS_PX = 6;
 /* Feel pass. Hit-stop is for three rare events only (ms); the last brick also bends time for LAST_SLOW_S at LAST_SCALE. */
@@ -1128,6 +1128,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       c.hits++; c.pulse = 1;
       // Jelly and pushback: the bubble squashes along the hit and is shoved away from the ball, then bleeds back to its drift.
       c.jelly = 1; c.jnx = nx; c.jny = ny; c.vx -= nx * BUBBLE_PUSH; c.vy -= ny * BUBBLE_PUSH;
+      const pushed = Math.hypot(c.vx, c.vy);                              // eight balls on one bubble must not fire it across the field
+      if (pushed > BUBBLE_MAX) { c.vx *= BUBBLE_MAX / pushed; c.vy *= BUBBLE_MAX / pushed; }
       const tier = c.tier || 1, popped = c.hits >= tier;
       if (popped) {
         c.fading = true; c.alpha = 0;

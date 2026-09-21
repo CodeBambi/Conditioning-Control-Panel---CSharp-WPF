@@ -128,3 +128,7 @@ test('multiball copies wear their own tints and the split speaks after the catch
  assert.deepEqual(f.events.map(e=>e[0]),['powerCatch','multiSplit']);assert.deepEqual(f.events[1][1],{x:640,y:600});
  const full=fixture({maxBalls:1});catchDrop(full,'multiball');assert.deepEqual(full.events.map(e=>e[0]),['powerCatch'],'no copies, no split');
 });
+test('a copy promoted to the last ball drops its tint: the player ball is violet again',()=>{
+ const f=fixture();catchDrop(f,'multiball');f.s.balls.shift();f.power.step(13);
+ assert.equal(f.s.balls.length,1);assert.equal(f.s.balls[0].temporary,false);assert.equal(f.s.balls[0].tint,0);
+});

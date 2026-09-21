@@ -25,7 +25,7 @@ export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=nu
   }
   function retire() {
     const live=s.balls.filter(b=>!b.lost&&!b.falling);
-    if(live.length&&!live.some(b=>!b.temporary))live[0].temporary=false;
+    if(live.length&&!live.some(b=>!b.temporary)){live[0].temporary=false;live[0].tint=0;}   // the promoted copy IS the player's ball now: violet again
     s.balls=s.balls.filter(b=>{if(!b.temporary)return true;if(s.well?.captured===b){s.well.captured=null;s.well.used=false;}return false;});
   }
   function reset(){p.epoch=(p.epoch||0)+1;retire();p.drops.length=p.shots.length=0;for(const k of POWER_KINDS)p[k]=0;p.charges=0;p.muzzle=0;p.eighth=null;for(const b of s.balls)b.fireContacts?.clear();}
