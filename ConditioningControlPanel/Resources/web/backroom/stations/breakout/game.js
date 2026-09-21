@@ -743,8 +743,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       }
       au('metal', {x:br.x/w}); emit('metalHit',{x:br.x+br.w/2,y:br.y+br.h/2}); pushBrick(br, ball); return;
     }
-    // A grey final wall-7 brick is the gate, but repeated impacts still earn escape.
-    if (g.stats.walls === 6 && g.state === 'grey' && g.bricks.filter(b=>b.alive).length === 1) {
+    // A grey final wall-7 brick is the gate, but repeated impacts still earn escape. House game only: a story or door run counts walls too.
+    if (!g.story && !g.door && g.stats.walls === 6 && g.state === 'grey' && g.bricks.filter(b=>b.alive).length === 1) {
       au('metal', {x:br.x/w}); emit('metalHit',{x:br.x+br.w/2,y:br.y+br.h/2}); pushBrick(br, ball); finaleProgress(ball); return;
     }
     // Authored steel: the ball never gets through it. Only a twist, through ctx.breakBrick, can.
