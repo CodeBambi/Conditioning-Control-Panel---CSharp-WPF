@@ -89,8 +89,10 @@
             </DataTemplate>
 
             <DataTemplate x:Key="CmpPresetChipTemplate">
+                <!-- ToolTip is the preset's own one-liner, not the label again: the chips were
+                     indistinguishable without it. Null Description means no tooltip. -->
                 <ToggleButton Content="{Binding Label}" Style="{StaticResource CmpToggleChipStyle}"
-                              ToolTip="{Binding Label}"
+                              ToolTip="{Binding Description}"
                               IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
             </DataTemplate>
         </ResourceDictionary>
