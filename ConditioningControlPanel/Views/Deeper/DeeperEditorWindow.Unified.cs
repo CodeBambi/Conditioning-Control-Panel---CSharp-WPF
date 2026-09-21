@@ -1082,10 +1082,22 @@ namespace ConditioningControlPanel.Views.Deeper
         // way to find or click it again. This renders each TimeReached rule as
         // a thin orange pin: a vertical line at the trigger time topped with a
         // small flag, click-to-select, with a wider transparent hit area.
+        //
+        // ccp-bugs #1245: two more rules had no presence either. A time past the
+        // end of the media landed off a canvas that clips, and a band rule whose
+        // region was deleted (RemoveRegionFromModel nulls the constraint) or set to
+        // "(none)" was never considered at all. Both are pinned now - the first on
+        // the right edge, the second in the left gutter - so every rule in the
+        // Items list has something on the timeline to click. Which of the three a
+        // rule is, and where its pin lands, is DeeperEditorGeometry's call.
 
         private readonly System.Collections.Generic.List<System.Windows.UIElement> _ruleVisuals = new();
         private static readonly System.Windows.Media.Color RulePinColor =
             System.Windows.Media.Color.FromRgb(0xFF, 0x8C, 0x00);
+        // Dimmer than a true pin: these two are markers for a rule that has no place
+        // of its own on the ruler, and should not read as a time the user chose.
+        private static readonly System.Windows.Media.Color StrayRulePinColor =
+            System.Windows.Media.Color.FromRgb(0xC0, 0x6A, 0x2A);
 
         private void RebuildRuleVisuals()
         {
@@ -1099,14 +1111,20 @@ namespace ConditioningControlPanel.Views.Deeper
 
                 var w = TimelineCanvas.ActualWidth;
                 var h = TimelineCanvas.ActualHeight;
-                if (w <= 0 || h <= 0 || _totalSeconds <= 0) return;
+                if (w <= 0 || h <= 0) return;
 
                 int idx = 0;
+                int detached = 0;
                 foreach (var rule in _enhancement.Rules)
                 {
                     idx++;
-                    if (rule?.Trigger is not TimeReachedTrigger tr) continue;
-                    BuildRulePin(rule, tr, idx, w, h);
+                    if (rule == null) continue;
+                    var tr = rule.Trigger as TimeReachedTrigger;
+                    var kind = ClassifyRulePin(tr?.Time, HasRegionBand(rule), _totalSeconds);
+                    if (kind == RulePinKind.OnItsBand) continue; // its region already draws it
+                    double x = RulePinX(kind, tr?.Time ?? 0, _totalSeconds, w, detached);
+                    if (kind == RulePinKind.Detached) detached++;
+                    BuildRulePin(rule, tr, kind, x, idx, h);
                 }
                 EnsurePlayheadOnTop();
             }
@@ -1116,13 +1134,19 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
-        private void BuildRulePin(EnhancementRule rule, TimeReachedTrigger tr, int oneBasedIndex,
-            double canvasWidth, double canvasHeight)
+        // True when the rule's constraint still resolves to a region on the timeline.
+        // A constraint pointing at a deleted id is the same as no band at all.
+        private bool HasRegionBand(EnhancementRule rule)
+            => !string.IsNullOrEmpty(rule.RegionConstraint)
+               && _enhancement.Regions.Any(r => r != null && r.Id == rule.RegionConstraint);
+
+        private void BuildRulePin(EnhancementRule rule, TimeReachedTrigger? tr, RulePinKind kind,
+            double x, int oneBasedIndex, double canvasHeight)
         {
-            double x = (Math.Max(0, tr.Time) / _totalSeconds) * canvasWidth;
+            bool stray = kind != RulePinKind.AtTime;
             bool isSelected = rule == _selectedRule;
 
-            var brush = new System.Windows.Media.SolidColorBrush(RulePinColor);
+            var brush = new System.Windows.Media.SolidColorBrush(stray ? StrayRulePinColor : RulePinColor);
             brush.Freeze();
             var selStroke = isSelected ? System.Windows.Media.Brushes.White : null;
 
@@ -1133,7 +1157,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 Y1 = 0, Y2 = canvasHeight,
                 Stroke = brush,
                 StrokeThickness = isSelected ? 2.5 : 1.5,
-                StrokeDashArray = new System.Windows.Media.DoubleCollection { 4, 3 },
+                // A stray pin is dotted rather than dashed: it marks a rule, not a time.
+                StrokeDashArray = stray
+                    ? new System.Windows.Media.DoubleCollection { 1, 3 }
+                    : new System.Windows.Media.DoubleCollection { 4, 3 },
                 IsHitTestVisible = false
             };
             Panel.SetZIndex(line, 9);
@@ -1141,13 +1168,16 @@ namespace ConditioningControlPanel.Views.Deeper
             _ruleVisuals.Add(line);
 
             // Flag at top — a small filled triangle (right-pointing pennant) so
-            // it's distinguishable from region rectangles and effect dots.
+            // it's distinguishable from region rectangles and effect dots. A rule
+            // past the end of the media flies its pennant the other way, back at
+            // the timeline, because that is where the rule actually wants to be.
+            double tip = kind == RulePinKind.PastEnd ? x - 12 : x + 12;
             var flag = new System.Windows.Shapes.Polygon
             {
                 Points = new System.Windows.Media.PointCollection
                 {
                     new Point(x, 2),
-                    new Point(x + 12, 6),
+                    new Point(tip, 6),
                     new Point(x, 10)
                 },
                 Fill = brush,
@@ -1168,9 +1198,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 Fill = System.Windows.Media.Brushes.Transparent,
                 Cursor = Cursors.Hand,
                 Tag = rule,
-                ToolTip = $"Rule #{oneBasedIndex} · time {tr.Time:0.##}s"
+                ToolTip = RulePinTooltip(rule, tr, kind, oneBasedIndex)
             };
-            Canvas.SetLeft(hit, x - 7);
+            Canvas.SetLeft(hit, x - RulePinEdgeInset);
             Canvas.SetTop(hit, 0);
             Panel.SetZIndex(hit, 11);
             hit.MouseLeftButtonDown += (s, e) =>
@@ -1181,6 +1211,18 @@ namespace ConditioningControlPanel.Views.Deeper
             TimelineCanvas.Children.Add(hit);
             _ruleVisuals.Add(hit);
         }
+
+        // English, like the rest of the editor's inspector copy (its own pass is still
+        // owed). A stray pin's x is not a time, so the tooltip has to say what it is.
+        private static string RulePinTooltip(EnhancementRule rule, TimeReachedTrigger? tr,
+            RulePinKind kind, int oneBasedIndex)
+            => kind switch
+            {
+                RulePinKind.PastEnd => $"Rule #{oneBasedIndex} · time {tr?.Time ?? 0:0.##}s, past the end of the media",
+                RulePinKind.Detached when tr != null => $"Rule #{oneBasedIndex} · time {tr.Time:0.##}s, media length unknown",
+                RulePinKind.Detached => $"Rule #{oneBasedIndex} · {DescribeRule(rule)} · no region",
+                _ => $"Rule #{oneBasedIndex} · time {tr?.Time ?? 0:0.##}s",
+            };
 
         // -- Helpers --------------------------------------------------------------
 

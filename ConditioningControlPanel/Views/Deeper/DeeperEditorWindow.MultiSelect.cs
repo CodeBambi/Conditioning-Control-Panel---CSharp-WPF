@@ -351,6 +351,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
+                // Deleting a region detaches every rule constrained to it (see
+                // RemoveRegionFromModel), and a detached rule wants its gutter marker,
+                // so the pin lane has to be redrawn here too.
+                RebuildRuleVisuals();
                 RefreshRulesList();
                 ScheduleValidation();
             }
@@ -415,6 +419,7 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
+            RebuildRuleVisuals();
             RefreshRulesList();
         }
 

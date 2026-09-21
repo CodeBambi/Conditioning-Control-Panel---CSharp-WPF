@@ -69,6 +69,68 @@ namespace ConditioningControlPanel.Views.Deeper
             return RangesOverlap(yMin, yMax, top, top + height);
         }
 
+        // -- Rule pins -------------------------------------------------------
+        // Rules are the one item kind with no lane of their own. A time rule is a
+        // pin at its time; a band rule reads as its region. ccp-bugs #1245: the two
+        // rules that are neither (a time past the end of the media, and a band rule
+        // whose region was deleted or set to none) used to draw nothing at all - the
+        // first off the clipped canvas, the second never even considered - so the
+        // enhancement carried a rule the timeline said was not there.
+
+        internal enum RulePinKind
+        {
+            /// <summary>At its trigger time, inside the media.</summary>
+            AtTime,
+            /// <summary>A time rule past the end of the media, parked on the right edge.</summary>
+            PastEnd,
+            /// <summary>A band rule: its region draws it, so the pin lane has nothing to add.</summary>
+            OnItsBand,
+            /// <summary>No time and no band. Parked in the left gutter, in order.</summary>
+            Detached,
+        }
+
+        /// <summary>Half the pin's hit rect: a clamped pin has to stay fully on a canvas
+        /// that clips.</summary>
+        internal const double RulePinEdgeInset = 7.0;
+        /// <summary>Gap between gutter markers so several detached rules are separately clickable.</summary>
+        internal const double DetachedRulePinSpacing = 16.0;
+        /// <summary>A rule sitting exactly on the last frame is not "past the end".</summary>
+        private const double RulePinEndEpsilon = 1e-6;
+
+        /// <summary>
+        /// What the pin lane should do with one rule. <paramref name="triggerTime"/> is null
+        /// for every trigger that is not time-reached; <paramref name="hasRegionBand"/> is
+        /// whether its region constraint still resolves to a region on the timeline.
+        /// </summary>
+        internal static RulePinKind ClassifyRulePin(double? triggerTime, bool hasRegionBand, double totalSeconds)
+        {
+            // A media length of zero means the ruler means nothing yet, so even a time
+            // rule has nowhere true to stand: gutter, rather than nothing.
+            if (triggerTime is { } t && totalSeconds > 0)
+                return t > totalSeconds + RulePinEndEpsilon ? RulePinKind.PastEnd : RulePinKind.AtTime;
+            return hasRegionBand ? RulePinKind.OnItsBand : RulePinKind.Detached;
+        }
+
+        /// <summary>
+        /// X for a rule pin, always inside [inset, width - inset] so it survives the
+        /// canvas clip. <paramref name="detachedIndex"/> is the rule's position among the
+        /// detached ones; past the right edge they stack rather than walk off it.
+        /// </summary>
+        internal static double RulePinX(RulePinKind kind, double triggerTime, double totalSeconds,
+                                        double canvasWidth, int detachedIndex)
+        {
+            if (canvasWidth <= 0) return 0;
+            double lo = Math.Min(RulePinEdgeInset, canvasWidth / 2);
+            double hi = Math.Max(lo, canvasWidth - RulePinEdgeInset);
+            double x = kind switch
+            {
+                RulePinKind.PastEnd  => hi,
+                RulePinKind.Detached => lo + Math.Max(0, detachedIndex) * DetachedRulePinSpacing,
+                _ => totalSeconds > 0 ? Math.Max(0, triggerTime) / totalSeconds * canvasWidth : lo,
+            };
+            return Math.Clamp(x, lo, hi);
+        }
+
         /// <summary>
         /// Picks the palette entry used by the fewest existing items (first wins on
         /// ties) so neighbours stop repeating after deletes shift the count.

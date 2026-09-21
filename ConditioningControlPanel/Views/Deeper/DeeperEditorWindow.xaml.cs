@@ -3179,6 +3179,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 _selectedRule.RegionConstraint = _enhancement.Regions[idx - 1].Id;
             }
             MarkDirty();
+            // Picking "(none)" on a band rule is the other way into ccp-bugs #1245:
+            // it leaves a rule no region draws, so the pin lane has to look again.
+            RebuildRuleVisuals();
             ScheduleValidation();
         }
 
