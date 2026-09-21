@@ -1,4 +1,4 @@
-import { durabilityColour, cometSegments, paddleMood } from './feedback.js';
+import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups} from './powerups-render.js';
 import { junctionProtected } from './junction-shield.js';
@@ -70,7 +70,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   let g = canvas.getContext('2d', { willReadFrequently: software }), foreground = null;
   let cw = 0, ch = 0, scale = 1, ox = 0, oy = 0, off = null;
   let last = null, glitch = 0, wipe = 0, crackFlash = 0, spin = 0, aberr = 0, recoil = 0, lastNow = 0, lastCombo = 0, comboPop = 0;
-  let happy = 0;
+  let happy = 0, pushIn = null, layerGlow = 0, layerRgb = MINT;   // feel pass: the last-brick push-in, the music-layer glow
   const smoke = createParticles({ max: 120, rng });
   let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, flash = 0, lastFlashAt = -1;
   const shockwaves = [], drifters = [];
@@ -204,10 +204,21 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       P.burst(d.x, d.y, MINT, 30, 220, 0.9);
       P.after(0.1, () => P.burst(d.x, d.y, PINK, 18, 160, 0.7));
     } else if (name === 'perfect') {
-      stamps.push({ kind: 'text', text: 'PERFECT', x: d.x || W / 2, y: (d.y || H / 2) - 18, life: 0.8, rgb: GOLD, size: 20 });
+      stamps.push({ kind: 'text', text: perfectLabel(d.streak), x: d.x || W / 2, y: (d.y || H / 2) - 18, life: 0.8, rgb: GOLD, size: perfectSize(d.streak) });
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: d.y || H / 2, r0: 6, r1: 60, life: 0.45, rgb: GOLD });
       P.spray(d.x || W / 2, d.y || H / 2, -Math.PI / 2, 1.5, GOLD, 16, 230, 0.6);
       flash = Math.max(flash, 0.25);
+    } else if (name === 'lastBrick') {
+      // The final brick: a gold ring where it stood, and (COLOUR, motion on) the camera leans in while the sim bends time.
+      stamps.push({ kind: 'ring', x: d.x, y: d.y, r0: 10, r1: colour ? 170 : 70, life: colour ? 0.7 : 0.4, rgb: colour ? GOLD : GREY });
+      if (!reduced && colour && !last?.transition) {
+        pushIn = { x: clamp(d.x, W * .2, W * .8), y: clamp(d.y, H * .2, H * .8), t: 0 };
+        P.burst(d.x, d.y, WHITE, 26, 300, 0.9, { gv: 60 }); flash = Math.max(flash, 0.3);
+      }
+    } else if (name === 'layer') {
+      // A music layer arrived: the top edge warms for a moment and a thin ring leaves the tip of the saturation bar.
+      layerGlow = 1; layerRgb = d.name === 'arp' ? GOLD : MINT;
+      if (!reduced) stamps.push({ kind: 'ring', x: W * clamp(d.sat || sat, 0, 1), y: 4, r0: 3, r1: 44, life: 0.6, rgb: layerRgb });
     } else if (name === 'nearMiss') {
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: d.y || H - 40, r0: 4, r1: 48, life: 0.4, rgb: WHITE });
     } else if (name === 'jackpot') {
@@ -227,7 +238,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: H - 20, r0: 8, r1: 80, life: 0.5, rgb: GREY });
     } else if (name === 'relapse') {
       landscape.reset();
-      wipe = 0.1; breakoutFlash = 0; P.clear(); shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset(); wellFx.reset();
+      wipe = 0.1; breakoutFlash = 0; pushIn = null; layerGlow = 0; P.clear(); shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset(); wellFx.reset();
 
     } else if (name === 'breakoutStart') {
       if (!reduced) flash = Math.max(flash, 0.3);
@@ -824,9 +835,14 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       }
       g.restore();
     }
+    // A ball waiting on the paddle breathes with the beat, harder as its launch nears; a bounce squashes it (feedback.js).
+    const wait = b.stuck && !reduced ? clamp((s.launchTimer || 0) / 1.2, 0, 1) : 0;
+    const pulse = b.stuck && !reduced ? 1 + (.06 + .12 * wait) * Math.pow(1 - (s.beatPhase || 0), 3) : 1;
+    const sq = !reduced && b.squash > 0 ? squashScale(b.squash) : null;
     if (b.ghost || s.state === 'grey') {
       g.save(); g.globalAlpha = 0.72;
-      g.fillStyle = '#9a9a9a'; g.beginPath(); g.arc(b.x, b.y, b.r, 0, 7); g.fill();
+      if (sq) { const n = Math.atan2(b.sqy, b.sqx); g.translate(b.x, b.y); g.rotate(n); g.scale(1 - (1 - sq.along) * .5, 1 + (sq.across - 1) * .5); g.rotate(-n); g.translate(-b.x, -b.y); }
+      g.fillStyle = '#9a9a9a'; g.beginPath(); g.arc(b.x, b.y, b.r * pulse, 0, 7); g.fill();
       g.strokeStyle = '#d0d0d0'; g.lineWidth = 1; g.stroke();
       g.fillStyle = '#2a2a2a'; g.font = `700 4.2px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText('OLD SELF', b.x, b.y + 0.3);
@@ -839,9 +855,12 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.fillStyle = grd; g.beginPath(); g.arc(b.x, b.y, b.r * 3.2, 0, 7); g.fill();
     }
     const sp = Math.hypot(b.vx || 0, b.vy || 0), ref = s.speed || 420;
-    const k = rungs(2) ? clamp(sp / ref, 0, 1.6) * 0.16 : 0, ang = sp > 1 ? Math.atan2(b.vy, b.vx) : 0;
+    // The comet trail carries the speed now, so the permanent stretch is a hint (0.07, was 0.16).
+    const k = rungs(2) ? clamp(sp / ref, 0, 1.6) * 0.07 : 0, ang = sp > 1 ? Math.atan2(b.vy, b.vx) : 0;
     const rot = typeof b.spin === 'number' ? b.spin : spin;
     g.save(); g.translate(b.x, b.y); g.rotate(ang); g.scale(1 + k, 1 - k * 0.8); g.rotate(-ang);
+    if (sq) { const n = Math.atan2(b.sqy, b.sqx); g.rotate(n); g.scale(sq.along, sq.across); g.rotate(-n); }
+    if (pulse !== 1) g.scale(pulse, pulse);
     // A solid light face and dark rim keep the playable ball readable over pictures.
     g.fillStyle = '#fffdf5'; g.strokeStyle = '#21162f'; g.lineWidth = 2.5;
     g.beginPath(); g.arc(0, 0, b.r, 0, 7); g.fill(); g.stroke();
@@ -867,6 +886,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   function drawPaddle(s, mix, dt) {
     const p = s.paddle, st = rungs(2) ? p.stretch : 0;
     const w = p.w * (1 + st * 0.25 + recoil * 0.1), h = p.h * (1 - st * 0.3), py = p.y + recoil * 5;
+    const lean = reduced ? 0 : paddleLean(p.vx);                            // the top edge tips into the direction of travel
+    g.save(); if (lean) { g.translate(p.x, py + h / 2); g.transform(1, 0, -lean * 2.2, 1, 0, 0); g.rotate(lean * .12); g.translate(-p.x, -(py + h / 2)); }
     roundRect(g, p.x - w / 2, py - h / 2, w, h, 7);
     g.fillStyle = col(VIOLET, mix); g.fill();
     g.fillStyle = 'rgba(255,255,255,.22)'; roundRect(g, p.x - w / 2 + 3, py - h / 2 + 2, w - 6, 3, 2); g.fill();
@@ -883,6 +904,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.strokeStyle = '#1a1a2e'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(p.x - 5, py + 2);
       g.quadraticCurveTo(p.x, py + (mood === 'happy' ? 9 : mood === 'sad' ? -4 : 3), p.x + 5, py + 2); g.stroke();
     }
+    g.restore();
   }
   function drawWalls(s, mix) {
     const wob = rungs(4) ? s.wobble : null, amp = wob ? wob.t * 6 * Math.sin(wob.t * 22) : 0;
@@ -1001,6 +1023,11 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   function drawHud(s, mix) {                                              // only the saturation bar; the counters live in the DOM strip
     g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, 0, W, 4);
     g.fillStyle = col(PINK, mix); g.fillRect(0, 0, W * (s.state === 'grey' ? 0 : s.sat), 4);
+    if (layerGlow > 0 && s.state !== 'grey') {                             // a new music layer: the top edge glows, briefly
+      const grd = g.createLinearGradient(0, 0, 0, 26);
+      grd.addColorStop(0, col(layerRgb, mix, .42 * layerGlow)); grd.addColorStop(1, col(layerRgb, mix, 0));
+      g.fillStyle = grd; g.fillRect(0, 0, W, 26);
+    }
   }
 
   /* ------------------------------------------------------------ frame */
@@ -1274,6 +1301,9 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       const zb = s.balls[0], zx = zb ? clamp(zb.x, W * 0.3, W * 0.7) : W / 2, zy = zb ? clamp(zb.y, H * 0.3, H * 0.7) : H / 2;
       g.translate(zx, zy); g.scale(zm, zm); g.translate(-zx, -zy);
     }
+    layerGlow = Math.max(0, layerGlow - dt / .9);
+    if (pushIn && (reduced || (pushIn.t += dt) >= PUSH_IN_S)) pushIn = null;
+    if (pushIn) { const pz = pushInZoom(pushIn.t); g.translate(pushIn.x, pushIn.y); g.scale(pz, pz); g.translate(-pushIn.x, -pushIn.y); }
     wordHooks('world', s, R);
     g.fillStyle = col(BG, mix); g.fillRect(0, 0, W, H);
     landscape.draw(g, grey && !s.finale, dt, !!s.finale, s.beatPhase, finaleBackgroundProgress(s)); mark("backgroundMs");

@@ -482,3 +482,21 @@ test('finale pupil keeps one live target across ball reordering and eases to a r
   for(let i=0;i<20;i++)draw();assert.ok(draw()>s.finale.centreX);renderer.dispose();
  }finally{globalThis.document=oldDocument;}
 });
+
+for (const reduced of [false, true]) test(`the last brick leans the camera in and eases back, reduced=${reduced}`, () => {
+  const oldDocument = globalThis.document; globalThis.document = { createElement: () => canvasStub() };
+  try {
+    const log = [], renderer = createRenderer(canvasStub(log), { reduced, rng: () => .5 }); renderer.resize(1280, 720);
+    const snap = { ...createGame({ rng: () => .5 }).snapshot(), state: 'colour', sat: .5 };
+    renderer.draw(snap, { now: 1, dt: .016 });
+    renderer.onEvent('lastBrick', { x: 640, y: 200 }); renderer.onEvent('perfect', { x: 600, y: 650, streak: 3 });
+    const zooms = () => log.filter(op => op[0] === 'scale' && op[1] === op[2] && op[1] > 1.01 && op[1] <= 1.0601);
+    log.length = 0; for (let i = 0; i < 10; i++) renderer.draw(snap, { now: 1.02 + i * .02, dt: .02 });
+    assert.equal(zooms().length > 0, !reduced, 'motion on pushes in; reduced motion keeps the ring only');
+    assert.ok(log.some(op => op[0] === 'fillText' && op[1] === 'PERFECT x3') || log.some(op => op[0] === 'strokeText' && op[1] === 'PERFECT x3'));
+    log.length = 0; for (let i = 0; i < 50; i++) renderer.draw(snap, { now: 2 + i * .02, dt: .02 });
+    log.length = 0; renderer.draw(snap, { now: 4, dt: .02 });
+    assert.equal(zooms().length, 0, 'the camera is home again');
+    renderer.dispose();
+  } finally { globalThis.document = oldDocument; }
+});
