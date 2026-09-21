@@ -182,6 +182,15 @@
 .bo-door-chip small { font:400 12px system-ui;color:#cbb6d4; }
 
 /* The door's own ending: the ending card, painted once, with no office clip behind it. */
+/* The long story's sheet wears the doors' sheet: one look for both pickers. */
+.bo-story { position:absolute;inset:0;z-index:13;display:flex;align-items:center;justify-content:center;background:#10091cda;pointer-events:auto; }
+.bo-story[hidden] { display:none; }
+.bo-story .bo-pause-card { width:min(420px,90%); }
+.bo-act-list { margin:10px 0; }
+.bo-story-continue { width:100%; }
+.bo-story-restart { width:100%;margin-bottom:10px;opacity:.72; }
+.bo-act-chip.is-locked { opacity:.42;cursor:default; }
+.bo-act-chip.is-locked:hover { background:#2a1a39 !important; }
 .bo-door-end { position:absolute;inset:0;z-index:11;display:flex;align-items:center;justify-content:center;background:#08050f; }
 .bo-door-end canvas { width:100%;height:100%;object-fit:contain; }
 

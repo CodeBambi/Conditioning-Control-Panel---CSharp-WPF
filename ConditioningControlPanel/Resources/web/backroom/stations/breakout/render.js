@@ -8,6 +8,7 @@ import {createRewardPicker, rewardBounds} from './bubble-rewards.js';
 import { FINALE_PULSE_PERIOD } from './finale-chaos.js';
 import { drawMetronome } from './reform.js';
 import { createLevelIntro } from './level-intro.js';
+import { createActIntro } from './story/act-intro.js';
 /* ============================================================================
  * stations/breakout/render.js - canvas 2D. Everything visual keys on the
  * snapshot's `rungs` (the juice ladder) and `state` (COLOUR / GREY). The
@@ -77,6 +78,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   const shockwaves = [], drifters = [];
   const rewardPick = createRewardPicker(rng);
   const levelIntro = createLevelIntro();
+  const actIntro = createActIntro();          // the story's own title card; level-intro.js is untouched
   const landscape = createLandscape(W, H, rng, reduced);
   let breakoutFlash = 0, breakoutGif = -1, irisMelt = 0, irisBuffer = null;
   const P = createParticles({ max: 600, rng });
@@ -1536,7 +1538,10 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     }
     drawFinale(s, ballTransform);
     g.save(); g.setTransform(scale,0,0,scale,ox,oy);
-    levelIntro.draw(g, s.stats.walls, s.wallAge, W, H, reduced); g.restore();
+    // A story run raises its ACT card on the first wall of an act, and never the house level card.
+    if (s.story) { if (s.storyCard) actIntro.draw(g, s.storyCard, s.wallAge, W, H, reduced); }
+    else levelIntro.draw(g, s.stats.walls, s.wallAge, W, H, reduced);
+    g.restore();
     mark('foregroundMs');
   }
 

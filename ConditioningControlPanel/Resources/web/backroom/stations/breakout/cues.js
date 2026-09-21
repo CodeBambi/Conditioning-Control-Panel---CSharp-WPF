@@ -20,7 +20,11 @@ import TWIST_MIRROR from './cues/twist-mirror.js';
 import TWIST_KEYS from './cues/twist-keys.js';
 import TWIST_NODE from './cues/twist-node.js';
 import TWIST_JUSTONE from './cues/twist-justone.js';
+/* The two story twists (story/CONTRACT.md section 8). */
+import TWIST_STARE from './cues/twist-stare.js';
+import TWIST_SHELLS from './cues/twist-shells.js';
 
 export const CUES = { ...POWER, ...FEEL,
-  ...TWIST_CRUMBLE, ...TWIST_MIRROR, ...TWIST_KEYS, ...TWIST_NODE, ...TWIST_JUSTONE };
+  ...TWIST_CRUMBLE, ...TWIST_MIRROR, ...TWIST_KEYS, ...TWIST_NODE, ...TWIST_JUSTONE,
+  ...TWIST_STARE, ...TWIST_SHELLS };
 export default CUES;

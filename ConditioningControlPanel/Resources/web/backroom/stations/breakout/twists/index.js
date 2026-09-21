@@ -8,18 +8,25 @@ import MIRROR from './mirror.js';
 import KEYS from './keys.js';
 import NODE from './node.js';
 import JUSTONE from './justone.js';
+/* The two story twists (story/CONTRACT.md section 8). Stubs until the act 3 and act 4 lanes fill them. */
+import STARE from './stare.js';
+import SHELLS from './shells.js';
 
 import CRUMBLE_RENDER from './crumble-render.js';
 import MIRROR_RENDER from './mirror-render.js';
 import KEYS_RENDER from './keys-render.js';
 import NODE_RENDER from './node-render.js';
 import JUSTONE_RENDER from './justone-render.js';
+import STARE_RENDER from './stare-render.js';
+import SHELLS_RENDER from './shells-render.js';
 
 export const TWISTS = {
   crumble: CRUMBLE, mirror: MIRROR, keys: KEYS, node: NODE, justone: JUSTONE,
+  stare: STARE, shells: SHELLS,
 };
 export const TWIST_RENDER = {
   crumble: CRUMBLE_RENDER, mirror: MIRROR_RENDER, keys: KEYS_RENDER, node: NODE_RENDER, justone: JUSTONE_RENDER,
+  stare: STARE_RENDER, shells: SHELLS_RENDER,
 };
 
 export const twistFor = id => (id && TWISTS[id]) || null;
