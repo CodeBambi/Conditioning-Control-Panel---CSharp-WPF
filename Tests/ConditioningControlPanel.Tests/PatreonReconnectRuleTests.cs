@@ -1,31 +1,26 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Text.RegularExpressions;
 using ConditioningControlPanel.Services;
 using Xunit;
 
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// The Patreon row in Settings &gt; Account, and the 409 that a reconnect always earns.
+/// The Patreon row in Settings &gt; Account, the health of the grant behind it, and the 409 a
+/// reconnect always earns.
 ///
-/// <para>Ticket 1551244367040221235 (Sep 2026): a tier 2 patron lost premium while the server
-/// record said patron on every sync. Her Patreon OAuth grant had died on her PC, so nothing
-/// re-stamped the 14-day premium window, and the old rule HID the Patreon button exactly because
-/// the account was already linked server-side. Every surface said "connected" and there was no way
-/// back short of signing out.</para>
+/// <para>Ticket 1551244367040221235 (Sep 2026): a tier 2 patron lost premium while the server said
+/// patron on every sync. Her Patreon OAuth grant had died on her PC, nothing re-stamped the 14-day
+/// window, and the old rule HID the Patreon button exactly because the account was already linked
+/// server-side. Every surface said "connected" and there was no way back short of signing out.</para>
 ///
-/// <para>Three things are pinned here, because all three compile either way:</para>
-/// <list type="number">
-/// <item>the row's full state table, including the two people who must never be nagged - a
-/// whitelisted account (entitled without any Patreon grant) and a patron whose premium is still
-/// on (SubscribeStar, or the grace window not yet lapsed);</item>
-/// <item>the two 409s <c>/v2/auth/link</c> answers with. They share most of their words, and
-/// mistaking the different-user conflict for the harmless one would silently tell somebody they
-/// had linked an account that belongs to a stranger;</item>
-/// <item>that the code-behind actually consults the rule. Source-text read: MainWindow cannot be
-/// instantiated in a unit test.</item>
-/// </list>
+/// <para>Four things are pinned here, because all four compile either way: the row's state table;
+/// that a dead grant is told apart from a bad connection (the flag that makes the row reachable at
+/// all for that account); the two 409s, which share most of their words; and that the UI really
+/// consults the rule. Source-text reads for the last: MainWindow cannot be instantiated here.</para>
 /// </summary>
 public class PatreonReconnectRuleTests
 {
@@ -44,7 +39,7 @@ public class PatreonReconnectRuleTests
         Assert.False(row.ShowsHint);
     }
 
-    /// <summary>Signed in with Discord only, no Patreon anywhere: the original offer.</summary>
+    /// <summary>Signed in with Discord only, no Patreon anywhere: the original offer, unchanged.</summary>
     [Fact]
     public void NeverLinked_OffersLink()
     {
@@ -59,10 +54,7 @@ public class PatreonReconnectRuleTests
         Assert.False(row.ShowsHint);
     }
 
-    /// <summary>
-    /// The grant works. Whatever the server record says, there is nothing here to fix and the
-    /// button stays gone - which is also the old behaviour for the ordinary linked patron.
-    /// </summary>
+    /// <summary>The grant works: nothing to fix, and the old behaviour for a linked patron.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -76,10 +68,7 @@ public class PatreonReconnectRuleTests
         Assert.False(row.ShowsButton);
     }
 
-    /// <summary>
-    /// The ticket's account, exactly: linked server-side, no token on this PC, premium already off.
-    /// Prominent, because the loss is being felt right now.
-    /// </summary>
+    /// <summary>The ticket's account: linked, no working grant, premium already off. Prominent.</summary>
     [Fact]
     public void LinkedButNoTokenAndPremiumLocked_IsProminentReconnect()
     {
@@ -95,9 +84,11 @@ public class PatreonReconnectRuleTests
     }
 
     /// <summary>
-    /// Same shape, but the grace window has not lapsed yet (or SubscribeStar is carrying them).
-    /// The button is there - it is the only way to stop the clock - but it does not shout, and it
-    /// must not claim anything has expired.
+    /// Same shape, but premium still holds (the window has not lapsed, or SubscribeStar is
+    /// carrying them, or they are whitelisted and ProfileSync keeps re-stamping). The button is
+    /// there because it is the only way to stop the clock, but it must not shout and must not
+    /// claim anything has expired. This row, not the whitelist branch below, is what actually
+    /// keeps whitelisted accounts off the prominent state.
     /// </summary>
     [Fact]
     public void LinkedButNoTokenWhilePremiumHolds_IsQuietReconnect()
@@ -114,8 +105,10 @@ public class PatreonReconnectRuleTests
     }
 
     /// <summary>
-    /// A whitelisted account is entitled with no Patreon grant at all, so a missing token costs it
-    /// nothing. Reconnecting would be a chore with no payoff: no button, in either premium state.
+    /// A whitelisted account is entitled with no Patreon grant at all, so reconnecting is a chore
+    /// with no payoff. A courtesy branch rather than the safety net: <c>IsWhitelisted</c> is an
+    /// in-memory flag written by a validate or a sync, so on a launch where neither reached the
+    /// server it arrives false and this shape never occurs. See the quiet-reconnect test above.
     /// </summary>
     [Theory]
     [InlineData(true)]
@@ -131,10 +124,7 @@ public class PatreonReconnectRuleTests
         Assert.False(row.ShowsHint);
     }
 
-    /// <summary>
-    /// A whitelisted account that never linked Patreon still gets the plain Link offer - the
-    /// whitelist rule is scoped to the reconnect branch, not to the whole row.
-    /// </summary>
+    /// <summary>The whitelist rule is scoped to the reconnect branch, not to the whole row.</summary>
     [Fact]
     public void WhitelistedAndNeverLinked_StillOffersLink()
     {
@@ -161,12 +151,109 @@ public class PatreonReconnectRuleTests
         }
     }
 
-    // ------------------------------------------------------------------ 2. the two 409s
+    // ------------------------------------------------- 2. is the grant dead, or is the wifi
 
     /// <summary>
-    /// The server's exact sentence for "you are already linked, to yourself". This is the normal
-    /// answer to a reconnect - the OAuth tokens are stored BEFORE the link call - so it has to read
-    /// as a success or the repair looks like a failure.
+    /// The only thing that lights the Reconnect row. A refresh token is refused only when revoked,
+    /// replaced or never valid, and none of those start working again by themselves.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public void A4xxAnswer_MeansTheGrantIsDead(HttpStatusCode status)
+    {
+        var outcome = PatreonGrantHealth.Classify(status, null, threw: false);
+        Assert.Equal(PatreonRefreshOutcome.Refused, outcome);
+        Assert.True(PatreonGrantHealth.MarksGrantDead(outcome));
+    }
+
+    /// <summary>
+    /// Nobody answering, the proxy falling over and being told to slow down are bad afternoons, not
+    /// verdicts: one extra launch of silence beats nagging a patron on a flaky connection.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.GatewayTimeout)]
+    [InlineData(HttpStatusCode.RequestTimeout)]
+    [InlineData((HttpStatusCode)429)]
+    public void AnOutage_SaysNothingAboutTheGrant(HttpStatusCode status)
+    {
+        var outcome = PatreonGrantHealth.Classify(status, null, threw: false);
+        Assert.Equal(PatreonRefreshOutcome.Unavailable, outcome);
+        Assert.False(PatreonGrantHealth.MarksGrantDead(outcome));
+    }
+
+    /// <summary>A thrown request has no answer to read, so it can never be a verdict.</summary>
+    [Fact]
+    public void AThrownRequest_SaysNothingAboutTheGrant()
+    {
+        Assert.Equal(PatreonRefreshOutcome.Unavailable,
+            PatreonGrantHealth.Classify(null, null, threw: true));
+        Assert.Equal(PatreonRefreshOutcome.Unavailable,
+            PatreonGrantHealth.Classify(HttpStatusCode.OK, "invalid_grant", threw: true));
+    }
+
+    /// <summary>The proxy can pass Patreon's refusal through with a 200 and an error field.</summary>
+    [Theory]
+    [InlineData("invalid_grant")]
+    [InlineData("invalid_request")]
+    public void AnOauthErrorBody_IsStillARefusal(string error)
+        => Assert.Equal(PatreonRefreshOutcome.Refused,
+            PatreonGrantHealth.Classify(HttpStatusCode.OK, error, threw: false));
+
+    [Fact]
+    public void ACleanAnswer_IsARefresh()
+    {
+        var outcome = PatreonGrantHealth.Classify(HttpStatusCode.OK, null, threw: false);
+        Assert.Equal(PatreonRefreshOutcome.Refreshed, outcome);
+        Assert.False(PatreonGrantHealth.MarksGrantDead(outcome));
+    }
+
+    /// <summary>
+    /// The flag's transitions as the service applies them. The outage row in BOTH directions is
+    /// the whole reason the outcome is three-valued: a bool either nags on every dropped
+    /// connection or clears the flag on one.
+    /// </summary>
+    [Fact]
+    public void AnOutageNeverMovesTheFlagEitherWay()
+    {
+        static bool Apply(bool dead, PatreonRefreshOutcome outcome)
+        {
+            if (outcome == PatreonRefreshOutcome.Refreshed) return false;
+            if (PatreonGrantHealth.MarksGrantDead(outcome)) return true;
+            return dead;
+        }
+
+        Assert.True(Apply(false, PatreonRefreshOutcome.Refused));
+        Assert.False(Apply(true, PatreonRefreshOutcome.Refreshed));
+        Assert.True(Apply(true, PatreonRefreshOutcome.Unavailable));
+        Assert.False(Apply(false, PatreonRefreshOutcome.Unavailable));
+    }
+
+    /// <summary>
+    /// The service applies that table and clears the flag on all four paths back to a working
+    /// grant. Source read: reaching those branches needs the network.
+    /// </summary>
+    [Fact]
+    public void ThePatreonService_KeepsTheFlag()
+    {
+        var source = ReadSource("Services", "Account", "PatreonService.cs");
+
+        Assert.Contains("public bool GrantLooksDead { get; private set; }", source, StringComparison.Ordinal);
+        Assert.Contains("PatreonGrantHealth.Classify", source, StringComparison.Ordinal);
+        Assert.Contains("PatreonGrantHealth.MarksGrantDead", source, StringComparison.Ordinal);
+        Assert.Equal(4, Regex.Matches(source, @"GrantLooksDead = false").Count);
+    }
+
+    // ------------------------------------------------------------------ 3. the two 409s
+
+    /// <summary>
+    /// "Already linked, to yourself" - the normal answer to a reconnect, since the OAuth tokens are
+    /// stored BEFORE the link call. It has to read as a success or the repair looks like a failure.
     /// </summary>
     [Theory]
     [InlineData("Patreon already linked to this account")]
@@ -175,10 +262,7 @@ public class PatreonReconnectRuleTests
     public void SameAccountConflict_ReadsAsSuccess(string error)
         => Assert.True(ProviderLinkResponseRules.IsAlreadyLinkedToThisAccount(error));
 
-    /// <summary>
-    /// The other 409, and the one that must never be swallowed: this provider identity belongs to
-    /// somebody else's record.
-    /// </summary>
+    /// <summary>The other 409: this provider identity belongs to somebody else's record.</summary>
     [Theory]
     [InlineData("Patreon account already linked to a different user")]
     [InlineData("Discord account already linked to a different user")]
@@ -196,7 +280,7 @@ public class PatreonReconnectRuleTests
     public void EverythingElse_StaysAnError(string? error)
         => Assert.False(ProviderLinkResponseRules.IsAlreadyLinkedToThisAccount(error));
 
-    // ------------------------------------------------------------------ 3. the wiring
+    // ------------------------------------------------------------------ 4. the wiring
 
     private static string RepoRoot()
     {
@@ -210,44 +294,94 @@ public class PatreonReconnectRuleTests
     private static string ReadSource(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
 
+    /// <summary>The source of a method, from its signature to the start of the next doc comment.</summary>
+    private static string MethodBody(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start > 0, signature + " is gone");
+        var end = source.IndexOf("/// <summary>", start, StringComparison.Ordinal);
+        if (end < 0) end = source.Length;
+        return source.Substring(start, end - start);
+    }
+
     /// <summary>
-    /// The account row's visibility must come from the rule and not from a second opinion. The bug
-    /// was precisely a hand-written "linked, therefore hide it" in this method.
+    /// The row must come from the rule and not from a second opinion - the bug was a hand-written
+    /// "linked, therefore hide it" right here. <c>GrantLooksDead</c> is asserted too: without it
+    /// the rule is handed a bare <c>IsAuthenticated</c>, which is true for the ticket's account and
+    /// always will be, so the whole feature would be dead code for the people it was built for.
     /// </summary>
     [Fact]
     public void UpdateAccountLinkingUi_AsksTheRule()
     {
-        var source = ReadSource("MainWindow", "MainWindow.Patreon.cs");
-        var start = source.IndexOf("private void UpdateAccountLinkingUI()", StringComparison.Ordinal);
-        Assert.True(start > 0, "UpdateAccountLinkingUI is gone");
-        // Far enough to cover the method, short enough not to reach the next one.
-        var body = source.Substring(start, Math.Min(2400, source.Length - start));
+        var body = MethodBody(ReadSource("MainWindow", "MainWindow.Patreon.cs"),
+            "private void UpdateAccountLinkingUI()");
 
         Assert.Contains("PatreonReconnectRule.Decide", body, StringComparison.Ordinal);
+        Assert.Contains("GrantLooksDead", body, StringComparison.Ordinal);
         Assert.Contains("ShowsButton", body, StringComparison.Ordinal);
         Assert.Contains("btn_reconnect_patreon", body, StringComparison.Ordinal);
         Assert.Contains("TxtPatreonReconnectHint", body, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The hint line has to exist in the section's XAML, collapsed, or the code-behind above is
-    /// setting a property on nothing.
+    /// The gate's reconnect must land on Settings . Account. <c>ShowTab("settings")</c> is the
+    /// DASHBOARD (the Settings door is keyed "appsettings" - see the NavDoorMap note in
+    /// MainWindow.TabNavigation.cs), so the obvious spelling sends a locked-out patron to Home with
+    /// the promised row nowhere on screen.
     /// </summary>
     [Fact]
-    public void TheHintLineIsInTheXamlAndStartsCollapsed()
+    public void TheGateReconnect_OpensAccountSettings()
     {
-        var xaml = ReadSource("Views", "Controls", "AppSettings", "AccountSettingsSection.xaml");
-        var at = xaml.IndexOf("x:Name=\"TxtPatreonReconnectHint\"", StringComparison.Ordinal);
-        Assert.True(at > 0, "the linking section has no reconnect hint line");
-        var element = xaml.Substring(at, Math.Min(400, xaml.Length - at));
-        Assert.Contains("label_patreon_reconnect_hint", element, StringComparison.Ordinal);
-        Assert.Contains("Visibility=\"Collapsed\"", element, StringComparison.Ordinal);
+        var body = MethodBody(ReadSource("MainWindow", "MainWindow.Patreon.cs"),
+            "internal void StartPatreonReconnectFromGate()");
+
+        Assert.Contains("ShowAccountSettings()", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowTab(\"settings\")", body, StringComparison.Ordinal);
+        // A second click on the lingering toast would re-run OAuth with the dead token.
+        Assert.Contains("IsEnabled == false", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>Or a patron with a dead grant keeps being told to upgrade a pledge they hold.</summary>
+    [Fact]
+    public void TierGateRefusal_AsksTheRule()
+    {
+        var source = ReadSource("Services", "TierGate.cs");
+        Assert.Contains("PatreonReconnectRule.Decide", source, StringComparison.Ordinal);
+        Assert.Contains("tiergate_denied_reconnect", source, StringComparison.Ordinal);
+        Assert.Contains("StartPatreonReconnectFromGate", source, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Every new key exists in all nine language files. English text in a non-English file is
-    /// allowed; a missing key is not.
+    /// A Content assignment would replace the XAML's live <c>{loc:Str}</c> binding on the first
+    /// paint for EVERY user, so a language switch would leave the button in the old tongue.
     /// </summary>
+    [Fact]
+    public void ThePatreonButtonLabelStaysBound()
+    {
+        var source = ReadSource("MainWindow", "MainWindow.Patreon.cs");
+        Assert.Contains("BindingOperations.SetBinding", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("BtnLinkPatreon.Content =", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The row is painted at window load, while the startup validate - half of what it decides - is
+    /// still in flight. Without a repaint the offer would only ever appear one launch late.
+    /// </summary>
+    [Fact]
+    public void TheRowIsRepaintedAfterTheStartupValidate()
+    {
+        var app = ReadSource("App.xaml.cs");
+        var at = app.IndexOf("await Patreon.InitializeAsync();", StringComparison.Ordinal);
+        Assert.True(at > 0, "the startup Patreon validate has moved");
+        var after = app.Substring(at, Math.Min(900, app.Length - at));
+
+        Assert.Contains("RefreshAccountLinkingRow", after, StringComparison.Ordinal);
+        // Loaded is starved on this path and would silently never run.
+        Assert.Contains("DispatcherPriority.Normal", after, StringComparison.Ordinal);
+        Assert.DoesNotContain("DispatcherPriority.Loaded", after, StringComparison.Ordinal);
+    }
+
+    /// <summary>Every new key exists in all nine language files.</summary>
     [Fact]
     public void TheNewKeysAreInAllNineLanguages()
     {
