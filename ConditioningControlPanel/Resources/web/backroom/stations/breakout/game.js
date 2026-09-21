@@ -1231,7 +1231,12 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
 
   const wordSim = createWordSim(g, { emit, au, rng, addSat, clamp, lerp, W: w, H: h });
-  const powers=createPowerups(g,{rng,emit,newBall,damage:breakBrick,maxBalls:MAX_BALLS});
+  /** Beats since the bed's step 0 as a float (the audio clock when it runs, the sim clock before). */
+  const beatTime = () => {
+    try { if (audio && audio.beat && typeof audio.now === 'function') { const v = (audio.now() - (audio.beat.origin || 0)) / audio.beat.spb; if (Number.isFinite(v)) return v; } } catch (e) { /* fine */ }
+    return g.time / spb();
+  };
+  const powers=createPowerups(g,{rng,emit,newBall,damage:breakBrick,maxBalls:MAX_BALLS,beatTime});
   buildWall();
   respawn(true);
   au('setSaturation', g.sat); au('setState', 'grey');

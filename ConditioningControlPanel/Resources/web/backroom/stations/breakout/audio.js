@@ -1,6 +1,7 @@
 import { setMusicScene } from '../../shared/sound/music.js';
 import { pentatonic, ROOT_HZ } from '../../shared/sound/kit.js';
 import { WORD_FX } from './word-fx.js';
+import { CUES } from './cues.js';
 
 /* ============================================================================
  * stations/breakout/audio.js - the cabinet's ears. Everything synthesised
@@ -34,7 +35,7 @@ export const MAX_COMBO = 14;
 export const LOOKAHEAD_S = 0.12, TICK_MS = 25, MIN_LEAD_S = 0.015;
 export const STEPS_PER_BEAT = 4, BEATS_PER_BAR = 4, BARS = 4;
 export const LOOP_STEPS = STEPS_PER_BEAT * BEATS_PER_BAR * BARS;
-const HIT_KINDS = ['wall', 'paddle', 'brick', 'gif', 'spiral'];
+const HIT_KINDS = ['wall', 'paddle', 'brick', 'damage', 'gif', 'spiral'];
 
 /** Saturation 0..1 -> the bed's low-pass cutoff, exponential 300 Hz .. 12 kHz. */
 export const cutoffFor = s => CUTOFF_MIN * (CUTOFF_MAX / CUTOFF_MIN) ** clamp(num(s, 0), 0, 1);
@@ -245,6 +246,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     }
     const cut = hitCutoff(saturation);
     switch (kind) {
+      case 'damage': return hitNotes('brick', 0, x);      // a brick that took a hit and held (audio lane refines this)
       case 'wall': return [noise(1500 * SEMI(hitSemis(combo) / 2), 0.022, 0.06, { q: 3, pan }), tone(hz / 2, 0.02, 0.03, { pan })];
       case 'paddle': return [tone(hz / 2, 0.17, 0.13, { wave: 'triangle', lp: Math.min(cut, 1800), pan }), tone(hz / 2, 0.12, 0.06, { attack: 0.02, pan })];
       case 'brick': return [
@@ -518,6 +520,18 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
         try { const p = g.gain; p.cancelScheduledValues(t); p.setValueAtTime(Math.max(0.0001, p.value), t); p.linearRampToValueAtTime(to, t + 0.06); p.setValueAtTime(to, back); p.linearRampToValueAtTime(1, back + rel); }
         catch (e) { g.gain.value = 1; }
       }
+    },
+    /**
+     * A registered cue (cues.js: name -> (synth, data) => void). Returns true when one played, so the caller can
+     * skip its fallback. The synth is the word synth plus the grid: beat, quantise(), saturation, state, hitSemis.
+     */
+    cue(name, data = {}) {
+      if (!running || !live()) return false;
+      const fn = CUES[name];
+      if (typeof fn !== 'function') return false;
+      const synth = { ctx, now: ctx.currentTime, play, tone, noise, bus, glide, SEMI, ROOT_HZ, pentatonic, hitSemis, hitCutoff, duck: api.duck,
+        beat, quantise: (lead) => beat.quantise(ctx.currentTime, lead), saturation, state, room };
+      try { return fn(synth, data || {}) !== false; } catch (e) { return false; }
     },
     /** A word trigger's signature sound (word-fx.js modules: sound(synth, fx)). */
     word(key, fx = {}) {

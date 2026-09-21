@@ -29,6 +29,8 @@ import { createVoice } from '../../shared/hypno/voice.js';
 import { createHostFx } from './host-fx.js';
 import { createPerfPanel } from './perf.js';
 import { createRenderBudget } from './render-budget.js';
+import { createHaptics } from './haptics.js';
+import { createGamepad } from './gamepad.js';
 
 export const roomStage = false;
 
@@ -58,7 +60,7 @@ export async function mount(ctx) {
     (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const t = (k, f) => { try { const v = typeof ctx.lex === 'function' ? ctx.lex(k, f) : f; return v || f; } catch (e) { return f; } };
 
-  let el = null, canvas = null, game = null, renderer = null, media = null, subs = null, audio = null, host = null;
+  let el = null, canvas = null, game = null, renderer = null, media = null, subs = null, audio = null, host = null, haptics = null, gamepad = null;
   // Word bricks may speak; near-ball text stays silent.
   let voice = null, lastSay = -Infinity;
   const roomLevels=globalThis.__backroom?.levels;
@@ -221,6 +223,10 @@ export async function mount(ctx) {
     try { if (typeof renderer.onGameEvent === 'function') renderer.onGameEvent(name, d); else renderer.onEvent(name, d); } catch (e) { /* cosmetic */ }
     const s = game.snapshot();
     routeFinaleAudio(name, d, audio, s.w);
+    // A registered cue (cues.js) plays first; `cued` lets a case skip its older fallback sound.
+    let cued = false;
+    try { cued = !!(audio && typeof audio.cue === 'function' && audio.cue(name, { ...d, xN: Number.isFinite(d.x) ? d.x / s.w : 0.5, sat: s.sat, state: s.state, combo: s.combo })); } catch (e) { /* audio optional */ }
+    try { haptics?.onEvent(name, d, s); } catch (e) { /* haptics optional */ }
     switch (name) {
       case 'finaleCoreReached':
         shutdownCover?.remove();
@@ -229,7 +235,7 @@ export async function mount(ctx) {
         document.body.append(shutdownCover);
         subs?.reset();
         break;
-      case 'brickDamage': hitAu('brick', {combo:0,x:d.x}); break;
+      case 'brickDamage': hitAu('damage', {combo:0,x:d.x}); break;
       case 'hit': sawHit = true; hitAu(d.kind, d); break;
       // Older sims emit the raw collision names instead of 'hit'; route them until a 'hit' shows up.
       case 'wallhit': if (!sawHit) hitAu('wall', { combo: s.combo, x: d.x }); break;
@@ -252,7 +258,7 @@ export async function mount(ctx) {
       case 'shatterWall': if (cue('shatterWall')) au('shatterWall'); break;
       case 'brickLand': au('brickLand', { x: Number.isFinite(d.x) ? d.x / s.w : 0.5 }); break;
       case 'split': au('split'); break;
-      case 'powerCatch': au('split'); break;
+      case 'powerCatch': if (!cued) au('split'); break;
       case 'powerSave': hitAu('paddle',d); break;
       case 'popOut': au('popOut', { x: Number.isFinite(d.x) ? d.x / s.w : 0.5 }); break;
       case 'burst': au('burst', { x: Number.isFinite(d.x) ? d.x / s.w : 0.5 }); break;
@@ -409,10 +415,12 @@ export async function mount(ctx) {
   function frame(ts) {
     if (!running) return;
     raf = requestAnimationFrame(frame);
+    // The pad is polled before the pause gate so its Start button can pause and resume.
+    try { const pad = gamepad?.poll(input, { menuOpen, paused, suspended }); if (pad?.pause && !menuOpen) setPaused(!paused); if (pad?.start && menuOpen) beginGame(); if (pad?.any) startAudio(); } catch (e) { /* pad optional */ }
     const frameMs = lastT ? ts-lastT : 1000/60;
     const dt = Math.min(0.05, frameMs/1000);
     lastT = ts;
-    if (menuOpen || suspended || paused) { diagnostics?.idle(); renderBudget.idle(ts); return; }
+    if (menuOpen || suspended || paused) { try { haptics?.stop(); } catch (e) { /* noop */ } diagnostics?.idle(); renderBudget.idle(ts); return; }
     const perfStart = performance.now();
     if (budgetResize) { resize(); budgetResize = false; }
     // The stylesheet lands after the first measure and the room can reshape the root without a window resize.
@@ -422,6 +430,7 @@ export async function mount(ctx) {
     input.launch = false;
     const s = game.snapshot(), now = ts / 1000;
     syncAudio(s);
+    try { haptics?.frame(s, now); } catch (e) { /* haptics optional */ }
     if(shutdownCover && s.finale?.phase==='outro') {
       const t=s.finale.outroAge,p=Math.max(0,Math.min(1,(t-2.9)/.63));
       const inset=(1-Math.pow(1-p,3))*50;
@@ -473,6 +482,8 @@ export async function mount(ctx) {
       speedScale: num(q, 'speed', 0.55), reduced });
     if (q.has('nolose')) game.setNoLose(true);
     renderer = createRenderer(canvas, { reduced, media, software: q.has('software') || prefersSoftwareCanvas() });
+    haptics = createHaptics({ ctx, reduced, enabled: !q.has('nohaptics') });
+    gamepad = createGamepad();
     sawHit = typeof game.snapshot().combo === 'number';   // a v2 sim emits 'hit'; the raw names are then cosmetic only
     const gates = ctx.gates || {};
     const fx = typeof ctx.fx === 'function' ? ctx.fx : null;
@@ -581,6 +592,8 @@ export async function mount(ctx) {
     try { audio && audio.stop(); } catch (e) { /* noop */ }
     try { voice && voice.stop(); } catch (e) { /* noop */ }
     voice = null;
+    try { haptics && haptics.destroy(); } catch (e) { /* noop */ }
+    haptics = null; gamepad = null;
     try { media && media.dispose(); } catch (e) { /* noop */ }
     try { renderer && renderer.dispose(); } catch (e) { /* noop */ }
     if (el && el.parentNode) el.parentNode.removeChild(el);

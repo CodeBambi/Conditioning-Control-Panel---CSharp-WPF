@@ -35,6 +35,7 @@ import { createLandscape } from './landscape.js';
 import { createSpellRender } from './spell-render.js';
 import { createWellFx } from './render-well.js';
 import { WORD_FX } from './word-fx.js';
+import { REACTIONS } from './reactions.js';
 
 const FONT = '"Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif';
 const BG = [26, 26, 46], PINK = [255, 105, 180], VIOLET = [165, 108, 255], MINT = [120, 230, 200], GOLD = [255, 207, 107], WHITE = [255, 255, 255], GREY = [150, 150, 150];
@@ -264,6 +265,15 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         P.rects(x, y, MINT, d.fired ? 6 : 3, { speed: 200, life: 0.6, size: 5 });
         if (d.fired && d.key !== 'DROP' && d.key !== 'BLANK') cam.kick(3);
       }
+    }
+    // Lane reactions (reactions.js: name -> (fx, d, snapshot) => void). Cosmetic only, never throws into the frame.
+    const react = REACTIONS[name];
+    if (typeof react === 'function') {
+      try {
+        react({ P, stamps, cam, debris, shockwaves, reduced, rng, W, H, colour, sat, rungs,
+          colours: { PINK, MINT, GOLD, VIOLET, WHITE, GREY },
+          flash: (v) => { flash = Math.max(flash, v); }, aberr: (v) => { aberr = Math.max(aberr, v); } }, d, last);
+      } catch (e) { /* cosmetic */ }
     }
   }
 
