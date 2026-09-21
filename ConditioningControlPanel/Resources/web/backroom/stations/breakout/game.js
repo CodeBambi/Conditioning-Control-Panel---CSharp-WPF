@@ -52,7 +52,10 @@ export const gifScaleForWall = cleared => .8 + .9 * Math.min(1, Math.max(0, clea
 export const bubbleTier = roll => roll < 0.7 ? 1 : roll < 0.9 ? 2 : 3;
 export const RUNG_NAMES = ['grey', 'colour', 'trail', 'particles', 'jelly', 'shake', 'words', 'spirals', 'colliders', 'crack'];
 export const BRICK = { cols: 16, rows: 5, w: 48.96, h: 27.54, gap: 6, top: 26 };
-export const PADDLE = { baseW: 170, h: 14 };
+/** grow: how much wider the paddle is at full saturation (owner, 2026-09-21: 0.6 read too big in colour, shortened a touch). */
+export const PADDLE = { baseW: 170, h: 14, grow: 0.5 };
+/** A split brick always drops a multiball. Was .05, which with the random drops made multiball 62% of everything that fell (owner: way too many). Now about a quarter, level with the others. */
+export const SPLIT_CHANCE = 0.01;
 export const BALL_R = 8;
 export const MAX_BALLS = 3;
 export const SPELL_WORDS = ['DROP', 'SINK', 'RELAX', 'LET GO'];
@@ -201,7 +204,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
           const spiral=gif<0&&!word&&rng()<SPIRAL_BRICK_P?WELL_PRESETS[Math.floor(rng()*WELL_PRESETS.length)]:null;
           bricks.push(mkBrick(pose.x,pose.y,pose.w,pose.h,row,col,{...pose,pendulumId:p.id,
             curtain:true,curtainRow:row,curtainCol:col,gif,tier:gif>=0?bubbleTier(face%1):0,
-            word,wordAt:word?.6+rng()*WORD_SWAP_S:0,spiral,split:rng()<.05,
+            word,wordAt:word?.6+rng()*WORD_SWAP_S:0,spiral,split: rng() < SPLIT_CHANCE,
             ...((row===0||row===CURTAIN_ROWS-1||col===0||col===CURTAIN_COLS-1)?
               {strength:3,hp:(row+col+p.id)%3===0?2:3,gif:-1,tier:0,word:null,wordAt:0,spiral:null,split:false}:{} )}));
         }
@@ -225,7 +228,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         const face = rng() < .15 ? rng() * 8 : -1, gif = Math.floor(face);
         const spiral = gif < 0 && rng() < SPIRAL_BRICK_P ? WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)] : null;
         const word = gif < 0 && !spiral && g.words.length && rng() < WORD_BRICK_P ? g.words[g.wordIx++ % g.words.length] : null;
-        bricks.push(mkBrick(cell.x, cell.y, cell.w, cell.h, Math.max(0, Math.min(4, Math.floor((cell.y - 38) / 38))), i, { gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, spiral, split: rng() < .05, word, wordAt: word ? .6 + rng() * WORD_SWAP_S : 0, letter: cell.letter, angle: cell.angle }));
+        bricks.push(mkBrick(cell.x, cell.y, cell.w, cell.h, Math.max(0, Math.min(4, Math.floor((cell.y - 38) / 38))), i, { gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, spiral, split: rng() < SPLIT_CHANCE, word, wordAt: word ? .6 + rng() * WORD_SWAP_S : 0, letter: cell.letter, angle: cell.angle }));
       }
       g.mantra = null;
     } else if (g.stats.walls === 1) {
@@ -236,7 +239,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         const word = gif < 0 && g.words.length && rng() < WORD_BRICK_P ? g.words[g.wordIx++ % g.words.length] : null;
         const spiral = gif < 0 && !word && rng() < SPIRAL_BRICK_P ? WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)] : null;
         bricks.push(mkBrick(pose.x, pose.y, pose.w, pose.h, row, col, {
-          angle: pose.angle, gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, split: rng() < .05, word, spiral,
+          angle: pose.angle, gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, split: rng() < SPLIT_CHANCE, word, spiral,
           hue: spiral ? Math.floor(rng() * 70) - 35 : 0, spin: spiral ? .75 + rng() * .5 : 1,
           wordAt: word ? .6 + rng() * (WORD_SWAP_S + WORD_SWAP_J) : 0,
         }));
@@ -254,7 +257,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         const spiral = gif < 0 && rng() < SPIRAL_BRICK_P ? WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)] : null;
         bricks.push(mkBrick(x0 + cell.col * (size + gap), BRICK.top + cell.row * (height + gap),
           size, height, cell.row, cell.col, { letter: cell.letter, gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0,
-            spiral, hue: spiral ? Math.floor(rng() * 70) - 35 : 0, spin: spiral ? 0.75 + rng() * 0.5 : 1, split: rng() < 0.05 }));
+            spiral, hue: spiral ? Math.floor(rng() * 70) - 35 : 0, spin: spiral ? 0.75 + rng() * 0.5 : 1, split: rng() < SPLIT_CHANCE }));
       }
       // Every Spell formation gets both payload kinds, even on an unlucky deal.
       if (!bricks.some(b => b.gif >= 0)) {
@@ -276,7 +279,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
           const word = gif < 0 && rng() < WORD_BRICK_P ? g.words[g.wordIx++ % g.words.length] : null;
           bricks.push(mkBrick(w / 2 + Math.cos(angle) * rx - BRICK.w / 2,
             h / 2 + Math.sin(angle) * ry - BRICK.h / 2, BRICK.w, BRICK.h, row, col,
-            { gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, word, split: rng() < .05,
+            { gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, word, split: rng() < SPLIT_CHANCE,
               wordAt: word ? .6 + rng() * WORD_SWAP_S : 0 }));
         }
       }
@@ -292,7 +295,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         // A few plain bricks wear a spiral: the well comes out of the brick it was in (owner, 2026-09-19).
         const spiral = gif < 0 && !word && rng() < SPIRAL_BRICK_P ? WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)] : null;
         bricks.push(mkBrick(x0 + col * (BRICK.w + BRICK.gap), BRICK.top + row * (BRICK.h + BRICK.gap), BRICK.w, BRICK.h, row, col,
-          { gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, split: rng() < 0.05, word, spiral, hue: spiral ? Math.floor(rng() * 70) - 35 : 0, spin: spiral ? 0.75 + rng() * 0.5 : 1,
+          { gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, split: rng() < SPLIT_CHANCE, word, spiral, hue: spiral ? Math.floor(rng() * 70) - 35 : 0, spin: spiral ? 0.75 + rng() * 0.5 : 1,
             wordAt: word ? 0.6 + rng() * (WORD_SWAP_S + WORD_SWAP_J) : 0 }));   // each word brick starts its clock somewhere else
       }
       g.mantra = null;
@@ -341,7 +344,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     const word=gif<0&&g.words.length&&rng()<WORD_BRICK_P?g.words[g.wordIx++%g.words.length]:null;
     return mkBrick(0,0,39,24,arm,Math.floor(age/IRIS_INTERVAL),{
       ...irisPose(arm,age,w,h,g.iris?.rotation||0),arm,irisAge:age,gif,tier:gif>=0?bubbleTier(rng()):0,
-      word,wordAt:.8+rng(),split:rng()<.05,
+      word,wordAt:.8+rng(),split: rng() < SPLIT_CHANCE,
       spiral:gif<0&&!word&&rng()<SPIRAL_BRICK_P?WELL_PRESETS[Math.floor(rng()*WELL_PRESETS.length)]:null
     });
   }
@@ -1236,7 +1239,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     g.rungs = rungsFor(g.sat, g.state, g.force);
     g.speed = targetSpeed() * g.mod.ballSpeed;
-    g.paddle.w = PADDLE.baseW * (1 + 0.6 * g.sat) * g.mod.paddleW;
+    g.paddle.w = PADDLE.baseW * (1 + PADDLE.grow * g.sat) * g.mod.paddleW;
     g.paddle.stretch = Math.max(0, g.paddle.stretch - dt * 4);
     g.wobble.t = Math.max(0, g.wobble.t - dt * 2);
     for (const br of g.bricks) {

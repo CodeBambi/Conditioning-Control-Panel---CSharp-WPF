@@ -1,7 +1,7 @@
 /* node --test game.test.js - the state machine and the saturation ladder, nothing visual. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
+import { PADDLE, SPLIT_CHANCE, BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 // These scoring/state fixtures use one-hit walls; durability has its own integration suite.
@@ -808,4 +808,12 @@ test('a bubble hammered by several balls never leaves faster than its cap', () =
     game.step(1 / 60); game.step(1 / 60);
   }
   assert.ok(s.colliders[0].hits >= 4); assert.ok(Math.hypot(s.colliders[0].vx, s.colliders[0].vy) <= BUBBLE_MAX + 1e-6);
+});
+
+test('the colour paddle grows by half at full saturation, no more; split bricks are rare', () => {
+  assert.equal(PADDLE.grow, 0.5); assert.ok(SPLIT_CHANCE <= 0.025);
+  const { game } = make({ saturation: 1 });
+  const s = game.snapshot(); game.step(1 / 60);
+  assert.ok(Math.abs(s.paddle.w - PADDLE.baseW * (1 + PADDLE.grow * s.sat) * s.mod.paddleW) < 1e-6);
+  assert.ok(s.paddle.w <= PADDLE.baseW * 1.5 + 1e-6);
 });
