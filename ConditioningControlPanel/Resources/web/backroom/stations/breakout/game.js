@@ -66,6 +66,8 @@ export const SPIRAL_BRICK_P = 0.07;
 export const WORD_SWAP_S = 1.7, WORD_SWAP_J = 0.9, GLITCH_S = 0.36;
 export const ROW_COLORS = ['#ff5fa2', '#ff8ac4', '#c86bff', '#7fd6ff', '#ffd166', '#7bffb0'];
 const STEP = 1 / 120;
+/** Picture bubbles: resting drift (px/s), the shove a ball gives one (px/s, bled off in about a second), the jelly's length (s). */
+export const BUBBLE_DRIFT = 24, BUBBLE_PUSH = 95, BUBBLE_MAX = 170, BUBBLE_JELLY_S = .75;
 const TAU = Math.PI * 2;
 const RELAPSE_S = 0.5, BREAKOUT_S = 0.3, PUSH_S = 0.12, RING_S = 0.03, NEAR_MISS_PX = 6;
 /* Feel pass. Hit-stop is for three rare events only (ms); the last brick also bends time for LAST_SLOW_S at LAST_SCALE. */
@@ -901,11 +903,21 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function spawnCollider(x, y, gif, tier = 1) {
     const r = 46 * 1.33 * gifScaleForWall(g.stats.walls), a = rng() * TAU;
-    g.colliders.push({ x, y, r, vx: Math.cos(a) * 18, vy: Math.sin(a) * 18, hits: 0, pulse: 0, alpha: 0, fading: false, gif, tier, age: 0 });
+    // ph comes from where it spawned, never from rng: the idle wobble and the wander cost the wall's dice nothing.
+    g.colliders.push({ x, y, r, vx: Math.cos(a) * BUBBLE_DRIFT, vy: Math.sin(a) * BUBBLE_DRIFT, hits: 0, pulse: 0, alpha: 0, fading: false, gif, tier, age: 0,
+      jelly: 0, jnx: 0, jny: -1, ph: (x * .017 + y * .031) % TAU });
   }
   function updateColliders(dt) {
     for (const c of g.colliders) {
       c.age += dt;
+      if (c.jelly > 0) c.jelly = Math.max(0, c.jelly - dt / BUBBLE_JELLY_S);
+      // A slow wander turns the drift, and a shove from the ball bleeds back down to the drift speed.
+      const sp = Math.hypot(c.vx, c.vy);
+      if (sp > .001) {
+        const turn = Math.sin(c.age * .7 + (c.ph || 0)) * .5 * dt, cs = Math.cos(turn), sn = Math.sin(turn);
+        const want = sp > BUBBLE_DRIFT ? Math.max(BUBBLE_DRIFT, sp * Math.exp(-2.6 * dt)) : Math.min(BUBBLE_DRIFT, sp + 12 * dt), k = want / sp;
+        const vx = (c.vx * cs - c.vy * sn) * k, vy = (c.vx * sn + c.vy * cs) * k; c.vx = vx; c.vy = vy;
+      }
       const nx=c.x+c.vx*dt, ny=c.y+c.vy*dt;
       const radius=c.r*1.15;
       if(brickOverlap(nx,ny,radius,g.bricks)>brickOverlap(c.x,c.y,radius,g.bricks)+.01) {
@@ -1114,6 +1126,10 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       if (dot < 0) { b.vx -= 2 * dot * nx; b.vy -= 2 * dot * ny; }
       b.x = c.x + nx * rr; b.y = c.y + ny * rr;
       c.hits++; c.pulse = 1;
+      // Jelly and pushback: the bubble squashes along the hit and is shoved away from the ball, then bleeds back to its drift.
+      c.jelly = 1; c.jnx = nx; c.jny = ny; c.vx -= nx * BUBBLE_PUSH; c.vy -= ny * BUBBLE_PUSH;
+      const pushed = Math.hypot(c.vx, c.vy);                              // eight balls on one bubble must not fire it across the field
+      if (pushed > BUBBLE_MAX) { c.vx *= BUBBLE_MAX / pushed; c.vy *= BUBBLE_MAX / pushed; }
       const tier = c.tier || 1, popped = c.hits >= tier;
       if (popped) {
         c.fading = true; c.alpha = 0;
@@ -1122,7 +1138,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       }
       au('hit', 'gif', { combo: g.combo + 1, x: b.x / w });
 
-      emit('gif', { x: c.x, y: c.y, r: c.r, hits: c.hits, tier, popped });
+      emit('gif', { x: c.x, y: c.y, r: c.r, hits: c.hits, tier, popped, hx: c.x + nx * c.r, hy: c.y + ny * c.r, nx, ny });
       bumpCombo('gif', c.x, c.y);
       return;
     }
@@ -1172,7 +1188,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     pushTrail(b);
   }
   const liveBalls = () => g.balls.reduce((n, b) => n + (!b.lost && !b.falling ? 1 : 0), 0);
-  function pushTrail(b) { b.trail.push(b.x, b.y); if (b.trail.length > 80) b.trail.splice(0, 2); }
+  function pushTrail(b) { b.trail.push(b.x, b.y); if (b.trail.length > 128) b.trail.splice(0, 2); }
 
   /* ------------------------------------------------------------ step */
   function movePaddle(dt, input) {

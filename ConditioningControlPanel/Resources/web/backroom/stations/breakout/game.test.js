@@ -1,7 +1,7 @@
 /* node --test game.test.js - the state machine and the saturation ladder, nothing visual. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
+import { BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 // These scoring/state fixtures use one-hit walls; durability has its own integration suite.
@@ -780,4 +780,32 @@ test('keys ease in to full speed in about 120 ms and stop dead on release', () =
   assert.ok(moves[3] < moves[7], 'it builds'); assert.ok(Math.abs(moves[11] - 640 * dt) < 1e-6, 'to the full 640 px/s');
   const x = s.paddle.x; game.step(dt, {}); assert.equal(s.paddle.x, x);
   game.step(dt, { right: true }); assert.ok(s.paddle.x - x < 640 * dt * 0.1, 'a reversal starts from rest');
+});
+
+test('a hit bubble jiggles, is shoved away from the ball and settles back to its drift', () => {
+  const { game, events } = make({ saturation: 0.5 });
+  const s = game.snapshot();
+  s.colliders.push({ x: 600, y: 420, r: 50, vx: BUBBLE_DRIFT, vy: 0, hits: 0, pulse: 0, alpha: 1, fading: false, gif: 0, tier: 3, age: 1, jelly: 0, ph: 1 });
+  s.balls = [{ ...s.balls[0], x: 600, y: 480, vx: 0, vy: -300, stuck: false, ghost: false, trail: [] }];
+  game.step(1 / 60); game.step(1 / 60);
+  const c = s.colliders[0]; assert.equal(c.hits, 1);
+  assert.ok(c.jelly > .9 && c.jny > .9, 'jelly rings along the hit normal');
+  assert.ok(c.vy < -BUBBLE_PUSH * .8, 'pushed up, away from a ball that came from below');
+  const hit = events.find(e => e[0] === 'gif')[1];
+  assert.ok(Math.abs(hit.hx - 600) < 2 && Math.abs(hit.hy - 470) < 2 && hit.ny > .9, 'the event carries the contact point');
+  s.balls = [{ ...s.balls[0], x: 100, y: 650, vx: 0, vy: 0, stuck: true }];
+  for (let i = 0; i < 240; i++) game.step(1 / 60);
+  assert.equal(c.jelly, 0); assert.ok(Math.abs(Math.hypot(c.vx, c.vy) - BUBBLE_DRIFT) < .5, 'back to the resting drift');
+});
+
+test('a bubble hammered by several balls never leaves faster than its cap', () => {
+  const { game } = make({ saturation: 0.5 });
+  const s = game.snapshot();
+  s.colliders.push({ x: 600, y: 420, r: 50, vx: 0, vy: 0, hits: 0, pulse: 0, alpha: 1, fading: false, gif: 0, tier: 9, age: 1, jelly: 0, ph: 0 });
+  for (let i = 0; i < 6; i++) {
+    const c = s.colliders[0]; c.x = 600; c.y = 420;
+    s.balls = [{ ...s.balls[0], x: 600, y: 480, vx: 0, vy: -300, stuck: false, ghost: false, trail: [] }];
+    game.step(1 / 60); game.step(1 / 60);
+  }
+  assert.ok(s.colliders[0].hits >= 4); assert.ok(Math.hypot(s.colliders[0].vx, s.colliders[0].vy) <= BUBBLE_MAX + 1e-6);
 });

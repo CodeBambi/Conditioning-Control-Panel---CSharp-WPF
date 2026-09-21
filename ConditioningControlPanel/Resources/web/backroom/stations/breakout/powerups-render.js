@@ -31,20 +31,34 @@ function drawFire(g,b,time,step){
     const i=(n-1-k)*2,f=k/40,flick=1+.2*Math.sin(time*31+k*1.7);
     g.globalAlpha=.5*(1-f);g.fillStyle=FLAME[1+Math.min(2,Math.floor(f*3.4))];disc(g,tr[i]+Math.sin(time*19+k)*f*4,tr[i+1]-f*7,r*(1.5-f)*flick);
   }
-  for(let j=0;j<6&&n>2;j++){                                            // embers ride a trail point up and out as they age
-    const f=(time*3+j/6)%1,i=(n-1-Math.min(n-1,Math.floor(f*38)))*2;
+  for(let j=0;j<10&&n>2;j++){                                            // embers ride a trail point up and out as they age
+    const f=(time*3+j/10)%1,i=(n-1-Math.min(n-1,Math.floor(f*38)))*2;
     g.globalAlpha=.85*(1-f);g.fillStyle=FLAME[j&1];disc(g,tr[i]+Math.sin(j*12.9+f*5)*9*f,tr[i+1]-f*18,2.4*(1-f*.8));
   }
-  g.globalAlpha=.3;g.fillStyle=FLAME[2];disc(g,b.x,b.y,r+6+Math.sin(time*23)*1.2);g.globalAlpha=.4;g.fillStyle=FLAME[0];disc(g,b.x,b.y,r+2.5);
+  g.globalAlpha=.14;g.fillStyle=FLAME[3];disc(g,b.x,b.y,r+13+Math.sin(time*17)*2);
+  g.globalAlpha=.3;g.fillStyle=FLAME[2];disc(g,b.x,b.y,r+7+Math.sin(time*23)*1.4);g.globalAlpha=.45;g.fillStyle=FLAME[0];disc(g,b.x,b.y,r+3);
 }
 export function drawPowerups(g,s){
   const p=s.power;if(!p||s.state!=='colour')return;
   const still=!!s.reduced,time=s.time||0,pad=s.paddle;
   for(const d of p.drops)drawDrop(g,d,s,still);
   g.save();g.lineCap='round';
-  // Bolts: a wide soft tail, the coloured body, a white core. Three passes so the styles change three times, not per bolt.
+  // Bolts: a long soft tail, a fat coloured body, a white core and a hot head. Passes, so the styles change per pass, not per bolt.
   const bolt=(len,w,c,a)=>{g.strokeStyle=c;g.lineWidth=w;g.globalAlpha=a;for(const b of p.shots){g.beginPath();g.moveTo(b.x,b.y);g.lineTo(b.x,b.y+len);g.stroke();}};
-  if(p.shots.length){g.globalCompositeOperation='lighter';bolt(34,6,COLORS.laser,.22);g.globalCompositeOperation='source-over';bolt(17,3.5,COLORS.laser,.95);bolt(12,1.5,'#fff',.95);}
+  if(p.shots.length){
+    g.globalCompositeOperation='lighter';bolt(still?40:64,11,COLORS.laser,.16);bolt(still?30:42,7,COLORS.laser,.22);
+    if(!still){
+      // Sparks shed down the tail: no state, each one a function of the clock and the bolt it rides.
+      g.fillStyle='#ffd9ef';
+      for(const b of p.shots)for(let j=0;j<4;j++){
+        const f=(time*5+j*.25+b.x*.013)%1;
+        g.globalAlpha=.8*(1-f);disc(g,b.x+Math.sin(j*9.1+b.x+f*7)*(2+7*f),b.y+12+f*54,2.1*(1-f*.7));
+      }
+      g.fillStyle=COLORS.laser;g.globalAlpha=.4;for(const b of p.shots)disc(g,b.x,b.y+2,8+Math.sin(time*40+b.x)*1.2);
+    }
+    g.globalCompositeOperation='source-over';bolt(26,6,COLORS.laser,.95);bolt(19,2.6,'#fff',.95);
+    g.fillStyle='#fff';g.globalAlpha=1;for(const b of p.shots)disc(g,b.x,b.y+1,3.2);
+  }
   if(p.laser>0){
     const m=still?0:Math.min(1,(p.muzzle||0)/MUZZLE_S);                  // 1 on the volley, 0 a tenth of a second later
     for(const sign of [-1,1]){
@@ -58,7 +72,23 @@ export function drawPowerups(g,s){
     if(still){g.strokeStyle=COLORS.fireball;g.lineWidth=3;g.globalAlpha=1;for(const b of s.balls){if(b.lost||b.falling)continue;g.beginPath();g.arc(b.x,b.y,b.r+4,0,7);g.stroke();}}
     else{g.globalCompositeOperation='lighter';for(const b of s.balls)if(!b.lost&&!b.falling)drawFire(g,b,time,live>3?5:2);g.globalCompositeOperation='source-over';}
   }
-  if(p.charges>0){g.strokeStyle=COLORS.shield;g.lineWidth=2;g.globalAlpha=p.shield<3?.4+.3*Math.sin(time*12):.8;for(let i=0;i<p.charges;i++){g.beginPath();g.moveTo(6,shieldY(pad,s.h)-i*5);g.lineTo(s.w-6,shieldY(pad,s.h)-i*5);g.stroke();}}
+  if(p.charges>0){
+    // The shield: a soft field under a bright line, a pulse of light running along it, motes lifting off. Still = the line.
+    const base=p.shield<3&&!still?.4+.3*Math.sin(time*12):.8,line=(w,a,c)=>{g.strokeStyle=c;g.lineWidth=w;g.globalAlpha=a;for(let i=0;i<p.charges;i++){const y=shieldY(pad,s.h)-i*5;g.beginPath();g.moveTo(6,y);g.lineTo(s.w-6,y);g.stroke();}};
+    if(!still){g.globalCompositeOperation='lighter';line(12,.12*base,COLORS.shield);line(6,.2*base,COLORS.shield);}
+    g.globalCompositeOperation='source-over';line(2.5,base,COLORS.shield);
+    if(!still){
+      g.globalCompositeOperation='lighter';
+      for(let i=0;i<p.charges;i++){
+        const y=shieldY(pad,s.h)-i*5,span=s.w-12,x=6+((time*(300+i*70)+i*span*.5)%span);
+        const run=g.createLinearGradient(x-70,0,x+70,0);run.addColorStop(0,'rgba(255,255,255,0)');run.addColorStop(.5,'rgba(255,255,255,.9)');run.addColorStop(1,'rgba(255,255,255,0)');
+        g.globalAlpha=base;g.strokeStyle=run;g.lineWidth=3.5;g.beginPath();g.moveTo(Math.max(6,x-70),y);g.lineTo(Math.min(s.w-6,x+70),y);g.stroke();
+      }
+      g.fillStyle=COLORS.shield;
+      for(let j=0;j<9;j++){const f=(time*.8+j/9)%1;g.globalAlpha=.6*base*(1-f);disc(g,6+((j*.618+.13)%1)*(s.w-12)+Math.sin(time*2+j)*6,shieldY(pad,s.h)-f*22,1.8*(1-f*.5));}
+      g.globalCompositeOperation='source-over';
+    }
+  }
   g.restore();
   // The HUD under the paddle: readable bars on a dark track, and the last WARN_AT seconds pulse (white and steady when reduced).
   let count=0;for(const kind of Object.keys(COLORS))if(p[kind]>0&&(kind!=='shield'||p.charges))count++;

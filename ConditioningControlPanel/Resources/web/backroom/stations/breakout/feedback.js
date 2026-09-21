@@ -8,7 +8,26 @@ export function durabilityColour(hp, grey = false, hue = 270) {
     return Math.round(255 * (light - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
   });
 }
-export const cometLength = speed => Math.min(180, Math.max(0, speed) * .22);
+/** The comet's length in px. It grows with speed, and a fast ball earns up to a quarter more on top (0 at 300 px/s, +25% by 700). */
+export const COMET_BONUS = .25;
+export const cometLength = speed => {
+  const v = Math.max(0, speed || 0), fast = Math.max(0, Math.min(1, (v - 300) / 400));
+  return Math.min(225, v * .22 * (1 + COMET_BONUS * fast));
+};
+/** Multiball copies wear their own colour so three balls read as three: [body spiral, trail]. 0 is the player's own ball. */
+export const BALL_TINTS = [null, [[255, 120, 196], [255, 140, 210]], [[110, 200, 255], [130, 215, 255]]];
+/** A bubble's jelly after a hit. `t` is the sim's collider.jelly (1 at the hit -> 0): squashed along the hit normal, then a
+ *  damped ring of three swings. `along` scales the normal, `across` the tangent, area roughly kept. */
+export function jellyScale(t) {
+  const u = 1 - Math.max(0, Math.min(1, t || 0));
+  const k = u >= 1 ? 0 : Math.exp(-4.2 * u) * Math.cos(u * Math.PI * 5) * (1 - u);
+  return { along: 1 - .2 * k, across: 1 + .16 * k };
+}
+/** A resting bubble is never still: it breathes, and a slow wobble trades width for height. Both from its age and a phase. */
+export function bubbleIdle(age = 0, ph = 0) {
+  const w = .035 * Math.sin(age * 2.1 + ph * 1.7);
+  return { breath: 1 + .03 * Math.sin(age * 1.5 + ph), sx: 1 + w, sy: 1 - w, tilt: .5 * Math.sin(age * .6 + ph) };
+}
 export function cometSegments(ball) {
   if (ball.stuck || ball.lost) return [];
   const length = cometLength(Math.hypot(ball.vx || 0, ball.vy || 0));

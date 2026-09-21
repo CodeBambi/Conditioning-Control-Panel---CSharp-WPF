@@ -500,3 +500,26 @@ for (const reduced of [false, true]) test(`the last brick leans the camera in an
     renderer.dispose();
   } finally { globalThis.document = oldDocument; }
 });
+
+test('the comet is a colour thing: a grey ball draws no trail, a tinted copy draws its own colour', () => {
+  const oldDocument = globalThis.document;
+  globalThis.document = { createElement: () => canvasStub() };
+  try {
+    const trail = []; for (let x = 0; x <= 300; x += 5) trail.push(x, 400);
+    const strokes = (state, ball) => {
+      const log = [], styles = [];
+      const stub = canvasStub(log), ctx = stub.getContext();
+      const renderer = createRenderer({ ...stub, getContext: () => new Proxy(ctx, { set(t, k, v) { if (k === 'strokeStyle') styles.push(String(v)); t[k] = v; return true; }, get: (t, k) => t[k] }) }, { rng: () => 0.5 });
+      renderer.resize(480, 720);
+      const snap = { ...createGame({ rng: () => 0.5 }).snapshot(), state, sat: state === 'colour' ? .5 : 0, balls: [ball], colliders: [], pops: [], bricks: [] };
+      renderer.draw(snap, { now: 1, dt: 0.016 });
+      return { n: log.filter(op => op[0] === 'stroke').length, styles };
+    };
+    const ball = { x: 300, y: 400, r: 8, vx: 420, vy: 0, trail, spin: 0 };
+    const bare = { ...ball, trail: [] };
+    assert.equal(strokes('grey', ball).n, strokes('grey', bare).n, 'grey: the trail adds nothing');
+    assert.ok(strokes('colour', ball).n > strokes('colour', bare).n + 10, 'colour: the comet is there');
+    const own = strokes('colour', ball).styles.join('|'), copy = strokes('colour', { ...ball, tint: 2 }).styles.join('|');
+    assert.notEqual(own, copy, 'a copy strokes its trail in its own colour');
+  } finally { globalThis.document = oldDocument; }
+});

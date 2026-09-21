@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, relativeDrag } from './feedback.js';
+import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, relativeDrag, cometLength, COMET_BONUS, jellyScale, bubbleIdle, BALL_TINTS } from './feedback.js';
 import { createParticles } from './particles.js';
 
 const luminance = rgb => rgb.map(v => {v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;}).reduce((n,v,i)=>n+v*[.2126,.7152,.0722][i],0);
@@ -56,4 +56,19 @@ test('touch drag is relative, a little faster than the finger, and re-anchors at
   assert.ok(Math.abs(relativeDrag(drag, 1000, 85, 1280) - 415) < 1e-9, '100 px of finger is 115 px of paddle');
   assert.equal(relativeDrag(drag, 100, 85, 1280), 85, 'clamped at the wall');
   assert.ok(relativeDrag(drag, 110, 85, 1280) > 85, 'and the reversal answers at once');
+});
+test('a fast ball earns up to a quarter more comet, and no more',()=>{
+  assert.equal(cometLength(300),300*.22);
+  assert.ok(Math.abs(cometLength(700)-700*.22*(1+COMET_BONUS))<1e-9);
+  assert.ok(Math.abs(cometLength(500)-500*.22*1.125)<1e-9,'the bonus ramps between');
+  assert.equal(cometLength(5000),225);assert.equal(cometLength(-3),0);
+  for(let v=0;v<1200;v+=20)assert.ok(cometLength(v+20)>=cometLength(v),'never shrinks with speed');
+});
+test('bubble jelly rests at round, squashes along the hit and rings out; the idle stays slight',()=>{
+  assert.deepEqual(jellyScale(0),{along:1,across:1});
+  const hit=jellyScale(1);assert.ok(hit.along<.85&&hit.across>1.1);
+  let swings=0,prev=hit.along-1;for(let t=1;t>=0;t-=.01){const k=jellyScale(t).along-1;if(k*prev<0)swings++;if(k)prev=k;assert.ok(Math.abs(k)<=.2001);}
+  assert.ok(swings>=3,'it wobbles, not just relaxes');
+  for(let a=0;a<30;a+=.37){const i=bubbleIdle(a,1.3);assert.ok(Math.abs(i.breath-1)<=.03&&Math.abs(i.sx-1)<=.035&&Math.abs(i.sx+i.sy-2)<1e-9);}
+  assert.equal(BALL_TINTS[0],null);assert.notDeepEqual(BALL_TINTS[1],BALL_TINTS[2]);
 });

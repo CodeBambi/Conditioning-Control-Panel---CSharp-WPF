@@ -1,4 +1,4 @@
-import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean } from './feedback.js';
+import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups} from './powerups-render.js';
 import { junctionProtected } from './junction-shield.js';
@@ -195,8 +195,17 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     } else if (name === 'wordSwap') {
       if (colour) { P.rects(d.x, d.y, MINT, 2, { speed: 70, life: 0.35, size: 3 }); P.burst(d.x, d.y, PINK, 3, 60, 0.4, { rise: 20, gv: 30, r0: 1, r1: 1.5 }); }
     } else if (name === 'gif') {
-      P.burst(d.x, d.y, VIOLET, d.popped ? 24 : 8, 150, 0.45);
-      P.rects(d.x, d.y, VIOLET, 4, { speed: 150, life: 0.6, size: 5 });
+      // In the colour of the skin that took the hit (pink, purple, deep violet), thrown off the point the ball struck.
+      const rgb = tierColour(Math.max(1, (d.tier || 1) - (d.hits || 1) + 1));
+      const hx = Number.isFinite(d.hx) ? d.hx : d.x, hy = Number.isFinite(d.hy) ? d.hy : d.y;
+      P.burst(d.x, d.y, rgb, d.popped ? 30 : 8, d.popped ? 210 : 150, d.popped ? 0.6 : 0.45);
+      P.rects(d.x, d.y, rgb, d.popped ? 8 : 4, { speed: 150, life: 0.6, size: 5 });
+      if (!reduced && Number.isFinite(d.nx)) {
+        const out = Math.atan2(d.ny, d.nx);
+        P.spray(hx, hy, out, 1.5, rgb, 16, 240, 0.5, { gv: 160 });
+        P.spray(hx, hy, out, 2.2, WHITE, 5, 150, 0.3, { gv: 80 });
+        stamps.push({ kind: 'ring', x: hx, y: hy, r0: 3, r1: d.popped ? 54 : 26, life: 0.25, rgb });
+      }
     } else if (name === 'capture') {
       // The well swallowing the ball: everything falls inward, then the release throws it back out.
       if (colour) P.implode(d.x, d.y, MINT, 30, 190, 0.6, { from: 115 });
@@ -790,8 +799,17 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   function drawColliders(s, mix) {
     for (const c of s.colliders) {
       const inflate = easeOutBack((typeof c.age === 'number' ? c.age : 1) / INFLATE_S);
-      const r = c.r * (1 + c.pulse * 0.25) * Math.max(0.02, inflate), frame = media ? media.frame(c.gif) : null;
+      const idle = reduced ? null : bubbleIdle(c.age || 0, c.ph || 0), jel = !reduced && c.jelly > 0 ? jellyScale(c.jelly) : null;
+      const r = c.r * (1 + c.pulse * 0.25) * Math.max(0.02, inflate) * (idle ? idle.breath : 1), frame = media ? media.frame(c.gif) : null;
       const a = clamp(c.alpha, 0, 1), remaining = Math.max(1, (c.tier || 1) - c.hits), tint = tierColour(remaining);
+      // Display only: the bubble wobbles at rest and rings like jelly along the normal of a hit. The collider stays a circle.
+      g.save();
+      if (idle || jel) {
+        g.translate(c.x, c.y);
+        if (idle) { g.rotate(idle.tilt); g.scale(idle.sx, idle.sy); g.rotate(-idle.tilt); }
+        if (jel) { const n = Math.atan2(c.jny || 0, c.jnx || 0); g.rotate(n); g.scale(jel.along, jel.across); g.rotate(-n); }
+        g.translate(-c.x, -c.y);
+      }
       if (s.state === 'colour') tierAura(remaining, c.x, c.y, r * 2 + 30, r * 2 + 30, a * 0.60);
       g.save(); g.globalAlpha = a;
       g.beginPath(); g.arc(c.x, c.y, r, 0, 7); g.closePath();
@@ -814,17 +832,20 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       for (let skin = 1; skin < remaining; skin++) {
         drawBubble(c.x, c.y, r * (1 - skin * .18), a * .25);
       }
+      g.restore();
     }
   }
   function drawBall(s, b, mix, words) {
     const hgt = clamp((H - 40 - b.y) / (H - 40), 0, 1);                        // soft shadow, grows with height
     g.fillStyle = `rgba(0,0,0,${0.28 - hgt * 0.16})`;
     g.beginPath(); g.ellipse(b.x, b.y + b.r + 3 + hgt * 10, b.r * (1 + hgt * 1.2), b.r * 0.45 * (1 + hgt * 0.6), 0, 0, 7); g.fill();
-    if (!reduced) {
+    const tints = BALL_TINTS[b.tint | 0] || null;                              // a multiball copy wears its own colour
+    // No trail in the grey world (owner, 2026-09-21): the comet is a colour thing.
+    if (!reduced && s.state !== 'grey' && !b.ghost) {
       g.save(); g.lineCap = 'round';
       let trailIndex = 0;
       for (const segment of cometSegments(b)) {
-        g.strokeStyle = col(b.ghost ? GREY : VIOLET, mix, segment.alpha * .6);
+        g.strokeStyle = col(tints ? tints[1] : VIOLET, mix, segment.alpha * .6);
         g.lineWidth = Math.max(.5, b.r * 1.7 * segment.alpha);
         g.beginPath(); g.moveTo(segment.x, segment.y); g.lineTo(segment.nx, segment.ny); g.stroke();
         if (s.state === 'colour' && !b.ghost && s.sat >= .7 && words?.length && trailIndex++ % 5 === 0) {
@@ -851,7 +872,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     }
     if (rungs(3)) {
       const grd = g.createRadialGradient(b.x, b.y, b.r, b.x, b.y, b.r * 3.2);
-      grd.addColorStop(0, col(PINK, mix, 0.45)); grd.addColorStop(1, col(PINK, mix, 0));
+      const glow = tints ? tints[1] : PINK;
+      grd.addColorStop(0, col(glow, mix, 0.45)); grd.addColorStop(1, col(glow, mix, 0));
       g.fillStyle = grd; g.beginPath(); g.arc(b.x, b.y, b.r * 3.2, 0, 7); g.fill();
     }
     const sp = Math.hypot(b.vx || 0, b.vy || 0), ref = s.speed || 420;
@@ -865,7 +887,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     g.fillStyle = '#fffdf5'; g.strokeStyle = '#21162f'; g.lineWidth = 2.5;
     g.beginPath(); g.arc(0, 0, b.r, 0, 7); g.fill(); g.stroke();
     g.beginPath(); g.arc(0, 0, b.r - 0.5, 0, 7); g.clip();
-    drawSpiral(g, 0, 0, b.r * .85, rot, col(VIOLET, mix), 0.55, 2);
+    drawSpiral(g, 0, 0, b.r * .85, rot, col(tints ? tints[0] : VIOLET, mix), 0.55, 2);
     g.fillStyle = '#ffffff'; g.beginPath(); g.arc(0, 0, b.r * .32, 0, 7); g.fill();
     g.restore();
   }
