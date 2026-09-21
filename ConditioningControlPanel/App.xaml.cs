@@ -524,6 +524,8 @@ namespace ConditioningControlPanel
         public static DailyFreeService? DailyFree { get; private set; }
         /// <summary>Back Room prize ownership, server snapshots held in memory (see Services/Prizes/OwnershipService).</summary>
         public static Services.Prizes.OwnershipService? Ownership { get; private set; }
+        /// <summary>Buying a v2 prize from the options panel (see Services/Prizes/V2PurchaseService).</summary>
+        public static Services.Prizes.V2PurchaseService? V2Purchase { get; private set; }
         /// <summary>Eight-hole intake punch card (see IntakePunchCardService).</summary>
         public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
@@ -2076,6 +2078,23 @@ namespace ConditioningControlPanel
             // CCP_PRIZE_GRANTS desk-test override. The static PrizeGrants facade the effect lanes call forwards here.
             Ownership = new Services.Prizes.OwnershipService();
             Services.Prizes.PrizeGrants.Attach(Ownership);
+            // Buying a v2 prize from the options panel instead of the Back Room (owner decision,
+            // 2026-09-19). Pure constructor: the counter is read only when a "Get it" row is put on
+            // screen. The relay is the room's own, so a reply adopts sp and applies its prizes block.
+            V2Purchase = new Services.Prizes.V2PurchaseService(
+                new Services.BackRoom.BackRoomApi(null, Services.BackRoom.BackRoomApi.AppIdentity,
+                    // The receipt's balance IS the balance: the server debited it under its own
+                    // locks, and the counter's netSp keeps a later sync from refunding it. Saved at
+                    // once so a crash before the next save cannot leave a stale, higher local total.
+                    sp => Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                    {
+                        if (Settings?.Current is not { } s || s.SkillPoints == sp) return;
+                        s.SkillPoints = sp;
+                        Settings.Save();
+                    }))),
+                () => Services.BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
+                Services.Prizes.V2PurchaseRule.OwnsPrize,
+                () => Settings?.Current?.SkillPoints ?? 0);
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); Patreon is constructed above too.
             Programs = new Services.Program.ProgramService();
