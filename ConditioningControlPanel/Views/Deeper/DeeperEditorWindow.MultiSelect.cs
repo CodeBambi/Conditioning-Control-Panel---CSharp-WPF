@@ -750,8 +750,7 @@ namespace ConditioningControlPanel.Views.Deeper
             foreach (var sel in _selectionSet) ShiftItem(sel, delta);
             MarkDirty();
             UpdateSelectedSidePanel();
-            RefreshSelectionVisuals();
-            RebuildRuleVisuals();
+            RefreshSelectionVisuals(); // rebuilds the pin lane too
             ScheduleValidation();
         }
 
@@ -846,6 +845,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
+                // The snapshot REPLACES _enhancement, so every pin's Tag points at a discarded
+                // rule instance until this runs. Clicking a stale marker opened the inspector on
+                // a dead object and the edits went nowhere on save.
+                RebuildRuleVisuals();
                 RefreshRulesList();
                 RestoreSelectionIds(sel);
                 ScheduleValidation();

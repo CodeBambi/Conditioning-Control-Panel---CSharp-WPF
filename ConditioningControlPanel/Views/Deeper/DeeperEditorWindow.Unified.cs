@@ -1114,17 +1114,20 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (w <= 0 || h <= 0) return;
 
                 int idx = 0;
-                int detached = 0;
+                // The two parked kinds count their own runs: they walk in from opposite edges.
+                int pastEnd = 0, detached = 0;
                 foreach (var rule in _enhancement.Rules)
                 {
                     idx++;
                     if (rule == null) continue;
                     var tr = rule.Trigger as TimeReachedTrigger;
                     var kind = ClassifyRulePin(tr?.Time, HasRegionBand(rule), _totalSeconds);
-                    if (kind == RulePinKind.OnItsBand) continue; // its region already draws it
-                    double x = RulePinX(kind, tr?.Time ?? 0, _totalSeconds, w, detached);
-                    if (kind == RulePinKind.Detached) detached++;
-                    BuildRulePin(rule, tr, kind, x, idx, h);
+                    // OnItsBand: its region already draws it. None: no media length, so there is
+                    // nothing honest to draw yet - a redraw lands when the duration does.
+                    if (kind is RulePinKind.OnItsBand or RulePinKind.None) continue;
+                    int strayIndex = kind == RulePinKind.PastEnd ? pastEnd++ : detached++;
+                    double x = RulePinX(kind, tr?.Time ?? 0, _totalSeconds, w, strayIndex);
+                    BuildRulePin(rule, tr, kind, x, idx, h, w);
                 }
                 EnsurePlayheadOnTop();
             }
@@ -1140,10 +1143,15 @@ namespace ConditioningControlPanel.Views.Deeper
             => !string.IsNullOrEmpty(rule.RegionConstraint)
                && _enhancement.Regions.Any(r => r != null && r.Id == rule.RegionConstraint);
 
+        // A parked marker's click target, tall enough to aim at and short enough to leave the
+        // lanes alone. A full-height one on the left gutter ate the scrub, the Shift+drag that
+        // starts a region at 0 s, and the left resize edge of a region that starts there.
+        private const double StrayRulePinHitHeight = 16.0;
+
         private void BuildRulePin(EnhancementRule rule, TimeReachedTrigger? tr, RulePinKind kind,
-            double x, int oneBasedIndex, double canvasHeight)
+            double x, int oneBasedIndex, double canvasHeight, double canvasWidth)
         {
-            bool stray = kind != RulePinKind.AtTime;
+            bool stray = IsStrayPin(kind);
             bool isSelected = rule == _selectedRule;
 
             var brush = new System.Windows.Media.SolidColorBrush(stray ? StrayRulePinColor : RulePinColor);
@@ -1190,17 +1198,20 @@ namespace ConditioningControlPanel.Views.Deeper
             _ruleVisuals.Add(flag);
 
             // Wider transparent hit-rect so the user can click on or near the
-            // pin without pixel-precise aiming.
+            // pin without pixel-precise aiming. A real pin earns the full height; a parked
+            // marker gets the flag's own depth, because its x is a parking spot and the lane
+            // underneath it belongs to the timeline. Its left edge is pulled onto the canvas
+            // so a pin at 0 s or on the last frame is clickable without moving its line.
             var hit = new System.Windows.Shapes.Rectangle
             {
-                Width = 14,
-                Height = canvasHeight,
+                Width = RulePinHitWidth,
+                Height = stray ? StrayRulePinHitHeight : canvasHeight,
                 Fill = System.Windows.Media.Brushes.Transparent,
                 Cursor = Cursors.Hand,
                 Tag = rule,
                 ToolTip = RulePinTooltip(rule, tr, kind, oneBasedIndex)
             };
-            Canvas.SetLeft(hit, x - RulePinEdgeInset);
+            Canvas.SetLeft(hit, RulePinHitLeft(x, canvasWidth));
             Canvas.SetTop(hit, 0);
             Panel.SetZIndex(hit, 11);
             hit.MouseLeftButtonDown += (s, e) =>
@@ -1212,17 +1223,26 @@ namespace ConditioningControlPanel.Views.Deeper
             _ruleVisuals.Add(hit);
         }
 
-        // English, like the rest of the editor's inspector copy (its own pass is still
-        // owed). A stray pin's x is not a time, so the tooltip has to say what it is.
+        // English, like the rest of the editor's inspector copy (its own pass is still owed).
+        // A parked marker's x is not a time, so the tooltip has to say what it is - and the
+        // two reasons a rule is parked read very differently. A gaze or region rule whose band
+        // went away has lost something and wants it back; an attention / blink / mouth rule
+        // never had a band and is working exactly as authored.
         private static string RulePinTooltip(EnhancementRule rule, TimeReachedTrigger? tr,
             RulePinKind kind, int oneBasedIndex)
-            => kind switch
+        {
+            var head = $"Rule #{oneBasedIndex}";
+            return kind switch
             {
-                RulePinKind.PastEnd => $"Rule #{oneBasedIndex} · time {tr?.Time ?? 0:0.##}s, past the end of the media",
-                RulePinKind.Detached when tr != null => $"Rule #{oneBasedIndex} · time {tr.Time:0.##}s, media length unknown",
-                RulePinKind.Detached => $"Rule #{oneBasedIndex} · {DescribeRule(rule)} · no region",
-                _ => $"Rule #{oneBasedIndex} · time {tr?.Time ?? 0:0.##}s",
+                RulePinKind.PastEnd => $"{head} · time {tr?.Time ?? 0:0.##}s, past the end of the media",
+                // The only way a time rule reaches the gutter: a time that is not a number.
+                RulePinKind.Detached when tr != null => $"{head} · {DescribeRule(rule)} · its time is not a number",
+                RulePinKind.Detached when !string.IsNullOrEmpty(rule.RegionConstraint) =>
+                    $"{head} · {DescribeRule(rule)} · its region is gone",
+                RulePinKind.Detached => $"{head} · {DescribeRule(rule)} · fires anywhere, no place on the ruler",
+                _ => $"{head} · time {tr?.Time ?? 0:0.##}s",
             };
+        }
 
         // -- Helpers --------------------------------------------------------------
 

@@ -1922,6 +1922,9 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
+            // Every other Select* redraws the pin lane; this one did not, so a deselected
+            // pin kept its white stroke and its heavier line until something else rebuilt.
+            RebuildRuleVisuals();
             RefreshRulesList();
         }
 

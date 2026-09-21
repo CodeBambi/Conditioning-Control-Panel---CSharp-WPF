@@ -58,9 +58,12 @@ public class DeeperLibraryDoorTests
     [Fact]
     public void The_tab_still_pulls_a_fresh_scan_on_a_later_show()
     {
-        // Init does the first scan itself; a show after that has to ask for one, or an
-        // import made from another window never shows up.
-        Assert.Contains("RefreshDeeperLibraryUI()", DeeperCase(), StringComparison.Ordinal);
+        // Init does the first scan itself; a show after that has to ask for one, or an import
+        // made from another window never shows up. The whole line, not just the call: a bare
+        // RefreshDeeperLibraryUI() is exactly what the broken build had, so asserting the call
+        // on its own passes on the bug.
+        Assert.Contains("if (!InitializeDeeperHub()) RefreshDeeperLibraryUI();",
+                        DeeperCase(), StringComparison.Ordinal);
     }
 
     [Fact]
