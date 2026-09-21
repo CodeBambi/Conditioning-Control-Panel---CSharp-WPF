@@ -384,6 +384,26 @@ public class StartupQueueCoreTests
     }
 
     [Fact]
+    public void NoModalOverAGameWindow()
+    {
+        // Pika's softlock (2026-09-15): a Discord link resolved while DtRH was up and the offer
+        // opened over the two doors, with the choice underneath it unreachable. The panel is not
+        // even on screen behind a fullscreen game.
+        Assert.False(StartupQueueCore.CanStartModal(modalUp: false, updateDialogActive: false,
+            tutorialActive: false, windowReady: true, gameHostUp: true));
+    }
+
+    [Fact]
+    public void AGameWindowMakesItQuietAndInboxesAPassiveSurface()
+    {
+        var playing = Calm() with { GameHostUp = true };
+
+        Assert.True(StartupQueueCore.IsQuiet(playing));
+        // Inbox, not Defer: a game is somebody else owning the user, the same as a session.
+        Assert.Equal(StartupRouting.Inbox, StartupQueueCore.Route(StartupSurfaceKind.Passive, playing));
+    }
+
+    [Fact]
     public void NoModalBeforeTheWindowIsLoaded()
         => Assert.False(StartupQueueCore.CanStartModal(modalUp: false, updateDialogActive: false, tutorialActive: false, windowReady: false));
 

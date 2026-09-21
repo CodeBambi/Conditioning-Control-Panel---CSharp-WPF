@@ -67,6 +67,16 @@ namespace ConditioningControlPanel.Services.Startup
         public bool SessionRunning { get; init; }
 
         /// <summary>
+        /// A game window is on screen - DtRH, the race, the Back Room, the Arcademy, any
+        /// <c>ChaosWebViewHost</c>.
+        ///
+        /// <para>A game owns the user as completely as a session does, and more visibly: it is
+        /// usually fullscreen and the panel is not even on screen behind it. Anything that opened
+        /// over one would land on top of the thing the player is trying to click.</para>
+        /// </summary>
+        public bool GameHostUp { get; init; }
+
+        /// <summary>
         /// End of the first-launch grace window, or null when no such window was ever opened.
         /// The wizard's far side opens it (10 minutes); nothing else does.
         /// </summary>
@@ -217,6 +227,7 @@ namespace ConditioningControlPanel.Services.Startup
             if (w.LadderBusy) return true;
             if (w.TutorialActive) return true;
             if (w.SessionRunning) return true;
+            if (w.GameHostUp) return true;
             if (w.FirstLaunchUntilUtc is DateTime until && w.NowUtc < until) return true;
             return false;
         }
@@ -255,6 +266,7 @@ namespace ConditioningControlPanel.Services.Startup
                 w.ModalUp ||
                 w.TutorialActive ||
                 w.SessionRunning ||
+                w.GameHostUp ||
                 (w.FirstLaunchUntilUtc is DateTime until && w.NowUtc < until);
 
             return somebodyElseOwnsTheUser ? StartupRouting.Inbox : StartupRouting.Defer;
@@ -268,8 +280,15 @@ namespace ConditioningControlPanel.Services.Startup
         /// nested under it owns input that nobody can reach - #481), never on top of the guided
         /// tour (the spotlight measures live controls and a modal ambushes it), and never before
         /// the window exists to own the dialog.</para>
+        ///
+        /// <para>The fourth is a game window. It is the same refusal one surface further out: the
+        /// panel is not on screen at all behind a fullscreen game, so a modal there is a card over
+        /// the thing the player is trying to click. The pump PARKS on it the way it parks behind
+        /// the launcher rather than spending the surface's five minutes, because a run is not a
+        /// queue the user is holding up.</para>
         /// </summary>
-        public static bool CanStartModal(bool modalUp, bool updateDialogActive, bool tutorialActive, bool windowReady)
-            => !modalUp && !updateDialogActive && !tutorialActive && windowReady;
+        public static bool CanStartModal(bool modalUp, bool updateDialogActive, bool tutorialActive,
+            bool windowReady, bool gameHostUp = false)
+            => !modalUp && !updateDialogActive && !tutorialActive && windowReady && !gameHostUp;
     }
 }

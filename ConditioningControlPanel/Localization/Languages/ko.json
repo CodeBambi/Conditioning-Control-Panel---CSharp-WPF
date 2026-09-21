@@ -5066,6 +5066,8 @@
   "inbox_open": "열기",
   "inbox_dismiss": "지우기",
   "inbox_tooltip": "조용한 때를 기다리던 것들",
+  "inbox_discord_share_title": "Discord 연결됨",
+  "inbox_discord_share_summary": "업적을 커뮤니티 Discord에 올릴까요?",
   "dash_toggle_hint": "타일을 우클릭하면 켜고 끄기 · 좌클릭하면 열기",
   "rail_favorites_caption": "즐겨찾기",
   "rail_recent_caption": "최근",

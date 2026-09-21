@@ -312,6 +312,7 @@ namespace ConditioningControlPanel.Services.Startup
             LadderBusy = !IsLadderIdle,
             TutorialActive = SafeTutorialActive(),
             SessionRunning = SafeSessionRunning(),
+            GameHostUp = SafeGameHostUp(),
             FirstLaunchUntilUtc = _firstLaunchUntilUtc,
             NowUtc = DateTime.UtcNow,
         };
@@ -325,6 +326,24 @@ namespace ConditioningControlPanel.Services.Startup
         {
             try { return App.IsSessionRunning; } catch { return false; }
         }
+
+        /// <summary>A GAME window is up: DtRH, the race, the Back Room, the Arcademy, the Goon
+        /// Game, Piece by Piece, Graded Intake, Just Drop. Deliberately not
+        /// <c>AnyHostActive</c>, which also counts the For You feed, the Loom editor, the codex
+        /// and the Bureau - windows people leave open for hours, and the park below has no
+        /// clock.</summary>
+        private static bool SafeGameHostUp()
+        {
+            try { return ChaosWebViewHost.AnyGameActive; } catch { return false; }
+        }
+
+        /// <summary>
+        /// The ladder is parked rather than waiting: the panel does not have the screen at all,
+        /// so the next surface has nowhere honest to open. ONE policy for both reasons - the
+        /// launcher (<see cref="Held"/>) and a running game - because they are the same
+        /// situation and a second, subtly different rule is how these drift apart.
+        /// </summary>
+        private bool Parked => Held || SafeGameHostUp();
 
         private static bool SafeUpdateDialogActive()
         {
@@ -379,11 +398,13 @@ namespace ConditioningControlPanel.Services.Startup
 
                     var waited = TimeSpan.Zero;
                     while (waited < MaxWaitPerSurface &&
-                           (Held || !StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(), SafeTutorialActive(), SafeWindowReady())))
+                           (Parked || !StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(),
+                               SafeTutorialActive(), SafeWindowReady(), SafeGameHostUp())))
                     {
                         await Task.Delay(PollInterval);
-                        // A held ladder is parked, not waiting: the launcher can sit for an hour.
-                        if (!Held) waited += PollInterval;
+                        // A parked ladder is not waiting: the launcher can sit for an hour and so
+                        // can a descent - neither is the user keeping a queue standing.
+                        if (!Parked) waited += PollInterval;
                     }
 
                     // Take that exact key. False means somebody dropped it while we waited, which
@@ -398,7 +419,8 @@ namespace ConditioningControlPanel.Services.Startup
                     if (!_shows.TryGetValue(key, out var surface)) continue;
                     _shows.Remove(key);
 
-                    if (!StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(), SafeTutorialActive(), SafeWindowReady()))
+                    if (!StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(),
+                            SafeTutorialActive(), SafeWindowReady(), SafeGameHostUp()))
                     {
                         App.Logger?.Information(
                             "[Startup] gave up on '{Key}' after {Seconds:0}s - the screen never came free; it is owed the next launch",

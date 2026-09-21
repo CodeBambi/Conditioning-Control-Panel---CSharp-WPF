@@ -5066,6 +5066,8 @@
   "inbox_open": "開く",
   "inbox_dismiss": "破棄",
   "inbox_tooltip": "静かなときを待っていたものたち",
+  "inbox_discord_share_title": "Discord を連携しました",
+  "inbox_discord_share_summary": "実績をコミュニティ Discord に投稿しますか？",
   "dash_toggle_hint": "タイルを右クリックでオン/オフ · 左クリックで開く",
   "rail_favorites_caption": "お気に入り",
   "rail_recent_caption": "最近",

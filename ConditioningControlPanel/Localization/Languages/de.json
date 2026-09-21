@@ -5066,6 +5066,8 @@
   "inbox_open": "Öffnen",
   "inbox_dismiss": "Verwerfen",
   "inbox_tooltip": "Dinge, die auf einen ruhigeren Moment gewartet haben",
+  "inbox_discord_share_title": "Discord verknüpft",
+  "inbox_discord_share_summary": "Deine Erfolge im Community-Discord posten?",
   "dash_toggle_hint": "Rechtsklick auf eine Kachel schaltet sie ein oder aus · Linksklick öffnet sie",
   "rail_favorites_caption": "FAVORITEN",
   "rail_recent_caption": "ZULETZT",

@@ -5066,6 +5066,8 @@
   "inbox_open": "Ouvrir",
   "inbox_dismiss": "Ignorer",
   "inbox_tooltip": "Ce qui attendait un moment plus calme",
+  "inbox_discord_share_title": "Discord lié",
+  "inbox_discord_share_summary": "Publier tes succès sur le Discord de la communauté ?",
   "dash_toggle_hint": "clic droit sur une tuile pour l'activer ou la désactiver · clic gauche pour l'ouvrir",
   "rail_favorites_caption": "FAVORIS",
   "rail_recent_caption": "RÉCENTS",

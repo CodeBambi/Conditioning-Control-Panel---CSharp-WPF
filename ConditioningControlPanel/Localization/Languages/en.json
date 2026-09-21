@@ -108,6 +108,8 @@
   "inbox_open": "Open",
   "inbox_dismiss": "Dismiss",
   "inbox_tooltip": "Things that were waiting for a quieter moment",
+  "inbox_discord_share_title": "Discord linked",
+  "inbox_discord_share_summary": "Post your achievements to the community Discord?",
   "dash_toggle_hint": "right-click a tile to switch it on or off · left-click opens it",
   "rail_favorites_caption": "FAVORITES",
   "rail_recent_caption": "RECENT",
