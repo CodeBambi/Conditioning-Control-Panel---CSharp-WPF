@@ -66,6 +66,11 @@ namespace ConditioningControlPanel
             catch { return null; }
         }
 
+        /// <summary>One box's persisted value: see
+        /// <see cref="Services.Companion.ActivePersonaPromptText.PersistedField"/>.</summary>
+        private static string Persist(TextBox box, string? shownDefault)
+            => Services.Companion.ActivePersonaPromptText.PersistedField(box?.Text, shownDefault);
+
         /// <summary>
         /// CCBill AI Addendum: show the full content-policy banner until the user
         /// clicks "Got it", then collapse to a slim non-dismissable reminder. State is
@@ -209,12 +214,17 @@ namespace ConditioningControlPanel
             settings.UseCustomPrompt = ChkUseCustom.IsChecked == true;
             // Provider/model/host/effect-permission settings are owned by the AI Brain
             // panel; we only persist personality-related fields here.
-            settings.Personality = TxtPersonality.Text;
-            settings.ExplicitReaction = TxtExplicitReaction.Text;
-            settings.SlutModePersonality = TxtSlutMode.Text;
-            settings.KnowledgeBase = TxtKnowledgeBase.Text;
-            settings.ContextReactions = TxtContextReactions.Text;
-            settings.OutputRules = TxtOutputRules.Text;
+            //
+            // ONLY what the user actually changed. The boxes are seeded from the running persona
+            // now, so writing them back verbatim would freeze a mod's paragraph into the user's
+            // own settings on an open-look-Save, and the persona could never show through again.
+            // Blank keeps the meaning it has always had: follow whatever the default is.
+            settings.Personality = Persist(TxtPersonality, _defaults.Personality);
+            settings.ExplicitReaction = Persist(TxtExplicitReaction, _defaults.ExplicitReaction);
+            settings.SlutModePersonality = Persist(TxtSlutMode, _defaults.SlutModePersonality);
+            settings.KnowledgeBase = Persist(TxtKnowledgeBase, _defaults.KnowledgeBase);
+            settings.ContextReactions = Persist(TxtContextReactions, _defaults.ContextReactions);
+            settings.OutputRules = Persist(TxtOutputRules, _defaults.OutputRules);
 
             // Un-ticking "use custom prompt" here is the same intent as the quick menu's
             // "Disable custom prompt": drop the community id too, or the Companion tab keeps
@@ -307,8 +317,10 @@ namespace ConditioningControlPanel
 
         private void ResetAll_Click(object sender, RoutedEventArgs e)
         {
+            // "default values" was true when this seeded from the stock prompt. It now seeds from
+            // the running persona, so say that instead. Unlocalised as it already was.
             var result = MessageBox.Show(
-                "Reset all prompts to their default values?\n\nThis cannot be undone.",
+                "Put every box back to your companion's own text?\n\nThis cannot be undone.",
                 "Reset All Prompts",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);

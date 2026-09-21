@@ -1,3 +1,4 @@
+using System;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.Companion
@@ -38,6 +39,31 @@ namespace ConditioningControlPanel.Services.Companion
             merged.ContextReactions = Pick(activePersona.ContextReactions, stock.ContextReactions);
             merged.OutputRules = Pick(activePersona.OutputRules, stock.OutputRules);
             return merged;
+        }
+
+        /// <summary>
+        /// What one box should PERSIST into <c>AppSettings.CompanionPrompt</c>.
+        ///
+        /// <para>The editor has always kept a "blank means follow whatever the default is"
+        /// contract: <c>LoadCurrentSettings</c> seeds a blank field from the default and a blank
+        /// one is read as "not overridden". Saving every box verbatim was harmless while they were
+        /// seeded from the STOCK prompt, because the stock prompt does not move. It is not
+        /// harmless now they are seeded from the running persona: open-look-Save under a themed
+        /// mod would freeze that mod's paragraph into the user's own settings, and from then on a
+        /// mod update, another preset or switching back to CCP Default would never show through
+        /// again - and ticking "use custom prompt" later would run one mod's text under whatever
+        /// mod is active.</para>
+        ///
+        /// <para>So a box the user did not touch persists as blank. Clearing a box lands in the
+        /// same place, which is the honest reading of an empty field: follow the default.</para>
+        /// </summary>
+        public static string PersistedField(string? boxText, string? shownDefault)
+        {
+            var text = boxText ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+            return string.Equals(text, shownDefault ?? string.Empty, StringComparison.Ordinal)
+                ? string.Empty
+                : text;
         }
 
         private static string Pick(string? persona, string? fallback)
