@@ -572,8 +572,9 @@ test('the hit glow is low, pink and fades from zero: never a white sheet', () =>
 });
 
 test('brick knocks: a crack moves the camera a little, a break more, and both stay modest', async () => {
-  const { BRICK_KICK } = await import('./render.js');
-  assert.ok(BRICK_KICK.hit > 0 && BRICK_KICK.hit < BRICK_KICK.broke);
-  assert.ok(BRICK_KICK.broke > 5.5 && BRICK_KICK.broke <= 9, 'a bit more than 5.5, not a quake');
-  assert.ok(BRICK_KICK.combo >= BRICK_KICK.broke);
+  const { BRICK_KNOCK } = await import('./render.js');
+  assert.ok(BRICK_KNOCK.hit >= 1 && BRICK_KNOCK.hit < BRICK_KNOCK.broke, 'a crack is at least a whole pixel');
+  assert.ok(BRICK_KNOCK.broke >= 2.5 && BRICK_KNOCK.broke <= 4, 'a break is seen, and is not a quake');
+  assert.ok(BRICK_KNOCK.combo >= BRICK_KNOCK.broke && BRICK_KNOCK.comboMax <= 6);
+  assert.ok(Math.exp(-BRICK_KNOCK.decay * .25) < .05, 'gone inside a quarter second');
 });
