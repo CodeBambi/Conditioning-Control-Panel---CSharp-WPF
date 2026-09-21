@@ -116,12 +116,17 @@ test('both modules honour the contract shape', () => {
 
 
 test('DROP restores each affected ball to its own side without steering unrelated balls', () => {
-  const left = { vx: -180, vy: -240 }, right = { vx: 180, vy: -240 };
-  const g = { balls: [left, right] }, fx = { data: {} };
+  // Only the ball that spoke the word drops: a multiball copy across the field must never snap mid flight.
+  const left = { x: 200, y: 150, vx: -180, vy: -240 }, right = { x: 1000, y: 600, vx: 180, vy: -240 };
+  const g = { balls: [right, left] }, fx = { x: 210, y: 140, data: {} };
   DROP.sim.start(g, fx, { rng: () => .5 });
-  assert.equal(left.vy, 300, 'preserves full speed before removing lateral velocity');
-  const later = { vx: 0, vy: -300 }; g.balls.push(later);
+  assert.equal(left.vy, 300, 'preserves full speed before removing lateral velocity'); assert.equal(left.vx, 0);
+  assert.deepEqual([right.vx, right.vy], [180, -240], 'the far ball flies on untouched');
+  const later = { x: 205, y: 145, vx: 0, vy: -300 }; g.balls.push(later);
   DROP.sim.end(g, fx, {});
-  assert.ok(left.vx < 0); assert.ok(right.vx > 0);
+  assert.ok(left.vx < 0, 'back to its own side'); assert.deepEqual([right.vx, right.vy], [180, -240]);
   assert.equal(later.vx, 0, 'a later vertical ball is not part of this DROP');
+  const bare = { balls: [{ vx: 180, vy: -240 }, { vx: -180, vy: -240 }] }, plain = { data: {} };
+  DROP.sim.start(bare, plain, { rng: () => .5 });
+  assert.equal(bare.balls.filter(b => b.vx === 0).length, 1, 'with no word position it is still one ball, never all of them');
 });

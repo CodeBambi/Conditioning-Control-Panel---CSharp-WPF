@@ -1,7 +1,7 @@
 /* node --test game.test.js - the state machine and the saturation ladder, nothing visual. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PADDLE, SPLIT_CHANCE, BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
+import { DOME_AIM_TURNS, PADDLE, SPLIT_CHANCE, BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 // These scoring/state fixtures use one-hit walls; durability has its own integration suite.
@@ -816,4 +816,40 @@ test('the colour paddle grows by half at full saturation, no more; split bricks 
   const s = game.snapshot(); game.step(1 / 60);
   assert.ok(Math.abs(s.paddle.w - PADDLE.baseW * (1 + PADDLE.grow * s.sat) * s.mod.paddleW) < 1e-6);
   assert.ok(s.paddle.w <= PADDLE.baseW * 1.5 + 1e-6);
+});
+
+test('the dome spiral holds its ball until the throw points at a brick, and gives up after its extra turns', () => {
+  const aimed = (keep) => {
+    const { game } = make({ saturation: 0.5 }); game.jumpToWall(4);
+    const s = game.snapshot(), well = s.well, ball = s.balls[0];
+    s.bricks.forEach((br, i) => { br.alive = keep(br, i); });
+    Object.assign(ball, { stuck: false, x: well.x + 70, y: well.y, vx: 0, vy: 0 }); game.step(.01);
+    assert.equal(well.captured, ball);
+    const due = ball.orbit.turns * Math.PI * 2; let released = -1;
+    for (let i = 0; i < 2000 && ball.orbit; i++) { const done = ball.orbit.done; game.step(1 / 120); if (!ball.orbit) released = done; }
+    return { s, ball, due, released };
+  };
+  const two = aimed((br, i) => i === 3 || i === 4);
+  assert.ok(two.released >= two.due - .1, 'never before its turns are done');
+  assert.ok(two.released < two.due + (DOME_AIM_TURNS + .1) * Math.PI * 2);
+  const sp = Math.hypot(two.ball.vx, two.ball.vy), ux = two.ball.vx / sp, uy = two.ball.vy / sp;
+  const onLine = two.s.bricks.filter(br => br.alive).some(br => { const dx = br.x + br.w / 2 - two.ball.x, dy = br.y + br.h / 2 - two.ball.y;
+    return dx * ux + dy * uy > 0 && Math.abs(dx * uy - dy * ux) < Math.hypot(br.w, br.h) / 2 + two.ball.r + 8; });
+  assert.ok(onLine, 'the throw is on a line with one of the two bricks left');
+  const none = aimed(() => false);
+  assert.ok(none.released >= none.due - .1 && none.released < none.due + .3, 'an empty wall lets go on time');
+});
+
+test('a newborn bubble is not solid until it can be seen and no ball is inside it', () => {
+  const { game } = make({ saturation: 0.5 });
+  const s = game.snapshot(); s.bricks = [];
+  const fly = () => { s.balls = [{ ...s.balls[0], x: 600, y: 470, vx: 0, vy: -300, stuck: false, ghost: false, trail: [] }]; return s.balls[0]; };
+  s.colliders.push({ x: 600, y: 420, r: 50, vx: 0, vy: 0, hits: 0, pulse: 0, alpha: 0, fading: false, solid: false, gif: 0, tier: 3, age: 0, jelly: 0, ph: 0 });
+  let b = fly(); for (let i = 0; i < 12; i++) game.step(1 / 120);
+  assert.equal(s.colliders[0].hits, 0, 'still fading in: the ball passes through'); assert.ok(b.vy < 0, 'and keeps its heading');
+  b = fly(); b.x = 600; b.y = 420; b.vx = 0; b.vy = 0; s.colliders[0].alpha = 1;
+  game.step(1 / 120); assert.equal(s.colliders[0].solid, false, 'visible, but a ball is inside: it waits'); assert.equal(b.x, 600);
+  b = fly(); b.y = 600; game.step(1 / 120); assert.equal(s.colliders[0].solid, true, 'clear and visible: solid from here on');
+  b = fly(); b.y = 480; for (let i = 0; i < 6 && !s.colliders[0].hits; i++) game.step(1 / 120);
+  assert.equal(s.colliders[0].hits, 1, 'and now it bounces');
 });

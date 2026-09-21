@@ -1,4 +1,6 @@
-/* DROP: a brief downward nudge and a 0.3 s vertical ball lane. No frame freeze or echoes. */
+/* DROP: a brief downward nudge and a 0.3 s vertical ball lane. No frame freeze or echoes.
+ * Only the ball that SPOKE the word drops (owner, 2026-09-21: with multiball every other ball on the field snapped
+ * straight down mid flight, up to a full reversal, and read as a physics bug). */
 const LANE_S = 0.3;
 
 const liveBall = b => !b.stuck && !b.lost && !b.falling && !b.orbit;
@@ -21,8 +23,10 @@ export default {
     start(g, fx, api) {
       fx.data.lanes = []; fx.data.released = false;
       // Keep play continuous; the downward lane carries the effect.
-      for (const b of g.balls) {
-        if (!liveBall(b)) continue;
+      // The speaker: the live ball nearest the word. It has just hit that brick, so its turn reads as the hit's.
+      const live = g.balls.filter(liveBall), near = b => Number.isFinite(fx.x) && Number.isFinite(fx.y) ? Math.hypot(b.x - fx.x, b.y - fx.y) : 0;
+      const speaker = live.reduce((best, b) => (!best || near(b) < near(best) ? b : best), null);
+      for (const b of speaker ? [speaker] : []) {
         const speed = speedOf(b, g), side = b.vx < 0 ? -1 : b.vx > 0 ? 1 : (api.rng() < .5 ? -1 : 1);
         fx.data.lanes.push({ ball: b, side });
         b.vx = 0; b.vy = speed;                                   // straight down its lane
