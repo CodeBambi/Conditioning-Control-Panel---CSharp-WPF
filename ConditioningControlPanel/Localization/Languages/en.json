@@ -4247,6 +4247,7 @@
   "haptics_hint_bouncing_text": "A tap each time bouncing text hits the edge of the screen.",
   "haptics_hint_bubble": "A tap for every bubble you pop.",
   "haptics_hint_dtrh": "Accents during a Down the Rabbit Hole descent.",
+  "haptics_dtrh_accent_pointer": "Pops, flashes and the big moments are the 🐇 row in the table above.",
   "haptics_hint_deeper": "Haptic patterns authored in Deeper enhancements (events and rule actions). Also gates FunScript playback.",
   "haptics_dtrh_ambient_label": "Rabbit Hole depth (ambient)",
   "haptics_pattern_lab": "Pattern lab",

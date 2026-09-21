@@ -601,6 +601,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     lessons.onPayloadFired(kind);   // blindfold's screen-busy window
     metrics.noteEffect(kind);       // session telemetry: effects shown + est. on-screen seconds
+    // ccp-bugs #1244: the 2026-07 cutover moved every effect in-world, and with the
+    // native fire-payload went the only signal the toy ever had that a flash had
+    // landed. Nothing here talks to the device; this is one bark the host's haptic
+    // director maps to an accent (DtrhHapticDirector.PayloadAccents), so the
+    // flashes and the washes are felt again. Audio payloads are not visual: skip.
+    if (kind !== 'audio') bark('effect-fired', { kind, detonation: !!isDetonation });
   };
   const heavyActive = () => covered || performance.now() < heavyUntil;
   const bankGold = (amount, x, y) => {

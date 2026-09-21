@@ -2938,6 +2938,7 @@
   "haptics_hint_bouncing_text": "Касание каждый раз, когда прыгающий текст ударяется о край экрана.",
   "haptics_hint_bubble": "Касание за каждый лопнутый пузырёк.",
   "haptics_hint_dtrh": "Акценты во время спуска Down the Rabbit Hole.",
+  "haptics_dtrh_accent_pointer": "Лопанье, вспышки и большие моменты - это строка 🐇 в таблице выше.",
   "haptics_hint_deeper": "Тактильные паттерны, созданные в дополнениях Deeper (события и действия правил). Также управляет воспроизведением FunScript.",
   "haptics_dtrh_ambient_label": "Глубина Rabbit Hole (фон)",
   "haptics_pattern_lab": "Лаборатория паттернов",

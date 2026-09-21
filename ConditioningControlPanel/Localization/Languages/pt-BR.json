@@ -2938,6 +2938,7 @@
   "haptics_hint_bouncing_text": "Um toque toda vez que o texto quicante bate na borda da tela.",
   "haptics_hint_bubble": "Um toque para cada bolha que você estoura.",
   "haptics_hint_dtrh": "Acentos durante uma descida no Down the Rabbit Hole.",
+  "haptics_dtrh_accent_pointer": "Estouros, flashes e os grandes momentos são a linha 🐇 da tabela acima.",
   "haptics_hint_deeper": "Padrões hápticos criados nos aprimoramentos do Deeper (eventos e ações de regras). Também controla a reprodução de FunScript.",
   "haptics_dtrh_ambient_label": "Profundidade do Rabbit Hole (ambiente)",
   "haptics_pattern_lab": "Laboratório de padrões",
