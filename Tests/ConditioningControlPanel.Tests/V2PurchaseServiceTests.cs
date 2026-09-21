@@ -411,6 +411,65 @@ public class V2PurchaseServiceTests
     }
 
     [Fact]
+    public async Task ABalanceIsHandedOnUNDERTheAccountTheRequestWentOutFor()
+    {
+        var h = new Harness();
+        await h.ReadCounterAsync();
+
+        // Sign out and in as somebody else while the buy is out. Reading the account back after
+        // the relay answers would name B, the app's own re-check would then compare B with B, and
+        // A's receipt would lower B's wallet.
+        h.Relay.HoldBuy = new TaskCompletionSource<bool>();
+        var press = h.Buy(Flashes);
+        await Harness.WaitFor(() => h.Relay.CountOf("buy") == 1);
+        h.Account = "u_two";
+        h.Relay.HoldBuy.SetResult(true);
+        await press;
+
+        var settlement = h.AdoptedCalls.Single(c => c.FromBuy);
+        Assert.Equal("u_one", settlement.Account);   // never "u_two"
+    }
+
+    [Theory]
+    [InlineData("insufficient")]
+    [InlineData("catalog_changed")]
+    [InlineData("busy")]
+    [InlineData("unavailable")]
+    [InlineData("closed")]
+    [InlineData("owned")]
+    public async Task ONLYADebitedReceiptCountsAsASettlement(string reason)
+    {
+        var h = new Harness();
+        await h.ReadCounterAsync();
+
+        // A refusal that carries an sp is a snapshot like any state read: it may be behind a local
+        // level-up credit, so it may only RAISE. `owned` is a refusal too, and it only fires when
+        // no receipt exists for this idem (backroom-counter.js settleBuy), so it is never our own
+        // settlement - it carries no sp today either.
+        h.Relay.BuyResult = new BackRoomStationResult(false, 200, reason,
+            new JObject { ["ok"] = false, ["reason"] = reason, ["sp"] = 4 });
+        await h.Buy(Flashes);
+
+        Assert.DoesNotContain(h.AdoptedCalls, c => c.FromBuy);
+        Assert.Contains(h.AdoptedCalls, c => c is { FromBuy: false, Sp: 4 });
+    }
+
+    [Fact]
+    public async Task AReplayedReceiptIsStillASettlement()
+    {
+        var h = new Harness();
+        await h.ReadCounterAsync();
+
+        // The server sends the stored receipt RAW when an idem replays (out.replay -> sendRaw), so
+        // a replay answers ok:true and is the same debited money the first attempt made.
+        h.Relay.BuyResult = new BackRoomStationResult(true, 200, null,
+            new JObject { ["ok"] = true, ["idem"] = "x", ["paidSp"] = 30, ["sp"] = 70 });
+        Assert.True(await h.Buy(Flashes));
+
+        Assert.Contains(h.AdoptedCalls, c => c is { FromBuy: true, Sp: 70 });
+    }
+
+    [Fact]
     public async Task ARefusedReadHandsNothingOn()
     {
         var h = new Harness();
