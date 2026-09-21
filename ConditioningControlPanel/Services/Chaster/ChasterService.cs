@@ -1,0 +1,286 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+
+namespace ConditioningControlPanel.Services.Chaster;
+
+/// <summary>What the player chose. Read fresh on every call, so a switch flipped in Settings
+/// takes hold on the next event with no restart.</summary>
+public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string> Prices)
+{
+    public static readonly ChasterOptions Off = new(false, null, new HashSet<string>());
+}
+
+public sealed record ChasterStoredTokens(string AccessToken, string RefreshToken, DateTime ExpiresAtUtc);
+
+/// <summary>Where the link's tokens live. The app's one is DPAPI on disk; tests use memory.</summary>
+public interface IChasterTokenStore
+{
+    ChasterStoredTokens? Read();
+    void Write(ChasterStoredTokens tokens);
+    void Clear();
+}
+
+public enum SettleOutcome
+{
+    /// <summary>Nothing to send: tab off, not linked, already pushed today, or no positive balance.</summary>
+    Nothing,
+    Pushed,
+    /// <summary>More than one active lock and the player has not picked one.</summary>
+    NoLockChosen,
+    LinkExpired,
+    /// <summary>Chaster did not take it this time. The balance waits; nothing is lost.</summary>
+    TryLater,
+}
+
+/// <summary>
+/// The Chaster link and Circe's tab, as one service: who is linked, what is on the tab, and the
+/// once-a-day settle that turns a positive balance into lock time.
+///
+/// <para>Three rules sit here rather than in <see cref="CircesTab"/> because they need the
+/// world: nothing books unless the tab is ON and an account is LINKED; a panic press or an
+/// emergency exit opens a safety hold during which nothing adds; and a settle only ever calls
+/// <see cref="ChasterClient.AddTimeAsync"/>, never anything that could take a lock's time down
+/// or open it.</para>
+///
+/// <para>The link flow (browser + loopback listener) is the next slice, ChasterService.Link.cs.</para>
+/// </summary>
+public sealed partial class ChasterService : IDisposable
+{
+    /// <summary>After a panic press or an emergency exit, nothing adds for this long. Long
+    /// enough that leaving is never priced, short enough that one press is not a free day.</summary>
+    public static readonly TimeSpan SafetyHold = TimeSpan.FromMinutes(10);
+
+    private readonly ChasterClient _client;
+    private readonly IChasterTokenStore _tokens;
+    private readonly string _tabPath;
+    private readonly Func<ChasterOptions> _options;
+    private readonly Func<DateTime> _utcNow;
+    private readonly Func<DateTime> _localNow;
+    private readonly DateTime _runStartUtc;
+    private readonly object _gate = new();
+    private readonly SemaphoreSlim _settleGate = new(1, 1);
+    private TabState _tab;
+    private DateTime _safetyUntilUtc = DateTime.MinValue;
+    private int _pushedThisRun;
+
+    /// <summary>A price landed (or a credit, or the jackpot wipe). The flashing "+0:30".</summary>
+    public event Action<string, TabBooking>? Booked;
+
+    /// <summary>Linked, unlinked, or the link died. Raised on whatever thread found out.</summary>
+    public event Action? LinkChanged;
+
+    public ChasterService(ChasterClient client, IChasterTokenStore tokens, string tabPath,
+        Func<ChasterOptions> options, Func<DateTime>? utcNow = null, Func<DateTime>? localNow = null)
+    {
+        _client = client;
+        _tokens = tokens;
+        _tabPath = tabPath;
+        _options = options;
+        _utcNow = utcNow ?? (() => DateTime.UtcNow);
+        _localNow = localNow ?? (() => DateTime.Now);
+        _runStartUtc = _utcNow();
+        _tab = LoadTab();
+    }
+
+    public bool IsLinked => _tokens.Read() is { RefreshToken.Length: > 0 };
+
+    /// <summary>Seconds on the tab and not on the lock yet. Negative is credit.</summary>
+    public int BalanceSeconds { get { lock (_gate) return _tab.BalanceSeconds; } }
+
+    private bool Active(out ChasterOptions options)
+    {
+        options = _options() ?? ChasterOptions.Off;
+        return options.TabEnabled && IsLinked;
+    }
+
+    /// <summary>A priced event happened. Books nothing unless the tab is on, an account is linked
+    /// and the player switched this row on. Safe to call from anywhere, on any thread.</summary>
+    public TabBooking Note(string eventId, int units = 1)
+    {
+        if (!Active(out var options)) return new(0, TabRefusal.Nothing);
+        return BookSeconds(eventId, TabPrices.Resolve(eventId, options.Prices, units));
+    }
+
+    /// <summary>An event that names its own price (an Awareness trigger carries its minutes in
+    /// the preset). Same tab, same cap, same safety hold; only the price table is skipped.</summary>
+    public TabBooking NoteSeconds(string eventId, int seconds)
+    {
+        if (!Active(out _) || TabPrices.NeverPriced.Contains(eventId ?? "")) return new(0, TabRefusal.Nothing);
+        return BookSeconds(eventId!, Math.Clamp(seconds, -CircesTab.DailyCapSeconds, CircesTab.DailyCapSeconds));
+    }
+
+    /// <summary>The jackpot. Wipes the tab, never the lock.</summary>
+    public TabBooking Wipe()
+    {
+        if (!Active(out _)) return new(0, TabRefusal.Nothing);
+        TabBooking booking;
+        lock (_gate)
+        {
+            booking = CircesTab.Wipe(_tab, _utcNow(), _runStartUtc);
+            if (booking.Booked) SaveTab();
+        }
+        if (booking.Booked) Booked?.Invoke(CircesTab.JackpotEventId, booking);
+        return booking;
+    }
+
+    /// <summary>Panic was pressed or an emergency exit opened. Call it from those paths and from
+    /// nowhere else; it never books anything itself.</summary>
+    public void NoteSafetyExit()
+    {
+        lock (_gate) _safetyUntilUtc = _utcNow() + SafetyHold;
+    }
+
+    private TabBooking BookSeconds(string eventId, int seconds)
+    {
+        if (seconds == 0) return new(0, TabRefusal.Nothing);
+        TabBooking booking;
+        lock (_gate)
+        {
+            var now = _utcNow();
+            booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc);
+            if (booking.Booked) SaveTab();
+        }
+        if (booking.Booked) Booked?.Invoke(eventId, booking);
+        return booking;
+    }
+
+    /// <summary>This run's receipt.</summary>
+    public TabBill Bill()
+    {
+        lock (_gate) return TabBill.Build(_tab.Entries.ToList(), _runStartUtc, _pushedThisRun);
+    }
+
+    /// <summary>The wearer's active locks, or null when the link cannot be used right now.</summary>
+    public async Task<IReadOnlyList<ChasterLock>?> GetLocksAsync(CancellationToken ct = default)
+    {
+        var access = await AccessTokenAsync(ct).ConfigureAwait(false);
+        if (access == null) return null;
+        var locks = await _client.GetLocksAsync(access, ct).ConfigureAwait(false);
+        if (locks.Status == ChasterStatus.LinkExpired) DropLink();
+        return locks.Ok ? locks.Value : null;
+    }
+
+    /// <summary>Send the tab to the lock, if today's push has not gone and the balance is
+    /// positive. Call at launch and at close; calling it more often is harmless.</summary>
+    public async Task<SettleOutcome> SettleAsync(CancellationToken ct = default)
+    {
+        if (!Active(out var options)) return SettleOutcome.Nothing;
+        await _settleGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            TabPush plan;
+            // A wearer link can only add. canRemove stays false until a link exists that can.
+            lock (_gate) plan = CircesTab.PlanPush(_tab, _localNow(), canRemove: false);
+            if (plan.Kind != TabPushKind.Add) return SettleOutcome.Nothing;
+            // A backlog from days Chaster was unreachable still lands an hour at a time.
+            plan = plan with { Seconds = Math.Min(plan.Seconds, ChasterClient.MaxAddSeconds) };
+
+            var access = await AccessTokenAsync(ct).ConfigureAwait(false);
+            if (access == null) return IsLinked ? SettleOutcome.TryLater : SettleOutcome.LinkExpired;
+
+            var lockId = options.LockId;
+            if (string.IsNullOrEmpty(lockId))
+            {
+                var locks = await _client.GetLocksAsync(access, ct).ConfigureAwait(false);
+                if (!locks.Ok) return Failed(locks.Status);
+                if (locks.Value!.Count != 1) return locks.Value.Count == 0 ? SettleOutcome.Nothing : SettleOutcome.NoLockChosen;
+                lockId = locks.Value[0].Id;
+            }
+
+            var added = await _client.AddTimeAsync(access, lockId!, plan.Seconds, ct).ConfigureAwait(false);
+            if (!added.Ok) return Failed(added.Status);
+
+            lock (_gate)
+            {
+                CircesTab.ApplyPush(_tab, plan, _localNow());
+                _pushedThisRun += plan.Seconds;
+                SaveTab();
+            }
+            App.Logger?.Information("[Chaster] settled {Seconds}s to the lock", plan.Seconds);
+            return SettleOutcome.Pushed;
+        }
+        finally { _settleGate.Release(); }
+    }
+
+    private SettleOutcome Failed(ChasterStatus status)
+    {
+        if (status != ChasterStatus.LinkExpired) return SettleOutcome.TryLater;
+        DropLink();
+        return SettleOutcome.LinkExpired;
+    }
+
+    /// <summary>Forget the link on this machine and tell Chaster to forget it too. The tab
+    /// stays: unlinking is a way out, not a way to clear what was already owed or earned.</summary>
+    public async Task UnlinkAsync()
+    {
+        var tokens = _tokens.Read();
+        _tokens.Clear();
+        LinkChanged?.Invoke();
+        if (tokens is { RefreshToken.Length: > 0 }) await _client.RevokeAsync(tokens.RefreshToken).ConfigureAwait(false);
+    }
+
+    private void StoreTokens(ChasterTokens fresh, string? previousRefresh)
+    {
+        var refresh = string.IsNullOrEmpty(fresh.RefreshToken) ? previousRefresh : fresh.RefreshToken;
+        _tokens.Write(new ChasterStoredTokens(fresh.AccessToken, refresh ?? "", _utcNow().AddSeconds(Math.Max(0, fresh.ExpiresIn))));
+    }
+
+    private async Task<string?> AccessTokenAsync(CancellationToken ct)
+    {
+        var tokens = _tokens.Read();
+        if (tokens == null || string.IsNullOrEmpty(tokens.RefreshToken)) return null;
+        if (!ChasterClient.NeedsRefresh(tokens.ExpiresAtUtc, _utcNow())) return tokens.AccessToken;
+
+        var fresh = await _client.RefreshAsync(tokens.RefreshToken, ct).ConfigureAwait(false);
+        if (fresh.Status == ChasterStatus.LinkExpired) { DropLink(); return null; }
+        if (!fresh.Ok) return null;
+        StoreTokens(fresh.Value!, tokens.RefreshToken);
+        return fresh.Value!.AccessToken;
+    }
+
+    private void DropLink()
+    {
+        _tokens.Clear();
+        App.Logger?.Information("[Chaster] the link expired; the tab is kept");
+        LinkChanged?.Invoke();
+    }
+
+    private TabState LoadTab()
+    {
+        try
+        {
+            if (File.Exists(_tabPath))
+                return JsonConvert.DeserializeObject<TabState>(File.ReadAllText(_tabPath)) ?? new TabState();
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            Diag.Swallowed(ex, "unreadable tab file starts a clean tab");
+        }
+        return new TabState();
+    }
+
+    // Caller holds _gate. Temp file then move, so a crash mid-write never leaves half a tab.
+    private void SaveTab()
+    {
+        try
+        {
+            var tmp = _tabPath + ".tmp";
+            File.WriteAllText(tmp, JsonConvert.SerializeObject(_tab));
+            File.Move(tmp, _tabPath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Diag.Swallowed(ex, "tab not saved this time; the next booking tries again");
+        }
+    }
+
+    public void Dispose()
+    {
+        _settleGate.Dispose();
+    }
+}
