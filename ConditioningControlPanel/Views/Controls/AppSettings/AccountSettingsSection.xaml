@@ -196,6 +196,14 @@
                     <TextBlock Text="{loc:Str label_link_both_providers_to_access_your_account_fr}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
+                    <!-- Shown only by the prominent Reconnect state: the server still says patron,
+                         this PC holds no Patreon token, and premium is off because of it.
+                         MainWindow.Patreon.cs:UpdateAccountLinkingUI owns the visibility. -->
+                    <TextBlock x:Name="TxtPatreonReconnectHint" x:FieldModifier="internal"
+                               Text="{loc:Str label_patreon_reconnect_hint}"
+                               Foreground="#FFFF424D" FontSize="11" TextWrapping="Wrap"
+                               Margin="0,0,0,10" Visibility="Collapsed"/>
+
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <Button x:Name="BtnLinkPatreon" x:FieldModifier="internal"
                                 Content="{loc:Str btn_link_patreon}"

@@ -618,6 +618,10 @@ namespace ConditioningControlPanel
             UpdateXPBarLoginState();
         }
 
+        /// <summary>The Patreon brand red, shared by the filled button and the reconnect hint.</summary>
+        private static readonly SolidColorBrush PatreonRedBrush =
+            new SolidColorBrush(Color.FromRgb(0xFF, 0x42, 0x4D));
+
         /// <summary>
         /// Updates the visibility of account linking buttons based on current login state
         /// </summary>
@@ -625,15 +629,33 @@ namespace ConditioningControlPanel
         {
             // Only show linking section if user is logged in with a unified account
             var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
-            var hasLinkedPatreon = App.Settings?.Current?.HasLinkedPatreon == true || App.Patreon?.IsAuthenticated == true;
             var hasLinkedDiscord = App.Settings?.Current?.HasLinkedDiscord == true || App.Discord?.IsAuthenticated == true;
 
-            // Show section only if logged in and missing at least one provider
-            bool showLinkingSection = hasUnifiedId && (!hasLinkedPatreon || !hasLinkedDiscord);
+            // The Patreon row is no longer a plain "is it linked" read. A patron whose OAuth grant
+            // died on this PC is linked server-side AND stuck, and the old rule hid the only button
+            // that could fix it. PatreonReconnectRule owns the whole decision; see its summary.
+            var patreonRow = PatreonReconnectRule.Decide(
+                hasUnifiedId: hasUnifiedId,
+                linkedServerSide: App.Settings?.Current?.HasLinkedPatreon == true,
+                desktopAuthenticated: App.Patreon?.IsAuthenticated == true,
+                hasPremiumNow: App.Patreon?.HasPremiumAccess == true,
+                whitelisted: App.Patreon?.IsWhitelisted == true);
+
+            // Show section when either provider has something to offer. Reconnect counts even
+            // though both providers are linked, which is the case the old condition missed.
+            bool showLinkingSection = hasUnifiedId && (patreonRow.ShowsButton || !hasLinkedDiscord);
             AppSettingsTab.AccountLinkingSection.Visibility = showLinkingSection ? Visibility.Visible : Visibility.Collapsed;
 
             // Show individual buttons for unlinked providers
-            AppSettingsTab.BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.BtnLinkPatreon.Visibility = patreonRow.ShowsButton ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.BtnLinkPatreon.Content = Loc.Get(
+                patreonRow.Action == PatreonLinkAction.Reconnect ? "btn_reconnect_patreon" : "btn_link_patreon");
+            AppSettingsTab.BtnLinkPatreon.Background = patreonRow.Filled ? PatreonRedBrush : Brushes.Transparent;
+            AppSettingsTab.BtnLinkPatreon.Foreground = patreonRow.Filled ? Brushes.White : PatreonRedBrush;
+            AppSettingsTab.BtnLinkPatreon.BorderBrush = PatreonRedBrush;
+            AppSettingsTab.BtnLinkPatreon.BorderThickness = new Thickness(patreonRow.Filled ? 0 : 1);
+            AppSettingsTab.TxtPatreonReconnectHint.Visibility = patreonRow.ShowsHint ? Visibility.Visible : Visibility.Collapsed;
+
             AppSettingsTab.BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
 
             // Show cloud settings backup section if user has a cloud identity
@@ -683,7 +705,28 @@ namespace ConditioningControlPanel
             finally
             {
                 AppSettingsTab.BtnLinkPatreon.IsEnabled = true;
-                AppSettingsTab.BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
+                // Not a hardcoded label any more: after a reconnect the row usually goes away
+                // entirely, and when it does not it has to come back saying the right word.
+                UpdateAccountLinkingUI();
+            }
+        }
+
+        /// <summary>
+        /// The reconnect the TierGate refusal offers. Same flow as the Settings button, reached
+        /// from wherever the lock was actually felt - a locked-out patron looks at the door that
+        /// refused them, not at Settings. Brings Settings up first so the row is on screen behind
+        /// the browser window, then runs the button's own handler.
+        /// </summary>
+        internal void StartPatreonReconnectFromGate()
+        {
+            try
+            {
+                ShowTab("settings");
+                BtnLinkPatreon_Click(AppSettingsTab.BtnLinkPatreon, new RoutedEventArgs());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("StartPatreonReconnectFromGate failed: {E}", ex.Message);
             }
         }
 
