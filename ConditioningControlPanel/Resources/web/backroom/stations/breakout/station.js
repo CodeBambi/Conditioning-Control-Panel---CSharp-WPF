@@ -422,7 +422,7 @@ export async function mount(ctx) {
     if (!running) return;
     raf = requestAnimationFrame(frame);
     // The pad is polled before the pause gate so its Start button can pause and resume.
-    try { const pad = gamepad?.poll(input, { menuOpen, paused, suspended }); if (pad?.pause && !menuOpen) setPaused(!paused); if (pad?.start && menuOpen) beginGame(); if (pad?.any) startAudio(); } catch (e) { /* pad optional */ }
+    try { const pad = gamepad?.poll(input, { menuOpen, paused, suspended }); if (pad?.pause && !menuOpen) setPaused(!paused); if (pad?.start && menuOpen) beginGame(); if (pad?.any) startAudio(); if (pad?.moved) firstMove(); } catch (e) { /* pad optional */ }
     const frameMs = lastT ? ts-lastT : 1000/60;
     const dt = Math.min(0.05, frameMs/1000);
     lastT = ts;
