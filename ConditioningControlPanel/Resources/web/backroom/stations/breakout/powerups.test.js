@@ -122,3 +122,9 @@ test('grey and reset are silent: no shot, warning, expiry or miss after the colo
  const mid=f.events.length;f.s.state='grey';for(let i=0;i<120;i++)f.power.step(.1);assert.equal(f.events.length,mid);
  assert.equal(f.s.power.muzzle,0);assert.equal(f.s.power.eighth,null);
 });
+test('multiball copies wear their own tints and the split speaks after the catch',()=>{
+ const f=fixture();catchDrop(f,'multiball');
+ assert.deepEqual(f.s.balls.map(b=>b.tint|0),[0,1,2]);
+ assert.deepEqual(f.events.map(e=>e[0]),['powerCatch','multiSplit']);assert.deepEqual(f.events[1][1],{x:640,y:600});
+ const full=fixture({maxBalls:1});catchDrop(full,'multiball');assert.deepEqual(full.events.map(e=>e[0]),['powerCatch'],'no copies, no split');
+});

@@ -47,15 +47,20 @@ export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=nu
     if(s.state!=='colour')return;
     p[kind]=POWER_DURATION[kind];
     if(kind==='shield')p.charges=Math.min(2,p.charges+1);
+    let split=null;
     if(kind==='multiball'){
       const source=s.balls.find(b=>!b.lost&&!b.falling&&!b.stuck)||s.balls.find(b=>!b.lost&&!b.falling);
+      let made=0;split=source?{x:source.x,y:source.y}:null;
       if(source)for(const sign of [-1,1]){
         if(s.balls.length>=maxBalls)break;
         const speed=Math.max(220,Math.hypot(source.vx,source.vy)),a=sign*.5;
-        s.balls.push({...newBall(s.state==='grey'),x:source.x,y:source.y,vx:Math.sin(a)*speed,vy:-Math.cos(a)*speed,stuck:false,temporary:true});
+        // tint: each copy wears its own colour (feedback.js BALL_TINTS), so three balls read as three.
+        s.balls.push({...newBall(s.state==='grey'),x:source.x,y:source.y,vx:Math.sin(a)*speed,vy:-Math.cos(a)*speed,stuck:false,temporary:true,tint:sign<0?1:2});made++;
       }
+      if(!made)split=null;
     }
     emit('powerCatch',{kind,x:s.paddle.x,y:s.paddle.y});
+    if(split)emit('multiSplit',split);                                   // after the catch, so the catch still speaks first
   }
   function step(dt){
     if(s.state!=='colour'){
