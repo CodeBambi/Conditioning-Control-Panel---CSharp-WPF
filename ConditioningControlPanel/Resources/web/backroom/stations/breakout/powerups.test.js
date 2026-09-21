@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from './game.js';
-import {createPowerups,ordinaryTarget,swayX,DROP_REACH} from './powerups.js';
+import {pickPower,POWER_WEIGHT,createPowerups,ordinaryTarget,swayX,DROP_REACH} from './powerups.js';
 function fixture(opts={}){
  const events=[],s={w:1280,h:720,state:'colour',wallAge:3,paddle:{x:640,y:680,w:160,h:12},balls:[{x:640,y:600,vx:30,vy:-220}],bricks:[]};
  const damage=[];const power=createPowerups(s,{rng:()=>.5,emit:(...e)=>events.push(e),newBall:()=>({r:7,trail:[]}),damage:br=>damage.push(br),...opts});
@@ -131,4 +131,10 @@ test('multiball copies wear their own tints and the split speaks after the catch
 test('a copy promoted to the last ball drops its tint: the player ball is violet again',()=>{
  const f=fixture();catchDrop(f,'multiball');f.s.balls.shift();f.power.step(13);
  assert.equal(f.s.balls.length,1);assert.equal(f.s.balls[0].temporary,false);assert.equal(f.s.balls[0].tint,0);
+});
+test('the random drop mix: multiball is the rare one, every kind still falls, one roll picks',()=>{
+ const n={multiball:0,fireball:0,laser:0,shield:0};for(let i=0;i<1000;i++)n[pickPower(i/1000)]++;
+ assert.deepEqual(n,{multiball:100,fireball:300,laser:300,shield:300});
+ assert.equal(pickPower(0),'multiball');assert.equal(pickPower(1),'shield');assert.equal(pickPower(-1),'multiball');
+ assert.ok(POWER_WEIGHT.multiball<POWER_WEIGHT.laser);
 });
