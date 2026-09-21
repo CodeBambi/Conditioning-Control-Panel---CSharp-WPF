@@ -694,6 +694,13 @@ namespace ConditioningControlPanel.Views.Tabs
         /// lives only in RackEntryStyle's Height setter, so there is one owner of it.</summary>
         private const double ActiveTileHeight = 56;
 
+        /// <summary>The checked tile caption's right inset: enough room for the state dot.</summary>
+        private const double TileLabelInset = 26;
+
+        /// <summary>The same inset with a worn v2 pill in front of the dot. Written by
+        /// <see cref="RefreshV2Pills"/>, so a row that owns nothing keeps the plain one.</summary>
+        private const double TileLabelInsetWithV2 = 56;
+
         /// <summary>
         /// The resting row: art (or emoji) chip | caption | state dot.
         ///
@@ -823,6 +830,12 @@ namespace ConditioningControlPanel.Views.Tabs
             // column trick as the NEW pill above: a column of its own on THIS row only, and the
             // dot still takes the last column. Built collapsed; RefreshV2Pills lights it from
             // ownership, on load and again whenever a prize lands.
+            //
+            // THE DOT GETS ITS OWN COLUMN TOO (Tock, tier2 2026-09-19: "V2 showing under the LED
+            // indicator"). Both used to resolve to ColumnDefinitions.Count - 1, which is the SAME
+            // column once this block has added one - and the state dot, added second, drew on top
+            // of the pill. Flash and Bubble Pop are the only rows that carry both, and they are
+            // exactly the two rows the v2 prizes badge.
             if (V2PillFamily(e.Key) != null)
             {
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -835,6 +848,10 @@ namespace ConditioningControlPanel.Views.Tabs
 
             if (e.Dot != null)
             {
+                // Its own column, always: a row with a NEW or a v2 pill has already taken the
+                // one that was last, and two children in one Auto column stack rather than sit
+                // side by side.
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 e.DotShape = new Ellipse
                 {
                     Width = 7,
@@ -842,8 +859,6 @@ namespace ConditioningControlPanel.Views.Tabs
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(6, 0, 2, 0),
                 };
-                // Last column, not a fixed 2: the NEW pill above inserts a column on the row
-                // it badges (v6.8.0). Unbadged rows still resolve to 2.
                 Grid.SetColumn(e.DotShape, grid.ColumnDefinitions.Count - 1);
                 grid.Children.Add(e.DotShape);
             }
@@ -916,7 +931,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 Foreground = Brushes.White,
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                Margin = new Thickness(12, 0, 26, 0),
+                Margin = new Thickness(12, 0, TileLabelInset, 0),
             };
             tile.Children.Add(e.TileLabel);
 
@@ -1473,7 +1488,18 @@ namespace ConditioningControlPanel.Views.Tabs
                 if (fam == null) continue;
                 var vis = (fam == "flash" ? flash : bubbles) ? Visibility.Visible : Visibility.Collapsed;
                 if (e.V2Pill != null) e.V2Pill.Visibility = vis;
-                if (e.TileV2Pill != null) e.TileV2Pill.Visibility = vis;
+                if (e.TileV2Pill != null)
+                {
+                    e.TileV2Pill.Visibility = vis;
+                    // The checked tile has no columns - the caption, the pill and the dot are
+                    // three right-anchored children over one picture - so the caption's own right
+                    // inset is the only thing holding it off the pill. Widened while the pill is
+                    // worn and given straight back when it is not, so an account that owns nothing
+                    // keeps the full caption width it has always had.
+                    if (e.TileLabel != null)
+                        e.TileLabel.Margin = new Thickness(12, 0, vis == Visibility.Visible
+                            ? TileLabelInsetWithV2 : TileLabelInset, 0);
+                }
             }
         }
 
