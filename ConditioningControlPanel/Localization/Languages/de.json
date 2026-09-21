@@ -3342,6 +3342,8 @@
   "takeover_voice_hint_no_mic": "Kein Mikrofon gefunden. Schließ eines an, um das zu nutzen.",
   "takeover_voice_hint_model_failed": "Das Sprachmodell ist da, lädt aber nicht. Entferne jedes zusätzliche Modell unter Resources\\Models\\vosk und starte neu.",
   "takeover_voice_hint_model_missing": "Noch kein Sprachmodell installiert. Sprachaufforderungen bleiben aus, bis eines da ist.",
+  "btn_open_models_folder": "Modellordner offnen",
+  "tooltip_open_models_folder": "Offnet den Ordner fur das Sprachmodell und legt ihn an, falls er fehlt. Entpacke das Modell so, dass am und conf darin liegen.",
   "takeover_voice_hint_offline_mic": "Offline-Mikrofon. Es öffnet sich nur, wenn die Übernahme fragt.",
   "takeover_countdown_bar_tooltip": "Setzt einen dünnen rosa Balken unter den Avatar, der abläuft, während die nächste Überraschungs-Übernahme näher rückt. So siehst du sie kommen.",
   "guide_takeover_step1_title": "1. Setz deine Grenzen",

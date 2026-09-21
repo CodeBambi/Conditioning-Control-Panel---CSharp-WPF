@@ -508,6 +508,8 @@ namespace ConditioningControlPanel
             var amber = new SolidColorBrush(Color.FromRgb(0xFF, 0xC1, 0x07));
             var grey = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
 
+            ShowSpeechModelFolderButton(BambiTakeoverTab?.BtnAutonomyOpenModels, on);
+
             if (on && App.Speech?.IsAvailable != true)
             {
                 hint.Foreground = amber;
@@ -528,6 +530,48 @@ namespace ConditioningControlPanel
             hint.Text = Localization.Loc.Get(on
                 ? "takeover_voice_hint_on"
                 : "takeover_voice_hint_off");
+        }
+
+        /// <summary>
+        /// Show the "Open models folder" button only while the problem is the MODEL - missing, or
+        /// on disk and refusing to load. A mic that is not plugged in is not helped by a folder,
+        /// and an engine that works needs no instructions at all.
+        /// </summary>
+        private static void ShowSpeechModelFolderButton(System.Windows.Controls.Button? button, bool voiceWanted)
+        {
+            if (button == null) return;
+            button.Visibility = voiceWanted && SpeechModelIsTheProblem()
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Speech is unavailable AND the microphone is not the reason, so the answer is a model.
+        /// Shared by the Takeover hint and the She's Listening status card: one condition, two
+        /// buttons, no chance of one offering the folder while the other says something else.
+        /// </summary>
+        internal static bool SpeechModelIsTheProblem()
+        {
+            if (App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice) return false;
+            if (App.Speech.IsAvailable) return false;
+            return App.Speech.ModelStatus is Services.Speech.SpeechModelStatus.LoadFailed
+                                          or Services.Speech.SpeechModelStatus.NoModelFound
+                                          or Services.Speech.SpeechModelStatus.NotProbed;
+        }
+
+        /// <summary>
+        /// Open <c>Resources\Models\vosk</c> in Explorer, creating it first.
+        ///
+        /// <para>The folder does not exist on a fresh install, which is half of why "drop the
+        /// model in Resources\Models\vosk" has cost four forty-minute support threads: the
+        /// instruction names a path under %LOCALAPPDATA%\Programs that the user cannot find and
+        /// then cannot confidently create. An empty folder open in Explorer says it instead.</para>
+        /// </summary>
+        internal void OpenSpeechModelFolder()
+        {
+            if (Services.Speech.SpeechModelFolder.Open()) return;
+            App.Logger?.Warning("Could not open the speech model folder at {Root}",
+                                Services.Speech.SpeechModelFolder.Root);
         }
 
         internal void ChkAutonomyResume_Changed(object sender, RoutedEventArgs e)

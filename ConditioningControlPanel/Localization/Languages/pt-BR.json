@@ -3342,6 +3342,8 @@
   "takeover_voice_hint_no_mic": "Nenhum microfone encontrado. Conecte um para usar isto.",
   "takeover_voice_hint_model_failed": "O modelo de voz está lá mas não carrega. Remova qualquer modelo extra que você colocou em Resources\\Models\\vosk e reinicie.",
   "takeover_voice_hint_model_missing": "Ainda não há modelo de voz instalado. Os avisos por voz ficam desligados até haver um.",
+  "btn_open_models_folder": "Abrir a pasta de modelos",
+  "tooltip_open_models_folder": "Abre a pasta onde o modelo de voz vai, e cria ela se ainda nao existir. Descompacte o modelo de forma que am e conf fiquem dentro.",
   "takeover_voice_hint_offline_mic": "Microfone offline. Só abre quando a Tomada pede.",
   "takeover_countdown_bar_tooltip": "Coloca uma barra rosa fina embaixo do avatar que esvazia conforme a próxima Tomada surpresa se aproxima, para você ver chegando.",
   "guide_takeover_step1_title": "1. Defina seus limites",

@@ -4094,6 +4094,8 @@
   "takeover_voice_hint_no_mic": "没有找到麦克风。接一个就能用。",
   "takeover_voice_hint_model_failed": "语音模型在，但加载不了。把你放进 Resources\\Models\\vosk 的多余模型删掉，然后重启。",
   "takeover_voice_hint_model_missing": "还没装语音模型。装上之前语音提示一直是关的。",
+  "btn_open_models_folder": "打开模型文件夹",
+  "tooltip_open_models_folder": "打开存放语音模型的文件夹，如果还没有就先建一个。解压时请让 am 和 conf 直接在里面。",
   "takeover_voice_hint_offline_mic": "离线麦克风。只有接管开口时才会打开。",
   "takeover_countdown_bar_tooltip": "在头像下方放一条细粉色进度条，随着下一次突袭接管临近而减少，让你看得见它在靠近。",
   "guide_takeover_step1_title": "1. 设定你的界限",

@@ -255,14 +255,30 @@ namespace ConditioningControlPanel.Services.Speech
         /// <see cref="BuildRecognizer"/>; the full (non-lgraph) 0.22 model ignores grammar, so don't
         /// ship that one here.
         /// </summary>
-        internal static string? ResolveModelDir()
-        {
-            if (!Directory.Exists(ModelRoot)) return null;
+        internal static string? ResolveModelDir() => ResolveModelDir(ModelRoot);
 
+        /// <inheritdoc cref="ResolveModelDir()"/>
+        /// <param name="root">The models folder to search. Parameterised for tests.</param>
+        internal static string? ResolveModelDir(string root)
+        {
+            if (!Directory.Exists(root)) return null;
+
+            // TWO levels deep, not one. Windows' own "Extract All" defaults to a folder named
+            // after the zip, so unpacking vosk-model-en-us-0.22-lgraph.zip INTO this folder
+            // routinely yields vosk/vosk-model-en-us-0.22-lgraph/vosk-model-en-us-0.22-lgraph/am.
+            // A one-level scan reported that as NO MODEL AT ALL - the hint then read "no speech
+            // model installed yet" while the user was looking at the model they had just put
+            // there, which is the shape of four forty-minute support threads (2026-09-14 and
+            // 2026-09-17, both on the ~128 MB model the README recommended). Two levels is the
+            // honest depth: it covers the double-unpack and stops well short of walking a tree.
             var candidates = new List<string>();
-            if (LooksLikeModel(ModelRoot)) candidates.Add(ModelRoot);
-            foreach (var sub in Directory.EnumerateDirectories(ModelRoot))
-                if (LooksLikeModel(sub)) candidates.Add(sub);
+            if (LooksLikeModel(root)) candidates.Add(root);
+            foreach (var sub in SafeDirectories(root))
+            {
+                if (LooksLikeModel(sub)) { candidates.Add(sub); continue; }
+                foreach (var nested in SafeDirectories(sub))
+                    if (LooksLikeModel(nested)) candidates.Add(nested);
+            }
             if (candidates.Count == 0) return null;
             if (candidates.Count == 1) return candidates[0];
 
@@ -298,6 +314,18 @@ namespace ConditioningControlPanel.Services.Speech
 
         private static bool LooksLikeModel(string dir) =>
             Directory.Exists(Path.Combine(dir, "am")) && Directory.Exists(Path.Combine(dir, "conf"));
+
+        /// <summary>Subdirectories, or none. A model folder can hold anything a user dropped in
+        /// it, including a junction or a path we are not allowed to enumerate.</summary>
+        private static IEnumerable<string> SafeDirectories(string dir)
+        {
+            try { return Directory.EnumerateDirectories(dir); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("SpeechService: could not list {Dir}: {E}", dir, ex.Message);
+                return Array.Empty<string>();
+            }
+        }
 
         /// <summary>
         /// Open the mic, ask the user to say <paramref name="target"/>, and score what comes back.
