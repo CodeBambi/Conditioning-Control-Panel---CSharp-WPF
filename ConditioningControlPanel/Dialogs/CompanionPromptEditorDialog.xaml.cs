@@ -33,6 +33,12 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class CompanionPromptEditorDialog : Window
     {
+        /// <summary>
+        /// The text each box starts from and the "reset" target. NOT the stock prompt: it is the
+        /// ACTIVE persona's own wording where that persona has any, so a Circe user forks Circe
+        /// rather than being shown Bambi sprite paragraphs they never picked (Kathryn,
+        /// 2026-09-14). See <see cref="Services.Companion.ActivePersonaPromptText"/>.
+        /// </summary>
         private readonly CompanionPromptSettings _defaults;
         private bool _hasUnsavedChanges;
         private readonly ObservableCollection<KnowledgeBaseLink> _knowledgeLinks = new();
@@ -41,11 +47,23 @@ namespace ConditioningControlPanel
         {
             InitializeComponent();
 
-            _defaults = CompanionPromptSettings.GetDefaults();
+            _defaults = Services.Companion.ActivePersonaPromptText.Resolve(
+                ActivePersonaPrompt(), CompanionPromptSettings.GetDefaults());
             LoadCurrentSettings();
             LoadKnowledgeLinks();
             UpdateActivePromptDisplay();
             ApplyPolicyBannerState();
+        }
+
+        /// <summary>
+        /// The running persona's prompt text, or null when the stack is not up or the persona
+        /// carries none. A mod's personalities.json is plain text by the time PersonalityService
+        /// hands it over, so there is nothing to decrypt here.
+        /// </summary>
+        private static CompanionPromptSettings? ActivePersonaPrompt()
+        {
+            try { return App.Personality?.GetActivePreset()?.PromptSettings; }
+            catch { return null; }
         }
 
         /// <summary>
