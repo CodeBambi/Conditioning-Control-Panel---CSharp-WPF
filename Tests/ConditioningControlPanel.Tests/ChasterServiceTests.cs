@@ -118,6 +118,51 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
+    public void A_self_priced_event_still_needs_its_row_switched_on()
+    {
+        _options = _options with { Prices = new HashSet<string> { "typo" } };
+        using var service = Make();
+
+        Assert.False(service.NoteSeconds("watcher", 600).Booked);
+        Assert.Equal(0, service.BalanceSeconds);
+    }
+
+    [Fact]
+    public void Today_reads_the_gross_adds_of_the_local_day_and_zero_on_a_new_one()
+    {
+        using var service = Make();
+        service.Note("typo");
+        service.Note("session");
+
+        Assert.Equal(15, service.TodayAddedSeconds);
+        _utc = _utc.AddDays(1);
+        Assert.Equal(0, service.TodayAddedSeconds);
+    }
+
+    [Fact]
+    public void The_page_lists_costs_then_earn_backs_biggest_first_and_names_every_row()
+    {
+        var (costs, earnBacks) = TabPageText.Split(TabPrices.All);
+
+        Assert.Equal(TabPrices.All.Count, costs.Count + earnBacks.Count);
+        Assert.Equal("program_skipped", costs[0].Id);
+        Assert.Equal("quest_weekly", earnBacks[0].Id);
+        Assert.Equal("+0:10 each", TabPageText.Price(TabPrices.Find("mantra")!, "{0} each"));
+        Assert.Equal("-10:00", TabPageText.Price(TabPrices.Find("session")!, "{0} each"));
+
+        var en = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", "en.json")));
+        foreach (var id in TabPrices.All.Select(p => p.Id).Append(CircesTab.JackpotEventId))
+            Assert.NotNull(en[TabPageText.NameKey(id)]);
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Localization"))) dir = dir.Parent;
+        return dir?.FullName ?? throw new DirectoryNotFoundException("repo root");
+    }
+
+    [Fact]
     public void A_safety_exit_holds_adds_for_ten_minutes_and_credits_still_land()
     {
         using var service = Make();

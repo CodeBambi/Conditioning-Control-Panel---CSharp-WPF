@@ -94,6 +94,13 @@ public sealed partial class ChasterService : IDisposable
     /// <summary>Seconds on the tab and not on the lock yet. Negative is credit.</summary>
     public int BalanceSeconds { get { lock (_gate) return _tab.BalanceSeconds; } }
 
+    /// <summary>Gross adds booked today, for "Today 12:30 of 60:00". A day nothing was booked
+    /// on yet reads 0, whatever yesterday left behind.</summary>
+    public int TodayAddedSeconds
+    {
+        get { lock (_gate) return _tab.Day == CircesTab.DayKey(_localNow()) ? _tab.DayAddedSeconds : 0; }
+    }
+
     private bool Active(out ChasterOptions options)
     {
         options = _options() ?? ChasterOptions.Off;
@@ -109,10 +116,12 @@ public sealed partial class ChasterService : IDisposable
     }
 
     /// <summary>An event that names its own price (an Awareness trigger carries its minutes in
-    /// the preset). Same tab, same cap, same safety hold; only the price table is skipped.</summary>
+    /// the preset). Same tab, same cap, same safety hold, and the row still has to be switched
+    /// on: a toggle on the page that reads off must mean off. Only the AMOUNT skips the table.</summary>
     public TabBooking NoteSeconds(string eventId, int seconds)
     {
-        if (!Active(out _) || TabPrices.NeverPriced.Contains(eventId ?? "")) return new(0, TabRefusal.Nothing);
+        if (!Active(out var options) || TabPrices.NeverPriced.Contains(eventId ?? "")) return new(0, TabRefusal.Nothing);
+        if (!options.Prices.Contains(eventId!)) return new(0, TabRefusal.Nothing);
         return BookSeconds(eventId!, Math.Clamp(seconds, -CircesTab.DailyCapSeconds, CircesTab.DailyCapSeconds));
     }
 

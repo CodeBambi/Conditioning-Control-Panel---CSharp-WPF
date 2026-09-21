@@ -127,6 +127,8 @@
   "chaster_lock_untitled": "Untitled lock",
   "chaster_prices_header": "Prices",
   "chaster_prices_hint": "Everything is off until you switch it on.",
+  "chaster_costs_header": "Costs time",
+  "chaster_earns_header": "Earns it back",
   "chaster_each": "{0} each",
   "chaster_bill_header": "This run",
   "chaster_bill_empty": "Nothing yet.",
