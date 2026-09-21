@@ -24,6 +24,9 @@ namespace ConditioningControlPanel.Features
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             Services.Prizes.PrizeGrants.GrantsChanged += OnGrantsChanged;
+            RowGetBubblesV2.Configure(Services.Prizes.V2PurchaseRule.BubblesPrizeId,
+                "v2_get_bubble_blurb", "label_bubbles_v2_box");
+            RowGetBubblesV2.RowChanged += OnGetRowChanged;
             RebuildMotionPicker();
             RebindToCurrentSettings();
             // The egg hint names the active persona, and the hero/side plates are mod art; the
@@ -44,7 +47,13 @@ namespace ConditioningControlPanel.Features
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
             Services.BubbleService.AmbientXpBudgetChanged -= OnAmbientXpBudgetChanged;
             if (App.Webcam != null) App.Webcam.OnTrackingStateChanged -= OnWebcamTrackingStateChanged;
+            RowGetBubblesV2.RowChanged -= OnGetRowChanged;
         }
+
+        // The Get it row decides its own visibility; the box only needs to know whether anything is
+        // left in it. The row repaints on its own schedule (a counter read landing, a sign-in),
+        // which is why the box is re-measured from the row and not from ownership alone.
+        private void OnGetRowChanged(object? sender, EventArgs e) => RebuildMotionPicker();
 
         /// <summary>
         /// The camera raises this off the UI thread, so the repaint is marshalled and swallowed on
@@ -310,7 +319,11 @@ namespace ConditioningControlPanel.Features
             // The BOX is what collapses now, not the row: Motion and the Brain Drain bubble both
             // arrive with the v2 prizes, so with none owned there is nothing in here to show.
             ChkBrainDrainBubble.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
-            V2Box.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
+            // A one-item picker is configuration with no capability behind it, so the row goes with
+            // the dials. The BOX stays up while the Get it row has something to offer.
+            MotionRow.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
+            V2Box.Visibility = rain || spiral || !RowGetBubblesV2.IsRowHidden
+                ? Visibility.Visible : Visibility.Collapsed;
             V2BoxBadge.Content ??= FeatureCard.NewV2Badge(new Thickness(0));
             bool wasLoading = _isLoading;
             _isLoading = true;

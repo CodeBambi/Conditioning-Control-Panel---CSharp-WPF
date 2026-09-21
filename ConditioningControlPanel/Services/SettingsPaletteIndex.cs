@@ -262,11 +262,19 @@ namespace ConditioningControlPanel.Services
             // also where "scheduler"/"ramp" resolve to now that they are rack modules.
             Tab("studio", "nav_door_studio", "🎛️", "studio",
                 "studio effects rack flashes visuals video spiral subliminal brain drain melt mind wipe " +
-                "bubbles lock card bouncing text pink filter scheduler ramp exclusion haptics");
-            Tab("haptics", "tab_haptics", "📳", "haptics", "haptics toy vibrator buttplug funscript");
+                "bubbles lock card bouncing text pink filter scheduler ramp exclusion haptics " +
+                // The words people actually type for three of those modules. "blur" is Brain Drain
+                // (accessibility report 2026-09-20), "starts by itself" is the Scheduler, and
+                // "volume gets quiet" is the ramp pulling the master dial down.
+                "blur screen blur turn off blur auto start starts by itself starts on its own " +
+                "intensity ramp volume gets quiet volume drops");
             Tab("companion", "tab_companion", "🤖", "companion", "companion ai persona workshop chat");
             Tab("bambitakeover", "tab_takeover", "💫", "bambitakeover", "takeover autonomy");
-            Tab("shelistening", "tab_shelistening", "🎙️", "shelistening", "listening voice speech mic");
+            // "vosk" and "speech model" are the words people bring: the offline model is the one
+            // part of voice that can be missing, and the hint that says so lives on this page.
+            Tab("shelistening", "tab_shelistening", "🎙️", "shelistening",
+                "listening voice speech mic microphone vosk speech model voice model offline model " +
+                "wake word hey bambi");
             Tab("awareness", "tab_awareness", "👁️", "awareness", "awareness screen watching");
             // Phase 6: the Lab page became the Play door's card wall. The row survives (people
             // search for "lab", "gaze", "rabbit hole") but it now names — and navigates to — the
@@ -274,13 +282,28 @@ namespace ConditioningControlPanel.Services
             // room, so the rail's joystick is the honest glyph. Every card on the wall is listed
             // in the aliases so the palette finds a feature by name, not just by room.
             Tab("play", "nav_door_play", "🕹️", "play",
-                "play lab experiments gaze focus blink trainer intake lockdown remote control loom tier 2");
+                "play lab experiments gaze focus blink trainer intake lockdown remote control loom tier 2 " +
+                "gaze minigame haptics vibration");
+
+            // DECLARED AFTER Play on purpose, and the order is the whole point. Score() gives every
+            // alias hit the same 40 and breaks ties by declaration order, so while this row sat
+            // above Play a bare "gaze" offered Haptics first - and the Gaze minigame is a card on
+            // the PLAY wall. Haptics keeps its own gaze words because the toy is connected here and
+            // "how do I get haptics working on the gaze minigame" was asked as one question
+            // (ask-support 2026-09-20): that query still lands here, because "haptics gaze" is a
+            // substring of nothing else. Moving a row DOWN can only lose ties, never steal them.
+            Tab("haptics", "tab_haptics", "📳", "haptics",
+                "haptics toy vibrator buttplug funscript vibration connect toy " +
+                "haptics gaze gaze minigame vibration mode");
             // card.arcademy and card.backroom (launcher cards on the Play wall) left the index on
             // 2026-09-18: the games live in the CC Labs launcher now, which is not a tab the
             // palette can navigate to.
             Tab("deeper", "tab_deeper", "🌊", "deeper", "deeper files audio video");
             Tab("exclusives", "tab_exclusives", "⭐", "exclusives", "premium exclusives velvet vault showcase");
-            Tab("gradedintake", "tab_gradedintake", "📝", "gradedintake", "intake quiz graded pass");
+            // Pop Quiz's only switch (ChkPopQuizEnabled) lives on this page, so "turn off the pop
+            // quiz" has to land here - asked in support 2026-09-16 and answered by hand.
+            Tab("gradedintake", "tab_gradedintake", "📝", "gradedintake",
+                "intake quiz graded pass pop quiz turn off quiz questions test");
             Tab("lockdown", "tab_lockdown_mode", "🔒", "lockdown", "lockdown lock kiosk");
             Tab("blinktrainer", "tab_blink_trainer", "👀", "blinktrainer", "blink trainer eyes");
             Tab("remotecontrol", "tab_remote_control", "📱", "remotecontrol", "remote control phone");
@@ -295,7 +318,11 @@ namespace ConditioningControlPanel.Services
             Tab("spiral", "tab_spiral", "🌀", "spiral", "spiral descent map devotion stage year one");
             Tab("quests", "tab_quests", "📜", "quests", "quests daily weekly");
             Tab("achievements", "tab_achievements", "🏆", "achievements", "achievements trophies badges");
-            Tab("enhancements", "tab_enhancements", "✨", "enhancements", "skill tree enhancements perks");
+            // The streak shield / streak fix is a skill, so "pause my streak" is a purchase on this
+            // page and nowhere else (ask-support 2026-09-16: the reporter searched and gave up).
+            Tab("enhancements", "tab_enhancements", "✨", "enhancements",
+                "skill tree enhancements perks streak pause streak freeze streak shield streak fix " +
+                "vacation away days off");
             Tab("programs", "tab_programs", "📅", "programs", "programs training multi day");
             Tab("leaderboard", "tab_leaderboard", "📊", "leaderboard", "leaderboard ranks");
             Tab("assets", "tab_assets", "📁", "assets", "assets images videos packs folder");
@@ -333,6 +360,32 @@ namespace ConditioningControlPanel.Services
                      "phrase manager text pools mantras subliminals barks lines");
             Launcher("medialog", "yl7_nav_medialog", "🎞️", "BtnNavMediaLog",
                      "media log history what did i see flashes videos recently shown");
+
+            // ---- two title-bar buttons ---------------------------------------------------
+            // Neither is a tab, and neither BELONGS to a door, so these rows carry no TabKey at
+            // all: Navigate skips ShowTab and goes straight to the pulse, which is the whole
+            // answer to "where is it" for a control that is always on screen and never scrolls.
+            //
+            // Both were real support questions this week. The bug button was asked outright
+            // ("where in the app is the bug report button?", answered with a screenshot), and the
+            // games moved into the CC Labs launcher on 2026-09-18, which took the Arcademy's
+            // palette row with them - so the honest answer is "through this button", not nothing.
+            void TitleBarButton(string id, string labelKey, string glyph, string element, string aliases) =>
+                list.Add(new SettingsPaletteEntry
+                {
+                    Id = "chrome." + id,
+                    LabelKey = labelKey,
+                    Glyph = glyph,
+                    ElementNames = new[] { element },
+                    ContextKeys = new[] { GroupNav },
+                    Aliases = aliases,
+                });
+
+            TitleBarButton("bugreport", "btn_report_bug", "🐛", "BtnTitleBarBugReport",
+                           "bug report feedback crash log problem broken send report suggestion");
+            TitleBarButton("cclabs", "launcher_window_title", "🕹", "BtnBackToLauncher",
+                           "cc labs launcher games arcademy academy campus school back room casino "
+                           + "racing thoughts race goon game rabbit hole piece by piece");
 
             // ---- the eight Settings sections -------------------------------------------
             void Section(string key, string labelKey, string glyph, string aliases) =>
@@ -410,7 +463,8 @@ namespace ConditioningControlPanel.Services
             Setting("video_on_launch", "rf_palette_video_on_launch", "🎬", "general",
                     new[] { "ChkVidLaunch" }, "set2_section_general", "video on launch mandatory startup");
             Setting("auto_start_engine", "rf_palette_auto_start_engine", "▶️", "general",
-                    new[] { "ChkAutoRun" }, "set2_section_general", "auto start engine run");
+                    new[] { "ChkAutoRun" }, "set2_section_general",
+                    "auto start engine run starts by itself starts on its own runs on launch");
             Setting("startup_video", "rf_palette_startup_video", "📼", "general",
                     new[] { "TxtStartupVideo" }, "set2_section_general", "startup video pick file");
             // The app-wide monitor picker. Heavily aliased on purpose: "monitor"/"screen" used to
@@ -453,7 +507,8 @@ namespace ConditioningControlPanel.Services
 
             // Devices - panic + shortcuts
             Setting("panic_key", "rf_palette_panic_key", "🆘", "devices",
-                    new[] { "BtnPanicKey" }, "set2_section_devices", "panic key escape rebind emergency stop");
+                    new[] { "BtnPanicKey" }, "set2_section_devices",
+                    "panic key escape rebind emergency stop exit key quit key esc closes the app");
             Setting("no_panic", "rf_palette_no_panic", "⚠️", "devices",
                     new[] { "ChkNoPanic" }, "set2_section_devices", "no panic disable escape");
             Setting("chat_shortcut", "set2_palette_chat_shortcut", "⌨️", "devices",

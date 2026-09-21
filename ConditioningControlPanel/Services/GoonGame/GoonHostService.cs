@@ -176,6 +176,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     Mappings = mappings,
                     UserDataFolderName = "browser_data_goon",
                     InputEnabled = true,
+                    IsGame = true,   // the startup ladder goes quiet while a game is up
                     // Window mode is REMEMBERED (AppSettings.GoonFullscreen) so the window is BUILT
                     // in the mode the player left it in. A recovery relaunch always comes back
                     // windowed: if the page wedged once it may wedge again, and a titled window is

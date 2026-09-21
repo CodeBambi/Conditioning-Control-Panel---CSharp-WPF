@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.10.1</Version>
+    <Version>6.10.3</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -552,8 +552,9 @@
       $(MSBuildProjectDirectory)\Resources\web\dtrh\assets\**\*.mp3
     </ContentPackWebExcludeAbs>
     <!-- The four arcademy *demo.html browser harnesses, plus the games' node smoke
-         checks (games\*\smoke\*.mjs), the Back Room smoke and the hypno kit's test pages
-         (shared\hypno\tests: kit.html, the mock host, the probe station). Listed once here and referenced by
+         checks (games\*\smoke\*.mjs), the Back Room smoke, the hypno kit's test pages
+         (shared\hypno\tests: kit.html, the mock host, the probe station) and DtRH's node
+         tests (dtrh\tests). Listed once here and referenced by
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
          which re-globs Resources\web independently - miss the second one and the
          harness pages come straight back into the publish tree (and so the installer). -->
@@ -569,7 +570,8 @@
       Resources\web\backroom\smoke\**\*;
       Resources\web\backroom\**\tests\**\*;
       Resources\web\backroom\shared\hypno\tests\**\*;
-      Resources\web\backroom\stations\breakout\**\*
+      Resources\web\backroom\stations\breakout\**\*;
+      Resources\web\dtrh\tests\**\*
     </ArcademyHarnessExclude>
     <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
          flash): its node tests ride along so the vendored copy stays checkable, but they are
@@ -589,7 +591,8 @@
       $(MSBuildProjectDirectory)\Resources\web\backroom\smoke\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\**\tests\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\shared\hypno\tests\**\*;
-      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\dtrh\tests\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 

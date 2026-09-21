@@ -85,9 +85,14 @@ public static class BrainDrainBubble
     /// turns it straight back into a percent for StartBrainDrainBlur - so the user's own visual
     /// dial (BrainDrainBlurStrength) is the right scale. BrainDrainIntensity is deliberately NOT
     /// used: it is the audio half's per-minute trigger rate, as AppSettings says out loud.
+    ///
+    /// <para>Floor 0, not 1, since 2026-09-21: 0 is a real slider position now and it means "no
+    /// picture", so clamping it up to 1 here would have left one path that still blurs the screen
+    /// of someone who turned the blur off. The pop pays its XP either way - the payload checks the
+    /// dial before it asks for an overlay at all.</para>
     /// </summary>
     public static double OverlayOpacity(int brainDrainBlurStrength) =>
-        Math.Clamp(brainDrainBlurStrength, 1, 100) / 100.0;
+        Math.Clamp(brainDrainBlurStrength, 0, 100) / 100.0;
 
     /// <summary>
     /// Whether the pop may raise the overlay at all. Two timed drains must never overlap (melt and

@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -619,21 +620,63 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// The Patreon brand red for the filled button. Frozen through the partial class's own
+        /// helper (MainWindow.QuestStamps.cs) so it crosses threads and is never re-allocated.
+        /// </summary>
+        private static readonly Brush PatreonRedBrush = Frozen(Color.FromRgb(0xFF, 0x42, 0x4D));
+
+        /// <summary>
+        /// The button's label is BOUND, never assigned. An assignment replaces the XAML's live
+        /// <c>{loc:Str}</c> binding on the first paint for every user, and a mid-session language
+        /// switch would then leave the button reading the old tongue for good.
+        /// </summary>
+        private static void BindLoc(DependencyObject target, DependencyProperty property, string key)
+        {
+            BindingOperations.SetBinding(target, property, new Binding($"[{key}]")
+            {
+                Source = LocalizationManager.Instance,
+                Mode = BindingMode.OneWay
+            });
+        }
+
+        /// <summary>
         /// Updates the visibility of account linking buttons based on current login state
         /// </summary>
         private void UpdateAccountLinkingUI()
         {
             // Only show linking section if user is logged in with a unified account
             var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
-            var hasLinkedPatreon = App.Settings?.Current?.HasLinkedPatreon == true || App.Patreon?.IsAuthenticated == true;
             var hasLinkedDiscord = App.Settings?.Current?.HasLinkedDiscord == true || App.Discord?.IsAuthenticated == true;
 
-            // Show section only if logged in and missing at least one provider
-            bool showLinkingSection = hasUnifiedId && (!hasLinkedPatreon || !hasLinkedDiscord);
+            // The Patreon row is no longer a plain "is it linked" read. A patron whose OAuth grant
+            // died on this PC is linked server-side AND stuck, and the old rule hid the only button
+            // that could fix it. PatreonReconnectRule owns the whole decision; see its summary.
+            var patreonRow = PatreonReconnectRule.Decide(
+                hasUnifiedId: hasUnifiedId,
+                linkedServerSide: App.Settings?.Current?.HasLinkedPatreon == true,
+                // Tokens on disk are not the same thing as a grant that works: the proxy refusing
+                // to refresh them leaves the .dat in place on purpose (#585), which is precisely
+                // the shape the ticket's account had been stuck in for six weeks.
+                desktopAuthenticated: App.Patreon?.IsAuthenticated == true
+                                      && App.Patreon?.GrantLooksDead != true,
+                hasPremiumNow: App.Patreon?.HasPremiumAccess == true,
+                whitelisted: App.Patreon?.IsWhitelisted == true);
+
+            // Show section when either provider has something to offer. Reconnect counts even
+            // though both providers are linked, which is the case the old condition missed.
+            bool showLinkingSection = hasUnifiedId && (patreonRow.ShowsButton || !hasLinkedDiscord);
             AppSettingsTab.AccountLinkingSection.Visibility = showLinkingSection ? Visibility.Visible : Visibility.Collapsed;
 
             // Show individual buttons for unlinked providers
-            AppSettingsTab.BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.BtnLinkPatreon.Visibility = patreonRow.ShowsButton ? Visibility.Visible : Visibility.Collapsed;
+            BindLoc(AppSettingsTab.BtnLinkPatreon, ContentControl.ContentProperty,
+                patreonRow.Action == PatreonLinkAction.Reconnect ? "btn_reconnect_patreon" : "btn_link_patreon");
+            AppSettingsTab.BtnLinkPatreon.Background = patreonRow.Filled ? PatreonRedBrush : Brushes.Transparent;
+            AppSettingsTab.BtnLinkPatreon.Foreground = patreonRow.Filled ? Brushes.White : PatreonRedBrush;
+            AppSettingsTab.BtnLinkPatreon.BorderBrush = PatreonRedBrush;
+            AppSettingsTab.BtnLinkPatreon.BorderThickness = new Thickness(patreonRow.Filled ? 0 : 1);
+            AppSettingsTab.TxtPatreonReconnectHint.Visibility = patreonRow.ShowsHint ? Visibility.Visible : Visibility.Collapsed;
+
             AppSettingsTab.BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
 
             // Show cloud settings backup section if user has a cloud identity
@@ -646,6 +689,25 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Repaint the account page's linking row from outside this partial. The startup Patreon
+        /// validate resolves long after the row is first drawn, and its verdict is half of what
+        /// the row decides; without this the Reconnect offer would only ever appear one launch
+        /// late. Safe before the tab exists.
+        /// </summary>
+        internal void RefreshAccountLinkingRow()
+        {
+            try
+            {
+                if (AppSettingsTab == null) return;
+                UpdateAccountLinkingUI();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RefreshAccountLinkingRow failed: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Link Patreon account to existing unified account
         /// </summary>
         internal async void BtnLinkPatreon_Click(object sender, RoutedEventArgs e)
@@ -653,7 +715,7 @@ namespace ConditioningControlPanel
             if (App.Patreon == null) return;
 
             AppSettingsTab.BtnLinkPatreon.IsEnabled = false;
-            AppSettingsTab.BtnLinkPatreon.Content = Loc.Get("login_connecting");
+            BindLoc(AppSettingsTab.BtnLinkPatreon, ContentControl.ContentProperty, "login_connecting");
 
             try
             {
@@ -683,7 +745,34 @@ namespace ConditioningControlPanel
             finally
             {
                 AppSettingsTab.BtnLinkPatreon.IsEnabled = true;
-                AppSettingsTab.BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
+                // Not a hardcoded label any more: after a reconnect the row usually goes away
+                // entirely, and when it does not it has to come back saying the right word.
+                UpdateAccountLinkingUI();
+            }
+        }
+
+        /// <summary>
+        /// The reconnect the TierGate refusal offers. Same flow as the Settings button, reached
+        /// from wherever the lock was actually felt - a locked-out patron looks at the door that
+        /// refused them, not at Settings. Brings Settings . Account up first (ShowAccountSettings,
+        /// NOT ShowTab("settings") - that key is the dashboard) so the row is on screen behind the
+        /// browser window, then runs the button's own handler.
+        ///
+        /// A disabled button means a link is already in flight, and the toast lingers long enough
+        /// to be clicked twice: a second run would re-link with the dead token and pop a refusal
+        /// on top of a working flow.
+        /// </summary>
+        internal void StartPatreonReconnectFromGate()
+        {
+            try
+            {
+                if (AppSettingsTab?.BtnLinkPatreon?.IsEnabled == false) return;
+                ShowAccountSettings();
+                BtnLinkPatreon_Click(AppSettingsTab!.BtnLinkPatreon, new RoutedEventArgs());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("StartPatreonReconnectFromGate failed: {E}", ex.Message);
             }
         }
 
@@ -735,13 +824,52 @@ namespace ConditioningControlPanel
         /// Achievement sharing is a separate opt-in that defaults OFF — users routinely
         /// link Discord and then wonder why nothing posts (support, 2026-07-10). Offer it
         /// once right after a successful link instead of leaving them to find the toggle.
+        ///
+        /// <para>A link resolves whenever the OAuth round trip finishes, which can be minutes
+        /// after the click, so "right after" is not necessarily a moment the panel is on screen.
+        /// With a game up - or the launcher holding the screen while the panel sits in the tray -
+        /// the offer becomes an Inbox row instead
+        /// (<see cref="Services.AchievementSharePromptRule"/>): one player got this box laid over
+        /// the DtRH doors with the choice underneath it unreachable.</para>
         /// </summary>
-        internal void OfferAchievementSharingAfterDiscordLink()
+        /// <param name="userAsked">Called from the Inbox row, which is the user asking for it.</param>
+        internal void OfferAchievementSharingAfterDiscordLink(bool userAsked = false)
         {
             var s = App.Settings?.Current;
-            if (s == null || s.DiscordShareAchievements) return;
+            if (s == null) return;
 
-            var share = MessageBox.Show(
+            var routing = Services.AchievementSharePromptRule.Decide(
+                s.DiscordShareAchievements,
+                ChaosWebViewHost.AnyGameActive,
+                App.StartupLadder?.Held == true,
+                // The general case behind the other two: the panel closes to the tray, and a link
+                // can resolve minutes after the click with no game and no launcher to blame.
+                IsVisible && WindowState != WindowState.Minimized,
+                userAsked);
+
+            switch (routing)
+            {
+                case Services.AchievementSharePromptRouting.Skip:
+                    return;
+
+                case Services.AchievementSharePromptRouting.Inbox:
+                    PresentOrInbox(new Services.Startup.InboxItem
+                    {
+                        Key = "discord-share-achievements",
+                        Glyph = "🎮",
+                        Title = InboxStr("inbox_discord_share_title", "Discord linked"),
+                        Summary = InboxStr("inbox_discord_share_summary",
+                            "Post your achievements to the community Discord?"),
+                        // The row re-asks through this same method, and says so: clicking a row
+                        // is the user asking, so it opens even if the game is still up.
+                        Open = () => OfferAchievementSharingAfterDiscordLink(userAsked: true),
+                    });
+                    return;
+            }
+
+            // Owned by the panel on purpose: an ownerless MessageBox takes whatever window is
+            // active, which is how this one ended up parented to a game.
+            var share = MessageBox.Show(this,
                 Loc.Get("msg_discord_share_achievements_prompt"),
                 Loc.Get("title_discord_linked"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question);

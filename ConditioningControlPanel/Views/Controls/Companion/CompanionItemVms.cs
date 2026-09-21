@@ -121,6 +121,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     {
         string Id { get; }
         string Label { get; }
+
+        /// <summary>One line on what this preset changes, for the chip's tooltip. Null when the
+        /// preset carries none, so the chip shows no tooltip rather than an empty box.</summary>
+        string? Description { get; }
+
         bool IsSelected { get; set; }
     }
 
@@ -340,15 +345,25 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         public CompanionPresetChip() { Id = string.Empty; Label = string.Empty; }
 
-        public CompanionPresetChip(string id, string label, bool selected = false)
+        public CompanionPresetChip(string id, string label, bool selected = false, string? description = null)
         {
             Id = id;
             Label = label;
+            Description = string.IsNullOrWhiteSpace(description) ? null : description!.Trim();
             _isSelected = selected;
         }
 
         public string Id { get; init; }
         public string Label { get; init; }
+
+        /// <summary>
+        /// The preset's own one-liner, shown on hover. Nobody could tell the chips apart without
+        /// it (Kathryn, 2026-09-14: "is there a way to know exactly what these presets change?
+        /// I couldn't find a description anywhere") - the tooltip used to repeat the label.
+        /// Built-in presets carry it in <c>PersonalityPresets</c>; a mod's come from its own
+        /// personalities.json, which is why this is data and not a loc key.
+        /// </summary>
+        public string? Description { get; init; }
 
         public bool IsSelected
         {

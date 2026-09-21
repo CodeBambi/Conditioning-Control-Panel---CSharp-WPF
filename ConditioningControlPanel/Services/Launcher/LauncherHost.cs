@@ -91,6 +91,11 @@ public static partial class LauncherHost
 
     public static bool IsCreated => _window != null;
 
+    /// <summary>The launcher window itself, or null while it has never been built. Read by the
+    /// game hosts, which place a new window on the monitor the launcher is on rather than on the
+    /// primary one (#1239). Nobody outside this assembly needs it.</summary>
+    internal static Window? WindowRef => _window;
+
     /// <summary>
     /// True while the launcher is part of this run: it has been created, or the boot did not ask
     /// for the panel outright (<c>--panel</c>, <c>--startup</c>, the skip-to-panel preference).

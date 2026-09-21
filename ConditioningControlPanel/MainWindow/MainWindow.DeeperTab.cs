@@ -33,9 +33,9 @@ namespace ConditioningControlPanel
         #region Deeper Tab
 
         // internal since Phase 6: the Play door's Deeper card forwards here rather than calling
-        // ShowTab("deeper"), because the first-visit pulse stop, the HasSeenDeeperTab save, the
-        // welcome-card refresh and the lazy hub init all live in this method. A card that only
-        // navigated would leave the rail entry breathing forever.
+        // ShowTab("deeper"), because the first-visit pulse stop, the HasSeenDeeperTab save and the
+        // welcome-card refresh all live in this method. A card that only navigated would leave the
+        // rail entry breathing forever.
         internal void BtnDeeper_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("deeper");
@@ -46,11 +46,9 @@ namespace ConditioningControlPanel
                 App.Settings?.Save();
             }
             UpdateDeeperWelcomeCardVisibility();
-            // Mission 2: lazy-init the hub the first time the user opens the
-            // tab, then on every show pull a fresh scan. Cheap; doesn't churn
-            // if the library hasn't changed.
-            InitializeDeeperHub();
-            ReloadDeeperLibraryFromDisk();
+            // Mission 2's lazy hub init and the fresh scan both moved into ShowTab's
+            // "deeper" case so every door gets them; this one no longer scans the
+            // library three times over.
         }
 
         private void UpdateDeeperWelcomeCardVisibility()

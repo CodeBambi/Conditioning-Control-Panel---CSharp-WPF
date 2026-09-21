@@ -174,8 +174,18 @@ namespace ConditioningControlPanel
                 UpdateDeeperEmptyState(sorted.Count, _deeperAllEntries.Count);
                 UpdateDeeperHeaderCount(sorted.Count, _deeperAllEntries.Count);
             }
-            catch (Exception ex) { App.Logger?.Debug("ApplyDeeperFilterAndSort error: {Error}", ex.Message); }
+            // Warning, not Debug: anything thrown in here leaves the user looking at an
+            // empty list with no empty state, which is exactly what a blank library looks
+            // like. It must be findable in the log without a debug build.
+            catch (Exception ex) { App.Logger?.Warning(ex, "ApplyDeeperFilterAndSort failed; the library list is left empty"); }
         }
+
+        // Theme brush by key, with a fallback. A mod theme ships its own resource
+        // dictionary and can be missing one of the hub's keys; FindResource throws on a
+        // miss, which took the whole projection down into the catch above and blanked the
+        // list. A missing key now costs one row's colour, not the library.
+        private Brush RowBrush(string key, Brush fallback)
+            => TryFindResource(key) as Brush ?? fallback;
 
         // -------------------------------------------------------------------
         // Row VM construction
@@ -206,8 +216,8 @@ namespace ConditioningControlPanel
                     {
                         Glyph = glyph,
                         Label = label,
-                        Background = (Brush)FindResource(bgKey),
-                        Foreground = (Brush)FindResource("TextLightBrush"),
+                        Background = RowBrush(bgKey, Brushes.Transparent),
+                        Foreground = RowBrush("TextLightBrush", Brushes.White),
                     });
                 }
             }
@@ -228,8 +238,8 @@ namespace ConditioningControlPanel
                 SubmissionBadgeFg     = badge.Fg,
                 SubmissionBadgeTooltip = badge.Tooltip,
 
-                MediaTypeBadgeBg = (Brush)FindResource(typeBadgeBgKey),
-                MediaTypeBadgeFg = (Brush)FindResource("TextLightBrush"),
+                MediaTypeBadgeBg = RowBrush(typeBadgeBgKey, Brushes.Transparent),
+                MediaTypeBadgeFg = RowBrush("TextLightBrush", Brushes.White),
 
                 CreatorDisplay   = string.IsNullOrEmpty(e.Creator) ? "" : e.Creator,
                 ShowCreator      = string.IsNullOrEmpty(e.Creator) ? Visibility.Collapsed : Visibility.Visible,
@@ -237,7 +247,7 @@ namespace ConditioningControlPanel
                 MediaSourceLabel = mediaLabel,
                 MediaSourceGlyph = mediaGlyph,
                 MediaSourceTooltip = mediaTooltip,
-                MediaSourceBrush = (Brush)FindResource(mediaBrushKey),
+                MediaSourceBrush = RowBrush(mediaBrushKey, Brushes.Gray),
                 ShowMediaSource  = string.IsNullOrEmpty(mediaLabel) ? Visibility.Collapsed : Visibility.Visible,
 
                 TimestampDisplay = FormatRelativeTime(e.LastModified),
@@ -703,12 +713,16 @@ namespace ConditioningControlPanel
         // Init + reload-from-disk
         // -------------------------------------------------------------------
 
-        private void InitializeDeeperHub()
+        // True when this call did the init (and therefore already scanned the
+        // library), false when the hub was up already. ShowTab reads it so the
+        // first open does not scan twice.
+        private bool InitializeDeeperHub()
         {
-            if (_deeperHubInitDone) return;
+            if (_deeperHubInitDone) return false;
             _deeperHubInitDone = true;
             RefreshDeeperPillVisuals();
             ReloadDeeperLibraryFromDisk();
+            return true;
         }
 
         private void ReloadDeeperLibraryFromDisk()

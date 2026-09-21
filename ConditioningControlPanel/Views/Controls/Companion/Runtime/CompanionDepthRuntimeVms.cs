@@ -170,13 +170,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             var all = App.Personality?.GetAllPresets() ?? new List<PersonalityPreset>();
             var activeId = App.Personality?.GetActivePreset()?.Id;
 
-            var wanted = new List<(string Id, string Label, bool Selected)>();
+            var wanted = new List<(string Id, string Label, bool Selected, string? Description)>();
             foreach (var preset in all)
             {
                 if (preset == null || string.IsNullOrEmpty(preset.Id)) continue;
                 var label = App.Mods?.GetPersonalityDisplayName(preset.Name) ?? preset.Name;
+                // The preset's own one-liner rides along as the chip's tooltip: a mod's presets
+                // carry theirs in personalities.json, so this cannot be a loc key.
+                var about = App.Mods?.GetPersonalityDisplayName(preset.Description) ?? preset.Description;
                 wanted.Add((preset.Id, label,
-                    string.Equals(preset.Id, activeId, StringComparison.Ordinal)));
+                    string.Equals(preset.Id, activeId, StringComparison.Ordinal), about));
             }
 
             // Writing IsSelected here is us REPORTING what App.Personality did. Letting it round-trip
@@ -194,9 +197,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
                 foreach (var stale in _presets) stale.PropertyChanged -= OnChipChanged;
                 _presets.Clear();
-                foreach (var (id, label, selected) in wanted)
+                foreach (var (id, label, selected, about) in wanted)
                 {
-                    var chip = new CompanionPresetChip(id, label, selected);
+                    var chip = new CompanionPresetChip(id, label, selected, about);
                     chip.PropertyChanged += OnChipChanged;
                     _presets.Add(chip);
                 }
@@ -207,14 +210,18 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             }
         }
 
-        /// <summary>True when the live chips already carry exactly these ids and labels, in order.</summary>
-        private bool SameChipSet(List<(string Id, string Label, bool Selected)> wanted)
+        /// <summary>True when the live chips already carry exactly these ids, labels and
+        /// descriptions, in order.</summary>
+        private bool SameChipSet(List<(string Id, string Label, bool Selected, string? Description)> wanted)
         {
             if (wanted.Count != _presets.Count) return false;
             for (int i = 0; i < wanted.Count; i++)
             {
                 if (!string.Equals(_presets[i].Id, wanted[i].Id, StringComparison.Ordinal)) return false;
                 if (!string.Equals(_presets[i].Label, wanted[i].Label, StringComparison.Ordinal)) return false;
+                // A mod can reuse an id and a name and still mean something else by it.
+                if (!string.Equals(_presets[i].Description ?? "", (wanted[i].Description ?? "").Trim(),
+                        StringComparison.Ordinal)) return false;
             }
             return true;
         }

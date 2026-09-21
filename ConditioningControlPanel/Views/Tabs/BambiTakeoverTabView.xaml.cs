@@ -199,6 +199,10 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkAutonomyVoice_Changed(sender, e);
         }
+        private void BtnAutonomyOpenModels_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.OpenSpeechModelFolder();
+        }
         private void ChkAutonomyResume_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
