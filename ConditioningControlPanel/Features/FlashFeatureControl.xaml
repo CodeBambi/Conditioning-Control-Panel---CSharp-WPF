@@ -251,7 +251,11 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_motion}" FontSize="13" FontWeight="SemiBold"
                                                    Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                        <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="170" Foreground="Black"
+                                        <!-- No Foreground="Black" here. The house rule about black
+                                             ComboBox text is about the STOCK template's light popup;
+                                             DarkComboBoxStyle is a dark box over a dark popup, where
+                                             black is the one colour that cannot be read. -->
+                                        <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="170"
                                                   VerticalAlignment="Center"
                                                   Style="{DynamicResource DarkComboBoxStyle}"
                                                   SelectionChanged="CmbMotion_Changed"/>

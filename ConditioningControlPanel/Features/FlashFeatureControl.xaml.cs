@@ -375,22 +375,33 @@ namespace ConditioningControlPanel.Features
             finally { _isLoading = wasLoading; }
         }
 
+        /// <summary>
+        /// The app-wide "a ComboBox needs an explicit black Foreground" rule is about the STOCK
+        /// template, whose popup is a light system surface. This picker is styled
+        /// <c>DarkComboBoxStyle</c>, whose popup is ElevatedSurface (#222240) - and no mod
+        /// overrides that key, so black rows measured 1.7:1 on every skin (Wobberjockey read them
+        /// on Circe, tier2 2026-09-19). Theme text, like the Bubble Pop picker beside it.
+        /// The closed box shows a VisualBrush of the selected row, so this one brush paints both.
+        /// </summary>
+        private static System.Windows.Media.Brush RowTextBrush()
+            => (System.Windows.Media.Brush?)Application.Current?.TryFindResource("TextLightBrush")
+               ?? System.Windows.Media.Brushes.White;
+
         private void AddMotionChoice(Models.FlashMotionStyle style, string key, bool v2)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal };
             row.Children.Add(new TextBlock
             {
                 Text = Localization.Loc.Get(key),
-                Foreground = System.Windows.Media.Brushes.Black,
+                Foreground = RowTextBrush(),
                 VerticalAlignment = VerticalAlignment.Center,
             });
             if (v2) row.Children.Add(FeatureCard.NewV2Badge(new Thickness(8, 0, 0, 0)));
-            CmbMotion.Items.Add(new ComboBoxItem
-            {
-                Content = row,
-                Tag = style,
-                Foreground = System.Windows.Media.Brushes.Black,
-            });
+            // No Foreground on the CONTAINER: a local value beats a style trigger, so setting one
+            // here would suppress DarkComboBoxStyle's own IsHighlighted / IsSelected foregrounds
+            // and the hovered row would stop lifting. The row's TextBlock carries the colour, the
+            // same way the Bubble Pop picker does it.
+            CmbMotion.Items.Add(new ComboBoxItem { Content = row, Tag = style });
         }
 
         /// <summary>

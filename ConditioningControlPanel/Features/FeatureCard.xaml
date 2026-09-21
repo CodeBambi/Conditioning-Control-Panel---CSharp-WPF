@@ -143,7 +143,14 @@
                 </StackPanel>
             </Border>
 
-            <!-- Tier badge (top-left). A price tag, NOT the LockedOverlay veil above.
+            <!-- THE MARK COLUMN (top-left). Price tag first, then what you own.
+                 Both pills are stacked rather than corner-pinned so they cannot land on each
+                 other, and both are on the LEFT so neither can crowd the "?" chip in the
+                 opposite corner - which is what the v2 pill was doing when it shipped
+                 (Wobberjockey + Tock, tier2 2026-09-19). One rule, no arithmetic: this corner
+                 holds the badges, the far corner holds the one control.
+
+                 Tier badge: a price tag, NOT the LockedOverlay veil above.
                  The veil is right for an XP-gated card - there is nothing to sell, you
                  just have not levelled yet - but the mosaic's eight destination tiles are
                  advertisements as much as doors, and the Play door already settled this
@@ -159,42 +166,50 @@
                  Text only, no emoji: WPF cannot draw COLR/CPAL colour-emoji fonts, and
                  the app-wide workaround (EmojiToImageSource) would put a bitmap inside a
                  9px pill. "TIER 1" says it without one. -->
-            <Border x:Name="TierBadgeHost"
-                    HorizontalAlignment="Left" VerticalAlignment="Top"
-                    Margin="8,8,0,0" Padding="6,2,7,3"
-                    CornerRadius="7"
-                    Background="#D91A1A2E"
-                    BorderBrush="{DynamicResource PinkBrush}"
-                    BorderThickness="1"
-                    IsHitTestVisible="False"
-                    Panel.ZIndex="11"
-                    Visibility="Collapsed">
-                <TextBlock x:Name="TxtTierBadge"
-                           Text="TIER 1"
-                           Foreground="{DynamicResource PinkBrush}"
-                           FontSize="9"
-                           FontWeight="Bold"/>
-            </Border>
+            <StackPanel x:Name="BadgeColumn"
+                        HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Margin="8,8,0,0"
+                        IsHitTestVisible="False"
+                        Panel.ZIndex="11">
+                <!-- The 4px gap lives on the tier badge's BOTTOM, not on the pill's top: a
+                     collapsed element is not measured at all, margin included, so the pill lands
+                     exactly where the tier badge would when there is no price tag. -->
+                <Border x:Name="TierBadgeHost"
+                        HorizontalAlignment="Left"
+                        Margin="0,0,0,4" Padding="6,2,7,3"
+                        CornerRadius="7"
+                        Background="#D91A1A2E"
+                        BorderBrush="{DynamicResource PinkBrush}"
+                        BorderThickness="1"
+                        IsHitTestVisible="False"
+                        Visibility="Collapsed">
+                    <TextBlock x:Name="TxtTierBadge"
+                               Text="TIER 1"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="9"
+                               FontWeight="Bold"/>
+                </Border>
 
-            <!-- v2 pill (top-right, beside the help icon). The tier badge's pill family in a
-                 fancier metal, worn when the feature owns a Back Room v2 style (ShowV2Badge):
-                 the bubbles card and the flash card both wear it. Colour lives in
-                 FeatureCard.V2BadgeBrush so the option pickers can wear the same pill; the DP
-                 handler paints it. -->
-            <Border x:Name="V2BadgeHost"
-                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,8,34,0" Padding="6,2,7,3"
-                    CornerRadius="7"
-                    Background="#D91A1A2E"
-                    BorderThickness="1"
-                    IsHitTestVisible="False"
-                    Panel.ZIndex="11"
-                    Visibility="Collapsed">
-                <TextBlock x:Name="TxtV2Badge"
-                           Text="{loc:Str badge_v2}"
-                           FontSize="9"
-                           FontWeight="Bold"/>
-            </Border>
+                <!-- v2 pill. The tier badge's pill family in a fancier metal, worn when the
+                     feature owns a Back Room v2 style (ShowV2Badge): the bubbles card and the
+                     flash card both wear it. Colour lives in FeatureCard.V2BadgeBrush so the
+                     option pickers can wear the same pill; the DP handler paints it.
+                     A collapsed tier badge takes no room, so on the free FX tiles - the only
+                     two that wear this today - the pill sits where the tier badge would. -->
+                <Border x:Name="V2BadgeHost"
+                        HorizontalAlignment="Left"
+                        Padding="6,2,7,3"
+                        CornerRadius="7"
+                        Background="#D91A1A2E"
+                        BorderThickness="1"
+                        IsHitTestVisible="False"
+                        Visibility="Collapsed">
+                    <TextBlock x:Name="TxtV2Badge"
+                               Text="{loc:Str badge_v2}"
+                               FontSize="9"
+                               FontWeight="Bold"/>
+                </Border>
+            </StackPanel>
 
             <!-- Help icon overlay (top-right corner) -->
             <Button x:Name="BtnHelp"
