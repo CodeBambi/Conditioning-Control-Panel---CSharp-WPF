@@ -18,6 +18,8 @@ import { CUES } from './cues.js';
  *                            so the combo ladder always rings)
  *         sub bus -> master (pulse, thud, crack: the low end is never filtered)
  *         one small delay room on the sfx bus for the wetter cues
+ *         master -> pause low-pass -> pause gate -> out (the pause sweep: open
+ *                            and flat in play, closed over 150 ms before suspend)
  *
  * The bed is a 4-bar loop in C pentatonic on a lookahead scheduler (a 25 ms
  * interval writing 120 ms ahead), so it never drifts against the ball. Before
@@ -48,6 +50,10 @@ export const hitCutoff = s => 1200 * 8 ** clamp(num(s, 0), 0, 1);
 /** Slow-mo: the bed's detune in cents for a time scale, 0 at 1 down to -200 (two semitones) at 0.35. */
 export const SLOWMO_SCALE = 0.35, SLOWMO_CENTS = -200, WOBBLE_CENTS = 8, WOBBLE_HZ = 0.5;
 export const timeScaleCents = s => SLOWMO_CENTS * clamp((1 - num(s, 1)) / (1 - SLOWMO_SCALE), 0, 1) + 0;
+/** The pause sweep: stop() closes a gate and a low-pass over PAUSE_FADE_S and only then suspends; start() opens them again. */
+export const PAUSE_FADE_S = 0.15, RESUME_FADE_S = 0.2, PAUSE_CUTOFF = 300, OPEN_CUTOFF = 20000;
+/** A streak cue and station.js's own au('perfect') arrive in the same moment; perfect() skips inside this window. */
+export const PERFECT_GUARD_S = 0.05;
 
 /** Pure beat math. `origin` is the clock time of step 0; rebase() moves it when the clock changes. */
 export function createBeat(bpm = 96, origin = 0) {
@@ -87,6 +93,8 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
   // The bed's shared detune inputs: a constant for slow-mo pitch and a slow LFO for the grey vinyl wobble.
   let bedDetune = null, wobbleGain = null, timeScale = 1;
   let finaleMuted=false, finaleGrey=false, musicGate=null, musicDrive=null;
+  // The pause sweep lives AFTER the master, so it never touches musicGate, the duck() buses or setMaster().
+  let pauseGate = null, pauseLp = null, pauseTimer = 0, faded = false, wantRunning = false, perfectCuedAt = -1;
   let saturation = 0, state = 'colour', stepIndex = 0, nextStepTime = 0;
   const level = clamp(num(master, 0.8), 0, 1);
 
@@ -107,7 +115,10 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
           .then(b => ctx.decodeAudioData(b))
           .then(b => { if (!destroyed) snapBuffer = b; }).catch(() => {});
       }
-      out = ctx.createGain(); out.gain.value = level; out.connect(ctx.destination);
+      pauseGate = ctx.createGain(); pauseGate.gain.value = 1; pauseGate.connect(ctx.destination);
+      pauseLp = ctx.createBiquadFilter(); pauseLp.type = 'lowpass'; pauseLp.Q.value = 0.7;
+      pauseLp.frequency.value = Math.min(OPEN_CUTOFF, ctx.sampleRate * 0.45); pauseLp.connect(pauseGate);   // flat when open
+      out = ctx.createGain(); out.gain.value = level; out.connect(pauseLp);
       lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8; lp.frequency.value = cutoffFor(saturation);
       musicGate=ctx.createGain();musicGate.gain.value=1;musicGate.connect(out);
       if(typeof ctx.createWaveShaper==='function') {musicDrive=ctx.createWaveShaper();lp.connect(musicDrive);musicDrive.connect(musicGate);}
@@ -131,7 +142,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
         wobbleGain = ctx.createGain(); wobbleGain.gain.value = state === 'grey' ? WOBBLE_CENTS : 0;
         lfo.connect(wobbleGain); lfo.start(0);
       } catch (e) { bedDetune = null; wobbleGain = null; }
-    } catch (e) { ctx = null; out = null; lp = null; room = null; return false; }
+    } catch (e) { ctx = null; out = null; lp = null; room = null; pauseGate = null; pauseLp = null; return false; }
     return true;
   }
   const isBedDest = d => d === bus.bed || d === layer.melody || d === layer.arp;
@@ -241,12 +252,18 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
   function hitNotes(kind, combo, x) {
     const hz = ROOT_HZ * SEMI(hitSemis(combo)), pan = clamp(num(x, 0.5), 0, 1);
     if (state === 'grey') {                                           // dull, dry, low-passed: the Old Self's cabinet
+      if (kind === 'damage') return [tone(hz / 2, 0.05, 0.06, { wave: 'triangle', lp: 420, pan })];   // a held brick: half a knock
       const dur = kind === 'wall' ? 0.05 : kind === 'paddle' ? 0.1 : 0.12;
       return [tone(hz / 2, dur, 0.1, { wave: 'triangle', lp: 500, pan })];
     }
     const cut = hitCutoff(saturation);
     switch (kind) {
-      case 'damage': return hitNotes('brick', 0, x);      // a brick that took a hit and held (audio lane refines this)
+      // THE TINK: a brick that took a hit and held. Short, dull and DRY (no room send), a little inharmonic metal on
+      // top, half the brick's level: the bell, its ring and the room are held back so the real break is the release.
+      case 'damage': return [
+        tone(hz, 0.07, 0.06, { wave: 'triangle', lp: Math.min(cut, 2200), pan }),
+        tone(hz * 2.41, 0.035, 0.014, { lp: Math.min(cut, 3600), pan }),
+        noise(3200, 0.008, 0.022, { q: 2, pan })];
       case 'wall': return [noise(1500 * SEMI(hitSemis(combo) / 2), 0.022, 0.06, { q: 3, pan }), tone(hz / 2, 0.02, 0.03, { pan })];
       case 'paddle': return [tone(hz / 2, 0.17, 0.13, { wave: 'triangle', lp: Math.min(cut, 1800), pan }), tone(hz / 2, 0.12, 0.06, { attack: 0.02, pan })];
       case 'brick': return [
@@ -272,7 +289,14 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     start() {
       if (destroyed) return false;
       if (!ctx && !build()) return false;
+      wantRunning = true;
+      if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = 0; }     // start() inside the fade: the suspend never happens
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      if (faded) {                                                      // the way back up: gate linear, filter exponential
+        faded = false;
+        glide(pauseGate.gain, 1, RESUME_FADE_S);
+        glide(pauseLp.frequency, Math.min(OPEN_CUTOFF, ctx.sampleRate * 0.45), RESUME_FADE_S, null, true);
+      }
       if (!running) {
         running = true;
         stepIndex = Math.max(0, beat.stepIndex(perf() - perfOrigin));   // carry the fallback clock's position into the loop
@@ -343,14 +367,33 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       }
       irisSource=sources;
     },
-    /** Hold everything; start() brings it back on the same grid (ctx time stops with it). */
-    stop() { if (live() && ctx.state === 'running') ctx.suspend().catch(() => {}); },
+    /**
+     * Hold everything; start() brings it back on the same grid (ctx time stops with it). THE PAUSE SWEEP: the gate and
+     * its low-pass close over PAUSE_FADE_S and only then does the context suspend, so a pause breathes out instead of
+     * cutting dead. The beat origin, stepIndex and nextStepTime are never touched. Safe to call twice; start() inside
+     * the fade cancels the suspend; a start() that lands while suspend() is still settling resumes again afterwards.
+     */
+    stop() {
+      wantRunning = false;
+      if (!live() || ctx.state !== 'running' || pauseTimer) return;
+      faded = true;
+      glide(pauseGate.gain, 0, PAUSE_FADE_S);
+      glide(pauseLp.frequency, PAUSE_CUTOFF, PAUSE_FADE_S, null, true);
+      pauseTimer = setTimeout(() => {
+        pauseTimer = 0;
+        if (!live() || wantRunning || ctx.state !== 'running') return;
+        const c = ctx;
+        c.suspend().then(() => { if (wantRunning && c === ctx && live()) c.resume().catch(() => {}); }).catch(() => {});
+      }, PAUSE_FADE_S * 1000 + 10);
+      if (pauseTimer && typeof pauseTimer.unref === 'function') pauseTimer.unref();
+    },
     destroy() {
       setMusicScene('normal');
-      destroyed = true; running = false;
+      destroyed = true; running = false; wantRunning = false;
       if (timer) { clearInterval(timer); timer = 0; }
+      if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = 0; }
       if (ctx) { try { ctx.close().catch(() => {}); } catch (e) { /* already */ } }
-      ctx = null; out = null; lp = null; room = null; noiseBuf = null; bedDetune = null; wobbleGain = null;
+      ctx = null; out = null; lp = null; room = null; noiseBuf = null; bedDetune = null; wobbleGain = null; pauseGate = null; pauseLp = null;
     },
     setSaturation(s) {
       saturation = clamp(num(s, saturation), 0, 1);
@@ -431,6 +474,10 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     /** A perfect paddle hit: a bright two-note stamp on the grid (root, then the fifth an octave up). */
     perfect() {
       if (!running || !live()) return;
+      // A 'perfect' streak cue (cues/feel.js) already stamped this moment and station.js still calls au('perfect'):
+      // skip ONCE inside the guard window, so the stamp never doubles and any other caller still gets its own.
+      if (perfectCuedAt >= 0 && Math.abs(ctx.currentTime - perfectCuedAt) < PERFECT_GUARD_S) { perfectCuedAt = -1; return; }
+      perfectCuedAt = -1;
       const t = beat.quantise(ctx.currentTime), hz = ROOT_HZ * 2;
       play([tone(hz, 0.16, 0.12, { wet: true }), tone(hz * SEMI(7), 0.28, 0.12, { at: 0.07, wet: true }),
         tone(hz * SEMI(7) * 2.76, 0.1, 0.03, { at: 0.07 })], t, bus.sfx);
@@ -500,6 +547,10 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     },
     /** Test and tuning seams. */
     pump,
+    hitNotes,
+    get pauseLevel() { return pauseGate ? pauseGate.gain.value : 1; },
+    get pauseCutoff() { return pauseLp ? pauseLp.frequency.value : OPEN_CUTOFF; },
+    get pausing() { return !!pauseTimer; },
     get context() { return ctx; },
     get running() { return running; },
     get state() { return state; },
@@ -531,7 +582,10 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       if (typeof fn !== 'function') return false;
       const synth = { ctx, now: ctx.currentTime, play, tone, noise, bus, glide, SEMI, ROOT_HZ, pentatonic, hitSemis, hitCutoff, duck: api.duck,
         beat, quantise: (lead) => beat.quantise(ctx.currentTime, lead), saturation, state, room };
-      try { return fn(synth, data || {}) !== false; } catch (e) { return false; }
+      let played = false;
+      try { played = fn(synth, data || {}) !== false; } catch (e) { played = false; }
+      if (played && name === 'perfect') perfectCuedAt = ctx.currentTime;   // arms the double-trigger guard in perfect()
+      return played;
     },
     /** A word trigger's signature sound (word-fx.js modules: sound(synth, fx)). */
     word(key, fx = {}) {
