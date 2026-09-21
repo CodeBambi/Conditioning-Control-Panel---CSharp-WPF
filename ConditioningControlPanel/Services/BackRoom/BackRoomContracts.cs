@@ -179,3 +179,11 @@ public interface IBackRoomVoice
     /// <summary>Law VI: cancel, suspend and leave drop the line at once.</summary>
     void Stop();
 }
+
+/// <summary>One validated <c>haptic</c> frame (CONTRACT 10.23): a flat pulse at <see cref="Level"/> 0..1 for
+/// <see cref="Ms"/> milliseconds, or a stop when the level is 0. A toy is not a waveform player, so there is
+/// no pattern on this wire. <see cref="Tag"/> is for the log only.</summary>
+public sealed record BackRoomHaptic(string Station, double Level, int Ms, string Tag)
+{
+    public bool IsStop => Level <= 0;
+}
