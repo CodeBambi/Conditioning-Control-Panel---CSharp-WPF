@@ -859,11 +859,13 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     // A ball waiting on the paddle breathes with the beat, harder as its launch nears; a bounce squashes it (feedback.js).
     const wait = b.stuck && !reduced ? clamp((s.launchTimer || 0) / 1.2, 0, 1) : 0;
     const pulse = b.stuck && !reduced ? 1 + (.06 + .12 * wait) * Math.pow(1 - (s.beatPhase || 0), 3) : 1;
-    const sq = !reduced && b.squash > 0 ? squashScale(b.squash) : null;
-    if (b.ghost || s.state === 'grey') {
+    // The grey world is bad on purpose (owner, 2026-09-21): there a ball neither breathes nor squashes.
+    const dead = s.state === 'grey';
+    const sq = !reduced && !dead && b.squash > 0 ? squashScale(b.squash) : null;
+    if (b.ghost || dead) {
       g.save(); g.globalAlpha = 0.72;
       if (sq) { const n = Math.atan2(b.sqy, b.sqx); g.translate(b.x, b.y); g.rotate(n); g.scale(1 - (1 - sq.along) * .5, 1 + (sq.across - 1) * .5); g.rotate(-n); g.translate(-b.x, -b.y); }
-      g.fillStyle = '#9a9a9a'; g.beginPath(); g.arc(b.x, b.y, b.r * pulse, 0, 7); g.fill();
+      g.fillStyle = '#9a9a9a'; g.beginPath(); g.arc(b.x, b.y, b.r * (dead ? 1 : pulse), 0, 7); g.fill();
       g.strokeStyle = '#d0d0d0'; g.lineWidth = 1; g.stroke();
       g.fillStyle = '#2a2a2a'; g.font = `700 4.2px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText('OLD SELF', b.x, b.y + 0.3);
@@ -906,7 +908,15 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     g.restore();
   }
   function drawPaddle(s, mix, dt) {
-    const p = s.paddle, st = rungs(2) ? p.stretch : 0;
+    const p = s.paddle;
+    // The grey world is bad on purpose (owner, 2026-09-21): a flat office slab. It does not stretch, bounce, lean or
+    // look at the ball. All of that, and the face, comes back with the colour.
+    if (s.state === 'grey') {
+      g.fillStyle = '#7d7d7d'; g.fillRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+      g.strokeStyle = '#565656'; g.lineWidth = 1; g.strokeRect(p.x - p.w / 2 + .5, p.y - p.h / 2 + .5, p.w - 1, p.h - 1);
+      return;
+    }
+    const st = rungs(2) ? p.stretch : 0;
     const w = p.w * (1 + st * 0.25 + recoil * 0.1), h = p.h * (1 - st * 0.3), py = p.y + recoil * 5;
     const lean = reduced ? 0 : paddleLean(p.vx);                            // the top edge tips into the direction of travel
     g.save(); if (lean) { g.translate(p.x, py + h / 2); g.transform(1, 0, -lean * 2.2, 1, 0, 0); g.rotate(lean * .12); g.translate(-p.x, -(py + h / 2)); }

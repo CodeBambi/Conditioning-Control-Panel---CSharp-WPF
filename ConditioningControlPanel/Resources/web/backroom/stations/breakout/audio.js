@@ -32,6 +32,8 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
 export const CUTOFF_MIN = 300, CUTOFF_MAX = 12000, GREY_CUTOFF = 250;
+/** The whole mix in the grey world, against 1 in colour (about -3 dB: duller AND a little further away). */
+export const GREY_LEVEL = 0.7;
 export const MELODY_FROM = 0.4, ARP_FROM = 0.7, LAYER_FADE = 0.2;
 export const MAX_COMBO = 14;
 export const LOOKAHEAD_S = 0.12, TICK_MS = 25, MIN_LEAD_S = 0.015;
@@ -94,7 +96,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
   let bedDetune = null, wobbleGain = null, timeScale = 1;
   let finaleMuted=false, finaleGrey=false, musicGate=null, musicDrive=null;
   // The pause sweep lives AFTER the master, so it never touches musicGate, the duck() buses or setMaster().
-  let pauseGate = null, pauseLp = null, pauseTimer = 0, faded = false, wantRunning = false, perfectCuedAt = -1;
+  let pauseGate = null, pauseLp = null, greyDip = null, pauseTimer = 0, faded = false, wantRunning = false, perfectCuedAt = -1;
   let saturation = 0, state = 'colour', stepIndex = 0, nextStepTime = 0;
   const level = clamp(num(master, 0.8), 0, 1);
 
@@ -118,7 +120,10 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       pauseGate = ctx.createGain(); pauseGate.gain.value = 1; pauseGate.connect(ctx.destination);
       pauseLp = ctx.createBiquadFilter(); pauseLp.type = 'lowpass'; pauseLp.Q.value = 0.7;
       pauseLp.frequency.value = Math.min(OPEN_CUTOFF, ctx.sampleRate * 0.45); pauseLp.connect(pauseGate);   // flat when open
-      out = ctx.createGain(); out.gain.value = level; out.connect(pauseLp);
+      // The grey dip sits after the master too: the whole mix sits a little lower in the grey world, and
+      // setMaster(), the duck() buses and the music gate never hear about it.
+      greyDip = ctx.createGain(); greyDip.gain.value = state === 'grey' ? GREY_LEVEL : 1; greyDip.connect(pauseLp);
+      out = ctx.createGain(); out.gain.value = level; out.connect(greyDip);
       lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8; lp.frequency.value = cutoffFor(saturation);
       musicGate=ctx.createGain();musicGate.gain.value=1;musicGate.connect(out);
       if(typeof ctx.createWaveShaper==='function') {musicDrive=ctx.createWaveShaper();lp.connect(musicDrive);musicDrive.connect(musicGate);}
@@ -142,7 +147,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
         wobbleGain = ctx.createGain(); wobbleGain.gain.value = state === 'grey' ? WOBBLE_CENTS : 0;
         lfo.connect(wobbleGain); lfo.start(0);
       } catch (e) { bedDetune = null; wobbleGain = null; }
-    } catch (e) { ctx = null; out = null; lp = null; room = null; pauseGate = null; pauseLp = null; return false; }
+    } catch (e) { ctx = null; out = null; lp = null; room = null; pauseGate = null; pauseLp = null; greyDip = null; return false; }
     return true;
   }
   const isBedDest = d => d === bus.bed || d === layer.melody || d === layer.arp;
@@ -246,6 +251,8 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     glide(layer.melody.gain, grey ? (finaleGrey ? .35 : 0) : layerLevel(saturation, MELODY_FROM), secs, at);
     glide(layer.arp.gain, grey ? 0 : layerLevel(saturation, ARP_FROM), secs, at);
     if (wobbleGain) glide(wobbleGain.gain, grey ? (finaleGrey ? 18 : WOBBLE_CENTS) : 0, Math.max(secs, 0.3), at);   // the vinyl wobble, grey only
+    // Slow on the way down so the relapse thud still lands at full weight; quick on the way back up.
+    if (greyDip) glide(greyDip.gain, grey ? GREY_LEVEL : 1, grey ? Math.max(secs, 0.6) : Math.max(secs, 0.3), at);
   }
 
   /* ---- the hit palette ---- */
@@ -393,7 +400,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       if (timer) { clearInterval(timer); timer = 0; }
       if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = 0; }
       if (ctx) { try { ctx.close().catch(() => {}); } catch (e) { /* already */ } }
-      ctx = null; out = null; lp = null; room = null; noiseBuf = null; bedDetune = null; wobbleGain = null; pauseGate = null; pauseLp = null;
+      ctx = null; out = null; lp = null; room = null; noiseBuf = null; bedDetune = null; wobbleGain = null; pauseGate = null; pauseLp = null; greyDip = null;
     },
     setSaturation(s) {
       saturation = clamp(num(s, saturation), 0, 1);
@@ -548,6 +555,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     /** Test and tuning seams. */
     pump,
     hitNotes,
+    get greyLevel() { return greyDip ? greyDip.gain.value : 1; },
     get pauseLevel() { return pauseGate ? pauseGate.gain.value : 1; },
     get pauseCutoff() { return pauseLp ? pauseLp.frequency.value : OPEN_CUTOFF; },
     get pausing() { return !!pauseTimer; },

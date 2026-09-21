@@ -3,7 +3,7 @@ import {routeFinaleAudio} from './finale-audio.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, timeScaleCents, LOOP_STEPS, MIN_LEAD_S, WOBBLE_CENTS,
-  PAUSE_FADE_S, PAUSE_CUTOFF, PERFECT_GUARD_S } from './audio.js';
+  PAUSE_FADE_S, PAUSE_CUTOFF, PERFECT_GUARD_S, GREY_LEVEL } from './audio.js';
 import { ROOT_HZ } from '../../shared/sound/kit.js';
 
 /* ---- a fake Web Audio graph: enough surface for the module, every scheduled start is counted ---- */
@@ -401,4 +401,17 @@ test('perfect: a streak cue stamps the moment and perfect() skips exactly once i
   audio.perfect();
   assert.equal(c.log.starts.length - n, 6, 'a stale guard never eats a later perfect');
   audio.destroy();
+});
+
+test('the grey world sits a little lower: the whole mix dips, colour brings it back, the master is left alone', () => {
+  assert.ok(GREY_LEVEL >= .6 && GREY_LEVEL < .85, 'slightly lower, not a mute');
+  const { audio } = make({ master: 0.5 });
+  assert.equal(audio.greyLevel, 1, 'no graph, no dip');
+  audio.start();
+  assert.equal(audio.greyLevel, 1);
+  audio.setState('grey'); assert.equal(audio.greyLevel, GREY_LEVEL);
+  audio.setMaster(0.9); assert.equal(audio.greyLevel, GREY_LEVEL, 'a volume change does not undo the dip');
+  audio.breakout(); assert.equal(audio.state, 'colour'); assert.equal(audio.greyLevel, 1);
+  audio.relapse(); assert.equal(audio.greyLevel, GREY_LEVEL, 'a relapse dips again');
+  audio.destroy(); assert.equal(audio.greyLevel, 1);
 });
