@@ -244,7 +244,20 @@ namespace ConditioningControlPanel.Views.Tabs
             Grid.SetColumn(toggle, 2);
             row.Children.Add(toggle);
             _priceToggles[price.Id] = toggle;
-            return row;
+            if (price.Id != CircesMisses.EventId) return row;
+
+            // The one row that charges for staying away says exactly how, right under its switch.
+            var hint = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 60, 4) };
+            hint.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
+            hint.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("[chaster_misses_hint]")
+            {
+                Source = LocalizationManager.Instance,
+                Mode = System.Windows.Data.BindingMode.OneWay,
+            });
+            var stack = new StackPanel();
+            stack.Children.Add(row);
+            stack.Children.Add(hint);
+            return stack;
         }
 
         private void PriceToggle_Changed(object sender, RoutedEventArgs e)

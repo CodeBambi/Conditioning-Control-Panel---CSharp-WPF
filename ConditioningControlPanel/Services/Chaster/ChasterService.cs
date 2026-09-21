@@ -112,7 +112,54 @@ public sealed partial class ChasterService : IDisposable
     public TabBooking Note(string eventId, int units = 1)
     {
         if (!Active(out var options)) return new(0, TabRefusal.Nothing);
+        // The first finished session after coming back forgives half of what being away cost,
+        // whether or not the session row itself is switched on.
+        if (eventId == "session") ForgiveMisses();
+        // "misses" has a row so it can be switched on, but only NoteSeen ever books it.
+        if (eventId == CircesMisses.EventId) return new(0, TabRefusal.Nothing);
         return BookSeconds(eventId, TabPrices.Resolve(eventId, options.Prices, units));
+    }
+
+    /// <summary>CCP is running today. Call at launch and when the local day turns over. With
+    /// the "misses" row on, every full day since the last linked run is booked on its own date,
+    /// so the 60:00 day cap and the backlog cap both still hold. Returns the seconds booked.</summary>
+    public int NoteSeen()
+    {
+        if (!IsLinked) return 0;
+        var booked = 0;
+        lock (_gate)
+        {
+            var local = _localNow();
+            var today = CircesTab.DayKey(local);
+            var last = _tab.LastSeenDay;
+            if (last == today) return 0;
+            _tab.LastSeenDay = today;
+            if (Active(out var options) && options.Prices.Contains(CircesMisses.EventId)
+                && CircesMisses.TryDay(last, out var lastDay))
+            {
+                var charges = CircesMisses.Charges(CircesMisses.DaysAway(last, local));
+                for (var i = 0; i < charges.Count; i++)
+                    booked += CircesTab.Book(_tab, CircesMisses.EventId, charges[i], _utcNow(),
+                        lastDay.AddDays(i + 1).AddHours(12), _runStartUtc, safetyExit: false).AppliedSeconds;
+                if (booked > 0) _tab.ForgivableSeconds = CircesMisses.Forgivable(booked);
+            }
+            SaveTab();
+        }
+        if (booked > 0) Booked?.Invoke(CircesMisses.EventId, new TabBooking(booked, TabRefusal.None));
+        return booked;
+    }
+
+    private void ForgiveMisses()
+    {
+        TabBooking booking;
+        lock (_gate)
+        {
+            if (_tab.ForgivableSeconds <= 0) return;
+            booking = CircesTab.Book(_tab, CircesMisses.ForgivenEventId, -_tab.ForgivableSeconds, _utcNow(), _localNow(), _runStartUtc, safetyExit: false);
+            _tab.ForgivableSeconds = 0;
+            SaveTab();
+        }
+        if (booking.Booked) Booked?.Invoke(CircesMisses.ForgivenEventId, booking);
     }
 
     /// <summary>An event that names its own price (an Awareness trigger carries its minutes in
@@ -197,6 +244,11 @@ public sealed partial class ChasterService : IDisposable
                 }
                 // A wearer link can only add. canRemove stays false until a link exists that can.
                 plan = CircesTab.PlanPush(_tab, _localNow(), canRemove: false);
+                if (plan.Kind != TabPushKind.Add && _tab.LastPushDay != CircesTab.DayKey(_localNow()))
+                {
+                    CircesTab.MarkSettled(_tab, _localNow());
+                    SaveTab();
+                }
             }
             if (plan.Kind != TabPushKind.Add) return SettleOutcome.Nothing;
             // A backlog from days Chaster was unreachable still lands an hour at a time.

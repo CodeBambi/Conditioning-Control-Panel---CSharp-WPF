@@ -41,6 +41,10 @@ public sealed partial class ChasterService
             var today = CircesTab.DayKey(_localNow());
             if (_lastSettleDay == today) return SettleOutcome.Nothing;
             var outcome = await SettleAsync().ConfigureAwait(false);
+            // AFTER the settle, on purpose: what being away cost lands on the tab once today's
+            // push has gone (or been found empty), so the player has the rest of the day to do
+            // the session that forgives half of it.
+            NoteSeen();
             // A try-later keeps the day open, so the next hourly tick goes again. So does a lock
             // nobody picked yet: once the player picks one, the push follows within the hour.
             if (outcome is not (SettleOutcome.TryLater or SettleOutcome.NoLockChosen)) _lastSettleDay = today;

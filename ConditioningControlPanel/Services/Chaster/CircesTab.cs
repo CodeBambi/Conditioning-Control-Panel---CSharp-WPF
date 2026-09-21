@@ -38,6 +38,13 @@ public sealed class TabState
     /// died mid-call). 0 when nothing is in doubt. See <see cref="CircesTab.ResolvePending"/>.</summary>
     [JsonProperty("pending")] public int PendingSeconds { get; set; }
     [JsonProperty("pending_day")] public string? PendingDay { get; set; }
+
+    /// <summary>The last local day CCP ran with an account linked. "Circe misses you" counts
+    /// from here. Null until the first linked run, so linking never charges for the past.</summary>
+    [JsonProperty("last_seen_day")] public string? LastSeenDay { get; set; }
+
+    /// <summary>Half of the last "misses you" charge, waiting for the first finished session.</summary>
+    [JsonProperty("forgivable")] public int ForgivableSeconds { get; set; }
 }
 
 public enum TabRefusal
@@ -176,6 +183,11 @@ public static class CircesTab
         }
         state.LastPushDay = DayKey(localNow);
     }
+
+    /// <summary>The day's settle looked and found nothing to send. The day is still spent: what
+    /// is booked later today waits for tomorrow's settle, so it always gets the rest of its own
+    /// day to be earned back, even if the app is restarted in between.</summary>
+    public static void MarkSettled(TabState state, DateTime localNow) => state.LastPushDay = DayKey(localNow);
 
     /// <summary>Write this down BEFORE an add goes out, and save. If the answer never comes the
     /// mark is still there on the next settle, and <see cref="ResolvePending"/> deals with it.</summary>

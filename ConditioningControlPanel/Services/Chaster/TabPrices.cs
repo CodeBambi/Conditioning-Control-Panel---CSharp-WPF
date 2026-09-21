@@ -28,6 +28,9 @@ public static class TabPrices
     public static readonly IReadOnlyList<TabPrice> All = new[]
     {
         // The panel
+        // Booked by the service itself on the day the player comes back (CircesMisses), never
+        // through Resolve: 5:00 is only the first day's figure, the one the page shows.
+        new TabPrice(CircesMisses.EventId, CircesMisses.FirstDaySeconds, TabPriceGate.Free),
         new TabPrice("typo", 15, TabPriceGate.Free, PerUnit: true),
         new TabPrice("lockcard", -30, TabPriceGate.Free),
         new TabPrice("attention", 120, TabPriceGate.Free),

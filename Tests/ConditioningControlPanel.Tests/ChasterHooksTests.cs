@@ -66,7 +66,11 @@ public class ChasterHooksTests
         // QuestRow picks its row with a ternary, so inside the hooks file the bare id counts.
         var hooks = File.ReadAllText(Path.Combine(app, "Services", "Chaster", "ChasterHooks.cs"));
 
+        // "misses" is booked by the service itself, on the day the player comes back.
+        Assert.Contains("CircesMisses.Charges(", source);
+
         var unwired = TabPrices.All.Select(p => p.Id)
+            .Where(id => id != CircesMisses.EventId)
             .Where(id => !source.Contains("Note(\"" + id + "\"", StringComparison.Ordinal)
                       && !source.Contains("NoteSeconds(\"" + id + "\"", StringComparison.Ordinal)
                       && !hooks.Contains("\"" + id + "\"", StringComparison.Ordinal))
