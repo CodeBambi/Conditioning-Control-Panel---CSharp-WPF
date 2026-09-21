@@ -1,7 +1,7 @@
 /* node --test game.test.js - the state machine and the saturation ladder, nothing visual. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DOME_AIM_TURNS, PADDLE, SPLIT_CHANCE, BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
+import { DOME_AIM_TURNS, DOME_AIM_AT, domeAims, PADDLE, SPLIT_CHANCE, BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 // These scoring/state fixtures use one-hit walls; durability has its own integration suite.
@@ -836,6 +836,11 @@ test('the dome spiral holds its ball until the throw points at a brick, and give
   const onLine = two.s.bricks.filter(br => br.alive).some(br => { const dx = br.x + br.w / 2 - two.ball.x, dy = br.y + br.h / 2 - two.ball.y;
     return dx * ux + dy * uy > 0 && Math.abs(dx * uy - dy * ux) < Math.hypot(br.w, br.h) / 2 + two.ball.r + 8; });
   assert.ok(onLine, 'the throw is on a line with one of the two bricks left');
+  // Above a quarter of the wall left, the spiral does not aim at all: it lets go on time wherever that points.
+  assert.equal(DOME_AIM_AT, .25);
+  assert.ok(!domeAims(85, 85) && !domeAims(23, 85) && domeAims(22, 85) && domeAims(2, 85) && !domeAims(0, 85) && !domeAims(0, 0));
+  const total = two.s.bricks.length, early = aimed((br, i) => i < Math.ceil(total * .4));
+  assert.ok(early.released >= early.due - .1 && early.released < early.due + .3, 'with 40 percent left it lets go on time');
   const none = aimed(() => false);
   assert.ok(none.released >= none.due - .1 && none.released < none.due + .3, 'an empty wall lets go on time');
 });

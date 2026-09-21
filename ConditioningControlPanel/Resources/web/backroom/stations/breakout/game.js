@@ -58,6 +58,9 @@ export const PADDLE = { baseW: 170, h: 14, grow: 0.5 };
 export const SPLIT_CHANCE = 0.01;
 /** Extra turns the dome's spiral may hold a ball while it waits for a line onto a brick. Every direction comes round inside one. */
 export const DOME_AIM_TURNS = 2;
+/** The dome only starts aiming once this share of its bricks is left (owner, 2026-09-21): on a full wall every throw finds a brick anyway, and a spiral that always aims reads as rigged. */
+export const DOME_AIM_AT = 0.25;
+export const domeAims = (alive, total) => total > 0 && alive > 0 && alive <= Math.ceil(total * DOME_AIM_AT);
 /** How visible a newborn picture bubble must be before a ball can bounce off it. */
 export const BUBBLE_SOLID_ALPHA = 0.7;
 export const BALL_R = 8;
@@ -1016,8 +1019,9 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     b.vx = -Math.sin(o.a) * o.dir * speed; b.vy = Math.cos(o.a) * o.dir * speed;
     // The dome prefers to throw at a brick (owner, 2026-09-21: two bricks left and the spiral kept throwing past them).
     // Once its turns are done it holds on until the tangent points at one, for DOME_AIM_TURNS more at most.
+    // Only late in the wall (DOME_AIM_AT of the bricks left): before that it throws wherever the turns end.
     const due = o.done >= o.turns * TAU;
-    if (due && s.persistent && o.done < (o.turns + DOME_AIM_TURNS) * TAU && !aimsAtBrick(b)) return;
+    if (due && s.persistent && o.done < (o.turns + DOME_AIM_TURNS) * TAU && domeAims(g.bricks.reduce((n, br) => n + (br.alive ? 1 : 0), 0), g.bricks.length) && !aimsAtBrick(b)) return;
     if (due) {
       b.orbit = null; s.captured = null;
       if (s.persistent) { s.used = false; s.cooldown = .7; b.domeCooldown = 1.4; b.domeBoost = .08 + s.energy * .17; }
