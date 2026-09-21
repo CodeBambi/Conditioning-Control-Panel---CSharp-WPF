@@ -34,8 +34,9 @@
   transition: opacity .5s; animation: bo-breathe 2.2s ease-in-out infinite; }
 .bo-station.is-played .bo-hint { opacity: 0; animation: none; }
 @keyframes bo-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
-.bo-ghost-hint { position: absolute; left: 0; top: 0; margin: 0; padding: 3px 9px; border-radius: 12px; white-space: nowrap; pointer-events: none;
-  font: 600 11px/1.2 Segoe UI, Arial, sans-serif; letter-spacing: .6px; color: #d6d6d6; background: #1a1a1acc; border: 1px solid #ffffff22;
+.bo-ghost-hint { position: absolute; left: 0; top: 0; margin: 0; padding: 5px 13px; border-radius: 16px; white-space: nowrap; pointer-events: none;
+  /* Owner, 2026-09-21: 11px was too small to read while chasing the ball. It is the one goal the grey world has. */
+  font: 700 17px/1.2 Segoe UI, Arial, sans-serif; letter-spacing: .6px; color: #ececec; background: #1a1a1ad9; border: 1px solid #ffffff22;
   font-variant-numeric: tabular-nums; will-change: transform; }
 
 /* ---- PAUSED: one word, the field dims, any move resumes ---- */
