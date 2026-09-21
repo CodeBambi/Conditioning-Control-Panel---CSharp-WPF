@@ -1,4 +1,4 @@
-import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle } from './feedback.js';
+import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle, wordTrailPoints, WORD_TRAIL } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups,glyphIdle} from './powerups-render.js';
 /** Camera knock per brick event, in pixels of shake. Owner-tuned by play, 2026-09-21. */
@@ -857,10 +857,13 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         g.strokeStyle = col(tints ? tints[1] : VIOLET, mix, segment.alpha * .6);
         g.lineWidth = Math.max(.5, b.r * 1.7 * segment.alpha);
         g.beginPath(); g.moveTo(segment.x, segment.y); g.lineTo(segment.nx, segment.ny); g.stroke();
-        if (s.state === 'colour' && !b.ghost && s.sat >= .7 && words?.length && trailIndex++ % 5 === 0) {
-          g.font = '700 7px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
-          g.fillStyle = col(PINK, mix, segment.alpha * .5);
-          g.fillText(words[(wordIdx + trailIndex) % words.length], segment.x, segment.y);
+      }
+      // The words follow the ball further than the streak does, and over it: they are the tail (owner, 2026-09-21).
+      if (s.state === 'colour' && !b.ghost && s.sat >= .7 && words?.length) {
+        g.font = `700 ${WORD_TRAIL.size}px ` + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
+        for (const p of wordTrailPoints(b)) {
+          g.fillStyle = col(tints ? tints[1] : PINK, mix, Math.min(1, p.alpha * 1.4) * WORD_TRAIL.alpha);
+          g.fillText(words[(wordIdx + ++trailIndex) % words.length], p.x, p.y);
         }
       }
       g.restore();
