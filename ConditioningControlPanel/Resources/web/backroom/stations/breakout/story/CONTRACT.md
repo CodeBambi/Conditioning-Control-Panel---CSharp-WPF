@@ -100,6 +100,11 @@ what runs over it.
 `?sat=` or a carried-over act), it only refuses to raise it past the cap. The juice ladder itself
 (`SPEC.md` rungs at 0.1 steps) is not touched: the story just spends it more slowly.
 
+A twist that wants to move the colour (the act 4 `shells` take a little and hand a little back) calls
+`ctx.addSat(v)`, which is signed and runs the same clamp, with a floor at zero. It must never write
+`g.sat` directly: the audio mix follows `setSaturation`, so a hand-written field changes the picture
+and leaves the bed where it was. `twists/CONTRACT.md` section 2 carries the same line.
+
 ## 7. The ending, `story/ending.js` (act 5 lane)
 
 ```js
@@ -129,7 +134,10 @@ module shape, same `ctx`, same render hooks, same cue and reaction maps. Their e
 localStorage `bo.story.v1` = `{ wall, cleared }` through the station's own `store` helper. `cleared` is the
 highest wall finished, `wall` is where Continue picks up. Act one is always open; act N opens when the last wall
 of act N-1 is cleared (`actUnlocked`). `?story=1` continues, `?story=1&wall=N` starts at N, `?story=1&unlock=1`
-opens every act chip, `?board=st_notice_03` opens one story board on its own and loops it.
+opens every act chip. `?board=st_notice_03` opens the story AT that board's wall and carries on from
+there (it does NOT loop the one board the way a door's `?board=` does: a story board is a wall in a
+run, not a standalone). Like every other url it arms the station and waits on Play; nothing in the
+story auto-starts. The reliable dev path is `?story=1&wall=N&unlock=1` plus a Play click.
 
 ## 10. Rules that still apply
 

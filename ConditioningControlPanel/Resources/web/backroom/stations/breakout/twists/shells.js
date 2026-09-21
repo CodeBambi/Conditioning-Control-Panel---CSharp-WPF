@@ -91,28 +91,25 @@ function place(st, reduced) {
   for (const sh of st.list) { const p = posAt(sh, st.t, reduced); sh.x = p.x; sh.y = p.y; }
 }
 
-/** The room loses a little colour. Never below zero, and never in GREY (there is none to take). */
-function loseSat(g, v) {
+/** Signed colour, through the game's own seam so the audio mix hears it. Floor zero, ceiling the act's cap. */
+function moveSat(g, ctx, v) {
   if (g.state !== 'colour') return;
-  g.sat = Math.max(0, (Number(g.sat) || 0) - v);
-}
-/** The release hands a little back, under the act's cap, exactly as addSat is clamped. */
-function gainSat(g, v) {
-  if (g.state !== 'colour') return;
+  if (typeof ctx.addSat === 'function') { ctx.addSat(v); return; }
+  /* An older host with no addSat on the ctx: keep the sim honest, the mix simply does not follow. */
   const cap = Number.isFinite(g.storyCap) ? g.storyCap : 1;
   const sat = Number(g.sat) || 0;
-  g.sat = Math.min(Math.max(cap, sat), sat + v);
+  g.sat = v < 0 ? Math.max(0, sat + v) : Math.min(Math.max(cap, sat), sat + v);
 }
 
 /** The ball went through one. It comes out heavy, and the room goes a shade quieter. */
 function touch(g, ctx, st, sh, b) {
   sh.hp--;
   b.shellSlow = SLOW_S;
-  loseSat(g, SAT_COST);
+  moveSat(g, ctx, -SAT_COST);
   ctx.emit('shellTouch', { x: b.x, y: b.y, hp: Math.max(0, sh.hp) });
   if (sh.hp > 0) return;
   const left = st.list.reduce((n, s) => n + (s !== sh && s.hp > 0 ? 1 : 0), 0);
-  gainSat(g, SAT_GIVE);
+  moveSat(g, ctx, SAT_GIVE);
   ctx.emit('shellPop', { x: sh.x, y: sh.y, left });
 }
 

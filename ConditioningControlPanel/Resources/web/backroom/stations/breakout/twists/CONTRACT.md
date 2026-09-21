@@ -62,9 +62,16 @@ A twist must therefore not assume it is alone on the board. Keep your state on y
                                       //   cancel function. Timers die with the board.
   powers,                             // the powerups module: powers.drop(br), powers.reset()
   startRelapse(),                     // force a relapse now (nothing happens if already in GREY)
+  addSat(v),                          // SIGNED colour, and the only way a twist may move it. Up is
+                                      //   clamped by the story act's cap exactly as the game's own
+                                      //   ladder is, down has a floor at zero, GREY is a no-op.
+                                      //   Returns the new saturation.
   w, h,                               // the field size
 }
 ```
+
+NEVER write `g.sat` yourself. The audio mix follows `setSaturation`, not the field, so a hand-written
+`g.sat` opens the picture and leaves the bed where it was. `shells` learned this the hard way.
 
 ## 3. Brick flags the authored wall sets (doors.js `brickSpec`)
 

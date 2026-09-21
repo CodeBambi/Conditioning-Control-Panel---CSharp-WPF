@@ -19,7 +19,9 @@ export default {
   title: 'THEY NOTICE',
   cap: 0.85,
   colour: '#A774E8',
-  words: ['WEIRD', 'GROW UP', 'REALLY?', 'AT YOUR AGE', 'WHAT IS THAT', 'STILL?', 'A GAME?', 'AGAIN?'],
+  /* A word brick renders nine characters and clips the rest (render.js drawWordLabel), so every
+   * line here is nine or under. That is why the voice is clipped short: it also reads better. */
+  words: ['WEIRD', 'GROW UP', 'REALLY?', 'YOUR AGE', 'WHAT?', 'STILL?', 'A GAME?', 'AGAIN?'],
   boards: [
     /* 13 - the dip at the top of the act. Two rivets, and nothing else is wrong yet. */
     { id: 'st_notice_01', name: 'Small Talk', twist: null, family: 'breather',

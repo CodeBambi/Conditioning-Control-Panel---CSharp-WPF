@@ -222,6 +222,17 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       return () => { timer.dead = true; };
     },
     startRelapse: () => { if (g.state === 'colour' && !g.transition) lostAll(g.balls[0]); },
+    // Signed, and the ONLY way a twist may move the room's colour. Writing g.sat by hand leaves the audio
+    // mix on the old number, so the bed never opens or closes with the picture. Up is clamped by the act's
+    // cap exactly as the game's own ladder is; down has a floor at zero. GREY has no colour to take.
+    addSat: (v) => {
+      const d = Number(v) || 0;
+      if (!d || g.state !== 'colour') return g.sat;
+      if (d > 0) { addSat(d); return g.sat; }
+      g.sat = Math.max(0, g.sat + d);
+      au('setSaturation', g.sat);
+      return g.sat;
+    },
   };
   /** Due timers, in due order, on the sim clock. They die with the board. */
   function runDoorTimers(dt) {

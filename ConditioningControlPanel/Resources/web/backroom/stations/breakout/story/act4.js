@@ -17,8 +17,10 @@ export default {
   title: 'ENOUGH',
   cap: 0.95,
   colour: '#EE5A44',
-  words: ['I SHOULD STOP', 'WHAT AM I DOING', 'NOT NORMAL', 'LAST TIME',
-    'ONE MORE', 'ENOUGH', 'AGAIN', 'STILL HERE'],
+  /* A word brick renders nine characters and clips the rest (render.js drawWordLabel), so every
+   * line here is nine or under. The inward voice is cut off mid thought, which is what it sounds like. */
+  words: ['I SHOULD', 'WHAT AM I', 'NOT OK', 'LAST TIME',
+    'ONE MORE', 'ENOUGH', 'AGAIN', 'UP LATE'],
   boards: [
     /* The act opens by dipping under the end of act 3, then climbs for five walls. */
     { id: 'st_enough_01', name: 'Two Minds', twist: null, family: 'chambers',

@@ -233,3 +233,40 @@ test('the house game and a door run are untouched by any of this', () => {
   assert.equal(ds.doorBoard, 'fog_bath');
   assert.equal(doorEvents.filter(e => e[0] === 'actStart' || e[0].startsWith('story')).length, 0);
 });
+
+/* A word brick draws nine characters and silently clips the rest (render.js drawWordLabel slices at
+ * 9), which is how "NOT NORMAL" shipped as "NOT NORMA". Every act's voice stays inside that. */
+test('no act says more than a word brick can draw', () => {
+  for (const act of ACTS) {
+    for (const word of (act.words || [])) {
+      assert.ok(word.length <= 9, act.id + ' word "' + word + '" is ' + word.length + ' characters, a brick draws 9');
+    }
+    for (const board of act.boards) {
+      for (const word of (board.words || [])) {
+        assert.ok(word.length <= 9, board.id + ' word "' + word + '" is ' + word.length + ' characters, a brick draws 9');
+      }
+    }
+  }
+});
+
+/* A twist that writes g.sat by hand leaves the audio mix on the old number, so the bed never closes
+ * with the picture. ctx.addSat is the seam, signed, and shells is the twist that spends it. */
+test('a twist moves the colour through ctx.addSat, not through g.sat', async () => {
+  const shells = (await import('../twists/shells.js')).default;
+  const moves = [];
+  const ctx = {
+    emit: () => {}, rng: () => 0.5, at: () => null, breakBrick: () => {},
+    powers: { drop() {}, reset() {} }, schedule: () => () => {}, startRelapse: () => {},
+    w: 1280, h: 720, addSat: v => { moves.push(v); return 0.5; },
+  };
+  const g = { state: 'colour', sat: 0.5, storyCap: 0.95, relapses: 2, doorBoard: 'st_enough_03',
+    reduced: false, balls: [{ x: -900, y: -900, r: 6, vx: 0, vy: 0 }] };
+  shells.build(g, ctx);
+  const shell = g.shells.list[0];
+  const ball = g.balls[0];
+  ball.x = shell.x; ball.y = shell.y;
+  shells.update(g, 1 / 60, ctx);
+  assert.ok(moves.length, 'touching a shell asks the game to move the colour');
+  assert.ok(moves[0] < 0, 'a touch subtracts: ' + moves[0]);
+  assert.equal(g.sat, 0.5, 'the twist never writes g.sat behind the mix');
+});
