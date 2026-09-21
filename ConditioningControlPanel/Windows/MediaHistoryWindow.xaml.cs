@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -30,6 +31,7 @@ namespace ConditioningControlPanel
         private string _search = "";
         private bool _subscribed;
         private int _previewGeneration;   // drops an online decode whose row was deselected
+        private MediaPreviewPlan? _plan;  // the selected row's plan; what the action buttons obey
 
         public MediaHistoryWindow()
         {
@@ -63,6 +65,9 @@ namespace ConditioningControlPanel
                 App.MediaHistory.EntryAdded -= OnEntryAdded;
                 App.MediaHistory.Cleared -= OnHistoryCleared;
             }
+            // Retires any online decode still in flight: its continuation must not touch a window
+            // that has closed.
+            _previewGeneration++;
             StopPreview();
         }
 
@@ -183,7 +188,9 @@ namespace ConditioningControlPanel
 
             var plan = MediaHistoryPreviewRules.Plan(
                 row.Entry.FilePath, row.Entry.Type, row.FileExists,
-                Services.Fyp.Online.RemoteMediaCache.IsCached(row.Entry.FilePath));
+                Services.Fyp.Online.RemoteMediaCache.IsCached(row.Entry.FilePath),
+                RemoteConsent());
+            _plan = plan;
 
             PreviewPath.Text = plan.SourceText;
             BtnPreviewOpenFolder.IsEnabled = plan.CanOpenFolder;
@@ -275,6 +282,15 @@ namespace ConditioningControlPanel
                     PreviewMissing.Text = Localization.Loc.Get("label_media_loading_preview");
                     PreviewMissing.Visibility = Visibility.Visible;
                 }
+                // OpenAsync DOWNLOADS on a miss, and the cache is an LRU a live flash burst is
+                // evicting from underneath us, so the IsCached that chose this branch can be stale
+                // by the time we get here. Re-ask on the free path: a row click must never become
+                // a fetch.
+                else if (!Services.Fyp.Online.RemoteMediaCache.IsCached(url))
+                {
+                    ShowStreamedOnlyCard();
+                    return;
+                }
 
                 using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(20));
                 using var stream = await Services.Fyp.Online.RemoteMediaCache.OpenAsync(url, cts.Token);
@@ -282,18 +298,26 @@ namespace ConditioningControlPanel
 
                 // The app's own remote decoder: WIC, then SkiaSharp for the webp a plain Win10
                 // box cannot read. Single frame - the preview pane never animates an online item.
-                var decoded = stream == null
+                //
+                // Off the dispatcher, exactly like FlashService's own two call sites: this is
+                // CPU-bound work and a 1080p source stalls the window for long enough to see. The
+                // stream stays alive for it because the await is inside the using scope, and what
+                // comes back is frozen, so it crosses threads.
+                Stream? captured = stream;
+                var decoded = captured == null
                     ? null
-                    : FlashService.DecodeRemoteStill(url, stream, 720, allowAnimated: false);
+                    : await Task.Run(() => FlashService.DecodeRemoteStill(url, captured, 720, allowAnimated: false));
                 if (generation != _previewGeneration) return;
 
                 if (decoded == null || decoded.Frames.Count == 0)
                 {
+                    // The bytes were here and we could not read them: do not tell the user nothing
+                    // was saved. Offer the retry when the consent gate allows one at all.
                     PreviewImage.Visibility = Visibility.Collapsed;
                     PreviewVideo.Visibility = Visibility.Collapsed;
-                    PreviewMissing.Text = Localization.Loc.Get("label_media_streamed_only");
+                    PreviewMissing.Text = Localization.Loc.Get("label_no_preview");
                     PreviewMissing.Visibility = Visibility.Visible;
-                    BtnPreviewLoad.IsEnabled = true;
+                    ShowRetryButton();
                     return;
                 }
 
@@ -309,17 +333,50 @@ namespace ConditioningControlPanel
                 if (generation != _previewGeneration) return;
                 App.Logger?.Debug("MediaHistoryWindow: online preview failed for {Host}: {Error}",
                     Services.Logging.UrlLog.Host(url), ex.Message);
-                PreviewImage.Visibility = Visibility.Collapsed;
-                PreviewVideo.Visibility = Visibility.Collapsed;
-                PreviewMissing.Text = Localization.Loc.Get("label_media_streamed_only");
-                PreviewMissing.Visibility = Visibility.Visible;
-                BtnPreviewLoad.IsEnabled = true;
+                ShowStreamedOnlyCard();
             }
+        }
+
+        /// <summary>The "streamed, nothing kept" card, plus the retry when consent allows one.</summary>
+        private void ShowStreamedOnlyCard()
+        {
+            PreviewImage.Visibility = Visibility.Collapsed;
+            PreviewVideo.Visibility = Visibility.Collapsed;
+            PreviewMissing.Text = Localization.Loc.Get("label_media_streamed_only");
+            PreviewMissing.Visibility = Visibility.Visible;
+            ShowRetryButton();
+        }
+
+        /// <summary>
+        /// Puts "Load preview" back after a failed draw. Gated on the plan, so a user who has not
+        /// consented to remote media never gets a fetch button through a failure path.
+        /// </summary>
+        private void ShowRetryButton()
+        {
+            bool allowed = _plan?.IsRemote == true && RemoteConsent();
+            BtnPreviewLoad.Visibility = allowed ? Visibility.Visible : Visibility.Collapsed;
+            BtnPreviewLoad.IsEnabled = allowed;
+        }
+
+        /// <summary>
+        /// The app-wide remote-media gate, the same one every other surface reads
+        /// (<c>MediaSource != "local" &amp;&amp; HasRemoteMediaConsent</c>). The media log is a
+        /// recap window, not a way around it.
+        /// </summary>
+        private static bool RemoteConsent()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                return s != null && s.MediaSource != "local" && s.HasRemoteMediaConsent;
+            }
+            catch { return false; }
         }
 
         private void ShowPreviewNone()
         {
             _previewGeneration++;
+            _plan = null;
             PreviewHint.Visibility = Visibility.Visible;
             PreviewImage.Visibility = Visibility.Collapsed;
             PreviewVideo.Visibility = Visibility.Collapsed;
@@ -422,17 +479,28 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Hands the source to the browser. The launched string is the PARSED, escaped url the
+        /// plan carries, never the logged one: BrowserLauncher's no-default-browser fallbacks put
+        /// what they are given on a command line, and this text came off a third-party feed. See
+        /// <see cref="MediaHistoryPreviewRules.BrowsableUrl"/>.
+        /// </summary>
         private void PreviewOpenSource_Click(object sender, RoutedEventArgs e)
         {
             if (MediaList.SelectedItem is not MediaHistoryRow row) return;
-            if (!MediaHistoryPreviewRules.IsBrowsable(row.Entry.FilePath)) return;
-            Helpers.BrowserLauncher.OpenUrlOrPrompt(row.Entry.FilePath);
+            // Re-derived from the selected row rather than trusted from the field, so a stale plan
+            // can never launch the wrong thing.
+            var url = MediaHistoryPreviewRules.BrowsableUrl(row.Entry.FilePath);
+            if (url == null) return;
+            Helpers.BrowserLauncher.OpenUrlOrPrompt(url);
         }
 
         private void PreviewLoad_Click(object sender, RoutedEventArgs e)
         {
             if (MediaList.SelectedItem is not MediaHistoryRow row) return;
             if (!MediaHistoryPreviewRules.IsRemote(row.Entry.FilePath)) return;
+            // The button is hidden without consent; this is the floor under that.
+            if (!RemoteConsent()) return;
             ShowRemotePreview(row, _previewGeneration, fetch: true);
         }
 

@@ -33,6 +33,60 @@ public class MediaHistoryPreviewRulesTests
         Assert.False(MediaHistoryPreviewRules.IsBrowsable(@"D:\Assets\x.jpg"));
     }
 
+    [Theory]
+    // A quote closes BrowserLauncher's `cmd /c start "" "{url}"` and starts a second command, on
+    // exactly the machines with no default browser - the ones that reach that fallback at all.
+    [InlineData("https://a.example.com/x.jpg\"&calc&\"")]
+    [InlineData("https://a.example.com/\"")]
+    // rundll32 takes the url unquoted, so control characters matter too.
+    [InlineData("https://a.example.com/x\njpg")]
+    [InlineData("https://a.example.com/x\rjpg")]
+    public void APoisonedFeedUrlIsNeverLaunched(string url)
+    {
+        // Not a vacuous test: Uri.TryCreate is perfectly happy with every one of these - the
+        // scheme really is https - which is why the first cut handed them to the launcher.
+        Assert.True(MediaHistoryPreviewRules.IsRemote(url));
+
+        Assert.Null(MediaHistoryPreviewRules.BrowsableUrl(url));
+        Assert.False(MediaHistoryPreviewRules.IsBrowsable(url));
+
+        var plan = MediaHistoryPreviewRules.Plan(url, MediaType.Image, false, false);
+        Assert.False(plan.CanOpenSource);
+        Assert.Null(plan.BrowseUrl);
+        // Copying it is still fine: the clipboard is text, not a command line, and the user asked.
+        Assert.True(plan.CanCopyLink);
+    }
+
+    [Fact]
+    public void WhatGoesToTheBrowserIsTheParsedEscapedForm()
+    {
+        // AbsoluteUri, not OriginalString: what was stored never reaches a command line.
+        Assert.Equal("https://cdn.example.com/a%20b/x.jpg",
+            MediaHistoryPreviewRules.BrowsableUrl("https://cdn.example.com/a b/x.jpg"));
+
+        var plan = MediaHistoryPreviewRules.Plan("https://cdn.example.com/a b/x.jpg",
+            MediaType.Image, false, false);
+        Assert.Equal("https://cdn.example.com/a%20b/x.jpg", plan.BrowseUrl);
+        // ...while the line under the preview still shows what was logged, for copying.
+        Assert.Equal("https://cdn.example.com/a b/x.jpg", plan.SourceText);
+    }
+
+    [Fact]
+    public void WithoutRemoteConsentThereIsNoFetchButton()
+    {
+        // The media log is a recap window, not a way around the app-wide remote gate.
+        var denied = MediaHistoryPreviewRules.Plan(Url, MediaType.Image,
+            localExists: false, remoteCached: false, remoteConsent: false);
+        var allowed = MediaHistoryPreviewRules.Plan(Url, MediaType.Image,
+            localExists: false, remoteCached: false, remoteConsent: true);
+
+        Assert.False(denied.CanLoadPreview);
+        Assert.True(allowed.CanLoadPreview);
+        // Everything that needs no network is unaffected.
+        Assert.True(denied.CanCopyLink);
+        Assert.True(denied.CanOpenSource);
+    }
+
     [Fact]
     public void ASourceUrlIsShownExactlyAsStored()
     {
@@ -64,7 +118,8 @@ public class MediaHistoryPreviewRulesTests
     [Fact]
     public void AnOnlineStillThatHasBeenEvictedSaysSoAndOffersToFetchIt()
     {
-        var plan = MediaHistoryPreviewRules.Plan(Url, MediaType.Image, localExists: false, remoteCached: false);
+        var plan = MediaHistoryPreviewRules.Plan(Url, MediaType.Image,
+            localExists: false, remoteCached: false, remoteConsent: true);
 
         Assert.Equal(MediaPreviewKind.RemoteUncached, plan.Kind);
         Assert.True(plan.CanLoadPreview);
@@ -78,10 +133,10 @@ public class MediaHistoryPreviewRulesTests
         // LibVLC streams a remote clip FromLocation, so there is no frame to pull out of the
         // byte cache and no local file either. Source actions only.
         var plan = MediaHistoryPreviewRules.Plan("https://v.example.com/p/DASH_720.mp4",
-            MediaType.Video, localExists: false, remoteCached: true);
+            MediaType.Video, localExists: false, remoteCached: true, remoteConsent: true);
 
         Assert.Equal(MediaPreviewKind.RemoteUncached, plan.Kind);
-        Assert.False(plan.CanLoadPreview);
+        Assert.False(plan.CanLoadPreview);   // consent or not, there is no frame to pull
         Assert.True(plan.CanOpenSource);
     }
 
