@@ -14,9 +14,13 @@ namespace ConditioningControlPanel.Services.Prizes;
 /// the sale, then <c>POST counter/buy</c> with the row's id and the version the counter just named,
 /// both through <see cref="BackRoomApi"/>. The server asks for nothing a seat would give it - the
 /// route's gate is the account's token plus the Back Room door - so the panel can reach it from
-/// where the options live. The relay already adopts the reply's <c>sp</c> and hands its
-/// <c>prizes</c> block to <see cref="OwnershipService"/>, so a buy debits the wallet and unlocks
-/// the dials before any sync.</para>
+/// where the options live. The relay hands the reply's <c>prizes</c> block to
+/// <see cref="OwnershipService"/>, so a buy unlocks the dials before any sync.</para>
+///
+/// <para><b>The balance is adopted HERE, not by the relay.</b> The relay adopts any <c>sp</c> it is
+/// shown, and a plain <c>counter/state</c> read carries one; only this class knows which op
+/// answered, and a read must never lower a wallet a local level-up has already credited. The rule
+/// is <see cref="V2WalletAdoption"/>; the app is handed (account, was it a buy, balance).</para>
 ///
 /// <para><b>One request per prize, ever.</b> The idem key is made once per prize and kept: a prize
 /// can only be bought once, so replaying the same key is exactly right, and the server's receipt
@@ -37,6 +41,7 @@ public sealed class V2PurchaseService
     private readonly Func<string?> _account;
     private readonly Func<string, bool> _owned;
     private readonly Func<int> _sp;
+    private readonly Action<string, bool, int>? _adoptSp;
 
     private readonly object _gate = new();
     private readonly Dictionary<string, Row> _rows = new(StringComparer.Ordinal);
@@ -61,12 +66,34 @@ public sealed class V2PurchaseService
     /// the row then offers the way in instead. It also pins the cache to one account.</param>
     /// <param name="owned">prizeId to ownership. The app reads <see cref="PrizeGrants"/>.</param>
     /// <param name="sp">The balance the wallet shows.</param>
-    public V2PurchaseService(IBackRoomRelay relay, Func<string?> account, Func<string, bool> owned, Func<int> sp)
+    /// <param name="adoptSp">(account the reply was for, it is a buy settlement, the balance). This
+    /// service does the adopting itself instead of letting <see cref="BackRoomApi"/> do it blindly,
+    /// because only here is it known WHICH op answered - and a state read must never lower a wallet
+    /// that a local level-up has already credited. See <see cref="V2WalletAdoption"/>.</param>
+    public V2PurchaseService(IBackRoomRelay relay, Func<string?> account, Func<string, bool> owned,
+        Func<int> sp, Action<string, bool, int>? adoptSp = null)
     {
         _relay = relay ?? throw new ArgumentNullException(nameof(relay));
         _account = account ?? throw new ArgumentNullException(nameof(account));
         _owned = owned ?? throw new ArgumentNullException(nameof(owned));
         _sp = sp ?? throw new ArgumentNullException(nameof(sp));
+        _adoptSp = adoptSp;
+    }
+
+    /// <summary>Hand a reply's balance on, never letting a broken listener break a purchase.</summary>
+    private void AdoptSp(string? account, bool fromBuy, JToken? sp)
+    {
+        if (_adoptSp == null || string.IsNullOrEmpty(account)) return;
+        if (sp is not JValue { Type: JTokenType.Integer } v) return;
+        try { _adoptSp(account, fromBuy, v.Value<int>()); }
+        catch (Exception ex) { App.Logger?.Debug("[Prizes] adopt sp failed: {Error}", ex.Message); }
+    }
+
+    /// <summary>A repaint no handler can turn into a stuck row.</summary>
+    private void RaiseChanged()
+    {
+        try { Changed?.Invoke(); }
+        catch (Exception ex) { App.Logger?.Debug("[Prizes] Changed handler threw: {Error}", ex.Message); }
     }
 
     /// <summary>What the row for <paramref name="prizeId"/> shows right now.</summary>
@@ -129,17 +156,22 @@ public sealed class V2PurchaseService
             _rows.Clear();
             _failures.Clear();
         }
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
     /// <summary>
-    /// Buy one row. The caller has already confirmed the spend. Answers true when the account holds
-    /// the prize afterwards, whether this call bought it or a receipt replayed. A second call while
-    /// the first is in flight answers false and sends nothing.
+    /// Buy one row. The caller has already confirmed the spend, at <paramref name="confirmedPriceSp"/>,
+    /// which is the price the row was SHOWING when it asked. Answers true when the account holds the
+    /// prize afterwards, whether this call bought it or a receipt replayed. A second call while the
+    /// first is in flight answers false and sends nothing.
+    ///
+    /// <para><b>Nothing is sent at a price the user did not see.</b> The confirmed price is checked
+    /// again after any re-read of the counter, so a reprice landing between the confirm and the
+    /// request refuses and puts the new number on the row instead of quietly charging it.</para>
     /// </summary>
-    public async Task<bool> BuyAsync(string prizeId)
+    public async Task<bool> BuyAsync(string prizeId, int confirmedPriceSp)
     {
-        if (string.IsNullOrEmpty(prizeId)) return false;
+        if (string.IsNullOrEmpty(prizeId) || confirmedPriceSp <= 0) return false;
 
         int version;
         string idem;
@@ -150,15 +182,16 @@ public sealed class V2PurchaseService
             version = _catalogVersion;
             if (!_idem.TryGetValue(prizeId, out idem!)) _idem[prizeId] = idem = V2PurchaseRule.NewIdem();
         }
-        Changed?.Invoke();
+        RaiseChanged();
 
         bool bought = false;
+        bool repriced = false;
         try
         {
             if (version <= 0)
             {
-                // The row cannot offer without a version, so this is a torn cache rather than a
-                // first press. Read the counter and take whatever it says.
+                // The row cannot offer without a version, so this is a torn cache (or a reprice
+                // that cleared it) rather than a first press. Read the counter again.
                 await FetchNowAsync().ConfigureAwait(false);
                 lock (_gate) version = _catalogVersion;
             }
@@ -168,16 +201,29 @@ public sealed class V2PurchaseService
                 return false;
             }
 
+            int priceNow;
+            lock (_gate) priceNow = _rows.TryGetValue(prizeId, out var row) ? row.PriceSp : 0;
+            if (priceNow != confirmedPriceSp)
+            {
+                lock (_gate) _failures[prizeId] = "v2_get_error_changed";
+                App.Logger?.Information("[Prizes] standalone buy {Prize} refused: confirmed {Was} SP, counter says {Now} SP",
+                    prizeId, confirmedPriceSp, priceNow);
+                return false;
+            }
+
             var body = new JObject { ["prizeId"] = prizeId, ["catalogVersion"] = version };
             var res = await _relay.RelayAsync("counter", "buy", idem, body).ConfigureAwait(false);
-            // The relay has already adopted the receipt's sp and applied its prizes block, so by
-            // here ownership and the wallet are settled; all that is left is what to say.
+            // The relay applied the reply's prizes block; the balance is this service's to hand on,
+            // and a buy settlement is the one reply allowed to lower a wallet.
             var failure = V2PurchaseRule.FailureKeyFor(res.Ok, res.Reason);
             bought = res.Ok || res.Reason == "owned";
+            AdoptSp(AccountSafe(), fromBuy: true, (res.Body as JObject)?["sp"]);
             lock (_gate)
             {
                 if (failure != null) _failures[prizeId] = failure;
-                if (res.Reason == "catalog_changed") _known = false;   // the next read re-learns it
+                // The version goes with the knowledge. Leaving the stale one behind made every
+                // retry re-send it and be refused forever.
+                if (res.Reason == "catalog_changed") { _known = false; _catalogVersion = 0; repriced = true; }
             }
             App.Logger?.Information("[Prizes] standalone buy {Prize}: ok={Ok} status={Status} reason={Reason}",
                 prizeId, res.Ok, res.Status, res.Reason ?? "-");
@@ -190,14 +236,21 @@ public sealed class V2PurchaseService
         finally
         {
             lock (_gate) _busy.Remove(prizeId);
-            Changed?.Invoke();
+            RaiseChanged();
         }
 
         if (bought)
         {
-            Bought?.Invoke(prizeId);
+            try { Bought?.Invoke(prizeId); }
+            catch (Exception ex) { App.Logger?.Debug("[Prizes] Bought handler threw: {Error}", ex.Message); }
             // The receipt settled the balance and the grants; this is for `owned` (nothing came
             // back in that reply) and for the sale flags.
+            Refresh();
+        }
+        else if (repriced)
+        {
+            // Put the new number on the row before the player presses again, so the second confirm
+            // is the one they would actually be paying.
             Refresh();
         }
         return bought;
@@ -251,6 +304,9 @@ public sealed class V2PurchaseService
                     _known = _catalogVersion > 0;
                 }
             }
+            // A read is a SNAPSHOT: it may be older than a level-up the client already credited, so
+            // it may only ever raise the wallet. V2WalletAdoption keeps that rule.
+            if (res.Ok) AdoptSp(account, fromBuy: false, (res.Body as JObject)?["sp"]);
         }
         catch (Exception ex)
         {
@@ -259,7 +315,7 @@ public sealed class V2PurchaseService
         finally
         {
             lock (_gate) _fetching = false;
-            Changed?.Invoke();
+            RaiseChanged();
         }
     }
 }

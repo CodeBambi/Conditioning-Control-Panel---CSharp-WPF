@@ -66,6 +66,32 @@ public class V2PurchaseRuleTests
     }
 
     [Fact]
+    public void AFailedRowWithNoPriceIsNotPressable()
+    {
+        // A failure recorded before the counter ever answered leaves a Failed row with PriceSp 0. A
+        // live button there would confirm "Spend 0 Sparkle Points" and then debit the real price.
+        var row = Row(known: false, price: 0, failure: "v2_get_error_offline");
+        Assert.Equal(V2PurchaseRowState.Failed, row.State);
+        Assert.False(row.BuyEnabled);
+        Assert.False(row.ShowsPrice);
+    }
+
+    [Fact]
+    public void NoPriceMeansNoPress_WhateverTheState()
+    {
+        Assert.False(Row(price: 0).BuyEnabled);
+        Assert.False(Row(price: 0, failure: "v2_get_error_busy").BuyEnabled);
+    }
+
+    [Fact]
+    public void TheSignInRowHasAButtonToo_ItJustDoesNotSpend()
+    {
+        var row = Row(signedIn: false, known: false, price: 0);
+        Assert.True(row.ShowsBuyButton);
+        Assert.False(row.BuyEnabled);
+    }
+
+    [Fact]
     public void BeforeTheCounterAnswers_TheRowOnlySaysItIsLooking()
     {
         var row = Row(known: false, price: 0);
