@@ -2,7 +2,9 @@ import {createGame} from './game.js';
 import {routeFinaleAudio} from './finale-audio.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, timeScaleCents, LOOP_STEPS, MIN_LEAD_S, WOBBLE_CENTS } from './audio.js';
+import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, timeScaleCents, LOOP_STEPS, MIN_LEAD_S, WOBBLE_CENTS,
+  PAUSE_FADE_S, PAUSE_CUTOFF, PERFECT_GUARD_S } from './audio.js';
+import { ROOT_HZ } from '../../shared/sound/kit.js';
 
 /* ---- a fake Web Audio graph: enough surface for the module, every scheduled start is counted ---- */
 function fakeContext() {
@@ -163,14 +165,28 @@ test('relapse goes grey by itself, breakout comes back to colour; one-shots sche
   audio.destroy();
 });
 
-test('stop suspends, start resumes, destroy closes and makes everything a no-op', () => {
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const FADE_MS = PAUSE_FADE_S * 1000 + 60;
+
+test('stop sweeps down and THEN suspends, start resumes and opens up, destroy closes and makes everything a no-op', async () => {
   const { audio, ctx } = make();
   audio.start();
   const c = ctx();
+  assert.equal(audio.pauseLevel, 1, 'the gate is open from the first start: no fade-in on a fresh context');
+  const origin = audio.beat.origin;
   audio.stop();
+  assert.equal(c.state, 'running', 'no dead cut: the context runs through the fade');
+  assert.ok(audio.pausing);
+  assert.ok(audio.pauseLevel < 0.001, 'the gate glides shut');
+  assert.equal(audio.pauseCutoff, PAUSE_CUTOFF, 'under a closing low-pass');
+  await wait(FADE_MS);
   assert.equal(c.state, 'suspended');
+  assert.equal(audio.pausing, false);
   audio.start();
   assert.equal(c.state, 'running');
+  assert.equal(audio.pauseLevel, 1);
+  assert.ok(audio.pauseCutoff > 15000, 'the filter is open again');
+  assert.equal(audio.beat.origin, origin, 'the same grid on the way back');
   audio.destroy();
   assert.equal(c.state, 'closed');
   assert.equal(audio.start(), false);
@@ -269,4 +285,120 @@ test('every ordinary grey entry slows the existing music scene and colour restor
  audio.setState('grey');assert.ok(Math.abs(audio.beat.spb-.5/.72)<1e-9);
  audio.setState('colour');assert.equal(audio.beat.spb,.5);
  audio.destroy();
+});
+
+/* ---- the polish pass: the damage tink, the pause sweep, the perfect double-trigger guard ---- */
+const longest = notes => Math.max(...notes.map(n => n.dur));
+const loudest = notes => Math.max(...notes.map(n => n.level));
+const brightest = notes => Math.max(...notes.filter(n => n.k === 'tone').map(n => n.lp || Infinity));
+
+test('damage is a tink: shorter, duller, quieter and drier than the brick it did not break, still in key', () => {
+  const { audio } = make();
+  audio.start();
+  for (const sat of [0, 0.5, 1]) {
+    audio.setSaturation(sat);
+    const tink = audio.hitNotes('damage', 0, 0.3), brick = audio.hitNotes('brick', 0, 0.3);
+    assert.ok(tink.length > 0);
+    assert.ok(longest(tink) <= longest(brick) / 2, 'at most half the ring');
+    assert.ok(loudest(tink) <= loudest(brick) / 2, 'at most half the level');
+    assert.ok(brightest(tink) <= brightest(brick), 'never brighter than the brick');
+    assert.ok(brightest(tink) <= hitCutoff(sat), 'and still under the saturation cutoff');
+    assert.ok(tink.every(n => !n.wet), 'dry: no room send, the break owns the room');
+    assert.ok(brick.some(n => n.wet));
+    assert.equal(tink[0].hz, ROOT_HZ, 'the fundamental is the root: in key');
+    assert.ok(tink.every(n => n.pan === 0.3), 'panned to the brick');
+  }
+  audio.setState('grey');
+  const dull = audio.hitNotes('damage', 0, 0.5), knock = audio.hitNotes('brick', 0, 0.5);
+  assert.equal(dull.length, 1, 'grey stays one dull voice');
+  assert.ok(dull[0].dur < knock[0].dur && dull[0].level < knock[0].level && dull[0].lp <= 500);
+  const c = audio.context, n0 = c.log.starts.length;
+  audio.setState('colour');
+  assert.ok(audio.hit('damage', { x: 0.2 }) > 0, 'routed through hit() like every other kind');
+  assert.equal(c.log.starts.length - n0, 3);
+  audio.destroy();
+});
+
+test('pause sweep: start() inside the fade cancels the suspend; the context never stops', async () => {
+  const { audio, ctx } = make();
+  audio.start();
+  const c = ctx();
+  let suspends = 0; const suspend = c.suspend; c.suspend = () => { suspends++; return suspend(); };
+  audio.stop();
+  assert.ok(audio.pausing);
+  audio.start();
+  assert.equal(audio.pausing, false, 'the pending suspend is gone');
+  assert.equal(audio.pauseLevel, 1, 'and the gate is on its way back up');
+  await wait(FADE_MS);
+  assert.equal(suspends, 0);
+  assert.equal(c.state, 'running');
+  audio.destroy();
+});
+
+test('pause sweep: stop twice is one fade and one suspend; stop while suspended and stop after destroy are no-ops', async () => {
+  const { audio, ctx } = make();
+  audio.stop();                                   // before any context exists
+  audio.start();
+  const c = ctx();
+  let suspends = 0; const suspend = c.suspend; c.suspend = () => { suspends++; return suspend(); };
+  audio.stop(); audio.stop(); audio.stop();
+  await wait(FADE_MS);
+  assert.equal(suspends, 1);
+  audio.stop();
+  assert.equal(audio.pausing, false, 'already suspended: nothing to fade');
+  audio.start(); audio.stop(); audio.destroy();
+  await wait(FADE_MS);
+  assert.equal(suspends, 1, 'destroy() drops the pending suspend');
+  assert.equal(c.state, 'closed');
+  audio.stop();
+});
+
+test('pause sweep: a start() that lands while suspend() is still settling resumes afterwards', async () => {
+  const { audio, ctx } = make();
+  audio.start();
+  const c = ctx();
+  let settle = null;
+  c.suspend = () => new Promise(r => { settle = () => { c.state = 'suspended'; r(); }; });
+  audio.stop();
+  await wait(FADE_MS);
+  assert.ok(settle, 'suspend() was asked for');
+  audio.start();                                  // the state still reads running, so a plain resume would be skipped
+  settle(); await wait(5);
+  assert.equal(c.state, 'running');
+  audio.destroy();
+});
+
+test('pause sweep leaves the master, the music gate and the duck buses alone', () => {
+  const { audio, ctx } = make();
+  audio.start();
+  const c = ctx(), n0 = c.log.nodes;
+  audio.setMaster(0.4); audio.duck(0.6, 1, 0.5);
+  audio.stop(); audio.start();
+  assert.equal(c.log.nodes, n0, 'no new nodes: the sweep reuses its one gate and one filter');
+  assert.equal(audio.pauseLevel, 1);
+  audio.destroy();
+});
+
+test('perfect: a streak cue stamps the moment and perfect() skips exactly once inside the guard window', () => {
+  const { audio, ctx } = make({ bpm: 120 });
+  audio.start();
+  const c = ctx();
+  c.currentTime = 2;
+  let n = c.log.starts.length;
+  assert.equal(audio.cue('perfect', { streak: 1 }), false, 'the first perfect has no cue');
+  audio.perfect();
+  assert.equal(c.log.starts.length - n, 3, 'so the older stamp plays unchanged');
+  n = c.log.starts.length;
+  assert.equal(audio.cue('perfect', { streak: 3, xN: 0.5 }), true);
+  assert.equal(c.log.starts.length - n, 3, 'the streak stamp');
+  audio.perfect();
+  assert.equal(c.log.starts.length - n, 3, 'station.js calling au(perfect) in the same moment adds nothing');
+  audio.perfect();
+  assert.equal(c.log.starts.length - n, 6, 'the guard is spent: another caller (a finished spell) still gets its stamp');
+  n = c.log.starts.length;
+  audio.cue('perfect', { streak: 4 });
+  c.currentTime = 2 + PERFECT_GUARD_S * 4;
+  audio.perfect();
+  assert.equal(c.log.starts.length - n, 6, 'a stale guard never eats a later perfect');
+  audio.destroy();
 });
