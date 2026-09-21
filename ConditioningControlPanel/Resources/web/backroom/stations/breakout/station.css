@@ -159,6 +159,7 @@
 .bo-options { z-index:13; }
 .bo-pause-card { display:flex;flex-direction:column;gap:16px;width:min(340px,85%);max-height:85%;overflow:auto;padding:28px;border:1px solid #bb7cd6;border-radius:20px;background:linear-gradient(145deg,#36204a,#20132f);box-shadow:0 20px 70px #0008;color:#f9edff;font:15px system-ui;text-align:center; }
 .bo-pause-card h2 { margin:0 0 6px;font-size:30px;letter-spacing:4px; }
+.bo-pause-card .bo-best { margin:-6px 0 0;font-size:13px;letter-spacing:1px;opacity:.7; }
 .bo-pause-card label { display:flex;flex-direction:column;gap:9px;text-align:left; }
 .bo-pause-card select { padding:9px;background:#24152e;color:#fff;border:1px solid #9565a8;border-radius:7px; }
 .bo-pause-card input { accent-color:#eb88c9; }

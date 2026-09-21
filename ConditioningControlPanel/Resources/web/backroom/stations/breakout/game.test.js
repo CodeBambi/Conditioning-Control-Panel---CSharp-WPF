@@ -639,9 +639,145 @@ test('opening ball waits for wall arrival even when launch is pressed', () => {
 });
 
 
-test('loss recovery retains a short falling transition and relaunches within 1.2 seconds',()=>{
+test('loss recovery retains a short falling transition and relaunches on the first downbeat after 1.2 seconds',()=>{
  const {game}=make({saturation:.5});game.loseBall();
  for(let i=0;i<4;i++)game.step(.1);assert.equal(game.snapshot().state,'colour');
  game.step(.1);const s=game.snapshot();assert.equal(s.state,'grey');assert.equal(s.balls[0].stuck,true);
- for(let i=0;i<7;i++)game.step(.1);assert.equal(s.balls[0].stuck,false);
+ for(let i=0;i<6;i++)game.step(.1);assert.equal(s.balls[0].stuck,true,'the serve holds for its 1.2 s');
+ for(let i=0;i<8;i++)game.step(.1);assert.equal(s.balls[0].stuck,false,'and leaves within one more beat');
+});
+
+/* ------------------------------------------------------------ feel pass (2026-09-21) */
+const lastIndex = s => s.bricks.findIndex(b => b.alive);
+function clearBut(game, keep = 1) { const s = game.snapshot(); while (s.bricks.filter(b => b.alive).length > keep) game.breakBrick(lastIndex(s)); }
+const beatAudio = ref => ({ beat: { spb: 0.625, phase: () => ref.ph }, now: () => 0 });
+function dropOnPaddle(game, off = 0) {
+  const s = game.snapshot(), p = s.paddle;
+  s.balls = [{ ...s.balls[0], x: p.x + off, y: p.y - p.h / 2 - 12, vx: 0, vy: 300, stuck: false, ghost: false, trail: [] }];
+  game.step(1 / 60); game.step(1 / 60);
+  return s.balls[0];
+}
+
+test('the last brick fires once, before its wall, and bends time only in COLOUR with motion on', () => {
+  const { game, names } = make({ saturation: 0.2 });
+  clearBut(game);
+  let s = game.snapshot();
+  assert.equal(names().includes('lastBrick'), false); assert.equal(s.hitStopMs, 0, 'routine bricks never stall the ball');
+  game.breakBrick(lastIndex(s), true);
+  assert.equal(names().filter(n => n === 'lastBrick').length, 1);
+  assert.equal(names().includes('wall'), false, 'the next wall is held back while the moment plays');
+  assert.equal(s.hitStopMs, 90); assert.ok(s.clearing && s.clearing.wall);
+  game.step(0.05); assert.equal(s.hitStopMs, 40, 'the freeze runs first');
+  game.step(0.05); game.step(0.05);
+  assert.equal(s.timeScale, 0.35, 'then the slow-mo'); assert.equal(s.stats.walls, 0);
+  for (let i = 0; i < 10; i++) game.step(0.05);
+  assert.equal(s.stats.walls, 1); assert.equal(s.clearing, null); assert.equal(s.timeScale, 1);
+  const order = names().filter(n => n === 'lastBrick' || n === 'wall');
+  assert.deepEqual(order, ['lastBrick', 'wall']);
+  for (const opts of [{ reduced: true }, { grey: true }]) {
+    const t = make({ saturation: 0.2, reduced: !!opts.reduced, breakoutN: 9999 }, !opts.grey);
+    clearBut(t.game); t.game.breakBrick(lastIndex(t.game.snapshot()), true);
+    assert.deepEqual(t.names().filter(n => n === 'lastBrick' || n === 'wall'), ['lastBrick', 'wall'], 'the event still leads the wall');
+    assert.equal(t.game.snapshot().hitStopMs, 0); assert.equal(t.game.snapshot().clearing, null);
+  }
+});
+
+test('a relapse during the last-brick moment lands the held wall first', () => {
+  const { game, names } = make({ saturation: 0.2 });
+  clearBut(game); game.breakBrick(lastIndex(game.snapshot()), true);
+  game.relapseNow(); for (let i = 0; i < 8; i++) game.step(0.1);
+  const s = game.snapshot();
+  assert.equal(s.state, 'grey'); assert.equal(s.stats.walls, 1); assert.ok(s.bricks.some(b => b.alive));
+  assert.equal(names().filter(n => n === 'wall').length, 1);
+});
+
+test('hit-stop belongs to the jackpot and a bubble final pop, nothing routine', () => {
+  const { game } = make({ saturation: 0.5 });
+  const s = game.snapshot();
+  game.breakBrick(s.bricks.findIndex(b => !b.jackpot), true); assert.equal(s.hitStopMs, 0);
+  game.breakBrick(s.bricks.findIndex(b => b.jackpot), true); assert.equal(s.hitStopMs, 60);
+  s.hitStopMs = 0;
+  s.colliders.push({ x: 600, y: 420, r: 50, vx: 0, vy: 0, hits: 0, pulse: 0, alpha: 1, fading: false, gif: 0, tier: 2, age: 1 });
+  const ball = () => { s.balls = [{ ...s.balls[0], x: 600, y: 480, vx: 0, vy: -300, stuck: false, ghost: false, trail: [] }]; };
+  ball(); game.step(1 / 60); game.step(1 / 60);
+  assert.equal(s.colliders[0].hits, 1); assert.equal(s.hitStopMs, 0, 'a bubble that holds does not stall');
+  ball(); game.step(1 / 60); game.step(1 / 60);
+  assert.ok(s.hitStopMs > 0 && s.hitStopMs <= 40, 'the final pop does');
+});
+
+test('a bounce squashes the ball against the surface and springs back', () => {
+  const { game } = make({ saturation: 0.3 });
+  const s = game.snapshot();
+  s.balls = [{ ...s.balls[0], x: 10, y: 400, vx: -300, vy: -200, stuck: false, ghost: false, trail: [] }];
+  game.step(1 / 60);
+  const b = s.balls[0];
+  assert.ok(b.squash > 0.7 && b.sqx > 0.99, 'the left wall pushes back along +x');
+  for (let i = 0; i < 8; i++) game.step(1 / 60);
+  assert.equal(b.squash, 0);
+});
+
+test('perfect paddle hits count a streak; an ordinary hit resets it', () => {
+  const ref = { ph: 0.02 };
+  const { game, events } = make({ saturation: 0.2, audio: beatAudio(ref) });
+  const s = game.snapshot(), streaks = () => events.filter(e => e[0] === 'perfect').map(e => e[1].streak);
+  const before = s.sat;
+  dropOnPaddle(game); dropOnPaddle(game); dropOnPaddle(game);
+  assert.deepEqual(streaks(), [1, 2, 3]);
+  assert.ok(Math.abs(s.sat - before - (0.06 + 0.003 + 0.006)) < 1e-9, 'a tiny capped bonus per streak step');
+  ref.ph = 0.5; dropOnPaddle(game);
+  assert.equal(s.perfectStreak, 0);
+  ref.ph = 0.97; dropOnPaddle(game);
+  assert.deepEqual(streaks(), [1, 2, 3, 1]);
+});
+
+test('layer fires once per crossing, one per hit, and a relapse re-arms it', () => {
+  const { game, events } = make({ saturation: 0.395 });
+  const s = game.snapshot(), layers = () => events.filter(e => e[0] === 'layer').map(e => e[1].name);
+  let i = 0;
+  game.breakBrick(i++); assert.deepEqual(layers(), ['melody']);
+  game.breakBrick(i++); game.breakBrick(i++); assert.deepEqual(layers(), ['melody']);
+  s.sat = 0.695; game.breakBrick(i++); assert.deepEqual(layers(), ['melody', 'arp']);
+  game.breakBrick(i++); assert.deepEqual(layers(), ['melody', 'arp']);
+  game.relapseNow(); for (let k = 0; k < 8; k++) game.step(0.1);
+  assert.equal(s.state, 'grey'); game.breakBrick(i++); assert.equal(layers().length, 2, 'never in GREY');
+  game.breakoutNow(); for (let k = 0; k < 6; k++) game.step(0.1);
+  assert.equal(s.state, 'colour');
+  game.breakBrick(i++); assert.deepEqual(layers(), ['melody', 'arp', 'melody']);
+  game.breakBrick(i++); assert.deepEqual(layers(), ['melody', 'arp', 'melody', 'arp']);
+});
+
+test('the auto launch waits for the downbeat; a manual launch does not', () => {
+  const ref = { ph: 0.5 };
+  const { game, names } = make({ saturation: 0.2, audio: beatAudio(ref) });
+  const s = game.snapshot();
+  s.balls = [{ ...s.balls[0], stuck: true, vx: 0, vy: 0 }]; s.launchTimer = 0;
+  for (let i = 0; i < 80; i++) game.step(1 / 60);
+  assert.equal(s.balls[0].stuck, true, '1.33 s in and no beat boundary yet');
+  ref.ph = 0.05; game.step(1 / 60);
+  assert.equal(s.balls[0].stuck, false); assert.ok(names().includes('launch'));
+  s.balls = [{ ...s.balls[0], stuck: true, vx: 0, vy: 0 }]; s.launchTimer = 0;
+  game.step(1 / 60, { launch: true });
+  assert.equal(s.balls[0].stuck, false, 'a tap is immediate');
+  s.balls = [{ ...s.balls[0], stuck: true, vx: 0, vy: 0 }]; s.launchTimer = 0;
+  for (let i = 0; i < 120; i++) game.step(1 / 60);
+  assert.equal(s.balls[0].stuck, false, 'a stalled clock launches after one beat of grace');
+});
+
+test('paddle english is bounded at 8 degrees and never passes the 60 degree tips', () => {
+  const { game } = make({ saturation: 0.2, audio: beatAudio({ ph: 0.5 }) });
+  const s = game.snapshot(), deg = b => Math.atan2(b.vx, -b.vy) * 180 / Math.PI;
+  s.paddle.vx = 0; assert.ok(Math.abs(deg(dropOnPaddle(game))) < 1e-6, 'a still paddle at the centre sends it straight up');
+  s.paddle.vx = 1e5; const right = dropOnPaddle(game); assert.ok(deg(right) > 7.9 && deg(right) <= 8 + 1e-6);
+  s.paddle.vx = -1e5; assert.ok(Math.abs(deg(dropOnPaddle(game)) + 8) < 0.1);
+  s.paddle.vx = 1e5; assert.ok(deg(dropOnPaddle(game, s.paddle.w / 2)) <= 60 + 1e-6);
+});
+
+test('keys ease in to full speed in about 120 ms and stop dead on release', () => {
+  const { game } = make({ saturation: 0.2 });
+  const s = game.snapshot(), dt = 1 / 60, moves = [];
+  for (let i = 0; i < 12; i++) { const x = s.paddle.x; game.step(dt, { left: true }); moves.push(x - s.paddle.x); }
+  assert.ok(moves[0] > 0 && moves[0] < 640 * dt * 0.1, 'a tap is a nudge');
+  assert.ok(moves[3] < moves[7], 'it builds'); assert.ok(Math.abs(moves[11] - 640 * dt) < 1e-6, 'to the full 640 px/s');
+  const x = s.paddle.x; game.step(dt, {}); assert.equal(s.paddle.x, x);
+  game.step(dt, { right: true }); assert.ok(s.paddle.x - x < 640 * dt * 0.1, 'a reversal starts from rest');
 });

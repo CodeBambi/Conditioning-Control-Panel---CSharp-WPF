@@ -31,6 +31,7 @@ import { createPerfPanel } from './perf.js';
 import { createRenderBudget } from './render-budget.js';
 import { createHaptics } from './haptics.js';
 import { createGamepad } from './gamepad.js';
+import { relativeDrag } from './feedback.js';
 
 export const roomStage = false;
 
@@ -89,6 +90,9 @@ export async function mount(ctx) {
   let lastSat = -1, lastState = '', lastTimeScale = 1, lastCombo = 0, lastSp = 0, sawHit = false, sourceChanged = false;
   const lastCue = {};
   const input = { x: null, left: false, right: false, launch: false };
+  const keysDown = { l: false, r: false, last: 0 };   // arrows and A / D; the newest key wins, the older one resumes on release
+  const syncKeys = () => { input.left = keysDown.l && (!keysDown.r || keysDown.last < 0); input.right = keysDown.r && (!keysDown.l || keysDown.last > 0); };
+  let touchDrag = null;                              // touch steers by relative drag (feedback.js relativeDrag); mouse and pen stay absolute
   const off = [];
   const on = (target, ev, fn, opts) => { target.addEventListener(ev, fn, opts); off.push(() => target.removeEventListener(ev, fn, opts)); };
   const ui = {};
@@ -122,8 +126,8 @@ export async function mount(ctx) {
       <p class="bo-hint">${t('br_breakout_hint_move', 'move to play')}</p>
       <p class="bo-ghost-hint" hidden></p>
       <button class="bo-pause-button" type="button" aria-label="Pause game">&#9208; Pause</button>
-      <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="options">Options</button></div></div>
-      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><label>Colour intensity<input class="bo-option-colour" type="range" min="0" max="1" step="0.05"></label><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse or drag to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
+      <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><p class="bo-best" hidden></p><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="options">Options</button></div></div>
+      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><label>Colour intensity<input class="bo-option-colour" type="range" min="0" max="1" step="0.05"></label><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
       <button class="bo-gear" type="button" aria-label="${t('br_breakout_dev', 'dev toggles')}" aria-expanded="false"></button>
       <div class="bo-dev" hidden>
         <div class="bo-dev-header"><strong>Developer tools</strong><button type="button" data-do="performance">Performance</button><button type="button" data-do="hide-tools">Hide all (F2)</button></div>
@@ -193,8 +197,10 @@ export async function mount(ctx) {
   function setPaused(p) {
     officeEnding?.suspend(p);
     if (paused === p) return;
-    input.left = input.right = input.launch = false;
+    input.left = input.right = input.launch = false; keysDown.l = keysDown.r = false; touchDrag = null;
     paused = p; ui.paused.hidden = !p; el.classList.toggle('is-paused', p);
+    const best = game ? game.snapshot().comboBest | 0 : 0, line = ui.paused.querySelector('.bo-best');   // the one quiet place the best combo shows
+    if (line) { line.hidden = best < 3; line.textContent = 'Best combo x' + best; }
     try { if (p) audio.stop(); else if (audioOn) audio.start(); } catch (e) { /* noop */ }
     if (!p) lastT = 0;
   }
@@ -528,12 +534,20 @@ export async function mount(ctx) {
     on(pace,'change' ,()=>game.setSpeedScale(Number(pace.value)));
     on(colour,'input',()=>game.setSaturation(Number(colour.value)));
 
-    on(canvas, 'pointermove', (e) => { if (menuOpen || paused || !e.isPrimary) return; input.x = pointerX(e); if (!moved) { firstMove(); input.launch = true; } });
+    const steer = (e) => {
+      if (e.pointerType !== 'touch') { touchDrag = null; return pointerX(e); }
+      const p = game.snapshot().paddle;
+      touchDrag = touchDrag && touchDrag.id === e.pointerId ? touchDrag : { id: e.pointerId, sx: pointerX(e), px: p.x };
+      return relativeDrag(touchDrag, pointerX(e), p.w / 2, W);
+    };
+    on(canvas, 'pointermove', (e) => { if (menuOpen || paused || !e.isPrimary) return; input.x = steer(e); if (!moved) { firstMove(); input.launch = true; } });
+    for (const end of ['pointerup', 'pointercancel']) on(canvas, end, (e) => { if (touchDrag && touchDrag.id === e.pointerId) touchDrag = null; });
 
     on(canvas, 'pointerdown', (e) => {
       if (menuOpen || paused || !e.isPrimary) return;
       canvas.setPointerCapture(e.pointerId);
-      startAudio(); input.x = pointerX(e); input.launch = true; firstMove(); if (paused) setPaused(false);
+      touchDrag = null;
+      startAudio(); input.x = steer(e); input.launch = true; firstMove(); if (paused) setPaused(false);
     });
     on(canvas, 'touchstart', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
     on(window, 'keydown', (e) => {
@@ -553,8 +567,9 @@ export async function mount(ctx) {
         }
         return;
       }
-      if (e.key === 'ArrowLeft') { input.left = true; input.x = null; firstMove(); }
-      else if (e.key === 'ArrowRight') { input.right = true; input.x = null; firstMove(); }
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key, held = e.ctrlKey || e.metaKey || e.altKey;
+      if (key === 'ArrowLeft' || (key === 'a' && !held)) { keysDown.l = true; if (!e.repeat) keysDown.last = -1; syncKeys(); input.x = null; firstMove(); }
+      else if (key === 'ArrowRight' || (key === 'd' && !held)) { keysDown.r = true; if (!e.repeat) keysDown.last = 1; syncKeys(); input.x = null; firstMove(); }
       else if (e.key === ' ' || e.key === 'Enter') { startAudio(); input.launch = true; firstMove(); }
       else if (e.key === 'Escape') { setPaused(true); }
       else return;
@@ -562,8 +577,11 @@ export async function mount(ctx) {
       e.preventDefault();
     });
     on(window, 'keyup', (e) => {
-      if (e.key === 'ArrowLeft') input.left = false;
-      else if (e.key === 'ArrowRight') input.right = false;
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (key === 'ArrowLeft' || key === 'a') keysDown.l = false;
+      else if (key === 'ArrowRight' || key === 'd') keysDown.r = false;
+      else return;
+      syncKeys();
     });
     on(window, 'blur', () => { if (moved) setPaused(true); });
     on(document, 'visibilitychange', () => { if (document.hidden && moved) setPaused(true); });
