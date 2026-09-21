@@ -77,6 +77,18 @@ namespace ConditioningControlPanel.Services.Startup
         public bool GameHostUp { get; init; }
 
         /// <summary>
+        /// The CC Labs launcher has the screen and the panel is tucked in the tray
+        /// (<c>StartupPresenter.Held</c>).
+        ///
+        /// <para>It reads exactly like a game, for exactly the same reason: the panel is not on
+        /// screen, so anything owned by it opens with no visible parent. It used to be known only
+        /// to the presenter, which meant the modal ladder respected it and the PASSIVE route did
+        /// not - a surface routed away from the launcher was handed straight back by
+        /// <see cref="Route"/>, because nothing in here made it quiet.</para>
+        /// </summary>
+        public bool LauncherHolding { get; init; }
+
+        /// <summary>
         /// End of the first-launch grace window, or null when no such window was ever opened.
         /// The wizard's far side opens it (10 minutes); nothing else does.
         /// </summary>
@@ -227,10 +239,21 @@ namespace ConditioningControlPanel.Services.Startup
             if (w.LadderBusy) return true;
             if (w.TutorialActive) return true;
             if (w.SessionRunning) return true;
-            if (w.GameHostUp) return true;
+            if (IsParked(w)) return true;
             if (w.FirstLaunchUntilUtc is DateTime until && w.NowUtc < until) return true;
             return false;
         }
+
+        /// <summary>
+        /// The panel does not have the screen at all: a game is up, or the launcher is, and in
+        /// both cases the panel is hidden behind it or in the tray.
+        ///
+        /// <para>ONE predicate for both, because they are the same situation and two subtly
+        /// different copies is how these drift apart. It is also what the ladder pump parks on -
+        /// parking, not waiting, so the surface's five minutes are not spent while a player is an
+        /// hour into a descent.</para>
+        /// </summary>
+        public static bool IsParked(in QuietInputs w) => w.GameHostUp || w.LauncherHolding;
 
         /// <summary>
         /// Should this surface become an Inbox row rather than open itself?
@@ -266,7 +289,7 @@ namespace ConditioningControlPanel.Services.Startup
                 w.ModalUp ||
                 w.TutorialActive ||
                 w.SessionRunning ||
-                w.GameHostUp ||
+                IsParked(w) ||
                 (w.FirstLaunchUntilUtc is DateTime until && w.NowUtc < until);
 
             return somebodyElseOwnsTheUser ? StartupRouting.Inbox : StartupRouting.Defer;
@@ -281,14 +304,14 @@ namespace ConditioningControlPanel.Services.Startup
         /// tour (the spotlight measures live controls and a modal ambushes it), and never before
         /// the window exists to own the dialog.</para>
         ///
-        /// <para>The fourth is a game window. It is the same refusal one surface further out: the
-        /// panel is not on screen at all behind a fullscreen game, so a modal there is a card over
-        /// the thing the player is trying to click. The pump PARKS on it the way it parks behind
-        /// the launcher rather than spending the surface's five minutes, because a run is not a
-        /// queue the user is holding up.</para>
+        /// <para>The fourth is <see cref="IsParked"/> - a game, or the launcher. It is the same
+        /// refusal one surface further out: the panel is not on screen at all, so a modal there is
+        /// a card over the thing the player is trying to click, or worse a dialog owned by a window
+        /// nobody can see. The pump PARKS on it rather than spending the surface's five minutes,
+        /// because a descent is not a queue the user is holding up.</para>
         /// </summary>
         public static bool CanStartModal(bool modalUp, bool updateDialogActive, bool tutorialActive,
-            bool windowReady, bool gameHostUp = false)
-            => !modalUp && !updateDialogActive && !tutorialActive && windowReady && !gameHostUp;
+            bool windowReady, bool parked = false)
+            => !modalUp && !updateDialogActive && !tutorialActive && windowReady && !parked;
     }
 }

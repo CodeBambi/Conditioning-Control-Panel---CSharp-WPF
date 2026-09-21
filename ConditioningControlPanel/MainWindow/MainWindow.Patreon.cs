@@ -753,6 +753,9 @@ namespace ConditioningControlPanel
                 s.DiscordShareAchievements,
                 ChaosWebViewHost.AnyGameActive,
                 App.StartupLadder?.Held == true,
+                // The general case behind the other two: the panel closes to the tray, and a link
+                // can resolve minutes after the click with no game and no launcher to blame.
+                IsVisible && WindowState != WindowState.Minimized,
                 userAsked);
 
             switch (routing)
