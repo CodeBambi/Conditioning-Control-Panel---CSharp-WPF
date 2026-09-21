@@ -48,6 +48,8 @@ public enum TabRefusal
     SafetyExit,
     /// <summary>The day's 60:00 is spent.</summary>
     DailyCap,
+    /// <summary>The tab already holds all the unpaid time it is allowed to hold.</summary>
+    Backlog,
     /// <summary>The credit would take back more than CCP ever put on the lock.</summary>
     Floor,
     Nothing,
@@ -82,6 +84,11 @@ public static class CircesTab
     /// <summary>The most a single local day can add, however busy the day was.</summary>
     public const int DailyCapSeconds = 60 * 60;
 
+    /// <summary>The most unpaid time the tab ever holds (owner, 2026-09-21: three hours). A
+    /// month with no lock, or with Chaster unreachable, is not a month of debt waiting for the
+    /// next lock: past this, prices stop adding until some is pushed or earned back.</summary>
+    public const int BacklogCapSeconds = 3 * 60 * 60;
+
     /// <summary>The ledger keeps this many lines. The bill only ever reads the current run.</summary>
     public const int MaxEntries = 500;
 
@@ -104,8 +111,9 @@ public static class CircesTab
         {
             if (safetyExit) return new(0, TabRefusal.SafetyExit);
             var room = Math.Max(0, DailyCapSeconds - state.DayAddedSeconds);
-            applied = Math.Min(seconds, room);
-            if (applied == 0) return new(0, TabRefusal.DailyCap);
+            var backlogRoom = Math.Max(0, BacklogCapSeconds - state.BalanceSeconds);
+            applied = Math.Min(seconds, Math.Min(room, backlogRoom));
+            if (applied == 0) return new(0, room == 0 ? TabRefusal.DailyCap : TabRefusal.Backlog);
             state.DayAddedSeconds += applied;
         }
         else
@@ -120,7 +128,9 @@ public static class CircesTab
         state.BalanceSeconds += applied;
         Record(state, eventId, applied, nowUtc, runStartUtc);
         var clamped = applied != seconds;
-        return new(applied, !clamped ? TabRefusal.None : seconds > 0 ? TabRefusal.DailyCap : TabRefusal.Floor);
+        if (!clamped) return new(applied, TabRefusal.None);
+        if (seconds < 0) return new(applied, TabRefusal.Floor);
+        return new(applied, state.DayAddedSeconds >= DailyCapSeconds ? TabRefusal.DailyCap : TabRefusal.Backlog);
     }
 
     /// <summary>The jackpot wipes the TAB. It never touches the lock: what was already pushed

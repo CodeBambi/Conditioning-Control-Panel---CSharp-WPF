@@ -84,6 +84,21 @@ public class CircesTabTests
     }
 
     [Fact]
+    public void The_tab_never_holds_more_than_three_unpaid_hours()
+    {
+        var s = new TabState();
+        for (var day = 0; day < 5; day++) Book(s, "watcher", 3600, Noon.AddDays(day));
+
+        Assert.Equal(CircesTab.BacklogCapSeconds, s.BalanceSeconds);
+        Assert.Equal(TabRefusal.Backlog, Book(s, "typo", 15, Noon.AddDays(6)).Refusal);
+
+        Book(s, "session", -600, Noon.AddDays(6));
+        var partial = Book(s, "watcher", 900, Noon.AddDays(6));
+        Assert.Equal(600, partial.AppliedSeconds);
+        Assert.Equal(TabRefusal.Backlog, partial.Refusal);
+    }
+
+    [Fact]
     public void A_new_local_day_opens_a_new_sixty_minutes()
     {
         var s = new TabState { Day = CircesTab.DayKey(Noon), DayAddedSeconds = 3600 };
