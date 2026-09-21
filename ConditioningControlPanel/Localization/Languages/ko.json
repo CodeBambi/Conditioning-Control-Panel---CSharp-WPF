@@ -2566,6 +2566,7 @@
   "achievement_bubble_milestone_header": "버블 마일스톤!",
   "video_no_videos_found": "영상을 찾을 수 없어요:\n{0}",
   "video_no_videos_title": "영상 없음",
+  "video_toast_feed_has_the_screen": "'추천'이 화면을 쓰고 있습니다. 닫으면 영상이 재생됩니다.",
   "video_packs_installed_none_active": "콘텐츠 팩 {0}개가 설치되어 있지만 활성화된 것이 없어요.",
   "video_enable_packs_hint": "에셋 탭에서 콘텐츠 팩을 활성화하거나 에셋 프리셋을 선택하세요.",
   "video_active_packs_no_videos": "활성 팩 {0}개가 있지만 영상이 없어요.",
