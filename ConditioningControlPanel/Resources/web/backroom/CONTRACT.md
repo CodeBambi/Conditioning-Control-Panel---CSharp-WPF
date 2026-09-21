@@ -69,6 +69,7 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `fx-tunnel` | `station, level` | Continuous tunnel vision level 0..1, at most 10 a second, no reply (10.13.B). |
 | `fx-release` | `token, station` | Fade out what that `fx` token still holds on screen, no reply (10.13.B). |
 | `melt` | `station, left` | Current melted spins left, sent whenever it changes. |
+| `haptic` | `station, level, ms, tag?` | One flat toy pulse, or a stop at `level:0`. No reply (10.23). |
 | `arcade-open` | `game:'race'` | The player tapped the unlocked arcade cabinet (2026-09-18). The host opens that game as a guest surface IN THE ROOM'S WINDOW (its own WebView2 over the room's, `ChaosWebViewHost.Options.MountIn`), hides the room's page and sends `suspend {on:true, reason:'arcade'}`. Answered with exactly one `arcade`. Unhosted, the page never sends it. |
 
 ### 2.2 Host -> page
@@ -2409,6 +2410,37 @@ Authored Back Room flash bursts may sample Still, Drift and Bounce, or Pendulum 
 Back Room flashes accept a drag and release without V2 ownership. A third of releases sample shatter; the rest slide or fling according to gesture speed. Full-motion shatter uses nine picture tiles. This replaces the earlier preview-only restriction on shatter, but it still requires user interaction and never runs on expiry. Motion Off uses a quiet dismissal. Desktop uses the existing compositor drag and shatter engines; classic windows retain their normal dismissal. Ambient preferences and prize grants are unchanged. Shared subliminal text targets 30vh with a thicker pink stroke, fitting down only where the viewport requires it.
 
 Roulette exit exception requested 2026-09-17: block station exit while requesting/playing a spin or while interactive browser flashes remain, including a 500 ms double-click grace after removal. Background tap-to-exit is restricted to the bottom 8 percent (maximum 60 px); explicit Back works once the guard clears. This supersedes unconditional Back during roulette play. Desktop landscape uses a higher camera angle; compact phone framing stays intact. All Back Room flash previews are 20 percent larger and drift at varied slow speeds when motion is enabled.
+
+## 10.23 Station haptics (2026-09-21)
+A station may ask the host to pulse the player's toy (the app's Lovense / Intiface integration). One frame, no reply:
+
+```json
+{ "type": "haptic", "station": "breakout", "level": 0.45, "ms": 120, "tag": "perfect" }
+{ "type": "haptic", "station": "breakout", "level": 0, "ms": 0, "tag": "stop" }
+```
+
+- **A pulse is FLAT.** `level` 0..1 held for `ms`, then the toy stops by itself. There is no pattern on this wire and
+  there must never be one: a Lovense pattern command averages its keyframes into one level for the duration, and a
+  repeat of the SAME level inside a second is silently dropped. A station that wants texture sends distinct levels, at
+  about three a second, and nudges a repeated level by one toy step (0.05). Per-hit ticks at 10 Hz do not reach a toy.
+- **`level: 0` is the stop**, whatever `ms` says. A station sends it whenever play is held (pause, menu, suspend,
+  close), once, not every frame. The host also stops the toy by itself wherever it cancels fx: `suspend`, `close`,
+  `exit`, `station-close` and the window going away.
+- **Validation (the page is untrusted).** `station` must be a station id; `level` and `ms` must be finite numbers or
+  the frame is dropped; `level` is clamped to 0..1 and `ms` to 20..1500; `tag` is a short plain token
+  (`[A-Za-z0-9_.-]{1,24}`) for the log only, anything else reads as empty. While the room is suspended or closing a
+  pulse is dropped and a stop still lands.
+- **The host decides whether the toy takes it** (`Services/Haptics/BackRoomHapticDirector`): nothing happens with
+  haptics off or no device connected, the host rate limits again (one pulse per 80 ms, six per rolling second), the
+  newest accepted pulse replaces the one in play, and a Buttplug device gets the duration doubled (capped at 1500) for
+  its command latency. Pulses are mixer transients: the user's master intensity and cap apply, they ride over a video
+  or audio-sync layer without replacing it, and a stop cancels the room's pulse only.
+- **Everywhere else the frame is harmless.** The phone and web shims match message types one by one and ignore this
+  one. On the web the same pulse goes to `navigator.vibrate` and to `vibrationActuator.playEffect('dual-rumble')` on
+  any connected gamepad, page-side (`stations/breakout/haptics.js`); neither exists on the host's wire.
+- Haptics stay on under reduced motion and Motion Off: a pulse is not motion. Calm does not scale them; the user's
+  haptic intensity does. First caller: the Breakout cabinet (`planPulse` in its `haptics.js` is the map from game
+  event to pulse; GREY is a faint brick tick and nothing else).
 
 ## Casino and racing window transfer (2026-09-17)
 The racing cabinet opens Racing Thoughts in the current window with `game-open {game:"race"}`. The host acknowledges `game-open-result` and finishes the room close handshake before transferring its browser. Race init sets `settings.returnToCasino`; normal exit returns to `/backroom/index.html?raceReturn=1`. A bounded one-use camera pose survives; no balance or reward state is restored from it. The separate Play entry retains normal exit behavior. Native callbacks are invalidated on transfer, and each run may settle rewards once. Preview uses the same camera contract with a local-ledger-only adapter and full same-origin navigation.

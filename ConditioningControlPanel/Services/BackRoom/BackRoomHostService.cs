@@ -320,6 +320,8 @@ internal static class BackRoomHostService
                 CloseWindow = OnRoomClosed,
                 Schedule = Schedule,
                 NoteEvent = key => App.FeatureDayLog?.Note(key),
+                // 10.23: a station's flat pulses reach the toy; the director gates on the haptics settings.
+                Haptic = Haptics.BackRoomHapticDirector.OnHaptic,
                 SetOption = option => OnUi(() =>
                 {
                     if (App.Settings?.Current is not { } s) return;
