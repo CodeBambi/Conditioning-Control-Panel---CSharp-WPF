@@ -27,38 +27,11 @@
   #sit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 28px; border-radius: 24px;
     background: #28172fea; color: inherit; border: 1px solid #edb1d177; font: inherit; font-size: 17px; font-weight: 600;
     letter-spacing: 1px; cursor: pointer; touch-action: manipulation; }
-  #pics-btn { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    z-index: 30; padding: 6px 12px; border-radius: 20px; border: 1px solid #b77da247; background: #201229cc; color: #e9c2dc;
-    font: inherit; font-size: 12px; opacity: .55; cursor: pointer; touch-action: manipulation; }
-  #pics-btn[hidden] { display: none; }
-  #pics { position: fixed; left: 50%; bottom: calc(52px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 31;
-    width: min(92vw, 380px); padding: 12px 14px; border-radius: 14px; background: #160e20f4; border: 1px solid #b77da247;
-    display: flex; flex-direction: column; gap: 8px; }
-  #pics[hidden] { display: none; }
-  #pics h2 { margin: 0; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: #ffcf6b; }
-  #pics label { display: flex; align-items: center; gap: 6px; }
-  #pics input[type="text"] { flex: 1; font: inherit; padding: 6px 8px; border-radius: 8px; background: #0c0713; color: inherit;
-    border: 1px solid #b77da247; min-width: 0; }
-  #pics .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  #pics button { font: inherit; padding: 6px 12px; border-radius: 10px; border: 1px solid #c58bbd59; color: #fce5f3;
-    background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26); cursor: pointer; touch-action: manipulation; }
-  #pics .note { font-size: 11px; opacity: .7; }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <button id="sit" type="button" hidden>Play</button>
-<button id="pics-btn" type="button" hidden>Pictures</button>
-<div id="pics" hidden>
-  <h2>Pictures</h2>
-  <div class="row">
-    <label><input type="radio" name="mode" value="scrolller"> Scrolller</label>
-    <label><input type="radio" name="mode" value="bundled"> Bundled</label>
-  </div>
-  <label><input id="subs" type="text" placeholder="r/ names, comma separated" autocapitalize="none" autocorrect="off"></label>
-  <div class="row"><button id="apply" type="button">Use these</button><button id="close" type="button">Close</button></div>
-  <div class="note" id="note">New pictures arrive on the next wall.</div>
-</div>
 <script type="module">
 import { mount } from './station.js';
 import { bridge, isHosted, mintId, announceReady, markInitialized } from '../../bridge.js';
@@ -135,31 +108,6 @@ window.addEventListener('pointerdown', () => {
   if (coarse && !standalone && !q.has('nofs')) { try { const p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* noop */ } }
 }, { capture: true });
 document.addEventListener('visibilitychange', () => { try { station.suspend(document.hidden); } catch (e) { /* noop */ } });
-
-/* ---- the pictures sheet: the room's picker, the short version (window.__brMedia is the phone shim's) ---- */
-const brMedia = window.__brMedia;
-const picsBtn = document.getElementById('pics-btn'), pics = document.getElementById('pics'), note = document.getElementById('note');
-if (brMedia && typeof brMedia.get === 'function') {
-  picsBtn.hidden = false;
-  const fill = () => {
-    let cfg; try { cfg = brMedia.get(); } catch (e) { cfg = null; }
-    if (!cfg) return;
-    for (const r of pics.querySelectorAll('input[name=mode]')) r.checked = r.value === (cfg.mode === 'scrolller' ? 'scrolller' : 'bundled');
-    document.getElementById('subs').value = (cfg.sources || []).join(', ');
-    const c = cfg.counts || {};
-    note.textContent = cfg.error ? cfg.error : cfg.loading ? 'Fetching pictures...' : cfg.mode === 'scrolller'
-      ? `${c.clips || 0} clips, ${c.stills || 0} stills. New pictures arrive on the next wall.` : 'Bundled pictures. New pictures arrive on the next wall.';
-  };
-  picsBtn.onclick = () => { pics.hidden = !pics.hidden; if (!pics.hidden) fill(); };
-  document.getElementById('close').onclick = () => { pics.hidden = true; };
-  document.getElementById('apply').onclick = async () => {
-    const mode = (pics.querySelector('input[name=mode]:checked') || {}).value || 'bundled';
-    const sources = document.getElementById('subs').value.split(/[,\s]+/).map(s => s.replace(/^r\//i, '').trim()).filter(Boolean);
-    note.textContent = 'Fetching pictures...';
-    try { await brMedia.set(mode, mode === 'scrolller' ? sources.join(',') : null); } catch (e) { note.textContent = String(e && e.message || e); return; }
-    fill();
-  };
-}
 
 window.dev = { station, ctx, open, stand, get game() { return station.game; }, get audio() { return station.audio; }, get media() { return station.media; } };
 </script>

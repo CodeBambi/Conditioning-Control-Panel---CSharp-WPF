@@ -22,7 +22,7 @@ import {currentMusic} from '../../shared/sound/music.js';
 import { createGame, RUNG_NAMES, RUNG_AT, W, H } from './game.js';
 import { createRenderer, prefersSoftwareCanvas } from './render.js';
 import { createMedia, createSubliminals } from './payloads.js';
-import { FLAVOURS, flavourHost, currentFlavour, applyFlavour } from './flavours.js';
+import { FLAVOURS, MINE, PICK_KEY, flavourHost, flavourById, currentFlavour, applyFlavour, nichesOf, liveSubs, toggleNiche, addNiche, removeNiche, readCustom, writeCustom, shellNiches } from './flavours.js';
 import { createAudio } from './audio.js';
 import { routeFinaleAudio } from './finale-audio.js';
 import { WORD_KEYS } from './word-fx.js';
@@ -125,6 +125,7 @@ export async function mount(ctx) {
         <p class="bo-flavour-line">It decides what the picture bricks wear.</p>
         <div class="bo-flavour-grid"></div>
         <button class="bo-flavour-keep" type="button"><b>Keep mine</b><span></span></button>
+        <p class="bo-flavour-foot">Add your own niches, or switch some off, in Options.</p>
       </section>
       ${backBtn}
       <div class="bo-hud">
@@ -135,7 +136,7 @@ export async function mount(ctx) {
       <p class="bo-ghost-hint" hidden></p>
       <button class="bo-pause-button" type="button" aria-label="Pause game">&#9208; Pause</button>
       <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><p class="bo-best" hidden></p><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="options">Options</button></div></div>
-      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><label>Colour intensity<input class="bo-option-colour" type="range" min="0" max="1" step="0.05"></label><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
+      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><label>Colour intensity<input class="bo-option-colour" type="range" min="0" max="1" step="0.05"></label><fieldset class="bo-pictures" hidden><legend>Pictures</legend><div class="bo-pic-tabs" role="group" aria-label="Flavour"></div><div class="bo-pic-niches" aria-label="Niches inside"></div><form class="bo-pic-add"><span aria-hidden="true">r/</span><input type="text" aria-label="Add a niche" placeholder="add a niche" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" maxlength="60"><button type="submit">Add</button></form><p class="bo-pic-note" aria-live="polite"></p></fieldset><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
       <button class="bo-gear" type="button" aria-label="${t('br_breakout_dev', 'dev toggles')}" aria-expanded="false"></button>
       <div class="bo-dev" hidden>
         <div class="bo-dev-header"><strong>Developer tools</strong><button type="button" data-do="performance">Performance</button><button type="button" data-do="hide-tools">Hide all (F2)</button></div>
@@ -233,8 +234,11 @@ export async function mount(ctx) {
     if (!menuOpen || !game || flavourOpen) return;
     const shell = flavourHost();
     if (!shell || q.has('noflavour')) { beginGame(); return; }
-    const mine = currentFlavour(shell);
-    for (const b of ui.flavour.querySelectorAll('[data-flavour]')) b.classList.toggle('is-current', !!mine && b.dataset.flavour === mine.id);
+    const all = readCustom(store), mine = currentFlavour(shell, all);
+    for (const b of ui.flavour.querySelectorAll('[data-flavour]')) {
+      b.classList.toggle('is-current', !!mine && b.dataset.flavour === mine.id);
+      b.querySelector('small').textContent = liveSubs(flavourById(b.dataset.flavour), all[b.dataset.flavour]).map(s => 'r/' + s).join('  ');
+    }
     // The way out is small and grey, and says what it keeps: the niches already set, or the built-in pictures.
     let kept = ''; try { const now = shell.get(); kept = now.mode === 'scrolller' ? now.sources.filter(s => !(now.disabledSources || []).includes(s)).map(s => 'r/' + s).join('  ') : now.mode === 'local' ? 'my own files' : 'the built-in pictures'; } catch (e) { /* the label is optional */ }
     ui.flavour.querySelector('.bo-flavour-keep span').textContent = kept;
@@ -243,14 +247,56 @@ export async function mount(ctx) {
   }
   function pickFlavour(id) {
     if (!flavourOpen) return;
-    const shell = flavourHost(), flavour = FLAVOURS.find(f => f.id === id);
     closeFlavour(); beginGame();
-    // The game starts at once; the new pictures are dealt in when they are warm. A refusal changes nothing.
-    if (shell && flavour) applyFlavour(shell, flavour).then((ok) => {
+    useFlavour(id);
+  }
+  // The game never waits for this: the new pictures are dealt in when they are warm, and a refusal changes nothing.
+  function useFlavour(id) {
+    const shell = flavourHost(), flavour = flavourById(id);
+    if (!shell || !flavour) return;
+    store.set(PICK_KEY, flavour.id);
+    applyFlavour(shell, flavour, readCustom(store)[flavour.id]).then((ok) => {
       if (!ok || !media) return;
       return media.redeal().then((dealt) => { if (dealt && game && typeof game.setWords === 'function') game.setWords(media.words.map(w => w.text)); });
     }).catch(() => {});
   }
+
+  /* ---- Options > Pictures: the flavours again, opened up. Every niche inside is shown; any can be switched off, a
+     suggested one switched on, the player's own added (one r/ field and pills, never a comma list). Applied once, when
+     Options closes, because every change to the shell is a fresh fetch. ---- */
+  let picSel = null, picDirty = false;
+  function openPictures() {
+    const box = ui.pictures; if (!box) return;
+    const shell = flavourHost(); box.hidden = !shell; if (!shell) return;
+    const all = readCustom(store), now = currentFlavour(shell, all);
+    // A list that is nobody's is the player's own: it becomes Mine the first time, so nothing they had is lost.
+    if (!now && !(all[MINE.id] && (all[MINE.id].added || []).length)) { const live = shellNiches(shell); if (live && live.length) { all[MINE.id] = { on: [], off: [], added: live.slice(0, 8) }; writeCustom(store, all); } }
+    picSel = (now || currentFlavour(shell, all) || flavourById(store.get(PICK_KEY)) || FLAVOURS[0]).id; picDirty = false;
+    drawPictures('');
+  }
+  function drawPictures(note) {
+    const box = ui.pictures, all = readCustom(store), flavour = flavourById(picSel) || FLAVOURS[0];
+    const tabs = box.querySelector('.bo-pic-tabs'), pills = box.querySelector('.bo-pic-niches'); tabs.textContent = ''; pills.textContent = '';
+    for (const f of [...FLAVOURS, MINE]) {
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.pic = f.id; b.textContent = f.name; b.style.setProperty('--tint', f.tint);
+      b.setAttribute('aria-pressed', String(f.id === flavour.id)); tabs.append(b);
+    }
+    for (const n of nichesOf(flavour, all[flavour.id])) {
+      const pill = document.createElement('span'); pill.className = 'bo-pic-pill' + (n.on ? ' is-on' : '');
+      const tog = document.createElement('button'); tog.type = 'button'; tog.dataset.niche = n.name; tog.setAttribute('aria-pressed', String(n.on));
+      tog.textContent = 'r/' + n.name; tog.title = n.on ? 'On. Click to switch it off.' : n.kind === 'extra' ? 'A suggestion. Click to switch it on.' : 'Off. Click to switch it on.';
+      pill.append(tog);
+      if (n.kind === 'added') { const x = document.createElement('button'); x.type = 'button'; x.className = 'bo-pic-remove'; x.dataset.remove = n.name; x.setAttribute('aria-label', 'Remove r/' + n.name); x.textContent = '\u00d7'; pill.append(x); }
+      pills.append(pill);
+    }
+    const live = liveSubs(flavour, all[flavour.id]).length;
+    box.querySelector('.bo-pic-note').textContent = note || (live ? live + ' on. Bright ones are on, dim ones are off. New pictures arrive when you close Options.' : flavour.id === MINE.id ? 'Empty. Add a niche below.' : 'All switched off. Switch one on, or nothing changes.');
+  }
+  function changePictures(fn) {
+    const all = readCustom(store), flavour = flavourById(picSel) || FLAVOURS[0];
+    const out = fn(flavour, all[flavour.id]); all[flavour.id] = out.custom || out; writeCustom(store, all); picDirty = true; drawPictures(out.error || '');
+  }
+  function closePictures() { if (picDirty && picSel) useFlavour(picSel); picDirty = false; }
   function firstMove() { if (moved) return; moved = true; el.classList.add('is-played'); }
 
   /* ------------------------------------------------------------ events */
@@ -545,7 +591,7 @@ export async function mount(ctx) {
     const grid = ui.flavour.querySelector('.bo-flavour-grid');
     for (const f of FLAVOURS) {
       const b = document.createElement('button'); b.type = 'button'; b.dataset.flavour = f.id; b.style.setProperty('--tint', f.tint);
-      const name = document.createElement('b'), line = document.createElement('span'); name.textContent = f.name; line.textContent = f.line; b.append(name, line); grid.append(b);
+      const name = document.createElement('b'), line = document.createElement('span'), inside = document.createElement('small'); name.textContent = f.name; line.textContent = f.line; b.append(name, line, inside); grid.append(b);
     }
     on(ui.flavour, 'click', (e) => {
       const b = e.target.closest('[data-flavour]');
@@ -569,14 +615,26 @@ export async function mount(ctx) {
         optionsFrom=button;if(!menuOpen)setPaused(true);
         pace.value=String(game.snapshot().speedScale);colour.value=game.snapshot().sat;
         for(const slider of options.querySelectorAll('[data-audio]')){slider.value=audioLevels[slider.dataset.audio];slider.nextElementSibling.value=Math.round(Number(slider.value)*100)+'%';}
-        options.hidden=false;pace.focus();
+        openPictures();options.hidden=false;pace.focus();
       }
-      if(action==='close-options'){options.hidden=true;optionsFrom?.focus();}
+      if(action==='close-options'){options.hidden=true;closePictures();optionsFrom?.focus();}
     });
     for(const slider of options.querySelectorAll('[data-audio]')){
       on(slider,'input',()=>{const value=Number(slider.value);slider.nextElementSibling.value=Math.round(value*100)+'%';applyAudioLevel(slider.dataset.audio,value);});
       on(slider,'change',()=>applyAudioLevel(slider.dataset.audio,Number(slider.value),true));
     }
+    ui.pictures=options.querySelector('.bo-pictures');
+    on(ui.pictures,'click',e=>{
+      const tab=e.target.closest('[data-pic]'),rem=e.target.closest('[data-remove]'),tog=e.target.closest('[data-niche]');
+      if(tab){picSel=tab.dataset.pic;picDirty=true;drawPictures('');ui.pictures.querySelector('[data-pic="'+picSel+'"]')?.focus();}
+      else if(rem)changePictures((f,c)=>removeNiche(c,rem.dataset.remove));
+      else if(tog)changePictures((f,c)=>toggleNiche(f,c,tog.dataset.niche));
+    });
+    on(ui.pictures.querySelector('.bo-pic-add'),'submit',e=>{
+      e.preventDefault();const field=e.target.querySelector('input'),typed=field.value;
+      changePictures((f,c)=>addNiche(f,c,typed));
+      if(!ui.pictures.querySelector('.bo-pic-note').textContent.startsWith('That'))field.value='';field.focus();
+    });
     on(pace,'change' ,()=>game.setSpeedScale(Number(pace.value)));
     on(colour,'input',()=>game.setSaturation(Number(colour.value)));
 
@@ -597,7 +655,9 @@ export async function mount(ctx) {
     });
     on(canvas, 'touchstart', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
     on(window, 'keydown', (e) => {
-      if(!options.hidden){if(e.key==='Escape'){e.preventDefault();options.hidden=true;optionsFrom?.focus();}return;}
+      const typing=e.target instanceof HTMLElement&&(e.target.isContentEditable||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'||(e.target.tagName==='INPUT'&&!['range','checkbox','radio','button'].includes(e.target.type)));
+      if(!options.hidden){if(e.key==='Escape'){e.preventDefault();options.hidden=true;closePictures();optionsFrom?.focus();}return;}
+      if(typing)return;
       if(!menuOpen&&game.snapshot().finale?.phase!=='outro'&&(e.key==='Escape'||e.key.toLowerCase()==='p')){
         e.preventDefault();setPaused(!paused);if(paused)el.querySelector('[data-menu="resume"]').focus();else canvas.focus();return;
       }
