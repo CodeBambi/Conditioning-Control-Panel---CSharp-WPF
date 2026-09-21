@@ -96,7 +96,7 @@ test('before start(): cues stay silent and grey tempo applies to the fallback cl
   audio.setSaturation(0.6); audio.setState('grey');
   assert.equal(ctx(), null, 'no context is built before a gesture');
   assert.ok(audio.beat.nextSixteenth(audio.now()) > audio.now());
-  assert.equal(audio.beat.spb, 60 / (96 * .72));
+  assert.equal(audio.beat.spb, 60 / (96 * .66));
 });
 
 test('start() is idempotent, builds one context, resumes it, and the bed schedules ahead', () => {
@@ -247,8 +247,8 @@ test('slow-mo pitches the bed down two semitones at 0.35, straight at 1; grey ad
 
 test('tempo changes keep beat helpers consistent', () => {
   const beat=createBeat(96);
-  beat.setTempo(96*.72);
-  assert.ok(Math.abs(beat.spb-60/(96*.72))<1e-9);
+  beat.setTempo(96*.66);
+  assert.ok(Math.abs(beat.spb-60/(96*.66))<1e-9);
   assert.equal(beat.stepIndex(beat.sixteenth*8),8);
   beat.setTempo(96);
   assert.equal(beat.spb,.625);
@@ -266,7 +266,7 @@ test('browser beat-only integration plays finale static, metal and scene changes
  assert.ok(ctx().log.starts.slice(start).some(n=>n.k==='noise'),'freeze schedules audible static');
  advance(4.05);assert.equal(game.snapshot().finale.phase,'locked');
  assert.ok(calls.some(c=>c[0]==='finaleGrey'&&c[1]===true));
- assert.ok(Math.abs(audio.beat.spb-60/(96*.72))<1e-9);
+ assert.ok(Math.abs(audio.beat.spb-60/(96*.66))<1e-9);
  start=ctx().log.starts.length;game.breakBrick(0);
  assert.equal(calls.filter(c=>c[0]==='metal').length,1);
  assert.ok(ctx().log.starts.slice(start).filter(n=>n.k==='tone').length>=3,'sealed brick schedules metallic partials');
@@ -281,8 +281,8 @@ test('browser beat-only integration plays finale static, metal and scene changes
 test('every ordinary grey entry slows the existing music scene and colour restores it',()=>{
  const {audio}=make({bpm:120});
  audio.setState('colour');assert.equal(audio.beat.spb,.5);
- audio.setState('grey');assert.ok(Math.abs(audio.beat.spb-.5/.72)<1e-9);
- audio.setState('grey');assert.ok(Math.abs(audio.beat.spb-.5/.72)<1e-9);
+ audio.setState('grey');assert.ok(Math.abs(audio.beat.spb-.5/.66)<1e-9);
+ audio.setState('grey');assert.ok(Math.abs(audio.beat.spb-.5/.66)<1e-9);
  audio.setState('colour');assert.equal(audio.beat.spb,.5);
  audio.destroy();
 });

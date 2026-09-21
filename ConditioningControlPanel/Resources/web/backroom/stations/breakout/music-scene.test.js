@@ -11,7 +11,7 @@ test('room soundtrack freezes across gestures and resumes same track slower',asy
  music.setScene('freeze');assert.equal(el.paused,true);
  handlers.pointerdown();await Promise.resolve();assert.equal(el.paused,true);
  music.setScene('grey');assert.equal(el.paused,false);assert.equal(el.src,src);assert.equal(el.currentTime,17);
- assert.equal(el.playbackRate,.72);assert.equal(el.preservesPitch,false);
+ assert.equal(el.playbackRate,.66);assert.equal(el.preservesPitch,false);
  music.setScene('normal');assert.equal(el.playbackRate,1);assert.equal(el.preservesPitch,true);
  music.dispose();
 });

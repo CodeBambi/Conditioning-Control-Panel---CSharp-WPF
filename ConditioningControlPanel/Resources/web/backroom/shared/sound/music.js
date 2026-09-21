@@ -1,3 +1,5 @@
+/** The grey world's tempo, soundtrack and generated bed alike (owner, by ear: .72 was not slow enough). */
+export const GREY_RATE = .66;
 const TRACKS = ['velvet-roulette.mp3','midnight-jackpot-alt.mp3','midnight-jackpot.mp3','coin-arpeggio.mp3','neon-jackpot.mp3'];
 
 /** Each shuffled round plays every track once, with three other tracks before a repeat. */
@@ -39,7 +41,7 @@ export function createMusic({ volume = .15, master = .8, AudioCtor = globalThis.
     } else audio.volume = level * master;
   };
   function applyScene() {
-    audio.playbackRate=scene==='grey'?.72:1;
+    audio.playbackRate=scene==='grey'?GREY_RATE:1;
     audio.preservesPitch=scene!=='grey';
     if(drive) {
       if(scene==='grey') {const curve=new Float32Array(256);for(let i=0;i<256;i++){const x=i/127.5-1;curve[i]=Math.tanh(x*1.4)/Math.tanh(1.4);}drive.curve=curve;}
