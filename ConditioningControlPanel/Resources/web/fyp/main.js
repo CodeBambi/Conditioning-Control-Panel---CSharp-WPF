@@ -829,10 +829,15 @@ function onSubProbe(data) {
     pruneRemoteToChannels(); // the new channel joins the batch loop immediately
     return;
   }
-  if (data.error === 'offline') showSubError("Couldn't reach the feed - try again");
-  else if (data.error === 'invalid') showSubError(`r/${name} isn't a usable subreddit name`);
-  else if (data.error) showSubError(`Couldn't check r/${name} - try again`);
-  else showSubError(`r/${name} doesn't exist or has no media`);
+  // The same four refusals in the same words as the Assets tab (the host's
+  // Services/Fyp/Online/RemoteSubAddMessages). "Scrolller does not carry it" is forever and
+  // "could not reach Scrolller" is worth retrying; the old line fused those two and named
+  // neither the provider nor the reason, which is how the report arrives as "the app won't let
+  // me add the category, is the criteria for media pretty restrictive?" - there is no criteria,
+  // the feed is Scrolller's and they either host a community or they do not.
+  if (data.error === 'invalid') showSubError('That is not a subreddit name. Try something like r/EroticHypnosis, or paste its link.');
+  else if (data.error) showSubError(`Could not reach Scrolller, so r/${name} is still unchecked. Try again in a moment.`);
+  else showSubError(`Scrolller does not carry r/${name}. The feed is theirs, so only the communities they host can be added.`);
   updateOnlineUi(); // drops the pending pill
 }
 

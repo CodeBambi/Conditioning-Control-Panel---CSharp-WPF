@@ -2498,8 +2498,11 @@ namespace ConditioningControlPanel
                 var sanitized = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(box.Text);
                 if (sanitized == null)
                 {
-                    ShowRemoteSubError(LocOr("msg_remote_sub_invalid",
-                        "That doesn't look like a subreddit. Try a name like r/EroticHypnosis, or paste its link."));
+                    // Null, never box.Text: this is the branch where the text FAILED sanitizing, so
+                    // it is the one string on this path we know nothing about. The copy has no {0}
+                    // today, and passing the raw box through is how it would quietly gain the
+                    // ability to echo whatever was pasted in the day someone adds one.
+                    ShowRemoteSubOutcome(Services.Fyp.Online.RemoteSubAddOutcome.NotAName, null);
                     return;
                 }
                 clean = sanitized;
@@ -2512,8 +2515,7 @@ namespace ConditioningControlPanel
                     box.Text = "";
                     if (current.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
                     {
-                        ShowRemoteSubError(string.Format(LocOr("msg_remote_sub_duplicate",
-                            "r/{0} is already added"), clean));
+                        ShowRemoteSubOutcome(Services.Fyp.Online.RemoteSubAddOutcome.AlreadyAdded, clean);
                         return;
                     }
                     ToggleRemoteSubSelection(clean);
@@ -2521,9 +2523,7 @@ namespace ConditioningControlPanel
                 }
                 if (settings.RemoteSubLibrary.Count >= Models.AppSettings.RemoteSubLibraryCap)
                 {
-                    ShowRemoteSubError(string.Format(LocOr("msg_remote_sub_library_cap",
-                        "You can keep up to {0} subreddits - remove one with its X first"),
-                        Models.AppSettings.RemoteSubLibraryCap));
+                    ShowRemoteSubOutcome(Services.Fyp.Online.RemoteSubAddOutcome.LibraryFull, clean);
                     return;
                 }
 
@@ -2583,30 +2583,26 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("[remote media] custom sub r/{Sub} verified ({N} videos)",
                         clean, probe.VideoCount);
                 }
-                else if (string.Equals(probe.Error, "offline", StringComparison.Ordinal))
-                {
-                    // Nothing persisted: we learned nothing about the sub, only about the wire.
-                    ShowRemoteSubError(LocOr("msg_remote_sub_offline",
-                        "Couldn't reach the feed - try again"));
-                }
-                else if (string.Equals(probe.Error, "invalid", StringComparison.Ordinal))
-                {
-                    ShowRemoteSubError(LocOr("msg_remote_sub_invalid",
-                        "That doesn't look like a subreddit. Try a name like r/EroticHypnosis, or paste its link."));
-                }
                 else
                 {
-                    // A real verdict about a real name: remember it so the same typo does not
-                    // buy another round trip.
-                    settings.FypOnlineSubVerdicts[clean] = new RemoteSubVerdict
+                    // One vocabulary for the three refusals (Services/Fyp/Online/
+                    // RemoteSubAddMessages): "Scrolller does not carry it" is forever, "could not
+                    // reach Scrolller" is worth retrying, and only the first is a verdict about
+                    // the name. That difference is also what decides whether we persist anything.
+                    var outcome = Services.Fyp.Online.RemoteSubAddMessages.Classify(probe.Ok, probe.Error);
+                    if (outcome == Services.Fyp.Online.RemoteSubAddOutcome.NotCarried)
                     {
-                        Ok = false,
-                        VideoCount = null,
-                        CheckedAtUtc = DateTime.UtcNow
-                    };
-                    App.Settings?.Save();
-                    ShowRemoteSubError(string.Format(LocOr("msg_remote_sub_not_found",
-                        "r/{0} doesn't exist or has no media"), clean));
+                        // A real verdict about a real name: remember it so the same typo does not
+                        // buy another round trip.
+                        settings.FypOnlineSubVerdicts[clean] = new RemoteSubVerdict
+                        {
+                            Ok = false,
+                            VideoCount = null,
+                            CheckedAtUtc = DateTime.UtcNow
+                        };
+                        App.Settings?.Save();
+                    }
+                    ShowRemoteSubOutcome(outcome, clean);
                 }
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Committing a probed subreddit failed"); }
@@ -2626,6 +2622,15 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex) { App.Logger?.Debug("Ending a sub probe failed: {E}", ex.Message); }
         }
+
+        /// <summary>
+        /// Say why the name did not go in, in the app's one vocabulary. Every refusal on this
+        /// screen goes through here so the Assets tab and the For You popover cannot drift apart
+        /// about what "it would not let me add the category" means.
+        /// </summary>
+        private void ShowRemoteSubOutcome(Services.Fyp.Online.RemoteSubAddOutcome outcome, string? name) =>
+            ShowRemoteSubError(Services.Fyp.Online.RemoteSubAddMessages.Describe(
+                outcome, name, Models.AppSettings.RemoteSubLibraryCap));
 
         /// <summary>The one soft-error slot under the add row. Null hides it.</summary>
         private void ShowRemoteSubError(string? text)
@@ -2743,8 +2748,9 @@ namespace ConditioningControlPanel
                     // know something we do not) but it is marked, not quietly rendered as fine.
                     accent = muted;
                     label = $"r/{name} ?";
-                    chipTip = string.Format(LocOr("msg_remote_sub_not_found",
-                        "r/{0} doesn't exist or has no media"), name);
+                    chipTip = Services.Fyp.Online.RemoteSubAddMessages.Describe(
+                        Services.Fyp.Online.RemoteSubAddOutcome.NotCarried, name,
+                        Models.AppSettings.RemoteSubLibraryCap);
                 }
                 else
                 {
