@@ -5783,6 +5783,22 @@ namespace ConditioningControlPanel.Models
             set { _personaVoiceFenceUtc = value; OnPropertyChanged(); }
         }
 
+        private DateTime? _personaIdentityFenceUtc;
+        /// <summary>
+        /// UTC moment the companion's NAME last changed under the user - a mod switch from one
+        /// companion to a different one. The voice fence above keeps the user's own pre-switch
+        /// turns, which is right for a preset change and wrong here: "hi Circe, ..." still sitting
+        /// in the window reads as one unbroken conversation with Circe, so the model answers as
+        /// Circe under a CCP Default prompt (Kathryn, 2026-09-14). Turns older than this moment
+        /// leave the WIRE window entirely, whatever their role. Nothing is deleted: the stored
+        /// session, the visible bubbles and the memory panel keep everything.
+        /// </summary>
+        public DateTime? PersonaIdentityFenceUtc
+        {
+            get => _personaIdentityFenceUtc;
+            set { _personaIdentityFenceUtc = value; OnPropertyChanged(); }
+        }
+
         private List<PersonalityPreset> _userPersonalityPresets = new();
         /// <summary>
         /// User-created personality presets (customizations or copies of built-ins).
