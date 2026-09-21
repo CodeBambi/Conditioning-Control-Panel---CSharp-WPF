@@ -1,3 +1,4 @@
+import { durabilityColour, cometSegments, paddleMood } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups} from './powerups-render.js';
 import { junctionProtected } from './junction-shield.js';
@@ -64,10 +65,12 @@ function roundRect(g, x, y, w, h, r) {
 
 // Owner verified this path fixes a black Firefox playfield on the desktop GPU.
 export const prefersSoftwareCanvas = (agent = globalThis.navigator?.userAgent || '') => /Firefox\//i.test(agent);
-export function createRenderer(canvas, { reduced = false, media = null, rng = Math.random, software = prefersSoftwareCanvas() } = {}) {
+export function createRenderer(canvas, { reduced = false, media = null, rng = Math.random, software = prefersSoftwareCanvas(), brickHue = 270 } = {}) {
   let g = canvas.getContext('2d', { willReadFrequently: software }), foreground = null;
   let cw = 0, ch = 0, scale = 1, ox = 0, oy = 0, off = null;
   let last = null, glitch = 0, wipe = 0, crackFlash = 0, spin = 0, aberr = 0, recoil = 0, lastNow = 0, lastCombo = 0, comboPop = 0;
+  let happy = 0;
+  const smoke = createParticles({ max: 120, rng });
   let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, flash = 0, lastFlashAt = -1;
   const shockwaves = [], drifters = [];
   const rewardPick = createRewardPicker(rng);
@@ -108,6 +111,12 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   function onEvent(name, d) {
     d = d || {};
     spellFx.event(name, d);
+    if (name === 'paddle') happy = .9;
+    if (!reduced && (name === 'brick' || name === 'brickDamage' || name === 'metalHit' ||
+        name === 'irisHit' || name === 'pendulumAnchorHit' || (name === 'hit' && d.kind === 'paddle'))) {
+      smoke.smoke(d.x, d.y, [205, 195, 215], 10);
+    }
+    if (name === 'relapse' || name === 'wall') { smoke.clear(); happy = 0; }
     if(name==='irisCore') {
       irisMelt=4;
       stamps.push({kind:'ring',x:d.x,y:d.y,r0:12,r1:100,life:.65,rgb:GOLD});
@@ -362,7 +371,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     const c = document.createElement('canvas'); c.width = 84; c.height = 52;
     const x = c.getContext('2d', { willReadFrequently: true });
     roundRect(x, 1, 1, 82, 50, 6);
-    x.fillStyle = grey ? '#707070' : col(ROWS[br.row % ROWS.length], Math.round(mix * 16) / 16); x.fill();
+    x.fillStyle = col(durabilityColour(1, grey, brickHue), Math.round(mix * 16) / 16); x.fill();
     finishBrick(x,84,52);
     plainFaces.set(key, c); return c;
   }
@@ -405,13 +414,13 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   }
   const toughFaces = new Map();
   function toughFace(br, grey, mix) {
-    const damage=br.strength-br.hp, shade=br.strength===3?.72:.86;
+    const damage=br.strength-br.hp;
     const tint=grey?0:Math.round(Math.max(.55,mix)*16)/16;
     const key=`${br.strength}:${damage}:${grey}:${tint}`;
     if(toughFaces.has(key)) return toughFaces.get(key);
     const c=document.createElement('canvas');c.width=96;c.height=56;
     const x=c.getContext('2d',{willReadFrequently:true});
-    const rgb=(grey?[112,112,112]:tierColour(br.hp)).map(v=>Math.round(v*shade));
+    const rgb=durabilityColour(br.hp, grey, brickHue);
     roundRect(x,1,1,94,54,6);x.fillStyle=col(rgb,tint);x.fill();
     finishBrick(x,96,56);
     if(damage>0) {
@@ -513,7 +522,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       } else if (s.state === 'grey') {
         const special = gifOn || br.spiral || br.split || br.jackpot || br.word;
         roundRect(g, -br.w / 2, -br.h / 2, br.w, br.h, 3);
-        g.fillStyle = special ? '#535353' : '#707070'; g.fill();
+        g.fillStyle = col(durabilityColour(1, true), 0); g.fill();
         g.fillStyle = special ? '#666' : '#7b7b7b';
         g.fillRect(-br.w / 2 + 2, -br.h / 2 + 2, br.w - 4, special ? 2 : 1);
         g.fillStyle = '#383838'; g.fillRect(-br.w / 2 + 1, br.h / 2 - 3, br.w - 2, 2);
@@ -547,7 +556,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       } else if (br.spiral) {
         drawSpiralBrick(br, s, mix);
       } else {
-        const rgb = br.jackpot ? GOLD : ROWS[br.row % ROWS.length];
+        const rgb = durabilityColour(1, false, brickHue);
         roundRect(g, -br.w / 2, -br.h / 2, br.w, br.h, 3);
         g.fillStyle = col(rgb, mix); g.fill();
         g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(-br.w / 2 + 2, -br.h / 2 + 2, br.w - 4, 3);
@@ -790,6 +799,21 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     const hgt = clamp((H - 40 - b.y) / (H - 40), 0, 1);                        // soft shadow, grows with height
     g.fillStyle = `rgba(0,0,0,${0.28 - hgt * 0.16})`;
     g.beginPath(); g.ellipse(b.x, b.y + b.r + 3 + hgt * 10, b.r * (1 + hgt * 1.2), b.r * 0.45 * (1 + hgt * 0.6), 0, 0, 7); g.fill();
+    if (!reduced) {
+      g.save(); g.lineCap = 'round';
+      let trailIndex = 0;
+      for (const segment of cometSegments(b)) {
+        g.strokeStyle = col(b.ghost ? GREY : VIOLET, mix, segment.alpha * .6);
+        g.lineWidth = Math.max(.5, b.r * 1.7 * segment.alpha);
+        g.beginPath(); g.moveTo(segment.x, segment.y); g.lineTo(segment.nx, segment.ny); g.stroke();
+        if (s.state === 'colour' && !b.ghost && s.sat >= .7 && words?.length && trailIndex++ % 5 === 0) {
+          g.font = '700 7px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.fillStyle = col(PINK, mix, segment.alpha * .5);
+          g.fillText(words[(wordIdx + trailIndex) % words.length], segment.x, segment.y);
+        }
+      }
+      g.restore();
+    }
     if (b.ghost || s.state === 'grey') {
       g.save(); g.globalAlpha = 0.72;
       g.fillStyle = '#9a9a9a'; g.beginPath(); g.arc(b.x, b.y, b.r, 0, 7); g.fill();
@@ -798,23 +822,6 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.fillText('OLD SELF', b.x, b.y + 0.3);
       g.restore();
       return;
-    }
-    const trail = b.trail || [];
-    if (rungs(2) && trail.length >= 4) {
-      const n = Math.min(trail.length / 2, Math.max(2, Math.round(30 * s.sat)));
-      const useWords = s.sat >= 0.7 && words && words.length;
-      if (useWords) { g.font = `700 7px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; }
-      for (let i = 0; i < n; i++) {
-        const k = trail.length - 2 - i * 2; if (k < 0) break;
-        const t = 1 - i / n;
-        if (useWords) {
-          if (i % 3) continue;
-          g.fillStyle = col(i % 2 ? MINT : PINK, mix, 0.5 * t);
-          g.fillText(words[(wordIdx + (i / 3 | 0)) % words.length], trail[k], trail[k + 1]);
-        } else {
-          g.fillStyle = col(PINK, mix, 0.35 * t); g.beginPath(); g.arc(trail[k], trail[k + 1], b.r * (0.2 + 0.8 * t), 0, 7); g.fill();
-        }
-      }
     }
     if (rungs(3)) {
       const grd = g.createRadialGradient(b.x, b.y, b.r, b.x, b.y, b.r * 3.2);
@@ -853,17 +860,18 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     roundRect(g, p.x - w / 2, py - h / 2, w, h, 7);
     g.fillStyle = col(VIOLET, mix); g.fill();
     g.fillStyle = 'rgba(255,255,255,.22)'; roundRect(g, p.x - w / 2 + 3, py - h / 2 + 2, w - 6, 3, 2); g.fill();
-    if (rungs(6) && s.state === 'colour' && s.balls[0]) {
+    if (s.balls[0]) {
       const b = s.balls[0], dx = b.x - p.x, dy = b.y - py, d = Math.hypot(dx, dy) || 1;
       const lx = dx / d * 1.6, ly = dy / d * 1.2;
       blinkAt -= dt; if (blinkAt <= 0) { blink = 0.12; blinkAt = 3 + rng() * 2; } blink = Math.max(0, blink - dt);
-      for (const ex of [-9, 9]) {
+      for (const ex of [-12, 12]) {
         if (blink > 0) { g.strokeStyle = '#fff'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(p.x + ex - 3.5, py); g.lineTo(p.x + ex + 3.5, py); g.stroke(); continue; }
-        g.fillStyle = '#fff'; g.beginPath(); g.arc(p.x + ex, py, 3.6, 0, 7); g.fill();
-        g.fillStyle = '#1a1a2e'; g.beginPath(); g.arc(p.x + ex + lx, py + ly, 1.7, 0, 7); g.fill();
+        g.fillStyle = '#fff'; g.beginPath(); g.arc(p.x + ex, py - 1, 4.6, 0, 7); g.fill();
+        g.fillStyle = '#1a1a2e'; g.beginPath(); g.arc(p.x + ex + lx, py - 1 + ly, 2.2, 0, 7); g.fill();
       }
-      const smile = 3.5 + clamp(s.combo || 0, 0, 12) * 0.35;
-      g.strokeStyle = '#1a1a2e'; g.lineWidth = 1.4; g.beginPath(); g.arc(p.x, py + 1, smile, 0.25, Math.PI - 0.25); g.stroke();
+      const mood = paddleMood(s.balls, p, happy);
+      g.strokeStyle = '#1a1a2e'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(p.x - 5, py + 2);
+      g.quadraticCurveTo(p.x, py + (mood === 'happy' ? 9 : mood === 'sad' ? -4 : 3), p.x + 5, py + 2); g.stroke();
     }
   }
   function drawWalls(s, mix) {
@@ -1232,6 +1240,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     finaleOutroFrame=null;finaleOutroOwner=null;
     if (!reduced && tr && tr.kind === 'breakout' && grey && tr.t > 0.3 && (((tr.t * 14) | 0) % 3) === 0) mix = clamp(0.2 + (s.savedSat || s.sat), 0, 1);
     if (s.freeze <= 0) spin += fxDt * (2 + 6 * s.sat);
+    happy = Math.max(0, happy - dt);
     recoil = Math.max(0, recoil - dt * 6); aberr = Math.max(0, aberr - dt * 3);
     wordAt += dt; if (wordAt > 0.35) { wordAt = 0; wordIdx++; }
     const words = extras && Array.isArray(extras.words) ? extras.words : null;
@@ -1301,6 +1310,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     if (grey) P.clear(); else ballSparkle(s);
     debris.draw(g, fxDt, mix, col, H);
     drawParticles(fxDt, mix);
+    smoke.step(g, fxDt, mix, col);
     spellFx.front(g, s, dt);
     const breakoutOnTop = breakoutFlash > 0 || bubbleRewards.length > 0 || irisMelt > 0;
     const ballTransform = g.getTransform();
@@ -1393,7 +1403,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   }
 
   const r = { resize, draw, onEvent, onGameEvent: onEvent, toField,
-    dispose() { endingCard.reset();letterFaces.clear();greyMetalFace=null; toughFaces.clear(); brickPictures.clear(); wordFaces.clear(); plainFaces.clear(); tierGlows.clear(); foreground?.remove(); foreground = null; spellFx.reset(); bubbleRewards.length = 0; P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); wellFx.dispose(); irisFx.dispose(); finaleFx.dispose(); finaleFreezeFrame=null; finaleOutroFrame=null; finaleOutroOwner=null; irisBuffer=null; off = null; },
+    dispose() { smoke.clear(); endingCard.reset();letterFaces.clear();greyMetalFace=null; toughFaces.clear(); brickPictures.clear(); wordFaces.clear(); plainFaces.clear(); tierGlows.clear(); foreground?.remove(); foreground = null; spellFx.reset(); bubbleRewards.length = 0; P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); wellFx.dispose(); irisFx.dispose(); finaleFx.dispose(); finaleFreezeFrame=null; finaleOutroFrame=null; finaleOutroOwner=null; irisBuffer=null; off = null; },
     particleCount: () => P.count() };
   return r;
 }
