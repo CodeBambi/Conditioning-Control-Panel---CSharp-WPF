@@ -2255,6 +2255,44 @@ namespace ConditioningControlPanel.Services
             image.Clip = clip;
         }
 
+        /// <summary>
+        /// The pendulums already hanging on this monitor, for <see cref="FlashMotion.Create"/> to
+        /// hang the next one clear of. Null when there are none, which is the common case and the
+        /// one where a pendulum keeps the top centre it has always had.
+        ///
+        /// <para>Reads the state bag rather than the layer item: a burst spawns every flash in one
+        /// pass and the earlier ones are still converting frames off the dispatcher, so their
+        /// LayerItem is null and their pivots would otherwise be invisible to this one. Matched on
+        /// the whole monitor rect the motion was BUILT against (which a v2 preview narrows to a
+        /// lane), so a second screen's pendulums never crowd this one's band.</para>
+        /// </summary>
+        private List<PendulumNeighbour>? LivePendulumsOn(double bx, double by, double bw, double bh)
+        {
+            List<PendulumNeighbour>? taken = null;
+            // Under _lockObj like every other walk of this list: Stop and CloseAllWindows mutate it
+            // off this call's back, and the InvalidOperationException would be caught and logged to
+            // Debug by SpawnFlashWindow's outer try - a flash that silently never appears.
+            lock (_lockObj)
+            {
+                foreach (var w in _activeWindows)
+                {
+                    var m = w.MotionState;
+                    if (m == null || m.Style != FlashMotionStyle.Pendulum) continue;
+                    // A flash that has been DRAGGED or flung is no longer hanging from anything -
+                    // FlashDrag rewrites its style, and the bounds moves that follow it (the work
+                    // area re-clamp) no longer match the monitor rect this spawn was built from, so
+                    // it drops out of the set. That is intended: a picture under the hand is not a
+                    // pendulum and has no pivot to stay clear of. A FADING one does still count -
+                    // it is on screen until the fade ends, which is exactly when it stops mattering.
+                    if (!FlashPendulumRig.SameMonitor(m.BoundsX, m.BoundsY, m.BoundsW, m.BoundsH,
+                                                      bx, by, bw, bh)) continue;
+                    (taken ??= new List<PendulumNeighbour>())
+                        .Add(new PendulumNeighbour(m.PivotX, FlashPendulumRig.EffectivePhase(m)));
+                }
+            }
+            return taken;
+        }
+
         private FlashMotionStyle ResolveMotionStyle(AppSettings settings, FlashMotionStyle? inherit)
         {
             var picked = inherit ?? settings.FlashMotionStyle;
@@ -2306,8 +2344,8 @@ namespace ConditioningControlPanel.Services
 
             // Flashes v2: roll the motion here on the UI thread (MotionFx.Level, _random) before the
             // off-thread conversion. The spawn monitor converts to world px like the window rect;
-            // a pendulum re-homes under the monitor's top centre and the rope is clamped on screen.
-            // Authored previews stay in a peripheral lane instead of crossing the active game.
+            // a pendulum hangs clear of the ones already on that monitor and the rope is clamped on
+            // screen. Authored previews stay in a peripheral lane instead of crossing the active game.
             double bx = monitor.X * dpi, by = monitor.Y * dpi, bw = monitor.Width * dpi, bh = monitor.Height * dpi;
             if (imageData.PreviewV2)
             {
@@ -2317,9 +2355,15 @@ namespace ConditioningControlPanel.Services
             FlashMotionState? motionState = motion == FlashMotionStyle.Still ? null
                 : FlashMotion.Create(motion, x, y, w, h,
                     bx, by, bw, bh,
-                    MotionFx.Level, _random);
+                    MotionFx.Level, _random,
+                    motion == FlashMotionStyle.Pendulum ? LivePendulumsOn(bx, by, bw, bh) : null);
 
             if (imageData.PreviewV2 && motionState != null) { motionState.Vx *= .35; motionState.Vy *= .35; }
+            // Kept on the state bag from the moment it is rolled, not only once the layer item
+            // exists: in a burst the flashes before this one are still converting frames off the
+            // dispatcher and have no LayerItem yet, and they are exactly the neighbours the next
+            // pendulum has to hang clear of. The layer item takes this very instance.
+            window.MotionState = motionState;
             window.LayerSpawnPending = true;
 
             _ = Task.Run(() =>
@@ -2354,7 +2398,13 @@ namespace ConditioningControlPanel.Services
                     {
                         window.LayerSpawnPending = false;
                         if (frames == null)
-                            return;   // conversion failed — the heartbeat sweeps the itemless window
+                        {
+                            // Conversion failed — the heartbeat sweeps the itemless window. Drop
+                            // the motion with it: a pendulum with no picture would go on reserving
+                            // its pivot against the next spawn until the sweep came round.
+                            window.MotionState = null;
+                            return;
+                        }
 
                         // The flash may have been clicked away, expired or torn down (Stop /
                         // CloseAllWindows) while converting — dispose instead of spawning.
@@ -4811,6 +4861,9 @@ namespace ConditioningControlPanel.Services
                         if (shatter != null) _flashLayer?.BeginShatter(item, shatter);
                         else _flashLayer?.Remove(item);
                     }
+                    // Dropped with the item: a dead pendulum must not keep reserving its pivot
+                    // against the next one (LivePendulumsOn walks the live windows).
+                    window.MotionState = null;
                     window.IsFadingOut = false;
                     // The state bag is still a real Window: constructing it registered it in
                     // Application.Windows, and only Close() removes it — returning without a
@@ -5072,6 +5125,14 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Flashes v2: the motion kind this flash resolved to; hydra children inherit it.</summary>
         public FlashMotionStyle MotionStyle { get; set; }
+
+        /// <summary>
+        /// Flashes v2, compositor only: the motion this spawn rolled, from the moment it was
+        /// rolled. The layer item takes the same instance, so this is the LIVE state while the
+        /// flash is up - and it exists during the off-thread frame conversion, which LayerItem
+        /// does not. FlashService.LivePendulumsOn reads it to hang the next pendulum clear.
+        /// </summary>
+        public FlashMotionState? MotionState { get; set; }
 
         /// <summary>
         /// Flashes v2 wave 2, compositor only: true when THIS teardown is a hand dismissing the
