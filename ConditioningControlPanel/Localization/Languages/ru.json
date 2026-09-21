@@ -5068,6 +5068,8 @@
   "inbox_open": "Открыть",
   "inbox_dismiss": "Убрать",
   "inbox_tooltip": "То, что ждало более спокойного момента",
+  "inbox_discord_share_title": "Discord привязан",
+  "inbox_discord_share_summary": "Публиковать достижения в Discord сообщества?",
   "dash_toggle_hint": "правый клик по плитке включает или выключает её · левый клик открывает",
   "rail_favorites_caption": "ИЗБРАННОЕ",
   "rail_recent_caption": "НЕДАВНИЕ",

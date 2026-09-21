@@ -282,6 +282,7 @@ internal static class ArcademyHostService
                 Mappings = mappings,
                 UserDataFolderName = "arcademy",
                 InputEnabled = true,
+                IsGame = true,   // the startup ladder goes quiet while a game is up
                 StartFullscreen = false,
                 // Native ownership rather than Topmost: plenty of things raise MainWindow (a bark,
                 // a video window closing, a tray restore) and would otherwise bury the class.

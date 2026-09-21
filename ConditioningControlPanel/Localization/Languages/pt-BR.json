@@ -5068,6 +5068,8 @@
   "inbox_open": "Abrir",
   "inbox_dismiss": "Dispensar",
   "inbox_tooltip": "Coisas que estavam esperando um momento mais calmo",
+  "inbox_discord_share_title": "Discord vinculado",
+  "inbox_discord_share_summary": "Publicar suas conquistas no Discord da comunidade?",
   "dash_toggle_hint": "clique direito num cartão liga ou desliga · clique esquerdo abre",
   "rail_favorites_caption": "FAVORITOS",
   "rail_recent_caption": "RECENTES",

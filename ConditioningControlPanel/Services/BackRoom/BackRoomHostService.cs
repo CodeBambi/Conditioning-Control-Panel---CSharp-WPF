@@ -258,6 +258,7 @@ internal static class BackRoomHostService
                 Mappings = mappings,
                 UserDataFolderName = "backroom",
                 InputEnabled = true,
+                IsGame = true,   // the startup ladder goes quiet while a game is up
                 StartFullscreen = false,
                 OwnedByMainWindow = true,
                 CenterOnMainWindow = true,

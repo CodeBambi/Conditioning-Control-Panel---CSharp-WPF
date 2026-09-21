@@ -384,6 +384,62 @@ public class StartupQueueCoreTests
     }
 
     [Fact]
+    public void NoModalOverAGameWindow()
+    {
+        // Pika's softlock (2026-09-15): a Discord link resolved while DtRH was up and the offer
+        // opened over the two doors, with the choice underneath it unreachable. The panel is not
+        // even on screen behind a fullscreen game.
+        Assert.False(StartupQueueCore.CanStartModal(modalUp: false, updateDialogActive: false,
+            tutorialActive: false, windowReady: true,
+            parked: StartupQueueCore.IsParked(Calm() with { GameHostUp = true })));
+    }
+
+    [Fact]
+    public void NoModalBehindTheLauncher()
+    {
+        // The panel is in the tray while the launcher has the screen, so a modal it owns has no
+        // visible parent at all. The pump has always refused this; the point of the assertion is
+        // that the refusal now comes off the same struct the passive route reads.
+        Assert.False(StartupQueueCore.CanStartModal(modalUp: false, updateDialogActive: false,
+            tutorialActive: false, windowReady: true,
+            parked: StartupQueueCore.IsParked(Calm() with { LauncherHolding = true })));
+    }
+
+    [Fact]
+    public void AGameWindowMakesItQuietAndInboxesAPassiveSurface()
+    {
+        var playing = Calm() with { GameHostUp = true };
+
+        Assert.True(StartupQueueCore.IsQuiet(playing));
+        // Inbox, not Defer: a game is somebody else owning the user, the same as a session.
+        Assert.Equal(StartupRouting.Inbox, StartupQueueCore.Route(StartupSurfaceKind.Passive, playing));
+    }
+
+    [Fact]
+    public void TheLauncherMakesItQuietAndInboxesAPassiveSurface()
+    {
+        // THE bug the second review caught: the launcher hold lived only on the presenter, so
+        // Route saw a calm world and answered Present. A surface routed away from the launcher
+        // was handed straight back and opened owned by a MainWindow sitting in the tray - the
+        // same softlock class as Pika's ticket, one door along.
+        var launcher = Calm() with { LauncherHolding = true };
+
+        Assert.True(StartupQueueCore.IsQuiet(launcher));
+        Assert.Equal(StartupRouting.Inbox, StartupQueueCore.Route(StartupSurfaceKind.Passive, launcher));
+        Assert.NotEqual(StartupRouting.Present, StartupQueueCore.Route(StartupSurfaceKind.Passive, launcher));
+    }
+
+    [Fact]
+    public void ParkedIsOneAnswerForBothWaysThePanelLosesTheScreen()
+    {
+        Assert.True(StartupQueueCore.IsParked(Calm() with { GameHostUp = true }));
+        Assert.True(StartupQueueCore.IsParked(Calm() with { LauncherHolding = true }));
+        Assert.False(StartupQueueCore.IsParked(Calm()));
+        // A session owns the user but the panel still HAS the screen: quiet, not parked.
+        Assert.False(StartupQueueCore.IsParked(Calm() with { SessionRunning = true }));
+    }
+
+    [Fact]
     public void NoModalBeforeTheWindowIsLoaded()
         => Assert.False(StartupQueueCore.CanStartModal(modalUp: false, updateDialogActive: false, tutorialActive: false, windowReady: false));
 

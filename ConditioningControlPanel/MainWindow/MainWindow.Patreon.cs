@@ -735,13 +735,52 @@ namespace ConditioningControlPanel
         /// Achievement sharing is a separate opt-in that defaults OFF — users routinely
         /// link Discord and then wonder why nothing posts (support, 2026-07-10). Offer it
         /// once right after a successful link instead of leaving them to find the toggle.
+        ///
+        /// <para>A link resolves whenever the OAuth round trip finishes, which can be minutes
+        /// after the click, so "right after" is not necessarily a moment the panel is on screen.
+        /// With a game up - or the launcher holding the screen while the panel sits in the tray -
+        /// the offer becomes an Inbox row instead
+        /// (<see cref="Services.AchievementSharePromptRule"/>): one player got this box laid over
+        /// the DtRH doors with the choice underneath it unreachable.</para>
         /// </summary>
-        internal void OfferAchievementSharingAfterDiscordLink()
+        /// <param name="userAsked">Called from the Inbox row, which is the user asking for it.</param>
+        internal void OfferAchievementSharingAfterDiscordLink(bool userAsked = false)
         {
             var s = App.Settings?.Current;
-            if (s == null || s.DiscordShareAchievements) return;
+            if (s == null) return;
 
-            var share = MessageBox.Show(
+            var routing = Services.AchievementSharePromptRule.Decide(
+                s.DiscordShareAchievements,
+                ChaosWebViewHost.AnyGameActive,
+                App.StartupLadder?.Held == true,
+                // The general case behind the other two: the panel closes to the tray, and a link
+                // can resolve minutes after the click with no game and no launcher to blame.
+                IsVisible && WindowState != WindowState.Minimized,
+                userAsked);
+
+            switch (routing)
+            {
+                case Services.AchievementSharePromptRouting.Skip:
+                    return;
+
+                case Services.AchievementSharePromptRouting.Inbox:
+                    PresentOrInbox(new Services.Startup.InboxItem
+                    {
+                        Key = "discord-share-achievements",
+                        Glyph = "🎮",
+                        Title = InboxStr("inbox_discord_share_title", "Discord linked"),
+                        Summary = InboxStr("inbox_discord_share_summary",
+                            "Post your achievements to the community Discord?"),
+                        // The row re-asks through this same method, and says so: clicking a row
+                        // is the user asking, so it opens even if the game is still up.
+                        Open = () => OfferAchievementSharingAfterDiscordLink(userAsked: true),
+                    });
+                    return;
+            }
+
+            // Owned by the panel on purpose: an ownerless MessageBox takes whatever window is
+            // active, which is how this one ended up parented to a game.
+            var share = MessageBox.Show(this,
                 Loc.Get("msg_discord_share_achievements_prompt"),
                 Loc.Get("title_discord_linked"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question);

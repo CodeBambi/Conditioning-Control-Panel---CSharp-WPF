@@ -45,6 +45,19 @@ internal sealed class ChaosWebViewHost : IDisposable
         /// <summary>true = game surface (activatable, focusable, topmost); false = passive backdrop.</summary>
         public bool InputEnabled { get; init; }
 
+        /// <summary>
+        /// This window is a GAME the player is inside: DtRH, the race, the Back Room, the
+        /// Arcademy, the Goon Game, Piece by Piece, Graded Intake, Just Drop.
+        ///
+        /// <para>The startup ladder reads it (<see cref="AnyGameActive"/>) and goes quiet while
+        /// one is up, because the panel is not on screen behind it and anything that opened over
+        /// it would land on the thing the player is trying to click. Deliberately narrower than
+        /// <see cref="AnyHostActive"/>, which also counts the For You feed, the Loom editor, the
+        /// codex, the Bureau and the Emergency Exit card - windows people leave open for hours,
+        /// and the ladder parks on this without a clock.</para>
+        /// </summary>
+        public bool IsGame { get; init; }
+
         /// <summary>Raised for every page message except the built-in "ready"/"log" handling.</summary>
         public Action<JObject>? OnMessage { get; init; }
 
@@ -289,12 +302,24 @@ internal sealed class ChaosWebViewHost : IDisposable
         _window.Show();
         _countedActive = true;
         System.Threading.Interlocked.Increment(ref _activeHostCount);
-        if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
-        if (_opts.InputEnabled) { try { _window.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); } }
+        if (_opts.IsGame) { _countedGame = true; System.Threading.Interlocked.Increment(ref _activeGameCount); }
+        try
+        {
+            if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
+            if (_opts.InputEnabled) { try { _window.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); } }
 
-        _ = InitWebAsync();
-        App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Host}",
-            _opts.LogTag, _opts.InputEnabled, _isFullscreen, Services.Logging.UrlLog.Host(_opts.StartUrl));
+            _ = InitWebAsync();
+            App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Host}",
+                _opts.LogTag, _opts.InputEnabled, _isFullscreen, Services.Logging.UrlLog.Host(_opts.StartUrl));
+        }
+        catch
+        {
+            // A constructor that dies after Show never reaches Dispose, and these counts are read
+            // by the avatar tube's raise and by the startup ladder's quiet window - stuck true,
+            // they silence every ladder modal for the life of the process.
+            ReleaseActiveCounts();
+            throw;
+        }
     }
 
     /// <summary>Lay the window out as borderless-fullscreen or a normal titled window.</summary>
@@ -1645,16 +1670,32 @@ internal sealed class ChaosWebViewHost : IDisposable
         try { DetachMainWindowGlue(); } catch (Exception ex) { Diag.Swallowed(ex); }
         try { _web?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
         try { _window?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
-        if (_countedActive) { _countedActive = false; System.Threading.Interlocked.Decrement(ref _activeHostCount); }
+        ReleaseActiveCounts();
         _web = null; _window = null; IsReady = false; _pending.Clear();
     }
 
-    // How many game hosts (Bureau / Graded Intake / DtRH) currently have a window up. The ATTACHED
-    // avatar tube consults this before its focus-stealing raise: an attached tube rides at main's
-    // level by definition, so it must not lift itself over a game page the user is working in.
+    // How many hosts (Bureau / Graded Intake / DtRH / the For You feed / the Loom / ...) currently
+    // have a window up. The ATTACHED avatar tube consults this before its focus-stealing raise: an
+    // attached tube rides at main's level by definition, so it must not lift itself over a page
+    // the user is working in.
     private static int _activeHostCount;
     private bool _countedActive;
     internal static bool AnyHostActive => System.Threading.Volatile.Read(ref _activeHostCount) > 0;
+
+    // ...and how many of those are GAMES (Options.IsGame). The startup ladder reads this one: it
+    // parks without a clock while a game is up, which would be wrong for a feed or an editor
+    // somebody left open all evening.
+    private static int _activeGameCount;
+    private bool _countedGame;
+    internal static bool AnyGameActive => System.Threading.Volatile.Read(ref _activeGameCount) > 0;
+
+    /// <summary>Give back whatever this host is holding on the two counters. Idempotent, because
+    /// both a failed constructor and Dispose call it.</summary>
+    private void ReleaseActiveCounts()
+    {
+        if (_countedActive) { _countedActive = false; System.Threading.Interlocked.Decrement(ref _activeHostCount); }
+        if (_countedGame) { _countedGame = false; System.Threading.Interlocked.Decrement(ref _activeGameCount); }
+    }
 
     // Passive backdrops absorb clicks (no WS_EX_TRANSPARENT) but never steal focus / show in Alt-Tab.
     private static void ApplyPassiveExStyles(Window w)

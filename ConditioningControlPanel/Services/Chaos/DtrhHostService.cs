@@ -152,6 +152,7 @@ internal static class DtrhHostService
                 Mappings = mappings,
                 UserDataFolderName = "browser_data_dtrh",
                 InputEnabled = true,
+                IsGame = true,   // the startup ladder goes quiet while a game is up
                 // Launch in a normal titled window (Alt-Tab / minimize / move); the dock's [ ]
                 // button toggles borderless fullscreen. All effects are in-world now, so nothing
                 // needs the old topmost fullscreen surface.

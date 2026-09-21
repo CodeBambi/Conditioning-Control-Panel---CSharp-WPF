@@ -5580,6 +5580,8 @@
   "inbox_open": "打开",
   "inbox_dismiss": "忽略",
   "inbox_tooltip": "那些在等一个更安静时刻的东西",
+  "inbox_discord_share_title": "已关联 Discord",
+  "inbox_discord_share_summary": "把你的成就发到社区 Discord 吗？",
   "dash_toggle_hint": "右键点击卡片可开关 · 左键点击打开",
   "rail_favorites_caption": "收藏",
   "rail_recent_caption": "最近",
