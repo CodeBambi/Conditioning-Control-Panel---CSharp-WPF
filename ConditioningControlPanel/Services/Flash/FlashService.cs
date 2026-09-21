@@ -2399,7 +2399,7 @@ namespace ConditioningControlPanel.Services
                         window.LayerSpawnPending = false;
                         if (frames == null)
                         {
-                            // Conversion failed — the heartbeat sweeps the itemless window. Drop
+                            // Conversion failed - the heartbeat sweeps the itemless window. Drop
                             // the motion with it: a pendulum with no picture would go on reserving
                             // its pivot against the next spawn until the sweep came round.
                             window.MotionState = null;
