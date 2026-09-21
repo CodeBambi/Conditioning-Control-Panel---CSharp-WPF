@@ -23,6 +23,7 @@ namespace ConditioningControlPanel.Tests;
 ///   4. turning the override off restores the old ladder and the old grace pause, byte for byte
 ///   5. the optional pause key matches nothing until the user binds it, and loses to the panic key
 /// </summary>
+[Collection(GameSurfacesCollection.Name)]
 public class PanicPolicyTests
 {
     private static readonly JsonSerializerSettings LoaderSettings = new()
@@ -439,11 +440,10 @@ public class PanicPolicyTests
     [InlineData("App.CornerGif?.StopAll()")]
     [InlineData("SessionEngine.Active?.PanicCloseCornerGif()")]
     [InlineData("PanicSilence()")]
-    [InlineData("App.Chaos?.ForceShutdown()")]
-    [InlineData("DtrhHostService.CloseActive()")]
-    [InlineData("ArcademyHostService.CloseActive()")]
-    [InlineData("FypHostService.Close()")]
-    [InlineData("JustDropHostService.CloseActive()")]
+    // The game and feed WINDOWS moved into Services.Safety.GameSurfaces, so the stop pass and the
+    // probe below read one list instead of two that drifted apart (GameSurfacePanicTests holds the
+    // membership). What the pass still owes is the call into that list.
+    [InlineData("GameSurfaces.CloseAll(Step)")]
     [InlineData("App.KillAllAudio")]
     public void StopEverything_CoversEverySurface(string call)
         => Assert.Contains(call, PanicStopEverySurfaceBody());
@@ -500,12 +500,19 @@ public class PanicPolicyTests
     /// surface's users get the reflexive-double-tap app exit back.
     /// </summary>
     [Theory]
-    [InlineData("App.Chaos?.IsDescending")]
-    [InlineData("DtrhHostService.IsActive")]
-    [InlineData("ArcademyHostService.IsActive")]
-    [InlineData("FypHostService.IsActive")]
-    [InlineData("JustDropHostService.IsActive")]
-    public void TheGameProbe_CoversEveryHandOffSurface(string call)
+    [InlineData("chaos")]
+    [InlineData("dtrh")]
+    [InlineData("arcademy")]
+    [InlineData("backroom")]
+    [InlineData("fyp")]
+    [InlineData("justdrop")]
+    // Sep 19 2026: the four the two hand-written copies of this list had missed, which is how
+    // "pressing Esc 2-3 times exits the app whilst in game" came back.
+    [InlineData("race")]
+    [InlineData("goon")]
+    [InlineData("piecebypiece")]
+    [InlineData("intake")]
+    public void TheGameProbe_CoversEveryHandOffSurface(string surfaceId)
     {
         var source = File.ReadAllText(Path.Combine(
             RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
@@ -513,6 +520,8 @@ public class PanicPolicyTests
         Assert.True(start >= 0, "AnyGameSurfaceOwnsTheScreen was renamed - update this test with it");
         var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
         var body = end > start ? source[start..end] : source[start..];
-        Assert.Contains(call, body);
+        // The probe is one line now; the list it reads is the registry, so assert on the registry.
+        Assert.Contains("GameSurfaces.AnyOwnsTheScreen()", body);
+        Assert.Contains(surfaceId, Services.Safety.GameSurfaces.Ids());
     }
 }
