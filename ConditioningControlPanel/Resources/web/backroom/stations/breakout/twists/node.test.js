@@ -34,10 +34,9 @@ function harness(rows) {
       timers.push(timer);
       return () => { timer.dead = true; };
     },
-    // game.js, exactly: ctx.breakBrick clears steel and gate steel and then runs the
-    // ORDINARY contact path, armour ladder and all. Faithful on purpose: a twist that
-    // hands it a three-hit brick gets a chip, not a break, and this harness says so.
-    breakBrick: (br) => { if (br && br.alive) { br.steel = false; br.gate = null; hit(br); } },
+    // game.js, exactly: ctx.breakBrick clears steel and gate steel, spends the armour
+    // ladder and then runs the ordinary contact path, so it is a true kill at any strength.
+    breakBrick: (br) => { if (br && br.alive) { br.steel = false; br.gate = null; if (br.hp > 1) br.hp = 1; hit(br); } },
     powers: { drop() {}, reset() {} },
     startRelapse() {},
   };
@@ -184,8 +183,8 @@ test('node: the blast never also reports a cut, however many wires it takes', ()
 });
 
 test('node: the blast breaks armoured wires outright, it never just chips them', () => {
-  // ctx.breakBrick walks game.js's own hp ladder, so a three-hit wire handed to it
-  // raw would survive the blast at two hits. If this goes red the workaround is gone.
+  // ctx.breakBrick is a true kill at any strength (the seam fix). If this goes red,
+  // either the seam has gone back to chipping or the blast stopped spending it.
   const h = harness(['..C.............', '..w.............', '..w.............']);
   const core = h.cell(0, 2);
   assert.equal(h.cell(1, 2).hp, 3, 'the wires really are armoured');

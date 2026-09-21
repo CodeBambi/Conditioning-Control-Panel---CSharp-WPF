@@ -175,6 +175,8 @@ test('keys: the cracked key primes the clay through the crumble module', () => {
   h.pop(h.cell(6, 8));                                                    // P
   assert.deepEqual(h.named('keyTurn').map(e => e.data.gate), ['clay']);
   assert.equal(h.named('clayPrimed')[0].data.n, clay.length);
+  // crumble's prime staggers its clayReady across the row, so the ripple has to run before it is counted.
+  for (let i = 0; i < 40; i++) h.step(0.05);
   assert.equal(h.named('clayReady').length, clay.length);
   assert.ok(clay.every(b => b.hp === 1), 'every clay brick is precarious');
   assert.equal(h.named('gateOpen').length, 0, 'it opens no box');

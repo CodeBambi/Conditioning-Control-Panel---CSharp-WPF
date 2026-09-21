@@ -14,8 +14,11 @@
  * ==========================================================================*/
 
 /** The trims, matching render.js GATE_TRIM and doors.js `M` / `W` / `P`. */
-export const KEY_COL = { M: '#F6D36B', W: '#7FD6E8', clay: '#D9A77C' };
-const RGB = { M: [246, 211, 107], W: [127, 214, 232], clay: [217, 167, 124] };
+import { CLAY } from './crumble-render.js';
+// The cracked key takes its colour from the crumble lane's clay, not a tan of its own: it belongs to the row it primes.
+const CLAY_KEY = CLAY[2];
+export const KEY_COL = { M: '#F6D36B', W: '#7FD6E8', clay: 'rgb(' + CLAY_KEY.join(',') + ')' };
+const RGB = { M: [246, 211, 107], W: [127, 214, 232], clay: CLAY_KEY };
 const PALE = [214, 214, 219];
 const rgba = (gate, a) => { const c = RGB[gate] || PALE; return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
 const isGrey = snap => !!snap && snap.state === 'grey';

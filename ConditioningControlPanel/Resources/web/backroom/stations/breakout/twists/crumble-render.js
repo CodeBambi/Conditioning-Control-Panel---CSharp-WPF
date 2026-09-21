@@ -8,8 +8,8 @@
  * Reduced motion: the sheen and the dust hold still. State still reads.
  * ==========================================================================*/
 
-/** The clay wash by hits left, as the pitch drew it (mockup-v3 CLAYS). */
-const CLAY = { 3: [138, 90, 60], 2: [185, 133, 96], 1: [230, 201, 168] };
+/** The clay wash by hits left, as the pitch drew it (mockup-v3 CLAYS). Exported so the cracked key wears the same clay. */
+export const CLAY = { 3: [138, 90, 60], 2: [185, 133, 96], 1: [230, 201, 168] };
 /** How much of the wash goes on: the pale rung takes less, so it stays the bright one. */
 const WASH = { 3: 0.42, 2: 0.34, 1: 0.24 };
 const rgba = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';

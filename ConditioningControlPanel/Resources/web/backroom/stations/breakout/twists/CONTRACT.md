@@ -32,16 +32,31 @@ export default {
 A hook that throws is caught and swallowed by the game: a twist's bug never stops the frame. It also
 never gets a second chance, so do not rely on that.
 
+## 1b. A board runs a LIST of twists
+
+`g.twists` is the list, `g.twist` is still the board's own one. A board gets its authored twist, PLUS
+`crumble` whenever the board lays any clay brick and its own twist is not already crumble. That is the
+owner's cracked key: `lock_keys2` runs `keys` and `crumble` together, so priming the wax seal and then
+popping one end really does run the chain. Every hook (`build onHit onBreak update onCatch wallCleared`)
+goes to every module in the list, in order, each inside its own try / catch. Render walks the same list:
+a brick is offered to every painter that claims it, and `under` / `over` run for each.
+
+A twist must therefore not assume it is alone on the board. Keep your state on your own key (`g.crumble`,
+`g.keysTwist`, ...) and flag only bricks you own.
+
 ## 2. `ctx`, exactly
 
 ```js
 {
   emit(name, data),                   // the game's own event channel; cues and reactions key on it
   rng(),                              // the game's seeded rng; never Math.random
-  at(row, col),                       // the authored brick at that cell, dead or alive, or null
+  at(row, col),                       // the authored brick at that cell, dead or alive, or null.
+                                      //   Off the edge is NULL, never the row next door: col -1 and
+                                      //   col 16 do not wrap. Walk neighbours freely.
   breakBrick(br, ball),               // break a brick NOW, through every normal consequence.
-                                      //   Steel and gate steel are cleared first, so this is how a
-                                      //   mirror twin and an opened gate come down.
+                                      //   A TRUE KILL at any armour: steel and gate steel are cleared
+                                      //   and the hp ladder is spent, so a three-hit mirror twin comes
+                                      //   down in one call. It never merely chips.
   schedule(seconds, fn),              // run fn(g, ctx) after `seconds` of SIM time. Deterministic,
                                       //   ordered by due time, frozen with the game. Returns a
                                       //   cancel function. Timers die with the board.
@@ -89,8 +104,8 @@ export function over(ctx2d, snap, t)      // field coordinates, over everything 
 `snap` is the live game object (`game.snapshot()`). `t` is `snap.time`. Each hook is wrapped in its own
 `save()` / `restore()` and its own try / catch. `brick` is offered for a brick carrying ANY of
 `clay wire core key gate treat steel`, plus anything in the twist's own `paintsBrick` list if it
-exports one (`export const paintsBrick = ['mine']`). `under` and `over` run only while that board's
-twist is the active one, and only in COLOUR (GREY is payload-free).
+exports one (`export const paintsBrick = ['mine']`). `under` and `over` run for every twist the board
+runs (section 1b), and only in COLOUR (GREY is payload-free).
 
 REDUCED MOTION: `snap.reduced` is true. No wobble, no shake, no bursts. State must still read: cracks,
 dark wires, a static dust mark. This is a rule, not a preference.
@@ -116,3 +131,11 @@ in. Cosmetic only; honour `fx.reduced` and `fx.colour`.
 - `powers.drop(br)` only drops in COLOUR. A twist that wants something to fall in GREY has to fall
   itself, and GREY is payload-free by design, so do not.
 - A lane that needs a new flag on the authored wall asks the scaffold. `doors.js` is not lane-owned.
+
+## 9. The door's colour
+
+A door board's plain bricks are tinted from the door accent (`snapshot().doorColour`: fog #F062A8,
+wardrobe #A774E8, lock #D9A531, hive #2FCB72, ward #EE5A44). Durability stays BRIGHTNESS inside that
+hue, exactly as the house game does it, and the GREY state is left dull. render.js owns this; a twist
+never sets a brick colour of its own. If your twist paints a material (clay, wire, gate trim), that
+material keeps its own colour on every door: it is a thing, not a mood.

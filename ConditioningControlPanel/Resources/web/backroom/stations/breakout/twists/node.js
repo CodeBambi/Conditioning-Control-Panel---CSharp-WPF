@@ -107,16 +107,13 @@ export function repower(g, ctx, options) {
 }
 
 /**
- * SEAM (reported to the scaffold): `ctx.breakBrick` goes through game.js's own
- * contact path, which clears steel and gate steel but still walks the `strength`
- * / `hp` ladder. Handed a three-hit armoured wire it chips it instead of
- * breaking it, so the blast would leave the whole net standing at two hits. We
- * take the armour off in the same instruction, so no frame ever sees the wire
- * both soft and alive.
+ * SEAM (fixed in the scaffold after this lane reported it): `ctx.breakBrick` is a
+ * true kill now, armour and all, so a three-hit powered wire comes down in one
+ * call instead of being chipped. This wrapper is kept only as the one place the
+ * blast talks to the seam.
  */
 function forceBreak(br, ctx) {
   if (!br || !br.alive) return;
-  br.strength = 0; br.hp = 1;
   ctx.breakBrick(br, null);
 }
 

@@ -397,12 +397,12 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   }
   const plainFaces = new Map();
   function plainFace(br, mix, grey) {
-    const key = `${grey ? 'grey' : br.row % ROWS.length}:${Math.round(mix * 16)}`;
+    const key = `${grey ? 'grey' : br.row % ROWS.length}:${Math.round(mix * 16)}:${grey ? 0 : liveHue}`;
     if (plainFaces.has(key)) return plainFaces.get(key);
     const c = document.createElement('canvas'); c.width = 84; c.height = 52;
     const x = c.getContext('2d', { willReadFrequently: true });
     roundRect(x, 1, 1, 82, 50, 6);
-    x.fillStyle = col(durabilityColour(1, grey, brickHue), Math.round(mix * 16) / 16); x.fill();
+    x.fillStyle = col(durabilityColour(1, grey, liveHue), Math.round(mix * 16) / 16); x.fill();
     finishBrick(x,84,52);
     plainFaces.set(key, c); return c;
   }
@@ -446,38 +446,69 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   /* ---------------------------------------------------------------- doors */
   /** The two gate trims a loot box wears (doors.js `M` gold, `W` cyan). */
   const GATE_TRIM = { M: '#F6D36B', W: '#7FD6E8' };
+  /** A door's accent as a hue, so a door board wears its own colour and durability stays brightness. GREY is untouched. */
+  function hueOfHex(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+    if (!m) return null;
+    const n = parseInt(m[1], 16), r = (n >> 16) / 255, gg = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const hi = Math.max(r, gg, b), lo = Math.min(r, gg, b), d = hi - lo;
+    if (d < 1e-6) return null;
+    const h = hi === r ? ((gg - b) / d) % 6 : hi === gg ? (b - r) / d + 2 : (r - gg) / d + 4;
+    return Math.round(((h * 60) % 360 + 360) % 360);
+  }
+  const doorHues = new Map();
+  /** The hue this frame's bricks wear: the door's accent on a door board, the house purple everywhere else. */
+  let liveHue = brickHue;
+  function setLiveHue(s) {
+    const hex = s && s.doorColour;
+    if (!hex) { liveHue = brickHue; return; }
+    if (!doorHues.has(hex)) doorHues.set(hex, hueOfHex(hex));
+    liveHue = doorHues.get(hex) == null ? brickHue : doorHues.get(hex);
+  }
   /** The brick flags that earn a twist's `brick` hook, plus anything the twist itself claims. */
   const TWIST_FLAGS = ['clay', 'wire', 'core', 'key', 'gate', 'treat', 'steel'];
+  /** Every painter this brick earns: a board runs a LIST of twists (clay boards also run crumble). */
   function twistPaintFor(br, s) {
-    const painter = s.twist ? twistRenderFor(s.twist) : null;
-    if (!painter || typeof painter.brick !== 'function') return null;
-    const claims = Array.isArray(painter.paintsBrick) ? painter.paintsBrick : [];
-    return TWIST_FLAGS.some(f => br[f]) || claims.some(f => br[f]) ? painter.brick : null;
+    const ids = Array.isArray(s.twists) && s.twists.length ? s.twists : (s.twist ? [s.twist] : []);
+    const paints = [];
+    for (const id of ids) {
+      const painter = twistRenderFor(id);
+      if (!painter || typeof painter.brick !== 'function') continue;
+      const claims = Array.isArray(painter.paintsBrick) ? painter.paintsBrick : [];
+      if (TWIST_FLAGS.some(f => br[f]) || claims.some(f => br[f])) paints.push(painter.brick);
+    }
+    return paints.length ? paints : null;
   }
   /** Inside the brick's own transform, after its face. A lane's bug never breaks the frame. */
-  function paintTwistBrick(paint, br, s) {
-    if (!paint) return;
-    g.save();
-    try { paint(g, br, s, s.time); } catch (e) { /* the lane's problem */ }
-    g.restore();
+  function paintTwistBrick(paints, br, s) {
+    if (!paints) return;
+    for (const paint of paints) {
+      g.save();
+      try { paint(g, br, s, s.time); } catch (e) { /* the lane's problem */ }
+      g.restore();
+    }
   }
-  /** The twist's field-wide layers, in COLOUR only (GREY is payload-free). */
+  /** The twists' field-wide layers, in COLOUR only (GREY is payload-free). */
   function twistLayer(hook, s) {
-    const painter = s.twist ? twistRenderFor(s.twist) : null;
-    if (!painter || typeof painter[hook] !== 'function' || s.state === 'grey') return;
-    g.save();
-    try { painter[hook](g, s, s.time); } catch (e) { /* the lane's problem */ }
-    g.restore();
+    if (s.state === 'grey') return;
+    const ids = Array.isArray(s.twists) && s.twists.length ? s.twists : (s.twist ? [s.twist] : []);
+    for (const id of ids) {
+      const painter = twistRenderFor(id);
+      if (!painter || typeof painter[hook] !== 'function') continue;
+      g.save();
+      try { painter[hook](g, s, s.time); } catch (e) { /* the lane's problem */ }
+      g.restore();
+    }
   }
   const toughFaces = new Map();
   function toughFace(br, grey, mix) {
     const damage=br.strength-br.hp;
     const tint=grey?0:Math.round(Math.max(.55,mix)*16)/16;
-    const key=`${br.strength}:${damage}:${grey}:${tint}`;
+    const key=`${br.strength}:${damage}:${grey}:${tint}:${grey ? 0 : liveHue}`;
     if(toughFaces.has(key)) return toughFaces.get(key);
     const c=document.createElement('canvas');c.width=96;c.height=56;
     const x=c.getContext('2d',{willReadFrequently:true});
-    const rgb=durabilityColour(br.hp, grey, brickHue);
+    const rgb=durabilityColour(br.hp, grey, liveHue);
     roundRect(x,1,1,94,54,6);x.fillStyle=col(rgb,tint);x.fill();
     finishBrick(x,96,56);
     if(damage>0) {
@@ -627,7 +658,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       } else if (br.spiral) {
         drawSpiralBrick(br, s, mix);
       } else {
-        const rgb = durabilityColour(1, false, brickHue);
+        const rgb = durabilityColour(1, false, liveHue);
         roundRect(g, -br.w / 2, -br.h / 2, br.w, br.h, 3);
         g.fillStyle = col(rgb, mix); g.fill();
         g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(-br.w / 2 + 2, -br.h / 2 + 2, br.w - 4, 3);
@@ -1334,6 +1365,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     let stageAt = extras?.timings ? performance.now() : 0;
     const mark = name => { if (extras?.timings) { const t = performance.now(); extras.timings[name] = +(t-stageAt).toFixed(2); stageAt=t; } };
     last = snap;
+    setLiveHue(snap);                                                       // a door board wears the door's own accent
     const s = snap, grey = s.state === 'grey', tr = s.transition || null, ts = typeof s.timeScale === 'number' ? s.timeScale : 1;
     const fxDt = dt * ts;
     let mix = grey ? 0 : (rungs(1) ? clamp(0.2 + s.sat, 0, 1) : 0);
@@ -1409,7 +1441,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     drawFinaleCore(s, fxDt); mark("coreMs");
     drawMetronome(g, s, reduced);
     spellFx.background(g, s);
-    if (s.twist) twistLayer('under', s);                                  // the door's twist, under the bricks
+    twistLayer('under', s);                                               // the board's twists, under the bricks
     drawPendulums(s,mix); drawBricks(s, mix); drawPendulums(s,mix,true); if(s.iris) drawBricks(s, mix, true); mark("bricksMs");
     if (!grey) { drawPops(s, mix); drawColliders(s, mix); }
     if (grey) P.clear(); else ballSparkle(s);
@@ -1431,7 +1463,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.fillStyle = `rgba(120,120,120,${0.25 * tr.t})`; g.fillRect(0, y0, W, H - y0);
     }
     if (!grey) wordHooks('over', s, R);
-    if (s.twist) twistLayer('over', s);                                   // the door's twist, over everything but the HUD
+    twistLayer('over', s);                                                // the board's twists, over everything but the HUD
     if (!grey && s.breakoutShield) WORD_FX['LET GO'].render.over(g, s, s.breakoutShield, R);
     drawHud(s, mix);
     if (grey) drawGreyPost(s);
