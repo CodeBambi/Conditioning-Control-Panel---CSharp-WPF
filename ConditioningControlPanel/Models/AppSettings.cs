@@ -2736,6 +2736,16 @@ namespace ConditioningControlPanel.Models
             set { _launcherSkipToPanel = value; OnPropertyChanged(); }
         }
 
+        // The launcher's own cues: the hover melody, the clicks, the open and exit stings. The
+        // speaker button in its title bar writes this. It is the launcher's chrome only and never
+        // touches a session, a game or the master volume (that lives behind the Media button).
+        private bool _launcherSoundEnabled = true;
+        public bool LauncherSoundEnabled
+        {
+            get => _launcherSoundEnabled;
+            set { _launcherSoundEnabled = value; OnPropertyChanged(); }
+        }
+
         private bool _panicKeyEnabled = true; // ESC to stop
         public bool PanicKeyEnabled
         {

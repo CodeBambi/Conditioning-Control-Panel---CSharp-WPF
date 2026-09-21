@@ -6373,6 +6373,8 @@
   "launcher_media_footnote": "The Back Room follows this too.",
   "launcher_media_done": "Done",
   "launcher_media_tooltip": "Media and sound",
+  "launcher_sound_mute": "Mute the launcher",
+  "launcher_sound_unmute": "Unmute the launcher",
   "launcher_media_button": "Media",
   "launcher_mod_label": "Mod: {0}",
   "launcher_mod_tooltip": "Switch the active mod",

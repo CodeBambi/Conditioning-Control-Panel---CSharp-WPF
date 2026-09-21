@@ -5617,6 +5617,8 @@
   "launcher_media_footnote": "バックルームにも反映されます。",
   "launcher_media_done": "完了",
   "launcher_media_tooltip": "メディアとサウンド",
+  "launcher_sound_mute": "ランチャーをミュート",
+  "launcher_sound_unmute": "ランチャーのミュートを解除",
   "launcher_media_button": "メディア",
   "launcher_mod_label": "Mod: {0}",
   "launcher_mod_tooltip": "使用中のModを切り替える",
