@@ -37,6 +37,10 @@ public sealed class V2PurchaseService
 {
     private sealed record Row(int PriceSp, bool OnSale);
 
+    /// <summary>How long a press will wait for a counter read that is already out. See FetchNowAsync.</summary>
+    private const int WaitForReadTries = 140;
+    private const int WaitForReadStepMs = 50;
+
     private readonly IBackRoomRelay _relay;
     private readonly Func<string?> _account;
     private readonly Func<string, bool> _owned;
@@ -267,16 +271,33 @@ public sealed class V2PurchaseService
         catch { return null; }
     }
 
-    /// <summary>A read the caller waits for. Skipped (false) when one is already in flight.</summary>
+    /// <summary>
+    /// A read the caller waits for. If one is already out it WAITS for that one instead of giving
+    /// up: a press landing on top of the refresh a reprice just started had everything it needed a
+    /// moment later, and answering "could not reach the counter" to it was a lie.
+    /// </summary>
     private async Task<bool> FetchNowAsync()
     {
+        bool mine;
         lock (_gate)
         {
-            if (_fetching) return false;
-            _fetching = true;
+            mine = !_fetching;
+            if (mine) _fetching = true;
         }
-        await FetchAsync().ConfigureAwait(false);
-        return true;
+        if (mine)
+        {
+            await FetchAsync().ConfigureAwait(false);
+            return true;
+        }
+
+        // Bounded by the relay's own 5 s budget plus a little; past that the other read is wedged
+        // and the caller is better off with a refusal than a hang.
+        for (var i = 0; i < WaitForReadTries; i++)
+        {
+            await Task.Delay(WaitForReadStepMs).ConfigureAwait(false);
+            lock (_gate) { if (!_fetching) return true; }
+        }
+        return false;
     }
 
     /// <summary>The read itself. The caller has already taken <c>_fetching</c>; this clears it.</summary>

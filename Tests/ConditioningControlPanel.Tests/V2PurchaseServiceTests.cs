@@ -34,6 +34,8 @@ public class V2PurchaseServiceTests
             new(true, 200, null, new JObject { ["ok"] = true, ["sp"] = 70 });
         /// <summary>Set to hold a buy open, so a second press can be sent while the first is out.</summary>
         public TaskCompletionSource<bool>? HoldBuy;
+        /// <summary>Set to hold a counter read open, so a press can land on top of one.</summary>
+        public TaskCompletionSource<bool>? HoldState;
 
         public IReadOnlyList<Call> Calls { get { lock (_gate) return _calls.ToArray(); } }
         public int CountOf(string op) => Calls.Count(c => c.Op == op);
@@ -43,6 +45,7 @@ public class V2PurchaseServiceTests
         {
             lock (_gate) _calls.Add(new Call(station, op, idem, body));
             if (op == "buy" && HoldBuy != null) await HoldBuy.Task.ConfigureAwait(false);
+            if (op == "state" && HoldState != null) await HoldState.Task.ConfigureAwait(false);
             return op == "buy" ? BuyResult : StateResult;
         }
 
@@ -347,12 +350,39 @@ public class V2PurchaseServiceTests
         Assert.Equal("v2_get_error_changed", h.Service.RowFor(Flashes).MessageKey);
 
         // Leaving the stale version behind made every later press re-send it and be refused again.
-        // The refusal also re-reads the counter, so the row is showing the current numbers.
-        h.Relay.StateResult = StateBody(catalogVersion: 7, flashesPrice: 30);
+        // The refusal also re-reads the counter, so the row shows the current numbers; wait on the
+        // APPLIED price, never on the call count (the call is recorded before the reply lands).
+        h.Relay.StateResult = StateBody(catalogVersion: 7, flashesPrice: 45);
         h.Relay.BuyResult = new BackRoomStationResult(true, 200, null, new JObject { ["ok"] = true });
-        await Harness.WaitFor(() => h.Relay.CountOf("state") >= 2);
+        await Harness.WaitFor(() => h.Service.RowFor(Flashes).PriceSp == 45);
+
         Assert.True(await h.Buy(Flashes));
-        Assert.Equal(7, h.Relay.Calls.Last(c => c.Op == "buy").Body?.Value<int>("catalogVersion"));
+        var buy = h.Relay.Calls.Last(c => c.Op == "buy");
+        Assert.Equal(7, buy.Body?.Value<int>("catalogVersion"));
+    }
+
+    [Fact]
+    public async Task APressLandingOnTopOfARefreshWaitsForIt_RatherThanClaimingTheCounterIsUnreachable()
+    {
+        var h = new Harness();
+        await h.ReadCounterAsync();
+
+        // Hold the refresh open, start it, then press. The press needs a version and there is a
+        // read already out: it must join that read, not give up and say "offline".
+        var hold = new TaskCompletionSource<bool>();
+        h.Relay.HoldState = hold;
+        h.Service.Invalidate();          // drops the version, so the press has to fetch
+        h.Service.Refresh();
+        await Harness.WaitFor(() => h.Relay.CountOf("state") == 2);
+
+        var press = h.Service.BuyAsync(Flashes, 30);
+        await Task.Delay(60);
+        Assert.False(press.IsCompleted);             // waiting on the read, not refusing
+        Assert.Equal(2, h.Relay.CountOf("state"));   // it joined that read, it did not start another
+
+        hold.SetResult(true);
+        Assert.True(await press);
+        Assert.Equal(1, h.Relay.CountOf("buy"));
     }
 
     // ---- the wallet ---------------------------------------------------------------------
