@@ -553,6 +553,8 @@ namespace ConditioningControlPanel
 
         public static PatreonService Patreon { get; private set; } = null!;
         public static SubscribeStarService SubscribeStar { get; private set; } = null!;
+        /// <summary>The Chaster link and Circe's tab. Inert until the player links an account AND switches the tab on.</summary>
+        public static Services.Chaster.ChasterService? Chaster { get; private set; }
         public static UpdateService Update { get; private set; } = null!;
         public static ProfileSyncService ProfileSync { get; private set; } = null!;
 
@@ -2031,6 +2033,7 @@ namespace ConditioningControlPanel
             // later in OnStartup, so this only moves the entitlement READ earlier.
             Patreon = new PatreonService();
             SubscribeStar = new SubscribeStarService();
+            Chaster = Services.Chaster.ChasterService.CreateForApp();
 
             splash?.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
@@ -2564,6 +2567,10 @@ namespace ConditioningControlPanel
             // Initialize SubscribeStar (validate subscription in background). Shares
             // the unified account + premium gate with Patreon (see PatreonService gate).
             _ = SubscribeStar.InitializeAsync();
+            // Circe's tab settles once a day, at the first chance: a minute after launch, then on
+            // the hour in case the app sits in the tray across midnight. Never at exit, where a
+            // call cut off mid-flight could land on the lock and not on the tab.
+            Chaster?.StartDailySettle();
 
             // Initialize Discord OAuth (validate session in background)
             _ = InitializeDiscordAsync();

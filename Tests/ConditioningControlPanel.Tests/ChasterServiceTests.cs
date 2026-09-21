@@ -300,4 +300,31 @@ public class ChasterServiceTests : IDisposable
 
         Assert.Equal(0, service.BalanceSeconds);
     }
+
+    [Fact]
+    public async Task The_daily_clock_settles_once_per_local_day_and_goes_again_after_a_try_later()
+    {
+        _http.Answer = _ => Json(503, "");
+        using var service = Make();
+        service.NoteSeconds("watcher", 300);
+
+        Assert.Equal(SettleOutcome.TryLater, await service.SettleIfNewDayAsync());
+        _http.Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
+
+        service.NoteSeconds("watcher", 300);
+        Assert.Equal(SettleOutcome.Nothing, await service.SettleIfNewDayAsync());
+        _utc = _utc.AddDays(1);
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
+    }
+
+    [Fact]
+    public void The_tab_ships_switched_off_with_no_price_on()
+    {
+        var settings = new ConditioningControlPanel.Models.AppSettings();
+
+        Assert.False(settings.ChasterTabEnabled);
+        Assert.Null(settings.ChasterLockId);
+        Assert.Empty(settings.ChasterPrices);
+    }
 }

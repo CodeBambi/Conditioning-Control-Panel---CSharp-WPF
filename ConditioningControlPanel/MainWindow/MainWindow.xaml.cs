@@ -1457,6 +1457,10 @@ namespace ConditioningControlPanel
             // down this method throws - the whole point is that she says nothing after a panic.
             try { App.EmiDesk?.Fire("panicPressed", null); } catch { }
 
+            // Circe's tab: the way out never costs. Armed up here because most of the ladder below
+            // returns early into a game's own panic rung, and the hold has to cover those too.
+            try { App.Chaster?.NoteSafetyExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
+
             VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
 
             // #875: an open lock card outranks every hand-off below, so it is answered FIRST. A lock

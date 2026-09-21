@@ -282,6 +282,7 @@ public sealed partial class ChasterService : IDisposable
     public void Dispose()
     {
         CancelLink();
+        _settleTimer?.Dispose();
         _settleGate.Dispose();
     }
 }
