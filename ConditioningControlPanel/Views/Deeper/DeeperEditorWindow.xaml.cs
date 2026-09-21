@@ -1922,6 +1922,9 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
+            // Every other Select* redraws the pin lane; this one did not, so a deselected
+            // pin kept its white stroke and its heavier line until something else rebuilt.
+            RebuildRuleVisuals();
             RefreshRulesList();
         }
 
@@ -3179,6 +3182,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 _selectedRule.RegionConstraint = _enhancement.Regions[idx - 1].Id;
             }
             MarkDirty();
+            // Picking "(none)" on a band rule is the other way into ccp-bugs #1245:
+            // it leaves a rule no region draws, so the pin lane has to look again.
+            RebuildRuleVisuals();
             ScheduleValidation();
         }
 

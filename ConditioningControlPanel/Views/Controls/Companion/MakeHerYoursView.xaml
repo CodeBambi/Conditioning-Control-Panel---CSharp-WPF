@@ -89,9 +89,29 @@
             </DataTemplate>
 
             <DataTemplate x:Key="CmpPresetChipTemplate">
-                <ToggleButton Content="{Binding Label}" Style="{StaticResource CmpToggleChipStyle}"
-                              ToolTip="{Binding Label}"
-                              IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
+                <!-- ToolTip is the preset's own one-liner, not the label again: the chips were
+                     indistinguishable without it.
+
+                     A MOD writes that string, so it is unbounded and a plain string ToolTip does
+                     not wrap - one long sentence would draw off the side of the screen. Hence a
+                     TextBlock with a width, which still picks up the app's ToolTip chrome. The
+                     trigger turns the tip OFF entirely for a preset with nothing to say, because
+                     a TextBlock is a non-null ToolTip and would otherwise pop an empty box. -->
+                <ToggleButton Content="{Binding Label}"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                    <ToggleButton.Style>
+                        <Style TargetType="ToggleButton" BasedOn="{StaticResource CmpToggleChipStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Description}" Value="{x:Null}">
+                                    <Setter Property="ToolTipService.IsEnabled" Value="False"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ToggleButton.Style>
+                    <ToggleButton.ToolTip>
+                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" MaxWidth="360"/>
+                    </ToggleButton.ToolTip>
+                </ToggleButton>
             </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>

@@ -1231,6 +1231,12 @@
                                         <Border Style="{StaticResource HapticAdvBlock}">
                                             <StackPanel>
                                                 <TextBlock Text="{loc:Str label_dtrh_haptics}" Style="{StaticResource HapticSubHeader}"/>
+                                                <!-- ccp-bugs #1244: the per-event DtRH sliders went away in the Phase E
+                                                     rebuild and their job moved to the 🐇 row of the routing table.
+                                                     People look here, find a depth slider, and conclude that pops and
+                                                     flashes no longer fire the toy at all. One line, pointing at it. -->
+                                                <TextBlock Text="{loc:Str haptics_dtrh_accent_pointer}"
+                                                           Style="{StaticResource HapticSubCaption}"/>
 
                                                 <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_dtrh_ambient}">
                                                     <Grid.ColumnDefinitions>

@@ -33,7 +33,12 @@ namespace ConditioningControlPanel.Services.Startup
     {
         /// <summary>How long the pump will wait for the screen to free up before it gives a
         /// surface up to the next launch. Five minutes: an upgrader legitimately spends that
-        /// long reading patch notes, and a mod pack can take that long to download in the wizard.</summary>
+        /// long reading patch notes, and a mod pack can take that long to download in the wizard.
+        ///
+        /// <para>The clock only runs while the panel HAS the screen. Parked time - the launcher
+        /// up, or a game - does not count against it, so a two-hour descent does not quietly
+        /// spend update-available's turn; the surface is shown when the panel comes back.</para>
+        /// </summary>
         private static readonly TimeSpan MaxWaitPerSurface = TimeSpan.FromMinutes(5);
 
         /// <summary>Poll interval while waiting for a surface's turn. The idiom the whole
@@ -312,6 +317,12 @@ namespace ConditioningControlPanel.Services.Startup
             LadderBusy = !IsLadderIdle,
             TutorialActive = SafeTutorialActive(),
             SessionRunning = SafeSessionRunning(),
+            GameHostUp = SafeGameHostUp(),
+            // The launcher belongs in the STRUCT, not only on the pump. It used to be known here
+            // alone, so the modal ladder respected it and the passive route did not: a surface
+            // routed away from the launcher was handed straight back by Route, which opened it
+            // owned by a MainWindow sitting in the tray.
+            LauncherHolding = Held,
             FirstLaunchUntilUtc = _firstLaunchUntilUtc,
             NowUtc = DateTime.UtcNow,
         };
@@ -325,6 +336,24 @@ namespace ConditioningControlPanel.Services.Startup
         {
             try { return App.IsSessionRunning; } catch { return false; }
         }
+
+        /// <summary>A GAME window is up: DtRH, the race, the Back Room, the Arcademy, the Goon
+        /// Game, Piece by Piece, Graded Intake, Just Drop. Deliberately not
+        /// <c>AnyHostActive</c>, which also counts the For You feed, the Loom editor, the codex
+        /// and the Bureau - windows people leave open for hours, and the park below has no
+        /// clock.</summary>
+        private static bool SafeGameHostUp()
+        {
+            try { return ChaosWebViewHost.AnyGameActive; } catch { return false; }
+        }
+
+        /// <summary>
+        /// The ladder is parked rather than waiting: the panel does not have the screen at all,
+        /// so the next surface has nowhere honest to open. Read off the SAME struct the quiet
+        /// window and the passive route read, so the pump and <see cref="PresentOrInbox"/> cannot
+        /// disagree about whether the panel is on screen.
+        /// </summary>
+        private bool Parked => StartupQueueCore.IsParked(ReadWorld());
 
         private static bool SafeUpdateDialogActive()
         {
@@ -379,11 +408,15 @@ namespace ConditioningControlPanel.Services.Startup
 
                     var waited = TimeSpan.Zero;
                     while (waited < MaxWaitPerSurface &&
-                           (Held || !StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(), SafeTutorialActive(), SafeWindowReady())))
+                           !StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(),
+                               SafeTutorialActive(), SafeWindowReady(), Parked))
                     {
                         await Task.Delay(PollInterval);
-                        // A held ladder is parked, not waiting: the launcher can sit for an hour.
-                        if (!Held) waited += PollInterval;
+                        // A parked ladder is not waiting: the launcher can sit for an hour and so
+                        // can a descent - neither is the user keeping a queue standing. The clock
+                        // is FROZEN meanwhile, so a surface owed a turn is shown when the panel
+                        // comes back rather than abandoned to the next launch.
+                        if (!Parked) waited += PollInterval;
                     }
 
                     // Take that exact key. False means somebody dropped it while we waited, which
@@ -398,7 +431,8 @@ namespace ConditioningControlPanel.Services.Startup
                     if (!_shows.TryGetValue(key, out var surface)) continue;
                     _shows.Remove(key);
 
-                    if (!StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(), SafeTutorialActive(), SafeWindowReady()))
+                    if (!StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(),
+                            SafeTutorialActive(), SafeWindowReady(), Parked))
                     {
                         App.Logger?.Information(
                             "[Startup] gave up on '{Key}' after {Seconds:0}s - the screen never came free; it is owed the next launch",

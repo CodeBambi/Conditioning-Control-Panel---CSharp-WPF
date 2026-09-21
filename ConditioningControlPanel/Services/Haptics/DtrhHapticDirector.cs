@@ -69,6 +69,59 @@ namespace ConditioningControlPanel.Services.Haptics
             ["tease-clicked"]        = new(1, 0.45, VibrationMode.Pulse,     200),
         };
 
+        /// <summary>
+        /// In-world effect payloads, keyed by the page's payload kind (ccp-bugs #1244).
+        ///
+        /// <para>Every DtRH effect used to be a native WPF window fired over the bridge, and the
+        /// toy felt it through the ordinary flash / subliminal rows. The 2026-07 cutover moved
+        /// them all in-world and nothing replaced that signal, so a descent full of flashes moved
+        /// the device only through the ambient depth floor - which is the report, in the
+        /// reporter's own words: "images and bubble pops do not fire the toy". The page barks
+        /// <c>effect-fired</c> now and these are the accents it maps to.</para>
+        ///
+        /// <para>The light ones are tier 1 on purpose: a pop that also fires a flash should feel
+        /// like ONE bigger pop, and the tier-1 coalescer is what makes that true. The heavies -
+        /// a video card, a gif cascade, a melt - are real moments and take tier 2.</para>
+        /// </summary>
+        private static readonly Dictionary<string, Accent> PayloadAccents = new()
+        {
+            ["flash"]        = new(1, 0.55, VibrationMode.Pulse,     220),
+            ["subliminal"]   = new(1, 0.35, VibrationMode.Constant,  180),
+            ["overlay"]      = new(1, 0.45, VibrationMode.Wave,      300),
+            ["glitch"]       = new(1, 0.50, VibrationMode.Pulse,     200),
+            ["bouncingText"] = new(1, 0.40, VibrationMode.Pulse,     180),
+            ["gifWash"]      = new(2, 0.60, VibrationMode.Wave,      500),
+            ["gifCascade"]   = new(2, 0.75, VibrationMode.Wave,      700),
+            ["melt"]         = new(2, 0.70, VibrationMode.Wave,      600),
+            ["blackout"]     = new(2, 0.65, VibrationMode.Constant,  400),
+            ["video"]        = new(2, 0.60, VibrationMode.Heartbeat, 600),
+        };
+
+        /// <summary>The accent for one bark, or null when nothing in the table answers to it.
+        /// Split out of <see cref="OnGameEvent"/> so the two tables can be checked without a
+        /// device, a page or an App.</summary>
+        internal static bool TryAccentFor(string? evt, string? payloadKind, out int tier)
+        {
+            tier = 0;
+            if (string.IsNullOrEmpty(evt)) return false;
+            var accent = Lookup(evt, payloadKind);
+            if (accent == null) return false;
+            tier = accent.Tier;
+            return true;
+        }
+
+        private static Accent? Lookup(string evt, string? payloadKind)
+        {
+            if (evt == PayloadEvent)
+            {
+                return payloadKind != null && PayloadAccents.TryGetValue(payloadKind, out var p) ? p : null;
+            }
+            return Map.TryGetValue(evt, out var a) ? a : null;
+        }
+
+        /// <summary>The page's bark for an in-world effect payload; its kind rides in <c>kind</c>.</summary>
+        private const string PayloadEvent = "effect-fired";
+
         private static readonly object Gate = new();
         private static bool _active;          // host window alive (Launch..DisposeAll)
         private static bool _testMode;
@@ -235,7 +288,9 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             if (!Ready) return;
             var evt = (string?)o["event"];
-            if (evt == null || !Map.TryGetValue(evt, out var accent)) return;
+            if (evt == null) return;
+            var accent = Lookup(evt, (string?)o["kind"]);
+            if (accent == null) return;
             lock (Gate)
             {
                 if (_worldFrozen || _videoCovering) return;
@@ -248,7 +303,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 Coalesce(accent);
                 return;
             }
-            _ = PlayAccent(accent, evt);
+            _ = PlayAccent(accent, evt == PayloadEvent ? evt + ":" + (string?)o["kind"] : evt);
         }
 
         // ============================ accents ============================

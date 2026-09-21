@@ -1589,6 +1589,42 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Every OTHER registered game surface (Racing Thoughts, the Goon Game, the Graded
+            // Intake window, Piece by Piece) gets a rung of its own, placed here - above the #735
+            // grace pause, with the five hand-offs. Without it a press from inside one of them fell
+            // through to the "not running" branch below, where the NEXT press exits the whole app,
+            // and in Racing Thoughts Escape is the brake: two taps of the brake quit the app.
+            //
+            // This rung does NOT return, and that is the difference from the five above. Those
+            // surfaces take the whole screen, so closing one IS the stop. These four are WINDOWED
+            // by default (CaucusHostService and PieceByPieceHostService ship StartFullscreen=false;
+            // intake and goon are windowed unless the user asked for fullscreen), so the Graded
+            // Intake can sit behind the panel while a session runs flashes and a spiral in FRONT of
+            // it. Consuming the press there would close a background window and leave the effects
+            // running until press 2 - an emergency stop delayed by a press. So: close what is up,
+            // then run the normal stop tail with the exit ladder NOT armed, which is what
+            // PanicPolicy.AdvancesExitLadder(StopEverything, true) already says for the override
+            // mode's one-pass equivalent.
+            //
+            // Only the LIVE surfaces are closed: the rungs above declined to touch a descent, DtRH,
+            // the Arcademy, the Back Room or the feed on purpose, and reaching past them from here
+            // would undo that.
+            var liveSurfaces = Services.Safety.GameSurfaces.ActiveIds();
+            if (liveSurfaces.Count > 0)
+            {
+                VideoDiag.Log("PANIC", $"closing the game surface(s) that own the screen: {string.Join(", ", liveSurfaces)}");
+                Services.Safety.GameSurfaces.CloseAll(liveSurfaces, (name, close) =>
+                {
+                    try { close(); }
+                    catch (Exception ex) { App.Logger?.Warning("PANIC: closing {Surface} failed: {Error}", name, ex.Message); }
+                });
+                // Standalone Lab minigames run outside the engine, so the tail below never reaches
+                // them; the override mode's stop pass stops them by hand for the same reason.
+                try { App.BlinkTrainer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                RunPanicStopTail(advanceExitLadder: false);
+                return;
+            }
+
             // #735 "grace pause": while a mandatory video is really on screen, the FIRST panic press
             // pauses it behind a small Paused/Resume card instead of stopping the engine — the user
             // may be pausing because someone walked in, and a bark, an achievement track and a whole
@@ -1621,21 +1657,14 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// TRUE while one of the surfaces that used to CONSUME a panic press on its own rung owns
-        /// the screen: a live Rabbit Hole descent, the DtRH window, the Arcademy, the For You feed
-        /// or Just Drop. Read once, before the stop pass closes them. Never throws - a dead host
-        /// service must not be able to eat a panic press.
+        /// the screen. The list itself lives in <see cref="Services.Safety.GameSurfaces"/>, which
+        /// the stop pass reads too: keeping it here as well is what let Racing Thoughts, the Goon
+        /// Game and the Graded Intake fall out of BOTH copies. Read once, before the stop pass
+        /// closes them. Never throws - a dead host service must not be able to eat a panic press.
         /// </summary>
         private static bool AnyGameSurfaceOwnsTheScreen()
         {
-            try
-            {
-                return App.Chaos?.IsDescending == true
-                    || Services.Chaos.DtrhHostService.IsActive
-                    || Services.Arcademy.ArcademyHostService.IsActive
-                    || Services.BackRoom.BackRoomHostService.IsActive
-                    || Services.Fyp.FypHostService.IsActive
-                    || Services.JustDrop.JustDropHostService.IsActive;
-            }
+            try { return Services.Safety.GameSurfaces.AnyOwnsTheScreen(); }
             catch (Exception ex)
             {
                 try { App.Logger?.Warning("PANIC: game-surface probe failed: {Error}", ex.Message); } catch { }
@@ -1841,12 +1870,9 @@ namespace ConditioningControlPanel
             Step("avatar voice", () => App.AvatarWindow?.StopVoiceLineAudio());
 
             // --- game / feed windows ---
-            Step("chaos", () => App.Chaos?.ForceShutdown());
-            Step("DtRH", () => Services.Chaos.DtrhHostService.CloseActive());
-            Step("Arcademy", () => Services.Arcademy.ArcademyHostService.CloseActive());
-            Step("Back Room", () => Services.BackRoom.BackRoomHostService.CloseActive("panic"));
-            Step("For You feed", () => Services.Fyp.FypHostService.Close());
-            Step("Just Drop", () => Services.JustDrop.JustDropHostService.CloseActive());
+            // One registry, shared with AnyGameSurfaceOwnsTheScreen above, so the probe and the
+            // stop pass can never disagree about what a "game surface" is again.
+            Services.Safety.GameSurfaces.CloseAll(Step);
             Step("Lab minigames", () => App.BlinkTrainer?.Stop());
 
             // --- modal / topmost cards ---
