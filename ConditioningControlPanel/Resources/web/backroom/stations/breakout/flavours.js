@@ -11,7 +11,7 @@
 export const FLAVOURS = [
   { id: 'trance', name: 'Trance', line: 'Spirals and soft voices.', tint: '#b99cff', subs: ['EroticHypnosis', 'HypnoHentai'] },
   { id: 'pink', name: 'Pink', line: 'Bimbo, top to bottom.', tint: '#ff87c7', subs: ['bimbofication', 'Bimbos', 'BimboOrNot'] },
-  { id: 'frills', name: 'Frills', line: 'Pretty things, put on slowly.', tint: '#ffb3d9', subs: ['sissyhypno', 'SissyInspiration', 'Sissyperfection'] },
+  { id: 'frills', name: 'Frills', line: 'Lace, bows, best behaviour.', tint: '#ffb3d9', subs: ['sissyhypno', 'SissyInspiration', 'Sissyperfection'] },
   { id: 'shiny', name: 'Shiny', line: 'Latex, rubber, drones.', tint: '#5fffd0', subs: ['ShinyPorn', 'Dronification', 'latexcosplay'] },
 ];
 const same = (a, b) => a.length === b.length && [...a].map(s => s.toLowerCase()).sort().join() === [...b].map(s => s.toLowerCase()).sort().join();
