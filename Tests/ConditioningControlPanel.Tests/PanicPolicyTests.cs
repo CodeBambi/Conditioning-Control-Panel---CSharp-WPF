@@ -23,6 +23,7 @@ namespace ConditioningControlPanel.Tests;
 ///   4. turning the override off restores the old ladder and the old grace pause, byte for byte
 ///   5. the optional pause key matches nothing until the user binds it, and loses to the panic key
 /// </summary>
+[Collection(GameSurfacesCollection.Name)]
 public class PanicPolicyTests
 {
     private static readonly JsonSerializerSettings LoaderSettings = new()
@@ -439,11 +440,10 @@ public class PanicPolicyTests
     [InlineData("App.CornerGif?.StopAll()")]
     [InlineData("SessionEngine.Active?.PanicCloseCornerGif()")]
     [InlineData("PanicSilence()")]
-    [InlineData("App.Chaos?.ForceShutdown()")]
-    [InlineData("DtrhHostService.CloseActive()")]
-    [InlineData("ArcademyHostService.CloseActive()")]
-    [InlineData("FypHostService.Close()")]
-    [InlineData("JustDropHostService.CloseActive()")]
+    // The game and feed WINDOWS moved into Services.Safety.GameSurfaces, so the stop pass and the
+    // probe below read one list instead of two that drifted apart (GameSurfacePanicTests holds the
+    // membership). What the pass still owes is the call into that list.
+    [InlineData("GameSurfaces.CloseAll(Step)")]
     [InlineData("App.KillAllAudio")]
     public void StopEverything_CoversEverySurface(string call)
         => Assert.Contains(call, PanicStopEverySurfaceBody());
@@ -499,13 +499,24 @@ public class PanicPolicyTests
     /// ...and it must cover every surface that used to consume the press on its own rung, or that
     /// surface's users get the reflexive-double-tap app exit back.
     /// </summary>
+    /// <param name="surfaceId">The registry id the probe and the stop pass both key on.</param>
+    /// <param name="probeCall">The host call that id must actually be WIRED to. Asserted against
+    /// the registry's own source, because an id whose probe was rewritten to <c>() =&gt; false</c>
+    /// would satisfy the id list and still hand its users the app exit back.</param>
     [Theory]
-    [InlineData("App.Chaos?.IsDescending")]
-    [InlineData("DtrhHostService.IsActive")]
-    [InlineData("ArcademyHostService.IsActive")]
-    [InlineData("FypHostService.IsActive")]
-    [InlineData("JustDropHostService.IsActive")]
-    public void TheGameProbe_CoversEveryHandOffSurface(string call)
+    [InlineData("chaos", "App.Chaos?.IsDescending == true")]
+    [InlineData("dtrh", "Chaos.DtrhHostService.IsActive")]
+    [InlineData("arcademy", "Arcademy.ArcademyHostService.IsActive")]
+    [InlineData("backroom", "BackRoom.BackRoomHostService.IsActive")]
+    [InlineData("fyp", "Fyp.FypHostService.IsActive")]
+    [InlineData("justdrop", "JustDrop.JustDropHostService.IsActive")]
+    // Sep 19 2026: the four the two hand-written copies of this list had missed, which is how
+    // "pressing Esc 2-3 times exits the app whilst in game" came back.
+    [InlineData("race", "Chaos.CaucusHostService.IsActive")]
+    [InlineData("goon", "GoonGame.GoonHostService.IsActive")]
+    [InlineData("piecebypiece", "PieceByPiece.PieceByPieceHostService.IsActive")]
+    [InlineData("intake", "Quiz.IntakeHostService.IsActive")]
+    public void TheGameProbe_CoversEveryHandOffSurface(string surfaceId, string probeCall)
     {
         var source = File.ReadAllText(Path.Combine(
             RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
@@ -513,6 +524,57 @@ public class PanicPolicyTests
         Assert.True(start >= 0, "AnyGameSurfaceOwnsTheScreen was renamed - update this test with it");
         var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
         var body = end > start ? source[start..end] : source[start..];
-        Assert.Contains(call, body);
+        // The probe is one line now; the list it reads is the registry, so assert on the registry -
+        // both that the id is there and that it is wired to the host it claims to watch.
+        Assert.Contains("GameSurfaces.AnyOwnsTheScreen()", body);
+        Assert.Contains(surfaceId, Services.Safety.GameSurfaces.Ids());
+        Assert.Contains(probeCall, GameSurfacesSource());
+        Assert.Contains("\"" + surfaceId + "\"", GameSurfacesSource());
+    }
+
+    /// <summary>The registry's own source. Anchors are single-line substrings, so this reads the
+    /// same on a CRLF checkout as on an LF one.</summary>
+    private static string GameSurfacesSource()
+        => File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "Services", "Safety", "GameSurfaces.cs"));
+
+    /// <summary>
+    /// The legacy rung must not be a press that only CLOSES. Four of the surfaces it answers are
+    /// windowed by default, so one can sit behind the panel while a session runs effects in front
+    /// of it; consuming the press there would close a background window and leave the flashes and
+    /// the spiral up until press 2. It closes what is live and then falls into the same stop tail
+    /// as everything else, with the exit ladder deliberately NOT armed.
+    /// </summary>
+    [Theory]
+    [InlineData("GameSurfaces.ActiveIds()")]
+    [InlineData("GameSurfaces.CloseAll(liveSurfaces,")]
+    [InlineData("RunPanicStopTail(advanceExitLadder: false)")]
+    public void TheLegacyGameRung_ClosesWhatIsUpAndStillStopsEverything(string call)
+        => Assert.Contains(call, LegacyGameRungBody());
+
+    /// <summary>...and it must NOT be the bare "consume the press" the five fullscreen hand-offs
+    /// are: a rung that returns before the tail is the delayed emergency stop this fixes.</summary>
+    [Fact]
+    public void TheLegacyGameRung_NeverReturnsBeforeTheStopTail()
+    {
+        var body = LegacyGameRungBody();
+        var tail = body.IndexOf("RunPanicStopTail(advanceExitLadder: false)", StringComparison.Ordinal);
+        Assert.True(tail >= 0, "the legacy game rung no longer runs the stop tail");
+        // The only `return;` in the rung is the one AFTER the tail.
+        var firstReturn = body.IndexOf("return;", StringComparison.Ordinal);
+        Assert.True(firstReturn > tail, "the legacy game rung returns before it stops anything");
+    }
+
+    /// <summary>The rung body: from its probe line to the end of the if block. Line-ending
+    /// agnostic - every anchor is a substring of one line.</summary>
+    private static string LegacyGameRungBody()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("var liveSurfaces = Services.Safety.GameSurfaces.ActiveIds();",
+            StringComparison.Ordinal);
+        Assert.True(start >= 0, "the legacy game-surface rung is gone - update this test with it");
+        var end = source.IndexOf("#735", start, StringComparison.Ordinal);
+        return end > start ? source[start..end] : source[start..];
     }
 }
