@@ -5664,6 +5664,8 @@
   "launcher_media_footnote": "Der Back Room folgt dem ebenfalls.",
   "launcher_media_done": "Fertig",
   "launcher_media_tooltip": "Medien und Ton",
+  "launcher_sound_mute": "Launcher stummschalten",
+  "launcher_sound_unmute": "Launcher-Ton einschalten",
   "launcher_media_button": "Medien",
   "launcher_mod_label": "Mod: {0}",
   "launcher_mod_tooltip": "Aktiven Mod wechseln",
