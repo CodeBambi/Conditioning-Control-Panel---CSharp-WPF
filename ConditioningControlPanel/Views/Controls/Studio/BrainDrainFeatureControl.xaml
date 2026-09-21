@@ -172,8 +172,11 @@
 
                             <!-- Blur strength. The VISUAL half's dial (BrainDrainBlurStrength) - the
                                  dial above is the AUDIO trigger probability, this one is how hard the
-                                 screen blur presses in. Explicit 1-100 range for the same
-                                 Slider-defaults-to-Maximum=10 reason as above. Prescribed dose. -->
+                                 screen blur presses in. Explicit 0-100 range for the same
+                                 Slider-defaults-to-Maximum=10 reason as above. Prescribed dose.
+                                 The floor is 0, not 1: 1 still drew the alpha curve's own floor, so
+                                 the quietest setting was a visible haze and there was no way to keep
+                                 the audio without the picture (accessibility, 2026-09-20). -->
                             <Grid Height="36" ToolTip="{loc:Str st4_braindrain_blur_strength_hint}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="120"/>
@@ -184,7 +187,7 @@
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" x:Name="SliderBlurStrength" x:FieldModifier="internal"
                                         feat:SessionLock.Owned="True"
-                                        Minimum="1" Maximum="100" Value="50"
+                                        Minimum="0" Maximum="100" Value="50"
                                         VerticalAlignment="Center" Margin="10,0"
                                         ValueChanged="SliderBlurStrength_Changed"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtBlurStrength" x:FieldModifier="internal" Text="50%"
