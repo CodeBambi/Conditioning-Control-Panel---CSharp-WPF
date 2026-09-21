@@ -22,7 +22,8 @@ import { shieldY } from './words/let-go.js';
  * createGame({ w, h, rng, audio, onEvent, words }) -> { step(dt, input), snapshot(), ... }
  * Events (onEvent(name, data)): brick, hit, paddle, wallhit, gif, capture, spiral,
  * split, wall, relapse, relapseStart, breakout, breakoutStart, crack, lost,
- * launch, perfect, nearMiss, jackpot, mantra, shatterWall, popOut, burst, word.
+ * launch, perfect {streak}, nearMiss, jackpot, mantra, shatterWall, popOut, burst, word,
+ * lastBrick (before its wall; g.clearing holds the next wall back while time bends), layer {name, sat}.
  *
  * Words: about one plain brick in six carries a subliminal word (g.words). Broken in
  * COLOUR it fires the word's diegetic effect (word-fx.js, one module per word
@@ -67,6 +68,12 @@ export const ROW_COLORS = ['#ff5fa2', '#ff8ac4', '#c86bff', '#7fd6ff', '#ffd166'
 const STEP = 1 / 120;
 const TAU = Math.PI * 2;
 const RELAPSE_S = 0.5, BREAKOUT_S = 0.3, PUSH_S = 0.12, RING_S = 0.03, NEAR_MISS_PX = 6;
+/* Feel pass. Hit-stop is for three rare events only (ms); the last brick also bends time for LAST_SLOW_S at LAST_SCALE. */
+export const LAST_STOP_MS = 90, LAST_SLOW_S = 0.45, LAST_SCALE = 0.35, JACKPOT_STOP_MS = 60, POP_STOP_MS = 40;
+export const SQUASH_S = 0.09, LAUNCH_S = 1.2, KEY_SPEED = 640, KEY_EASE_S = 0.12;
+export const ENGLISH_MAX = 8 * Math.PI / 180, ENGLISH_REF = 900;      // paddle px/s that earns the whole 8 degrees
+export const STREAK_SAT = 0.003, STREAK_SAT_STEPS = 4;                 // a perfect streak's extra saturation, tiny and capped
+export const LAYER_AT = [['melody', 0.4], ['arp', 0.7]];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -118,13 +125,15 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     reduced: !!reduced,                            // reduced motion: no tumble, the bubble appears at the brick
     sat: 0, savedSat: saturation, state: 'grey', greyBricks: 0,
     force: {}, rungs: rungsFor(0, 'grey', null), speed: 0,
-    paddle: { x: w / 2, w: PADDLE.baseW, h: PADDLE.h, y: h - 40, stretch: 0, tug: 0 },
+    paddle: { x: w / 2, w: PADDLE.baseW, h: PADDLE.h, y: h - 40, stretch: 0, tug: 0, vx: 0 },
     balls: [], bricks: [], colliders: [], well: null, pops: [],
     stats: { bricks: 0, walls: 0, sp: 0 }, combo: 0, comboBest: 0, time: 0, freeze: 0, pendingBreakout: false, breakoutAt: null, breakoutShield: null,
     wallAge: 2, landRow: 99, wobble: { side: '', t: 0 }, crackFired: false, acc: 0, launchTimer: 0,
     // contract v2
     transition: null, timeScale: 1, hitStopMs: 0, smear: null, smearFading: false, fractures: 0, shatterWall: false,
     mantra: null, spell: null, beatPhase: 0, lastPerfectAt: 0, nearMissT: 0,
+    // feel pass: the last-brick moment, the perfect streak, the armed music layers, the downbeat latch, the key ramp
+    clearing: null, lastBrickDone: false, perfectStreak: 0, layerArmed: { melody: true, arp: true }, downbeat: false, keyHeld: 0,
     words: (Array.isArray(words) && words.length ? words : DEFAULT_WORDS).map(x => String(x)), wordIx: 0,
     // word triggers (word-fx.js): the running effects and this frame's mods
     fx: { active: [], lastHeavyAt: -99 }, mod: freshMod(),
@@ -366,7 +375,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     for(const b of g.bricks)if(b.reformSafe)
       b.reformSafe=g.balls.some(ball=>!ball.lost&&rotatedBrickContact(ball,b));
-    if(!bricksAlive())wallCleared();
+    if(!bricksAlive()&&!g.clearing?.wall)wallCleared();
   }
   const bricksAlive = () => g.bricks.some(b => b.alive);
   function updateReform(dt) {
@@ -446,7 +455,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   /* ------------------------------------------------------------ balls */
   function newBall(ghost) {
     return { x: g.paddle.x, y: g.paddle.y - g.paddle.h / 2 - BALL_R, vx: 0, vy: 0, r: BALL_R, spin: 0, ghost: !!ghost, stuck: true,
-      orbit: null, lost: false, falling: false, trail: [] };
+      orbit: null, lost: false, falling: false, trail: [], squash: 0, sqx: 0, sqy: -1 };
   }
   function respawn(ghost, quick = false) { g.balls = [newBall(ghost)]; g.launchTimer = quick ? .55 : 0; }
   function launch(b) {
@@ -470,14 +479,34 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (g.state !== 'colour') return;
     g.sat = Math.min(1, g.sat + v);
     au('setSaturation', g.sat);
-
+    // A music layer arrives: once per crossing, one per call so two never land on the same hit; a relapse re-arms both.
+    for (const [name, at] of LAYER_AT) {
+      if (!g.layerArmed[name] || g.sat < at) continue;
+      g.layerArmed[name] = false; emit('layer', { name, sat: g.sat }); break;
+    }
   }
   function bumpCombo(kind, x, y) {
     chargeDome();
     g.combo++; g.comboBest = Math.max(g.comboBest, g.combo);
-    // Hit feedback stays visual; routine collisions must not stall ball motion.
+    // Hit feedback stays visual; routine collisions must not stall ball motion (hit-stop lives in rareStop only).
     emit('hit', { kind, combo: g.combo, x, y });
   }
+  /** Hit-stop for the three rare events (last brick, jackpot, a bubble's final pop). COLOUR only, never in reduced motion. */
+  function rareStop(ms) {
+    if (g.state !== 'colour' || g.reduced || g.transition) return false;
+    g.hitStopMs = Math.max(g.hitStopMs, ms); return true;
+  }
+  /** The final brick of a wall: the event always and once per wall; the freeze and the slow-mo only where juice belongs.
+   *  `hold` keeps the next wall back until the moment has played. Returns true when the wall is being held. */
+  function lastBrick(x, y, hold) {
+    if (g.lastBrickDone) return false;
+    g.lastBrickDone = true;
+    emit('lastBrick', { x, y });
+    if (!rareStop(LAST_STOP_MS)) return false;
+    g.clearing = { t: LAST_SLOW_S, dur: LAST_SLOW_S, x, y, wall: !!hold };
+    return !!hold;
+  }
+  function flushClearing() { const c = g.clearing; g.clearing = null; if (c && c.wall) wallCleared(); }
   /** The slow-motion fall: the ball keeps dropping under the paddle for 0.5 s of real time, then the grey cut. */
   function startRelapse(b) {
     if ((g.finale && g.finale.phase !== 'released') || g.state !== 'colour' || g.transition || g.balls.some(other => other !== b && !other.lost && !other.falling)) return;
@@ -488,6 +517,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     emit('relapseStart', { x: b.x, y: b.y });
   }
   function relapse(at) {
+    flushClearing();                                  // a wall owed by the last-brick moment lands before the cut, so its saturation is saved
+    g.perfectStreak = 0; g.layerArmed = { melody: true, arp: true };
     powers.reset();
     g.transition = null; setTimeScale(1); wordSim.endAll();
     g.breakoutN = nextBreakoutN();
@@ -611,7 +642,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     fillSpell(br, cx, cy);
     if (br.word && !grey) wordSim.fire(br.word, cx, cy);
     bumpCombo(br.gif >= 0 || br.spiral ? 'gif' : 'brick', cx, cy);
-    if (br.jackpot) { g.stats.sp += 5; emit('jackpot', { x: cx, y: cy, sp: g.stats.sp, ghost: grey }); }
+    if (br.jackpot) { g.stats.sp += 5; rareStop(JACKPOT_STOP_MS); emit('jackpot', { x: cx, y: cy, sp: g.stats.sp, ghost: grey }); }
     if (grey) {
       g.greyBricks += plus;
       g.fractures = Math.min(1, g.greyBricks / g.breakoutN);
@@ -629,7 +660,12 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
 
     }
     // Later finale stages are undecided. Clearing this slice must not load wall 9.
-    if (!bricksAlive() && !g.spell?.complete && !f) wallCleared();
+    // The last brick: the break that empties the wall, or the iris wall's final core (its arms are consumed on
+    // their own and never see a ball). Metal only exists in GREY and a grey wall still needs every brick gone, so
+    // "empty" is the honest test. Never in the finale; a finished Spell wall clears after its own celebration.
+    if (f) return;
+    if (!bricksAlive()) { if (!lastBrick(cx, cy, !g.spell?.complete) && !g.spell?.complete) wallCleared(); }
+    else if (br.irisCore && !g.bricks.some(o => o.alive && o.irisCore)) lastBrick(cx, cy, false);
   }
   function makeFinaleFeed(id, age = 0) {
     const meta=finaleChaosMetadata(id);
@@ -814,6 +850,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     return false;
   }
   function wallCleared() {
+    if (g.clearing?.wall) g.clearing = null;          // the held wall is this one
+    g.lastBrickDone = false;
     g.stats.walls++; g.stats.sp = Math.min(20, g.stats.sp + 1);
     addSat(0.1);
     au('wallCleared');
@@ -987,6 +1025,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     b.vx = Math.sin(a) * s; b.vy = -Math.cos(a) * s; b.y = top - b.r;
     // End-of-wall help is a single bounce adjustment, never steering in flight.
     const remaining=g.bricks.filter(br=>br.alive);
+    let decided=false;
     const cleanupAt = Math.max(1, Math.floor(g.wallBrickCount * .2));
     if(g.finale?.phase!=='locked' && remaining.length>0 && remaining.length<=cleanupAt) {
       const strength = (cleanupAt - remaining.length) / Math.max(1, cleanupAt - 1);
@@ -999,13 +1038,18 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       }
       if(best!==null) {
         const assisted=clamp(a+clamp(best-a,-maxTurn,maxTurn),-Math.PI/3,Math.PI/3);
-        b.vx=Math.sin(assisted)*s;b.vy=-Math.cos(assisted)*s;
+        b.vx=Math.sin(assisted)*s;b.vy=-Math.cos(assisted)*s;decided=true;
       }
     }
     // Late finale help changes this rebound only and preserves its speed.
     const assisted=finaleHelpAngle({...g,ball:b,angle:a,speed:s});
     if(g.finale?.phase==='locked') {
-      b.vx=Math.sin(assisted)*s;b.vy=-Math.cos(assisted)*s;
+      b.vx=Math.sin(assisted)*s;b.vy=-Math.cos(assisted)*s;decided=true;
+    }
+    // English: a moving paddle drags the rebound its way, 8 degrees at most, and only when no help chose the angle.
+    if (!decided && p.vx) {
+      const e = clamp(a + clamp(p.vx / ENGLISH_REF, -1, 1) * ENGLISH_MAX, -Math.PI / 3, Math.PI / 3);
+      b.vx = Math.sin(e) * s; b.vy = -Math.cos(e) * s;
     }
     chargeDome(.12);
     g.combo = 0; p.stretch = 1;
@@ -1013,7 +1057,11 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     emit('paddle', { x: b.x, t });
     emit('hit', { kind: 'paddle', combo: 0, x: b.x, y: b.y });
     const ph = g.beatPhase;
-    if (Math.min(ph, 1 - ph) <= 0.08) { g.lastPerfectAt = g.time * 1000; addSat(0.02); au('perfect'); emit('perfect', { x: b.x, y: b.y }); }
+    if (Math.min(ph, 1 - ph) <= 0.08) {
+      g.lastPerfectAt = g.time * 1000; g.perfectStreak++;
+      addSat(0.02 + STREAK_SAT * Math.min(g.perfectStreak - 1, STREAK_SAT_STEPS));
+      au('perfect'); emit('perfect', { x: b.x, y: b.y, streak: g.perfectStreak });
+    } else g.perfectStreak = 0;
   }
   function collideBricks(b, px, py) {
     if (g.wallAge < 1.9) return;                      // a wall still tweening in is not solid yet
@@ -1069,7 +1117,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       const tier = c.tier || 1, popped = c.hits >= tier;
       if (popped) {
         c.fading = true; c.alpha = 0;
-        addSat([0, 0.03, 0.06, 0.10][tier]);
+        addSat([0, 0.03, 0.06, 0.10][tier]); rareStop(POP_STOP_MS);
         emit('bubblePop', { x: c.x, y: c.y, r: c.r, gif: c.gif, tier });
       }
       au('hit', 'gif', { combo: g.combo + 1, x: b.x / w });
@@ -1082,6 +1130,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   function moveBall(b, dt) {
     b.domeCooldown = Math.max(0, (b.domeCooldown || 0) - dt);
     b.domeBoost = Math.max(0, (b.domeBoost || 0) - dt * .15);
+    if (b.squash > 0) b.squash = Math.max(0, b.squash - dt / SQUASH_S);
     if (b.stuck) { b.x = g.paddle.x; b.y = g.paddle.y - g.paddle.h / 2 - b.r; return; }
     if (b.orbit) { orbitStep(b, dt); pushTrail(b); return; }
     const s = g.well;
@@ -1090,7 +1139,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     const speed = Math.hypot(b.vx, b.vy), n = Math.max(1, Math.ceil(speed * dt / b.r)), ds = dt / n;
     b.spin += (b.vx >= 0 ? 1 : -1) * speed * dt / (b.r * 2);
     for (let i = 0; i < n && !b.lost && g.freeze <= 0 && !b.orbit && g.finale?.phase !== 'interrupt'; i++) {
-      const px = b.x, py = b.y;
+      const px = b.x, py = b.y, vx0 = b.vx, vy0 = b.vy;
       b.x += b.vx * ds; b.y += b.vy * ds;
       collideWalls(b);
       if (b.falling) continue;
@@ -1114,6 +1163,9 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         }
       }
       if (g.state === 'colour') collideColliders(b);
+      // Impact squash: any bounce this sub-step flattens the ball against the surface it met (normal = the change in velocity).
+      const jx = b.vx - vx0, jy = b.vy - vy0, j = Math.hypot(jx, jy);
+      if (j > 1) { b.squash = 1; b.sqx = jx / j; b.sqy = jy / j; }
       // The last live ball slipping under the paddle in COLOUR: the relapse begins here, in slow motion.
       if (!b.lost && g.state === 'colour' && !g.transition && !g.noLose && !g.mod.safe && !junctionProtected(g) && !g.power.charges && b.vy > 0 && b.y - b.r > g.paddle.y + g.paddle.h / 2 && liveBalls() === 1) startRelapse(b);
     }
@@ -1131,13 +1183,18 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       base += ((low ? low.x : w / 2) - base) * Math.min(1, dt * 14);
     }
     else if (typeof input.x === 'number' && !Number.isNaN(input.x)) base = input.x;
-    else if (input.left) base -= 640 * dt;
-    else if (input.right) base += 640 * dt;
+    // Keys ease in to full speed over KEY_EASE_S and stop dead on release.
+    const dir = g.mod.autopilot || typeof input.x === 'number' ? 0 : input.left ? -1 : input.right ? 1 : 0;
+    g.keyHeld = dir && dir === Math.sign(g.keyHeld) ? g.keyHeld + dir * dt : dir * dt;
+    if (dir) base += dir * KEY_SPEED * Math.min(1, (Math.abs(g.keyHeld) - dt / 2) / KEY_EASE_S) * dt;
     // A live spiral within 200 px tugs the paddle toward its centre at 60 px/s; the player's input still wins.
     const s = g.well;
     if (s && (s.persistent || (s.age < s.ttl && s.fade >= 1 && s.born >= .1)) && g.state === 'colour' && Math.hypot(s.x - p.x, s.y - p.y) < 200) p.tug = clamp(p.tug + Math.sign(s.x - p.x) * 60 * dt, -60, 60);
     else p.tug = p.tug > 0 ? Math.max(0, p.tug - 120 * dt) : Math.min(0, p.tug + 120 * dt);
+    const x0 = p.x;
     p.x = clamp(base + p.tug, p.w / 2, w - p.w / 2);
+    // Smoothed paddle velocity (px/s): the rebound's english and the renderer's lean both read it.
+    if (dt > 0) p.vx += (clamp((p.x - x0) / dt, -2400, 2400) - p.vx) * Math.min(1, dt * 20);
   }
   /** A word brick's own clock: when it runs out the brick glitches and shows another word from the list. */
   function swapWord(br, dt) {
@@ -1176,7 +1233,9 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     updatePops(dt); updateColliders(dt); updateWell(dt);
     if (g.balls.some(b => b.stuck)) {
       g.launchTimer += dt;
-      if ((g.reduced || g.wallAge >= 1.9) && (input.launch || (!g.finale && g.launchTimer >= 1.2))) { for (const b of g.balls) if (b.stuck) launch(b); g.launchTimer = 0; }
+      // The auto launch waits for the first downbeat at or after LAUNCH_S (one beat of grace if the clock stalls); a manual launch is immediate.
+      const auto = !g.finale && g.launchTimer >= LAUNCH_S && (g.downbeat || g.launchTimer >= LAUNCH_S + spb() + 0.05);
+      if ((g.reduced || g.wallAge >= 1.9) && (input.launch || auto)) { for (const b of g.balls) if (b.stuck) launch(b); g.launchTimer = 0; }
     }
     for (const b of g.balls) { if (g.freeze > 0 || ['interrupt','outro'].includes(g.finale?.phase)) break; moveBall(b, dt); }
     if (g.balls.some(b => b.lost)) {
@@ -1197,7 +1256,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         else { startSpellRound(); cycleSpellLetters(); }
       }
     }
-    g.beatPhase = beatPhase();
+    const ph = beatPhase();
+    g.downbeat = ph < g.beatPhase; g.beatPhase = ph;  // the phase wrapped: a beat boundary fell inside this frame
     if (g.smear && g.smearFading) { g.smear.a -= dt; if (g.smear.a <= 0) { g.smear = null; g.smearFading = false; } }
     if (g.freeze > 0) {
       g.freeze -= dt;
@@ -1213,6 +1273,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (g.hitStopMs > 0) { g.hitStopMs = Math.max(0, g.hitStopMs - dt * 1000); if (g.hitStopMs > 0) return; }
     if (tr && tr.kind === 'relapse') tr.t = Math.min(1, tr.t + dt / RELAPSE_S + 1e-9);
     if (g.nearMissT > 0) g.nearMissT = Math.max(0, g.nearMissT - dt);
+    // The last-brick moment runs on the wall clock: slow-mo while it lasts, then the wall it was holding back.
+    if (g.clearing && (g.clearing.t -= dt) <= 0) flushClearing();
     updateReform(dt);
     updateIris(dt);
     wordSim.advance(dt);                              // wall-clock: a word that slows the game does not slow itself
@@ -1221,12 +1283,12 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       if (g.state !== 'colour' || g.breakoutShield.t >= g.breakoutShield.dur) g.breakoutShield = null;
       else { g.mod.safe = true; g.mod.shield = true; }
     }
-    setTimeScale(Math.min(tr && tr.kind === 'relapse' ? 0.35 : g.nearMissT > 0 ? 0.4 : 1, g.mod.timeScale));
+    setTimeScale(Math.min(tr && tr.kind === 'relapse' ? 0.35 : g.clearing ? LAST_SCALE : g.nearMissT > 0 ? 0.4 : 1, g.mod.timeScale));
     movePaddle(dt, input);
     if(!g.transition)powers.step(dt);
     g.acc += dt * g.timeScale;
     let guard = 0;
-    while (g.acc >= STEP && guard++ < 24) { g.acc -= STEP; tick(STEP, input); if (g.freeze > 0 || ['interrupt','outro'].includes(g.finale?.phase)) { g.acc = 0; break; } }
+    while (g.acc >= STEP && guard++ < 24) { g.acc -= STEP; tick(STEP, input); if (g.freeze > 0 || g.hitStopMs > 0 || ['interrupt','outro'].includes(g.finale?.phase)) { g.acc = 0; break; } }
     if (tr && tr.kind === 'relapse' && tr.t >= 1) relapse(g.balls[0] || g.smear);
   }
 
@@ -1251,7 +1313,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     jumpToWall(n) {
       g.stats.walls = Math.max(0, Math.floor(Number(n) || 1) - 1);
       wordSim.endAll(); g.colliders = []; g.pops = []; g.well = null;
-      g.hitStopMs = 0; g.freeze = 0; g.pendingBreakout = false; g.transition = null;
+      g.hitStopMs = 0; g.freeze = 0; g.pendingBreakout = false; g.transition = null; g.clearing = null; g.lastBrickDone = false;
       buildWall(); g.wallAge = 2; g.landRow = 99; respawn(g.state === 'grey');
       emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra });
     },
@@ -1301,7 +1363,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     fireWordNow(word) { const b = g.balls[0]; return wordSim.fire(word, b ? b.x : w / 2, b ? Math.min(b.y, h * 0.5) : h * 0.4); },
     relapseNow() { if (g.state === 'colour') lostAll(g.balls[0]); },
     breakoutNow() { startBreakout(g.balls[0]); },
-    breakBrick(i) { const br = g.bricks[i]; if (br) breakBrick(br, g.balls[0]); },
+    /** Dev and tests: synchronous, so a wall held back by the last-brick moment lands at once (`hold` keeps the moment). */
+    breakBrick(i, hold = false) { const br = g.bricks[i]; if (br) breakBrick(br, g.balls[0]); if (!hold) { flushClearing(); g.hitStopMs = 0; } },
     loseBall() {
       const b=g.balls.shift();
       if(g.balls.some(other=>!other.lost&&!other.falling)) { if(b) emit('lost',{x:b.x,y:b.y}); }
