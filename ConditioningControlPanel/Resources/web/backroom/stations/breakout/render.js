@@ -1,8 +1,12 @@
 import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle, wordTrailPoints, WORD_TRAIL } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups,glyphIdle} from './powerups-render.js';
-/** Camera knock per brick event, in pixels of shake. Owner-tuned by play, 2026-09-21. */
-export const BRICK_KICK = { hit: 3.5, broke: 7.5, combo: 7.5 };
+/**
+ * The brick knock, in REAL field pixels each way. It has its own channel because cam.kick is scaled by shakeGain
+ * (.175 on the first wall), so a kick of 7.5 moved the screen two thirds of a pixel: three rounds of "a bit more"
+ * on that number changed nothing the owner could see (2026-09-21). decay is per second, exponential: gone in about .2 s.
+ */
+export const BRICK_KNOCK = { hit: 2, broke: 4, combo: 4, comboStep: .2, comboMax: 6, decay: 14 };
 import { junctionProtected } from './junction-shield.js';
 import { shieldY as junctionShieldY } from './words/let-go.js';
 import {metalActive} from './grey-metal.js';
@@ -74,7 +78,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   let last = null, glitch = 0, wipe = 0, crackFlash = 0, spin = 0, aberr = 0, recoil = 0, lastNow = 0, lastCombo = 0, comboPop = 0;
   let happy = 0, pushIn = null, layerGlow = 0, layerRgb = MINT;   // feel pass: the last-brick push-in, the music-layer glow
   const smoke = createParticles({ max: 120, rng });
-  let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, flash = 0, lastFlashAt = -1;
+  let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, knock = 0, flash = 0, lastFlashAt = -1;
   const shockwaves = [], drifters = [];
   const rewardPick = createRewardPicker(rng);
   const levelIntro = createLevelIntro();
@@ -166,8 +170,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
           debris.spawn(x, y, (d.w || 82) * (.08 + rng() * .09), (d.h || 27) * (.2 + rng() * .22), dust, rng);
         }
       }
-      // 7.5: 4 at first, 5.5 once the softer hit glow took some of the jolt with it, then "a bit more" (owner, 2026-09-21).
-      if (rungs(5) && colour && !last?.iris) cam.kick(BRICK_KICK.broke);
+      if (rungs(5) && colour && !last?.iris) { cam.kick(5.5); knock = Math.max(knock, BRICK_KNOCK.broke); }
       if (d.jackpot) cam.kick(6, 1, 0.01);
       if (d.ghost && (d.plus | 0) > 1) stamps.push({ kind: 'text', text: '+' + (d.plus | 0), x: d.x, y: d.y - 8, life: 0.8, rgb: WHITE, size: 18 });
     } else if (name === 'popOut') {
@@ -187,9 +190,9 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     } else if (name === 'hit') {
       if (d.kind === 'paddle') recoil = 1;
       if (d.kind === 'gif') { cam.kick(7); if (rungs(8)) { glitch = 0.14; aberr = 1; } }
-      if (d.kind === 'brick' && (d.combo | 0) >= 5 && colour && !last?.iris) { cam.kick(BRICK_KICK.combo + Math.min(8, d.combo * 0.5), 1, 0.012); aberr = Math.max(aberr, 0.8); }
+      if (d.kind === 'brick' && (d.combo | 0) >= 5 && colour && !last?.iris) { cam.kick(6 + Math.min(8, d.combo * 0.5), 1, 0.012); knock = Math.max(knock, Math.min(BRICK_KNOCK.comboMax, BRICK_KNOCK.combo + d.combo * BRICK_KNOCK.comboStep)); aberr = Math.max(aberr, 0.8); }
       // A brick that only cracks used to move nothing at all; it gets a small knock of its own now.
-      else if (d.kind === 'brick' && colour && rungs(5) && !last?.iris) { cam.kick(BRICK_KICK.hit); aberr = Math.max(aberr, 0.35); }
+      else if (d.kind === 'brick' && colour && rungs(5) && !last?.iris) { knock = Math.max(knock, BRICK_KNOCK.hit); aberr = Math.max(aberr, 0.35); }
     } else if (name === 'paddle') {
       recoil = 1;
       if (colour && rungs(3) && last) {
@@ -251,7 +254,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: H - 20, r0: 8, r1: 80, life: 0.5, rgb: GREY });
     } else if (name === 'relapse') {
       landscape.reset();
-      wipe = 0.1; breakoutFlash = 0; pushIn = null; layerGlow = 0; P.clear(); shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset(); wellFx.reset();
+      wipe = 0.1; breakoutFlash = 0; pushIn = null; layerGlow = 0; P.clear(); shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset(); knock = 0; wellFx.reset();
 
     } else if (name === 'breakoutStart') {
       if (!reduced) flash = Math.max(flash, 0.3);
@@ -1332,7 +1335,11 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     const dropping = s.fx && s.fx.active.some(f => f.key === 'DROP');
     // Keep the level ramp, with all camera shake at half its previous strength.
     const shakeGain = dropping ? 0 : .175 + .175 * clamp((s.stats?.walls || 0) / 7, 0, 1);
-    const shk = { sx: camera.sx * shakeGain, sy: camera.sy * shakeGain,
+    // The brick knock rides on top at its own size, never through shakeGain. Nothing under reduced motion or in a DROP.
+    if (reduced || dropping) knock = 0;
+    const kx = knock > .05 ? (rng() - .5) * 2 * knock : 0, ky = knock > .05 ? (rng() - .5) * 2 * knock : 0;
+    knock *= Math.exp(-BRICK_KNOCK.decay * Math.max(0, dt || 0));
+    const shk = { sx: camera.sx * shakeGain + kx, sy: camera.sy * shakeGain + ky,
       rot: camera.rot * shakeGain, zoom: 1 + (camera.zoom - 1) * shakeGain };
 
     g.setTransform(1, 0, 0, 1, 0, 0);
