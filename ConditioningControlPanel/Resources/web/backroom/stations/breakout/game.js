@@ -10,6 +10,8 @@ import { IRIS_ARMS, IRIS_LIFE, IRIS_INTERVAL, irisPose } from './iris.js';
 import { TIDE_ROWS, TIDE_COLS, tidePose } from './tide.js';
 import { CURTAIN_ROWS, CURTAIN_COLS, ANCHOR_GUARDS, createPendulums, curtainPose, advancePendulum, releasePendulum, collidePendulum } from './pendulum.js';
 import { shieldY } from './words/let-go.js';
+import { doorById, boardById, parseBoard, BOARD_COLS } from './doors.js';
+import { twistFor } from './twists/index.js';
 /* ============================================================================
  * stations/breakout/game.js - the sim. DOM-free so `node --test` can drive it.
  *
@@ -117,7 +119,16 @@ export function layoutWord(word) {
 }
 
 export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEvent = () => {}, breakoutN,
-  saturation = 0.15, speedScale = 0.55, words = DEFAULT_WORDS, reduced = false, brickStrength = STRENGTH_BY_WALL, greyMetal = true } = {}) {
+  saturation = 0.15, speedScale = 0.55, words = DEFAULT_WORDS, reduced = false, brickStrength = STRENGTH_BY_WALL, greyMetal = true,
+  door = null, board = null } = {}) {
+  /* A DOOR RUN (doors.js): the two authored boards of one door, in order, then `doorClear`.
+   * `board` alone opens that one board and loops it. With neither, nothing below changes and the
+   * house game plays exactly as it always has. */
+  const doorFound = board ? boardById(board) : null;
+  const doorDef = doorFound ? doorFound.door : (door ? doorById(door) : null);
+  const soloBoard = doorFound ? doorFound.board : null;
+  const doorBoards = doorDef ? (soloBoard ? [soloBoard] : doorDef.boards) : null;
+  if (doorDef && Array.isArray(doorDef.words) && doorDef.words.length) words = doorDef.words;
   // Explicit N is a fixed dev override; ordinary sit-downs use the shrinking sequence.
   let fixedBreakoutN = breakoutN == null ? null : Math.max(1, Math.floor(Number(breakoutN) || BREAKOUT_COUNTS[0]));
   let breakouts = 0;
@@ -139,7 +150,13 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     words: (Array.isArray(words) && words.length ? words : DEFAULT_WORDS).map(x => String(x)), wordIx: 0,
     // word triggers (word-fx.js): the running effects and this frame's mods
     fx: { active: [], lastHeavyAt: -99 }, mod: freshMod(),
+    // door run (doors.js + twists/): null on the house game and nothing below reads it
+    door: doorDef ? doorDef.id : null, doorName: doorDef ? doorDef.name : null,
+    doorColour: doorDef ? doorDef.colour : null, doorBoard: null, twist: null, doorDone: false,
+    doorClock: 0, doorTimers: [], paddleScale: 1,
   };
+  /** A door board's bricks by cell, for the twists: `at(row, col)`, dead or alive. */
+  let doorGrid = null;
   const emit = (name, data) => { try { onEvent(name, data); } catch (e) { /* the listener's problem */ } };
   const au = (fn, ...args) => { try { if (audio && typeof audio[fn] === 'function') audio[fn](...args); } catch (e) { /* audio is optional */ } };
   const spb = () => (audio && audio.beat && audio.beat.spb) || 60 / 96;
@@ -158,8 +175,75 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       wordAt: 0, glitch: 0, swaps: 0,                // a word brick: seconds to its next swap, the glitch left (1 -> 0), swaps so far
       jelly: 0, jellyIn: 0, push: { dx: 0, dy: 0 }, pushT: 0, push0: { dx: 0, dy: 0 }, ...extra };
   }
+  /* ------------------------------------------------- the door's twist seam */
+  /** Call one hook of the board's twist. A twist's bug never stops the frame (twists/CONTRACT.md). */
+  function twistCall(hook, ...args) {
+    const twist = g.twist ? twistFor(g.twist) : null;
+    if (!twist || typeof twist[hook] !== 'function') return;
+    try { twist[hook](...args); } catch (e) { /* cosmetic to the sim: the board keeps playing */ }
+  }
+  /** `ctx`, exactly as twists/CONTRACT.md section 2 froze it. */
+  const doorCtx = {
+    emit, rng, w, h,
+    get powers() { return powers; },
+    at: (row, col) => (doorGrid ? doorGrid.get(row * BOARD_COLS + col) || null : null),
+    // Steel and gate steel are cleared first: this is how a mirror twin and an opened gate come down.
+    breakBrick: (br, ball) => { if (!br || !br.alive) return; br.steel = false; br.gate = null; breakBrick(br, ball || null); },
+    schedule(seconds, fn) {
+      const timer = { at: g.doorClock + Math.max(0, Number(seconds) || 0), fn, dead: false };
+      g.doorTimers.push(timer);
+      return () => { timer.dead = true; };
+    },
+    startRelapse: () => { if (g.state === 'colour' && !g.transition) lostAll(g.balls[0]); },
+  };
+  /** Due timers, in due order, on the sim clock. They die with the board. */
+  function runDoorTimers(dt) {
+    g.doorClock += dt;
+    if (!g.doorTimers.length) return;
+    const due = g.doorTimers.filter(t => !t.dead && t.at <= g.doorClock).sort((a, b) => a.at - b.at);
+    if (!due.length) return;
+    g.doorTimers = g.doorTimers.filter(t => !t.dead && t.at > g.doorClock);
+    for (const timer of due) { try { timer.fn(g, doorCtx); } catch (e) { /* a twist's bug never stops the frame */ } }
+  }
+  /** One authored board on the ordinary 16-column grid. Never reached by the house game. */
+  function authoredWall() {
+    const board = doorBoards[doorBoards.length > 1 ? g.stats.walls % doorBoards.length : 0];
+    g.doorBoard = board.id; g.twist = board.twist || null;
+    g.dome = false; g.mantra = null;
+    g.spell = null; g.reform = null; g.iris = null; g.tide = null; g.finale = null; g.pendulums = null;
+    g.doorTimers = []; g.doorClock = 0; g.paddleScale = 1;
+    if (g.well?.persistent) { for (const ball of g.balls) ball.orbit = null; g.well = null; }
+    const x0 = (w - (BRICK.cols * BRICK.w + (BRICK.cols - 1) * BRICK.gap)) / 2;
+    const bricks = [];
+    doorGrid = new Map();
+    for (const cell of parseBoard(board.rows)) {
+      const spec = cell.spec, extra = { ...spec };
+      delete extra.picture; delete extra.spiralBrick;
+      if (spec.picture) { extra.gif = Math.floor(rng() * 8); extra.tier = bubbleTier(rng()); }
+      if (spec.spiralBrick) {
+        extra.spiral = WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)];
+        extra.hue = Math.floor(rng() * 70) - 35; extra.spin = 0.75 + rng() * 0.5;
+      }
+      // About one plain one-hit brick in six carries one of the door's words, dealt in turn.
+      const plain = !spec.picture && !spec.spiralBrick && !spec.steel && !spec.clay && !spec.wire &&
+        !spec.core && !spec.key && !spec.powerup && !spec.strength;
+      if (plain && g.words.length && rng() < WORD_BRICK_P) {
+        extra.word = g.words[g.wordIx++ % g.words.length];
+        extra.wordAt = 0.6 + rng() * (WORD_SWAP_S + WORD_SWAP_J);
+      }
+      const br = mkBrick(x0 + cell.col * (BRICK.w + BRICK.gap), BRICK.top + cell.row * (BRICK.h + BRICK.gap),
+        BRICK.w, BRICK.h, cell.row, cell.col, extra);
+      bricks.push(br);
+      doorGrid.set(cell.row * BOARD_COLS + cell.col, br);
+    }
+    g.bricks = bricks; g.wallBrickCount = bricks.length;
+    // No random strength, no random power-ups, no grey metal: every brick on an authored board is authored.
+    g.fractures = g.state === 'grey' ? Math.min(1, g.greyBricks / g.breakoutN) : 0; g.shatterWall = false;
+    twistCall('build', g, doorCtx);
+  }
   function buildWall() {
     powers.reset();
+    if (doorBoards) { authoredWall(); return; }
     const bricks = [];
     const mantra = g.stats.walls === 2;
     const dome = g.stats.walls === 3;
@@ -379,7 +463,9 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       b.reformSafe=g.balls.some(ball=>!ball.lost&&rotatedBrickContact(ball,b));
     if(!bricksAlive()&&!g.clearing?.wall)wallCleared();
   }
-  const bricksAlive = () => g.bricks.some(b => b.alive);
+  // Steel (an authored `X`, `M` or `W`) never counts toward clearing: a board is clear when
+  // every BREAKABLE brick is gone.
+  const bricksAlive = () => g.bricks.some(b => b.alive && !b.steel);
   function updateReform(dt) {
     const r = g.reform; if (!r) return;
     if (r.moving > 0) {
@@ -603,6 +689,13 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (g.stats.walls === 6 && g.state === 'grey' && g.bricks.filter(b=>b.alive).length === 1) {
       au('metal', {x:br.x/w}); emit('metalHit',{x:br.x+br.w/2,y:br.y+br.h/2}); pushBrick(br, ball); finaleProgress(ball); return;
     }
+    // Authored steel: the ball never gets through it. Only a twist, through ctx.breakBrick, can.
+    if (br.steel) {
+      pushBrick(br, ball);
+      au('metal', {x:br.x/w}); emit('metalHit', {x:br.x+br.w/2,y:br.y+br.h/2,steel:true,gate:br.gate||null});
+      twistCall('onHit', g, br, ball, doorCtx);
+      return;
+    }
     if (metalActive(br, g.state)) {
       pushBrick(br, ball);
       au('metal', {x:br.x/w}); emit('metalHit', {x:br.x+br.w/2,y:br.y+br.h/2});
@@ -624,6 +717,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (br.strength && br.hp > 1) {
       br.hp--; pushBrick(br, ball);
       emit('brickDamage', {x:br.x+br.w/2,y:br.y+br.h/2,hp:br.hp,strength:br.strength,ghost:g.state==='grey'});
+      twistCall('onHit', g, br, ball, doorCtx);
       return;
     }
     if (br.strength) br.hp = 0;
@@ -636,6 +730,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     const plus = f?.phase === 'locked' && br.finaleDefense ? 0 : (br.gif >= 0 || br.spiral || br.split || br.jackpot || br.word) ? 3 : 1;   // a special brick counts triple on the grey counter
     emit('brick', { x: cx, y: cy, w: br.w, h: br.h, color: br.color, row: br.row, col: br.col, gif: br.gif >= 0, gifIndex: br.gif,
       spiral: br.spiral, jackpot: br.jackpot, letter: br.letter, word: br.word, ghost: grey, sat: g.sat, plus });
+    twistCall('onBreak', g, br, ball, doorCtx);
     if(br.pendulumAnchor) {
       const p=g.pendulums[br.pendulumId];releasePendulum(p,w);
       au('pendulumRelease',{x:cx/w});emit('pendulumRelease',{x:cx,y:cy});
@@ -854,9 +949,16 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   function wallCleared() {
     if (g.clearing?.wall) g.clearing = null;          // the held wall is this one
     g.lastBrickDone = false;
+    twistCall('wallCleared', g);
     g.stats.walls++; g.stats.sp = Math.min(20, g.stats.sp + 1);
     addSat(0.1);
     au('wallCleared');
+    // A door run is two boards. The second one clearing is the end of the door; the board rebuilds
+    // underneath so the sim stays honest while the station holds up its card.
+    if (doorBoards && doorBoards.length > 1 && !g.doorDone && g.stats.walls >= doorBoards.length) {
+      g.doorDone = true;
+      emit('doorClear', { door: g.door });
+    }
     buildWall(); g.wallAge = 0; g.landRow = 0;
     emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra });
   }
@@ -1236,7 +1338,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     g.rungs = rungsFor(g.sat, g.state, g.force);
     g.speed = targetSpeed() * g.mod.ballSpeed;
-    g.paddle.w = PADDLE.baseW * (1 + 0.6 * g.sat) * g.mod.paddleW;
+    g.paddle.w = PADDLE.baseW * (1 + 0.6 * g.sat) * g.mod.paddleW * (g.paddleScale || 1);
     g.paddle.stretch = Math.max(0, g.paddle.stretch - dt * 4);
     g.wobble.t = Math.max(0, g.wobble.t - dt * 2);
     for (const br of g.bricks) {
@@ -1306,6 +1408,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     let guard = 0;
     while (g.acc >= STEP && guard++ < 24) { g.acc -= STEP; tick(STEP, input); if (g.freeze > 0 || g.hitStopMs > 0 || ['interrupt','outro'].includes(g.finale?.phase)) { g.acc = 0; break; } }
     if (tr && tr.kind === 'relapse' && tr.t >= 1) relapse(g.balls[0] || g.smear);
+    // The board's twist, last: the wall and the balls have already moved this frame.
+    if (g.twist) { runDoorTimers(dt); twistCall('update', g, dt, doorCtx); }
   }
 
   const wordSim = createWordSim(g, { emit, au, rng, addSat, clamp, lerp, W: w, H: h });
@@ -1314,7 +1418,9 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     try { if (audio && audio.beat && typeof audio.now === 'function') { const v = (audio.now() - (audio.beat.origin || 0)) / audio.beat.spb; if (Number.isFinite(v)) return v; } } catch (e) { /* fine */ }
     return g.time / spb();
   };
-  const powers=createPowerups(g,{rng,emit,newBall,damage:breakBrick,maxBalls:MAX_BALLS,beatTime});
+  // The twist hears a caught drop after the game's own event, so its cue never speaks before the catch.
+  const powerEmit = (name, data) => { emit(name, data); if (name === 'powerCatch') twistCall('onCatch', g, data || {}, doorCtx); };
+  const powers=createPowerups(g,{rng,emit:powerEmit,newBall,damage:breakBrick,maxBalls:MAX_BALLS,beatTime});
   buildWall();
   respawn(true);
   au('setSaturation', g.sat); au('setState', 'grey');

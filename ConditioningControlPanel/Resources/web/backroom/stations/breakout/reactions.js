@@ -8,6 +8,13 @@
  * payload-free).
  * ==========================================================================*/
 import POWER from './reactions/power.js';
+/* One per door twist (twists/CONTRACT.md section 7). A lane adds a visual in its own file. */
+import TWIST_CRUMBLE from './reactions/twist-crumble.js';
+import TWIST_MIRROR from './reactions/twist-mirror.js';
+import TWIST_KEYS from './reactions/twist-keys.js';
+import TWIST_NODE from './reactions/twist-node.js';
+import TWIST_JUSTONE from './reactions/twist-justone.js';
 
-export const REACTIONS = { ...POWER };
+export const REACTIONS = { ...POWER,
+  ...TWIST_CRUMBLE, ...TWIST_MIRROR, ...TWIST_KEYS, ...TWIST_NODE, ...TWIST_JUSTONE };
 export default REACTIONS;
