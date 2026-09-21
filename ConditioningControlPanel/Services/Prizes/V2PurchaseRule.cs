@@ -31,12 +31,23 @@ public readonly record struct V2PurchaseRow(V2PurchaseRowState State, int PriceS
         && State is V2PurchaseRowState.Offer or V2PurchaseRowState.CannotAfford
             or V2PurchaseRowState.Busy or V2PurchaseRowState.Failed;
 
-    /// <summary>The "Get it" button is up, and pressable only when a press would actually buy.</summary>
-    public bool ShowsBuyButton => State is V2PurchaseRowState.Offer or V2PurchaseRowState.CannotAfford
-        or V2PurchaseRowState.Busy or V2PurchaseRowState.Failed;
+    /// <summary>
+    /// A button is up. SignIn is included: the row has a button there too, it just opens the login
+    /// dialog instead of spending. The control asks this and nothing else about drawing it.
+    /// </summary>
+    public bool ShowsBuyButton => State is V2PurchaseRowState.SignIn or V2PurchaseRowState.Offer
+        or V2PurchaseRowState.CannotAfford or V2PurchaseRowState.Busy or V2PurchaseRowState.Failed;
 
-    /// <summary>Pressable: a press starts a purchase.</summary>
-    public bool BuyEnabled => State is V2PurchaseRowState.Offer or V2PurchaseRowState.Failed;
+    /// <summary>
+    /// Pressable AND a press spends money.
+    ///
+    /// <para>The price is part of the gate, not decoration. A failure recorded before the counter
+    /// ever answered leaves a Failed row with no price, and a live button on that row would open a
+    /// confirm reading "Spend 0 Sparkle Points" and then debit whatever the counter turned out to
+    /// charge. No price, no press.</para>
+    /// </summary>
+    public bool BuyEnabled => PriceSp > 0
+        && State is V2PurchaseRowState.Offer or V2PurchaseRowState.Failed;
 }
 
 /// <summary>
