@@ -139,8 +139,29 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Information("TierGate: blocked {Feature} (needs {Required})", verdict.Feature, verdict.Required);
             try
             {
-                App.Notifications?.Show(verdict.Reason, NotificationType.Warning, TimeSpan.FromSeconds(8),
-                    Loc.Get("tiergate_see_tiers"), () => App.MainWindowRef?.ShowAppInfoPopup());
+                // A patron whose Patreon grant died on this PC is being refused a door they paid
+                // for, and "upgrade your pledge" is the wrong sentence to hand them. When
+                // PatreonReconnectRule says the row is in its prominent Reconnect state - linked
+                // server-side, no token here, premium off - the refusal says what actually
+                // happened and its button repairs it instead of selling them a tier they hold.
+                var row = PatreonReconnectRule.Decide(
+                    hasUnifiedId: !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId),
+                    linkedServerSide: App.Settings?.Current?.HasLinkedPatreon == true,
+                    desktopAuthenticated: App.Patreon?.IsAuthenticated == true,
+                    hasPremiumNow: App.Patreon?.HasPremiumAccess == true,
+                    whitelisted: App.Patreon?.IsWhitelisted == true);
+
+                if (row.Prominent)
+                {
+                    App.Notifications?.Show(Loc.Get("tiergate_denied_reconnect"), NotificationType.Warning,
+                        TimeSpan.FromSeconds(10), Loc.Get("tiergate_reconnect_action"),
+                        () => App.MainWindowRef?.StartPatreonReconnectFromGate());
+                }
+                else
+                {
+                    App.Notifications?.Show(verdict.Reason, NotificationType.Warning, TimeSpan.FromSeconds(8),
+                        Loc.Get("tiergate_see_tiers"), () => App.MainWindowRef?.ShowAppInfoPopup());
+                }
             }
             catch (Exception ex)
             {

@@ -3610,6 +3610,15 @@ namespace ConditioningControlPanel
                 // Initialize Patreon authentication
                 await Patreon.InitializeAsync();
 
+                // The account page's Patreon row is painted at window load, which happens while the
+                // line above is still in flight - and the validate is what decides whether this PC
+                // holds a grant that works. Repaint it once the answer is in, or a patron whose
+                // grant died sees the row only on their NEXT launch. DispatcherPriority.Normal:
+                // Loaded is starved here and would silently never run.
+                MainWindowRef?.Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Normal,
+                    new Action(() => MainWindowRef?.RefreshAccountLinkingRow()));
+
                 // If authenticated, load cloud profile and start heartbeat
                 if (Patreon.IsAuthenticated)
                 {

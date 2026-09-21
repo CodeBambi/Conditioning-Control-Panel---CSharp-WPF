@@ -56,6 +56,28 @@ namespace ConditioningControlPanel.Services
         public bool IsAuthenticated => _tokenStorage.HasValidTokens();
 
         /// <summary>
+        /// This launch has seen the proxy REFUSE to refresh the stored grant, so the tokens on
+        /// disk are paper: <see cref="IsAuthenticated"/> still says yes (the .dat holds a non-empty
+        /// access token and #585 deliberately keeps it through a failed refresh), but nothing in it
+        /// will ever reach Patreon again.
+        ///
+        /// <para>In memory only, by design. It is re-derived on every launch from a live answer,
+        /// so a grant repaired elsewhere, a revoked-then-re-pledged account, or a wrong guess all
+        /// cost at most one session. Set only on a 4xx refusal (see
+        /// <see cref="PatreonGrantHealth"/>) - never on a timeout or a 5xx - and cleared by any
+        /// successful refresh, validate or fresh OAuth exchange.</para>
+        ///
+        /// <para>Read by <see cref="PatreonReconnectRule"/> and by nothing that grants anything:
+        /// this decides whether the user is OFFERED a repair, never what they are entitled to.</para>
+        ///
+        /// <para>Every online launch gets a chance to set it: <see cref="InitializeAsync"/> clears
+        /// the cached state before validating, so the 24h-cache short-circuit at the top of
+        /// <see cref="ValidateSubscriptionAsync"/> cannot skip the refresh on that path. Offline
+        /// mode never validates at all, which is the point of offline mode.</para>
+        /// </summary>
+        public bool GrantLooksDead { get; private set; }
+
+        /// <summary>
         /// Whether the user is an active paying patron
         /// </summary>
         public bool IsActivePatron { get; private set; }
@@ -474,6 +496,9 @@ namespace ConditioningControlPanel.Services
                 tokenResponse.RefreshToken,
                 DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn));
 
+            // A brand new grant. Whatever the old one did, this is the repair.
+            GrantLooksDead = false;
+
             App.Logger?.Information("Patreon tokens stored successfully");
         }
 
@@ -524,7 +549,7 @@ namespace ConditioningControlPanel.Services
                 // Check if token expired and needs refresh
                 if (tokens.IsExpired)
                 {
-                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken);
+                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken, tokens.ExpiresAt);
                     if (!refreshed)
                     {
                         // A refresh failure here is usually transient (proxy/network hiccup, not a
@@ -539,6 +564,9 @@ namespace ConditioningControlPanel.Services
                     tokens = _tokenStorage.RetrieveTokens();
                     if (tokens == null)
                     {
+                        // Stored and then gone: whatever IsAuthenticated is about to claim, there
+                        // is nothing here to talk to Patreon with, so offer the repair.
+                        GrantLooksDead = true;
                         App.Logger?.Warning("Patreon tokens missing after successful refresh - keeping cached tier {Tier}", CurrentTier);
                         return CurrentTier;
                     }
@@ -569,7 +597,7 @@ namespace ConditioningControlPanel.Services
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
                     // Token may be invalid, try refresh
-                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken);
+                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken, tokens.ExpiresAt);
                     if (refreshed)
                     {
                         return await ValidateSubscriptionAsync(forceRefresh: true);
@@ -596,6 +624,10 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("Patreon validation error: {Error}", subscription?.Error);
                     return CurrentTier;
                 }
+
+                // The stored grant just reached Patreon and came back with an answer. Whatever a
+                // previous refusal made us think, it is alive.
+                GrantLooksDead = false;
 
                 ProfileSyncService.ApplyValidatePrizes(prizesFor, subscription.UnifiedId, subscription.Prizes, "Patreon validate");
 
@@ -756,7 +788,12 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private async Task<bool> RefreshTokensAsync(string refreshToken)
+        /// <param name="accessTokenExpiresAtUtc">
+        /// When the access token this refresh is replacing expired. The proxy answers 500 for a
+        /// revoked grant as well as for its own trouble (see <see cref="PatreonGrantHealth"/>), so
+        /// the age of that expiry is the only thing that tells the two apart.
+        /// </param>
+        private async Task<bool> RefreshTokensAsync(string refreshToken, DateTime? accessTokenExpiresAtUtc)
         {
             try
             {
@@ -768,7 +805,8 @@ namespace ConditioningControlPanel.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     App.Logger?.Warning("Token refresh failed with status {Status}", response.StatusCode);
-                    return false;
+                    return NoteRefresh(PatreonGrantHealth.Classify(
+                        response.StatusCode, null, threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow));
                 }
 
                 var tokenResponse = await response.Content.ReadFromJsonAsync<PatreonTokenResponse>();
@@ -776,7 +814,12 @@ namespace ConditioningControlPanel.Services
                 if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
                 {
                     App.Logger?.Warning("Token refresh error: {Error}", tokenResponse?.ErrorDescription);
-                    return false;
+                    // A missing body is a malformed answer, not a verdict; an OAuth error field is
+                    // the refusal wearing a 200.
+                    return NoteRefresh(tokenResponse == null
+                        ? PatreonRefreshOutcome.Unavailable
+                        : PatreonGrantHealth.Classify(response.StatusCode, tokenResponse.Error,
+                            threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow));
                 }
 
                 _tokenStorage.StoreTokens(
@@ -785,13 +828,26 @@ namespace ConditioningControlPanel.Services
                     DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn));
 
                 App.Logger?.Information("Patreon tokens refreshed successfully");
-                return true;
+                return NoteRefresh(PatreonRefreshOutcome.Refreshed);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to refresh Patreon tokens");
-                return false;
+                return NoteRefresh(PatreonGrantHealth.Classify(
+                    null, null, threw: true, accessTokenExpiresAtUtc, DateTime.UtcNow));
             }
+        }
+
+        /// <summary>
+        /// Records what a refresh attempt said about the grant and reports whether it worked.
+        /// Only a refusal raises <see cref="GrantLooksDead"/>; a success lowers it; an outage
+        /// leaves it exactly as it was, so a flaky connection can neither raise nor clear it.
+        /// </summary>
+        private bool NoteRefresh(PatreonRefreshOutcome outcome)
+        {
+            if (outcome == PatreonRefreshOutcome.Refreshed) GrantLooksDead = false;
+            else if (PatreonGrantHealth.MarksGrantDead(outcome)) GrantLooksDead = true;
+            return outcome == PatreonRefreshOutcome.Refreshed;
         }
 
         private void UpdateTier(PatreonTier tier, bool isActive, string? displayName = null)
@@ -1027,6 +1083,7 @@ namespace ConditioningControlPanel.Services
             DisplayName = null; // Explicitly clear DisplayName
             NeedsDisplayNameMigration = false;
             _isWhitelisted = false; // Clear whitelist status
+            GrantLooksDead = false; // Nothing to be dead: the tokens are gone with it
 
             // Clear all cached premium access - user explicitly logged out
             if (App.Settings?.Current != null)
