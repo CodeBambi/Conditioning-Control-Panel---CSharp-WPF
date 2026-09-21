@@ -47,7 +47,7 @@ public enum SettleOutcome
 /// <see cref="ChasterClient.AddTimeAsync"/>, never anything that could take a lock's time down
 /// or open it.</para>
 ///
-/// <para>The link flow (browser + loopback listener) is the next slice, ChasterService.Link.cs.</para>
+/// <para>The link flow (browser + loopback listener) is in ChasterService.Link.cs.</para>
 /// </summary>
 public sealed partial class ChasterService : IDisposable
 {
@@ -281,6 +281,7 @@ public sealed partial class ChasterService : IDisposable
 
     public void Dispose()
     {
+        CancelLink();
         _settleGate.Dispose();
     }
 }
