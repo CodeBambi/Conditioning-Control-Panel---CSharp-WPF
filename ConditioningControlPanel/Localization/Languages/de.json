@@ -2939,6 +2939,7 @@
   "haptics_hint_bouncing_text": "Ein Tippen, wenn der hüpfende Text den Bildschirmrand trifft.",
   "haptics_hint_bubble": "Ein Tippen für jede Blase, die du zerplatzen lässt.",
   "haptics_hint_dtrh": "Akzente während eines Abstiegs in Down the Rabbit Hole.",
+  "haptics_dtrh_accent_pointer": "Pops, Blitze und die grossen Momente sind die 🐇 Zeile in der Tabelle oben.",
   "haptics_hint_deeper": "Haptik-Muster, die in Deeper-Erweiterungen erstellt wurden (Ereignisse und Regelaktionen). Steuert auch die FunScript-Wiedergabe.",
   "haptics_dtrh_ambient_label": "Rabbit-Hole-Tiefe (Grundton)",
   "haptics_pattern_lab": "Musterlabor",

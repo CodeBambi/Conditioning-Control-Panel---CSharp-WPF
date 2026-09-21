@@ -2939,6 +2939,7 @@
   "haptics_hint_bouncing_text": "Une tape à chaque fois que le texte rebondissant touche le bord de l'écran.",
   "haptics_hint_bubble": "Une tape pour chaque bulle que tu éclates.",
   "haptics_hint_dtrh": "Des accents pendant une descente Down the Rabbit Hole.",
+  "haptics_dtrh_accent_pointer": "Les bulles, les flashs et les grands moments, c'est la ligne 🐇 du tableau ci-dessus.",
   "haptics_hint_deeper": "Motifs haptiques créés dans les améliorations Deeper (événements et actions de règles). Contrôle aussi la lecture FunScript.",
   "haptics_dtrh_ambient_label": "Profondeur du Rabbit Hole (ambiance)",
   "haptics_pattern_lab": "Labo de motifs",

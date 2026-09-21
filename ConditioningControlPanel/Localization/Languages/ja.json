@@ -2939,6 +2939,7 @@
   "haptics_hint_bouncing_text": "バウンステキストが画面の端に当たるたびの軽いタップ。",
   "haptics_hint_bubble": "バブルを割るたびの軽いタップ。",
   "haptics_hint_dtrh": "Down the Rabbit Holeの降下中のアクセント。",
+  "haptics_dtrh_accent_pointer": "バブル、フラッシュ、大きな瞬間は上の表の 🐇 の行です。",
   "haptics_hint_deeper": "Deeperの拡張機能で作成された触覚パターン（イベントとルールのアクション）。FunScript再生もここで制御されます。",
   "haptics_dtrh_ambient_label": "Rabbit Holeの深さ（アンビエント）",
   "haptics_pattern_lab": "パターンラボ",

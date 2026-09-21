@@ -2939,6 +2939,7 @@
   "haptics_hint_bouncing_text": "바운싱 텍스트가 화면 가장자리에 닿을 때마다의 가벼운 탭.",
   "haptics_hint_bubble": "버블을 터뜨릴 때마다의 가벼운 탭.",
   "haptics_hint_dtrh": "Down the Rabbit Hole 하강 중의 악센트.",
+  "haptics_dtrh_accent_pointer": "터뜨리기, 플래시, 큰 순간은 위 표의 🐇 행입니다.",
   "haptics_hint_deeper": "Deeper 확장에서 제작한 햅틱 패턴(이벤트 및 규칙 동작). FunScript 재생도 여기서 제어됩니다.",
   "haptics_dtrh_ambient_label": "Rabbit Hole 깊이 (앰비언트)",
   "haptics_pattern_lab": "패턴 연구소",

@@ -3794,6 +3794,7 @@
   "haptics_hint_bouncing_text": "弹跳文字每次撞到屏幕边缘时的一下轻触。",
   "haptics_hint_bubble": "你每戳破一个泡泡就来一下轻触。",
   "haptics_hint_dtrh": "Down the Rabbit Hole 坠落过程中的重音。",
+  "haptics_dtrh_accent_pointer": "气泡、闪图和大场面在上面表格的 🐇 那一行。",
   "haptics_hint_deeper": "在 Deeper 增强内容中编排的触觉模式（事件与规则动作）。同时控制 FunScript 播放。",
   "haptics_dtrh_ambient_label": "Rabbit Hole 深度（环境）",
   "haptics_pattern_lab": "图案实验室",

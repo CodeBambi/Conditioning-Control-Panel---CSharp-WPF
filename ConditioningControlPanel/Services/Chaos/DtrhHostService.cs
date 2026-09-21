@@ -792,6 +792,10 @@ internal static class DtrhHostService
                 case "rabbit-caught": bark.NotifyChaosDarterCaught(I("gold"), 0, true); break;
                 // ---- Crafting: THE BOUDOIR (reuse the first-time voice) ----
                 case "crafted": bark.NotifyChaosFirstTime(S("id")); break;
+                // Haptics-only: an in-world effect payload landed. The director taps this before
+                // the routing switch (#1244); she has nothing to say about it, and saying so once
+                // per flash would be a log line per flash.
+                case "effect-fired": break;
                 default: App.Logger?.Debug("DtrhHost: unrouted bark event '{E}'", (string?)o["event"]); break;
             }
         }

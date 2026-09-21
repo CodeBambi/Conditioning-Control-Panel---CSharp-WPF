@@ -2939,6 +2939,7 @@
   "haptics_hint_bouncing_text": "Un toque cada vez que el texto rebotante toca el borde de la pantalla.",
   "haptics_hint_bubble": "Un toque por cada burbuja que revientas.",
   "haptics_hint_dtrh": "Acentos durante un descenso de Down the Rabbit Hole.",
+  "haptics_dtrh_accent_pointer": "Los estallidos, los destellos y los momentos grandes son la fila 🐇 de la tabla de arriba.",
   "haptics_hint_deeper": "Patrones hápticos creados en las mejoras de Deeper (eventos y acciones de reglas). También controla la reproducción de FunScript.",
   "haptics_dtrh_ambient_label": "Profundidad de Rabbit Hole (ambiente)",
   "haptics_pattern_lab": "Laboratorio de patrones",
