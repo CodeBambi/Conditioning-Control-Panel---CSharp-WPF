@@ -1,4 +1,4 @@
-import { setMusicScene } from '../../shared/sound/music.js';
+import { setMusicScene, GREY_RATE } from '../../shared/sound/music.js';
 import { pentatonic, ROOT_HZ } from '../../shared/sound/kit.js';
 import { WORD_FX } from './word-fx.js';
 import { CUES } from './cues.js';
@@ -327,7 +327,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     finaleGrey(on) {
       setMusicScene(on?'grey':'normal');
       finaleGrey=!!on;finaleMuted=false;
-      beat.setTempo(bpm*(finaleGrey?.72:1));
+      beat.setTempo(bpm*(finaleGrey?GREY_RATE:1));
       if(!live())return;
       const t=ctx.currentTime;nextStepTime=t+.03;
       beat.rebase(nextStepTime-stepIndex*beat.sixteenth);

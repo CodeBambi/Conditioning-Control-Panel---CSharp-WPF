@@ -809,3 +809,12 @@ test('a bubble hammered by several balls never leaves faster than its cap', () =
   }
   assert.ok(s.colliders[0].hits >= 4); assert.ok(Math.hypot(s.colliders[0].vx, s.colliders[0].vy) <= BUBBLE_MAX + 1e-6);
 });
+
+test('the rally ramp eases up to the pace ceiling and a respawn resets it', async () => {
+  const { rallyBoost, RALLY_RAMP_S } = await import('./game.js');
+  assert.equal(rallyBoost(0, 0.55), 1);
+  assert.ok(Math.abs(rallyBoost(RALLY_RAMP_S, 0.4) - 1.15) < 1e-9);
+  assert.ok(Math.abs(rallyBoost(RALLY_RAMP_S, 0.55) - 1.1875) < 1e-9);
+  assert.ok(Math.abs(rallyBoost(RALLY_RAMP_S * 4, 0.8) - 1.25) < 1e-9);
+  assert.ok(rallyBoost(10, 0.8) < rallyBoost(20, 0.8));
+});

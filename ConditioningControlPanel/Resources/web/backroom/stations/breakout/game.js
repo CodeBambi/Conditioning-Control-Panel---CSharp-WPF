@@ -76,6 +76,14 @@ export const SQUASH_S = 0.09, LAUNCH_S = 1.2, KEY_SPEED = 640, KEY_EASE_S = 0.12
 export const ENGLISH_MAX = 8 * Math.PI / 180, ENGLISH_REF = 900;      // paddle px/s that earns the whole 8 degrees
 export const STREAK_SAT = 0.003, STREAK_SAT_STEPS = 4;                 // a perfect streak's extra saturation, tiny and capped
 export const LAYER_AT = [['melody', 0.4], ['arp', 0.7]];
+/* The rally ramp: the longer a ball stays up, the faster it goes, eased over RALLY_RAMP_S and reset by every
+ * respawn. The ceiling grows with the pace the player picked: Gentle 15%, Normal 20%, Fast 25%. */
+export const RALLY_RAMP_S = 50, RALLY_MAX = [0.15, 0.25], RALLY_PACE = [0.4, 0.8];
+export function rallyBoost(seconds, speedScale = 0.55) {
+  const p = Math.max(0, Math.min(1, (Number(seconds) || 0) / RALLY_RAMP_S)), ease = p * p * (3 - 2 * p);
+  const k = Math.max(0, Math.min(1, ((Number(speedScale) || 0.55) - RALLY_PACE[0]) / (RALLY_PACE[1] - RALLY_PACE[0])));
+  return 1 + (RALLY_MAX[0] + (RALLY_MAX[1] - RALLY_MAX[0]) * k) * ease;
+}
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -130,7 +138,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     paddle: { x: w / 2, w: PADDLE.baseW, h: PADDLE.h, y: h - 40, stretch: 0, tug: 0, vx: 0 },
     balls: [], bricks: [], colliders: [], well: null, pops: [],
     stats: { bricks: 0, walls: 0, sp: 0 }, combo: 0, comboBest: 0, time: 0, freeze: 0, pendingBreakout: false, breakoutAt: null, breakoutShield: null,
-    wallAge: 2, landRow: 99, wobble: { side: '', t: 0 }, crackFired: false, acc: 0, launchTimer: 0,
+    wallAge: 2, landRow: 99, wobble: { side: '', t: 0 }, crackFired: false, acc: 0, launchTimer: 0, rally: 0,
     // contract v2
     transition: null, timeScale: 1, hitStopMs: 0, smear: null, smearFading: false, fractures: 0, shatterWall: false,
     mantra: null, spell: null, beatPhase: 0, lastPerfectAt: 0, nearMissT: 0,
@@ -148,7 +156,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     return (g.time / spb()) % 1;
   };
   // One beat bottom-to-top at saturation 0, one and a half at 1 (breathing pace); never below a floor.
-  const targetSpeed = () => Math.max(220, g.speedScale * h / (spb() * (1 + 0.5 * g.sat)));
+  const targetSpeed = () => Math.max(220, g.speedScale * h / (spb() * (1 + 0.5 * g.sat))) * (g.finale ? 1 : rallyBoost(g.rally, g.speedScale));   // the finale keeps its own authored pace
   const setTimeScale = (s) => { if (s !== g.timeScale) { g.timeScale = s; au('setTimeScale', s); } };
 
   /* ------------------------------------------------------------ wall */
@@ -459,7 +467,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     return { x: g.paddle.x, y: g.paddle.y - g.paddle.h / 2 - BALL_R, vx: 0, vy: 0, r: BALL_R, spin: 0, ghost: !!ghost, stuck: true,
       orbit: null, lost: false, falling: false, trail: [], squash: 0, sqx: 0, sqy: -1 };
   }
-  function respawn(ghost, quick = false) { g.balls = [newBall(ghost)]; g.launchTimer = quick ? .55 : 0; }
+  function respawn(ghost, quick = false) { g.rally = 0; g.balls = [newBall(ghost)]; g.launchTimer = quick ? .55 : 0; }
   function launch(b) {
     if (!g.reduced && g.wallAge < 1.9) return;
     const a = (rng() < 0.5 ? -1 : 1) * (0.25 + rng() * 0.3);
@@ -1227,6 +1235,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function tick(dt, input) {
     g.time += dt; g.wallAge += dt;
+    if (g.balls.some(b => !b.stuck && !b.lost && !b.falling)) g.rally += dt;   // the rally ramp only counts a ball in the air
     updateTide(dt); updateFinaleFormation(dt); updatePendulums(dt);
     // Quiet landing ticks accompany the slower wall entrance.
     while (g.landRow < (g.spell ? 5 : BRICK.rows) && g.wallAge >= 0.56 + g.landRow * 0.04) {

@@ -468,7 +468,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     toughFaces.set(key,c);return c;
   }
   function drawBricks(s, mix, coresOnly = false, outro = null) {
-    const landing = !reduced && s.wallAge < 1.9;
+    const landing = !reduced && s.wallAge < 1.9, springy = landing && s.state !== 'grey';   // the grey world has no bounce in it: bricks drop and stay put
     const hide = s.mod && s.state === 'colour' ? clamp(s.mod.hideBricks || 0, 0, 1) : 0;   // BLANK: the wall fades from sight, still there
     if (hide >= 1) return;
     for (const br of s.bricks) {
@@ -480,8 +480,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       const arrival = landing ? clamp((s.wallAge - delay) / 1.6, 0, 1) : 1;
       const fall = Math.min(1, arrival / .35);
       const spring = clamp((arrival - .35) / .65, 0, 1);
-      const bounce = landing && arrival > .35 ? Math.abs(Math.sin(spring * Math.PI * 2)) * 85 * (1 - spring) : 0;
-      const squash = landing && arrival > .35 ? Math.cos(spring * Math.PI * 4) * .07 * (1 - spring) : 0;
+      const bounce = springy && arrival > .35 ? Math.abs(Math.sin(spring * Math.PI * 2)) * 85 * (1 - spring) : 0;
+      const squash = springy && arrival > .35 ? Math.cos(spring * Math.PI * 4) * .07 * (1 - spring) : 0;
       const offsetY = landing ? -(Math.max(0, br.y) + br.h + 28) * (1 - fall * fall) - bounce : 0;
       const jelly = rungs(4) ? (br.jelly || 0) : 0;
       const sx = 1 + jelly * 0.18 * Math.sin(jelly * 9) + squash, sy = 1 - jelly * 0.22 * Math.sin(jelly * 9) - squash;
