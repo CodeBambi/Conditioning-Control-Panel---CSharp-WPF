@@ -2498,7 +2498,11 @@ namespace ConditioningControlPanel
                 var sanitized = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(box.Text);
                 if (sanitized == null)
                 {
-                    ShowRemoteSubOutcome(Services.Fyp.Online.RemoteSubAddOutcome.NotAName, box.Text);
+                    // Null, never box.Text: this is the branch where the text FAILED sanitizing, so
+                    // it is the one string on this path we know nothing about. The copy has no {0}
+                    // today, and passing the raw box through is how it would quietly gain the
+                    // ability to echo whatever was pasted in the day someone adds one.
+                    ShowRemoteSubOutcome(Services.Fyp.Online.RemoteSubAddOutcome.NotAName, null);
                     return;
                 }
                 clean = sanitized;
