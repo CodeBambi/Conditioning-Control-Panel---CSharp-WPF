@@ -234,9 +234,11 @@ const opticalBuffers = new WeakMap();
  * The hit glow. Every brick hit in colour fires this pass, and it screens copies of the WHOLE frame back over itself,
  * so its level is how hard the screen flashes. It was .08 + aberr * .1 per copy: a fixed floor that cut off instead of
  * fading, and near-white on a bright board (owner, 2026-09-21: "too white and too bright, it's hurting my eyes").
- * Now it scales from zero, sits at about a third of the old level, and the added light is tinted pink.
+ * Now it scales from zero, sits well under the old level, and the added light is tinted pink.
  */
-export const HIT_GLOW = { perCopy: .055, tint: '#ff8cc8' };
+// .055 was tried first and the owner could barely see it, and the jolt went with it: the two sideways copies ARE part of
+// how a hit reads as a shake. .11 is the middle: about 40 percent of the old jump, still pink, still fading from zero.
+export const HIT_GLOW = { perCopy: .11, tint: '#ff8cc8' };
 export const hitGlowAlpha = aberr => Math.max(0, Math.min(1, aberr || 0)) * HIT_GLOW.perCopy;
 export function postProcess(g, canvas, off, { aberr = 0, bloom = 0, glitch = false, scan = null, rng = Math.random }) {
   const cw = canvas.width, ch = canvas.height;
