@@ -1016,7 +1016,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       }
       g.restore(); breakoutFlash = Math.max(0, breakoutFlash - dt);
     }
-    if (flash > 0) { flash = Math.max(0, flash - dt * 2.5); g.fillStyle = `rgba(255,255,255,${flash * 0.175})`; g.fillRect(0, 0, W, H); }
+    // The event flash (perfect, last brick, power catches): pink and low, never a white sheet (owner, 2026-09-21).
+    if (flash > 0) { flash = Math.max(0, flash - dt * 2.5); g.fillStyle = `rgba(255,140,200,${flash * 0.11})`; g.fillRect(0, 0, W, H); }
     if (wipe > 0) {                                    // the RELAPSE wipe: 100 ms sweep of grey
       wipe -= dt; const t = clamp(1 - wipe / 0.1, 0, 1);
       g.fillStyle = 'rgba(120,120,120,.9)'; g.fillRect(0, 0, W * t, H);
