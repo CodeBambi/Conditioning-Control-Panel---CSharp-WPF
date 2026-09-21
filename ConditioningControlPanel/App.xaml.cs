@@ -2571,6 +2571,7 @@ namespace ConditioningControlPanel
             // the hour in case the app sits in the tray across midnight. Never at exit, where a
             // call cut off mid-flight could land on the lock and not on the tab.
             Chaster?.StartDailySettle();
+            if (Chaster != null) Services.Chaster.ChasterHooks.Attach(Chaster);
 
             // Initialize Discord OAuth (validate session in background)
             _ = InitializeDiscordAsync();

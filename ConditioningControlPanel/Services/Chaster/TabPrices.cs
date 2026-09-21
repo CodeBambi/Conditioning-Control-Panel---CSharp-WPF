@@ -28,7 +28,7 @@ public static class TabPrices
     public static readonly IReadOnlyList<TabPrice> All = new[]
     {
         // The panel
-        new TabPrice("typo", 15, TabPriceGate.Free),
+        new TabPrice("typo", 15, TabPriceGate.Free, PerUnit: true),
         new TabPrice("lockcard", -30, TabPriceGate.Free),
         new TabPrice("attention", 120, TabPriceGate.Free),
         new TabPrice("mantra", 10, TabPriceGate.Free, PerUnit: true),
