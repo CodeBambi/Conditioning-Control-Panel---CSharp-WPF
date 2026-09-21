@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
-             xmlns:feat="clr-namespace:ConditioningControlPanel.Features">
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
+             xmlns:ctl="clr-namespace:ConditioningControlPanel.Controls">
 
     <!-- Velvet Kit 2 density pass. The root IS the StackPanel (the old Grid wrapper is gone):
          MainWindow.SessionFeatureLock.cs inserts the session-lock banner at index 0 of
@@ -200,6 +201,12 @@
                                                    Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                         <ContentControl x:Name="V2BoxBadge" Margin="7,0,0,0" VerticalAlignment="Center"/>
                                     </StackPanel>
+
+                                    <!-- The standalone way in (owner decision, 2026-09-19): the same
+                                         counter prize at the same price, bought from here for the
+                                         people who never open the Back Room. It hides itself once the
+                                         prize lands and the rows below take over. -->
+                                    <ctl:V2GetItRow x:Name="RowGetBubblesV2"/>
 
                                     <Grid x:Name="MotionRow" Height="36" Background="Transparent"
                                           ToolTip="{loc:Str tooltip_bubble_motion}">

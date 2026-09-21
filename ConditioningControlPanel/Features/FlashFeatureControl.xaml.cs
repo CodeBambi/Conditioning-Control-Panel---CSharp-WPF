@@ -33,6 +33,8 @@ namespace ConditioningControlPanel.Features
             // mod switch must repaint them (a popup instance never lived long enough to care).
             ApplyFeatureArt();
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
+            RowGetFlashesV2.Configure(V2PurchaseRule.FlashesPrizeId, "v2_get_flash_blurb", "section_flash_v2");
+            RowGetFlashesV2.RowChanged += OnGetRowChanged;
             RefreshV2Box();
         }
 
@@ -41,7 +43,13 @@ namespace ConditioningControlPanel.Features
             PrizeGrants.GrantsChanged -= OnGrantsChanged;
             _settingsHook?.Unhook();
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+            RowGetFlashesV2.RowChanged -= OnGetRowChanged;
         }
+
+        // The Get it row decides its own visibility; the box only needs to know whether anything is
+        // left in it. It repaints on its own schedule (a counter read landing, a sign-in), which is
+        // why the box is re-measured from the row rather than from ownership alone.
+        private void OnGetRowChanged(object? sender, EventArgs e) => RefreshV2Box();
 
         // The Flashes v2 box and its rows: visibility is ownership, never settings (the dashboard
         // flash card's own v2 pill counts these prizes too - that check lives in
@@ -60,7 +68,10 @@ namespace ConditioningControlPanel.Features
             RowDraggable.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
             // Shatter dresses the way that same picture leaves, so it rides those grants too.
             RowShatter.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
-            BoxFlashV2.Visibility = (remix || motion) ? Visibility.Visible : Visibility.Collapsed;
+            // The box no longer collapses on ownership alone: with nothing owned it holds the offer
+            // to buy the prize, which is the whole point of that row being there.
+            BoxFlashV2.Visibility = (remix || motion || !RowGetFlashesV2.IsRowHidden)
+                ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // One hook for both ownership-driven pieces of this control: the motion picker's rows

@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
-             xmlns:feat="clr-namespace:ConditioningControlPanel.Features">
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
+             xmlns:ctl="clr-namespace:ConditioningControlPanel.Controls">
 
     <!-- Velvet Kit 2 density pass. The root stays a StackPanel: MainWindow.SessionFeatureLock.cs
          inserts the session-lock banner at index 0 of this panel. -->
@@ -239,6 +240,12 @@
                                                    FontWeight="SemiBold" Foreground="#FFE08A" Opacity="0.92"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
+
+                                    <!-- The standalone way in (owner decision, 2026-09-19): the same
+                                         counter prize at the same price, bought from here for the
+                                         people who never open the Back Room. It hides itself once the
+                                         prize lands and the rows below take over. -->
+                                    <ctl:V2GetItRow x:Name="RowGetFlashesV2"/>
 
                                     <!-- Flashes v2 motion (Back Room prizes). Hidden until a v2 style is owned; the
                                          choices are built in code from PrizeGrants: Still always, each owned style with
