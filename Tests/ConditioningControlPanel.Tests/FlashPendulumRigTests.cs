@@ -44,7 +44,10 @@ public class FlashPendulumRigTests
             var s = FlashMotion.Create(FlashMotionStyle.Pendulum, 300, y, mw, mh,
                 0, 0, bw, bh, MotionLevel.Full, rng, taken);
             up.Add(s);
-            taken.Add(new PendulumNeighbour(s.PivotX, s.Phase));
+            // Built the way the service builds it: the neighbour's EFFECTIVE phase, not the one it
+            // was born with. Identical here (nothing has been stepped yet) and the point of the
+            // exercise once something has - see TheNeighboursPhaseIsWhereItIsNowNotWhereItStarted.
+            taken.Add(new PendulumNeighbour(s.PivotX, FlashPendulumRig.EffectivePhase(s)));
         }
         return up;
     }
@@ -153,6 +156,31 @@ public class FlashPendulumRigTests
     }
 
     [Fact]
+    public void TheLonePendulumDrawsTheSameThreeNumbersItAlwaysDid()
+    {
+        // The rig must not cost the common case a single rng draw: amplitude, period, phase, in
+        // that order, and nothing else. A fourth draw here would shift every seeded flash in the
+        // app one step down the sequence.
+        var expect = new Random(41);
+        expect.NextDouble();                                 // amplitude
+        expect.NextDouble();                                 // period
+        var expectedPhase = expect.NextDouble() * 2.0 * Math.PI;
+
+        var s = FlashMotion.Create(FlashMotionStyle.Pendulum, 300, 400, MW, MH,
+            0, 0, BW, BH, MotionLevel.Full, new Random(41));
+        Assert.Equal(expectedPhase, s.Phase, 9);
+
+        // And an EMPTY neighbour list is the same thing as no list at all, draws included.
+        var withNull = FlashMotion.Create(FlashMotionStyle.Pendulum, 300, 400, MW, MH,
+            0, 0, BW, BH, MotionLevel.Full, new Random(41), null);
+        var withEmpty = FlashMotion.Create(FlashMotionStyle.Pendulum, 300, 400, MW, MH,
+            0, 0, BW, BH, MotionLevel.Full, new Random(41), Array.Empty<PendulumNeighbour>());
+        Assert.Equal(withNull.Phase, withEmpty.Phase, 9);
+        Assert.Equal(withNull.PivotX, withEmpty.PivotX, 9);
+        Assert.Equal(withNull.Rope, withEmpty.Rope, 9);
+    }
+
+    [Fact]
     public void APictureTooWideToMoveKeepsTheCentreAndTakesTheOppositePhaseInstead()
     {
         // A flash at the default ImageScale is 40% of the monitor's width; at nearly the whole
@@ -161,12 +189,12 @@ public class FlashPendulumRigTests
         var rng = new Random(3);
         var first = FlashMotion.Create(FlashMotionStyle.Pendulum, 60, 400, 1800, 500,
             0, 0, BW, BH, MotionLevel.Full, rng);
-        var taken = new[] { new PendulumNeighbour(first.PivotX, first.Phase) };
+        var taken = new[] { new PendulumNeighbour(first.PivotX, FlashPendulumRig.EffectivePhase(first)) };
         var second = FlashMotion.Create(FlashMotionStyle.Pendulum, 60, 600, 1800, 500,
             0, 0, BW, BH, MotionLevel.Full, rng, taken);
 
         Assert.Equal(first.PivotX, second.PivotX, 6);
-        var apart = Math.Abs(FlashPendulumRig.Wrap(second.Phase - first.Phase) - Math.PI);
+        var apart = Math.Abs(Math.Abs(SignedGap(second.Phase, first.Phase)) - Math.PI);
         Assert.True(apart < 1e-6, $"the two share a nail and start {apart} off anti-phase");
     }
 
@@ -174,17 +202,107 @@ public class FlashPendulumRigTests
     public void TwoPendulumsFarEnoughApartSwingInStepSoTheGapHolds()
     {
         // The opposite rule, and the reason it is not one rule: with a real gap between the nails,
-        // opposite phases walk the two pictures into each other every half period. In step, the
-        // gap they started with is the gap they keep.
+        // opposite phases walk the two pictures into each other every half period. Near enough in
+        // step, the gap they started with is the gap they keep - near enough, because an exact
+        // copy would make a burst one rigid sheet.
         var rng = new Random(11);
         var first = FlashMotion.Create(FlashMotionStyle.Pendulum, 200, 300, MW, MH,
             0, 0, BW, BH, MotionLevel.Full, rng);
-        var taken = new[] { new PendulumNeighbour(first.PivotX, first.Phase) };
+        var taken = new[] { new PendulumNeighbour(first.PivotX, FlashPendulumRig.EffectivePhase(first)) };
         var second = FlashMotion.Create(FlashMotionStyle.Pendulum, 200, 500, MW, MH,
             0, 0, BW, BH, MotionLevel.Full, rng, taken);
 
         Assert.True(Math.Abs(second.PivotX - first.PivotX) >= MW);
-        Assert.Equal(FlashPendulumRig.Wrap(first.Phase), second.Phase, 6);
+        var off = SignedGap(second.Phase, first.Phase);
+        Assert.True(Math.Abs(off) <= FlashPendulumRig.PhaseJitterRad + 1e-9,
+            $"the copy is {off} rad off its neighbour, past the jitter it is allowed");
+    }
+
+    /// <summary>Shortest signed distance between two phases, in (-pi, pi].</summary>
+    private static double SignedGap(double a, double b)
+    {
+        var d = FlashPendulumRig.Wrap(a - b);
+        return d > Math.PI ? d - 2.0 * Math.PI : d;
+    }
+
+    [Fact]
+    public void ABurstIsNotOneRigidSheet()
+    {
+        // Three pictures copying one phase EXACTLY slide across the screen in unison and read as a
+        // single object on rails. They must differ, and by no more than the jitter allows.
+        for (int seed = 0; seed < 40; seed++)
+        {
+            var up = Burst(4, seed);
+            var phases = up.Select(s => s.Phase).ToList();
+            Assert.Equal(phases.Count, phases.Select(p => Math.Round(p, 6)).Distinct().Count());
+
+            for (int i = 1; i < up.Count; i++)
+            {
+                // Every one of them is either a jittered copy or an exact anti-phase; nothing may
+                // be further off its nearest neighbour than one of those two allows.
+                var nearest = up.Take(i).OrderBy(o => Math.Abs(o.PivotX - up[i].PivotX)).First();
+                var off = Math.Abs(SignedGap(up[i].Phase, FlashPendulumRig.EffectivePhase(nearest)));
+                var antiPhase = Math.Abs(off - Math.PI) <= 1e-6;
+                Assert.True(antiPhase || off <= FlashPendulumRig.PhaseJitterRad + 1e-9,
+                    $"seed {seed}: pendulum {i} starts {off} rad off its nearest neighbour");
+            }
+        }
+    }
+
+    [Fact]
+    public void TheNeighboursPhaseIsWhereItIsNowNotWhereItStarted()
+    {
+        // A pendulum that has been up a second or two is nowhere near where it started, so the
+        // stored Phase is a stale number. Lining a new one up against it comes out half a swing
+        // wrong - and in the too-wide case, "the opposite phase" of a stale number can land IN
+        // phase, which is the stacking this whole change is about.
+        var rng = new Random(23);
+        var first = FlashMotion.Create(FlashMotionStyle.Pendulum, 60, 400, 1800, 500,
+            0, 0, BW, BH, MotionLevel.Full, rng);
+        for (int i = 0; i < 140; i++) FlashMotion.Step(first, 0.01);   // 1.4s in
+
+        var live = FlashPendulumRig.EffectivePhase(first);
+        Assert.True(Math.Abs(SignedGap(live, first.Phase)) > 1.0,
+            "this fixture is meant to have MOVED - the swing has not advanced enough to prove anything");
+
+        var second = FlashMotion.Create(FlashMotionStyle.Pendulum, 60, 600, 1800, 500,
+            0, 0, BW, BH, MotionLevel.Full, rng, new[] { new PendulumNeighbour(first.PivotX, live) });
+
+        // Same nail, so exactly opposite - measured against where the first one IS.
+        Assert.Equal(first.PivotX, second.PivotX, 6);
+        Assert.Equal(Math.PI, Math.Abs(SignedGap(second.Phase, live)), 6);
+    }
+
+    // =====================================================================================
+    //  which screen a neighbour is on
+    // =====================================================================================
+
+    [Fact]
+    public void TwoScreensStackedVerticallyAreNotTheSameScreen()
+    {
+        // The trap the horizontal-only test fell into: two 1080p monitors one above the other
+        // share X and W exactly, so a lone pendulum on the lower one would have hung off centre
+        // because the upper one had a flash up.
+        Assert.False(FlashPendulumRig.SameMonitor(0, 0, 1920, 1080, 0, 1080, 1920, 1080));
+        Assert.True(FlashPendulumRig.SameMonitor(0, 1080, 1920, 1080, 0, 1080, 1920, 1080));
+    }
+
+    [Fact]
+    public void SideBySideAndMixedDpiScreensAreNotTheSameScreenEither()
+    {
+        // Side by side: same Y, same size, different X.
+        Assert.False(FlashPendulumRig.SameMonitor(0, 0, 1920, 1080, 1920, 0, 1920, 1080));
+
+        // Mixed DPI: a 2560x1440 panel at 150% sits at the same origin in world px as a 1080p one
+        // and differs only in extent, which is exactly the pair a width-only test would miss if it
+        // ever matched. Both extents differ here, and either one alone is enough to separate them.
+        Assert.False(FlashPendulumRig.SameMonitor(1920, 0, 2560, 1440, 1920, 0, 1920, 1080));
+
+        // A v2 preview narrows the monitor to a peripheral LANE, and a lane is not the screen.
+        Assert.False(FlashPendulumRig.SameMonitor(0, 0, 1920, 1080, 0, 0, 652, 1080));
+
+        // Rounding slack, not equality: world px come out of a DPI multiply.
+        Assert.True(FlashPendulumRig.SameMonitor(0, 0, 1920, 1080, 0.4, -0.3, 1920.2, 1079.6));
     }
 
     // =====================================================================================
