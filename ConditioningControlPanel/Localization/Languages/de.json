@@ -2566,6 +2566,7 @@
   "achievement_bubble_milestone_header": "Blasen-Meilenstein!",
   "video_no_videos_found": "Keine Videos gefunden in:\n{0}",
   "video_no_videos_title": "Keine Videos",
+  "video_toast_feed_has_the_screen": "Für dich hat gerade den Bildschirm. Schliess den Feed, dann läuft das Video.",
   "video_packs_installed_none_active": "Du hast {0} Inhaltspaket(e) installiert, aber keines ist aktiv.",
   "video_enable_packs_hint": "Gehe zum Dateien-Tab und aktiviere deine Inhaltspakete, oder wähle eine Dateien-Vorlage.",
   "video_active_packs_no_videos": "Du hast {0} aktive(s) Paket(e), aber keines enthält Videos.",

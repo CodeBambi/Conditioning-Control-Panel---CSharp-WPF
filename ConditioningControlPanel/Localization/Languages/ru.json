@@ -2566,6 +2566,7 @@
   "achievement_bubble_milestone_header": "Веха пузырьков!",
   "video_no_videos_found": "Видео не найдены в:\n{0}",
   "video_no_videos_title": "Нет видео",
+  "video_toast_feed_has_the_screen": "«Для тебя» занимает экран. Закройте ленту, и видео начнётся.",
   "video_packs_installed_none_active": "У тебя установлено {0} контент-паков, но ни один не активен.",
   "video_enable_packs_hint": "Перейди на вкладку «Ассеты» и включи контент-паки или выбери пресет ассетов.",
   "video_active_packs_no_videos": "У тебя {0} активных паков, но ни один не содержит видео.",

@@ -3578,6 +3578,7 @@
   "achievement_bubble_milestone_header": "Bubble Milestone!",
   "video_no_videos_found": "No videos found in:\n{0}",
   "video_no_videos_title": "No Videos",
+  "video_toast_feed_has_the_screen": "The For You feed has the screen. Close the feed and the video plays.",
   "video_packs_installed_none_active": "You have {0} content pack(s) installed but none are active.",
   "video_enable_packs_hint": "Go to Assets tab and enable your content packs, or select an Asset Preset.",
   "video_active_packs_no_videos": "You have {0} active pack(s) but none contain videos.",

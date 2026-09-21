@@ -2566,6 +2566,7 @@
   "achievement_bubble_milestone_header": "Marco de Bolhas!",
   "video_no_videos_found": "Nenhum vídeo encontrado em:\n{0}",
   "video_no_videos_title": "Sem Vídeos",
+  "video_toast_feed_has_the_screen": "Para Você está ocupando a tela. Feche o feed e o vídeo começa.",
   "video_packs_installed_none_active": "Você tem {0} pacote(s) de conteúdo instalado(s) mas nenhum está ativo.",
   "video_enable_packs_hint": "Vá para a aba Recursos e ative seus pacotes de conteúdo, ou selecione uma Predefinição de Recursos.",
   "video_active_packs_no_videos": "Você tem {0} pacote(s) ativo(s) mas nenhum contém vídeos.",

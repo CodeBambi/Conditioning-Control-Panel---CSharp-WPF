@@ -3304,6 +3304,7 @@
   "achievement_bubble_milestone_header": "泡泡里程碑！",
   "video_no_videos_found": "在以下路径未找到视频：\n{0}",
   "video_no_videos_title": "无视频",
+  "video_toast_feed_has_the_screen": "“为你推荐”正占着屏幕。关掉它，视频就会播放。",
   "video_packs_installed_none_active": "你已安装 {0} 个内容包但没有一个是活跃的。",
   "video_enable_packs_hint": "前往资源标签页启用你的内容包，或选择资源预设。",
   "video_active_packs_no_videos": "你有 {0} 个活跃内容包但没有一个包含视频。",

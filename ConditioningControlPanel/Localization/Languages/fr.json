@@ -2566,6 +2566,7 @@
   "achievement_bubble_milestone_header": "Palier de Bulles !",
   "video_no_videos_found": "Aucune vidéo trouvée dans :\n{0}",
   "video_no_videos_title": "Aucune Vidéo",
+  "video_toast_feed_has_the_screen": "Pour toi occupe l'écran. Ferme le fil et la vidéo démarre.",
   "video_packs_installed_none_active": "Tu as {0} pack(s) de contenu installé(s) mais aucun n'est actif.",
   "video_enable_packs_hint": "Va dans l'onglet Ressources et active tes packs de contenu, ou sélectionne un Préréglage de Ressources.",
   "video_active_packs_no_videos": "Tu as {0} pack(s) actif(s) mais aucun ne contient de vidéos.",

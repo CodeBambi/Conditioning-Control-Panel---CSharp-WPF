@@ -2566,6 +2566,7 @@
   "achievement_bubble_milestone_header": "バブルマイルストーン！",
   "video_no_videos_found": "動画が見つかりません：\n{0}",
   "video_no_videos_title": "動画なし",
+  "video_toast_feed_has_the_screen": "「おすすめ」が画面を使っています。閉じると動画が再生されます。",
   "video_packs_installed_none_active": "コンテンツパックが{0}個インストールされていますが、有効なものがありません。",
   "video_enable_packs_hint": "アセットタブでコンテンツパックを有効にするか、アセットプリセットを選択してください。",
   "video_active_packs_no_videos": "有効なパックが{0}個ありますが、動画を含むものがありません。",

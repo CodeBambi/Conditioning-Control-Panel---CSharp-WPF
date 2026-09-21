@@ -2566,6 +2566,7 @@
   "achievement_bubble_milestone_header": "¡Hito de Burbujas!",
   "video_no_videos_found": "No se encontraron videos en:\n{0}",
   "video_no_videos_title": "Sin Videos",
+  "video_toast_feed_has_the_screen": "Para ti tiene la pantalla. Cierra el feed y el vídeo se reproduce.",
   "video_packs_installed_none_active": "Tienes {0} paquete(s) de contenido instalado(s) pero ninguno está activo.",
   "video_enable_packs_hint": "Ve a la pestaña de Recursos y activa tus paquetes de contenido, o selecciona un Preset de Recursos.",
   "video_active_packs_no_videos": "Tienes {0} paquete(s) activo(s) pero ninguno contiene videos.",
