@@ -62,6 +62,11 @@ internal static class DtrhHostService
     private static double _runVoiceoverSec;
     private static int _runSubliminalsHeard;
 
+    /// <summary>The page's last run-progress snapshot: the run-ended body as it stood a few
+    /// seconds ago. Banked by <see cref="DisposeAll"/> when the window dies with a descent still
+    /// falling, which is the one exit the page cannot report. See <see cref="DtrhRunCloseRule"/>.</summary>
+    private static JObject? _lastRunProgress;
+
     public static bool IsActive => _host != null;
 
     /// <summary>A DtRH descent is currently running (between run-started and run-ended). Used to
@@ -92,6 +97,7 @@ internal static class DtrhHostService
 
             _exiting = false;
             _runActive = false;
+            _lastRunProgress = null;
             _worldFrozen = false;
             _testMode = testMode;
             _meta = new DtrhMetaBridge(testMode, msg => _host?.Post(msg));
@@ -289,9 +295,16 @@ internal static class DtrhHostService
             case "request-run":
                 OnRequestRun(o);
                 break;
+            case "run-progress":
+                // The page's ~10s snapshot of the descent in flight, kept for one purpose: a
+                // window that dies without a word (the frame's X, Alt+F4, a crash) has nobody
+                // left to send run-ended, and the teardown banks this instead of losing the run.
+                if (_runActive) _lastRunProgress = o;
+                break;
             case "run-started":
             {
                 _runActive = true;
+                _lastRunProgress = null;
                 SeasonRecapService.TrackFeature(SeasonFeatureKeys.Dtrh);
                 _vnSpeaking = false;   // never carry a stale duck into a run
                 ApplyWorldFreeze(false);   // a stale freeze from a crashed prior run must not bleed into this descent's dedup state
@@ -574,19 +587,42 @@ internal static class DtrhHostService
 
     /// <summary>run-ended -> XP payout (C#-owned formula, identical to the WPF EndRun) +
     /// meta banking via the shared AwardRunRewards, answered with payout-result.</summary>
-    private static void OnRunEnded(JObject o)
+    /// <param name="fromTeardown">The host synthesised this booking from its last progress
+    /// snapshot because the window died. The crash sentinel is NOT cleared on that path: a
+    /// WebView2 process failure reaches the same teardown, and clearing it would report a real
+    /// crash as a clean run on the next launch.</param>
+    private static void OnRunEnded(JObject o, bool fromTeardown = false)
     {
+        // The host is the authority on whether a descent is still open, because it now has TWO
+        // producers: the page's run-ended and the teardown's synthetic one. A run-ended already
+        // queued on the dispatcher can be pumped after DisposeAll banked, and paying it again
+        // would double the Sparks and the run counter.
+        bool wasActive = _runActive;
         _runActive = false;
+        _lastRunProgress = null;   // banked: nothing left for the teardown to pay
         try { Haptics.DtrhHapticDirector.OnRunEnded(); } catch (Exception ex) { Diag.Swallowed(ex); }
         ApplyWorldFreeze(false);   // a run ending mid-freeze must resume native video + voice, not wedge them through the hub
+        if (!DtrhRunCloseRule.ShouldPayBooking(wasActive))
+        {
+            App.Logger?.Debug("DtrhHost: run-ended for a descent that is already banked - ignored");
+            return;
+        }
         try
         {
             double score = (double?)o["score"] ?? 0;
-            double durationSec = Math.Max(1, (double?)o["durationSec"] ?? 60);
-            double elapsedSec = Math.Clamp((double?)o["elapsedSec"] ?? durationSec, 0, durationSec * 2);
+            double configuredSec = Math.Max(1, (double?)o["durationSec"] ?? 60);
+            double elapsedSec = Math.Clamp((double?)o["elapsedSec"] ?? configuredSec, 0, configuredSec * 2);
             double diffMult = Math.Clamp((double?)o["difficultyMult"] ?? 1.0, 0.5, 5.0);
             double sparkGainMult = Math.Clamp((double?)o["sparkGainMult"] ?? 1.0, 0.5, 5.0);
             string diff = (string?)o["difficulty"] ?? "Gentle";
+
+            // A descent that was LEFT is paid for the seconds it really fell, and only counts as
+            // a run once it lasted a minute. Both because AwardRunRewards scales its Spark floor
+            // off the CONFIGURED length: an endless run is dealt 720s, so without this a
+            // hold-Escape one second in mints the fully maxed floor, repeatably.
+            bool abandoned = (bool?)o["abandoned"] ?? false;
+            var payout = DtrhRunPayoutRule.For(abandoned, configuredSec, elapsedSec);
+            double durationSec = Math.Max(1, payout.PaidDurationSec);
 
             double durMin = durationSec / 60.0;
             double capBase = 250.0 * durMin * diffMult;
@@ -608,7 +644,8 @@ internal static class DtrhHostService
                     DripFeedMaxed: (bool?)o["dripFeedMaxed"] ?? false,
                     BestCombo: (int?)o["bestCombo"] ?? 0,
                     Defused: (int?)o["defused"] ?? 0,
-                    ElapsedSec: elapsedSec));
+                    ElapsedSec: elapsedSec),
+                    payout.CountsAsRun);
             }
 
             ChaosRank? rankUp = null;
@@ -634,7 +671,10 @@ internal static class DtrhHostService
                 }
                 catch (Exception ex) { Diag.Swallowed(ex); }
                 try { App.Bark?.NotifyChaosRunCompleted((int)finalXp, diff); } catch (Exception ex) { Diag.Swallowed(ex); }
-                try { ChaosCrashSentinel.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                // NOT on the teardown path: ChaosCrashSentinel.Recover("process-failed") and
+                // ("heartbeat-silent") both land in DisposeAll, and clearing the sentinel from
+                // there would report a genuine WebView2 crash as a clean run next launch.
+                if (!fromTeardown) { try { ChaosCrashSentinel.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); } }
                 // RevealService.Sync mutated pendingReveals BEHIND the bridge - push a fresh
                 // snapshot so the Warren's flash pass sees the new pendings on return.
                 try { _meta?.Rebroadcast(); } catch (Exception ex) { Diag.Swallowed(ex); }
@@ -1003,6 +1043,23 @@ internal static class DtrhHostService
         CancelExitWatchdog();
         StopHeartbeatWatch();
         HookVideoEvents(false);
+        // The window died with a descent still falling. Every exit the page can see books
+        // itself first (the recap, the Escape hold, the host's end-run), so reaching here with
+        // _runActive still true means the frame was closed out from under it - and an endless
+        // descent has no other ending. Bank the last snapshot rather than dropping the run.
+        // It is an ABANDONED booking like any other: paid pro rata for the seconds the snapshot
+        // says were fallen, and counting as a run only past the minute mark.
+        if (DtrhRunCloseRule.ShouldBookOnClose(_runActive, _lastRunProgress != null))
+        {
+            App.Logger?.Information("DtrhHost: the window closed mid-run - banking the last run snapshot");
+            try
+            {
+                var snapshot = _lastRunProgress!;
+                snapshot["abandoned"] = true;
+                OnRunEnded(snapshot, fromTeardown: true);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
         // Never leave the toy running after the window dies (crash, watchdog, clean exit alike).
         try { Haptics.DtrhHapticDirector.OnClosed(); } catch (Exception ex) { Diag.Swallowed(ex); }
         // Never leave a video or voiceline wedged paused if the window dies mid-freeze.
@@ -1014,12 +1071,11 @@ internal static class DtrhHostService
         _diveMuted = false;
         try { App.Video?.SetExternalMute(false); } catch (Exception ex) { Diag.Swallowed(ex); }
         try { _meta?.FlushSave(); } catch (Exception ex) { Diag.Swallowed(ex); }
-        if (_runActive && !_testMode)
-        {
-            // The window died mid-run (crash/force close): leave the sentinel armed only for
-            // genuine process death; a deliberate close is a clean end.
-            try { ChaosCrashSentinel.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
-        }
+        // The sentinel is NOT disarmed here any more. This teardown is where
+        // Recover("process-failed") and Recover("heartbeat-silent") both land, and Recover's own
+        // contract is "the sentinel records the abnormal end" - the old clear contradicted it and
+        // reported a real WebView2 vanish as a clean run on the next launch. A deliberate close
+        // mid-descent now costs one diagnostic line in the log, which is the cheaper mistake.
         _runActive = false;
         try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _host = null;
