@@ -153,10 +153,15 @@ public class PatreonReconnectRuleTests
 
     // ------------------------------------------------- 2. is the grant dead, or is the wifi
 
-    /// <summary>
-    /// The only thing that lights the Reconnect row. A refresh token is refused only when revoked,
-    /// replaced or never valid, and none of those start working again by themselves.
-    /// </summary>
+    private static readonly DateTime Now = new(2026, 9, 21, 12, 0, 0, DateTimeKind.Utc);
+    private static DateTime Ago(TimeSpan t) => Now - t;
+
+    private static PatreonRefreshOutcome Classify(
+        HttpStatusCode? status, string? oauthError = null, bool threw = false, TimeSpan? expiredFor = null)
+        => PatreonGrantHealth.Classify(status, oauthError, threw,
+            expiredFor == null ? null : Ago(expiredFor.Value), Now);
+
+    /// <summary>A 4xx is the token turned down: a verdict at once, however fresh the expiry.</summary>
     [Theory]
     [InlineData(HttpStatusCode.BadRequest)]
     [InlineData(HttpStatusCode.Unauthorized)]
@@ -164,37 +169,74 @@ public class PatreonReconnectRuleTests
     [InlineData(HttpStatusCode.NotFound)]
     public void A4xxAnswer_MeansTheGrantIsDead(HttpStatusCode status)
     {
-        var outcome = PatreonGrantHealth.Classify(status, null, threw: false);
+        var outcome = Classify(status, expiredFor: TimeSpan.FromMinutes(1));
         Assert.Equal(PatreonRefreshOutcome.Refused, outcome);
         Assert.True(PatreonGrantHealth.MarksGrantDead(outcome));
     }
 
-    /// <summary>
-    /// Nobody answering, the proxy falling over and being told to slow down are bad afternoons, not
-    /// verdicts: one extra launch of silence beats nagging a patron on a flaky connection.
-    /// </summary>
+    /// <summary>A fresh expiry under a 5xx is a bad afternoon, and nagging would be wrong.</summary>
     [Theory]
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.BadGateway)]
     [InlineData(HttpStatusCode.ServiceUnavailable)]
     [InlineData(HttpStatusCode.GatewayTimeout)]
-    [InlineData(HttpStatusCode.RequestTimeout)]
-    [InlineData((HttpStatusCode)429)]
-    public void AnOutage_SaysNothingAboutTheGrant(HttpStatusCode status)
+    public void A5xxOverAFreshExpiry_SaysNothing(HttpStatusCode status)
+        => Assert.Equal(PatreonRefreshOutcome.Unavailable,
+            Classify(status, expiredFor: TimeSpan.FromHours(1)));
+
+    /// <summary>
+    /// THIS is the rung that reaches the ticket's user. CCP-Server origin/main maps every refresh
+    /// failure - including the invalid_grant a revoked refresh token earns - to a 500, so the 4xx
+    /// rung above can never fire in production. A healthy install refreshes on the first launch
+    /// after expiry, so an expiry days old while the proxy keeps answering is a dead grant.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    public void A5xxOverAStaleExpiry_MeansTheGrantIsDead(HttpStatusCode status)
     {
-        var outcome = PatreonGrantHealth.Classify(status, null, threw: false);
-        Assert.Equal(PatreonRefreshOutcome.Unavailable, outcome);
-        Assert.False(PatreonGrantHealth.MarksGrantDead(outcome));
+        var outcome = Classify(status, expiredFor: TimeSpan.FromDays(4));
+        Assert.Equal(PatreonRefreshOutcome.Refused, outcome);
+        Assert.True(PatreonGrantHealth.MarksGrantDead(outcome));
     }
 
-    /// <summary>A thrown request has no answer to read, so it can never be a verdict.</summary>
+    /// <summary>Exactly at the threshold is still a bad afternoon; a second past it is not.</summary>
+    [Fact]
+    public void TheStalenessBoundaryIsStrict()
+    {
+        Assert.Equal(PatreonRefreshOutcome.Unavailable,
+            Classify(HttpStatusCode.InternalServerError, expiredFor: PatreonGrantHealth.StaleAfter));
+        Assert.Equal(PatreonRefreshOutcome.Refused,
+            Classify(HttpStatusCode.InternalServerError,
+                expiredFor: PatreonGrantHealth.StaleAfter + TimeSpan.FromSeconds(1)));
+    }
+
+    /// <summary>An unknown expiry can never make a grant dead.</summary>
+    [Fact]
+    public void A5xxWithNoExpiryToJudge_SaysNothing()
+        => Assert.Equal(PatreonRefreshOutcome.Unavailable,
+            Classify(HttpStatusCode.InternalServerError, expiredFor: null));
+
+    /// <summary>
+    /// A timeout and a 429 are the service asking for less, not a word about the token, so they
+    /// stay Unavailable at ANY age. Otherwise a rate-limited install would accuse its own grant.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.RequestTimeout)]
+    [InlineData((HttpStatusCode)429)]
+    public void TimeoutsAndRateLimits_NeverBecomeAVerdict(HttpStatusCode status)
+        => Assert.Equal(PatreonRefreshOutcome.Unavailable,
+            Classify(status, expiredFor: TimeSpan.FromDays(40)));
+
+    /// <summary>Nothing answered, so there is nothing to read - at any age.</summary>
     [Fact]
     public void AThrownRequest_SaysNothingAboutTheGrant()
     {
+        Assert.Equal(PatreonRefreshOutcome.Unavailable, Classify(null, threw: true));
         Assert.Equal(PatreonRefreshOutcome.Unavailable,
-            PatreonGrantHealth.Classify(null, null, threw: true));
+            Classify(null, threw: true, expiredFor: TimeSpan.FromDays(40)));
         Assert.Equal(PatreonRefreshOutcome.Unavailable,
-            PatreonGrantHealth.Classify(HttpStatusCode.OK, "invalid_grant", threw: true));
+            Classify(HttpStatusCode.OK, "invalid_grant", threw: true, expiredFor: TimeSpan.FromDays(40)));
     }
 
     /// <summary>The proxy can pass Patreon's refusal through with a 200 and an error field.</summary>
@@ -203,14 +245,27 @@ public class PatreonReconnectRuleTests
     [InlineData("invalid_request")]
     public void AnOauthErrorBody_IsStillARefusal(string error)
         => Assert.Equal(PatreonRefreshOutcome.Refused,
-            PatreonGrantHealth.Classify(HttpStatusCode.OK, error, threw: false));
+            Classify(HttpStatusCode.OK, error, expiredFor: TimeSpan.FromMinutes(1)));
 
     [Fact]
     public void ACleanAnswer_IsARefresh()
     {
-        var outcome = PatreonGrantHealth.Classify(HttpStatusCode.OK, null, threw: false);
+        var outcome = Classify(HttpStatusCode.OK, expiredFor: TimeSpan.FromDays(40));
         Assert.Equal(PatreonRefreshOutcome.Refreshed, outcome);
         Assert.False(PatreonGrantHealth.MarksGrantDead(outcome));
+    }
+
+    /// <summary>
+    /// A Local-kind expiry off the JSON round-trip must be converted, not assumed UTC, or the
+    /// threshold moves by the user's offset.
+    /// </summary>
+    [Fact]
+    public void ALocalKindExpiryIsConvertedNotAssumed()
+    {
+        var justInsideUtc = Now - PatreonGrantHealth.StaleAfter + TimeSpan.FromMinutes(1);
+        Assert.Equal(PatreonRefreshOutcome.Unavailable, PatreonGrantHealth.Classify(
+            HttpStatusCode.InternalServerError, null, false,
+            justInsideUtc.ToLocalTime(), Now));
     }
 
     /// <summary>
@@ -247,6 +302,10 @@ public class PatreonReconnectRuleTests
         Assert.Contains("PatreonGrantHealth.Classify", source, StringComparison.Ordinal);
         Assert.Contains("PatreonGrantHealth.MarksGrantDead", source, StringComparison.Ordinal);
         Assert.Equal(4, Regex.Matches(source, @"GrantLooksDead = false").Count);
+
+        // The staleness rung is useless without the expiry, and both refresh call sites have the
+        // stored tokens in hand: pass it, never null.
+        Assert.Equal(2, Regex.Matches(source, @"RefreshTokensAsync\(tokens\.RefreshToken, tokens\.ExpiresAt\)").Count);
     }
 
     // ------------------------------------------------------------------ 3. the two 409s

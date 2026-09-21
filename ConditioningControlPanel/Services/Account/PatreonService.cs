@@ -69,6 +69,11 @@ namespace ConditioningControlPanel.Services
         ///
         /// <para>Read by <see cref="PatreonReconnectRule"/> and by nothing that grants anything:
         /// this decides whether the user is OFFERED a repair, never what they are entitled to.</para>
+        ///
+        /// <para>Every online launch gets a chance to set it: <see cref="InitializeAsync"/> clears
+        /// the cached state before validating, so the 24h-cache short-circuit at the top of
+        /// <see cref="ValidateSubscriptionAsync"/> cannot skip the refresh on that path. Offline
+        /// mode never validates at all, which is the point of offline mode.</para>
         /// </summary>
         public bool GrantLooksDead { get; private set; }
 
@@ -544,7 +549,7 @@ namespace ConditioningControlPanel.Services
                 // Check if token expired and needs refresh
                 if (tokens.IsExpired)
                 {
-                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken);
+                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken, tokens.ExpiresAt);
                     if (!refreshed)
                     {
                         // A refresh failure here is usually transient (proxy/network hiccup, not a
@@ -592,7 +597,7 @@ namespace ConditioningControlPanel.Services
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
                     // Token may be invalid, try refresh
-                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken);
+                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken, tokens.ExpiresAt);
                     if (refreshed)
                     {
                         return await ValidateSubscriptionAsync(forceRefresh: true);
@@ -783,7 +788,12 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private async Task<bool> RefreshTokensAsync(string refreshToken)
+        /// <param name="accessTokenExpiresAtUtc">
+        /// When the access token this refresh is replacing expired. The proxy answers 500 for a
+        /// revoked grant as well as for its own trouble (see <see cref="PatreonGrantHealth"/>), so
+        /// the age of that expiry is the only thing that tells the two apart.
+        /// </param>
+        private async Task<bool> RefreshTokensAsync(string refreshToken, DateTime? accessTokenExpiresAtUtc)
         {
             try
             {
@@ -795,7 +805,8 @@ namespace ConditioningControlPanel.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     App.Logger?.Warning("Token refresh failed with status {Status}", response.StatusCode);
-                    return NoteRefresh(PatreonGrantHealth.Classify(response.StatusCode, null, threw: false));
+                    return NoteRefresh(PatreonGrantHealth.Classify(
+                        response.StatusCode, null, threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow));
                 }
 
                 var tokenResponse = await response.Content.ReadFromJsonAsync<PatreonTokenResponse>();
@@ -807,7 +818,8 @@ namespace ConditioningControlPanel.Services
                     // the refusal wearing a 200.
                     return NoteRefresh(tokenResponse == null
                         ? PatreonRefreshOutcome.Unavailable
-                        : PatreonGrantHealth.Classify(response.StatusCode, tokenResponse.Error, threw: false));
+                        : PatreonGrantHealth.Classify(response.StatusCode, tokenResponse.Error,
+                            threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow));
                 }
 
                 _tokenStorage.StoreTokens(
@@ -821,7 +833,8 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to refresh Patreon tokens");
-                return NoteRefresh(PatreonGrantHealth.Classify(null, null, threw: true));
+                return NoteRefresh(PatreonGrantHealth.Classify(
+                    null, null, threw: true, accessTokenExpiresAtUtc, DateTime.UtcNow));
             }
         }
 
