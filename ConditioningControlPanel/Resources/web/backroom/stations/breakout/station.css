@@ -167,6 +167,24 @@
 .bo-menu { overflow:auto; }
 .bo-paused[hidden],.bo-options[hidden] { display:none; }
 
+/* The doors (doors.js): a quiet second button on the menu, then five chips. The house game keeps Start. */
+.bo-doors { position:absolute;inset:0;z-index:13;display:flex;align-items:center;justify-content:center;background:#10091cda;pointer-events:auto; }
+.bo-doors[hidden] { display:none; }
+.bo-doors .bo-pause-card { width:min(420px,90%); }
+.bo-doors-line { margin:-8px 0 2px; }
+.bo-door-list { display:flex;flex-direction:column;gap:9px; }
+.bo-door-chip { display:grid !important;grid-template-columns:14px 1fr;gap:2px 11px;align-items:center;
+  padding:11px 15px !important;text-align:left;border-color:color-mix(in srgb,var(--door) 60%,#3c2450) !important;
+  background:linear-gradient(120deg,color-mix(in srgb,var(--door) 20%,#2a1738),#22142f) !important; }
+.bo-door-chip:hover { background:linear-gradient(120deg,color-mix(in srgb,var(--door) 34%,#2a1738),#2a1a39) !important; }
+.bo-door-chip i { grid-row:span 2;width:14px;height:36px;border-radius:4px;background:var(--door); }
+.bo-door-chip b { font:600 16px system-ui;letter-spacing:.5px; }
+.bo-door-chip small { font:400 12px system-ui;color:#cbb6d4; }
+
+/* The door's own ending: the ending card, painted once, with no office clip behind it. */
+.bo-door-end { position:absolute;inset:0;z-index:11;display:flex;align-items:center;justify-content:center;background:#08050f; }
+.bo-door-end canvas { width:100%;height:100%;object-fit:contain; }
+
 .bo-audio-options { border:1px solid #775288;border-radius:10px;padding:12px;display:grid;gap:12px; }
 .bo-audio-options legend { padding:0 7px;text-align:left;color:#e7b2ef; }
 .bo-audio-options label span { display:flex;align-items:center;gap:10px; }

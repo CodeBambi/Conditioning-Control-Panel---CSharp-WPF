@@ -1,4 +1,6 @@
 import { createOfficeEnding } from './office-ending.js';
+import { paintEndingCard } from './ending-card.js';
+import { DOORS, doorById, boardById } from './doors.js';
 import {currentMusic} from '../../shared/sound/music.js';
 /* ============================================================================
  * stations/breakout/station.js - CONTRACT section 7 module for the Breakout
@@ -84,6 +86,11 @@ export async function mount(ctx) {
     try { voice.speak({ text: String(text), volume: VOICE_LEVEL*audioLevels.sub }).catch(() => {}); } catch (e) { /* host gone */ }
   }
   let shutdownCover = null, officeEnding = null;
+  // The doors (doors.js): `?door=<id>` or `?board=<id>` opens one, the menu's Doors button picks one,
+  // and with neither the house game plays exactly as it always has.
+  const startBoard = q.get('board') && boardById(q.get('board')) ? q.get('board') : null;
+  let chosenDoor = !startBoard && q.get('door') && doorById(q.get('door')) ? q.get('door') : null;
+  let doorEnd = null, doorEnded = false;
   let menuOpen = true;
   let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;
@@ -115,8 +122,16 @@ export async function mount(ctx) {
         <h1 id="bo-menu-title">BREAK<span>OUT</span></h1>
         <p class="bo-menu-line">Find your colour.</p>
         <button class="bo-play" type="button">Start <span aria-hidden="true">&#9656;</span></button>
-        <div class="bo-menu-actions"><button type="button" data-menu="options">Options</button><button type="button" data-menu="exit">Exit</button></div>
+        <div class="bo-menu-actions"><button type="button" data-menu="doors">Doors</button><button type="button" data-menu="options">Options</button><button type="button" data-menu="exit">Exit</button></div>
         <p class="bo-menu-controls">Move your mouse or drag to steer.<br>Arrow keys to move. Space to launch.</p>
+      </section>
+      <section class="bo-doors" hidden role="dialog" aria-modal="true" aria-labelledby="bo-doors-title">
+        <div class="bo-pause-card">
+          <h2 id="bo-doors-title">Doors</h2>
+          <p class="bo-doors-line">Two boards each. The second one bends a rule.</p>
+          <div class="bo-door-list">${DOORS.map(d => `<button type="button" class="bo-door-chip" data-door="${d.id}" style="--door:${d.colour}"><i aria-hidden="true"></i><b>${d.name}</b><small>${d.promise}</small></button>`).join('')}</div>
+          <button type="button" data-menu="close-doors">Back</button>
+        </div>
       </section>
       ${backBtn}
       <div class="bo-hud">
@@ -216,6 +231,44 @@ export async function mount(ctx) {
     canvas.focus({ preventScroll: true });
   }
   function firstMove() { if (moved) return; moved = true; el.classList.add('is-played'); }
+  /* ------------------------------------------------------------ the doors */
+  function showDoors(open) {
+    const sheet = el.querySelector('.bo-doors');
+    if (!sheet) return;
+    sheet.hidden = !open;
+    if (open) sheet.querySelector('.bo-door-chip')?.focus();
+    else ui.menu?.querySelector('[data-menu="doors"]')?.focus();
+  }
+  /** Pick a door: rebuild the station around it, then walk straight in. */
+  async function playDoor(id) {
+    if (!doorById(id)) return;
+    chosenDoor = id;
+    showDoors(false);
+    await close(); audio?.destroy?.(); audio = null;
+    await open();
+    beginGame();
+  }
+  /** The door is done. The existing ending card, painted once, and the same two buttons. */
+  function showDoorEnd(id) {
+    if (doorEnd || !el) return;
+    doorEnded = true;
+    try { audio?.stop(); } catch (e) { /* noop */ }
+    try { haptics?.stop(); } catch (e) { /* noop */ }
+    doorEnd = document.createElement('div');
+    doorEnd.className = 'bo-door-end';
+    const card = document.createElement('canvas');
+    card.width = 1280; card.height = 720;
+    try { paintEndingCard(card.getContext('2d')); } catch (e) { /* a blank card is still a card */ }
+    doorEnd.append(card);
+    el.append(doorEnd);
+    const status = ui.endingActions?.querySelector('.bo-ending-status');
+    const door = doorById(id);
+    if (status) status.textContent = door ? 'You cleared ' + door.name + '.' : 'You broke out.';
+    if (ui.endingActions) {
+      ui.endingActions.hidden = false;
+      for (const b of ui.endingActions.querySelectorAll('button')) b.disabled = false;
+    }
+  }
 
   /* ------------------------------------------------------------ events */
   const cue = (name, gapMs = 400) => { const n = performance.now(); if (n - (lastCue[name] || -1e9) < gapMs) return false; lastCue[name] = n; return true; };
@@ -283,6 +336,8 @@ export async function mount(ctx) {
       // The breakout cue carries its own riser, so it starts with the rewind and the snap is silent.
       case 'breakoutStart': if (cue('breakout', 1500)) au('breakout'); break;
       case 'breakout': break; // The renderer owns this flash so Old Self stays above it.
+      // A door is two boards. Both clear: the ending card, with no office clip behind it.
+      case 'doorClear': showDoorEnd(d.door); break;
       default: break;
     }
   }
@@ -426,7 +481,7 @@ export async function mount(ctx) {
     const frameMs = lastT ? ts-lastT : 1000/60;
     const dt = Math.min(0.05, frameMs/1000);
     lastT = ts;
-    if (menuOpen || suspended || paused) { try { haptics?.stop(); } catch (e) { /* noop */ } diagnostics?.idle(); renderBudget.idle(ts); return; }
+    if (menuOpen || suspended || paused || doorEnded) { try { haptics?.stop(); } catch (e) { /* noop */ } diagnostics?.idle(); renderBudget.idle(ts); return; }
     const perfStart = performance.now();
     if (budgetResize) { resize(); budgetResize = false; }
     // The stylesheet lands after the first measure and the room can reshape the root without a window resize.
@@ -485,7 +540,7 @@ export async function mount(ctx) {
     // The sim paces on the bed but never plays: every sound is routed from onEvent, so nothing fires twice.
     const beatShim = { beat: audio.beat, now: audio.now };
     game = createGame({ audio: beatShim, onEvent, ...(q.has('n') ? { breakoutN: num(q, 'n', 20) } : {}), saturation: Math.max(0, Math.min(1, num(q, 'sat', 0.15))),
-      speedScale: num(q, 'speed', 0.55), reduced });
+      speedScale: num(q, 'speed', 0.55), reduced, door: chosenDoor, board: startBoard });
     if (q.has('nolose')) game.setNoLose(true);
     renderer = createRenderer(canvas, { reduced, media, software: q.has('software') || prefersSoftwareCanvas() });
     haptics = createHaptics({ ctx, reduced, enabled: !q.has('nohaptics') });
@@ -497,7 +552,8 @@ export async function mount(ctx) {
     try { voice = createVoice(); } catch (e) { voice = null; }   // null unhosted (dev.html): the harness stays mute
     host = createHostFx({ fx, reduced });
     media.load().then(() => {
-      if (!game || typeof game.setWords !== 'function') return;
+      // A door brings its own word list (doors.js), so the dealt words never overwrite it.
+      if (!game || typeof game.setWords !== 'function' || game.snapshot().door) return;
       try { game.setWords(media.words.map(w => w.text)); } catch (e) { /* words are optional */ }
     }).catch(() => {});
     resize();
@@ -509,6 +565,7 @@ export async function mount(ctx) {
       const button=e.target.closest('[data-ending]');if(!button||button.disabled)return;
       const replay=button.dataset.ending==='replay';
       for(const b of ui.endingActions.querySelectorAll('button'))b.disabled=true;
+      if(!replay)chosenDoor=null;                      // Menu goes back to the house game, not to the door
       await close();audio?.destroy?.();audio=null;await open();if(replay)beginGame();
     });
     const options=el.querySelector('.bo-options'),pace=el.querySelector('.bo-option-pace'),colour=el.querySelector('.bo-option-colour');
@@ -526,6 +583,12 @@ export async function mount(ctx) {
         options.hidden=false;pace.focus();
       }
       if(action==='close-options'){options.hidden=true;optionsFrom?.focus();}
+      if(action==='doors')showDoors(true);
+      if(action==='close-doors')showDoors(false);
+    });
+    on(el,'click',e=>{
+      const chip=e.target.closest('.bo-door-chip');
+      if(chip)playDoor(chip.dataset.door);
     });
     for(const slider of options.querySelectorAll('[data-audio]')){
       on(slider,'input',()=>{const value=Number(slider.value);slider.nextElementSibling.value=Math.round(value*100)+'%';applyAudioLevel(slider.dataset.audio,value);});
@@ -602,6 +665,7 @@ export async function mount(ctx) {
   async function close() {
     running = false;
     shutdownCover?.remove();shutdownCover=null;
+    doorEnd?.remove();doorEnd=null;doorEnded=false;
     officeEnding?.dispose();officeEnding=null;
     game?.dispose();
     diagnostics?.dispose(); diagnostics = null;

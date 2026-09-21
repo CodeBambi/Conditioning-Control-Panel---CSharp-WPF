@@ -14,6 +14,13 @@
  * ==========================================================================*/
 import POWER from './cues/power.js';
 import FEEL from './cues/feel.js';
+/* One per door twist (twists/CONTRACT.md section 6). A lane adds a sound in its own file. */
+import TWIST_CRUMBLE from './cues/twist-crumble.js';
+import TWIST_MIRROR from './cues/twist-mirror.js';
+import TWIST_KEYS from './cues/twist-keys.js';
+import TWIST_NODE from './cues/twist-node.js';
+import TWIST_JUSTONE from './cues/twist-justone.js';
 
-export const CUES = { ...POWER, ...FEEL };
+export const CUES = { ...POWER, ...FEEL,
+  ...TWIST_CRUMBLE, ...TWIST_MIRROR, ...TWIST_KEYS, ...TWIST_NODE, ...TWIST_JUSTONE };
 export default CUES;

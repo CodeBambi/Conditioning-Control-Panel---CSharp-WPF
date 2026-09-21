@@ -36,6 +36,7 @@ import { createSpellRender } from './spell-render.js';
 import { createWellFx } from './render-well.js';
 import { WORD_FX } from './word-fx.js';
 import { REACTIONS } from './reactions.js';
+import { twistRenderFor } from './twists/index.js';
 
 const FONT = '"Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif';
 const BG = [26, 26, 46], PINK = [255, 105, 180], VIOLET = [165, 108, 255], MINT = [120, 230, 200], GOLD = [255, 207, 107], WHITE = [255, 255, 255], GREY = [150, 150, 150];
@@ -442,6 +443,32 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     x.fillStyle='#262b30';for(const px of [8,88]){x.beginPath();x.arc(px,20,2,0,7);x.fill();}
     return greyMetalFace=c;
   }
+  /* ---------------------------------------------------------------- doors */
+  /** The two gate trims a loot box wears (doors.js `M` gold, `W` cyan). */
+  const GATE_TRIM = { M: '#F6D36B', W: '#7FD6E8' };
+  /** The brick flags that earn a twist's `brick` hook, plus anything the twist itself claims. */
+  const TWIST_FLAGS = ['clay', 'wire', 'core', 'key', 'gate', 'treat', 'steel'];
+  function twistPaintFor(br, s) {
+    const painter = s.twist ? twistRenderFor(s.twist) : null;
+    if (!painter || typeof painter.brick !== 'function') return null;
+    const claims = Array.isArray(painter.paintsBrick) ? painter.paintsBrick : [];
+    return TWIST_FLAGS.some(f => br[f]) || claims.some(f => br[f]) ? painter.brick : null;
+  }
+  /** Inside the brick's own transform, after its face. A lane's bug never breaks the frame. */
+  function paintTwistBrick(paint, br, s) {
+    if (!paint) return;
+    g.save();
+    try { paint(g, br, s, s.time); } catch (e) { /* the lane's problem */ }
+    g.restore();
+  }
+  /** The twist's field-wide layers, in COLOUR only (GREY is payload-free). */
+  function twistLayer(hook, s) {
+    const painter = s.twist ? twistRenderFor(s.twist) : null;
+    if (!painter || typeof painter[hook] !== 'function' || s.state === 'grey') return;
+    g.save();
+    try { painter[hook](g, s, s.time); } catch (e) { /* the lane's problem */ }
+    g.restore();
+  }
   const toughFaces = new Map();
   function toughFace(br, grey, mix) {
     const damage=br.strength-br.hp;
@@ -493,6 +520,18 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.globalAlpha = (landing ? Math.min(1, arrival * 12) : 1) * (1 - hide) * (br.irisAlpha ?? 1);
       if (outro) pullFinalePiece(cx, cy, outro);
       g.translate(cx, cy); if (br.angle) g.rotate(br.angle); g.scale(sx, sy);
+      const twistPaint = twistPaintFor(br, s);
+      // Authored steel (doors.js X / M / W): the same plate as grey metal, with the loot box's trim on top.
+      if(br.steel) {
+        g.drawImage(metalFace(),-br.w/2,-br.h/2,br.w,br.h);
+        const trim = GATE_TRIM[br.gate];
+        if(trim) {
+          g.fillStyle=trim;g.fillRect(-br.w/2,-br.h/2,br.w,3);
+          g.fillStyle='rgba(0,0,0,.35)';g.fillRect(-br.w/2,-br.h/2+3,br.w,1);
+        }
+        paintTwistBrick(twistPaint, br, s);
+        g.restore();continue;
+      }
       if(metalActive(br,s.state)) {
         g.drawImage(metalFace(),-br.w/2,-br.h/2,br.w,br.h);
         g.restore();continue;
@@ -503,6 +542,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
           g.save();if(br.angle)g.rotate(-br.angle);g.fillStyle='#192930';
           drawLetter(letter,(s.spell||br.finaleMotif==='spell')?Math.min(25,Math.min(br.w,br.h)*.65):11,2);g.restore();
         }
+        paintTwistBrick(twistPaint, br, s);
         g.restore();continue;
       }
       const gifOn = br.gif === true || (typeof br.gif === 'number' && br.gif >= 0);
@@ -510,6 +550,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       if (gifOn && s.state === 'colour') tierAura(br.tier || 1, 0, 0, br.w + 26, br.h + 24);
       if (!gifOn && !br.powerup && !br.spiral && !br.split && !br.jackpot && !br.word && !letter && !br.finaleWord && !br.irisCore && !br.pendulumAnchor && !br.finaleHinge && !(br.finaleRing && s.finale?.phase === 'locked')) {
         g.drawImage(plainFace(br, mix, s.state === 'grey'), -br.w/2, -br.h/2, br.w, br.h);
+        paintTwistBrick(twistPaint, br, s);
         g.restore(); continue;
       }
       if (br.finaleWord) {
@@ -614,6 +655,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       if (!br.finaleWord && !br.irisCore && !br.pendulumAnchor && !br.finaleHinge) {
         g.drawImage(finishTile(),-br.w/2,-br.h/2,br.w,br.h);
       }
+      paintTwistBrick(twistPaint, br, s);
       g.restore();
     }
   }
@@ -1367,6 +1409,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     drawFinaleCore(s, fxDt); mark("coreMs");
     drawMetronome(g, s, reduced);
     spellFx.background(g, s);
+    if (s.twist) twistLayer('under', s);                                  // the door's twist, under the bricks
     drawPendulums(s,mix); drawBricks(s, mix); drawPendulums(s,mix,true); if(s.iris) drawBricks(s, mix, true); mark("bricksMs");
     if (!grey) { drawPops(s, mix); drawColliders(s, mix); }
     if (grey) P.clear(); else ballSparkle(s);
@@ -1388,6 +1431,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.fillStyle = `rgba(120,120,120,${0.25 * tr.t})`; g.fillRect(0, y0, W, H - y0);
     }
     if (!grey) wordHooks('over', s, R);
+    if (s.twist) twistLayer('over', s);                                   // the door's twist, over everything but the HUD
     if (!grey && s.breakoutShield) WORD_FX['LET GO'].render.over(g, s, s.breakoutShield, R);
     drawHud(s, mix);
     if (grey) drawGreyPost(s);
