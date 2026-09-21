@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 
 namespace ConditioningControlPanel;
@@ -57,6 +58,36 @@ internal static class HostWindowBounds
         var s = SafeScale(dpiScale);
         return new Rect(physicalBounds.X / s, physicalBounds.Y / s,
                         physicalBounds.Width / s, physicalBounds.Height / s);
+    }
+
+    /// <summary>
+    /// True when <paramref name="frame"/> still overlaps at least one live monitor, i.e. putting a
+    /// window back on it would put it somewhere the user can reach.
+    ///
+    /// <para>Both sides are DIPs. The frame is one the host remembered before it went fullscreen,
+    /// and a monitor can go away in between - undock, unplug, an RDP reconnect with a different
+    /// layout - which is how a faithful restore hands back a window that is nowhere on the desk. A
+    /// frame with no size, and a list with no screens in it, are not on screen either: both answer
+    /// false, and the caller's fallback (re-centring) is what this path did before it remembered
+    /// any frame at all.</para>
+    /// </summary>
+    internal static bool IntersectsAnyScreen(Rect frame, IReadOnlyList<Rect> screensInDips)
+    {
+        if (screensInDips == null || screensInDips.Count == 0) return false;
+        if (double.IsNaN(frame.Left) || double.IsNaN(frame.Top)
+            || double.IsNaN(frame.Width) || double.IsNaN(frame.Height)) return false;
+        if (frame.Width <= 0 || frame.Height <= 0) return false;
+
+        foreach (var s in screensInDips)
+        {
+            if (s.Width <= 0 || s.Height <= 0) continue;
+            // A shared EDGE is not an overlap: a window whose right edge is exactly the next
+            // monitor's left edge has no pixel on it. Hence the strict compares rather than
+            // Rect.IntersectsWith, which counts touching rectangles as intersecting.
+            if (frame.Left < s.Right && s.Left < frame.Right
+                && frame.Top < s.Bottom && s.Top < frame.Bottom) return true;
+        }
+        return false;
     }
 
     /// <summary>

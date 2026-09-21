@@ -312,7 +312,11 @@ internal sealed class ChaosWebViewHost : IDisposable
         // on the monitor (and at the size) the user had it on. CaptureWindowedFrame refuses while
         // _isFullscreen is already set, hence the order.
         if (fullscreen) CaptureWindowedFrame();
-        _isFullscreen = fullscreen;   // set first: the deferred fullscreen pin below reads it
+        // Set BEFORE the style/state churn below, because the deferred fullscreen pin reads it to
+        // decide whether its move is still wanted. Nothing between here and the end of this method
+        // may read _isFullscreen as "the mode the window is in right now" - it is the mode the
+        // window is being put into, and the frame does not agree with it until the branch is done.
+        _isFullscreen = fullscreen;
 
         if (fullscreen)
         {
@@ -332,13 +336,9 @@ internal sealed class ChaosWebViewHost : IDisposable
         {
             _window.WindowStyle = WindowStyle.SingleBorderWindow;   // title bar = free Alt-Tab / minimize / move
             _window.ResizeMode = ResizeMode.CanResize;
-            if (_hasWindowedFrame)
-            {
-                _window.Left = _frameLeft; _window.Top = _frameTop;
-                _window.Width = _frameW; _window.Height = _frameH;
-            }
-            else CenterDefaultWindowedBounds();
-            _window.WindowState = _frameWasMaximized && _hasWindowedFrame
+            bool restored = RestoreCapturedFrame();
+            if (!restored) CenterDefaultWindowedBounds();
+            _window.WindowState = _frameWasMaximized && restored
                 ? WindowState.Maximized
                 : WindowState.Normal;
         }
@@ -370,6 +370,42 @@ internal sealed class ChaosWebViewHost : IDisposable
     /// <summary>A monitor's PHYSICAL bounds as a Rect, for <see cref="HostWindowBounds"/>.</summary>
     private static Rect ScreenBounds(System.Windows.Forms.Screen screen)
         => new(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height);
+
+    /// <summary>
+    /// Put the window back on the frame <see cref="CaptureWindowedFrame"/> took, and say whether it
+    /// could. False when there is no captured frame, or when that frame no longer touches any live
+    /// monitor: go fullscreen on a second screen, undock, leave fullscreen, and restoring it
+    /// faithfully would hand the user a window they cannot reach. The caller then falls back to the
+    /// centred default, which is what this path always did before the frame was remembered at all.
+    /// </summary>
+    private bool RestoreCapturedFrame()
+    {
+        if (_window == null || !_hasWindowedFrame) return false;
+        var frame = new Rect(_frameLeft, _frameTop, _frameW, _frameH);
+        if (!HostWindowBounds.IntersectsAnyScreen(frame, ScreensInDips()))
+        {
+            App.Logger?.Information("{Tag}: the windowed frame is off every live monitor now - centring instead", _opts.LogTag);
+            return false;
+        }
+        _window.Left = frame.Left; _window.Top = frame.Top;
+        _window.Width = frame.Width; _window.Height = frame.Height;
+        return true;
+    }
+
+    /// <summary>Every live monitor in DIPs, each converted with its OWN scale. Best effort by
+    /// construction (WPF's DIP space is not one uniform grid across a mixed-DPI desk), which is all
+    /// the "is this frame still reachable" question needs.</summary>
+    private static List<Rect> ScreensInDips()
+    {
+        var list = new List<Rect>();
+        try
+        {
+            foreach (var s in System.Windows.Forms.Screen.AllScreens)
+                list.Add(HostWindowBounds.Fullscreen(ScreenBounds(s), BubbleCountWindow.GetDpiForScreen(s)));
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+        return list;
+    }
 
     /// <summary>
     /// The monitor this window belongs on. Our own HWND when there is one (Screen.FromHandle is
@@ -432,7 +468,10 @@ internal sealed class ChaosWebViewHost : IDisposable
     /// set above are realized in the CREATION monitor's scale: on a mixed-DPI desk that leaves a
     /// part-width window until this runs. SetWindowPos works in real pixels and settles it.
     /// Deferred to SourceInitialized when the window has no HWND yet (the fullscreen-at-launch
-    /// path lays the window out before Show).
+    /// path lays the window out before Show), and applied AGAIN on Loaded, exactly as
+    /// BrowserVideoWindow does: WM_DPICHANGED arrives when the frame crosses onto a monitor at a
+    /// different scale and resizes the window back after our move, so a game launched fullscreen
+    /// onto the 100% side of a 125%-primary desk needs the second pass to hold its size.
     /// </summary>
     private void PinFullscreenToScreen(System.Windows.Forms.Screen screen)
     {
@@ -453,13 +492,29 @@ internal sealed class ChaosWebViewHost : IDisposable
         try
         {
             if (_window == null) return;
-            if (new WindowInteropHelper(_window).Handle != IntPtr.Zero) { Apply(); return; }
-            void OnSource(object? s, EventArgs e)
+            bool realized = new WindowInteropHelper(_window).Handle != IntPtr.Zero;
+            if (realized) Apply();
+            else
             {
-                if (_window != null) _window.SourceInitialized -= OnSource;
-                Apply();
+                void OnSource(object? s, EventArgs e)
+                {
+                    if (_window != null) _window.SourceInitialized -= OnSource;
+                    Apply();
+                }
+                _window.SourceInitialized += OnSource;
             }
-            _window.SourceInitialized += OnSource;
+            // The second pass, and only while there is still a Loaded to come: a toggle on a window
+            // that is already loaded would otherwise leave a dead handler behind on every press,
+            // and the inline Apply above has already done that window's work.
+            if (!_window.IsLoaded)
+            {
+                void OnLoaded(object s, RoutedEventArgs e)
+                {
+                    if (_window != null) _window.Loaded -= OnLoaded;
+                    Apply();
+                }
+                _window.Loaded += OnLoaded;
+            }
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.PinFullscreenToScreen: {E}", _opts.LogTag, ex.Message); }
     }
@@ -665,16 +720,16 @@ internal sealed class ChaosWebViewHost : IDisposable
         _window.WindowState = WindowState.Normal;
         _window.WindowStyle = WindowStyle.SingleBorderWindow;
         _window.ResizeMode = ResizeMode.CanResize;
-        if (_hasWindowedFrame)
+        if (RestoreCapturedFrame())
         {
-            _window.Left = _frameLeft; _window.Top = _frameTop;
-            _window.Width = _frameW; _window.Height = _frameH;
             if (_frameWasMaximized) _window.WindowState = WindowState.Maximized;
         }
         else
         {
-            // Launched straight into fullscreen (the shelf replay): there is no prior frame to owe
-            // the user, so the default centered one is the honest answer.
+            // Launched straight into fullscreen (the shelf replay), or the frame we remembered is
+            // off every live monitor now (the second screen was unplugged while we were on it):
+            // there is no reachable frame to owe the user, so the default centered one is the
+            // honest answer.
             CenterDefaultWindowedBounds();
         }
         RefreshNativeOwner();

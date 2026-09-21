@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using Xunit;
 
@@ -81,6 +82,58 @@ public class HostWindowBoundsTests
 
         Assert.Equal((1280 - 640) / 2, r.Left);
         Assert.Equal((720 - 480) / 2, r.Top);
+    }
+
+    // ---- the frame the host remembered may not exist any more ----
+
+    [Fact]
+    public void AFrameOnALiveMonitor_IsRestorable()
+    {
+        var frame = new Rect(2600, 100, 1200, 800);   // on the right-hand 1080p screen
+
+        Assert.True(HostWindowBounds.IntersectsAnyScreen(frame, new[] { Primary1440, RightHand1080 }));
+    }
+
+    [Fact]
+    public void AFrameOnAMonitorThatIsGone_IsNot()
+    {
+        // Go fullscreen on the second screen, undock, leave fullscreen: restoring this faithfully
+        // would hand back a window that is nowhere on the desk. The caller re-centres instead.
+        var frame = new Rect(2600, 100, 1200, 800);
+
+        Assert.False(HostWindowBounds.IntersectsAnyScreen(frame, new[] { Primary1440 }));
+    }
+
+    [Fact]
+    public void AFrameHalfOffTheEdge_IsStillReachable()
+    {
+        // Part of the title bar is on the primary, which is all the user needs to drag it back.
+        var frame = new Rect(-400, 200, 800, 600);
+
+        Assert.True(HostWindowBounds.IntersectsAnyScreen(frame, new[] { Primary1440 }));
+    }
+
+    [Fact]
+    public void TouchingTheEdgeIsNotBeingOnIt()
+    {
+        // The frame ends exactly where the monitor begins: not one pixel of it is visible there.
+        var frame = new Rect(1560, 0, 1000, 600);
+
+        Assert.False(HostWindowBounds.IntersectsAnyScreen(frame, new[] { RightHand1080 }));
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(800, 0)]
+    [InlineData(double.NaN, 600)]
+    public void AFrameWithNoSize_IsNotOnAnyScreen(double w, double h)
+        => Assert.False(HostWindowBounds.IntersectsAnyScreen(new Rect(10, 10, w, h), new[] { Primary1440 }));
+
+    [Fact]
+    public void NoScreensAtAll_ReadsAsNotOnScreen()
+    {
+        Assert.False(HostWindowBounds.IntersectsAnyScreen(new Rect(10, 10, 800, 600), Array.Empty<Rect>()));
+        Assert.False(HostWindowBounds.IntersectsAnyScreen(new Rect(10, 10, 800, 600), null!));
     }
 
     [Fact]
