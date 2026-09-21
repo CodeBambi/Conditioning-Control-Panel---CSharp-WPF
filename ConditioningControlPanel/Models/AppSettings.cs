@@ -4909,19 +4909,26 @@ namespace ConditioningControlPanel.Models
             set { _brainDrainHighRefresh = value; OnPropertyChanged(); }
         }
 
-        private int _brainDrainBlurStrength = 50; // 1-100
+        private int _brainDrainBlurStrength = 50; // 0-100
         /// <summary>
-        /// Strength of the Brain Drain SCREEN BLUR (1-100). Deliberately separate from
+        /// Strength of the Brain Drain SCREEN BLUR (0-100). Deliberately separate from
         /// <see cref="BrainDrainIntensity"/>, which is the AUDIO half's per-minute trigger
         /// probability - the rework gave the visual its own dial. Drives both the gaussian
         /// sigma and the draw alpha on the compositor layer (see BrainDrainLayer.SetIntensity);
         /// applied live via OverlayService's settings hook while the overlay is showing.
+        ///
+        /// <para><b>ZERO IS OFF, and off is a real setting.</b> The floor was 1 until 2026-09-21,
+        /// and 1 is not off: the alpha curve starts at its own floor there, so the quietest blur
+        /// the app offered was still a visible haze (accessibility report 2026-09-20, "doesn't go
+        /// below 1% which still hurts my eyes"). Zero takes the picture away and leaves the audio
+        /// half running - see <c>Services/Notifications/BrainDrainVisualPolicy</c>. Widening the
+        /// range rewrites nobody's saved choice: a file holding 1 still loads as 1.</para>
         /// </summary>
         [JsonProperty]
         public int BrainDrainBlurStrength
         {
             get => _brainDrainBlurStrength;
-            set { _brainDrainBlurStrength = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+            set { _brainDrainBlurStrength = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
         private bool _brainDrainMeltEnabled = false;
