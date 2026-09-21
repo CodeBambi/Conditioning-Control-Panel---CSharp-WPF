@@ -293,6 +293,7 @@ namespace ConditioningControlPanel.Services
             // any other door. A row that appeared and disappeared with the block would also turn
             // the search box into a place that leaks who has one.
             Tab("spiral", "tab_spiral", "🌀", "spiral", "spiral descent map devotion stage year one");
+            Tab("chaster", "chaster_title", "🔒", "chaster", "chaster lock chastity circe tab time keyholder timer price");
             Tab("quests", "tab_quests", "📜", "quests", "quests daily weekly");
             Tab("achievements", "tab_achievements", "🏆", "achievements", "achievements trophies badges");
             Tab("enhancements", "tab_enhancements", "✨", "enhancements", "skill tree enhancements perks");

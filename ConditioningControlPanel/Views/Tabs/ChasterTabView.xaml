@@ -1,0 +1,112 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Tabs.ChasterTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="800">
+    <!-- CIRCE'S TAB. Two states and nothing else: not linked (what it is, one button) and linked
+         (the number, the switch, the lock, then prices and this run's bill behind expanders).
+         All logic is in Services/Chaster; this view only reads ChasterService and writes three
+         settings (ChasterTabEnabled, ChasterLockId, ChasterPrices). -->
+    <Border Style="{StaticResource SectionPanel}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="640" HorizontalAlignment="Left" Margin="0,0,12,0">
+                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str chaster_title}" Margin="0"/>
+                <TextBlock Text="{loc:Str chaster_subtitle}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,4,0,16"/>
+
+                <!-- NOT LINKED -->
+                <StackPanel x:Name="UnlinkedPanel">
+                    <TextBlock Text="{loc:Str chaster_intro_1}" TextWrapping="Wrap" FontSize="13"
+                               Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{loc:Str chaster_intro_2}" TextWrapping="Wrap" FontSize="13"
+                               Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{loc:Str chaster_intro_3}" TextWrapping="Wrap" FontSize="13"
+                               Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,16"/>
+                    <Button x:Name="BtnLink" Style="{StaticResource PinkButton}" Content="{loc:Str chaster_link}"
+                            HorizontalAlignment="Left" Padding="18,8" Click="BtnLink_Click"/>
+                    <StackPanel x:Name="LinkingRow" Orientation="Horizontal" Visibility="Collapsed">
+                        <TextBlock Text="{loc:Str chaster_linking}" VerticalAlignment="Center" FontSize="13"
+                                   Foreground="{DynamicResource TextLightBrush}" Margin="0,0,14,0"/>
+                        <Button Style="{StaticResource SecondaryButton}" Content="{loc:Str chaster_cancel}"
+                                Padding="14,6" Click="BtnCancelLink_Click"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtLinkNote" Visibility="Collapsed" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,12,0,0"/>
+                </StackPanel>
+
+                <!-- LINKED -->
+                <StackPanel x:Name="LinkedPanel" Visibility="Collapsed">
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
+                            <TextBlock x:Name="TxtBalance" Text="0:00" FontSize="44" FontWeight="Bold"
+                                       FontFamily="Consolas, Courier New" Foreground="{DynamicResource TextLightBrush}"/>
+                            <TextBlock x:Name="TxtBalanceCaption" Text="{loc:Str chaster_balance_caption}" FontSize="13"
+                                       VerticalAlignment="Bottom" Margin="10,0,0,9"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                        </StackPanel>
+                        <TextBlock x:Name="TxtToday" Grid.Column="1" FontSize="12" VerticalAlignment="Bottom"
+                                   Margin="0,0,0,9" Foreground="{DynamicResource TextMutedBrush}"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str chaster_tab_switch}" Style="{StaticResource SettingLabel}" FontSize="13"
+                                   VerticalAlignment="Center"/>
+                        <CheckBox x:Name="ChkTab" Grid.Column="1" Style="{StaticResource ToggleStyle}"
+                                  VerticalAlignment="Center" Checked="ChkTab_Changed" Unchecked="ChkTab_Changed"/>
+                    </Grid>
+
+                    <Grid x:Name="LockRow" Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str chaster_lock_label}" Style="{StaticResource SettingLabel}" FontSize="13"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtLock" Grid.Column="1" FontSize="12" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                        <ComboBox x:Name="CmbLock" Grid.Column="1" Visibility="Collapsed"
+                                  Style="{StaticResource DarkComboBoxStyle}" FontSize="11"
+                                  Foreground="{DynamicResource TextLightBrush}"
+                                  Width="220" MinHeight="28" VerticalAlignment="Center"
+                                  SelectionChanged="CmbLock_SelectionChanged"/>
+                    </Grid>
+
+                    <Expander x:Name="PricesExpander" Header="{loc:Str chaster_prices_header}"
+                              Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" Margin="0,0,0,8">
+                        <StackPanel Margin="4,8,0,4">
+                            <TextBlock Text="{loc:Str chaster_prices_hint}" FontSize="12" Margin="0,0,0,8"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock Text="{loc:Str chaster_costs_header}" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#FF8FA3" Margin="0,4,0,4"/>
+                            <StackPanel x:Name="CostRows"/>
+                            <TextBlock Text="{loc:Str chaster_earns_header}" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#5FFFD0" Margin="0,12,0,4"/>
+                            <StackPanel x:Name="EarnRows"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <Expander Header="{loc:Str chaster_bill_header}" Expanded="BillExpander_Expanded"
+                              Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" Margin="0,0,0,14">
+                        <StackPanel x:Name="BillRows" Margin="4,8,0,4"/>
+                    </Expander>
+
+                    <TextBlock Text="{loc:Str chaster_intro_3}" TextWrapping="Wrap" FontSize="11"
+                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
+                    <Button Style="{StaticResource SecondaryButton}" Content="{loc:Str chaster_unlink}"
+                            HorizontalAlignment="Left" Padding="14,6" Click="BtnUnlink_Click"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</UserControl>
