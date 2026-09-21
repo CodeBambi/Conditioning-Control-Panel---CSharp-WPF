@@ -1590,19 +1590,38 @@ namespace ConditioningControlPanel
             }
 
             // Every OTHER registered game surface (Racing Thoughts, the Goon Game, the Graded
-            // Intake window, Piece by Piece) gets the rung the named ones above have: the press
-            // closes the game and is consumed there. Without it a press from inside one of them
-            // fell through to the "not running" branch below, where the NEXT press exits the whole
-            // app - and in Racing Thoughts Escape is the brake, so that was two taps of the brake.
+            // Intake window, Piece by Piece) gets a rung of its own, placed here - above the #735
+            // grace pause, with the five hand-offs. Without it a press from inside one of them fell
+            // through to the "not running" branch below, where the NEXT press exits the whole app,
+            // and in Racing Thoughts Escape is the brake: two taps of the brake quit the app.
+            //
+            // This rung does NOT return, and that is the difference from the five above. Those
+            // surfaces take the whole screen, so closing one IS the stop. These four are WINDOWED
+            // by default (CaucusHostService and PieceByPieceHostService ship StartFullscreen=false;
+            // intake and goon are windowed unless the user asked for fullscreen), so the Graded
+            // Intake can sit behind the panel while a session runs flashes and a spiral in FRONT of
+            // it. Consuming the press there would close a background window and leave the effects
+            // running until press 2 - an emergency stop delayed by a press. So: close what is up,
+            // then run the normal stop tail with the exit ladder NOT armed, which is what
+            // PanicPolicy.AdvancesExitLadder(StopEverything, true) already says for the override
+            // mode's one-pass equivalent.
+            //
+            // Only the LIVE surfaces are closed: the rungs above declined to touch a descent, DtRH,
+            // the Arcademy, the Back Room or the feed on purpose, and reaching past them from here
+            // would undo that.
             var liveSurfaces = Services.Safety.GameSurfaces.ActiveIds();
             if (liveSurfaces.Count > 0)
             {
                 VideoDiag.Log("PANIC", $"closing the game surface(s) that own the screen: {string.Join(", ", liveSurfaces)}");
-                Services.Safety.GameSurfaces.CloseAll((name, close) =>
+                Services.Safety.GameSurfaces.CloseAll(liveSurfaces, (name, close) =>
                 {
                     try { close(); }
                     catch (Exception ex) { App.Logger?.Warning("PANIC: closing {Surface} failed: {Error}", name, ex.Message); }
                 });
+                // Standalone Lab minigames run outside the engine, so the tail below never reaches
+                // them; the override mode's stop pass stops them by hand for the same reason.
+                try { App.BlinkTrainer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                RunPanicStopTail(advanceExitLadder: false);
                 return;
             }
 

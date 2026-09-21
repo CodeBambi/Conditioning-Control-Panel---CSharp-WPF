@@ -28,7 +28,13 @@ namespace ConditioningControlPanel.Services.Safety;
 internal static class GameSurfaces
 {
     /// <summary>One surface. <paramref name="Id"/> matches the launcher's game id where there is
-    /// one, so the drift guard can compare the two lists.</summary>
+    /// one, so the drift guard can compare the two lists.
+    ///
+    /// <para>One id does not mean what the launcher tile means: <c>intake</c> here is
+    /// <see cref="Quiz.IntakeHostService"/>'s own WebView2 window (the Lab / remote route), NOT the
+    /// launcher tile of that name, which opens the Graded Intake as a PANEL TAB and reports
+    /// <c>IsActive</c> false forever. The panic key has to close the window; the tab goes down with
+    /// the panel's own stop.</para></summary>
     internal sealed record Surface(string Id, Func<bool> IsActive, Action Close);
 
     /// <summary>
@@ -78,10 +84,25 @@ internal static class GameSurfaces
     /// <summary>
     /// Close every one of them. <paramref name="step"/> is the caller's guarded runner (the stop
     /// pass's own <c>Step</c>), so one host that throws cannot starve the rest.
+    ///
+    /// <para>The stop pass wants this shape: closing is idempotent on every host, so it does not
+    /// ask who is up first and cannot be wrong about it either.</para>
     /// </summary>
     internal static void CloseAll(Action<string, Action> step)
     {
         foreach (var s in All) step(s.Id, s.Close);
+    }
+
+    /// <summary>
+    /// Close only the named surfaces. For a caller that has already probed - the legacy ladder's
+    /// rung closes the games that ARE up, and must not reach past them into a Rabbit Hole descent
+    /// that its own rung above had already declined to touch.
+    /// </summary>
+    internal static void CloseAll(IEnumerable<string> ids, Action<string, Action> step)
+    {
+        var wanted = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
+        foreach (var s in All)
+            if (wanted.Contains(s.Id)) step(s.Id, s.Close);
     }
 
     /// <summary>The ids in the registry, for the drift guard against the launcher catalogue.</summary>

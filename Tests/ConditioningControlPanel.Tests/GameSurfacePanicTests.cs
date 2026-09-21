@@ -111,6 +111,35 @@ public class GameSurfacePanicTests : IDisposable
     }
 
     [Fact]
+    public void CloseAll_ByName_TouchesOnlyTheOnesAsked()
+    {
+        // The legacy rung has already probed, and it must not reach past the rungs above it into a
+        // Rabbit Hole descent or a feed that those rungs deliberately declined to touch.
+        var closed = new List<string>();
+        GameSurfaces.All = new[]
+        {
+            Fake("chaos", false, () => closed.Add("chaos")),
+            Fake("race", true, () => closed.Add("race")),
+            Fake("goon", true, () => closed.Add("goon")),
+        };
+
+        GameSurfaces.CloseAll(new[] { "race", "goon" }, (_, close) => close());
+
+        Assert.Equal(new[] { "race", "goon" }, closed);
+    }
+
+    [Fact]
+    public void CloseAll_ByName_IgnoresAnIdThatIsNotRegistered()
+    {
+        var closed = new List<string>();
+        GameSurfaces.All = new[] { Fake("race", true, () => closed.Add("race")) };
+
+        GameSurfaces.CloseAll(new[] { "race", "somethingelse" }, (_, close) => close());
+
+        Assert.Equal(new[] { "race" }, closed);
+    }
+
+    [Fact]
     public void APressThatClosesAGame_DoesNotArmTheExitLadder()
     {
         // The rule the registry exists to serve: with a game on screen the press stops the world
