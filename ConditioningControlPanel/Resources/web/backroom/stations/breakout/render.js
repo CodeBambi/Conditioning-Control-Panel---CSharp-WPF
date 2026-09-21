@@ -164,7 +164,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
           debris.spawn(x, y, (d.w || 82) * (.08 + rng() * .09), (d.h || 27) * (.2 + rng() * .22), dust, rng);
         }
       }
-      if (rungs(5) && colour && !last?.iris) cam.kick(4);
+      // 5.5, was 4: the softer hit glow took some of the jolt with it (owner, 2026-09-21), so the camera gives it back.
+      if (rungs(5) && colour && !last?.iris) cam.kick(5.5);
       if (d.jackpot) cam.kick(6, 1, 0.01);
       if (d.ghost && (d.plus | 0) > 1) stamps.push({ kind: 'text', text: '+' + (d.plus | 0), x: d.x, y: d.y - 8, life: 0.8, rgb: WHITE, size: 18 });
     } else if (name === 'popOut') {

@@ -555,8 +555,8 @@ test('the grey paddle is a dead slab: no face, no stretch, no bounce, no lean; c
 
 test('the hit glow is low, pink and fades from zero: never a white sheet', () => {
   assert.equal(hitGlowAlpha(0), 0, 'no floor: it fades out, it does not cut off');
-  assert.ok(hitGlowAlpha(.35) * 2 < .05, 'an ordinary brick hit adds under 5 percent');
-  assert.ok(hitGlowAlpha(1) * 2 <= .12, 'the hardest hit stays under 12 percent (was 36)');
+  assert.ok(hitGlowAlpha(.35) * 2 < .09 && hitGlowAlpha(.35) * 2 > .05, 'an ordinary brick hit: visible, under 9 percent (was 23)');
+  assert.ok(hitGlowAlpha(1) * 2 <= .24, 'the hardest hit stays under 24 percent (was 36)');
   assert.ok(hitGlowAlpha(5) === hitGlowAlpha(1));
   const oldDocument = globalThis.document;
   const layerLog = [];
