@@ -27,7 +27,7 @@ export const COLS = 16;
 /** The beat between a brick breaking and its twin going: long enough to read as caused, short enough to feel like one move. */
 export const TWIN_DELAY = 0.09;
 /** How long the white beam between a pair stays up, and how long the seam's flare takes to fade. */
-export const BEAM_LIFE = 0.34;
+export const BEAM_LIFE = 0.7;
 export const SEAM_FLARE = 0.55;
 /** A beam bows by up to this much of its own length, so two beams in one row are not one line. */
 export const BEAM_BOW = 0.09;

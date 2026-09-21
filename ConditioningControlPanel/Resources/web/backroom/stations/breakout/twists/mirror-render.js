@@ -81,7 +81,7 @@ export function over(ctx2d, snap, t) {
   for (const beam of st.beams) {
     const k = Math.max(0, Math.min(1, 1 - beam.age / beam.life));
     if (k <= 0) continue;
-    const a = snap.reduced ? k : Math.pow(k, 1.5);
+    const a = snap.reduced ? k : Math.min(1, k * 1.8);     // holds full for the first half, then fades
     const mx = (beam.x1 + beam.x2) / 2, my = (beam.y1 + beam.y2) / 2;
     const dx = beam.x2 - beam.x1, dy = beam.y2 - beam.y1;
     // The bow is across the line, so two beams in one row are two lines and not one.
@@ -91,11 +91,11 @@ export function over(ctx2d, snap, t) {
     ctx2d.beginPath();
     ctx2d.moveTo(beam.x1, beam.y1);
     ctx2d.quadraticCurveTo(cx, cy, beam.x2, beam.y2);
-    ctx2d.strokeStyle = 'rgba(255,255,255,' + (0.16 * a).toFixed(3) + ')';
-    ctx2d.lineWidth = 6;
+    ctx2d.strokeStyle = 'rgba(255,255,255,' + (0.22 * a).toFixed(3) + ')';
+    ctx2d.lineWidth = 12;
     ctx2d.stroke();
-    ctx2d.strokeStyle = 'rgba(255,255,255,' + (0.85 * a).toFixed(3) + ')';
-    ctx2d.lineWidth = 1.6;
+    ctx2d.strokeStyle = 'rgba(255,255,255,' + (0.95 * a).toFixed(3) + ')';
+    ctx2d.lineWidth = 3;
     ctx2d.stroke();
 
     if (snap.reduced) continue;
