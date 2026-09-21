@@ -397,12 +397,11 @@ namespace ConditioningControlPanel.Features
                 VerticalAlignment = VerticalAlignment.Center,
             });
             if (v2) row.Children.Add(FeatureCard.NewV2Badge(new Thickness(8, 0, 0, 0)));
-            CmbMotion.Items.Add(new ComboBoxItem
-            {
-                Content = row,
-                Tag = style,
-                Foreground = RowTextBrush(),
-            });
+            // No Foreground on the CONTAINER: a local value beats a style trigger, so setting one
+            // here would suppress DarkComboBoxStyle's own IsHighlighted / IsSelected foregrounds
+            // and the hovered row would stop lifting. The row's TextBlock carries the colour, the
+            // same way the Bubble Pop picker does it.
+            CmbMotion.Items.Add(new ComboBoxItem { Content = row, Tag = style });
         }
 
         /// <summary>

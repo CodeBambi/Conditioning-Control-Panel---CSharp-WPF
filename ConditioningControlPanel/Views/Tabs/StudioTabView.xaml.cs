@@ -695,11 +695,36 @@ namespace ConditioningControlPanel.Views.Tabs
         private const double ActiveTileHeight = 56;
 
         /// <summary>The checked tile caption's right inset: enough room for the state dot.</summary>
-        private const double TileLabelInset = 26;
+        internal const double TileLabelInset = 26;
 
-        /// <summary>The same inset with a worn v2 pill in front of the dot. Written by
-        /// <see cref="RefreshV2Pills"/>, so a row that owns nothing keeps the plain one.</summary>
-        private const double TileLabelInsetWithV2 = 56;
+        /// <summary>Where the checked tile's v2 pill is right-anchored, just inside the dot's slot.</summary>
+        internal const double TilePillInset = 24;
+
+        /// <summary>Clear air between the caption's last glyph (or its ellipsis) and the pill.</summary>
+        internal const double TileLabelGap = 8;
+
+        /// <summary>
+        /// Holds the checked tile's caption off the v2 pill while the pill is worn, and gives the
+        /// room straight back when it is not - so an account owning nothing keeps the full caption
+        /// width it has always had.
+        ///
+        /// <para>The tile has no columns: caption, pill and dot are three right-anchored children
+        /// over one picture, so the caption's own inset is the only thing holding it off the pill.
+        /// The pill is MEASURED rather than allowed for by a hand-counted number - it is two
+        /// glyphs of 7px bold inside four paddings and a border, and the day someone renames the
+        /// badge or bumps the type a guessed constant silently stops clearing it.</para>
+        /// </summary>
+        internal static void ApplyTileCaptionInset(Border? pill, TextBlock? label, bool worn)
+        {
+            if (label == null) return;
+            var inset = TileLabelInset;
+            if (worn && pill != null)
+            {
+                pill.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                inset = TilePillInset + pill.DesiredSize.Width + TileLabelGap;
+            }
+            label.Margin = new Thickness(12, 0, inset, 0);
+        }
 
         /// <summary>
         /// The resting row: art (or emoji) chip | caption | state dot.
@@ -939,7 +964,7 @@ namespace ConditioningControlPanel.Views.Tabs
             // caption keeps its room. See RefreshV2Pills.
             if (V2PillFamily(e.Key) != null)
             {
-                e.TileV2Pill = Features.FeatureCard.NewV2Badge(new Thickness(0, 0, 24, 0), compact: true);
+                e.TileV2Pill = Features.FeatureCard.NewV2Badge(new Thickness(0, 0, TilePillInset, 0), compact: true);
                 e.TileV2Pill.HorizontalAlignment = HorizontalAlignment.Right;
                 e.TileV2Pill.VerticalAlignment = VerticalAlignment.Center;
                 e.TileV2Pill.Visibility = Visibility.Collapsed;
@@ -1491,14 +1516,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 if (e.TileV2Pill != null)
                 {
                     e.TileV2Pill.Visibility = vis;
-                    // The checked tile has no columns - the caption, the pill and the dot are
-                    // three right-anchored children over one picture - so the caption's own right
-                    // inset is the only thing holding it off the pill. Widened while the pill is
-                    // worn and given straight back when it is not, so an account that owns nothing
-                    // keeps the full caption width it has always had.
-                    if (e.TileLabel != null)
-                        e.TileLabel.Margin = new Thickness(12, 0, vis == Visibility.Visible
-                            ? TileLabelInsetWithV2 : TileLabelInset, 0);
+                    ApplyTileCaptionInset(e.TileV2Pill, e.TileLabel, vis == Visibility.Visible);
                 }
             }
         }

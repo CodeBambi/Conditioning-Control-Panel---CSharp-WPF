@@ -229,13 +229,36 @@ public class FeatureCardBadgeSlotTests
             Assert.True(tiles.Count >= 2,
                 $"expected the flash and bubbles art tiles to carry both marks, found {tiles.Count}");
 
-            foreach (var (_, pill, dot) in tiles)
+            foreach (var (grid, pill, dot) in tiles)
             {
                 // No columns here - the caption, the pill and the dot are three right-anchored
                 // children, so the insets are the only thing holding them apart.
                 Assert.True(pill!.Margin.Right >= dot!.Margin.Right + dot.Width,
                     $"the tile's v2 pill sits {pill.Margin.Right}px in, over a state LED at "
                     + $"{dot.Margin.Right}px");
+
+                // ...and the caption is held off the pill by the SAME method RefreshV2Pills calls,
+                // which MEASURES the pill rather than allowing for it by eye.
+                var caption = grid.Children.OfType<TextBlock>().FirstOrDefault();
+                Assert.True(caption != null, "the art tile lost its caption");
+
+                StudioTabView.ApplyTileCaptionInset(pill, caption, worn: false);
+                Assert.Equal(StudioTabView.TileLabelInset, caption!.Margin.Right, 3);
+
+                pill.Visibility = Visibility.Visible;
+                StudioTabView.ApplyTileCaptionInset(pill, caption, worn: true);
+                var worn = caption.Margin.Right;
+                Assert.True(worn > StudioTabView.TileLabelInset,
+                    "the caption did not make room for the pill");
+                Assert.True(worn >= StudioTabView.TilePillInset + pill.DesiredSize.Width,
+                    $"the caption stops at {worn}px, still under a {pill.DesiredSize.Width:0.#}px "
+                    + $"pill anchored {StudioTabView.TilePillInset}px in");
+
+                // And the room is genuinely given back: a row that owns nothing keeps the full
+                // caption width it has always had.
+                pill.Visibility = Visibility.Collapsed;
+                StudioTabView.ApplyTileCaptionInset(pill, caption, worn: false);
+                Assert.Equal(StudioTabView.TileLabelInset, caption.Margin.Right, 3);
             }
 
             foreach (var (grid, pill, dot) in strips)
