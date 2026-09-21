@@ -136,7 +136,7 @@ export async function mount(ctx) {
       <p class="bo-ghost-hint" hidden></p>
       <button class="bo-pause-button" type="button" aria-label="Pause game">&#9208; Pause</button>
       <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><p class="bo-best" hidden></p><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="options">Options</button></div></div>
-      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><label>Colour intensity<input class="bo-option-colour" type="range" min="0" max="1" step="0.05"></label><fieldset class="bo-pictures" hidden><legend>Pictures</legend><div class="bo-pic-tabs" role="group" aria-label="Flavour"></div><div class="bo-pic-niches" aria-label="Niches inside"></div><form class="bo-pic-add"><span aria-hidden="true">r/</span><input type="text" aria-label="Add a niche" placeholder="add a niche" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" maxlength="60"><button type="submit">Add</button></form><p class="bo-pic-note" aria-live="polite"></p></fieldset><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
+      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><fieldset class="bo-pictures" hidden><legend>Pictures</legend><div class="bo-pic-tabs" role="group" aria-label="Flavour"></div><div class="bo-pic-niches" aria-label="Niches inside"></div><form class="bo-pic-add"><span aria-hidden="true">r/</span><input type="text" aria-label="Add a niche" placeholder="add a niche" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" maxlength="60"><button type="submit">Add</button></form><p class="bo-pic-note" aria-live="polite"></p></fieldset><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
       <button class="bo-gear" type="button" aria-label="${t('br_breakout_dev', 'dev toggles')}" aria-expanded="false"></button>
       <div class="bo-dev" hidden>
         <div class="bo-dev-header"><strong>Developer tools</strong><button type="button" data-do="performance">Performance</button><button type="button" data-do="hide-tools">Hide all (F2)</button></div>
@@ -603,7 +603,7 @@ export async function mount(ctx) {
       for(const b of ui.endingActions.querySelectorAll('button'))b.disabled=true;
       await close();audio?.destroy?.();audio=null;await open();if(replay)beginGame();
     });
-    const options=el.querySelector('.bo-options'),pace=el.querySelector('.bo-option-pace'),colour=el.querySelector('.bo-option-colour');
+    const options=el.querySelector('.bo-options'),pace=el.querySelector('.bo-option-pace');
     let optionsFrom=null;
     on(el.querySelector('.bo-pause-button'),'click',()=>{setPaused(true);el.querySelector('[data-menu="resume"]').focus();});
     on(el,'click',e=>{
@@ -613,7 +613,7 @@ export async function mount(ctx) {
       if(action==='exit'&&globalThis.chrome?.webview)back();
       if(action==='options'){
         optionsFrom=button;if(!menuOpen)setPaused(true);
-        pace.value=String(game.snapshot().speedScale);colour.value=game.snapshot().sat;
+        pace.value=String(game.snapshot().speedScale);
         for(const slider of options.querySelectorAll('[data-audio]')){slider.value=audioLevels[slider.dataset.audio];slider.nextElementSibling.value=Math.round(Number(slider.value)*100)+'%';}
         openPictures();options.hidden=false;pace.focus();
       }
@@ -636,7 +636,6 @@ export async function mount(ctx) {
       if(!ui.pictures.querySelector('.bo-pic-note').textContent.startsWith('That'))field.value='';field.focus();
     });
     on(pace,'change' ,()=>game.setSpeedScale(Number(pace.value)));
-    on(colour,'input',()=>game.setSaturation(Number(colour.value)));
 
     const steer = (e) => {
       if (e.pointerType !== 'touch') { touchDrag = null; return pointerX(e); }
