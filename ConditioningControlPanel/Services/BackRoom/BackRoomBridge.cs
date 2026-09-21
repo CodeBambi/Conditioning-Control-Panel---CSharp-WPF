@@ -62,6 +62,9 @@ public sealed class BackRoomBridge
         public Action<Action>? OffUi { get; init; }
         /// <summary>Write a validated <c>room-option</c> into the settings and save (10.14). Null = ignored.</summary>
         public Action<RoomOption>? SetOption { get; init; }
+        /// <summary>One validated <c>haptic</c> pulse, or a stop (10.23). Null = no toy path, the frame is dropped.
+        /// The bridge also sends a stop of its own wherever it cancels fx: suspend, close, exit, station-close.</summary>
+        public Action<BackRoomHaptic>? Haptic { get; init; }
         public Func<int>? NextSeed { get; init; }
         public Action<string>? Log { get; init; }
     }
@@ -185,7 +188,13 @@ public sealed class BackRoomBridge
                     FlushCursors(shut);
                     // 10.13.B: that station's holds and tunnel go with it.
                     try { _d.Fx.ReleaseStation(shut); } catch (Exception ex) { _d.Log?.Invoke("fx release threw: " + ex.Message); }
+                    StopHaptic(shut);
                 }
+                break;
+            case "haptic":
+                // No reply (10.23). A stop always lands; a pulse is dropped while closing or suspended,
+                // so a frame already in flight cannot restart what the suspend just stopped.
+                if (ReadHaptic(m) is { } pulse && (pulse.IsStop || !Quiet)) Guard(() => _d.Haptic?.Invoke(pulse));
                 break;
             case "station-request":
                 _ = OnStationRequestAsync(m);
@@ -290,6 +299,28 @@ public sealed class BackRoomBridge
             && (string?)niche is { } name && NicheName.IsMatch(name))
             return new RoomOption(key, false, null, name);
         return null;
+    }
+
+    public const int HapticMinMs = 20, HapticMaxMs = 1500;
+    private static readonly Regex HapticTag = new("^[A-Za-z0-9_.-]{1,24}$", RegexOptions.CultureInvariant);
+
+    /// <summary><c>{type:'haptic', station, level: 0..1, ms, tag}</c> (10.23). The page is untrusted: a level or
+    /// an ms that is not a finite number drops the frame, the level is clamped to 0..1 and the ms to
+    /// <see cref="HapticMinMs"/>..<see cref="HapticMaxMs"/>, and a tag that is not a short plain token reads as
+    /// empty (it is only ever logged). Level 0 is the stop, whatever its ms says.</summary>
+    internal static BackRoomHaptic? ReadHaptic(JObject m)
+    {
+        if (Station(m) is not { } station) return null;
+        if (m["level"] is not JValue { Type: JTokenType.Integer or JTokenType.Float } lv) return null;
+        var level = lv.Value<double>();
+        if (double.IsNaN(level) || double.IsInfinity(level)) return null;
+        level = Math.Clamp(level, 0, 1);
+        var tag = m["tag"] is JValue { Type: JTokenType.String } t && (string?)t is { } raw && HapticTag.IsMatch(raw) ? raw : string.Empty;
+        if (level <= 0) return new BackRoomHaptic(station, 0, 0, tag);
+        if (m["ms"] is not JValue { Type: JTokenType.Integer or JTokenType.Float } dv) return null;
+        var ms = dv.Value<double>();
+        if (double.IsNaN(ms) || double.IsInfinity(ms)) return null;
+        return new BackRoomHaptic(station, level, (int)Math.Clamp(ms, HapticMinMs, HapticMaxMs), tag);
     }
 
     /// <summary><c>media-request.count</c>: an integer 1..13, anything else reads as 4 (10.13.C).</summary>
@@ -556,7 +587,13 @@ public sealed class BackRoomBridge
     private void CancelFx()
     {
         StopVoice();
+        StopHaptic(string.Empty);
         try { _d.Fx.CancelAll(); } catch (Exception ex) { _d.Log?.Invoke("fx cancel threw: " + ex.Message); }
+    }
+
+    private void StopHaptic(string station)
+    {
+        try { _d.Haptic?.Invoke(new BackRoomHaptic(station, 0, 0, "host")); } catch (Exception ex) { _d.Log?.Invoke("haptic stop threw: " + ex.Message); }
     }
 
     private void StopVoice()
