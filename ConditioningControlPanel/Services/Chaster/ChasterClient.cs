@@ -52,6 +52,9 @@ public enum ChasterStatus
     Refused,
     /// <summary>Network, 5xx, a body we cannot read. Try later; never drop the link over it.</summary>
     Unavailable,
+    /// <summary>The call went out and no answer came back. For a read that is an outage like
+    /// any other; for a write nobody knows whether it landed, so it must not simply go again.</summary>
+    TimedOut,
 }
 
 public readonly record struct ChasterResult<T>(ChasterStatus Status, T? Value)
@@ -167,7 +170,13 @@ public sealed class ChasterClient : IDisposable
             return new(ChasterStatus.Ok, read(body));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (TaskCanceledException ex)
+        {
+            // HttpClient's own timeout: the request may have reached Chaster before we gave up.
+            Diag.Swallowed(ex, "chaster call timed out");
+            return new(ChasterStatus.TimedOut, default);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
         {
             Diag.Swallowed(ex, "chaster call failed, reads as unavailable");
             return new(ChasterStatus.Unavailable, default);

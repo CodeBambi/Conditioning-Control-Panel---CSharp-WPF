@@ -30,7 +30,8 @@ public enum SettleOutcome
     /// <summary>Nothing to send: tab off, not linked, already pushed today, or no positive balance.</summary>
     Nothing,
     Pushed,
-    /// <summary>More than one active lock and the player has not picked one.</summary>
+    /// <summary>More than one active lock and the player has not picked one, or the one they
+    /// picked has ended. Either way: ask, never guess.</summary>
     NoLockChosen,
     LinkExpired,
     /// <summary>Chaster did not take it this time. The balance waits; nothing is lost.</summary>
@@ -64,6 +65,7 @@ public sealed partial class ChasterService : IDisposable
     private readonly DateTime _runStartUtc;
     private readonly object _gate = new();
     private readonly SemaphoreSlim _settleGate = new(1, 1);
+    private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private TabState _tab;
     private DateTime _safetyUntilUtc = DateTime.MinValue;
     private int _pushedThisRun;
@@ -166,7 +168,8 @@ public sealed partial class ChasterService : IDisposable
     }
 
     /// <summary>Send the tab to the lock, if today's push has not gone and the balance is
-    /// positive. Call at launch and at close; calling it more often is harmless.</summary>
+    /// positive. Calling it more often is harmless. Never call it on the way out of the app: a
+    /// call cut off mid-flight is exactly the doubt the pending mark exists for.</summary>
     public async Task<SettleOutcome> SettleAsync(CancellationToken ct = default)
     {
         if (!Active(out var options)) return SettleOutcome.Nothing;
@@ -174,8 +177,18 @@ public sealed partial class ChasterService : IDisposable
         try
         {
             TabPush plan;
-            // A wearer link can only add. canRemove stays false until a link exists that can.
-            lock (_gate) plan = CircesTab.PlanPush(_tab, _localNow(), canRemove: false);
+            lock (_gate)
+            {
+                // An add from last time that was never answered: counted as landed, never resent.
+                var doubted = CircesTab.ResolvePending(_tab);
+                if (doubted > 0)
+                {
+                    SaveTab();
+                    App.Logger?.Information("[Chaster] an unanswered push of {Seconds}s is counted as landed", doubted);
+                }
+                // A wearer link can only add. canRemove stays false until a link exists that can.
+                plan = CircesTab.PlanPush(_tab, _localNow(), canRemove: false);
+            }
             if (plan.Kind != TabPushKind.Add) return SettleOutcome.Nothing;
             // A backlog from days Chaster was unreachable still lands an hour at a time.
             plan = plan with { Seconds = Math.Min(plan.Seconds, ChasterClient.MaxAddSeconds) };
@@ -192,15 +205,26 @@ public sealed partial class ChasterService : IDisposable
                 lockId = locks.Value[0].Id;
             }
 
+            lock (_gate)
+            {
+                CircesTab.MarkPending(_tab, plan, _localNow());
+                SaveTab();
+            }
             var added = await _client.AddTimeAsync(access, lockId!, plan.Seconds, ct).ConfigureAwait(false);
-            if (!added.Ok) return Failed(added.Status);
+            // No answer at all: the mark stays, and the next settle counts the push as landed.
+            if (added.Status == ChasterStatus.TimedOut) return SettleOutcome.TryLater;
 
             lock (_gate)
             {
-                CircesTab.ApplyPush(_tab, plan, _localNow());
-                _pushedThisRun += plan.Seconds;
+                CircesTab.ClearPending(_tab);
+                if (added.Ok)
+                {
+                    CircesTab.ApplyPush(_tab, plan, _localNow());
+                    _pushedThisRun += plan.Seconds;
+                }
                 SaveTab();
             }
+            if (!added.Ok) return Failed(added.Status);
             App.Logger?.Information("[Chaster] settled {Seconds}s to the lock", plan.Seconds);
             return SettleOutcome.Pushed;
         }
@@ -209,6 +233,8 @@ public sealed partial class ChasterService : IDisposable
 
     private SettleOutcome Failed(ChasterStatus status)
     {
+        // The chosen lock ended or was never this wearer's. Picking another is the player's call.
+        if (status == ChasterStatus.NotFound) return SettleOutcome.NoLockChosen;
         if (status != ChasterStatus.LinkExpired) return SettleOutcome.TryLater;
         DropLink();
         return SettleOutcome.LinkExpired;
@@ -230,17 +256,24 @@ public sealed partial class ChasterService : IDisposable
         _tokens.Write(new ChasterStoredTokens(fresh.AccessToken, refresh ?? "", _utcNow().AddSeconds(Math.Max(0, fresh.ExpiresIn))));
     }
 
+    // One refresh at a time. If Chaster rotates refresh tokens, two at once means the second
+    // presents a spent token, gets a 401, and a perfectly good link is dropped.
     private async Task<string?> AccessTokenAsync(CancellationToken ct)
     {
-        var tokens = _tokens.Read();
-        if (tokens == null || string.IsNullOrEmpty(tokens.RefreshToken)) return null;
-        if (!ChasterClient.NeedsRefresh(tokens.ExpiresAtUtc, _utcNow())) return tokens.AccessToken;
+        await _refreshGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var tokens = _tokens.Read();
+            if (tokens == null || string.IsNullOrEmpty(tokens.RefreshToken)) return null;
+            if (!ChasterClient.NeedsRefresh(tokens.ExpiresAtUtc, _utcNow())) return tokens.AccessToken;
 
-        var fresh = await _client.RefreshAsync(tokens.RefreshToken, ct).ConfigureAwait(false);
-        if (fresh.Status == ChasterStatus.LinkExpired) { DropLink(); return null; }
-        if (!fresh.Ok) return null;
-        StoreTokens(fresh.Value!, tokens.RefreshToken);
-        return fresh.Value!.AccessToken;
+            var fresh = await _client.RefreshAsync(tokens.RefreshToken, ct).ConfigureAwait(false);
+            if (fresh.Status == ChasterStatus.LinkExpired) { DropLink(); return null; }
+            if (!fresh.Ok) return null;
+            StoreTokens(fresh.Value!, tokens.RefreshToken);
+            return fresh.Value!.AccessToken;
+        }
+        finally { _refreshGate.Release(); }
     }
 
     private void DropLink()
@@ -284,5 +317,6 @@ public sealed partial class ChasterService : IDisposable
         CancelLink();
         _settleTimer?.Dispose();
         _settleGate.Dispose();
+        _refreshGate.Dispose();
     }
 }

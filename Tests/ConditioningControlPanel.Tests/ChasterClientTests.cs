@@ -116,7 +116,7 @@ public class ChasterClientTests
     [InlineData(0)]
     [InlineData(-30)]
     [InlineData(ChasterClient.MaxAddSeconds + 1)]
-    public async Task Add_is_the_only_verb_and_never_more_than_a_day(int seconds)
+    public async Task Add_is_the_only_verb_and_never_more_than_the_days_cap(int seconds)
     {
         var h = new FakeHandler();
         using var client = new ChasterClient(h);
@@ -160,6 +160,14 @@ public class ChasterClientTests
 
         Assert.Equal(ChasterStatus.Unavailable, (await down.GetLocksAsync("AT")).Status);
         Assert.Equal(ChasterStatus.Unavailable, (await garbled.GetLocksAsync("AT")).Status);
+    }
+
+    [Fact]
+    public async Task A_call_nobody_answered_is_told_apart_from_an_outage()
+    {
+        using var client = new ChasterClient(new FakeHandler { Answer = _ => throw new TaskCanceledException("timeout") });
+
+        Assert.Equal(ChasterStatus.TimedOut, (await client.AddTimeAsync("AT", "aaa111", 60)).Status);
     }
 
     [Fact]

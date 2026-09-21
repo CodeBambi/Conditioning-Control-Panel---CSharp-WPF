@@ -41,8 +41,9 @@ public sealed partial class ChasterService
             var today = CircesTab.DayKey(_localNow());
             if (_lastSettleDay == today) return SettleOutcome.Nothing;
             var outcome = await SettleAsync().ConfigureAwait(false);
-            // A try-later keeps the day open, so the next hourly tick goes again.
-            if (outcome != SettleOutcome.TryLater) _lastSettleDay = today;
+            // A try-later keeps the day open, so the next hourly tick goes again. So does a lock
+            // nobody picked yet: once the player picks one, the push follows within the hour.
+            if (outcome is not (SettleOutcome.TryLater or SettleOutcome.NoLockChosen)) _lastSettleDay = today;
             return outcome;
         }
         catch (Exception ex)

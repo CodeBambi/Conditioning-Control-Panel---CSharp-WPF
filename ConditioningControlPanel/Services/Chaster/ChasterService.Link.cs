@@ -35,9 +35,14 @@ public sealed partial class ChasterService
     /// falls back to a copy-the-link prompt on machines with no default browser.</param>
     public async Task<LinkOutcome> LinkAsync(Action<string> openBrowser)
     {
-        if (_linkCts != null) return LinkOutcome.Failed;
+        var cts = new CancellationTokenSource(LinkTimeout);
+        // One flow at a time, decided atomically: two listeners cannot share the port anyway.
+        if (Interlocked.CompareExchange(ref _linkCts, cts, null) != null)
+        {
+            cts.Dispose();
+            return LinkOutcome.Failed;
+        }
         _linkCancelled = false;
-        var cts = _linkCts = new CancellationTokenSource(LinkTimeout);
         var state = ChasterClient.NewState();
         using var listener = new HttpListener();
         try
@@ -46,20 +51,27 @@ public sealed partial class ChasterService
             listener.Start();
             openBrowser(ChasterClient.AuthorizeUrl(state));
 
-            var contextTask = listener.GetContextAsync();
-            // Observe a fault from a listener torn down under the wait, so it never surfaces
-            // as an unobserved task exception on the finalizer thread.
-            _ = contextTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
-            var done = await Task.WhenAny(contextTask, Task.Delay(Timeout.Infinite, cts.Token)).ConfigureAwait(false);
-            if (done != contextTask) return _linkCancelled ? LinkOutcome.Cancelled : LinkOutcome.TimedOut;
+            string? error;
+            while (true)
+            {
+                var contextTask = listener.GetContextAsync();
+                // Observe a fault from a listener torn down under the wait, so it never surfaces
+                // as an unobserved task exception on the finalizer thread.
+                _ = contextTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                var done = await Task.WhenAny(contextTask, Task.Delay(Timeout.Infinite, cts.Token)).ConfigureAwait(false);
+                if (done != contextTask) return _linkCancelled ? LinkOutcome.Cancelled : LinkOutcome.TimedOut;
 
-            var context = await contextTask.ConfigureAwait(false);
-            var query = context.Request.QueryString;
-            var error = query["error"];
-            var stateOk = SecurityHelper.SecureCompare(state, query["state"] ?? "");
-            await RespondAsync(context, stateOk && string.IsNullOrEmpty(error)).ConfigureAwait(false);
+                var context = await contextTask.ConfigureAwait(false);
+                var query = context.Request.QueryString;
+                error = query["error"];
+                var stateOk = SecurityHelper.SecureCompare(state, query["state"] ?? "");
+                await RespondAsync(context, stateOk && string.IsNullOrEmpty(error)).ConfigureAwait(false);
+                // A knock with the wrong state is a stale tab from an earlier try, or some other
+                // program on this machine. It gets the "not linked" page and the wait goes on;
+                // it must not be able to end a real attempt.
+                if (stateOk) break;
+            }
 
-            if (!stateOk) return LinkOutcome.Failed;
             if (!string.IsNullOrEmpty(error)) return error == "denied" ? LinkOutcome.Denied : LinkOutcome.Failed;
 
             var tokens = await _client.ExchangeAsync(state, cts.Token).ConfigureAwait(false);
@@ -82,7 +94,7 @@ public sealed partial class ChasterService
         }
         finally
         {
-            _linkCts = null;
+            Interlocked.Exchange(ref _linkCts, null);
             cts.Dispose();
         }
     }

@@ -30,6 +30,7 @@ public class ChasterServiceTests : IDisposable
     {
         public readonly List<(string Path, string? Body)> Seen = new();
         public bool RefreshIsReal;
+        public TaskCompletionSource? HoldRefresh;
         public Func<string, HttpResponseMessage> Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
@@ -41,6 +42,7 @@ public class ChasterServiceTests : IDisposable
             if (path == "/chaster/refresh" && !RefreshIsReal)
                 return Json(200, "{\"access_token\":\"AT\",\"expires_in\":300}");
             Seen.Add((path, body));
+            if (path == "/chaster/refresh" && HoldRefresh != null) await HoldRefresh.Task;
             return Answer(path);
         }
     }
@@ -202,6 +204,72 @@ public class ChasterServiceTests : IDisposable
 
         _http.Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
         Assert.Equal(SettleOutcome.Pushed, await service.SettleAsync());
+    }
+
+    [Fact]
+    public async Task A_push_nobody_answered_is_counted_as_landed_and_never_sent_twice()
+    {
+        _http.Answer = _ => throw new TaskCanceledException("timeout");
+        using var service = Make();
+        service.NoteSeconds("watcher", 600);
+
+        Assert.Equal(SettleOutcome.TryLater, await service.SettleAsync());
+        Assert.Equal(600, service.BalanceSeconds);
+
+        _http.Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
+        Assert.Equal(SettleOutcome.Nothing, await service.SettleAsync());
+        Assert.Equal(0, service.BalanceSeconds);
+        Assert.Equal(0, service.Bill().PushedSeconds);
+        Assert.Single(_http.Seen);
+    }
+
+    [Fact]
+    public async Task A_push_cut_off_by_a_crash_is_not_sent_again_on_the_next_launch()
+    {
+        var day = CircesTab.DayKey(_utc.ToLocalTime());
+        File.WriteAllText(Path.Combine(_dir, "tab.json"), "{\"balance\":600,\"pending\":600,\"pending_day\":\"" + day + "\"}");
+        using var service = Make();
+
+        Assert.Equal(SettleOutcome.Nothing, await service.SettleAsync());
+        Assert.Equal(0, service.BalanceSeconds);
+        Assert.Empty(_http.Seen);
+    }
+
+    [Fact]
+    public async Task A_chosen_lock_that_ended_asks_again_and_the_push_follows_the_new_pick()
+    {
+        _http.Answer = _ => Json(404, "");
+        using var service = Make();
+        service.NoteSeconds("watcher", 300);
+
+        Assert.Equal(SettleOutcome.NoLockChosen, await service.SettleIfNewDayAsync());
+        Assert.Equal(300, service.BalanceSeconds);
+        Assert.True(service.IsLinked);
+
+        _options = _options with { LockId = "lock2" };
+        _http.Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
+        Assert.Equal("/locks/lock2/update-time", _http.Seen.Last().Path);
+    }
+
+    [Fact]
+    public async Task Two_callers_with_a_stale_token_refresh_once()
+    {
+        _http.RefreshIsReal = true;
+        _http.HoldRefresh = new TaskCompletionSource();
+        _store.Tokens = new ChasterStoredTokens("OLD", "RT", _utc.AddSeconds(-5));
+        _http.Answer = p => p == "/chaster/refresh"
+            ? Json(200, "{\"access_token\":\"NEW\",\"refresh_token\":\"RT2\",\"expires_in\":300}")
+            : Json(200, "[]");
+        using var service = Make();
+
+        var first = service.GetLocksAsync();
+        var second = service.GetLocksAsync();
+        _http.HoldRefresh.SetResult();
+        await Task.WhenAll(first, second);
+
+        Assert.Single(_http.Seen, s => s.Path == "/chaster/refresh");
+        Assert.Equal("RT2", _store.Tokens!.RefreshToken);
     }
 
     [Fact]

@@ -157,6 +157,35 @@ public class CircesTabTests
     }
 
     [Fact]
+    public void An_unanswered_push_counts_as_landed_and_does_not_widen_the_floor()
+    {
+        var s = new TabState();
+        Book(s, "watcher", 900);
+        CircesTab.MarkPending(s, new TabPush(TabPushKind.Add, 900), Noon);
+
+        Assert.Equal(900, CircesTab.ResolvePending(s));
+
+        Assert.Equal(0, s.BalanceSeconds);
+        Assert.Equal(0, s.PushedNetSeconds);
+        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, Noon, canRemove: false).Kind);
+        Assert.Equal(0, CircesTab.ResolvePending(s));
+    }
+
+    [Fact]
+    public void Resolving_a_doubt_never_hands_out_credit()
+    {
+        var s = new TabState();
+        Book(s, "watcher", 900);
+        CircesTab.MarkPending(s, new TabPush(TabPushKind.Add, 900), Noon);
+        CircesTab.Wipe(s, Run.AddHours(1), Run);
+        Book(s, "typo", 15);
+
+        CircesTab.ResolvePending(s);
+
+        Assert.Equal(0, s.BalanceSeconds);
+    }
+
+    [Fact]
     public void A_wearer_link_keeps_a_credit_on_the_tab()
     {
         var s = new TabState { BalanceSeconds = -300, PushedNetSeconds = 900 };

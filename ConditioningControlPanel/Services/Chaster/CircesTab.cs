@@ -33,6 +33,11 @@ public sealed class TabState
     [JsonProperty("day_added")] public int DayAddedSeconds { get; set; }
 
     [JsonProperty("entries")] public List<TabEntry> Entries { get; set; } = new();
+
+    /// <summary>Seconds of a push that went out and was never answered (a timeout, or the app
+    /// died mid-call). 0 when nothing is in doubt. See <see cref="CircesTab.ResolvePending"/>.</summary>
+    [JsonProperty("pending")] public int PendingSeconds { get; set; }
+    [JsonProperty("pending_day")] public string? PendingDay { get; set; }
 }
 
 public enum TabRefusal
@@ -130,8 +135,8 @@ public static class CircesTab
     }
 
     /// <summary>What to send the lock right now, if anything. One push per local day: the first
-    /// chance wins (close of the app, or the next launch when the close never got there).
-    /// <paramref name="canRemove"/> is false for a wearer link, which Chaster only lets add.</summary>
+    /// chance of the day wins. <paramref name="canRemove"/> is false for a wearer link, which
+    /// Chaster only lets add.</summary>
     public static TabPush PlanPush(TabState state, DateTime localNow, bool canRemove)
     {
         if (state.LastPushDay == DayKey(localNow)) return new(TabPushKind.None, 0);
@@ -160,6 +165,36 @@ public static class CircesTab
             state.PushedNetSeconds = Math.Max(0, state.PushedNetSeconds - push.Seconds);
         }
         state.LastPushDay = DayKey(localNow);
+    }
+
+    /// <summary>Write this down BEFORE an add goes out, and save. If the answer never comes the
+    /// mark is still there on the next settle, and <see cref="ResolvePending"/> deals with it.</summary>
+    public static void MarkPending(TabState state, TabPush push, DateTime localNow)
+    {
+        if (push.Kind != TabPushKind.Add || push.Seconds <= 0) return;
+        state.PendingSeconds = push.Seconds;
+        state.PendingDay = DayKey(localNow);
+    }
+
+    /// <summary>Chaster answered, yes or no. Nothing is in doubt any more.</summary>
+    public static void ClearPending(TabState state)
+    {
+        state.PendingSeconds = 0;
+        state.PendingDay = null;
+    }
+
+    /// <summary>An add that was never answered counts as LANDED. The other reading sends it
+    /// again, and a lock that gains an hour nobody owed is the one mistake the tab must never
+    /// make. The doubt goes the player's way twice: the seconds leave the tab, and they do not
+    /// widen the floor, since CCP cannot prove it put them on the lock. Returns what it settled.</summary>
+    public static int ResolvePending(TabState state)
+    {
+        var seconds = state.PendingSeconds;
+        if (seconds <= 0) { ClearPending(state); return 0; }
+        state.BalanceSeconds -= Math.Min(seconds, Math.Max(0, state.BalanceSeconds));
+        state.LastPushDay = state.PendingDay ?? state.LastPushDay;
+        ClearPending(state);
+        return seconds;
     }
 
     /// <summary>"+0:30", "-10:00", "+1:05:00". The number that flashes when a price lands, and the
