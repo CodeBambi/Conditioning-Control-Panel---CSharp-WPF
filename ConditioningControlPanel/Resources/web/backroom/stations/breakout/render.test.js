@@ -523,3 +523,31 @@ test('the comet is a colour thing: a grey ball draws no trail, a tinted copy dra
     assert.notEqual(own, copy, 'a copy strokes its trail in its own colour');
   } finally { globalThis.document = oldDocument; }
 });
+
+test('the grey paddle is a dead slab: no face, no stretch, no bounce, no lean; colour gives all of it back', () => {
+  const oldDocument = globalThis.document;
+  globalThis.document = { createElement: () => canvasStub() };
+  try {
+    const look = (state) => {
+      const log = [];
+      const renderer = createRenderer(canvasStub(log), { rng: () => 0.5 });
+      renderer.resize(480, 720);
+      const base = createGame({ rng: () => 0.5 }).snapshot();
+      const paddle = { ...base.paddle, x: 240, stretch: 1, vx: 900 };
+      const snap = { ...base, state, sat: state === 'colour' ? .5 : 0, rungs: base.rungs.map(() => true), paddle,
+        balls: [{ x: 120, y: 300, r: 8, vx: 100, vy: -100, trail: [], squash: 1, sqx: 0, sqy: 1 }], colliders: [], pops: [], bricks: [] };
+      renderer.onEvent('paddle', { x: 240, t: 0 });                       // a bounce: recoil is at its peak
+      renderer.draw(snap, { now: 1, dt: 0.016 });
+      const p = paddle;
+      return {
+        slab: log.filter(op => op[0] === 'fillRect' && op[1] === p.x - p.w / 2 && op[2] === p.y - p.h / 2 && op[3] === p.w && op[4] === p.h).length,
+        eyes: log.filter(op => op[0] === 'arc' && op[3] === 4.6).length,
+        mouth: log.filter(op => op[0] === 'quadraticCurveTo').length,
+        shear: log.filter(op => op[0] === 'transform').length,
+      };
+    };
+    const grey = look('grey'), colour = look('colour');
+    assert.deepEqual(grey, { slab: 1, eyes: 0, mouth: 0, shear: 0 }, 'grey: one flat rectangle at the rest size and place');
+    assert.equal(colour.slab, 0); assert.equal(colour.eyes, 2); assert.ok(colour.mouth >= 1 && colour.shear >= 1, 'colour: the face and the lean are back');
+  } finally { globalThis.document = oldDocument; }
+});
