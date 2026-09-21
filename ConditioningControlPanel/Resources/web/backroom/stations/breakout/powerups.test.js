@@ -138,3 +138,13 @@ test('the random drop mix: multiball is the rare one, every kind still falls, on
  assert.equal(pickPower(0),'multiball');assert.equal(pickPower(1),'shield');assert.equal(pickPower(-1),'multiball');
  assert.ok(POWER_WEIGHT.multiball<POWER_WEIGHT.laser);
 });
+
+test('a power-up glyph in a brick bobs and breathes a little, never under reduced motion', async () => {
+  const { glyphIdle, GLYPH_IDLE } = await import('./powerups-render.js');
+  assert.deepEqual(glyphIdle(3.3, 100, 80, true), { dy: 0, scale: 1 });
+  let lo = 9, hi = -9, sLo = 9, sHi = 0;
+  for (let t = 0; t < 6; t += .02) { const i = glyphIdle(t, 100, 80); lo = Math.min(lo, i.dy); hi = Math.max(hi, i.dy); sLo = Math.min(sLo, i.scale); sHi = Math.max(sHi, i.scale); }
+  assert.ok(hi > 1 && lo < -1 && hi <= GLYPH_IDLE.bob && lo >= -GLYPH_IDLE.bob, 'it moves, and only slightly');
+  assert.ok(sHi > 1.05 && sLo < .95 && sHi <= 1.1 && sLo >= .9, 'it breathes within ten percent');
+  assert.notEqual(glyphIdle(1, 100, 80).dy, glyphIdle(1, 182, 80).dy, 'neighbours are out of phase');
+});

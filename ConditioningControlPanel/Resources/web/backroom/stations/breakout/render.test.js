@@ -570,3 +570,10 @@ test('the hit glow is low, pink and fades from zero: never a white sheet', () =>
     assert.ok(log.some(op => op[0] === 'drawImage'), 'and then screened over the frame once');
   } finally { globalThis.document = oldDocument; }
 });
+
+test('brick knocks: a crack moves the camera a little, a break more, and both stay modest', async () => {
+  const { BRICK_KICK } = await import('./render.js');
+  assert.ok(BRICK_KICK.hit > 0 && BRICK_KICK.hit < BRICK_KICK.broke);
+  assert.ok(BRICK_KICK.broke > 5.5 && BRICK_KICK.broke <= 9, 'a bit more than 5.5, not a quake');
+  assert.ok(BRICK_KICK.combo >= BRICK_KICK.broke);
+});
