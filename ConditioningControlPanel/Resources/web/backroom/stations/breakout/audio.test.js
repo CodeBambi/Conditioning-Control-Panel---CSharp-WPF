@@ -415,3 +415,9 @@ test('the grey world sits a little lower: the whole mix dips, colour brings it b
   audio.relapse(); assert.equal(audio.greyLevel, GREY_LEVEL, 'a relapse dips again');
   audio.destroy(); assert.equal(audio.greyLevel, 1);
 });
+
+test('the eye voice loads from the station own assets first, and the three clips are really there', async () => {
+  const fs = await import('node:fs'), src = fs.readFileSync(new URL('./audio.js', import.meta.url), 'utf8');
+  assert.ok(src.indexOf("./assets/voice/drift-") > 0 && src.indexOf("./assets/voice/drift-") < src.indexOf('dtrh/assets/barks'), 'own assets before the cross-tree fallback');
+  for (let i = 1; i <= 3; i++) assert.ok(fs.statSync(new URL('./assets/voice/drift-' + i + '.mp3', import.meta.url)).size > 100000, 'a real mp3, not a pointer');
+});
