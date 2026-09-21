@@ -1,6 +1,8 @@
-import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle } from './feedback.js';
+import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle, wordTrailPoints, WORD_TRAIL } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
-import {drawPowerIcon,drawPowerups} from './powerups-render.js';
+import {drawPowerIcon,drawPowerups,glyphIdle} from './powerups-render.js';
+/** Camera knock per brick event, in pixels of shake. Owner-tuned by play, 2026-09-21. */
+export const BRICK_KICK = { hit: 3.5, broke: 7.5, combo: 7.5 };
 import { junctionProtected } from './junction-shield.js';
 import { shieldY as junctionShieldY } from './words/let-go.js';
 import {metalActive} from './grey-metal.js';
@@ -164,8 +166,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
           debris.spawn(x, y, (d.w || 82) * (.08 + rng() * .09), (d.h || 27) * (.2 + rng() * .22), dust, rng);
         }
       }
-      // 5.5, was 4: the softer hit glow took some of the jolt with it (owner, 2026-09-21), so the camera gives it back.
-      if (rungs(5) && colour && !last?.iris) cam.kick(5.5);
+      // 7.5: 4 at first, 5.5 once the softer hit glow took some of the jolt with it, then "a bit more" (owner, 2026-09-21).
+      if (rungs(5) && colour && !last?.iris) cam.kick(BRICK_KICK.broke);
       if (d.jackpot) cam.kick(6, 1, 0.01);
       if (d.ghost && (d.plus | 0) > 1) stamps.push({ kind: 'text', text: '+' + (d.plus | 0), x: d.x, y: d.y - 8, life: 0.8, rgb: WHITE, size: 18 });
     } else if (name === 'popOut') {
@@ -185,8 +187,9 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     } else if (name === 'hit') {
       if (d.kind === 'paddle') recoil = 1;
       if (d.kind === 'gif') { cam.kick(7); if (rungs(8)) { glitch = 0.14; aberr = 1; } }
-      if (d.kind === 'brick' && (d.combo | 0) >= 5 && colour && !last?.iris) { cam.kick(6 + Math.min(8, d.combo * 0.5), 1, 0.012); aberr = Math.max(aberr, 0.8); }
-      else if (d.kind === 'brick' && colour && rungs(5) && !last?.iris) aberr = Math.max(aberr, 0.35);
+      if (d.kind === 'brick' && (d.combo | 0) >= 5 && colour && !last?.iris) { cam.kick(BRICK_KICK.combo + Math.min(8, d.combo * 0.5), 1, 0.012); aberr = Math.max(aberr, 0.8); }
+      // A brick that only cracks used to move nothing at all; it gets a small knock of its own now.
+      else if (d.kind === 'brick' && colour && rungs(5) && !last?.iris) { cam.kick(BRICK_KICK.hit); aberr = Math.max(aberr, 0.35); }
     } else if (name === 'paddle') {
       recoil = 1;
       if (colour && rungs(3) && last) {
@@ -594,7 +597,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         if (br.split) {
           // Twin pearls and an orbit distinguish extra balls without a live blur pass.
           const orbit = reduced ? 0 : spin * .8;
-          g.save();
+          const idle = glyphIdle(s.time, br.x, br.y, reduced || s.state !== 'colour');
+          g.save(); g.translate(0, idle.dy); g.scale(idle.scale, idle.scale);
           g.strokeStyle = col(MINT, mix, .85); g.lineWidth = 1.2;
           g.beginPath(); g.ellipse(0, 0, 12, 6, 0, 0, Math.PI * 2); g.stroke();
           for (const x of [-4, 4]) {
@@ -611,7 +615,11 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         if (br.word) { g.save(); roundRect(g, -br.w / 2, -br.h / 2, br.w, br.h, 3); g.clip(); drawWordLabel(br, s, mix); g.restore(); }
         else if (letter) { g.save(); if (br.angle) g.rotate(-br.angle); drawLetter(letter,(s.spell || br.finaleMotif === 'spell') ? Math.min(25, Math.min(br.w, br.h) * .72) : 11,.5); g.restore(); }
       }
-      if(s.state==='colour'&&br.powerup)drawPowerIcon(g,br.powerup,0,0,Math.min(9,br.h*.36),s.state==='grey');
+      if(s.state==='colour'&&br.powerup){
+        // The prize waits: a slow bob and a breath, each brick on its own phase. Colour only, so grey never sees it.
+        const idle=glyphIdle(s.time,br.x,br.y,reduced);
+        drawPowerIcon(g,br.powerup,0,idle.dy,Math.min(9,br.h*.36)*idle.scale,false);
+      }
       if (!br.finaleWord && !br.irisCore && !br.pendulumAnchor && !br.finaleHinge) {
         g.drawImage(finishTile(),-br.w/2,-br.h/2,br.w,br.h);
       }
@@ -849,10 +857,13 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         g.strokeStyle = col(tints ? tints[1] : VIOLET, mix, segment.alpha * .6);
         g.lineWidth = Math.max(.5, b.r * 1.7 * segment.alpha);
         g.beginPath(); g.moveTo(segment.x, segment.y); g.lineTo(segment.nx, segment.ny); g.stroke();
-        if (s.state === 'colour' && !b.ghost && s.sat >= .7 && words?.length && trailIndex++ % 5 === 0) {
-          g.font = '700 7px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
-          g.fillStyle = col(PINK, mix, segment.alpha * .5);
-          g.fillText(words[(wordIdx + trailIndex) % words.length], segment.x, segment.y);
+      }
+      // The words follow the ball further than the streak does, and over it: they are the tail (owner, 2026-09-21).
+      if (s.state === 'colour' && !b.ghost && s.sat >= .7 && words?.length) {
+        g.font = `700 ${WORD_TRAIL.size}px ` + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
+        for (const p of wordTrailPoints(b)) {
+          g.fillStyle = col(tints ? tints[1] : PINK, mix, Math.min(1, p.alpha * 1.4) * WORD_TRAIL.alpha);
+          g.fillText(words[(wordIdx + ++trailIndex) % words.length], p.x, p.y);
         }
       }
       g.restore();

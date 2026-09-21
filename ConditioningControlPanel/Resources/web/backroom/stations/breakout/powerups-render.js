@@ -1,6 +1,13 @@
 import {shieldY} from './words/let-go.js';
 import {POWER_DURATION,WARN_AT,MUZZLE_S,swayX} from './powerups.js';
 const COLORS={multiball:'#c693ff',fireball:'#ffc46d',laser:'#ff8fce',shield:'#85f5db'};
+/** A power-up glyph waiting inside a brick bobs a little and breathes (owner, 2026-09-21). Phased by where the brick sits, so a row never moves as one. */
+export const GLYPH_IDLE={bob:1.6,bobHz:.55,breath:.09,breathHz:.4};
+export function glyphIdle(time,x=0,y=0,still=false){
+  if(still||!Number.isFinite(time))return {dy:0,scale:1};
+  const ph=(x*.013+y*.021)*Math.PI*2,w=Math.PI*2*time;
+  return {dy:Math.sin(w*GLYPH_IDLE.bobHz+ph)*GLYPH_IDLE.bob,scale:1+GLYPH_IDLE.breath*Math.sin(w*GLYPH_IDLE.breathHz+ph*1.7)};
+}
 export function drawPowerIcon(g,kind,x,y,size=12,grey=false){
   g.save();g.translate(x,y);g.scale(size/12,size/12);g.lineWidth=2;g.lineCap='round';
   g.strokeStyle='#191326';g.fillStyle=grey?'#d5d5d5':COLORS[kind];
