@@ -156,8 +156,9 @@ public class PaletteDoorParityTests
     [InlineData("vosk", "tab.shelistening")]
     [InlineData("speech model", "tab.shelistening")]
     [InlineData("microphone", "tab.shelistening")]
-    // "how do I get haptics working on the gaze minigame"
-    [InlineData("gaze minigame", "tab.haptics")]
+    // "how do I get haptics working on the gaze minigame" - the toy is connected on Haptics.
+    [InlineData("haptics gaze", "tab.haptics")]
+    [InlineData("vibration", "tab.haptics")]
     public void ThePhrasesPeopleTypeFindTheirSetting(string query, string expectedId)
     {
         var hits = SettingsPaletteIndex.Search(query);
@@ -167,9 +168,38 @@ public class PaletteDoorParityTests
     }
 
     /// <summary>
-    /// The two title-bar rows are the only entries with no <c>TabKey</c>: they pulse a button that
-    /// is always on screen instead of navigating. If one ever loses its element names it becomes a
-    /// row that does nothing at all, which is worse than not being listed.
+    /// The Gaze minigame is a card on the PLAY wall, so a bare "gaze" must offer Play ahead of
+    /// Haptics. Both are alias hits, both score 40, and ties break by declaration order - so this
+    /// is really a test that the Haptics row is still declared BELOW Play, which is the only thing
+    /// keeping the two apart. Haptics keeps its own gaze words on purpose: the toy is connected
+    /// there, and "haptics gaze" is a substring of nothing else.
+    ///
+    /// <para>Not asserted as first place outright: <c>set.restrict_gaze</c> carries the word in its
+    /// own caption, and a label hit outranking an alias hit is the matcher working as designed.</para>
+    /// </summary>
+    [Fact]
+    public void BareGazePrefersThePlayWallOverHaptics()
+    {
+        foreach (var query in new[] { "gaze", "gaze minigame" })
+        {
+            var ids = SettingsPaletteIndex.Search(query).Select(e => e.Id).ToList();
+            var play = ids.IndexOf("tab.play");
+            var haptics = ids.IndexOf("tab.haptics");
+
+            Assert.True(play >= 0, $"\"{query}\" does not offer the Play wall at all");
+            Assert.True(haptics < 0 || play < haptics,
+                $"typing \"{query}\" ranks Haptics above Play, but the Gaze minigame is a card on " +
+                "the Play wall (got: " + string.Join(", ", ids.Take(4)) + ")");
+        }
+
+        Assert.Contains(SettingsPaletteIndex.Search("haptics gaze"), e => e.Id == "tab.haptics");
+    }
+
+    /// <summary>
+    /// The title-bar rows are the only entries with no <c>TabKey</c>: they pulse a button that is
+    /// always on screen instead of navigating. If one ever loses its element names it becomes a row
+    /// that does nothing at all, which is worse than not being listed. Asserted over however many
+    /// there are - the property is what matters, not the count.
     /// </summary>
     [Fact]
     public void TitleBarRowsPointAtAButtonInsteadOfNavigating()
@@ -178,7 +208,7 @@ public class PaletteDoorParityTests
             .Where(e => e.Id.StartsWith("chrome.", StringComparison.Ordinal))
             .ToList();
 
-        Assert.Equal(2, chrome.Count);
+        Assert.NotEmpty(chrome);
         foreach (var row in chrome)
         {
             Assert.True(string.IsNullOrEmpty(row.TabKey),

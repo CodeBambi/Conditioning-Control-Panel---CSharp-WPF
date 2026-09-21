@@ -268,11 +268,6 @@ namespace ConditioningControlPanel.Services
                 // "volume gets quiet" is the ramp pulling the master dial down.
                 "blur screen blur turn off blur auto start starts by itself starts on its own " +
                 "intensity ramp volume gets quiet volume drops");
-            // "gaze minigame" rides here as well as on the Play wall: the minigame's own vibration
-            // mode is an advanced setting inside the game, but the toy is connected HERE, and
-            // "haptics on the gaze minigame" was asked as one question (ask-support 2026-09-20).
-            Tab("haptics", "tab_haptics", "📳", "haptics",
-                "haptics toy vibrator buttplug funscript vibration gaze minigame connect toy");
             Tab("companion", "tab_companion", "🤖", "companion", "companion ai persona workshop chat");
             Tab("bambitakeover", "tab_takeover", "💫", "bambitakeover", "takeover autonomy");
             // "vosk" and "speech model" are the words people bring: the offline model is the one
@@ -289,6 +284,17 @@ namespace ConditioningControlPanel.Services
             Tab("play", "nav_door_play", "🕹️", "play",
                 "play lab experiments gaze focus blink trainer intake lockdown remote control loom tier 2 " +
                 "gaze minigame haptics vibration");
+
+            // DECLARED AFTER Play on purpose, and the order is the whole point. Score() gives every
+            // alias hit the same 40 and breaks ties by declaration order, so while this row sat
+            // above Play a bare "gaze" offered Haptics first - and the Gaze minigame is a card on
+            // the PLAY wall. Haptics keeps its own gaze words because the toy is connected here and
+            // "how do I get haptics working on the gaze minigame" was asked as one question
+            // (ask-support 2026-09-20): that query still lands here, because "haptics gaze" is a
+            // substring of nothing else. Moving a row DOWN can only lose ties, never steal them.
+            Tab("haptics", "tab_haptics", "📳", "haptics",
+                "haptics toy vibrator buttplug funscript vibration connect toy " +
+                "haptics gaze gaze minigame vibration mode");
             // card.arcademy and card.backroom (launcher cards on the Play wall) left the index on
             // 2026-09-18: the games live in the CC Labs launcher now, which is not a tab the
             // palette can navigate to.
