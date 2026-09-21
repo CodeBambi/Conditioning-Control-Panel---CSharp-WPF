@@ -5617,6 +5617,8 @@
   "launcher_media_footnote": "El Back Room también lo sigue.",
   "launcher_media_done": "Listo",
   "launcher_media_tooltip": "Medios y sonido",
+  "launcher_sound_mute": "Silenciar el sonido",
+  "launcher_sound_unmute": "Volver a activar el sonido",
   "launcher_media_button": "Medios",
   "launcher_mod_label": "Mod: {0}",
   "launcher_mod_tooltip": "Cambiar el mod activo",

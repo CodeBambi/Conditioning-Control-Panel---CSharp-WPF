@@ -107,6 +107,9 @@ public static class LauncherSfx
         {
             var audio = App.Audio;
             if (audio == null || audio.IsOutputSuppressed) return false;
+            // The speaker button in the launcher's title bar. One flag, ahead of every cue, so
+            // muted means muted and not "muted except the one I forgot".
+            if (App.Settings?.Current?.LauncherSoundEnabled == false) return false;
             int level = App.Settings?.Current?.MasterVolume ?? 0;
             if (level <= 0) return false;
             master = Math.Clamp(level / 100f, 0f, 1f);

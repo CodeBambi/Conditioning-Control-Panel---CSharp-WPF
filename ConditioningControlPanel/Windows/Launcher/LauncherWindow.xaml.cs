@@ -56,6 +56,8 @@ public partial class LauncherWindow : Window
         LauncherHost.FadeOut = FadeOutThen;
         LauncherHost.RequestSignIn = OpenSignIn;
 
+        SetUpSoundButton();
+
         var mods = App.Mods;
         if (mods != null) mods.ModChanged += OnModChanged;
 
