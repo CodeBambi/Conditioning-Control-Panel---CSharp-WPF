@@ -11,6 +11,7 @@ import { TIDE_ROWS, TIDE_COLS, tidePose } from './tide.js';
 import { CURTAIN_ROWS, CURTAIN_COLS, ANCHOR_GUARDS, createPendulums, curtainPose, advancePendulum, releasePendulum, collidePendulum } from './pendulum.js';
 import { shieldY } from './words/let-go.js';
 import { doorById, boardById, parseBoard, BOARD_COLS } from './doors.js';
+import { STORY_WALLS, storyBoardAt, actOfWall, capForWall, isHouseEntry } from './story/index.js';
 import { twistFor } from './twists/index.js';
 /* ============================================================================
  * stations/breakout/game.js - the sim. DOM-free so `node --test` can drive it.
@@ -120,7 +121,7 @@ export function layoutWord(word) {
 
 export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEvent = () => {}, breakoutN,
   saturation = 0.15, speedScale = 0.55, words = DEFAULT_WORDS, reduced = false, brickStrength = STRENGTH_BY_WALL, greyMetal = true,
-  door = null, board = null } = {}) {
+  door = null, board = null, story = false, from = 1 } = {}) {
   /* A DOOR RUN (doors.js): the two authored boards of one door, in order, then `doorClear`.
    * `board` alone opens that one board and loops it. With neither, nothing below changes and the
    * house game plays exactly as it always has. */
@@ -129,6 +130,17 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   const soloBoard = doorFound ? doorFound.board : null;
   const doorBoards = doorDef ? (soloBoard ? [soloBoard] : doorDef.boards) : null;
   if (doorDef && Array.isArray(doorDef.words) && doorDef.words.length) words = doorDef.words;
+  /* A STORY RUN (story/index.js): the story's walls in order, through the SAME authored-wall path the
+   * doors use. `from` is the wall to start at, 1-based. With `story` off nothing below changes and the
+   * house game and the doors play exactly as they always have. See story/CONTRACT.md. */
+  const storyRun = story && STORY_WALLS > 0 ? { from: Math.max(1, Math.min(STORY_WALLS, Math.floor(Number(from)) || 1)) } : null;
+  /** The story wall now playing, 1-based, clamped to the last wall so the sim stays honest past the end. */
+  const storyWallNo = () => Math.min(STORY_WALLS, storyRun.from + g.stats.walls);
+  /* Story events are QUEUED and flushed at the top of the next step(): wall one is built inside createGame,
+   * before the caller holds the game, so a listener there could not call snapshot(). story/CONTRACT.md 5. */
+  const storyQueue = [];
+  const queueStory = (name, data) => { if (storyRun) storyQueue.push([name, data]); };
+  function flushStory() { while (storyQueue.length) { const row = storyQueue.shift(); emit(row[0], row[1]); } }
   // Explicit N is a fixed dev override; ordinary sit-downs use the shrinking sequence.
   let fixedBreakoutN = breakoutN == null ? null : Math.max(1, Math.floor(Number(breakoutN) || BREAKOUT_COUNTS[0]));
   let breakouts = 0;
@@ -154,6 +166,9 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     door: doorDef ? doorDef.id : null, doorName: doorDef ? doorDef.name : null,
     doorColour: doorDef ? doorDef.colour : null, doorBoard: null, twist: null, twists: [], doorDone: false,
     doorClock: 0, doorTimers: [], paddleScale: 1,
+    // story run (story/index.js): `story` false and the rest idle on the house game and on a door run
+    story: !!(story && STORY_WALLS > 0), storyWall: 0, storyOf: STORY_WALLS, storyAct: null, storyActTitle: null,
+    storyCap: 1, storyBoard: null, storyDone: false, storyCard: null,
   };
   /** A door board's bricks by cell, for the twists: `at(row, col)`, dead or alive. */
   let doorGrid = null;
@@ -218,8 +233,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     for (const timer of due) { try { timer.fn(g, doorCtx); } catch (e) { /* a twist's bug never stops the frame */ } }
   }
   /** One authored board on the ordinary 16-column grid. Never reached by the house game. */
-  function authoredWall() {
-    const board = doorBoards[doorBoards.length > 1 ? g.stats.walls % doorBoards.length : 0];
+  function authoredWall(boardIn) {
+    const board = boardIn || doorBoards[doorBoards.length > 1 ? g.stats.walls % doorBoards.length : 0];
     g.doorBoard = board.id; g.twist = board.twist || null; g.twists = [];
     g.dome = false; g.mantra = null;
     g.spell = null; g.reform = null; g.iris = null; g.tide = null; g.finale = null; g.pendulums = null;
@@ -259,14 +274,38 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function buildWall() {
     powers.reset();
-    if (doorBoards) { authoredWall(); return; }
+    // The story picks its own board for this wall. `{ house: 'finale' }` is not a board: it asks for the
+    // house finale, built below exactly as the house game builds its wall 8 (story/CONTRACT.md section 2).
+    let houseIx = g.stats.walls;
+    if (storyRun) {
+      const wall = storyWallNo(), row = storyBoardAt(wall), act = actOfWall(wall);
+      const entry = row ? row.board : null;
+      g.storyWall = wall; g.storyOf = STORY_WALLS; g.storyBoard = entry && entry.id ? entry.id : null;
+      if (act) {
+        const newAct = g.storyAct !== act.id;
+        g.storyAct = act.id; g.storyActTitle = act.title; g.storyCap = capForWall(wall);
+        // The act's colour is what render.js already tints authored plain bricks with. `g.door` stays null.
+        g.doorColour = act.colour || null; g.doorName = act.title || null;
+        if (Array.isArray(act.words) && act.words.length) { g.words = act.words.map(x => String(x)); g.wordIx = 0; }
+        // The act title card, for render.js. Null on every wall that does not open an act.
+        g.storyCard = newAct && row && row.first ? { actNo: row.actIx + 1, title: act.title, colour: act.colour || null } : null;
+        if (newAct && row && row.first) queueStory('actStart', { act: act.id, title: act.title, wall, cap: g.storyCap, colour: act.colour || null });
+      }
+      queueStory('storyWall', { wall, of: STORY_WALLS, board: g.storyBoard, name: entry && entry.name ? entry.name : null,
+        act: g.storyAct, twist: entry && entry.twist ? entry.twist : null,
+        family: entry && entry.family ? entry.family : null, house: isHouseEntry(entry) });
+      if (!isHouseEntry(entry)) { authoredWall(entry); return; }
+      // The house finale is UNCHANGED, and that includes its own colours: the act tint comes off for it.
+      g.doorColour = null; g.doorName = null;
+      houseIx = 7;
+    } else if (doorBoards) { authoredWall(); return; }
     const bricks = [];
-    const mantra = g.stats.walls === 2;
-    const dome = g.stats.walls === 3;
+    const mantra = houseIx === 2;
+    const dome = houseIx === 3;
     g.dome = dome;
     if (g.well?.persistent) { for (const ball of g.balls) ball.orbit = null; g.well = null; }
     g.spell = null; g.reform = null; g.iris = null; g.tide = null; g.finale = null; g.pendulums = null;
-    if (g.stats.walls === 7) {
+    if (houseIx === 7) {
       g.finale = { phase: 'forming', age: 0, wordClock: 0, wordIndex: 0, bursts: [],
         centreX:w/2, centreY:h*.28, coreRadius:32, stage:1, stageAge:0, stageComplete:false, feedClock:0, feedIndex:0 };
       g.sat = g.state === 'grey' ? g.savedSat : g.sat; g.state = 'colour'; g.savedSat = g.sat;
@@ -285,7 +324,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       for(let i=0;i<columns;i++) bricks.push(mkBrick(i*pitch+1,h*.28+210,pitch-2,24,3,i,{finaleDefense:true}));
       g.paddle.x = w/2; respawn(false); g.wallAge = 0;
       g.mantra = null;
-    } else if (g.stats.walls === 6) {
+    } else if (houseIx === 6) {
       g.pendulums = createPendulums(w,h);
       for(const p of g.pendulums) {
         advancePendulum(p,0,w,h,g.reduced);
@@ -307,7 +346,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         }
       }
       g.mantra = null;
-    } else if (g.stats.walls === 5) {
+    } else if (houseIx === 5) {
       g.iris = { rotation:0, eye:{x:w/2,y:h*.42,r:65,pull:0,age:0,born:1,ttl:Infinity,rot:0,fade:1,persistent:true,preset:"whirl",hue:0,energy:0,musicPulse:0,hitPulse:0}, clocks: Array.from({length:IRIS_ARMS},(_,i)=>i*IRIS_INTERVAL/IRIS_ARMS) };
       for(let arm=0;arm<IRIS_ARMS;arm++) {
         const pose=irisPose(arm,0,w,h);
@@ -319,7 +358,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         for(let age=IRIS_INTERVAL;age<IRIS_LIFE;age+=IRIS_INTERVAL) bricks.push(makeIrisBrick(arm,age));
       }
       g.mantra = null;
-    } else if (g.stats.walls === 4) {
+    } else if (houseIx === 4) {
       g.reform = { index: 0, word: REFORM_WORDS[0], beats: 0, lastPhase: g.beatPhase, every: Math.max(1, Math.round(5 / spb())), moving: 0, stopped: false };
       for (const [i, cell] of reformLayout(REFORM_WORDS[0], 100, w).entries()) {
         const face = rng() < .15 ? rng() * 8 : -1, gif = Math.floor(face);
@@ -328,7 +367,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         bricks.push(mkBrick(cell.x, cell.y, cell.w, cell.h, Math.max(0, Math.min(4, Math.floor((cell.y - 38) / 38))), i, { gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, spiral, split: rng() < .05, word, wordAt: word ? .6 + rng() * WORD_SWAP_S : 0, letter: cell.letter, angle: cell.angle }));
       }
       g.mantra = null;
-    } else if (g.stats.walls === 1) {
+    } else if (houseIx === 1) {
       g.tide = { age: 0 };
       for (let row = 0; row < TIDE_ROWS; row++) for (let col = 0; col < TIDE_COLS; col++) {
         const pose = tidePose(row, col, 0, w, h, g.reduced);
@@ -399,7 +438,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     const jackpotSeats = bricks.filter(b=>!b.strength);
     if (jackpotSeats.length) jackpotSeats[Math.floor(rng() * jackpotSeats.length)].jackpot = true;   // keep payloads off authored armour
-    distributeStrength(bricks, brickStrength[g.stats.walls], rng);
+    distributeStrength(bricks, brickStrength[houseIx], rng);
     g.bricks = bricks; g.wallBrickCount = bricks.length;
     for(const br of bricks)powers.assign(br);
     distributeGreyMetal(bricks, g.breakoutN, g.greyBricks, greyMetal);
@@ -581,7 +620,10 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   /* ------------------------------------------------------------ saturation and states */
   function addSat(v) {
     if (g.state !== 'colour') return;
-    g.sat = Math.min(1, g.sat + v);
+    // The act's cap spends the juice ladder across the story. It never LOWERS a saturation that is already
+    // higher (a dev ?sat=, or the act before it): it only refuses to raise it past the cap. story/CONTRACT.md 6.
+    const ceiling = storyRun ? Math.max(g.storyCap, g.sat) : 1;
+    g.sat = Math.min(ceiling, g.sat + v);
     au('setSaturation', g.sat);
     // A music layer arrives: once per crossing, one per call so two never land on the same hit; a relapse re-arms both.
     for (const [name, at] of LAYER_AT) {
@@ -701,8 +743,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       }
       au('metal', {x:br.x/w}); emit('metalHit',{x:br.x+br.w/2,y:br.y+br.h/2}); pushBrick(br, ball); return;
     }
-    // A grey final wall-7 brick is the gate, but repeated impacts still earn escape.
-    if (g.stats.walls === 6 && g.state === 'grey' && g.bricks.filter(b=>b.alive).length === 1) {
+    // A grey final wall-7 brick is the gate, but repeated impacts still earn escape. House game only: a story or door run counts walls too.
+    if (!g.story && !g.door && g.stats.walls === 6 && g.state === 'grey' && g.bricks.filter(b=>b.alive).length === 1) {
       au('metal', {x:br.x/w}); emit('metalHit',{x:br.x+br.w/2,y:br.y+br.h/2}); pushBrick(br, ball); finaleProgress(ball); return;
     }
     // Authored steel: the ball never gets through it. Only a twist, through ctx.breakBrick, can.
@@ -974,6 +1016,12 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (doorBoards && doorBoards.length > 1 && !g.doorDone && g.stats.walls >= doorBoards.length) {
       g.doorDone = true;
       emit('doorClear', { door: g.door });
+    }
+    // The story is over when its last wall clears. A story that ends on the house finale never reaches this:
+    // that one fires storyClear from the outro instead (story/CONTRACT.md section 5).
+    if (storyRun && !g.storyDone && storyRun.from + g.stats.walls - 1 >= STORY_WALLS) {
+      g.storyDone = true;
+      queueStory('storyClear', { wall: STORY_WALLS, house: false });
     }
     buildWall(); g.wallAge = 0; g.landRow = 0;
     emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra });
@@ -1285,6 +1333,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       if(finale?.phase==='released' && finale.stage===2 && finale.stageAge>=FINALE_REBUILD_SECONDS &&
         Math.hypot(b.x-finale.centreX,b.y-finale.centreY)<=finale.coreRadius*.45+b.r) {
         finale.phase='outro';finale.outroAge=0;finale.stageComplete=true;
+        if(storyRun&&!g.storyDone){g.storyDone=true;queueStory('storyClear',{wall:g.storyWall,house:true});}
         g.acc=0;g.transition=null;g.freeze=0;g.hitStopMs=0;
         emit('finaleCoreReached',{x:finale.centreX,y:finale.centreY});
         return;
@@ -1380,6 +1429,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function step(dt, input = {}) {
     dt = Math.min(Math.max(0, dt), 0.1);
+    if (storyQueue.length) flushStory();
     if (updateFinale(dt, input)) return;
     if (g.spell?.complete) {
       g.spell.celebrate = Math.max(0, g.spell.celebrate - dt);

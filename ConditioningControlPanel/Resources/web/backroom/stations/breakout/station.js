@@ -1,6 +1,8 @@
 import { createOfficeEnding } from './office-ending.js';
 import { paintEndingCard } from './ending-card.js';
 import { DOORS, doorById, boardById } from './doors.js';
+import { ACTS, STORY_WALLS, storyBoardById, actUnlocked, readProgress, noteCleared, firstWallOfAct, lastWallOfAct } from './story/index.js';
+import { playStoryEnding } from './story/ending.js';
 import {currentMusic} from '../../shared/sound/music.js';
 /* ============================================================================
  * stations/breakout/station.js - CONTRACT section 7 module for the Breakout
@@ -43,6 +45,10 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private window */ } },
 };
+/** The long story's progress, through the station's own store. story/CONTRACT.md section 9. */
+const STORY_KEY = 'bo.story.v1';
+const storyProgress = () => readProgress(store.get(STORY_KEY));
+const saveStoryProgress = p => store.set(STORY_KEY, JSON.stringify(p));
 
 function loadCss() {
   if (document.querySelector('link[data-breakout-css]')) return;
@@ -91,6 +97,15 @@ export async function mount(ctx) {
   const startBoard = q.get('board') && boardById(q.get('board')) ? q.get('board') : null;
   let chosenDoor = !startBoard && q.get('door') && doorById(q.get('door')) ? q.get('door') : null;
   let doorEnd = null, doorEnded = false;
+  /* The long story (story/index.js): `?story=1` continues, `&wall=N` starts at N, `&unlock=1` opens every act
+   * chip, and `?board=st_...` opens one story board on its own. Progress is bo.story.v1 = { wall, cleared }.
+   * With none of it the house game plays exactly as it always has. story/CONTRACT.md section 9. */
+  const storyBoardStart = q.get('board') ? storyBoardById(q.get('board')) : null;
+  const storyUnlockAll = q.has('unlock') && q.get('unlock') !== '0';
+  let storyOn = (q.has('story') && q.get('story') !== '0') || !!storyBoardStart;
+  let storyFrom = 1, storyEnded = false;
+  if (storyOn) storyFrom = q.has('wall') ? Math.max(1, Math.min(STORY_WALLS, num(q, 'wall', 1))) : storyProgress().wall;
+  if (storyBoardStart) storyFrom = storyBoardStart.wall;
   let menuOpen = true;
   let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;
@@ -122,7 +137,7 @@ export async function mount(ctx) {
         <h1 id="bo-menu-title">BREAK<span>OUT</span></h1>
         <p class="bo-menu-line">Find your colour.</p>
         <button class="bo-play" type="button">Start <span aria-hidden="true">&#9656;</span></button>
-        <div class="bo-menu-actions"><button type="button" data-menu="doors">Doors</button><button type="button" data-menu="options">Options</button><button type="button" data-menu="exit">Exit</button></div>
+        <div class="bo-menu-actions"><button type="button" data-menu="doors">Doors</button><button type="button" data-menu="story">Long story</button><button type="button" data-menu="options">Options</button><button type="button" data-menu="exit">Exit</button></div>
         <p class="bo-menu-controls">Move your mouse or drag to steer.<br>Arrow keys to move. Space to launch.</p>
       </section>
       <section class="bo-doors" hidden role="dialog" aria-modal="true" aria-labelledby="bo-doors-title">
@@ -131,6 +146,16 @@ export async function mount(ctx) {
           <p class="bo-doors-line">Two boards each. The second one bends a rule.</p>
           <div class="bo-door-list">${DOORS.map(d => `<button type="button" class="bo-door-chip" data-door="${d.id}" style="--door:${d.colour}"><i aria-hidden="true"></i><b>${d.name}</b><small>${d.promise}</small></button>`).join('')}</div>
           <button type="button" data-menu="close-doors">Back</button>
+        </div>
+      </section>
+      <section class="bo-story" hidden role="dialog" aria-modal="true" aria-labelledby="bo-story-title">
+        <div class="bo-pause-card">
+          <h2 id="bo-story-title">Long story</h2>
+          <p class="bo-doors-line">Five acts. You never lose, you only go grey for a while.</p>
+          <button type="button" class="bo-story-continue" data-story="continue">Continue</button>
+          <div class="bo-door-list bo-act-list">${ACTS.map((a, i) => `<button type="button" class="bo-door-chip bo-act-chip" data-act="${a.id}" style="--door:${a.colour}"><i aria-hidden="true"></i><b>${i + 1}. ${a.title}</b><small></small></button>`).join('')}</div>
+          <button type="button" class="bo-story-restart" data-story="restart">Start over</button>
+          <button type="button" data-menu="close-story">Back</button>
         </div>
       </section>
       ${backBtn}
@@ -248,6 +273,59 @@ export async function mount(ctx) {
     await open();
     beginGame();
   }
+  /* ------------------------------------------------------------ the long story */
+  /** Paint the sheet from the stored progress: Continue says where, a locked act says so. */
+  function syncStory() {
+    const sheet = el && el.querySelector('.bo-story');
+    if (!sheet) return;
+    const progress = storyProgress();
+    const cont = sheet.querySelector('.bo-story-continue');
+    if (cont) {
+      cont.textContent = progress.cleared ? 'Continue, wall ' + progress.wall : 'Start, wall 1';
+      cont.dataset.wall = String(progress.wall);
+    }
+    for (const chip of sheet.querySelectorAll('.bo-act-chip')) {
+      const id = chip.dataset.act, unlocked = actUnlocked(id, progress.cleared, storyUnlockAll);
+      chip.disabled = !unlocked;
+      chip.classList.toggle('is-locked', !unlocked);
+      const small = chip.querySelector('small');
+      if (small) small.textContent = unlocked ? 'Walls ' + firstWallOfAct(id) + ' to ' + lastWallOfAct(id) : 'Locked';
+    }
+    const restart = sheet.querySelector('.bo-story-restart');
+    if (restart) restart.hidden = !progress.cleared;
+  }
+  function showStory(show) {
+    const sheet = el && el.querySelector('.bo-story');
+    if (!sheet) return;
+    if (show) syncStory();
+    sheet.hidden = !show;
+    if (show) sheet.querySelector('.bo-story-continue')?.focus();
+    else ui.menu?.querySelector('[data-menu="story"]')?.focus();
+  }
+  /** Walk into the story at a wall: rebuild the station around it, then straight in. */
+  async function playStory(wall) {
+    storyOn = true;
+    storyFrom = Math.max(1, Math.min(STORY_WALLS, Math.floor(Number(wall)) || 1));
+    chosenDoor = null;
+    showStory(false);
+    await close(); audio?.destroy?.(); audio = null;
+    await open();
+    beginGame();
+  }
+  /** The story is over. The act 5 lane's ending first; the ordinary card if it does not take it. */
+  async function showStoryEnd(d) {
+    if (storyEnded || !el) return;
+    storyEnded = true;
+    let taken = false;
+    try {
+      taken = await playStoryEnding({ el, canvas, reduced, actions: ui.endingActions, officeEnding, paintCard: paintEndingCard },
+        { wall: Number(d && d.wall) || STORY_WALLS, house: !!(d && d.house) });
+    } catch (e) { taken = false; }
+    if (taken) return;
+    // The house finale's own office pan out owns the screen and raises its own buttons.
+    if (d && d.house) return;
+    showDoorEnd(null);
+  }
   /** The door is done. The existing ending card, painted once, and the same two buttons. */
   function showDoorEnd(id) {
     if (doorEnd || !el) return;
@@ -325,6 +403,7 @@ export async function mount(ctx) {
         shutdownCover?.remove();shutdownCover=null;
         if(s.iris || s.stats.walls===4) au('warmIrisVoice');
         if (cue('wall')) au('wallCleared');
+        if (s.story && s.storyWall > 1) saveStoryProgress(noteCleared(storyProgress(), s.storyWall - 1));
         setSp(Number(d.sp) || s.stats.sp || 0);
         onWall(Number(d.walls) || s.stats.walls || 0, d.mantra);
         break;
@@ -338,6 +417,10 @@ export async function mount(ctx) {
       case 'breakout': break; // The renderer owns this flash so Old Self stays above it.
       // A door is two boards. Both clear: the ending card, with no office clip behind it.
       case 'doorClear': showDoorEnd(d.door); break;
+      // The long story (story/CONTRACT.md section 5). The act card is drawn by the renderer off snapshot().storyCard.
+      case 'actStart': break;
+      case 'storyWall': saveStoryProgress({ wall: Number(d.wall) || 1, cleared: storyProgress().cleared }); break;
+      case 'storyClear': showStoryEnd(d); break;
       default: break;
     }
   }
@@ -540,7 +623,8 @@ export async function mount(ctx) {
     // The sim paces on the bed but never plays: every sound is routed from onEvent, so nothing fires twice.
     const beatShim = { beat: audio.beat, now: audio.now };
     game = createGame({ audio: beatShim, onEvent, ...(q.has('n') ? { breakoutN: num(q, 'n', 20) } : {}), saturation: Math.max(0, Math.min(1, num(q, 'sat', 0.15))),
-      speedScale: num(q, 'speed', 0.55), reduced, door: chosenDoor, board: startBoard });
+      speedScale: num(q, 'speed', 0.55), reduced, door: chosenDoor, board: startBoard,
+      story: storyOn, from: storyFrom });
     if (q.has('nolose')) game.setNoLose(true);
     renderer = createRenderer(canvas, { reduced, media, software: q.has('software') || prefersSoftwareCanvas() });
     haptics = createHaptics({ ctx, reduced, enabled: !q.has('nohaptics') });
@@ -553,7 +637,7 @@ export async function mount(ctx) {
     host = createHostFx({ fx, reduced });
     media.load().then(() => {
       // A door brings its own word list (doors.js), so the dealt words never overwrite it.
-      if (!game || typeof game.setWords !== 'function' || game.snapshot().door) return;
+      if (!game || typeof game.setWords !== 'function' || game.snapshot().door || game.snapshot().story) return;
       try { game.setWords(media.words.map(w => w.text)); } catch (e) { /* words are optional */ }
     }).catch(() => {});
     resize();
@@ -565,7 +649,7 @@ export async function mount(ctx) {
       const button=e.target.closest('[data-ending]');if(!button||button.disabled)return;
       const replay=button.dataset.ending==='replay';
       for(const b of ui.endingActions.querySelectorAll('button'))b.disabled=true;
-      if(!replay)chosenDoor=null;                      // Menu goes back to the house game, not to the door
+      if(!replay){chosenDoor=null;storyOn=false;storyFrom=1;}  // Menu goes back to the house game, not to the door or the story
       await close();audio?.destroy?.();audio=null;await open();if(replay)beginGame();
     });
     const options=el.querySelector('.bo-options'),pace=el.querySelector('.bo-option-pace'),colour=el.querySelector('.bo-option-colour');
@@ -585,10 +669,19 @@ export async function mount(ctx) {
       if(action==='close-options'){options.hidden=true;optionsFrom?.focus();}
       if(action==='doors')showDoors(true);
       if(action==='close-doors')showDoors(false);
+      if(action==='story')showStory(true);
+      if(action==='close-story')showStory(false);
     });
     on(el,'click',e=>{
+      const act=e.target.closest('.bo-act-chip');
+      if(act){if(!act.disabled)playStory(firstWallOfAct(act.dataset.act));return;}
       const chip=e.target.closest('.bo-door-chip');
-      if(chip)playDoor(chip.dataset.door);
+      if(chip){playDoor(chip.dataset.door);return;}
+      const story=e.target.closest('[data-story]');
+      if(story){
+        if(story.dataset.story==='continue')playStory(story.dataset.wall);
+        if(story.dataset.story==='restart'){saveStoryProgress({wall:1,cleared:0});syncStory();playStory(1);}
+      }
     });
     for(const slider of options.querySelectorAll('[data-audio]')){
       on(slider,'input',()=>{const value=Number(slider.value);slider.nextElementSibling.value=Math.round(value*100)+'%';applyAudioLevel(slider.dataset.audio,value);});
@@ -665,7 +758,7 @@ export async function mount(ctx) {
   async function close() {
     running = false;
     shutdownCover?.remove();shutdownCover=null;
-    doorEnd?.remove();doorEnd=null;doorEnded=false;
+    doorEnd?.remove();doorEnd=null;doorEnded=false;storyEnded=false;
     officeEnding?.dispose();officeEnding=null;
     game?.dispose();
     diagnostics?.dispose(); diagnostics = null;

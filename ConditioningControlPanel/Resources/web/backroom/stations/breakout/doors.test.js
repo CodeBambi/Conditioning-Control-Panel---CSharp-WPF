@@ -64,11 +64,17 @@ test('the legend maps to what the game really has', () => {
   assert.equal(brickSpec('.'), null);
 });
 
+/** The two story twists are registered for the long story, not for a door (story/CONTRACT.md section 8). */
+const STORY_TWISTS = ['shells', 'stare'];
+
 test('every twist a board names is in the registry, and every twist is used', () => {
   const named = new Set(ALL_BOARDS.map(x => x.board.twist).filter(Boolean));
   assert.deepEqual([...named].sort(), ['crumble', 'justone', 'keys', 'mirror', 'node']);
   for (const id of named) assert.ok(TWISTS[id], id + ' is registered');
-  for (const id of Object.keys(TWISTS)) assert.ok(named.has(id), id + ' is on a board');
+  for (const id of Object.keys(TWISTS)) {
+    assert.ok(named.has(id) || STORY_TWISTS.includes(id), id + ' is on a door board or belongs to the story');
+  }
+  for (const id of STORY_TWISTS) assert.ok(TWISTS[id], id + ' is registered');
 });
 
 test('the twisted boards actually carry the pieces their twist needs', () => {

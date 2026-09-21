@@ -14,7 +14,11 @@ import TWIST_MIRROR from './reactions/twist-mirror.js';
 import TWIST_KEYS from './reactions/twist-keys.js';
 import TWIST_NODE from './reactions/twist-node.js';
 import TWIST_JUSTONE from './reactions/twist-justone.js';
+/* The two story twists (story/CONTRACT.md section 8). */
+import TWIST_STARE from './reactions/twist-stare.js';
+import TWIST_SHELLS from './reactions/twist-shells.js';
 
 export const REACTIONS = { ...POWER,
-  ...TWIST_CRUMBLE, ...TWIST_MIRROR, ...TWIST_KEYS, ...TWIST_NODE, ...TWIST_JUSTONE };
+  ...TWIST_CRUMBLE, ...TWIST_MIRROR, ...TWIST_KEYS, ...TWIST_NODE, ...TWIST_JUSTONE,
+  ...TWIST_STARE, ...TWIST_SHELLS };
 export default REACTIONS;

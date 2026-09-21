@@ -12,6 +12,7 @@
             &speed=0.8 (ball speed scale)  &nosub (gates.subliminal = false)  &words=a,b,c (override the dealt words)
             &hostback (pretend the host draws its own Back, so the chevron is hidden)
             &board=fog_brittle (one authored board, looped)  &door=fog (a door's two boards, then doorClear)
+            &story=1 (the long story, from the stored wall)  &story=1&wall=13  &story=1&unlock=1 (every act chip open)
      The row of board buttons top right is the same thing, one click.
      Standalone, so no ctx.hostBack by default: the station shows its own chevron Back here. -->
 <style>
@@ -39,13 +40,15 @@
 <script type="module">
 import { mount } from './station.js';
 import { ALL_BOARDS } from './doors.js';
+import { ACTS, STORY_BOARDS, STORY_WALLS, firstWallOfAct, isHouseEntry } from './story/index.js';
 
 // One button per authored board (doors.js), plus the house game. Each one is just a link:
 // ?board=<id> opens that board and loops it, ?door=<id> plays a door's two boards in order.
 {
   const bar = document.getElementById('boards');
   const keep = new URLSearchParams(location.search);
-  const href = (key, value) => { const p = new URLSearchParams(keep); p.delete('board'); p.delete('door'); if (key) p.set(key, value); return '?' + p; };
+  const href = (key, value) => { const p = new URLSearchParams(keep); p.delete('board'); p.delete('door'); p.delete('story'); p.delete('wall'); if (key) p.set(key, value); return '?' + p; };
+  const storyHref = (wall) => { const p = new URLSearchParams(keep); p.delete('board'); p.delete('door'); p.set('story', '1'); p.set('wall', String(wall)); p.set('unlock', '1'); return '?' + p; };
   const add = (label, url, colour, cls) => {
     const a = document.createElement('a');
     a.textContent = label; a.href = url; a.style.borderLeftColor = colour; if (cls) a.className = cls;
@@ -54,6 +57,12 @@ import { ALL_BOARDS } from './doors.js';
   add('house', href(null), '#888', 'house');
   for (const { door, board } of ALL_BOARDS) add(board.name, href('board', board.id), door.colour);
   for (const door of new Set(ALL_BOARDS.map(x => x.door))) add(door.name + ' run', href('door', door.id), door.colour);
+  // The long story (story/index.js): one link per act, then one per wall. ?story=1&wall=N&unlock=1.
+  for (const act of ACTS) add(act.title, storyHref(firstWallOfAct(act.id)), act.colour);
+  for (const row of STORY_BOARDS) {
+    const label = isHouseEntry(row.board) ? row.wall + ' house finale' : row.wall + ' ' + row.board.name;
+    add(label, storyHref(row.wall), row.act.colour);
+  }
 }
 
 const q = new URLSearchParams(location.search);
