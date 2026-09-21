@@ -85,4 +85,5 @@ test('the words trail further than the streak, evenly spaced along the path, fad
   for(let i=1;i<pts.length;i++){assert.ok(Math.abs((pts[i-1].x-pts[i].x)-WORD_TRAIL.gap)<1e-9);assert.ok(pts[i].alpha<pts[i-1].alpha);}
   assert.deepEqual(wordTrailPoints({...ball,stuck:true}),[]);
   assert.ok(WORD_TRAIL.size>7&&WORD_TRAIL.alpha>.5,'bigger and clearer than the old 7px at half alpha');
+  assert.ok(WORD_TRAIL.gap>=20&&WORD_TRAIL.gap<=28,'dense, but a 10px word still has room');
 });

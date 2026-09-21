@@ -861,8 +861,9 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       // The words follow the ball further than the streak does, and over it: they are the tail (owner, 2026-09-21).
       if (s.state === 'colour' && !b.ghost && s.sat >= .7 && words?.length) {
         g.font = `700 ${WORD_TRAIL.size}px ` + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
+        let turn = 0;
         for (const p of wordTrailPoints(b)) {
-          g.fillStyle = col(tints ? tints[1] : PINK, mix, Math.min(1, p.alpha * 1.4) * WORD_TRAIL.alpha);
+          g.fillStyle = col(turn++ % 2 ? MINT : (tints ? tints[1] : PINK), mix, Math.min(1, p.alpha * 1.4) * WORD_TRAIL.alpha);
           g.fillText(words[(wordIdx + ++trailIndex) % words.length], p.x, p.y);
         }
       }

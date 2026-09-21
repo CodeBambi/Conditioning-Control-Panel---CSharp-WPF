@@ -18,8 +18,9 @@ export const wordTrailLength = speed => {
 /** The streak behind the ball is short on purpose: about what the slowest ball used to draw, so the words own the tail. */
 export const COMET_MAX = 60;
 export const cometLength = speed => Math.min(COMET_MAX, wordTrailLength(speed));
-/** The words on the tail: one every WORD_TRAIL.gap px of path, the first a little behind the ball. */
-export const WORD_TRAIL = { gap: 34, first: 20, size: 10, alpha: .85 };
+/** The words on the tail: one every WORD_TRAIL.gap px of path, the first a little behind the ball, mint and pink in turn
+ *  as the first trail had them (owner, 2026-09-21: "alternating cyan to pink and slightly more densely populated"). */
+export const WORD_TRAIL = { gap: 25, first: 18, size: 10, alpha: .85 };
 /** Multiball copies wear their own colour so three balls read as three: [body spiral, trail]. 0 is the player's own ball. */
 export const BALL_TINTS = [null, [[255, 120, 196], [255, 140, 210]], [[110, 200, 255], [130, 215, 255]]];
 /** A bubble's jelly after a hit. `t` is the sim's collider.jelly (1 at the hit -> 0): squashed along the hit normal, then a
