@@ -102,6 +102,34 @@
 .bo-play:hover { background: #ffe2a1; transform: translateY(-2px); }
 .bo-play:active { transform: translateY(2px); box-shadow: 0 2px 0 #9c6740; }
 .bo-play:focus-visible { outline: 3px solid #ff8ed0; outline-offset: 6px; }
+.bo-flavour { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 24px 20px 36px; overflow: auto; text-align: center;
+  background: radial-gradient(ellipse at 50% 35%, #49223880, transparent 55%), #100c15; }
+.bo-flavour h2 { margin: 0; color: #fff0dc; font: 900 clamp(28px, 5.5vw, 52px)/1 "Arial Black", "Trebuchet MS", sans-serif; letter-spacing: 1px; }
+.bo-flavour-line { margin: 12px 0 24px; color: #b5a3b8; font-size: 14px; letter-spacing: 1.5px; }
+.bo-flavour-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 168px)); gap: 14px; width: min(100%, 730px); justify-content: center; }
+.bo-flavour-grid button { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 7px; min-height: 148px;
+  padding: 16px 12px; border: 1px solid color-mix(in srgb, var(--tint) 55%, #0000); border-radius: 12px; cursor: pointer; touch-action: manipulation;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 30%, #1a1024), #1a1024 72%); color: #fff0dc;
+  box-shadow: 0 4px 0 #0a0710, 0 8px 28px color-mix(in srgb, var(--tint) 14%, #0000); transition: transform .15s, border-color .15s; }
+.bo-flavour-grid button::before { content: ""; width: 34px; height: 34px; margin-bottom: auto; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--tint) 45%, color-mix(in srgb, var(--tint) 40%, #000)); box-shadow: 0 0 18px color-mix(in srgb, var(--tint) 50%, #0000); }
+.bo-flavour-grid b { font: 800 19px/1.1 Segoe UI, sans-serif; letter-spacing: .5px; }
+.bo-flavour-grid span { color: #c9b8cf; font-size: 12px; line-height: 1.35; }
+.bo-flavour-grid button:hover { transform: translateY(-3px); border-color: var(--tint); }
+.bo-flavour-grid button:active { transform: translateY(2px); box-shadow: 0 1px 0 #0a0710; }
+.bo-flavour-grid button:focus-visible, .bo-flavour-keep:focus-visible { outline: 3px solid #ffe9aa; outline-offset: 4px; }
+.bo-flavour-grid button.is-current { border-color: var(--tint); border-width: 2px; }
+.bo-flavour-grid button.is-current b::after { content: " \2713"; color: var(--tint); }
+.bo-flavour-keep { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: min(92%, 520px); margin-top: 20px; padding: 8px 16px;
+  border: 1px solid #4a4a52; border-radius: 10px; background: #1b1b20; color: #9a9aa3; cursor: pointer; touch-action: manipulation; filter: grayscale(1); }
+.bo-flavour-keep b { font: 700 12px/1.2 Segoe UI, sans-serif; letter-spacing: 1.5px; text-transform: uppercase; }
+.bo-flavour-keep span { font: 500 10.5px/1.3 Segoe UI, sans-serif; color: #77777f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.bo-flavour-keep span:empty { display: none; }
+.bo-flavour-keep:hover { color: #d6d6dc; border-color: #8a8a94; }
+@media (max-width: 640px) { .bo-flavour-grid { grid-template-columns: repeat(2, minmax(0, 168px)); } .bo-flavour-grid button { min-height: 118px; } }
+@media (max-height: 480px) { .bo-flavour { justify-content: flex-start; padding-top: 14px; } .bo-flavour-line { margin: 6px 0 12px; }
+  .bo-flavour-grid { grid-template-columns: repeat(4, minmax(0, 150px)); } .bo-flavour-grid button { min-height: 96px; padding: 10px 8px; } .bo-flavour-keep { margin-top: 12px; } }
 .bo-menu-controls { margin: 23px 0 0; color: #9d8ea7; font-size: 12px; line-height: 1.8; }
 .bo-menu-art { position: relative; width: 236px; height: 115px; flex: none; display: grid;
   grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 15px); gap: 5px;

@@ -22,6 +22,7 @@ import {currentMusic} from '../../shared/sound/music.js';
 import { createGame, RUNG_NAMES, RUNG_AT, W, H } from './game.js';
 import { createRenderer, prefersSoftwareCanvas } from './render.js';
 import { createMedia, createSubliminals } from './payloads.js';
+import { FLAVOURS, flavourHost, currentFlavour, applyFlavour } from './flavours.js';
 import { createAudio } from './audio.js';
 import { routeFinaleAudio } from './finale-audio.js';
 import { WORD_KEYS } from './word-fx.js';
@@ -84,7 +85,7 @@ export async function mount(ctx) {
     try { voice.speak({ text: String(text), volume: VOICE_LEVEL*audioLevels.sub }).catch(() => {}); } catch (e) { /* host gone */ }
   }
   let shutdownCover = null, officeEnding = null;
-  let menuOpen = true;
+  let menuOpen = true, flavourOpen = false;
   let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;
   let lastSat = -1, lastState = '', lastTimeScale = 1, lastCombo = 0, lastSp = 0, sawHit = false, sourceChanged = false;
@@ -117,6 +118,13 @@ export async function mount(ctx) {
         <button class="bo-play" type="button">Start <span aria-hidden="true">&#9656;</span></button>
         <div class="bo-menu-actions"><button type="button" data-menu="options">Options</button><button type="button" data-menu="exit">Exit</button></div>
         <p class="bo-menu-controls">Move your mouse or drag to steer.<br>Arrow keys to move. Space to launch.</p>
+      </section>
+      <section class="bo-flavour" hidden role="dialog" aria-modal="true" aria-labelledby="bo-flavour-title">
+        <p class="bo-menu-kicker">BEFORE THE FIRST BALL</p>
+        <h2 id="bo-flavour-title">Pick a flavour</h2>
+        <p class="bo-flavour-line">It decides what the picture bricks wear.</p>
+        <div class="bo-flavour-grid"></div>
+        <button class="bo-flavour-keep" type="button"><b>Keep mine</b><span></span></button>
       </section>
       ${backBtn}
       <div class="bo-hud">
@@ -218,6 +226,30 @@ export async function mount(ctx) {
     lastT = 0;
     startAudio();
     canvas.focus({ preventScroll: true });
+  }
+  /* Start asks one thing first, where a shell can answer it: which niches the pictures come from (flavours.js). */
+  function closeFlavour() { if (ui.flavour) ui.flavour.hidden = true; flavourOpen = false; }
+  function pressStart() {
+    if (!menuOpen || !game || flavourOpen) return;
+    const shell = flavourHost();
+    if (!shell || q.has('noflavour')) { beginGame(); return; }
+    const mine = currentFlavour(shell);
+    for (const b of ui.flavour.querySelectorAll('[data-flavour]')) b.classList.toggle('is-current', !!mine && b.dataset.flavour === mine.id);
+    // The way out is small and grey, and says what it keeps: the niches already set, or the built-in pictures.
+    let kept = ''; try { const now = shell.get(); kept = now.mode === 'scrolller' ? now.sources.filter(s => !(now.disabledSources || []).includes(s)).map(s => 'r/' + s).join('  ') : now.mode === 'local' ? 'my own files' : 'the built-in pictures'; } catch (e) { /* the label is optional */ }
+    ui.flavour.querySelector('.bo-flavour-keep span').textContent = kept;
+    flavourOpen = true; ui.flavour.hidden = false;
+    (ui.flavour.querySelector('.is-current') || ui.flavour.querySelector('[data-flavour]')).focus({ preventScroll: true });
+  }
+  function pickFlavour(id) {
+    if (!flavourOpen) return;
+    const shell = flavourHost(), flavour = FLAVOURS.find(f => f.id === id);
+    closeFlavour(); beginGame();
+    // The game starts at once; the new pictures are dealt in when they are warm. A refusal changes nothing.
+    if (shell && flavour) applyFlavour(shell, flavour).then((ok) => {
+      if (!ok || !media) return;
+      return media.redeal().then((dealt) => { if (dealt && game && typeof game.setWords === 'function') game.setWords(media.words.map(w => w.text)); });
+    }).catch(() => {});
   }
   function firstMove() { if (moved) return; moved = true; el.classList.add('is-played'); }
 
@@ -426,7 +458,7 @@ export async function mount(ctx) {
     if (!running) return;
     raf = requestAnimationFrame(frame);
     // The pad is polled before the pause gate so its Start button can pause and resume.
-    try { const pad = gamepad?.poll(input, { menuOpen, paused, suspended }); if (pad?.pause && !menuOpen) setPaused(!paused); if (pad?.start && menuOpen) beginGame(); if (pad?.any) startAudio(); if (pad?.moved) firstMove(); } catch (e) { /* pad optional */ }
+    try { const pad = gamepad?.poll(input, { menuOpen, paused, suspended }); if (pad?.pause && !menuOpen) setPaused(!paused); if (pad?.start && menuOpen) pressStart(); if (pad?.any) startAudio(); if (pad?.moved) firstMove(); } catch (e) { /* pad optional */ }
     const frameMs = lastT ? ts-lastT : 1000/60;
     const dt = Math.min(0.05, frameMs/1000);
     lastT = ts;
@@ -480,7 +512,7 @@ export async function mount(ctx) {
   /* ------------------------------------------------------------ lifecycle */
   async function open() {
     if (el) return;
-    menuOpen = true;
+    menuOpen = true; flavourOpen = false;
     build();
     if (q.has('perf')) { diagnostics = createPerfPanel(el.querySelector('.bo-perf-slot'));setDevOpen(true); }
     audio = createAudio({ bpm: num(q, 'bpm', 96) });
@@ -508,7 +540,17 @@ export async function mount(ctx) {
     on(window, 'resize', resize);
     if (window.visualViewport) on(window.visualViewport, 'resize', resize);
     on(window, 'br-media-changed', () => { sourceChanged = true; });
-    on(ui.play, 'click', beginGame);
+    on(ui.play, 'click', pressStart);
+    ui.flavour = el.querySelector('.bo-flavour');
+    const grid = ui.flavour.querySelector('.bo-flavour-grid');
+    for (const f of FLAVOURS) {
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.flavour = f.id; b.style.setProperty('--tint', f.tint);
+      const name = document.createElement('b'), line = document.createElement('span'); name.textContent = f.name; line.textContent = f.line; b.append(name, line); grid.append(b);
+    }
+    on(ui.flavour, 'click', (e) => {
+      const b = e.target.closest('[data-flavour]');
+      if (b) pickFlavour(b.dataset.flavour); else if (e.target.closest('.bo-flavour-keep')) pickFlavour(null);
+    });
     on(ui.endingActions,'click',async e=>{
       const button=e.target.closest('[data-ending]');if(!button||button.disabled)return;
       const replay=button.dataset.ending==='replay';
@@ -563,11 +605,15 @@ export async function mount(ctx) {
       if(e.key==='Escape' && game.snapshot().finale?.phase==='outro') {
         e.preventDefault();if(game.snapshot().finale.outroAge>=3.8)officeEnding.skip();return;
       }
+      if (flavourOpen) {
+        if (e.key === 'Escape') { e.preventDefault(); closeFlavour(); ui.play.focus({ preventScroll: true }); }
+        return;                                                // the tiles are buttons: Enter and Space are theirs
+      }
       if (menuOpen) {
         if (e.key === 'Escape') { e.preventDefault(); back(); }
         else if ((e.key === 'Enter' || e.key === ' ') &&
           (e.target === ui.play || e.target === document.body || e.target === el)) {
-          e.preventDefault(); beginGame();
+          e.preventDefault(); pressStart();
         }
         return;
       }
@@ -619,7 +665,7 @@ export async function mount(ctx) {
     try { media && media.dispose(); } catch (e) { /* noop */ }
     try { renderer && renderer.dispose(); } catch (e) { /* noop */ }
     if (el && el.parentNode) el.parentNode.removeChild(el);
-    el = canvas = null; menuOpen = true; audioOn = false; paused = false; moved = false;
+    el = canvas = null; menuOpen = true; flavourOpen = false; audioOn = false; paused = false; moved = false;
     lastSat = -1; lastState = ''; lastTimeScale = 1; lastCombo = 0; lastSp = 0; sawHit = false; sourceChanged = false;
   }
   function suspend(onOff) {
