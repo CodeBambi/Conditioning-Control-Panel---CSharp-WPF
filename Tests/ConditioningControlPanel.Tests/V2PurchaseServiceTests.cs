@@ -106,9 +106,14 @@ public class V2PurchaseServiceTests
             await WaitFor(() => Service.RowFor(Flashes).State != V2PurchaseRowState.Loading);
         }
 
+        /// <summary>
+        /// Wait for the service to reach a state. The budget is generous on purpose: this runs
+        /// alongside the whole suite, where a Task.Run can sit in the pool for a while, and a short
+        /// budget turns into a test that is only red on a loaded machine.
+        /// </summary>
         public static async Task WaitFor(Func<bool> done)
         {
-            for (var i = 0; i < 400 && !done(); i++) await Task.Delay(5);
+            for (var i = 0; i < 800 && !done(); i++) await Task.Delay(10);
             Assert.True(done(), "the service never settled");
         }
     }
@@ -345,14 +350,16 @@ public class V2PurchaseServiceTests
         var h = new Harness();
         await h.ReadCounterAsync();
         h.Relay.BuyResult = Refuse("catalog_changed");
+        // The counter the refusal's own re-read will find. It is set BEFORE the press that triggers
+        // that read: setting it afterwards races the read and it can pick up the old body.
+        h.Relay.StateResult = StateBody(catalogVersion: 7, flashesPrice: 45);
 
         Assert.False(await h.Buy(Flashes));
         Assert.Equal("v2_get_error_changed", h.Service.RowFor(Flashes).MessageKey);
 
         // Leaving the stale version behind made every later press re-send it and be refused again.
-        // The refusal also re-reads the counter, so the row shows the current numbers; wait on the
-        // APPLIED price, never on the call count (the call is recorded before the reply lands).
-        h.Relay.StateResult = StateBody(catalogVersion: 7, flashesPrice: 45);
+        // Wait on the APPLIED price, never on the relay's call count: the call is recorded before
+        // the reply lands, so counting it proves nothing about what the service knows.
         h.Relay.BuyResult = new BackRoomStationResult(true, 200, null, new JObject { ["ok"] = true });
         await Harness.WaitFor(() => h.Service.RowFor(Flashes).PriceSp == 45);
 
