@@ -1,7 +1,10 @@
 import {junctionProtected} from './junction-shield.js';
 import {metalActive} from './grey-metal.js';
 import {rotatedBrickContact} from './reform.js';
-export const POWER_DURATION={multiball:12,fireball:8,laser:8,shield:20};
+/** Seconds. The shooting paddle lasts 4 (was 8: owner, 2026-09-21, half the time). */
+export const POWER_DURATION={multiball:12,fireball:8,laser:4,shield:20};
+/** An ordinary brick's chance to hold a power-up. Was .085; 15 percent fewer OVERALL (owner, 2026-09-21): split bricks (game.js SPLIT_CHANCE, 1 percent) still always drop, so this one carries the whole cut. */
+export const POWER_CHANCE=.07;
 export const POWER_KINDS=Object.keys(POWER_DURATION);
 /** The random drop's mix. Multiball also falls from every split brick, so it takes the small share here (owner, 2026-09-21: way too many). */
 export const POWER_WEIGHT={multiball:1,fireball:3,laser:3,shield:3};
@@ -36,7 +39,7 @@ export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=nu
   function reset(){p.epoch=(p.epoch||0)+1;retire();p.drops.length=p.shots.length=0;for(const k of POWER_KINDS)p[k]=0;p.charges=0;p.muzzle=0;p.eighth=null;for(const b of s.balls)b.fireContacts?.clear();}
   function assign(br){
     if(br.split||br.gif>=0||br.word||br.spiral||br.jackpot||br.strength||!ordinaryTarget({...br,finaleRing:false},s))return;
-    if(rng()<.085)br.powerup=pickPower(rng());
+    if(rng()<POWER_CHANCE)br.powerup=pickPower(rng());
   }
   function drop(br){
     if(s.state!=='colour')return;

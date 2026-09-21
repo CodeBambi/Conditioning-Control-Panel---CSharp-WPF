@@ -343,11 +343,12 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       if(irisLoading||!live()||typeof ctx.decodeAudioData!=='function')return;
       irisLoading=true;
       const ac=ctx;
-      // Sequential decoding keeps the wall entry light; reuse the existing Rabbit Hole drift recordings.
+      // Sequential decoding keeps the wall entry light. The Rabbit Hole drift recordings ride in the station's OWN assets:
+      // the site vendors only a slice of /dtrh, so the old cross-tree path 404'd there and the eye was mute (owner, 2026-09-21).
       for(let i=1;i<=3&&!destroyed;i++) {
         try {
-          const url=new URL('../../../dtrh/assets/barks/sissy/fall_drift_00'+i+'.mp3',import.meta.url);
-          const response=await fetch(url,{credentials:'same-origin'});
+          let response=await fetch(new URL('./assets/voice/drift-'+i+'.mp3',import.meta.url),{credentials:'same-origin'});
+          if(!response.ok)response=await fetch(new URL('../../../dtrh/assets/barks/sissy/fall_drift_00'+i+'.mp3',import.meta.url),{credentials:'same-origin'});
           if(!response.ok)continue;
           const buffer=await ac.decodeAudioData(await response.arrayBuffer());
           if(!destroyed)irisBuffers.push(buffer);

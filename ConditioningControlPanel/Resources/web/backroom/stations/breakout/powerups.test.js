@@ -148,3 +148,11 @@ test('a power-up glyph in a brick bobs and breathes a little, never under reduce
   assert.ok(sHi > 1.05 && sLo < .95 && sHi <= 1.1 && sLo >= .9, 'it breathes within ten percent');
   assert.notEqual(glyphIdle(1, 100, 80).dy, glyphIdle(1, 182, 80).dy, 'neighbours are out of phase');
 });
+
+test('the shooting paddle lasts half as long, and fifteen percent fewer power-ups fall overall', async () => {
+  const { POWER_CHANCE, POWER_DURATION } = await import('./powerups.js');
+  const { SPLIT_CHANCE } = await import('./game.js');
+  assert.equal(POWER_DURATION.laser, 4);
+  const was = .085 + .01, now = POWER_CHANCE + SPLIT_CHANCE;
+  assert.ok(Math.abs(now / was - .85) < .02, 'drops per brick: ' + (now / was).toFixed(3));
+});

@@ -1,6 +1,7 @@
 import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle, wordTrailPoints, WORD_TRAIL } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups,glyphIdle} from './powerups-render.js';
+import { createBrickWobble } from './brick-wobble.js';
 /**
  * The brick knock, in REAL field pixels each way. It has its own channel because cam.kick is scaled by shakeGain
  * (.175 on the first wall), so a kick of 7.5 moved the screen two thirds of a pixel: three rounds of "a bit more"
@@ -78,6 +79,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   let last = null, glitch = 0, wipe = 0, crackFlash = 0, spin = 0, aberr = 0, recoil = 0, lastNow = 0, lastCombo = 0, comboPop = 0;
   let happy = 0, pushIn = null, layerGlow = 0, layerRgb = MINT;   // feel pass: the last-brick push-in, the music-layer glow
   const smoke = createParticles({ max: 120, rng });
+  const idleWobble = createBrickWobble(rng);
   let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, knock = 0, flash = 0, lastFlashAt = -1;
   const shockwaves = [], drifters = [];
   const rewardPick = createRewardPicker(rng);
@@ -254,7 +256,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: H - 20, r0: 8, r1: 80, life: 0.5, rgb: GREY });
     } else if (name === 'relapse') {
       landscape.reset();
-      wipe = 0.1; breakoutFlash = 0; pushIn = null; layerGlow = 0; P.clear(); shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset(); knock = 0; wellFx.reset();
+      wipe = 0.1; breakoutFlash = 0; pushIn = null; layerGlow = 0; P.clear(); shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset(); knock = 0; idleWobble.reset(); wellFx.reset();
 
     } else if (name === 'breakoutStart') {
       if (!reduced) flash = Math.max(flash, 0.3);
@@ -499,7 +501,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.save();
       g.globalAlpha = (landing ? Math.min(1, arrival * 12) : 1) * (1 - hide) * (br.irisAlpha ?? 1);
       if (outro) pullFinalePiece(cx, cy, outro);
-      g.translate(cx, cy); if (br.angle) g.rotate(br.angle); g.scale(sx, sy);
+      const wob = idleWobble.of(br);
+      g.translate(cx, cy); if (br.angle || wob.rot) g.rotate((br.angle || 0) + wob.rot); g.scale(sx * wob.sx, sy * wob.sy);
       if(metalActive(br,s.state)) {
         g.drawImage(metalFace(),-br.w/2,-br.h/2,br.w,br.h);
         g.restore();continue;
@@ -1332,6 +1335,9 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     const words = extras && Array.isArray(extras.words) ? extras.words : null;
     const beat = typeof s.beatPhase === 'number' ? Math.pow(1 - s.beatPhase, 3) : 0;
     const camera = cam.step(dt, rng);
+    // Idle life: now and then a hittable brick wobbles on its own. Colour only, never while the wall lands or in the finale.
+    idleWobble.step(dt, s.bricks, !reduced && s.state === 'colour' && s.wallAge >= 1.9 && !s.finale && !s.iris,
+      br => !metalActive(br, s.state) && !br.irisCore && !br.finaleWord && !br.finaleHinge && !br.finaleRing && !br.pendulumAnchor);
     const dropping = s.fx && s.fx.active.some(f => f.key === 'DROP');
     // Keep the level ramp, with all camera shake at half its previous strength.
     const shakeGain = dropping ? 0 : .175 + .175 * clamp((s.stats?.walls || 0) / 7, 0, 1);
