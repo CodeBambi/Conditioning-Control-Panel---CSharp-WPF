@@ -56,6 +56,10 @@ export const BRICK = { cols: 16, rows: 5, w: 48.96, h: 27.54, gap: 6, top: 26 };
 export const PADDLE = { baseW: 170, h: 14, grow: 0.5 };
 /** A split brick always drops a multiball. Was .05, which with the random drops made multiball 62% of everything that fell (owner: way too many). Now about a quarter, level with the others. */
 export const SPLIT_CHANCE = 0.01;
+/** Extra turns the dome's spiral may hold a ball while it waits for a line onto a brick. Every direction comes round inside one. */
+export const DOME_AIM_TURNS = 2;
+/** How visible a newborn picture bubble must be before a ball can bounce off it. */
+export const BUBBLE_SOLID_ALPHA = 0.7;
 export const BALL_R = 8;
 export const MAX_BALLS = 3;
 export const SPELL_WORDS = ['DROP', 'SINK', 'RELAX', 'LET GO'];
@@ -907,7 +911,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   function spawnCollider(x, y, gif, tier = 1) {
     const r = 46 * 1.33 * gifScaleForWall(g.stats.walls), a = rng() * TAU;
     // ph comes from where it spawned, never from rng: the idle wobble and the wander cost the wall's dice nothing.
-    g.colliders.push({ x, y, r, vx: Math.cos(a) * BUBBLE_DRIFT, vy: Math.sin(a) * BUBBLE_DRIFT, hits: 0, pulse: 0, alpha: 0, fading: false, gif, tier, age: 0,
+    g.colliders.push({ x, y, r, vx: Math.cos(a) * BUBBLE_DRIFT, vy: Math.sin(a) * BUBBLE_DRIFT, hits: 0, pulse: 0, alpha: 0, fading: false, solid: false, gif, tier, age: 0,
       jelly: 0, jnx: 0, jny: -1, ph: (x * .017 + y * .031) % TAU });
   }
   function updateColliders(dt) {
@@ -931,6 +935,10 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       if (c.y < top) { c.y = top; c.vy = Math.abs(c.vy); } else if (c.y > bottom) { c.y = bottom; c.vy = -Math.abs(c.vy); }
       c.pulse = Math.max(0, c.pulse - dt * 3);
       c.alpha = c.fading ? c.alpha - dt / 0.6 : Math.min(1, c.alpha + dt * 2);
+      // A bubble is not solid until it can be seen and no ball is inside it. It used to be solid from its first frame,
+      // at full size, while it faded in over half a second: a ball crossing the spot bounced off nothing, or was
+      // thrown to the rim of a bubble born on top of it (owner, 2026-09-21: sharp turns mid flight).
+      if (c.solid === false && !c.fading && c.alpha >= BUBBLE_SOLID_ALPHA && !g.balls.some(b => !b.lost && Math.hypot(b.x - c.x, b.y - c.y) < b.r + c.r + 2)) c.solid = true;
     }
     g.colliders = g.colliders.filter(c => c.alpha > 0);
   }
@@ -987,6 +995,18 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     s.used = true; s.captured = b;
     emit('capture', { x: s.x, y: s.y });
   }
+  /** Would a ball let go right now fly straight into a live brick? The ray against each brick's box, widened by the ball. */
+  function aimsAtBrick(b) {
+    const sp = Math.hypot(b.vx, b.vy); if (!(sp > 0)) return true;
+    const ux = b.vx / sp, uy = b.vy / sp; let any = false;
+    for (const br of g.bricks) {
+      if (!br.alive) continue; any = true;
+      const dx = br.x + br.w / 2 - b.x, dy = br.y + br.h / 2 - b.y;
+      if (dx * ux + dy * uy <= 0) continue;                                  // behind the throw
+      if (Math.abs(dx * uy - dy * ux) < (Math.abs(uy) * br.w + Math.abs(ux) * br.h) / 2 + b.r * .5) return true;
+    }
+    return !any;                                                             // nothing left to aim at: let go
+  }
   function orbitStep(b, dt) {
     const s = g.well, o = b.orbit;
     if (!s || s.captured !== b) { b.orbit = null; return; }
@@ -994,7 +1014,11 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     o.a += o.dir * wA * dt; o.done += wA * dt;
     b.x = s.x + Math.cos(o.a) * o.r; b.y = s.y + Math.sin(o.a) * o.r;
     b.vx = -Math.sin(o.a) * o.dir * speed; b.vy = Math.cos(o.a) * o.dir * speed;
-    if (o.done >= o.turns * TAU) {
+    // The dome prefers to throw at a brick (owner, 2026-09-21: two bricks left and the spiral kept throwing past them).
+    // Once its turns are done it holds on until the tangent points at one, for DOME_AIM_TURNS more at most.
+    const due = o.done >= o.turns * TAU;
+    if (due && s.persistent && o.done < (o.turns + DOME_AIM_TURNS) * TAU && !aimsAtBrick(b)) return;
+    if (due) {
       b.orbit = null; s.captured = null;
       if (s.persistent) { s.used = false; s.cooldown = .7; b.domeCooldown = 1.4; b.domeBoost = .08 + s.energy * .17; }
       else s.age = s.ttl;
@@ -1122,7 +1146,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function collideColliders(b) {
     for (const c of g.colliders) {
-      if (c.fading) continue;
+      if (c.fading || c.solid === false) continue;
       const dx = b.x - c.x, dy = b.y - c.y, d = Math.hypot(dx, dy) || 0.001, rr = b.r + c.r;
       if (d >= rr) continue;
       const nx = dx / d, ny = dy / d, dot = b.vx * nx + b.vy * ny;
