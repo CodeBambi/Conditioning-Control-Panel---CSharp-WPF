@@ -1,4 +1,4 @@
-import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle, wordTrailPoints, WORD_TRAIL } from './feedback.js';
+import { durabilityColour, brickHueOf, brickHueIndex, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle, wordTrailPoints, WORD_TRAIL } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups,glyphIdle} from './powerups-render.js';
 import { createBrickWobble } from './brick-wobble.js';
@@ -405,12 +405,12 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   }
   const plainFaces = new Map();
   function plainFace(br, mix, grey) {
-    const key = `${grey ? 'grey' : br.row % ROWS.length}:${Math.round(mix * 16)}`;
+    const key = `${grey ? 'grey' : brickHueIndex(br)}:${Math.round(mix * 16)}`;
     if (plainFaces.has(key)) return plainFaces.get(key);
     const c = document.createElement('canvas'); c.width = 84; c.height = 52;
     const x = c.getContext('2d', { willReadFrequently: true });
     roundRect(x, 1, 1, 82, 50, 6);
-    x.fillStyle = col(durabilityColour(1, grey, brickHue), Math.round(mix * 16) / 16); x.fill();
+    x.fillStyle = col(durabilityColour(1, grey, brickHueOf(br, brickHue)), Math.round(mix * 16) / 16); x.fill();
     finishBrick(x,84,52);
     plainFaces.set(key, c); return c;
   }
@@ -455,11 +455,11 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   function toughFace(br, grey, mix) {
     const damage=br.strength-br.hp;
     const tint=grey?0:Math.round(Math.max(.55,mix)*16)/16;
-    const key=`${br.strength}:${damage}:${grey}:${tint}`;
+    const key=`${br.strength}:${damage}:${grey}:${tint}:${grey?0:brickHueIndex(br)}`;
     if(toughFaces.has(key)) return toughFaces.get(key);
     const c=document.createElement('canvas');c.width=96;c.height=56;
     const x=c.getContext('2d',{willReadFrequently:true});
-    const rgb=durabilityColour(br.hp, grey, brickHue);
+    const rgb=durabilityColour(br.hp, grey, brickHueOf(br, brickHue));
     roundRect(x,1,1,94,54,6);x.fillStyle=col(rgb,tint);x.fill();
     finishBrick(x,96,56);
     if(damage>0) {
@@ -570,7 +570,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         const pulse=reduced?1:1+.035*Math.sin(s.time*4);
         g.scale(pulse,pulse);
         roundRect(g,-br.w/2,-br.h/2,br.w,br.h,9);
-        g.fillStyle='#20192d';g.fill();g.strokeStyle='#bca184';g.lineWidth=2;g.stroke();
+        g.fillStyle=col(durabilityColour(br.hp||3,false,brickHueOf(br,brickHue)),mix);g.fill();g.strokeStyle='#bca184';g.lineWidth=2;g.stroke();
         roundRect(g,-br.w/2+4,-br.h/2+4,br.w-8,br.h-8,6);
         g.fillStyle='#090c18';g.fill();g.strokeStyle='rgba(255,225,183,.35)';g.lineWidth=1;g.stroke();
         // Vinyl grooves rotate under a fixed play label.
@@ -596,7 +596,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       } else if (br.spiral) {
         drawSpiralBrick(br, s, mix);
       } else {
-        const rgb = durabilityColour(1, false, brickHue);
+        const rgb = durabilityColour(1, false, brickHueOf(br, brickHue));
         roundRect(g, -br.w / 2, -br.h / 2, br.w, br.h, 3);
         g.fillStyle = col(rgb, mix); g.fill();
         g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(-br.w / 2 + 2, -br.h / 2 + 2, br.w - 4, 3);
