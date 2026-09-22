@@ -1,4 +1,5 @@
 using System;
+using System.Net.Http;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -14,17 +15,76 @@ public sealed partial class ChasterService
     private Timer? _lockTimer;
     private string? _lastSettleDay;
 
-    public static ChasterService CreateForApp() => new(
-        new ChasterClient(userAgent: $"ConditioningControlPanel/{UpdateService.AppVersion}"),
-        new DpapiChasterTokenStore(),
-        Path.Combine(App.UserDataPath, "chaster_tab.json"),
-        () =>
+    public static ChasterService CreateForApp()
+    {
+        Func<ChasterOptions> options = () =>
         {
             var s = App.Settings?.Current;
             return s == null
                 ? ChasterOptions.Off
                 : new ChasterOptions(s.ChasterTabEnabled, s.ChasterLockId, new HashSet<string>(s.ChasterPrices ?? new List<string>(), StringComparer.Ordinal));
-        });
+        };
+#if DEBUG
+        if (DemoService(options) is { } demo) return demo;
+#endif
+        return new(
+            new ChasterClient(userAgent: $"ConditioningControlPanel/{UpdateService.AppVersion}"),
+            new DpapiChasterTokenStore(),
+            Path.Combine(App.UserDataPath, "chaster_tab.json"),
+            options);
+    }
+
+#if DEBUG
+    /// <summary>The demo switch, the same shape as <c>CCP_PRIZE_GRANTS</c>: with the environment
+    /// variable set, the service is linked to a fake Chaster that owns one test lock twelve days
+    /// out and answers every call locally. The tab lives in its own file and starts with a few
+    /// bookings on it, so the page has something to show. Compiled only under DEBUG; a Release
+    /// build never reads the variable and never talks to anything but the real proxy.</summary>
+    public const string DemoEnvVar = "CCP_CHASTER_DEMO";
+
+    private static ChasterService? DemoService(Func<ChasterOptions> options)
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(DemoEnvVar))) return null;
+        var tabPath = Path.Combine(App.UserDataPath, "chaster_tab.demo.json");
+        try { File.Delete(tabPath); } catch (Exception ex) { Diag.Swallowed(ex); }
+        var svc = new ChasterService(new ChasterClient(new DemoChaster()), new DemoTokens(), tabPath,
+            () => options() with { LockId = "demo-lock" });
+        svc.Note("typo", 3);
+        svc.Note("attention");
+        svc.Note("escape");
+        svc.Note("session");
+        svc.Note("quest");
+        App.Logger?.Warning("[Chaster] DEMO mode: fake account, fake lock, nothing reaches Chaster");
+        return svc;
+    }
+
+    private sealed class DemoTokens : IChasterTokenStore
+    {
+        private ChasterStoredTokens? _tokens = new("demo", "demo", DateTime.UtcNow.AddMinutes(4));
+        public ChasterStoredTokens? Read() => _tokens;
+        public void Write(ChasterStoredTokens tokens) => _tokens = tokens;
+        public void Clear() => _tokens = null;
+    }
+
+    private sealed class DemoChaster : HttpMessageHandler
+    {
+        private static readonly DateTime Ends = DateTime.UtcNow.AddDays(12).AddHours(4);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        {
+            var path = r.RequestUri!.AbsolutePath;
+            if (path == "/chaster/refresh")
+                return Task.FromResult(Json("{\"access_token\":\"demo\",\"expires_in\":300}"));
+            if (path == "/locks")
+                return Task.FromResult(Json("[{\"_id\":\"demo-lock\",\"title\":\"Locktober\",\"status\":\"locked\",\"role\":\"wearer\",\"endDate\":\""
+                    + Ends.ToString("o") + "\",\"isFrozen\":false,\"displayRemainingTime\":true,\"isAllowedToViewTime\":true,\"isTestLock\":true}]"));
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NoContent));
+        }
+
+        private static HttpResponseMessage Json(string body) =>
+            new(System.Net.HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+    }
+#endif
 
     /// <summary>A minute after launch, then hourly. The hourly tick only acts when the local day
     /// has changed since the last attempt, so a day's bookings always get the rest of that day to

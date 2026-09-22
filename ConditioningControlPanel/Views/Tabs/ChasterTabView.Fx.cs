@@ -40,8 +40,8 @@ namespace ConditioningControlPanel.Views.Tabs
         private const int ArtDriftFps = 10;
         private const int PopMs = 380;
         private const int ShockwaveMs = 480;
-        private const double ShockwaveFrom = 30;
-        private const double ShockwaveTo = 520;
+        private const double ShockwaveFrom = 16;
+        private const double ShockwaveTo = 260;
         private const double HeroRadius = 18;
 
         private bool _fxStarted;
@@ -304,7 +304,7 @@ namespace ConditioningControlPanel.Views.Tabs
             {
                 var colour = eventId == CircesTab.JackpotEventId ? JackpotColour : seconds > 0 ? CostColour : EarnColour;
                 FxPop(TxtBalance, 1.14);
-                BurstAt(TxtBalance, colour, 70);
+                BurstAt(TxtBalance, colour, 36);
                 Shockwave(StatTab, colour);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx booked"); }
@@ -315,7 +315,7 @@ namespace ConditioningControlPanel.Views.Tabs
             try
             {
                 FxPop(tile, 1.05);
-                BurstAt(tile, hue, 90);
+                BurstAt(tile, hue, 44);
                 Shockwave(tile, hue);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx preset"); }
@@ -326,7 +326,7 @@ namespace ConditioningControlPanel.Views.Tabs
             try
             {
                 FxPop(chip, 1.1);
-                if (on) BurstAt(chip, hue, 26);
+                if (on) BurstAt(chip, hue, 14);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx chip"); }
         }
@@ -336,7 +336,7 @@ namespace ConditioningControlPanel.Views.Tabs
             try
             {
                 FxPop(SwitchPill, 1.08);
-                if (on) { BurstAt(SwitchPill, CostColour, 60); Shockwave(SwitchPill, CostColour); }
+                if (on) { BurstAt(SwitchPill, CostColour, 30); Shockwave(SwitchPill, CostColour); }
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx switch"); }
         }
@@ -351,7 +351,7 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             try
             {
-                BurstAt(BtnConsentOk, JackpotColour, 90);
+                BurstAt(BtnConsentOk, JackpotColour, 44);
                 Shockwave(BtnConsentOk, JackpotColour);
                 FxPop(SwitchPill, 1.1);
             }
@@ -376,7 +376,7 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             try
             {
-                BurstAt(HeroCard, JackpotColour, 140);
+                BurstAt(HeroCard, JackpotColour, 70);
                 Shockwave(HeroCard, JackpotColour);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx linked"); }
@@ -433,13 +433,13 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (anchor == null || !MotionFx.AllowParticles) return;
             if (!anchor.IsVisible || anchor.ActualWidth <= 0 || anchor.ActualHeight <= 0) return;
-            if (BurstLayer.ActualWidth <= 0 || BurstLayer.ActualHeight <= 0) return;
-            var bounds = anchor.TransformToVisual(BurstLayer)
+            var bounds = anchor.TransformToVisual(BurstHost)
                                .TransformBounds(new Rect(0, 0, anchor.ActualWidth, anchor.ActualHeight));
-            if (!FxBurstAnchor.TryResolve(bounds, new Size(BurstLayer.ActualWidth, BurstLayer.ActualHeight),
-                                          FxBurstSpot.Center, out var origin))
-                return;
-            BurstLayer.Burst(origin.X, origin.Y, colour, count);
+            var centre = new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+            // Park the small canvas on the anchor and burst from its middle.
+            Canvas.SetLeft(BurstLayer, centre.X - BurstLayer.Width / 2);
+            Canvas.SetTop(BurstLayer, centre.Y - BurstLayer.Height / 2);
+            BurstLayer.Burst(BurstLayer.Width / 2, BurstLayer.Height / 2, colour, count);
         }
 
         /// <summary>Two rings out of the anchor's centre: a bright one and a thin echo 90 ms behind.</summary>
@@ -449,7 +449,7 @@ namespace ConditioningControlPanel.Views.Tabs
             var bounds = anchor.TransformToVisual(ShockwaveCanvas)
                                .TransformBounds(new Rect(0, 0, anchor.ActualWidth, anchor.ActualHeight));
             var centre = new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
-            Ring(centre, colour, 0, 3, 0.9);
+            Ring(centre, colour, 0, 2.2, 0.85);
             Ring(centre, colour, 90, 1.5, 0.45);
         }
 

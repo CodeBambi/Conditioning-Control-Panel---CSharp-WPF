@@ -523,7 +523,11 @@
 
         <!-- ================= event layers over the page ================= -->
         <Canvas x:Name="ShockwaveCanvas" IsHitTestVisible="False" ClipToBounds="True"/>
-        <ctrl:AmbientFxCanvas x:Name="BurstLayer" x:FieldModifier="internal" IsHitTestVisible="False"/>
+        <!-- The spark canvas is SMALL and moves to the anchor: a burst's travel and dot size scale
+             with its canvas, and one spanning the page threw sparks the size of a card. -->
+        <Canvas x:Name="BurstHost" IsHitTestVisible="False" ClipToBounds="True">
+            <ctrl:AmbientFxCanvas x:Name="BurstLayer" x:FieldModifier="internal" Width="560" Height="560" IsHitTestVisible="False"/>
+        </Canvas>
         <!-- the page's edge, the launcher's window edge at card weight -->
         <Border BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1.5" CornerRadius="18" Opacity="0.45" IsHitTestVisible="False"/>
     </Grid>
