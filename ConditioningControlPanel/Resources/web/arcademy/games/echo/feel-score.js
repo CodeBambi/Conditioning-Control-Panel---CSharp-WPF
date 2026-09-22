@@ -7,8 +7,9 @@ const PHRASES = [
   [3, 2, 1, 0], [0, 1, 3, 2], [2, 1, 2, 0],
 ];
 export function phrase(round, branch = 0) {
-  const pads = PHRASES[round % PHRASES.length];
-  return pads.map((pad, i) => ({ pad: branch && round >= 2 ? [2, 1, 0, 2][i] : pad, beat: i * 2 }));
+  const home = [[2, 1, 0, 1], [3, 2, 1, 0], [2, 0, 1, 0], [1, 2, 1, 0]];
+  const pads = branch && round >= 2 ? home[(round - 2) % home.length] : PHRASES[round % PHRASES.length];
+  return pads.map((pad, i) => ({ pad, beat: i * 2 }));
 }
 export function cuesFor(notes, start = 0) {
   return notes.map(n => ({ pad: n.pad, time: start + (8 + n.beat) * BEAT, hit: false }));

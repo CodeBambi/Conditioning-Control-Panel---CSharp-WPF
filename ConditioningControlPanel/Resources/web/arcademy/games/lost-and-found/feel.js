@@ -120,7 +120,7 @@ export function create(ctx) {
       const ghost = document.createElement('div'); ghost.className = 'lf-ghost'; ghost.innerHTML = picture(id);
       Object.assign(ghost.style, { left: `${from.x}px`, top: `${from.y}px`, width: `${from.width}px`, height: `${from.height}px` });
       stage.append(ghost); floating.add(ghost);
-      animate(ghost, [{ transform: 'translateY(-4px) rotate(-3deg)', opacity: 1 }, { transform: `translate(${to.x - from.x}px,${to.y - from.y}px) rotate(8deg) scale(.45)`, opacity: 0 }], 360, true);
+      animate(ghost, [{ transform: 'perspective(500px) translateY(-4px) rotateX(0deg)', opacity: 1 }, { transform: 'perspective(500px) translateY(-20px) rotateX(32deg) rotate(-8deg)', opacity: 1, offset: .35 }, { transform: `translate(${to.x - from.x}px,${to.y - from.y}px) rotate(8deg) scale(.45)`, opacity: 0 }], 360, true);
     }
     draw();
     message.textContent = state.found === 27 ? t('lf2_done', 'You found the quiet underneath.') : t('lf2_next', 'A little more of the room. Keep peeling.');

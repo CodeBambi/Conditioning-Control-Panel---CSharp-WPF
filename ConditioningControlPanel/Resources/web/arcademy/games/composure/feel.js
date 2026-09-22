@@ -38,7 +38,9 @@ export function create(ctx) {
   $('.cf-instruction').textContent = t('instruction', 'Pick a piece. Drag it above the platform. Let go.');
   $('.cf-rotate').textContent = t('rotate', 'Rotate');
   $('.cf-drop').textContent = t('drop', 'Drop');
-  $('.cf-hint').textContent = t('keys', 'Arrows to aim. R to rotate. Space to drop. Fallen pieces come back.');
+  $('.cf-hint').textContent = ctx.platform?.isTouch
+    ? t('touch_hint', 'Tap a piece, then drag above the platform. Rotate before placing.')
+    : t('keys', 'Arrows to aim. R to rotate. Space to drop. Fallen pieces come back.');
   svg.setAttribute('aria-label', t('scene', 'Sculpture. Pick a piece below, then drag to place it.'));
   let M, world, ghost, selected = -1, raf = 0, last = 0, accumulator = 0, stable = 0;
   let running = false, paused = false, suspended = false, destroyed = false, finished = false;

@@ -5,7 +5,7 @@ const GAMES = [
   { id: 'echo', name: 'Echo', pitch: 'The room starts the tune. You finish it.', instruction: 'Four pads. Follow the light. Make the tune grow.', color: '#a9d8cc' },
 ];
 const $ = id => document.getElementById(id);
-let selected, instance, context, paused = false, finished = false, generation = 0, take = 0;
+let selected, selectedModule, instance, context, paused = false, finished = false, generation = 0, take = 0;
 $('motion').checked = matchMedia('(prefers-reduced-motion: reduce)').matches;
 for (const [index, game] of GAMES.entries()) {
   const button = document.createElement('button'); button.className = 'game-card'; button.type = 'button';
@@ -19,18 +19,28 @@ function dispose() {
   paused = false; finished = false; $('pause').textContent = 'Pause'; $('pause').disabled = true;
   $('motion').disabled = false; $('stage').replaceChildren(); $('error').hidden = true;
 }
-function select(game) {
+async function select(game) {
   dispose(); selected = game;
   $('lobby').hidden = true; $('play').hidden = false; $('result').hidden = true; $('launch').hidden = false;
   $('title').textContent = game.name; $('instruction').textContent = game.instruction;
-  $('start').disabled = false; $('start').textContent = 'Start'; $('start').focus();
+  selectedModule = null; $('start').disabled = true; $('start').textContent = 'Opening...';
+  const token = generation;
+  try {
+    const module = await import(`./games/${game.id}/feel.js`);
+    if (token !== generation) return;
+    selectedModule = module; $('start').disabled = false; $('start').textContent = 'Start'; $('start').focus();
+  } catch (error) {
+    if (token !== generation) return;
+    $('error').hidden = false; $('error').textContent = 'This room could not open. Return to all games and try again.'; console.error(error);
+  }
   history.replaceState(null, '', `#${game.id}`);
 }
 async function start() {
+  if (!selectedModule) return;
   dispose(); $('start').disabled = true; $('start').textContent = 'Opening...'; $('result').hidden = true;
   const token = generation;
   try {
-    const module = await import(`./games/${selected.id}/feel.js`);
+    const module = selectedModule;
     if (token !== generation) return;
     context = {
       root: $('stage'), audioAudible: $('sound').checked,
@@ -45,7 +55,7 @@ async function start() {
     };
     instance = module.create(context);
     $('launch').hidden = true; $('motion').disabled = true; $('pause').disabled = false;
-    instance.start({ seed: `feel-${selected.id}-${++take}`, tier: 1, devSkipHowto: true });
+    await instance.start({ seed: `feel-${selected.id}-${++take}`, tier: 1, devSkipHowto: true });
     if (document.hidden) setPaused(true);
   } catch (error) {
     instance?.destroy(); instance = null;

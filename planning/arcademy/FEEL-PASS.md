@@ -68,3 +68,18 @@ The preview provides selection, explicit Start, Pause, sound and motion controls
 3. Accepted loops gain content and production adapters: current cards, stars, purchases, daily limits and Annex access remain intact; grade and saved game records are versioned. Retakes grant no extra daily XP or stars. Existing players see a short new intro.
 4. Validate deal truth/reachability, physics recovery, audio scheduling, pause/destroy, and one completion report. Run the full unit suite once at production integration, plus focused behavior checks for these modules. Do not repair unrelated harnesses.
 5. Before rollout add minimal versioned starts, finishes, early exits and voluntary replay counts through existing approved tracking. Server changes stay in the private repo. Desktop release and phone publication are separate. No merge or deployment is part of this first feel checkpoint.
+
+## Milestone one checkpoint, 2026-09-22
+
+All four slices are implemented in `feel.js` modules and available through `feel-preview.html`. These are original vector/synth prototypes, not production game replacements. Composure vendors Matter.js 0.20.0 with its MIT license.
+
+- Recall: three visible pictures, one substitution, six untimed rounds, fracture/restore response, answer evidence and a restored-picture finale. The seed repeats the same deal.
+- Composure: six physical pieces, rotation, direct drag, recovery, collision response and a stable-sculpture ending.
+- Lost & Found: 27 unique pictures across nine three-layer stacks, three reachable references, peel flight, paper flecks and a hidden garden reveal.
+- Echo: six authored phrases, four pads, a compatible phrase branch, earned accompaniment and a resolving cadence.
+
+Validation: 17 focused tests pass. All four modules open without browser errors at 390x844, with no horizontal overflow and game buttons at least 48 CSS px. Complete browser runs at 360x640 reached all four endings: 27 real search presses, a stable six-piece sculpture, six Recall answers, and an Echo run with every note missed. Pause/resume was exercised for each module. Full desktop integration and the C# suite are not relevant yet because no production host or registry changes were made.
+
+Still unproven: subjective satisfaction, real phone touch/audio latency, composition quality by ear, real media integration, difficulty curves and long-term replay value. The next checkpoint is the owner's playthrough of these slices, followed by targeted revisions before content expansion.
+
+Local preview: serve `ConditioningControlPanel/Resources/web/arcademy` on localhost and open `/feel-preview.html`. This preview never writes cards, stars, XP or player records.
