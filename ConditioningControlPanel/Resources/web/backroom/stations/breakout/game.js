@@ -73,6 +73,24 @@ export const steerToward = (vx, vy, x, y, tx, ty) => {
   const sp = Math.hypot(vx, vy), d = Math.hypot(tx - x, ty - y);
   return sp > 0 && d > 0 ? { vx: (tx - x) / d * sp, vy: (ty - y) / d * sp } : { vx, vy };
 };
+/** The same speed, turned toward (tx, ty) by at most maxRad. A still ball stays still. */
+export const turnToward = (vx, vy, x, y, tx, ty, maxRad) => {
+  const sp = Math.hypot(vx, vy), d = Math.hypot(tx - x, ty - y);
+  if (!(sp > 0) || !(d > 0) || !(maxRad > 0)) return { vx, vy };
+  const want = Math.atan2(ty - y, tx - x), have = Math.atan2(vy, vx);
+  let diff = want - have; while (diff > Math.PI) diff -= TAU; while (diff < -Math.PI) diff += TAU;
+  const a = have + Math.sign(diff) * Math.min(Math.abs(diff), maxRad);
+  return { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp };
+};
+/** While DOME_AIM_FEW or fewer bricks are left, the dome bends a free ball outside its reach back toward itself, at least this fast (rad/s).
+ *  The rate rises with speed over distance so there is no orbit outside the reach the ball can settle into (owner, 2026-09-22: a ball riding
+ *  one side of the field top to bottom never came near the spiral again). */
+export const DOME_DRAW_RATE = 1.6;
+export const DOME_DRAW_MAX = 6;
+/** The tail: with this many bricks or fewer for TAIL_LIMIT_S of colour play, the rest fall off on their own, one every TAIL_DROP_GAP_S (owner, 2026-09-22). */
+export const TAIL_BRICKS = 5;
+export const TAIL_LIMIT_S = 120;
+export const TAIL_DROP_GAP_S = 0.3;
 /** How visible a newborn picture bubble must be before a ball can bounce off it. */
 export const BUBBLE_SOLID_ALPHA = 0.7;
 export const BALL_R = 8;
@@ -161,6 +179,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     words: (Array.isArray(words) && words.length ? words : DEFAULT_WORDS).map(x => String(x)), wordIx: 0,
     // word triggers (word-fx.js): the running effects and this frame's mods
     fx: { active: [], lastHeavyAt: -99 }, mod: freshMod(),
+    alive: 0, tail: 0, tailDrop: 0,                   // live brick count this tick; the tail clock (TAIL_LIMIT_S) and its drop cadence
   };
   const emit = (name, data) => { try { onEvent(name, data); } catch (e) { /* the listener's problem */ } };
   const au = (fn, ...args) => { try { if (audio && typeof audio[fn] === 'function') audio[fn](...args); } catch (e) { /* audio is optional */ } };
@@ -493,9 +512,10 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     const s = targetSpeed() * g.mod.ballSpeed * (1 + (b.domeBoost || 0));
     let len = Math.hypot(b.vx, b.vy) || 1;
     b.vx = b.vx / len * s; b.vy = b.vy / len * s;
-    // Never let it settle into a horizontal shuttle.
+    // Never let it settle into a horizontal shuttle. An aimed ball (a dome throw, or a ball the dome is drawing in) is exempt
+    // until it touches a wall or the paddle: the rule bent every flat throw 7 degrees off its brick (owner, 2026-09-22).
     const minVy = 0.25 * s;
-    if (Math.abs(b.vy) < minVy) { b.vy = (b.vy < 0 ? -1 : 1) * minVy; len = Math.hypot(b.vx, b.vy); b.vx = b.vx / len * s; b.vy = b.vy / len * s; }
+    if (!(b.aimed > 0) && Math.abs(b.vy) < minVy) { b.vy = (b.vy < 0 ? -1 : 1) * minVy; len = Math.hypot(b.vx, b.vy); b.vx = b.vx / len * s; b.vy = b.vy / len * s; }
   }
 
   /* ------------------------------------------------------------ saturation and states */
@@ -879,7 +899,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     g.stats.walls++; g.stats.sp = Math.min(20, g.stats.sp + 1);
     addSat(0.1);
     au('wallCleared');
-    buildWall(); g.wallAge = 0; g.landRow = 0;
+    buildWall(); g.wallAge = 0; g.landRow = 0; g.tail = 0; g.tailDrop = 0;
     emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra });
   }
 
@@ -1050,7 +1070,10 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     const alive = s.persistent && due ? g.bricks.reduce((n, br) => n + (br.alive ? 1 : 0), 0) : 0;
     const aiming = due && s.persistent && domeAims(alive, g.bricks.length);
     if (aiming && o.done < (o.turns + domeAimTurns(alive)) * TAU && !aimsAtBrick(b)) return;
-    if (aiming && alive <= DOME_AIM_FEW && !aimsAtBrick(b)) {
+    // An aimed throw flies as thrown (normalise's shuttle rule would bend a flat one off its brick).
+    if (aiming) b.aimed = 1.4;
+    // The last few throws are centred on the nearest brick, not merely lined up with one: a tangent that grazes a corner is a miss.
+    if (aiming && alive <= DOME_AIM_FEW) {
       const br = nearestBrick(b);
       if (br) Object.assign(b, steerToward(b.vx, b.vy, b.x, b.y, br.x + br.w / 2, br.y + br.h / 2));
     }
@@ -1066,6 +1089,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
 
   /* ------------------------------------------------------------ collisions */
   function wallHit(side, b) {
+    b.aimed = 0;
     chargeDome(.08);
     g.wobble = { side, t: 1 };
     au('hit', 'wall', { combo: g.combo, x: b.x / w });
@@ -1126,7 +1150,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       const e = clamp(a + clamp(p.vx / ENGLISH_REF, -1, 1) * ENGLISH_MAX, -Math.PI / 3, Math.PI / 3);
       b.vx = Math.sin(e) * s; b.vy = -Math.cos(e) * s;
     }
-    chargeDome(.12);
+    chargeDome(.12); b.aimed = 0;
     g.combo = 0; p.stretch = 1;
     au('hit', 'paddle', { combo: 0, x: b.x / w });
     emit('paddle', { x: b.x, t });
@@ -1214,6 +1238,13 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (b.orbit) { orbitStep(b, dt); pushTrail(b); return; }
     const s = g.well;
     if (s && (s.persistent || (s.age < s.ttl && s.fade >= 1 && s.born >= .1)) && !s.used && !s.captured && !(s.cooldown > 0) && !(b.domeCooldown > 0) && g.state === 'colour' && !b.ghost && !b.falling && Math.hypot(b.x - s.x, b.y - s.y) < s.pull) { capture(b, s); return; }
+    // The dome reaches out for the last few bricks: a free ball beyond its pull is bent back toward it, faster the closer it is,
+    // so there is no ring outside the reach it can settle on. The throw that follows is the auto-aim.
+    if (s && s.persistent && !s.captured && !(s.cooldown > 0) && !(b.domeCooldown > 0) && g.state === 'colour' && !b.ghost && !b.falling && g.alive > 0 && g.alive <= DOME_AIM_FEW) {
+      const d = Math.hypot(s.x - b.x, s.y - b.y), sp = Math.hypot(b.vx, b.vy);
+      if (d >= s.pull && sp > 0) { Object.assign(b, turnToward(b.vx, b.vy, b.x, b.y, s.x, s.y, Math.min(DOME_DRAW_MAX, Math.max(DOME_DRAW_RATE, 1.3 * sp / d)) * dt)); b.aimed = Math.max(b.aimed || 0, .1); }
+    }
+    b.aimed = Math.max(0, (b.aimed || 0) - dt);
     if (!b.falling) normalise(b);
     const speed = Math.hypot(b.vx, b.vy), n = Math.max(1, Math.ceil(speed * dt / b.r)), ds = dt / n;
     b.spin += (b.vx >= 0 ? 1 : -1) * speed * dt / (b.r * 2);
@@ -1288,6 +1319,23 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     br.glitch = 1; br.swaps++;
     emit('wordSwap', { x: br.x + br.w / 2, y: br.y + br.h / 2, word: br.word, row: br.row, col: br.col });
   }
+  /** The tail (owner, 2026-09-22): TAIL_BRICKS or fewer left for TAIL_LIMIT_S of colour play, and the rest let go on their own,
+   *  lowest first, one every TAIL_DROP_GAP_S, through the ordinary break so the clear plays out as it always does.
+   *  Never in the finale, never on the iris wall (its arms are consumed on their own clock), never while a wall is still landing. */
+  function updateTail(dt) {
+    const tailing = g.state === 'colour' && !g.finale && !g.iris && !g.transition && !g.clearing && g.wallAge > 2 && g.alive > 0 && g.alive <= TAIL_BRICKS;
+    if (!tailing) { g.tail = 0; g.tailDrop = 0; return; }
+    g.tail += dt;
+    if (g.tail < TAIL_LIMIT_S) return;
+    g.tailDrop += dt;
+    if (g.tailDrop < TAIL_DROP_GAP_S) return;
+    g.tailDrop = 0;
+    const br = g.bricks.filter(b => b.alive).sort((a, b) => (b.y + b.h) - (a.y + a.h))[0];
+    if (!br) return;
+    emit('tailDrop', { x: br.x + br.w / 2, y: br.y + br.h / 2, left: g.alive - 1 });
+    br.hp = 1; br.strength = 0;
+    breakBrick(br, null);
+  }
   function tick(dt, input) {
     g.time += dt; g.wallAge += dt;
     updateTide(dt); updateFinaleFormation(dt); updatePendulums(dt);
@@ -1310,6 +1358,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       if (br.word && br.alive && g.state === 'colour') swapWord(br, dt);
     }
     updatePops(dt); updateColliders(dt); updateWell(dt);
+    g.alive = g.bricks.reduce((n, br) => n + (br.alive ? 1 : 0), 0);
+    updateTail(dt);
     if (g.balls.some(b => b.stuck)) {
       g.launchTimer += dt;
       // The auto launch waits for the first downbeat at or after LAUNCH_S (one beat of grace if the clock stalls); a manual launch is immediate.
