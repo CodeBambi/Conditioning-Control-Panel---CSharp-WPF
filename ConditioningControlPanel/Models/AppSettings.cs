@@ -5095,6 +5095,7 @@ namespace ConditioningControlPanel.Models
         // ---- CHASTER: Circe's tab (Services/Chaster) ----
         // Device-local on purpose, like the link itself: none of these ride the cloud profile.
         private bool _chasterTabEnabled;
+        private bool _chasterConsentSeen;
         private string? _chasterLockId;
         private List<string> _chasterPrices = new();
 
@@ -5104,6 +5105,19 @@ namespace ConditioningControlPanel.Models
         {
             get => _chasterTabEnabled;
             set { _chasterTabEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// The player has read what switching the tab on means (the cap, the floor, that Panic never
+        /// adds, one push a day) and pressed "I understand". Set once, by the inline consent card the
+        /// page shows on the FIRST switch-on and never again. It gates nothing on its own: the master
+        /// switch above is still what the service reads.
+        /// </summary>
+        [JsonProperty]
+        public bool ChasterConsentSeen
+        {
+            get => _chasterConsentSeen;
+            set { _chasterConsentSeen = value; OnPropertyChanged(); }
         }
 
         /// <summary>The lock the tab settles to. Null = the only active lock, and never a guess between two.</summary>

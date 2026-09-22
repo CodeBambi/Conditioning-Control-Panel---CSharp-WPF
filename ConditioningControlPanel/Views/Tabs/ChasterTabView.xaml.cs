@@ -5,29 +5,41 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Chaster;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
     /// <summary>
-    /// Circe's tab, the page. Reads <see cref="ChasterService"/>, writes three settings, decides
+    /// Circe's tab, the page. Reads <see cref="ChasterService"/>, writes four settings, decides
     /// nothing: every rule (what books, what is capped, what reaches the lock) lives in
-    /// Services/Chaster and is tested there.
+    /// Services/Chaster and is tested there, and every string the page composes comes out of
+    /// <see cref="TabPageText"/> or <see cref="TabPresets"/> so it is tested without a window.
     /// </summary>
     public partial class ChasterTabView : UserControl
     {
         private static readonly Brush CostBrush = Frozen(0xFF, 0x8F, 0xA3);
         private static readonly Brush EarnBrush = Frozen(0x5F, 0xFF, 0xD0);
+        private static readonly Brush PresetOnBrush = Frozen(0xFF, 0x8F, 0xA3);
+        private static readonly Brush PresetOffBrush = Frozen(0x77, 0x72, 0x80);
+
+        /// <summary>Half a minute is as fine as the hero needs; a running safety hold is counted
+        /// in seconds because it is the one number the player is sitting there waiting out.</summary>
+        private static readonly TimeSpan SlowTick = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan HoldTick = TimeSpan.FromSeconds(1);
 
         private bool _loading;
         private bool _rowsBuilt;
         private bool _subscribed;
         private readonly Dictionary<string, CheckBox> _priceToggles = new();
+        private readonly DispatcherTimer _tick;
 
         public ChasterTabView()
         {
             InitializeComponent();
+            _tick = new DispatcherTimer(DispatcherPriority.Background) { Interval = SlowTick };
+            _tick.Tick += (_, _) => { RefreshHero(); RefreshDay(); };
             // Only listen while the page is on screen: Booked fires on every priced event.
             IsVisibleChanged += (_, _) => Subscribe(IsVisible);
         }
@@ -39,12 +51,13 @@ namespace ConditioningControlPanel.Views.Tabs
             return brush;
         }
 
-        /// <summary>ShowTab calls this on every visit. Cheap parts run now; the lock list is a
-        /// network call and fills in when it lands.</summary>
+        /// <summary>ShowTab calls this on every visit. Cheap parts run now; the lock list and the
+        /// lock itself are network calls and fill in when they land.</summary>
         public void OnTabShown()
         {
             Refresh();
             _ = LoadLocksAsync();
+            _ = App.Chaster?.RefreshLockAsync();
         }
 
         private void Subscribe(bool on)
@@ -52,13 +65,26 @@ namespace ConditioningControlPanel.Views.Tabs
             var chaster = App.Chaster;
             if (chaster == null || on == _subscribed) return;
             _subscribed = on;
-            if (on) { chaster.Booked += OnBooked; chaster.LinkChanged += OnLinkChanged; }
-            else { chaster.Booked -= OnBooked; chaster.LinkChanged -= OnLinkChanged; }
+            if (on)
+            {
+                chaster.Booked += OnBooked;
+                chaster.LinkChanged += OnLinkChanged;
+                chaster.LockChanged += OnLockChanged;
+                _tick.Start();
+            }
+            else
+            {
+                chaster.Booked -= OnBooked;
+                chaster.LinkChanged -= OnLinkChanged;
+                chaster.LockChanged -= OnLockChanged;
+                _tick.Stop();
+            }
         }
 
-        // Both events arrive on whatever thread found out.
+        // All three events arrive on whatever thread found out.
         private void OnBooked(string eventId, TabBooking booking) => Dispatcher.BeginInvoke(new Action(RefreshNumbers));
         private void OnLinkChanged() => Dispatcher.BeginInvoke(new Action(OnTabShown));
+        private void OnLockChanged() => Dispatcher.BeginInvoke(new Action(RefreshHero));
 
         private void Refresh()
         {
@@ -70,18 +96,20 @@ namespace ConditioningControlPanel.Views.Tabs
             ShowLinking(chaster?.IsLinking == true);
             if (!linked) return;
 
-            BuildPriceRows();
             var settings = App.Settings?.Current;
             _loading = true;
-            try
-            {
-                ChkTab.IsChecked = settings?.ChasterTabEnabled == true;
-                var on = new HashSet<string>(settings?.ChasterPrices ?? new List<string>(), StringComparer.Ordinal);
-                foreach (var (id, toggle) in _priceToggles) toggle.IsChecked = on.Contains(id);
-                // A tab that is on with nothing priced does nothing, so open the list for them.
-                if (on.Count == 0) PricesExpander.IsExpanded = true;
-            }
+            try { ChkTab.IsChecked = settings?.ChasterTabEnabled == true; }
             finally { _loading = false; }
+            ConsentCard.Visibility = Visibility.Collapsed;
+
+            // A set the player built by hand is worth showing, so open Customize on it. A preset,
+            // or nothing at all, reads better as chips.
+            var match = TabPresets.Match(settings?.ChasterPrices);
+            if (match == TabPresets.Custom) ShowCustomize(true);
+            // A tab that is on with nothing priced does nothing, so open the list for them.
+            if (match == null) PricesExpander.IsExpanded = true;
+            RefreshPresets();
+            RefreshHero();
             RefreshNumbers();
         }
 
@@ -93,10 +121,72 @@ namespace ConditioningControlPanel.Views.Tabs
             TxtBalance.Text = balance == 0 ? CircesTab.Format(0, signed: false) : CircesTab.Format(balance);
             TxtBalance.Foreground = balance > 0 ? CostBrush : balance < 0 ? EarnBrush : (Brush)FindResource("TextLightBrush");
             TxtBalanceCaption.Text = Loc.Get(balance < 0 ? "chaster_credit_caption" : "chaster_balance_caption");
+            RefreshDay();
+            if (Receipt.IsVisible) BuildBill();
+        }
+
+        // ============================== 1. the lock ==============================
+
+        internal void RefreshHero()
+        {
+            var chaster = App.Chaster;
+            if (chaster == null) return;
+            var snapshot = chaster.Lock;
+            var lookup = chaster.LockLookup;
+
+            var title = snapshot == null ? null
+                : string.IsNullOrWhiteSpace(snapshot.Title) ? Loc.Get("chaster_lock_untitled") : snapshot.Title;
+            TxtHeroTitle.Text = title ?? "";
+            TxtHeroTitle.Visibility = title == null ? Visibility.Collapsed : Visibility.Visible;
+
+            // No countdown means no clock at all: a placeholder glyph is one more thing to
+            // translate and says less than the state line right under it already says.
+            var left = snapshot?.Remaining(DateTime.UtcNow);
+            if (left is { } remaining)
+            {
+                var parts = TabPageText.Countdown(remaining);
+                TxtHeroClock.Text = parts.Count == 0
+                    ? Loc.Get("chaster_left_soon")
+                    : string.Join(" ", parts.Select(p => Loc.GetF(p.Key, p.Value)));
+                HeroClockRow.Visibility = Visibility.Visible;
+            }
+            else HeroClockRow.Visibility = Visibility.Collapsed;
+
+            var ends = snapshot is { TimerHidden: false, EndsAtUtc: { } endUtc } ? endUtc.ToLocalTime() : (DateTime?)null;
+            TxtHeroEnds.Text = ends is { } when ? Loc.GetF("chaster_hero_ends", when.ToString("g")) : "";
+            TxtHeroEnds.Visibility = ends == null ? Visibility.Collapsed : Visibility.Visible;
+
+            var stateKey = TabPageText.HeroState(lookup, snapshot);
+            TxtHeroState.Text = stateKey == null ? "" : Loc.Get(stateKey);
+            TxtHeroState.Visibility = stateKey == null ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        // ============================== 2. today ==============================
+
+        internal void RefreshDay()
+        {
+            var chaster = App.Chaster;
+            if (chaster == null) return;
+            var today = chaster.TodayAddedSeconds;
             TxtToday.Text = Loc.GetF("chaster_today",
-                CircesTab.Format(chaster.TodayAddedSeconds, signed: false),
+                CircesTab.Format(today, signed: false),
                 CircesTab.Format(CircesTab.DailyCapSeconds, signed: false));
-            if (BillRows.IsVisible) BuildBill();
+
+            var filled = TabPageText.CapFraction(today);
+            CapFilled.Width = new GridLength(filled, GridUnitType.Star);
+            CapRest.Width = new GridLength(1 - filled, GridUnitType.Star);
+
+            var hold = chaster.SafetyHoldRemaining;
+            if (hold > TimeSpan.Zero)
+            {
+                TxtHold.Text = Loc.GetF("chaster_hold", $"{(int)hold.TotalMinutes}:{hold.Seconds:00}");
+                TxtHold.Visibility = Visibility.Visible;
+            }
+            else TxtHold.Visibility = Visibility.Collapsed;
+
+            // Only spin at a second while there is a second-by-second number to show.
+            var wanted = hold > TimeSpan.Zero ? HoldTick : SlowTick;
+            if (_tick.Interval != wanted) _tick.Interval = wanted;
         }
 
         // ============================== link ==============================
@@ -141,14 +231,44 @@ namespace ConditioningControlPanel.Views.Tabs
             catch (Exception ex) { Diag.Swallowed(ex, "chaster unlink from the page"); }
         }
 
-        // ============================== the switch and the lock ==============================
+        // ============================== 3. the switch, and the one consent ==============================
 
         private void ChkTab_Changed(object sender, RoutedEventArgs e)
         {
             if (_loading || App.Settings?.Current is not { } settings) return;
-            settings.ChasterTabEnabled = ChkTab.IsChecked == true;
+            var wanted = ChkTab.IsChecked == true;
+
+            // The first time anyone switches this on, the four facts come first. Inline, not a
+            // modal: a modal is something to dismiss, and this is something to read.
+            if (wanted && !settings.ChasterConsentSeen)
+            {
+                _loading = true;
+                try { ChkTab.IsChecked = false; }
+                finally { _loading = false; }
+                ConsentCard.Visibility = Visibility.Visible;
+                return;
+            }
+
+            ConsentCard.Visibility = Visibility.Collapsed;
+            settings.ChasterTabEnabled = wanted;
             App.Settings?.Save();
         }
+
+        private void BtnConsentOk_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current is not { } settings) return;
+            settings.ChasterConsentSeen = true;
+            settings.ChasterTabEnabled = true;
+            App.Settings?.Save();
+            _loading = true;
+            try { ChkTab.IsChecked = true; }
+            finally { _loading = false; }
+            ConsentCard.Visibility = Visibility.Collapsed;
+            // On with nothing priced does nothing at all, so put the sets in front of them.
+            if (TabPresets.Match(settings.ChasterPrices) == null) PricesExpander.IsExpanded = true;
+        }
+
+        // ============================== the lock picker ==============================
 
         private async Task LoadLocksAsync()
         {
@@ -198,9 +318,62 @@ namespace ConditioningControlPanel.Views.Tabs
             if ((CmbLock.SelectedItem as ComboBoxItem)?.Tag is not string id) return;
             settings.ChasterLockId = id;
             App.Settings?.Save();
+            // The hero is showing the old lock until this lands.
+            _ = App.Chaster?.RefreshLockAsync();
         }
 
-        // ============================== prices ==============================
+        // ============================== 4. prices: presets first ==============================
+
+        private void Preset_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current is not { } settings) return;
+            if ((sender as Button)?.Tag is not string id) return;
+            var ids = TabPresets.Apply(id);
+            if (ids.Count == 0) return;
+            settings.ChasterPrices = new List<string>(ids);
+            App.Settings?.Save();
+            ApplyPriceToggles();
+            RefreshPresets();
+        }
+
+        private void BtnCustomize_Click(object sender, RoutedEventArgs e) =>
+            ShowCustomize(CustomizeHost.Visibility != Visibility.Visible);
+
+        private void ShowCustomize(bool show)
+        {
+            if (show) ApplyPriceToggles();
+            CustomizeHost.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>Light the chip for the set that is on, and say in one line what it does.</summary>
+        internal void RefreshPresets()
+        {
+            var match = TabPresets.Match(App.Settings?.Current?.ChasterPrices);
+            PaintPreset(BtnPresetGentle, match == TabPresets.Gentle);
+            PaintPreset(BtnPresetStrict, match == TabPresets.Strict);
+            PaintPreset(BtnPresetCirce, match == TabPresets.Circe);
+            BtnPresetCustom.Visibility = match == TabPresets.Custom ? Visibility.Visible : Visibility.Collapsed;
+            PaintPreset(BtnPresetCustom, true);
+            TxtPresetHint.Text = match == null ? Loc.Get("chaster_prices_hint") : Loc.Get(TabPresets.HintKey(match));
+        }
+
+        private static void PaintPreset(Button button, bool on)
+        {
+            button.BorderBrush = on ? PresetOnBrush : PresetOffBrush;
+            button.Foreground = on ? PresetOnBrush : PresetOffBrush;
+            button.Opacity = on ? 1 : 0.75;
+        }
+
+        /// <summary>Push the saved set onto the switches. Never the other way round: the settings
+        /// list is the truth and the rows are a view of it.</summary>
+        internal void ApplyPriceToggles()
+        {
+            BuildPriceRows();
+            var on = new HashSet<string>(App.Settings?.Current?.ChasterPrices ?? new List<string>(), StringComparer.Ordinal);
+            _loading = true;
+            try { foreach (var (id, toggle) in _priceToggles) toggle.IsChecked = on.Contains(id); }
+            finally { _loading = false; }
+        }
 
         internal void BuildPriceRows()
         {
@@ -271,50 +444,14 @@ namespace ConditioningControlPanel.Views.Tabs
             if (((CheckBox)sender).IsChecked == true) next.Add(id);
             settings.ChasterPrices = next;
             App.Settings?.Save();
+            // One hand-flipped switch can land exactly on a preset, or step off one. Say which.
+            RefreshPresets();
         }
 
-        // ============================== this run's bill ==============================
+        // ============================== 5. this run's bill ==============================
 
         private void BillExpander_Expanded(object sender, RoutedEventArgs e) => BuildBill();
 
-        private void BuildBill()
-        {
-            var chaster = App.Chaster;
-            if (chaster == null) return;
-            var bill = chaster.Bill();
-            BillRows.Children.Clear();
-            if (bill.IsEmpty)
-            {
-                BillRows.Children.Add(Muted(Loc.Get("chaster_bill_empty")));
-                return;
-            }
-            foreach (var line in bill.Lines)
-            {
-                var row = new DockPanel { Margin = new Thickness(0, 2, 0, 2) };
-                var figure = new TextBlock
-                {
-                    Text = CircesTab.Format(line.Seconds),
-                    FontFamily = new FontFamily("Consolas, Courier New"),
-                    FontSize = 12,
-                    Foreground = line.Seconds > 0 ? CostBrush : EarnBrush,
-                };
-                DockPanel.SetDock(figure, Dock.Right);
-                row.Children.Add(figure);
-                var name = new TextBlock { FontSize = 12, Text = Loc.Get(TabPageText.NameKey(line.EventId)) + (line.Count > 1 ? "  x" + line.Count : "") };
-                name.SetResourceReference(TextBlock.ForegroundProperty, "TextLightBrush");
-                row.Children.Add(name);
-                BillRows.Children.Add(row);
-            }
-            BillRows.Children.Add(Muted(Loc.GetF("chaster_bill_net", CircesTab.Format(bill.NetSeconds))));
-            if (bill.PushedSeconds > 0)
-                BillRows.Children.Add(Muted(Loc.GetF("chaster_bill_pushed", CircesTab.Format(bill.PushedSeconds, signed: false))));
-        }
-
-        private TextBlock Muted(string text)
-        {
-            var block = new TextBlock { Text = text, FontSize = 12, Margin = new Thickness(0, 6, 0, 0) };
-            block.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
-            return block;
-        }
+        internal void BuildBill() => Receipt.Show(App.Chaster?.Bill());
     }
 }
