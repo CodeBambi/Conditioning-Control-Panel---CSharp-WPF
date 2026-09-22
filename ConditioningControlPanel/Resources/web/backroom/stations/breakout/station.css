@@ -239,3 +239,6 @@
 .bo-pause-card .bo-pic-add input { flex: 1; min-width: 0; padding: 8px 9px; border: 1px solid #9565a8; border-radius: 8px; background: #24152e; color: #fff; font: 15px system-ui; }
 .bo-pause-card .bo-pic-add button { padding: 8px 14px; font-size: 13px; }
 .bo-pause-card .bo-pic-note { margin: 0; font-size: 11px; line-height: 1.5; color: #a894b3; }
+/* The mouse capture switch in Options: one row, box before its words (the card's labels stack vertically otherwise). */
+.bo-lock-row span { display:flex;flex-direction:row;align-items:center;gap:9px; }
+.bo-lock-row input { width:16px;height:16px;margin:0;accent-color:#e7b2ef; }
