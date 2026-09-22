@@ -669,6 +669,30 @@ namespace ConditioningControlPanel.Services
         /// Trigger a one-shot flash that works even when service is not running.
         /// Used by Autonomy Mode to trigger flashes independently of engine state.
         /// </summary>
+        /// <summary>Per-window path of Natasha's red halo: the same two-pulse blink the compositor
+        /// draws as a wash, here as a flare of the DropShadow's opacity. Stopped with the window's
+        /// other animations by SafeCloseFlashWindow.</summary>
+        private static DoubleAnimationUsingKeyFrames NatashaBlink(double rest)
+        {
+            var peak = Math.Min(1.0, rest + 2.0 * Chaster.NatashasFavourite.WashPeak);
+            var p = Chaster.NatashasFavourite.PulseSec;
+            var g = Chaster.NatashasFavourite.PulseGapSec;
+            var anim = new DoubleAnimationUsingKeyFrames
+            {
+                Duration = TimeSpan.FromSeconds(Chaster.NatashasFavourite.BlinkPeriodSec),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.Zero));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(peak, TimeSpan.FromSeconds(p / 2)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.FromSeconds(p)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.FromSeconds(p + g)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(peak, TimeSpan.FromSeconds(p + g + p / 2)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.FromSeconds(p + g + p)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.FromSeconds(Chaster.NatashasFavourite.BlinkPeriodSec)));
+            anim.Freeze();
+            return anim;
+        }
+
         public void TriggerFlashOnce(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false, FlashBurstLook? look = null)
         {
             if (_isBusy)
@@ -1776,6 +1800,16 @@ namespace ConditioningControlPanel.Services
                 var isLucky = multiplier > 1;
                 window.IsLucky = isLucky;
 
+                // Natasha's favourite: about one flash in ten wears red and is 3:00 on the tab
+                // when it shows. Never a hydra copy, a remix mirror, a v2 preview or a picture a
+                // bubble delivered (that bubble had its own roll), and only while the row can charge.
+                var natasha = hydraGeneration == 0 && !imageData.RemixMirror && !imageData.PreviewV2
+                    && imageData.BubbleOriginPx == null
+                    && App.Chaster?.CanBook(Chaster.NatashasFavourite.EventId) == true
+                    && Chaster.NatashasFavourite.Roll(_random);
+                window.IsNatasha = natasha;
+                var natashaGlow = natasha && PerformanceProfile.AllowGlow(perfTier);
+
                 if (isLucky)
                 {
                     PlayLuckyFlashSound();
@@ -1788,10 +1822,12 @@ namespace ConditioningControlPanel.Services
                 var sparkleBoostTier = App.SkillTree?.GetSparkleBoostTier() ?? 0;
                 bool glowEnabled = (App.Settings?.Current?.FlashGlowEnabled ?? true)
                                    && PerformanceProfile.AllowGlow(perfTier);
-                if (glowEnabled && (isLucky || sparkleBoostTier > 0))
+                if ((glowEnabled && (isLucky || sparkleBoostTier > 0)) || natashaGlow)
                 {
                     var glowColor = isLucky
                         ? System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00) // Gold
+                        : natashaGlow
+                        ? System.Windows.Media.Color.FromRgb(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B)
                         : System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4); // Hot pink
 
                     double blurRadius, glowOpacity;
@@ -1804,6 +1840,13 @@ namespace ConditioningControlPanel.Services
                     {
                         blurRadius = sparkleBoostTier switch { 1 => 25, 2 => 35, _ => 45 };
                         glowOpacity = sparkleBoostTier switch { 1 => 0.5, 2 => 0.6, _ => 0.7 };
+                    }
+
+                    // Natasha's red is a thin halo, under the lucky gold and the sparkle pink.
+                    if (natashaGlow && !isLucky && (sparkleBoostTier == 0 || !glowEnabled))
+                    {
+                        blurRadius = Chaster.NatashasFavourite.HaloBlurDip;
+                        glowOpacity = Chaster.NatashasFavourite.HaloOpacity;
                     }
 
                     // Cap the blur radius per tier (Quality ~24, Balanced ~18).
@@ -1860,6 +1903,7 @@ namespace ConditioningControlPanel.Services
                     window.Background = System.Windows.Media.Brushes.Transparent;
                     content = border;
                     window.GlowEffect = glowEffect;   // tracked so SafeCloseFlashWindow can stop its animations + free the native blur target
+                    if (natashaGlow && !isLucky) glowEffect.BeginAnimation(DropShadowEffect.OpacityProperty, NatashaBlink(glowOpacity));
 
                     // Host mode expands the bookkeeping rect (the gaze rect) to match the glow-expanded
                     // visual. Per-window mode must NOT resize the window here: the shell is already
@@ -2010,6 +2054,9 @@ namespace ConditioningControlPanel.Services
                 {
                     _activeWindows.Add(window);
                 }
+
+                // Natasha's favourite: the red one showed. +3:00 on the tab (inert unless the row is on).
+                if (natasha) App.Chaster?.Note("natasha");
             }
             catch (Exception ex)
             {
@@ -2420,6 +2467,7 @@ namespace ConditioningControlPanel.Services
                         window.LayerItem = layer.Spawn(frames, x, y, w, h,
                             paddingPx, cornerRadiusPx, skGlowColor, glowSigmaPx,
                             glowOpacity, luckyPulse, motionState);
+                        window.LayerItem.NatashaCue = window.IsNatasha;
                         if (imageData.BubbleOriginPx is { } origin)
                         {
                             window.LayerItem.BubbleOriginPx = origin;
@@ -5268,6 +5316,8 @@ namespace ConditioningControlPanel.Services
         /// Whether this flash triggered a lucky proc (golden glow effect)
         /// </summary>
         public bool IsLucky { get; set; }
+        /// <summary>Natasha's favourite: wears the red cue and booked 3:00 when it showed.</summary>
+        public bool IsNatasha { get; set; }
 
         /// <summary>
         /// Drives a subtle inflate effect on the flash content during Focus

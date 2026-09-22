@@ -51,7 +51,7 @@ public static class TabPresets
 
     private static readonly string[] StrictIds =
     {
-        CircesMisses.EventId, "typo", "attention", "mantra", "program_skipped",
+        CircesMisses.EventId, "typo", "attention", NatashasFavourite.EventId, "mantra", "program_skipped",
         "remote_media", "remote_video", "escape", "watcher",
         "melt", "bubbles", "ball", "padlock", "crash",
         // the one way down
@@ -61,7 +61,7 @@ public static class TabPresets
     private static readonly string[] CirceIds =
     {
         // costs
-        CircesMisses.EventId, "typo", "attention", "mantra", "program_skipped", "melt",
+        CircesMisses.EventId, "typo", "attention", NatashasFavourite.EventId, "mantra", "program_skipped", "melt",
         // earns back
         "lockcard", "session", "quest", "video", "levelup", "program_done",
     };
