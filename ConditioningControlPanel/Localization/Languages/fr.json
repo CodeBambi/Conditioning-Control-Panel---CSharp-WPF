@@ -5675,5 +5675,6 @@
   "launcher_media_library": "Bibliothèque",
   "launcher_media_preset": "Préréglage de ressources",
   "launcher_media_preset_hint": "Quelles images et quels clips de ta bibliothèque les jeux utilisent. Enregistré dans le navigateur de ressources du panneau.",
-  "launcher_media_open_browser": "Ouvrir le navigateur de ressources"
+  "launcher_media_open_browser": "Ouvrir le navigateur de ressources",
+  "br_opt_drag_look": "Cliquer et glisser pour regarder"
 }

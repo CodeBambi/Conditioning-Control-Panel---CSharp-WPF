@@ -5675,5 +5675,6 @@
   "launcher_media_library": "Biblioteca",
   "launcher_media_preset": "Preset de recursos",
   "launcher_media_preset_hint": "Quais das suas imagens e clipes os jogos usam. Salvo no navegador de recursos do painel.",
-  "launcher_media_open_browser": "Abrir o navegador de recursos"
+  "launcher_media_open_browser": "Abrir o navegador de recursos",
+  "br_opt_drag_look": "Clique e arraste para olhar"
 }

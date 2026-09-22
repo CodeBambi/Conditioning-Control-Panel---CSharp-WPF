@@ -1,3 +1,4 @@
+import { readDragLook, saveDragLook } from './look-preference.js';
 import { intro } from './intro.js';
 import { createWelcome, shouldShow } from './welcome.js';
 import { createRacePortal, consumeRoomPose } from './race-portal.js';
@@ -70,7 +71,7 @@ const readGates = (g) => {
 const INTENSITIES = ['calm', 'normal', 'full'];
 const readChoice = (v, fallback) => (INTENSITIES.includes(v) ? v : fallback);
 
-const state = { sp: 0, reduced: false, invertLook: false, motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false,
+const state = { sp: 0, reduced: false, invertLook: false, dragLook: readDragLook(), motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false,
   // The room's own picture source and mix, both owned by the host. These defaults only hold for the
   // few frames before init lands, and they are the quiet ones on purpose.
   media: { source: 'auto', effective: 'local', subs: [], off: [], cap: 8, consented: false },
@@ -214,11 +215,18 @@ function paintMotion() {
   if (!hud) return;
   hud.motion(still(), forcedStill());
   hud.options({ intensityChoice: state.intensityChoice, forcedCalm: !!state.reduced, tunnel: state.gates.tunnel,
-                melt: state.gates.melt, invertLook: state.invertLook, media: state.media, levels: state.levels });
+                melt: state.gates.melt, invertLook: state.invertLook, dragLook: state.dragLook, media: state.media, levels: state.levels });
 }
 
 /** The room's Options (10.14): tell the host and show the press at once; the host's settings frame has the last word. */
 function setOption(key, value) {
+  if (key === 'dragLook') {
+    state.dragLook = !!value;
+    saveDragLook(state.dragLook);
+    scene?.freeLook();
+    paintMotion();
+    return;
+  }
   if (key === 'intensity') {
     if (!INTENSITIES.includes(value)) return;
     state.intensityChoice = value;
@@ -664,6 +672,7 @@ async function start(init) {
       still: still(),
       cameraMotion:()=>({off:state.userStill||state.motion==='off'||state.motion==='still',reduced:state.reduced||state.motion==='reduced'||state.intensity==='calm'}),
       invertLook: () => state.invertLook,
+      dragLook: () => state.dragLook,
       onProgress: (f) => { hud.progress(f); intro.progress(f); },
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),

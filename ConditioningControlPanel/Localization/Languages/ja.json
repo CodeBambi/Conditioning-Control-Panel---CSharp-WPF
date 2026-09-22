@@ -5675,5 +5675,6 @@
   "launcher_media_library": "ライブラリ",
   "launcher_media_preset": "アセットプリセット",
   "launcher_media_preset_hint": "ゲームが使う画像とクリップの選択。パネルのアセットブラウザーに保存されます。",
-  "launcher_media_open_browser": "アセットブラウザーを開く"
+  "launcher_media_open_browser": "アセットブラウザーを開く",
+  "br_opt_drag_look": "クリックしてドラッグで視点移動"
 }

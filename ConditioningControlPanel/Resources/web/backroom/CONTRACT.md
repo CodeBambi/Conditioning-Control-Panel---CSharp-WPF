@@ -2454,3 +2454,10 @@ window and sends `init.settings.racingTracks` itself. The web room has no host o
 `/backroom/racing/race.html?casino=1&back=...`. The race's web router (cclabs-web `scripts/race-web-ext/host/index.js`)
 reads it only when `?casino=1` is on the URL and sends it as `racingTracks` (plus `returnToCasino: true`); through the
 door with no record the race owns nothing. Off the door the field stays absent and the race keeps its web contract.
+
+### Camera control preference
+
+The room Options switch `dragLook` (Click and drag to look) is opt-in and defaults off.
+It persists per device in `br.dragLook.v1` localStorage, like room quality, without a host message.
+When on, mouse clicks never request pointer lock; existing drag-to-look and click-to-visit controls apply.
+Touch controls and camera inversion keep their existing behavior. Switching releases any pointer lock.

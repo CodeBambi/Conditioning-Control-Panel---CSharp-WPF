@@ -269,10 +269,10 @@ export async function createScene(o) {
     if (drag && (drag.id === e.pointerId || (canvas.hasPointerCapture && !canvas.hasPointerCapture(drag.id)))) drag = null;
     if (drag) return;
     drag = tap = { id: e.pointerId, x: e.clientX, y: e.clientY, startX:e.clientX, startY:e.clientY, moved:false };
-    /* A MOUSE CLICK TAKES THE MOUSE (desk tester, 2026-09-18: click-drag to look "is terrible"). The capturing click is
+    /* Mouse-look is the default; the drag-look preference keeps the pointer free. The capturing click is
      * not a tap: it only takes the pointer, so a click to get the mouse back after Esc cannot also walk you into whatever
      * the crosshair happened to rest on. Fingers and pens never lock; a refused lock leaves click-drag and taps as they were. */
-    if (e.pointerType === 'mouse' && !locked && !lockRefused && typeof canvas.requestPointerLock === 'function') {
+    if (e.pointerType === 'mouse' && !o.dragLook?.() && !locked && !lockRefused && typeof canvas.requestPointerLock === 'function') {
       tap = null;
       try {
         const p = canvas.requestPointerLock();

@@ -5873,6 +5873,7 @@
   "br_opt_tunnel": "Tunnel vision",
   "br_opt_melt": "Melt",
   "br_opt_invert": "Invert camera",
+  "br_opt_drag_look": "Click and drag to look",
   "br_opt_on": "On",
   "br_opt_off": "Off",
   "br_loading": "A little further in.",
