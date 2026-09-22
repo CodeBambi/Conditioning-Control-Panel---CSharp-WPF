@@ -45,7 +45,7 @@ function whileLoading(promise, signal) {
  * @returns {Promise<{canvas, animated, frames, index, tick(now, still), dispose()} | null>}
  */
 export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS, onFrame = null, signal = null, maxBytes = MEDIA_LIMITS.bytes, preferCanvas = false } = {}) {
-  let decoder = null, data = null, type = '', validated = false;
+  let decoder = null, data = null, type = '', validated = false, native = false;
   const controller = new AbortController();
   const abort = () => { controller.abort(); try { decoder?.close(); } catch {} };
   signal?.addEventListener('abort', abort, {once:true});
@@ -62,8 +62,8 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
     if (!dimensions) throw new MediaLimitError('Unsupported image header','transfer');   // our sniffer's gap, not the file's fault: the browser may still decode it
     checkDimensions(...dimensions); validated = true;
     controller.signal.throwIfAborted();
-    decoder = !preferCanvas && canAnimate() && await whileLoading(ImageDecoder.isTypeSupported(type), controller.signal)
-      ? new ImageDecoder({ data, type }) : await compatibilityDecoder(data, type);
+    native = !preferCanvas && canAnimate() && await whileLoading(ImageDecoder.isTypeSupported(type), controller.signal);
+    decoder = native ? new ImageDecoder({ data, type }) : await compatibilityDecoder(data, type);
     controller.signal.throwIfAborted();
     if (!decoder) return await boundedStill(data, type, maxEdge, controller.signal);
     await whileLoading(decoder.tracks.ready, controller.signal);
@@ -90,6 +90,9 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
     let index = 0, dueAt = 0, busy = false, closed = false, frames = 0;
     const show = (i, started) => {
       busy = true;
+      // Firefox can leave a backwards decode pending forever after the last frame.
+      // Reopen from the retained, bounded bytes when rewinding, including Motion still.
+      if (native && i < index) { decoder.close(); decoder = new ImageDecoder({ data, type }); }
       return decoder.decode({ frameIndex: i }).then((r) => {
         if (closed) { r.image.close(); return; }
         const delay = r.image.duration ? r.image.duration / 1000 : 100;   // microseconds to ms
