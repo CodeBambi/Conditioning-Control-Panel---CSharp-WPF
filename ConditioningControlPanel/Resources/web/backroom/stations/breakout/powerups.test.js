@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from './game.js';
-import {pickPower,POWER_WEIGHT,createPowerups,ordinaryTarget,swayX,DROP_REACH} from './powerups.js';
+import {pickPower,POWER_WEIGHT,createPowerups,ordinaryTarget,laserFinaleTarget,swayX,DROP_REACH} from './powerups.js';
 function fixture(opts={}){
  const events=[],s={w:1280,h:720,state:'colour',wallAge:3,paddle:{x:640,y:680,w:160,h:12},balls:[{x:640,y:600,vx:30,vy:-220}],bricks:[]};
  const damage=[];const power=createPowerups(s,{rng:()=>.5,emit:(...e)=>events.push(e),newBall:()=>({r:7,trail:[]}),damage:br=>damage.push(br),...opts});
@@ -185,7 +185,9 @@ test('the laser lands hits on every wall 1-8 and damages bricks on every wall th
  for(let wall=1;wall<=8;wall++){
   let seed=7;const rng=()=>(seed=(seed*1664525+1013904223)%4294967296)/4294967296;let evs=[];
   const game=createGame({words:['SINK','DROP','RELAX','LET GO','DEEPER','BLANK'],rng,audio:simAudio(),onEvent:(n,d)=>evs.push([n,d])});
-  const s=game.snapshot();s.noLose=true;game.breakoutNow();game.jumpToWall(wall);s.noLose=true;
+  const s=game.snapshot();s.noLose=true;game.breakoutNow();
+  if(wall===8){game.jumpToFinaleBeat('rings');s.wallAge=2;}else game.jumpToWall(wall);                // wall 8 in its released stage: rings, guards and gates are live
+  s.noLose=true;
   for(let i=0;i<240;i++){game.step(STEP,{x:s.balls[0]?.x??640,launch:i%60===0});if(s.state!=='colour'&&!s.transition)game.breakoutNow();}
   evs=[];s.power.laser=4;let hits=0,laserDamage=0;
   for(let i=0;i<120*4.5;i++){
@@ -199,6 +201,30 @@ test('the laser lands hits on every wall 1-8 and damages bricks on every wall th
    evs=[];
   }
   assert.ok(hits>=1,'wall '+wall+' laser hit nothing');
-  if(wall<8)assert.ok(laserDamage>=1,'wall '+wall+' laser damaged nothing');            // wall 8 is the finale: rings and defenses are excluded on purpose
+  assert.ok(laserDamage>=1,'wall '+wall+' laser damaged nothing');
  }
+});
+
+test('in the released finale a laser shot takes one hp off a centre guard or gate, the way the ball does',()=>{
+ const evs=[];const game=createGame({rng:()=>.5,audio:simAudio(),onEvent:(n,d)=>evs.push([n,d])});game.jumpToFinaleBeat('rings');const s=game.snapshot();
+ s.wallAge=2;assert.equal(s.finale.phase,'released');assert.equal(s.state,'colour');
+ const br=s.bricks.find(b=>b.alive&&(b.finaleCenterGuard||b.finaleGate)&&b.hp===3);assert.ok(br,'a three-hit guard or gate');
+ assert.ok(laserFinaleTarget(br,s));assert.ok(!ordinaryTarget(br,s));
+ // shoot straight up through the brick's own centre: the rotated contact finds it on the first substep
+ const cx=br.x+br.w/2,cy=br.y+br.h/2;s.balls[0].stuck=false;s.balls[0].vx=0;s.balls[0].vy=0;s.balls[0].y=650;s.power.laser=4;
+ for(const b of s.bricks)if(b!==br&&b.alive&&Math.abs(b.x+b.w/2-cx)<40&&b.y>cy-20)b.alive=false;                                  // clear whatever hangs below it in that column
+ s.power.shots.push({x:cx,y:cy+3,r:3});game.step(1/120,{x:cx});
+ assert.equal(s.power.shots.length,0,'the shot is spent');assert.equal(evs.filter(e=>e[0]==='laserHit').length,1);
+ assert.equal(br.hp,2);assert.equal(br.alive,true);assert.equal(s.finale.phase,'released');
+});
+test('a laser hit on a ring during the approach is a spark only: no damage and no interrupt',()=>{
+ const evs=[];const game=createGame({rng:()=>.5,audio:simAudio(),onEvent:(n,d)=>evs.push([n,d])});game.jumpToWall(8);const s=game.snapshot();
+ for(let i=0;i<300&&s.finale.phase!=='approach';i++)game.step(1/120,{x:640,launch:s.finale.phase==='ready'});
+ assert.equal(s.finale.phase,'approach');
+ const ring=s.bricks.find(b=>b.alive&&b.finaleRing);assert.ok(ring);assert.ok(!laserFinaleTarget(ring,s));assert.ok(!ordinaryTarget(ring,s));
+ const ball=s.balls[0];ball.vx=0;ball.vy=0;ball.y=650;ball.x=40;                                                                    // the ball parks: only the laser touches anything
+ const cx=ring.x+ring.w/2,cy=ring.y+ring.h/2;s.power.laser=4;s.wallAge=2;evs.length=0;
+ s.power.shots.push({x:cx,y:cy+3,r:3});game.step(1/120,{x:640});
+ assert.equal(s.finale.phase,'approach');assert.equal(evs.filter(e=>e[0]==='finaleInterrupt').length,0);
+ assert.equal(ring.alive,true);assert.equal(s.power.shots.length,0);assert.equal(evs.filter(e=>e[0]==='laserHit').length,1);
 });

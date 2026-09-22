@@ -24,6 +24,15 @@ export function ordinaryTarget(br,s) {
     !br.finaleMetal&&!br.finaleRing&&!br.finaleDefense&&!br.finaleCenterGuard&&!br.finaleGate&&
     !br.finaleWord&&!br.irisCore&&!br.pendulumAnchor&&!br.finaleHinge&&s.finale?.phase!=='approach'&&s.finale?.phase!=='locked';
 }
+/** The finale bricks a laser shot may damage: exactly the ones the BALL damages through breakBrick's own phase rules. In
+ * 'released' every ring, defense row, centre guard and gate takes normal damage; a defense row also takes it during
+ * 'approach' and 'locked'. Any OTHER brick touched during 'approach' would trigger the interrupt, which a laser must never
+ * cause, so those stay out. Words, hinges, metal, iris cores and pendulum anchors stay excluded. Not for assign(). */
+export function laserFinaleTarget(br,s) {
+  const f=s.finale;if(!f||!br.alive||br.reformSafe)return false;
+  if(f.phase==='released')return !!(br.finaleRing||br.finaleDefense||br.finaleCenterGuard||br.finaleGate);
+  return !!br.finaleDefense&&(f.phase==='approach'||f.phase==='locked');
+}
 export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=null}) {
   s.power={drops:[],shots:[],multiball:0,fireball:0,laser:0,shield:0,charges:0,clock:0,eighth:null,muzzle:0,beatSeen:null,beatSeenAt:0};
   const p=s.power;
@@ -123,7 +132,7 @@ export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=nu
           if(!br.alive||br.reformSafe||br.irisAlpha<.15)continue;
           if(!rotatedBrickContact(shot,br))continue;
           emit('laserHit',{x:shot.x,y:shot.y});
-          if(ordinaryTarget(br,s))damage(br,{...shot,vx:0,vy:-780});
+          if(ordinaryTarget(br,s)||laserFinaleTarget(br,s))damage(br,{...shot,vx:0,vy:-780});
           return false;
         }
       }
