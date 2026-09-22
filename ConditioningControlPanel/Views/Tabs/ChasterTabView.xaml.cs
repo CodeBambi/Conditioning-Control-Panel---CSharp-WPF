@@ -8,6 +8,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
@@ -72,6 +73,7 @@ namespace ConditioningControlPanel.Views.Tabs
         /// <summary>What the calendar was built for, so a tick that changes nothing redraws nothing.</summary>
         private (DateTime Start, DateTime End, DateTime Today)? _calendarKey;
         private FrameworkElement? _tonightCell;
+        private FrameworkElement? _tonightMark;
         private FrameworkElement? _keyCell;
         /// <summary>The crosses, padlocks and key in calendar order, for the draw-in.</summary>
         private readonly List<FrameworkElement> _calendarDraws = new();
@@ -91,6 +93,8 @@ namespace ConditioningControlPanel.Views.Tabs
             // Only listen while the page is on screen: Booked fires on every priced event.
             IsVisibleChanged += (_, _) => { Subscribe(IsVisible); if (!IsVisible) HideTrailer(); };
             Calendar.SizeChanged += (_, _) => PlaceCalendarTag();
+            // the lock's name fits the hero's inner width: it shrinks, it never wraps
+            HeroCard.SizeChanged += (_, _) => HeroTitle.FitWidth = Math.Max(0, HeroCard.ActualWidth - 52);
             // No runtime, dead process, bad page: the still picture under the browser is the trailer.
             TrailerWeb.Failed += (_, _) => TrailerWeb.Visibility = Visibility.Collapsed;
             FxInit();
@@ -331,13 +335,14 @@ namespace ConditioningControlPanel.Views.Tabs
 
         // ============================== 2. the calendar ==============================
 
-        internal const double CellSize = 32;
-        private const double CellGap = 1.5;
-        private static readonly Brush CellPlate = Frozen(Color.FromRgb(0x1A, 0x12, 0x30));
-        private static readonly Brush CellRim = Frozen(Color.FromArgb(0x2E, 0xC9, 0xA6, 0xFF));
-        private static readonly Brush LilacBrush = Frozen(CustomColour);
-        private static readonly Brush IceBrush = Frozen(IceColour);
-        private static readonly Brush HotPink = Frozen(Color.FromRgb(0xFF, 0x3D, 0x7A));
+        internal const double CellSize = 44;
+        private const double CrossInset = 10;
+        private static readonly Color InkColour = Color.FromRgb(0x24, 0x1A, 0x2E);
+        private static readonly Color MarkerColour = Color.FromRgb(0xC8, 0x24, 0x4A);
+        private static readonly Brush Ink = Frozen(InkColour);
+        private static readonly Brush Marker = Frozen(MarkerColour);
+        private static readonly Brush Rule = Frozen(Color.FromArgb(0x38, 0x24, 0x1A, 0x2E));
+        private static readonly Brush Foil = MakeFoil();
         private static readonly Geometry KeyGlyph = Geometry.Parse(
             "M 8,0 A 8,8 0 1 0 8,16 A 8,8 0 1 0 8,0 Z M 8,4.5 A 3.5,3.5 0 1 0 8,11.5 A 3.5,3.5 0 1 0 8,4.5 Z M 15,5.5 H 42 V 11 H 38.5 V 8.5 H 34.5 V 12.5 H 30.5 V 8.5 H 15 Z");
         private static ImageBrush? _padlockMask;
@@ -355,10 +360,11 @@ namespace ConditioningControlPanel.Views.Tabs
 
         internal void BuildCalendar(LockSnapshot? snapshot) => BuildCalendar(CalendarSpan(snapshot, DateTime.Now), DateTime.Now);
 
-        /// <summary>One square a day, a served day crossed out, tonight's square red with the
-        /// tab's tag under it, the days still to serve wearing a small padlock, and the key after
-        /// the last. Rebuilt only when the lock or the day changes: the hero's tick calls this
-        /// every half minute and must not redraw a calendar that has not moved.</summary>
+        /// <summary>A sheet off a wall calendar: one ruled square a day, a served day crossed out
+        /// in red marker, tonight's number circled in red ink with the tab's tag under it, the
+        /// days still to serve stamped with a small padlock, and a gold sticker after the last for
+        /// the day it opens. Rebuilt only when the lock or the day changes: the hero's tick calls
+        /// this every half minute and must not redraw a sheet that has not moved.</summary>
         internal void BuildCalendar((DateTime Start, DateTime End)? span, DateTime today)
         {
             if (span is not { } lockSpan)
@@ -383,13 +389,13 @@ namespace ConditioningControlPanel.Views.Tabs
                 var dayNumber = (day.Date - lockSpan.Start.Date).Days + 1;
                 var square = Cell(day, dayNumber, elided);
                 Calendar.Children.Add(square);
-                if (day.Today) FxCalendarTonight(square);
+                if (day.Today) _tonightCell = square;
                 if (day.IsKey) _keyCell = square;
             }
             CalendarRow.Visibility = Visibility.Visible;
             RefreshTag(App.Chaster?.BalanceSeconds ?? 0);
             PlaceCalendarTag();
-            if (IsVisible) FxCalendarDrawIn();
+            if (IsVisible) { FxCalendarDrawIn(); StartCalendarLoops(); }
         }
 
         private void ClearCalendar()
@@ -401,39 +407,31 @@ namespace ConditioningControlPanel.Views.Tabs
             CalendarTag.Visibility = Visibility.Collapsed;
         }
 
-        /// <summary>A day: a small dark plate with its number in ice at the corner, and on it
-        /// either a hand-drawn cross (served), a padlock (still to serve), or the key.</summary>
+        /// <summary>A day on the sheet: a ruled square with its number in the corner, and on it a
+        /// marker cross (served), a padlock stamp (still to serve), a red ring (tonight) or the
+        /// gold sticker (the key).</summary>
         private FrameworkElement Cell(LockDay day, int dayNumber, int elided)
         {
-            var plate = new Grid();
+            var plate = new Grid { Width = CellSize, Height = CellSize };
             var square = new Border
             {
-                Width = CellSize, Height = CellSize, Margin = new Thickness(CellGap),
-                Background = CellPlate, BorderBrush = day.Today ? HotPink : day.IsKey ? JackpotBrush : CellRim,
-                BorderThickness = new Thickness(day.Today ? 2 : 1), CornerRadius = new CornerRadius(6),
-                Child = plate, SnapsToDevicePixels = true,
+                BorderBrush = Rule, BorderThickness = new Thickness(0, 0, 1, 1),
+                Child = plate, SnapsToDevicePixels = true, Background = Brushes.Transparent,
             };
             if (!day.IsKey)
             {
                 plate.Children.Add(new TextBlock
                 {
-                    Text = day.DayOfMonth.ToString(), FontSize = 11, FontWeight = FontWeights.SemiBold, FontFamily = Display,
-                    Foreground = day.Today ? HotPink : IceBrush, Opacity = day.Served ? 0.55 : 0.9,
+                    Text = day.DayOfMonth.ToString(), FontSize = 10.5, FontWeight = FontWeights.Bold, FontFamily = Mono,
+                    Foreground = Ink, Opacity = day.Served ? 0.5 : 0.8,
                     HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
-                    Margin = new Thickness(3, 1, 0, 0),
+                    Margin = new Thickness(4, 2, 0, 0),
                 });
             }
 
             if (day.IsKey)
             {
-                var keyGlyph = new Path
-                {
-                    Data = KeyGlyph, Fill = JackpotBrush, Stretch = Stretch.Uniform, Width = 22, Height = 9,
-                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-                    RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1),
-                };
-                plate.Children.Add(keyGlyph);
-                _calendarDraws.Add(keyGlyph);
+                plate.Children.Add(Sticker());
                 square.ToolTip = Loc.Get("chaster_chain_open");
             }
             else if (day.Served)
@@ -445,19 +443,18 @@ namespace ConditioningControlPanel.Views.Tabs
             }
             else if (day.Today)
             {
+                _tonightMark = Ring(dayNumber);
+                plate.Children.Add(_tonightMark);
                 square.ToolTip = Loc.Get("chaster_chain_tonight");
             }
             else
             {
-                var padlock = new Rectangle
+                plate.Children.Add(new Rectangle
                 {
-                    Width = 9, Height = 12.5, Fill = LilacBrush, Opacity = 0.8, OpacityMask = PadlockMask(),
-                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom,
-                    Margin = new Thickness(0, 0, 0, 3),
-                    RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1),
-                };
-                plate.Children.Add(padlock);
-                _calendarDraws.Add(padlock);
+                    Width = 8, Height = 11, Fill = Ink, Opacity = 0.5, OpacityMask = PadlockMask(),
+                    HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(0, 0, 5, 4),
+                });
                 square.ToolTip = Loc.GetF("chaster_cal_locked", dayNumber);
             }
 
@@ -466,41 +463,104 @@ namespace ConditioningControlPanel.Views.Tabs
                 // the first square shown stands for every day before it
                 plate.Children.Add(new TextBlock
                 {
-                    Text = "...", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = IceBrush, Opacity = 0.8,
-                    HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
-                    Margin = new Thickness(0, 0, 3, -1), IsHitTestVisible = false,
+                    Text = "...", FontSize = 11, FontWeight = FontWeights.Bold, FontFamily = Mono, Foreground = Ink, Opacity = 0.7,
+                    HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 0, 4, 0), IsHitTestVisible = false,
                 });
                 square.ToolTip = Loc.GetF("chaster_cal_elided", elided);
             }
             return square;
         }
 
-        /// <summary>A crossed-out day: two strokes that do not quite meet in the middle and lean
-        /// a little differently from one day to the next, so a month of them reads as a hand.</summary>
+        /// <summary>A crossed-out day in red marker: two strokes that bend a little and do not
+        /// quite meet, different from one day to the next, with a splat where the pen lifted.
+        /// Each stroke carries its length in Tag so the draw-in can dash it.</summary>
         private static Canvas Cross(int seed)
         {
             var wobble = (seed % 3) - 1;          // -1, 0, 1
             var lean = ((seed * 7) % 5) - 2;      // -2 .. 2
-            double a = 7 + lean * 0.4, b = CellSize - 7 - lean * 0.4;
-            var canvas = new Canvas
-            {
-                Width = CellSize, Height = CellSize, IsHitTestVisible = false,
-                RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1),
-            };
-            // invariant: a comma is a separator in path data, whatever the culture's decimal is
-            canvas.Children.Add(Stroke(FormattableString.Invariant(
-                $"M {a},{a + wobble} L {CellSize / 2 + wobble * 0.6},{CellSize / 2 - 0.4} L {b},{b - wobble}")));
-            canvas.Children.Add(Stroke(FormattableString.Invariant(
-                $"M {b - lean * 0.3},{a} L {CellSize / 2 - wobble * 0.5},{CellSize / 2 + 0.6} L {a + lean * 0.3},{b}")));
+            double a = CrossInset + lean * 0.5, b = CellSize - CrossInset - lean * 0.5, mid = CellSize / 2;
+            var canvas = new Canvas { Width = CellSize, Height = CellSize, IsHitTestVisible = false };
+            var p1 = new[] { new Point(a, a + wobble), new Point(mid + wobble * 0.8, mid - 0.6), new Point(b, b - wobble) };
+            var p2 = new[] { new Point(b - lean * 0.4, a), new Point(mid - wobble * 0.7, mid + 0.8), new Point(a + lean * 0.4, b) };
+            canvas.Children.Add(Stroke(p1));
+            canvas.Children.Add(Stroke(p2));
+            // the splat where the second stroke ends
+            var splat = new Ellipse { Width = 4.6, Height = 4.2, Fill = Marker, Opacity = 0.9 };
+            Canvas.SetLeft(splat, p2[^1].X - 2.3 + lean * 0.3);
+            Canvas.SetTop(splat, p2[^1].Y - 2.1 + wobble * 0.4);
+            canvas.Children.Add(splat);
             return canvas;
         }
 
-        private static Path Stroke(string data) => new()
+        private static Path Stroke(Point[] points)
         {
-            Data = Geometry.Parse(data),
-            Stroke = HotPink, StrokeThickness = 2.5, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
-            StrokeLineJoin = PenLineJoin.Round, Opacity = 0.92,
-        };
+            var figure = new PathFigure { StartPoint = points[0] };
+            for (var i = 1; i < points.Length; i++) figure.Segments.Add(new LineSegment(points[i], true));
+            var geometry = new PathGeometry { Figures = { figure } };
+            geometry.Freeze();
+            double length = 0;
+            for (var i = 1; i < points.Length; i++) length += (points[i] - points[i - 1]).Length;
+            return new Path
+            {
+                Data = geometry, Tag = length,
+                Stroke = Marker, StrokeThickness = 3, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round, Opacity = 0.9,
+            };
+        }
+
+        /// <summary>Tonight's number ringed in red ink: two passes of a slightly lopsided ellipse,
+        /// the second lighter, the way a pen goes round twice.</summary>
+        private static Canvas Ring(int seed)
+        {
+            var canvas = new Canvas
+            {
+                Width = CellSize, Height = CellSize, IsHitTestVisible = false,
+                RenderTransformOrigin = new Point(12.5 / CellSize, 9.5 / CellSize), RenderTransform = new ScaleTransform(1, 1),
+            };
+            var tilt = -9 + (seed % 4) * 2;
+            var first = new EllipseGeometry(new Point(12.5, 9.5), 11.5, 8.2) { Transform = new RotateTransform(tilt, 12.5, 9.5) };
+            var second = new EllipseGeometry(new Point(13.2, 10), 12, 7.6) { Transform = new RotateTransform(tilt + 11, 13.2, 10) };
+            canvas.Children.Add(new Path { Data = first, Stroke = Marker, StrokeThickness = 1.9, Opacity = 0.9 });
+            canvas.Children.Add(new Path { Data = second, Stroke = Marker, StrokeThickness = 1.2, Opacity = 0.5 });
+            return canvas;
+        }
+
+        /// <summary>The day it opens: a gold foil sticker with the key pressed into it.</summary>
+        private static Border Sticker()
+        {
+            var sticker = new Border
+            {
+                Width = 30, Height = 19, CornerRadius = new CornerRadius(4), Background = Foil,
+                BorderBrush = Frozen(Color.FromArgb(0x80, 0xFF, 0xF4, 0xC0)), BorderThickness = new Thickness(0.8),
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new RotateTransform(-7),
+                Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 4, ShadowDepth = 1, Opacity = 0.4, RenderingBias = RenderingBias.Performance },
+                Child = new Path
+                {
+                    Data = KeyGlyph, Fill = Frozen(Color.FromRgb(0x4A, 0x32, 0x10)), Stretch = Stretch.Uniform, Width = 20, Height = 8,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.85,
+                },
+            };
+            return sticker;
+        }
+
+        private static Brush MakeFoil()
+        {
+            var brush = new LinearGradientBrush
+            {
+                StartPoint = new Point(0, 0), EndPoint = new Point(1, 1),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromRgb(0xFF, 0xF0, 0xB0), 0),
+                    new GradientStop(Color.FromRgb(0xE0, 0xB0, 0x52), 0.45),
+                    new GradientStop(Color.FromRgb(0xB8, 0x86, 0x2E), 0.8),
+                    new GradientStop(Color.FromRgb(0xF3, 0xD2, 0x7A), 1),
+                },
+            };
+            brush.Freeze();
+            return brush;
+        }
 
         private static ImageBrush PadlockMask()
         {
@@ -513,18 +573,20 @@ namespace ConditioningControlPanel.Views.Tabs
             return mask;
         }
 
-        /// <summary>Park the tag under tonight's square, wherever the grid put it.</summary>
+        /// <summary>Park the tag under tonight's square, wherever the sheet put it.</summary>
         private void PlaceCalendarTag()
         {
             try
             {
-                if (_tonightCell is not { IsVisible: true } cell) return;
+                if (_tonightCell is not { } cell || cell.ActualWidth <= 0) return;
                 var bounds = cell.TransformToVisual(CalendarRow).TransformBounds(new Rect(0, 0, cell.ActualWidth, cell.ActualHeight));
                 var x = bounds.X + bounds.Width / 2 - CalendarTag.ActualWidth / 2;
-                CalendarTag.Margin = new Thickness(Math.Max(0, x), bounds.Bottom - 4, 0, 0);
+                CalendarTag.Margin = new Thickness(Math.Max(0, x), bounds.Bottom - 14, 0, 0);
             }
             catch (Exception ex) { Diag.Swallowed(ex); }
         }
+
+        private void Sheet_MouseEnter(object sender, MouseEventArgs e) => FxSheetFlutter();
 
         // ============================== 3. today, and this run ==============================
 

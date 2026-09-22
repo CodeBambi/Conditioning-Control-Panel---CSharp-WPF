@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Controls
@@ -19,32 +20,56 @@ namespace ConditioningControlPanel.Controls
     /// padlocks lean opposite ways so a word like "Locktober" reads as a row of locks hung on
     /// a line rather than a stamp. Built as one glyph per element (text runs between the
     /// padlocks, one Image per padlock) on a horizontal panel, sized off a FormattedText measure
-    /// so the padlock's body sits on the x-height and its shackle rises to the cap line.
+    /// so the padlock's body sits on the x-height and its shackle rises to the cap line. Give it
+    /// a <see cref="FitWidth"/> and it scales the font down until the word fits on one line;
+    /// it never wraps.
     ///
-    /// <para>Motion: <see cref="Start"/> under ambient loops makes the padlocks breathe two
-    /// per cent and the shadow drift; <see cref="Stop"/> parks them. Nothing here ever throws
-    /// into the page.</para>
+    /// <para>Juice, every bit of it gated on <see cref="MotionFx"/> with Reduced and Off getting
+    /// the final state: <see cref="PlayEntry"/> drops the glyphs in one by one with the house
+    /// thud and a squash on landing, the padlocks last and swinging from the shackle;
+    /// <see cref="Start"/> runs the idle (each glyph on a slow wobble of its own, the padlocks
+    /// breathing) and <see cref="Stop"/> parks it; <see cref="Jolt"/> tugs the padlocks when a
+    /// price lands; a hover rattles them once. Nothing here ever throws into the page.</para>
     /// </summary>
     public sealed class LockTitle : Grid
     {
         public const string PadlockArt = "pack://application:,,,/Resources/features/chaster_padlock_o.png";
         private const double PadlockAspect = 152.0 / 213.0;
         /// <summary>The padlock's height as a share of the font size: the cap height, roughly.</summary>
-        private const double PadlockHeightEm = 0.78;
+        private const double PadlockHeightEm = 0.72;
         private const double TiltDegrees = 10;
         private const double BreathTo = 1.02;
         private const double BreathSeconds = 2.6;
+        private const double WobbleDegrees = 1.2;
+        private const double WobbleSeconds = 2.8;
+        private const double SwayPx = 1.5;
+        private const double SwaySeconds = 3.3;
         private const double ShadowDepthFrom = 2;
         private const double ShadowDepthTo = 5;
         private const double ShadowSeconds = 3.4;
+        private const int DropMs = 340;
+        private const int DropStaggerMs = 40;
+        private const double DropFromPx = -70;
+        private const int SwingMs = 1200;
+        private const double SwingDegrees = 14;
+        private const int JoltMs = 600;
+        private const double JoltDegrees = 10;
+        private const int RattleMs = 250;
+        private const double RattleDegrees = 4;
 
         public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
             nameof(Text), typeof(string), typeof(LockTitle),
-            new FrameworkPropertyMetadata("", FrameworkPropertyMetadataOptions.AffectsMeasure, (d, _) => ((LockTitle)d).Rebuild()));
+            new FrameworkPropertyMetadata("", FrameworkPropertyMetadataOptions.AffectsMeasure, (d, _) => ((LockTitle)d).Rebuild(entry: true)));
 
         public static readonly DependencyProperty FontSizeProperty = DependencyProperty.Register(
             nameof(FontSize), typeof(double), typeof(LockTitle),
-            new FrameworkPropertyMetadata(64.0, FrameworkPropertyMetadataOptions.AffectsMeasure, (d, _) => ((LockTitle)d).Rebuild()));
+            new FrameworkPropertyMetadata(88.0, FrameworkPropertyMetadataOptions.AffectsMeasure, (d, _) => ((LockTitle)d).Rebuild(entry: false)));
+
+        /// <summary>The width the word must fit in; NaN means no limit. The page hands it the
+        /// hero's inner width so a long lock name shrinks instead of wrapping or clipping.</summary>
+        public static readonly DependencyProperty FitWidthProperty = DependencyProperty.Register(
+            nameof(FitWidth), typeof(double), typeof(LockTitle),
+            new FrameworkPropertyMetadata(double.NaN, FrameworkPropertyMetadataOptions.AffectsMeasure, (d, _) => ((LockTitle)d).Rebuild(entry: false)));
 
         private static readonly FontFamily Display = new("/Fonts/#Fredoka, Segoe UI");
         private static readonly Typeface Face = new(Display, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
@@ -53,16 +78,24 @@ namespace ConditioningControlPanel.Controls
         private static readonly Brush IceMask = MakeIceMask();
         private static BitmapImage? _padlock;
 
+        /// <summary>One glyph and the transforms it moves on, every one with its own centre so
+        /// a squash sits on the baseline, a lean on the middle and a swing on the shackle.</summary>
+        private sealed record Glyph(FrameworkElement Element, ScaleTransform Scale, RotateTransform Wobble, RotateTransform? Swing,
+            TranslateTransform Drop, TranslateTransform Sway, bool Padlock);
+
         private readonly StackPanel _row = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        private readonly List<Image> _padlocks = new();
+        private readonly List<Glyph> _glyphs = new();
         private DropShadowEffect? _shadow;
         private bool _running;
+        private DateTime _entryUntil = DateTime.MinValue;
+        private double _effectiveFontSize;
 
         public LockTitle()
         {
             Children.Add(_row);
-            IsHitTestVisible = false;
-            Rebuild();
+            Background = Brushes.Transparent; // hit-testable for the hover rattle, paints nothing
+            MouseEnter += (_, _) => Rattle();
+            Rebuild(entry: false);
         }
 
         public string Text
@@ -77,11 +110,24 @@ namespace ConditioningControlPanel.Controls
             set => SetValue(FontSizeProperty, value);
         }
 
+        public double FitWidth
+        {
+            get => (double)GetValue(FitWidthProperty);
+            set => SetValue(FitWidthProperty, value);
+        }
+
+        /// <summary>The size the word was actually drawn at: <see cref="FontSize"/>, or less when
+        /// <see cref="FitWidth"/> made it shrink.</summary>
+        public double EffectiveFontSize => _effectiveFontSize;
+
         /// <summary>How many letters became padlocks, for the tests.</summary>
-        public int PadlockCount => _padlocks.Count;
+        public int PadlockCount => _glyphs.Count(g => g.Padlock);
 
         /// <summary>The glyph elements in reading order: TextBlocks for the runs, Images for the padlocks.</summary>
         public IEnumerable<FrameworkElement> Glyphs => _row.Children.OfType<FrameworkElement>();
+
+        /// <summary>The padlocks in reading order, for the page's sparks.</summary>
+        public IEnumerable<FrameworkElement> Padlocks => _glyphs.Where(g => g.Padlock).Select(g => g.Element);
 
         /// <summary>The runs of a title: letters between padlocks, and the padlocks. Pure, for the tests.</summary>
         public static IReadOnlyList<(string Run, bool Padlock)> Split(string? text)
@@ -102,7 +148,22 @@ namespace ConditioningControlPanel.Controls
             return parts;
         }
 
-        private void Rebuild()
+        /// <summary>The word's width at a font size, before any fitting. Pure enough for the tests.</summary>
+        public static double NaturalWidth(string? text, double size, double pixelsPerDip = 1.0)
+        {
+            double width = 0;
+            foreach (var (run, padlock) in Split(text))
+            {
+                if (padlock) width += size * PadlockHeightEm * PadlockAspect - size * 0.04;
+                else width += Measure(run, size, pixelsPerDip).WidthIncludingTrailingWhitespace;
+            }
+            return width;
+        }
+
+        private static FormattedText Measure(string text, double size, double pixelsPerDip) =>
+            new(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Face, size, Brushes.White, pixelsPerDip);
+
+        private void Rebuild(bool entry)
         {
             // A title that was breathing keeps breathing after the lock renames it.
             var wasRunning = _running;
@@ -110,14 +171,21 @@ namespace ConditioningControlPanel.Controls
             {
                 Stop();
                 _row.Children.Clear();
-                _padlocks.Clear();
-                var size = Math.Max(8, FontSize);
+                _glyphs.Clear();
                 var text = Text ?? "";
+                var ppd = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+                var size = Math.Max(8, FontSize);
+                var fit = FitWidth;
+                if (!double.IsNaN(fit) && fit > 0 && text.Length > 0)
+                {
+                    var natural = NaturalWidth(text, size, ppd);
+                    if (natural > fit) size = Math.Max(8, size * fit / natural);
+                }
+                _effectiveFontSize = size;
                 if (text.Length == 0) { Effect = null; _shadow = null; return; }
 
                 // One measure tells where the baseline sits, so every padlock lands on it.
-                var probe = new FormattedText("Hg", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Face, size, Brushes.White,
-                    VisualTreeHelper.GetDpi(this).PixelsPerDip);
+                var probe = Measure("Hg", size, ppd);
                 var descent = Math.Max(0, probe.Height - probe.Baseline);
                 var padlockHeight = size * PadlockHeightEm;
                 var padlockWidth = padlockHeight * PadlockAspect;
@@ -127,7 +195,18 @@ namespace ConditioningControlPanel.Controls
                 {
                     if (!padlock)
                     {
-                        _row.Children.Add(Run(run, size));
+                        var measured = Measure(run, size, ppd);
+                        var w = measured.WidthIncludingTrailingWhitespace;
+                        var h = measured.Height;
+                        var element = Run(run, size);
+                        // squash on the baseline, wobble about the middle
+                        var scale = new ScaleTransform(1, 1, w / 2, h);
+                        var wobble = new RotateTransform(0, w / 2, h / 2);
+                        var drop = new TranslateTransform();
+                        var sway = new TranslateTransform();
+                        element.RenderTransform = new TransformGroup { Children = { scale, wobble, drop, sway } };
+                        _row.Children.Add(element);
+                        _glyphs.Add(new Glyph(element, scale, wobble, null, drop, sway, false));
                         continue;
                     }
                     var image = new Image
@@ -136,15 +215,18 @@ namespace ConditioningControlPanel.Controls
                         VerticalAlignment = VerticalAlignment.Bottom,
                         // the glyph's own light bleeds a little past its box: overlap the neighbours by that
                         Margin = new Thickness(-size * 0.02, 0, -size * 0.02, descent - padlockHeight * 0.06),
-                        RenderTransformOrigin = new Point(0.5, 0.5),
-                        RenderTransform = new TransformGroup
-                        {
-                            Children = { new ScaleTransform(1, 1), new RotateTransform((tilt++ & 1) == 0 ? -TiltDegrees : TiltDegrees) },
-                        },
                     };
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+                    // breathe and wobble about the middle, lean about the middle, swing from the shackle top
+                    var breath = new ScaleTransform(1, 1, padlockWidth / 2, padlockHeight / 2);
+                    var lean = new RotateTransform((tilt++ & 1) == 0 ? -TiltDegrees : TiltDegrees, padlockWidth / 2, padlockHeight / 2);
+                    var wobbleLock = new RotateTransform(0, padlockWidth / 2, padlockHeight / 2);
+                    var swing = new RotateTransform(0, padlockWidth / 2, padlockHeight * 0.06);
+                    var fall = new TranslateTransform();
+                    var drift = new TranslateTransform();
+                    image.RenderTransform = new TransformGroup { Children = { breath, lean, wobbleLock, swing, fall, drift } };
                     _row.Children.Add(image);
-                    _padlocks.Add(image);
+                    _glyphs.Add(new Glyph(image, breath, wobbleLock, swing, fall, drift, true));
                 }
 
                 if (PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
@@ -160,6 +242,7 @@ namespace ConditioningControlPanel.Controls
             }
             catch (Exception ex) { Diag.Swallowed(ex, "lock title"); }
             if (wasRunning) Start();
+            if (entry && IsVisible) PlayEntry();
         }
 
         /// <summary>A run of letters: the candy fill, and over it the same letters in ice, masked
@@ -193,28 +276,162 @@ namespace ConditioningControlPanel.Controls
             return _padlock;
         }
 
-        /// <summary>The idle: each padlock breathes two per cent on its own phase, and the shadow
-        /// under the whole word slides a little, as if the light moved.</summary>
+        private static bool Full => MotionFx.Level == MotionLevel.Full;
+
+        // ------------------------------------------------------------------ the entry
+
+        /// <summary>The word lands: letters first, then the padlocks, each dropping in with the
+        /// house thud, squashing as it hits the line, 40 ms apart. A padlock then swings from its
+        /// shackle and settles. A second call while one is in flight is ignored, so the page can
+        /// call this from every door without the word jumping back up.</summary>
+        public void PlayEntry()
+        {
+            try
+            {
+                if (!Full || _glyphs.Count == 0) return;
+                if (DateTime.UtcNow < _entryUntil) return;
+                var order = _glyphs.Where(g => !g.Padlock).Concat(_glyphs.Where(g => g.Padlock)).ToList();
+                var lastStart = DropStaggerMs * (order.Count - 1);
+                _entryUntil = DateTime.UtcNow.AddMilliseconds(lastStart + DropMs + SwingMs);
+                var i = 0;
+                foreach (var glyph in order)
+                {
+                    var self = glyph;
+                    var phase = _glyphs.IndexOf(self);
+                    var delay = TimeSpan.FromMilliseconds(DropStaggerMs * i++);
+                    var drop = TimeSpan.FromMilliseconds(DropMs);
+
+                    // invisible above the line until its turn
+                    self.Element.Opacity = 0;
+                    var show = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(70)) { BeginTime = delay };
+                    show.Completed += (_, _) => Settle(() => { self.Element.BeginAnimation(OpacityProperty, null); self.Element.Opacity = 1; });
+                    self.Element.BeginAnimation(OpacityProperty, show);
+
+                    // the thud: cubic-bezier(.2,1.5,.4,1) is an overshoot, which is a back-ease out here
+                    var fall = new DoubleAnimation(DropFromPx, 0, drop)
+                    {
+                        BeginTime = delay,
+                        EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.55 },
+                    };
+                    fall.Completed += (_, _) => Settle(() => { self.Drop.BeginAnimation(TranslateTransform.YProperty, null); self.Drop.Y = 0; });
+                    self.Drop.BeginAnimation(TranslateTransform.YProperty, fall);
+
+                    // squash on landing, sitting on the baseline
+                    var land = delay + TimeSpan.FromMilliseconds(DropMs * 0.55);
+                    var squashY = Squash(land, 0.82, 1.05);
+                    var squashX = Squash(land, 1.12, 0.97);
+                    // a padlock that is breathing takes its breath back after the squash
+                    squashY.Completed += (_, _) => Settle(() =>
+                    {
+                        self.Scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                        self.Scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                        self.Scale.ScaleX = self.Scale.ScaleY = 1;
+                        if (self.Padlock && _running) Breathe(self, phase);
+                    });
+                    self.Scale.BeginAnimation(ScaleTransform.ScaleYProperty, squashY);
+                    self.Scale.BeginAnimation(ScaleTransform.ScaleXProperty, squashX);
+
+                    if (self.Swing != null) Swing(self.Swing, land, SwingDegrees, SwingMs, 4);
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "lock title entry"); }
+        }
+
+        private static DoubleAnimationUsingKeyFrames Squash(TimeSpan begin, double hit, double rebound)
+        {
+            var frames = new DoubleAnimationUsingKeyFrames { BeginTime = begin, Duration = TimeSpan.FromMilliseconds(260) };
+            frames.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromPercent(0)));
+            frames.KeyFrames.Add(new EasingDoubleKeyFrame(hit, KeyTime.FromPercent(0.3), new QuadraticEase { EasingMode = EasingMode.EaseOut }));
+            frames.KeyFrames.Add(new EasingDoubleKeyFrame(rebound, KeyTime.FromPercent(0.7), new QuadraticEase { EasingMode = EasingMode.EaseInOut }));
+            frames.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromPercent(1), new QuadraticEase { EasingMode = EasingMode.EaseInOut }));
+            return frames;
+        }
+
+        private static void Settle(Action reset)
+        {
+            try { reset(); }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        /// <summary>A decaying swing about the shackle: full one way, then back a little less
+        /// each time until it hangs still.</summary>
+        private static void Swing(RotateTransform swing, TimeSpan begin, double degrees, int ms, int beats)
+        {
+            var frames = new DoubleAnimationUsingKeyFrames { BeginTime = begin, Duration = TimeSpan.FromMilliseconds(ms) };
+            frames.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+            var sign = 1.0;
+            for (var b = 1; b <= beats; b++)
+            {
+                var amplitude = degrees * Math.Pow(0.55, b - 1);
+                frames.KeyFrames.Add(new EasingDoubleKeyFrame(sign * amplitude, KeyTime.FromPercent((b - 0.5) / beats), new SineEase { EasingMode = EasingMode.EaseInOut }));
+                sign = -sign;
+            }
+            frames.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(1), new SineEase { EasingMode = EasingMode.EaseInOut }));
+            frames.Completed += (_, _) => Settle(() => { swing.BeginAnimation(RotateTransform.AngleProperty, null); swing.Angle = 0; });
+            swing.BeginAnimation(RotateTransform.AngleProperty, frames);
+        }
+
+        // ------------------------------------------------------------------ the beats
+
+        /// <summary>A price landed on the tab: the padlocks take a tug.</summary>
+        public void Jolt()
+        {
+            if (!Full) return;
+            try
+            {
+                foreach (var glyph in _glyphs.Where(g => g.Swing != null))
+                    Swing(glyph.Swing!, TimeSpan.Zero, JoltDegrees, JoltMs, 3);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "lock title jolt"); }
+        }
+
+        /// <summary>The pointer crossed the word: the padlocks rattle once.</summary>
+        public void Rattle()
+        {
+            if (!Full || DateTime.UtcNow < _entryUntil) return;
+            try
+            {
+                var i = 0;
+                foreach (var glyph in _glyphs.Where(g => g.Swing != null))
+                    Swing(glyph.Swing!, TimeSpan.FromMilliseconds(30 * i++), RattleDegrees, RattleMs, 3);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "lock title rattle"); }
+        }
+
+        // ------------------------------------------------------------------ the idle
+
+        /// <summary>The idle: every glyph wobbles a degree either way and rides up and down a
+        /// pixel on its own phase, the padlocks breathe two per cent, and the shadow under the
+        /// whole word slides a little, as if the light moved.</summary>
         public void Start()
         {
             try
             {
                 Stop();
-                if (!MotionFx.AllowAmbientLoops || _padlocks.Count == 0) return;
+                if (!MotionFx.AllowAmbientLoops || _glyphs.Count == 0) return;
                 _running = true;
                 var i = 0;
-                foreach (var padlock in _padlocks)
+                foreach (var glyph in _glyphs)
                 {
-                    if (padlock.RenderTransform is not TransformGroup g || g.Children.OfType<ScaleTransform>().FirstOrDefault() is not { } scale) continue;
-                    var breath = new DoubleAnimation(1.0, BreathTo, TimeSpan.FromSeconds(BreathSeconds))
+                    var wobble = new DoubleAnimation(-WobbleDegrees, WobbleDegrees, TimeSpan.FromSeconds(WobbleSeconds))
                     {
                         AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
-                        BeginTime = TimeSpan.FromMilliseconds(420 * i++),
+                        BeginTime = TimeSpan.FromMilliseconds(370 * i),
                         EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
                     };
-                    Timeline.SetDesiredFrameRate(breath, 20);
-                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, breath);
-                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, breath);
+                    var sway = new DoubleAnimation(SwayPx, -SwayPx, TimeSpan.FromSeconds(SwaySeconds))
+                    {
+                        AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
+                        BeginTime = TimeSpan.FromMilliseconds(530 * i),
+                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                    };
+                    Timeline.SetDesiredFrameRate(wobble, 20);
+                    Timeline.SetDesiredFrameRate(sway, 20);
+                    glyph.Wobble.BeginAnimation(RotateTransform.AngleProperty, wobble);
+                    glyph.Sway.BeginAnimation(TranslateTransform.YProperty, sway);
+                    // during an entry the squash owns the scale; its landing hands the breath over
+                    if (glyph.Padlock && DateTime.UtcNow >= _entryUntil) Breathe(glyph, i);
+                    i++;
                 }
                 if (_shadow != null)
                 {
@@ -230,18 +447,37 @@ namespace ConditioningControlPanel.Controls
             catch (Exception ex) { Diag.Swallowed(ex, "lock title start"); }
         }
 
+        private static void Breathe(Glyph glyph, int phase)
+        {
+            var breath = new DoubleAnimation(1.0, BreathTo, TimeSpan.FromSeconds(BreathSeconds))
+            {
+                AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
+                BeginTime = TimeSpan.FromMilliseconds(420 * phase),
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            };
+            Timeline.SetDesiredFrameRate(breath, 20);
+            glyph.Scale.BeginAnimation(ScaleTransform.ScaleXProperty, breath);
+            glyph.Scale.BeginAnimation(ScaleTransform.ScaleYProperty, breath);
+        }
+
         public void Stop()
         {
             if (!_running) return;
             _running = false;
             try
             {
-                foreach (var padlock in _padlocks)
+                foreach (var glyph in _glyphs)
                 {
-                    if (padlock.RenderTransform is not TransformGroup g || g.Children.OfType<ScaleTransform>().FirstOrDefault() is not { } scale) continue;
-                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                    scale.ScaleX = scale.ScaleY = 1;
+                    glyph.Wobble.BeginAnimation(RotateTransform.AngleProperty, null);
+                    glyph.Wobble.Angle = 0;
+                    glyph.Sway.BeginAnimation(TranslateTransform.YProperty, null);
+                    glyph.Sway.Y = 0;
+                    if (glyph.Padlock)
+                    {
+                        glyph.Scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                        glyph.Scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                        glyph.Scale.ScaleX = glyph.Scale.ScaleY = 1;
+                    }
                 }
                 if (_shadow != null)
                 {

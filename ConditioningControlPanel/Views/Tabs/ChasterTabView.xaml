@@ -329,7 +329,7 @@
                 </Grid>
 
                 <!-- ================= 1. THE LOCK ================= -->
-                <Border x:Name="HeroCard" Grid.Row="1" Style="{StaticResource CirceCard}" Padding="0" Height="330"
+                <Border x:Name="HeroCard" Grid.Row="1" Style="{StaticResource CirceCard}" Padding="0" Height="368"
                         BorderBrush="{DynamicResource PanelAccentBrush}" Margin="0,0,0,10">
                     <Grid x:Name="HeroBody">
                         <Grid.ColumnDefinitions>
@@ -393,7 +393,7 @@
                         <!-- the words and the digits, over the art's fade -->
                         <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Margin="26,14,26,14" VerticalAlignment="Center">
                             <!-- the lock's name, big and candy, every o a padlock -->
-                            <ctrl:LockTitle x:Name="HeroTitle" FontSize="60" HorizontalAlignment="Center" Margin="0,0,0,10"
+                            <ctrl:LockTitle x:Name="HeroTitle" FontSize="88" HorizontalAlignment="Center" Margin="0,0,0,8"
                                             Visibility="Collapsed"/>
                             <!-- under it: the calendar, one square a day, and the countdown beside it -->
                             <Grid x:Name="HeroLower">
@@ -401,8 +401,42 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Grid x:Name="CalendarRow" Grid.Column="0" Visibility="Collapsed" VerticalAlignment="Top" Margin="0,0,18,0">
-                                    <UniformGrid x:Name="Calendar" Columns="12" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                <Grid x:Name="CalendarRow" Grid.Column="0" Visibility="Collapsed" VerticalAlignment="Top" Margin="0,2,18,0">
+                                    <!-- a torn-off wall-calendar sheet in the tag's paper, pinned a little crooked -->
+                                    <Grid x:Name="Sheet" RenderTransformOrigin="0.5,0" MouseEnter="Sheet_MouseEnter" Margin="0,0,0,6">
+                                        <Grid.RenderTransform>
+                                            <TransformGroup>
+                                                <RotateTransform x:Name="SheetTilt" Angle="-1.5"/>
+                                                <TranslateTransform x:Name="SheetNudge"/>
+                                            </TransformGroup>
+                                        </Grid.RenderTransform>
+                                        <StackPanel x:Name="SheetBody">
+                                            <StackPanel.Effect>
+                                                <DropShadowEffect Color="#000000" BlurRadius="14" ShadowDepth="4" Opacity="0.45"/>
+                                            </StackPanel.Effect>
+                                            <!-- the torn top edge -->
+                                            <Path x:Name="TornEdge" Fill="#FFF3EAD9" Stretch="Fill" Height="9" Margin="0,0,0,-1"
+                                                  Data="M 0,9 L 0,5 L 6,2 L 12,6 L 18,1 L 25,5 L 31,2 L 38,6 L 44,0 L 51,5 L 57,2 L 64,6 L 70,1 L 77,5 L 83,3 L 90,6 L 96,1 L 100,4 L 100,9 Z"/>
+                                            <Border Background="#FFF3EAD9" Padding="10,12,10,10">
+                                                <!-- thin ink rules: the sheet's grid -->
+                                                <Border x:Name="GridLines" BorderBrush="#38241A2E" BorderThickness="1,1,0,0" HorizontalAlignment="Left">
+                                                    <UniformGrid x:Name="Calendar" Columns="8" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                                </Border>
+                                            </Border>
+                                        </StackPanel>
+                                        <!-- the punched hole, and the pin through it -->
+                                        <Ellipse Width="9" Height="9" Fill="#FF1A1230" Stroke="#66241A2E" StrokeThickness="1"
+                                                 HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0"/>
+                                        <Ellipse Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="2,3,0,0"
+                                                 Stroke="#FF8A1830" StrokeThickness="1">
+                                            <Ellipse.Fill>
+                                                <RadialGradientBrush GradientOrigin="0.35,0.3">
+                                                    <GradientStop Color="#FFFF8FA8" Offset="0"/>
+                                                    <GradientStop Color="#FFC8244A" Offset="1"/>
+                                                </RadialGradientBrush>
+                                            </Ellipse.Fill>
+                                        </Ellipse>
+                                    </Grid>
                                     <!-- tonight's tag, parked under today's square by the code -->
                                     <Border x:Name="CalendarTag" HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed"
                                             Panel.ZIndex="5" Background="#E6120C1F" BorderBrush="#FF6B8A" BorderThickness="1"

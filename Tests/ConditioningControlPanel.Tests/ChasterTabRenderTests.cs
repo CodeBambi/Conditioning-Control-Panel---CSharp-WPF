@@ -195,8 +195,9 @@ public class ChasterTabRenderTests
 
         WpfRenderHarness.OnStaThread(() =>
         {
-            var title = new LockTitle { Text = "Locktober", FontSize = 60 };
-            Realize(title, 800, 120);
+            var title = new LockTitle { Text = "Locktober", FontSize = 88 };
+            Realize(title, 1000, 140);
+            Assert.Equal(88, title.EffectiveFontSize);
 
             Assert.Equal(2, title.PadlockCount);
             var glyphs = title.Glyphs.ToList();
@@ -205,8 +206,8 @@ public class ChasterTabRenderTests
             var padlocks = glyphs.OfType<Image>().ToList();
             Assert.Equal(2, padlocks.Count);
             // the padlock stands on the cap line, not the full line box, and leans opposite ways
-            Assert.All(padlocks, p => Assert.InRange(p.Height, 60 * 0.6, 60 * 0.95));
-            var tilts = padlocks.Select(p => ((TransformGroup)p.RenderTransform).Children.OfType<RotateTransform>().Single().Angle).ToList();
+            Assert.All(padlocks, p => Assert.InRange(p.Height, 88 * 0.6, 88 * 0.95));
+            var tilts = padlocks.Select(p => ((TransformGroup)p.RenderTransform).Children.OfType<RotateTransform>().First().Angle).ToList();
             Assert.Equal(-tilts[0], tilts[1]);
             Assert.NotEqual(0, tilts[0]);
             // the letters wear the candy gradient, under an ice sliver
@@ -221,6 +222,18 @@ public class ChasterTabRenderTests
             title.Text = "";
             Assert.Equal(0, title.PadlockCount);
             Assert.Empty(title.Glyphs);
+
+            // the hero's inner width at a 1000 px card is 948: Locktober at 88 fits it whole,
+            // and a long lock name shrinks to the width instead of wrapping or clipping
+            var fitted = new LockTitle { Text = "Locktober", FontSize = 88, FitWidth = 948 };
+            Realize(fitted, 948, 140);
+            Assert.Equal(88, fitted.EffectiveFontSize);
+            Assert.True(fitted.ActualWidth <= 948, "Locktober at 88 does not fit a 1000 px hero");
+            var longName = new LockTitle { Text = "The Longest Lock Anyone Ever Wore", FontSize = 88, FitWidth = 600 };
+            Realize(longName, 600, 140);
+            Assert.True(longName.EffectiveFontSize < 88, "a long name did not shrink");
+            Assert.True(longName.ActualWidth <= 601, $"the fitted word is {longName.ActualWidth} wide in 600");
+            Assert.True(LockTitle.NaturalWidth("Locktober", 88) > LockTitle.NaturalWidth("Locktober", 60));
         });
     }
 
@@ -242,19 +255,22 @@ public class ChasterTabRenderTests
             var squares = tab.Calendar.Children.OfType<Border>().ToList();
             Assert.Equal(32, squares.Count);
             Assert.All(squares, sq => Assert.True(sq.ActualWidth > 0 && sq.ActualHeight > 0, "a square did not lay out"));
-            Assert.True(tab.Calendar.ActualWidth <= 12 * (ChasterTabView.CellSize + 3) + 1, "the grid is wider than twelve columns");
-            Assert.True(tab.Calendar.ActualHeight >= 3 * ChasterTabView.CellSize, "a month did not take three rows");
+            Assert.True(tab.Calendar.ActualWidth <= 8 * (ChasterTabView.CellSize + 1) + 1, "the sheet is wider than eight columns");
+            Assert.True(tab.Calendar.ActualHeight >= 4 * ChasterTabView.CellSize, "a month and its key did not take four rows");
+            Assert.True(tab.Sheet.ActualWidth < 420, $"the sheet is {tab.Sheet.ActualWidth} wide, it must leave room for the countdown");
 
-            // 18 crossed out, tonight red, 12 padlocks still to serve, then the key
-            var crosses = squares.Where(sq => Descendants(sq).OfType<Canvas>().Any(c => c.Children.OfType<System.Windows.Shapes.Path>().Count() == 2)).ToList();
+            // 18 crossed out in marker (two strokes and a splat), tonight ringed, 12 stamped, then the sticker
+            var crosses = squares.Where(sq => Descendants(sq).OfType<Canvas>().Any(c => c.Children.OfType<Ellipse>().Any())).ToList();
             Assert.Equal(18, crosses.Count);
+            Assert.All(crosses, sq => Assert.Equal(2, Descendants(sq).OfType<System.Windows.Shapes.Path>().Count(p => p.Tag is double)));
             var tonight = squares[18];
-            Assert.Equal(2, tonight.BorderThickness.Left);
             Assert.DoesNotContain(tonight, crosses);
+            Assert.Equal(2, Descendants(tonight).OfType<System.Windows.Shapes.Path>().Count(p => p.Data is EllipseGeometry));
             var padlocks = squares.Where(sq => Descendants(sq).OfType<Rectangle>().Any(r => r.OpacityMask is ImageBrush)).ToList();
             Assert.Equal(12, padlocks.Count);
             var key = squares[^1];
-            Assert.Contains(Descendants(key), d => d is System.Windows.Shapes.Path { Fill: SolidColorBrush });
+            var sticker = Assert.Single(Descendants(key).OfType<Border>().Where(b => b.Background is LinearGradientBrush));
+            Assert.Contains(Descendants(sticker), d => d is System.Windows.Shapes.Path { Fill: SolidColorBrush });
             Assert.DoesNotContain(Descendants(key), d => d is TextBlock);
             // the numerals are the day of the month
             Assert.Equal("4", Descendants(squares[0]).OfType<TextBlock>().First().Text);
@@ -273,7 +289,7 @@ public class ChasterTabRenderTests
             Assert.Same(before, tab.Calendar.Children[0]);
             tab.BuildCalendar(span, today.AddDays(1));
             Assert.NotSame(before, tab.Calendar.Children[0]);
-            Assert.Equal(19, tab.Calendar.Children.OfType<Border>().Count(sq => Descendants(sq).OfType<Canvas>().Any()));
+            Assert.Equal(19, tab.Calendar.Children.OfType<Border>().Count(sq => Descendants(sq).OfType<Canvas>().Any(c => c.Children.OfType<Ellipse>().Any())));
 
             // a year-long lock shows its last 31 days and says so on the first
             tab.BuildCalendar((today.AddDays(-300), today.AddDays(12)), today);
