@@ -3,7 +3,7 @@ import {routeFinaleAudio} from './finale-audio.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, timeScaleCents, LOOP_STEPS, MIN_LEAD_S, WOBBLE_CENTS,
-  PAUSE_FADE_S, PAUSE_CUTOFF, PERFECT_GUARD_S, GREY_LEVEL, TICK_MS } from './audio.js';
+  PAUSE_FADE_S, PAUSE_CUTOFF, PERFECT_GUARD_S, GREY_LEVEL, TICK_MS, createVoiceBag, VOICE_LEVEL, VOICE_FADE_S, VOICE_RELEASE_S } from './audio.js';
 import { ROOT_HZ } from '../../shared/sound/kit.js';
 
 /* ---- a fake Web Audio graph: enough surface for the module, every scheduled start is counted ---- */
@@ -469,5 +469,84 @@ test('a bed voice drops its detune inputs when it ends, so dead voices are not k
   for (const o of bed) o.onended();
   const params = new Set(dropped.filter(d => d[1] && typeof d[1] === 'object').map(d => d[1]));
   assert.ok(bed.some(o => params.has(o.detune)), 'each ended voice disconnected the detune feeds from its own detune param');
+  audio.destroy();
+});
+
+/* ---- the iris voice: whole recordings from a shuffle bag, one at a time ---- */
+function seeded(seed) { let x = seed >>> 0 || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
+
+test('voice bag: never the same clip twice running, every clip heard before any comes round again', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const bag = createVoiceBag(3, seeded(seed));
+    const draws = Array.from({ length: 60 }, () => bag.next());
+    for (let i = 1; i < draws.length; i++) assert.notEqual(draws[i], draws[i - 1], `seed ${seed}: repeat at draw ${i}`);
+    for (let r = 0; r < 20; r++) assert.deepEqual([...draws.slice(r * 3, r * 3 + 3)].sort(), [0, 1, 2], `seed ${seed}: round ${r} is a full pass`);
+    assert.ok(draws.every(d => d >= 0 && d < 3));
+  }
+  assert.equal(createVoiceBag(0).next(), -1, 'no clips: nothing to draw');
+  const one = createVoiceBag(1); assert.equal(one.next(), 0); assert.equal(one.next(), 0, 'one clip is the only clip');
+});
+
+// Warms three fake recordings of different lengths through the real warmIrisVoice path (stubbed fetch + decode).
+async function warmVoices(audio, ctx, durations) {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(4) });
+  let n = 0;
+  ctx.decodeAudioData = async () => ({ duration: durations[n++ % durations.length], numberOfChannels: 1 });
+  try { await audio.warmIrisVoice(); } finally { globalThis.fetch = realFetch; }
+}
+function recordSources(c) {
+  const spans = [];
+  const inner = c.createBufferSource;
+  c.createBufferSource = () => { const s = inner(); const rec = { buffer: null, start: null, stop: null }; spans.push(rec);
+    const start0 = s.start.bind(s); s.start = t => { rec.buffer = s.buffer; rec.start = t; start0(t); }; s.stop = t => { rec.stop = t; }; return s; };
+  return spans;
+}
+
+test('irisVoice plays one WHOLE recording per call: the span equals the buffer duration, with its own short fades', async () => {
+  const { audio, ctx } = make({ rng: seeded(7) });
+  audio.start(); const c = ctx(); c.currentTime = 10;
+  await warmVoices(audio, c, [23.43, 17.74, 18.47]);
+  const spans = recordSources(c);
+  assert.equal(audio.irisVoice(), true);
+  assert.equal(spans.length, 1, 'one source, not four slices');
+  const [v] = spans;
+  assert.equal(v.start, 10);
+  assert.ok(Math.abs((v.stop - v.start) - v.buffer.duration) < 1e-9, 'the clip runs for its real length, never a fixed window');
+  assert.ok(VOICE_FADE_S >= 0.03 && VOICE_FADE_S <= 0.06, 'a click guard, not an envelope');
+  assert.equal(VOICE_LEVEL, 0.35);
+});
+
+test('irisVoice never repeats the last clip, visits all three, and drops a call while a line is still playing', async () => {
+  const { audio, ctx } = make({ rng: seeded(3) });
+  audio.start(); const c = ctx(); c.currentTime = 0;
+  await warmVoices(audio, c, [23.43, 17.74, 18.47]);
+  const spans = recordSources(c);
+  const played = [];
+  for (let i = 0; i < 12; i++) {
+    const before = spans.length;
+    assert.equal(audio.irisVoice(), true, `call ${i} starts a line`);
+    const v = spans[before];
+    played.push(v.buffer.duration);
+    assert.equal(audio.irisVoice(), false, 'a second call inside the line is dropped: the eye never talks over itself');
+    assert.equal(spans.length, before + 1);
+    c.currentTime = v.stop + 0.5;   // the line has ended, the next core hit may speak
+  }
+  for (let i = 1; i < played.length; i++) assert.notEqual(played[i], played[i - 1], `back-to-back repeat at line ${i}`);
+  assert.equal(new Set(played.slice(0, 3)).size, 3, 'the first three lines are the three recordings');
+});
+
+test('irisVoiceRelease fades the playing line over 150 ms instead of cutting it', async () => {
+  const { audio, ctx } = make({ rng: seeded(5) });
+  audio.start(); const c = ctx(); c.currentTime = 4;
+  await warmVoices(audio, c, [23.43, 17.74, 18.47]);
+  const spans = recordSources(c);
+  audio.irisVoice();
+  c.currentTime = 6;
+  audio.irisVoiceRelease();
+  assert.ok(Math.abs(spans[0].stop - (6 + VOICE_RELEASE_S)) < 1e-9, 'the source stops at the end of the fade');
+  assert.equal(audio.irisVoice(), true, 'after a release the next call speaks again');
+  audio.irisVoiceRelease(); audio.irisVoiceRelease();   // idempotent
+  assert.equal(audio.irisVoice(), true);
   audio.destroy();
 });
