@@ -80,6 +80,41 @@ test('the preference is on unless stored off', () => {
   assert.equal(readEnabled({ get: () => { throw new Error('private'); } }), true);
 });
 
+test('an intentional release does not fire onLost; Esc still does', () => {
+  const doc = fakeDoc(), canvas = fakeCanvas(doc), lost = [];
+  const lock = createMouseLock({ canvas, doc, now: () => 0, onLost: () => lost.push(1) });
+  // The ending lets the mouse go for its card: quiet.
+  lock.request({ pointerType: 'mouse' }); assert.equal(lock.locked, true);
+  lock.release();
+  assert.equal(lock.locked, false); assert.deepEqual(lost, [], 'a release the station asked for is not a loss');
+  // The switch going off lets go: quiet.
+  lock.request({ pointerType: 'mouse' }); lock.setEnabled(false);
+  assert.equal(lock.locked, false); assert.deepEqual(lost, []);
+  lock.setEnabled(true);
+  // Esc after a fresh lock: the browser let go by itself, the station pauses on it.
+  lock.request({ pointerType: 'mouse' }); assert.equal(lock.locked, true);
+  doc.exitPointerLock();
+  assert.deepEqual(lost, [1], 'the flag is spent by the release it answered, a later Esc still counts');
+  // dispose lets go: quiet.
+  lock.request({ pointerType: 'mouse' }); lock.dispose();
+  assert.equal(lock.locked, false); assert.deepEqual(lost, [1]);
+});
+
+test('a release whose pointerlockchange lands on a later task is still quiet, and the raf backstop release beside it is a no-op', async () => {
+  // Chromium queues pointerlockchange; station.js releases on finaleCoreReached AND again from the frame loop while `locked` still reads true.
+  const doc = fakeDoc(), lost = [];
+  doc.exitPointerLock = () => { doc.pointerLockElement = null; setTimeout(() => doc.fire('pointerlockchange'), 0); };
+  const canvas = fakeCanvas(doc);
+  const lock = createMouseLock({ canvas, doc, now: () => 0, onLost: () => lost.push(1) });
+  lock.request({ pointerType: 'mouse' }); assert.equal(lock.locked, true);
+  lock.release(); lock.release();
+  assert.equal(lock.locked, true, 'not yet told');
+  await tick();
+  assert.equal(lock.locked, false); assert.deepEqual(lost, [], 'the ending release never pauses');
+  lock.request({ pointerType: 'mouse' }); doc.pointerLockElement = null; doc.fire('pointerlockchange');
+  assert.deepEqual(lost, [1], 'a real loss after it still pauses');
+});
+
 test('a page without pointer lock is left alone', () => {
   const doc = fakeDoc();
   const lock = createMouseLock({ canvas: {}, doc });

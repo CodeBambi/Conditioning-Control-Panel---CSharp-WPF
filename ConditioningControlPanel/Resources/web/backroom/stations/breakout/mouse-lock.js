@@ -24,15 +24,18 @@ export function readEnabled(store) {
 /**
  * createMouseLock({ canvas, doc, now, onLost }) -> { request(e), release(), setEnabled(on), locked, enabled, refused, dispose() }
  * `onLost()` fires when a held lock goes away by itself (Esc, a tab switch): the station pauses on it so the pointer
- * that just came back has a card to click.
+ * that just came back has a card to click. A lock the station lets go of on purpose (`release()`, the switch going
+ * off, `dispose()`) is NOT lost and never fires it: the ending releases the mouse for its card, and a pause on that
+ * release paused the ending on every frame (owner, 2026-09-22: "if I unpause it repauses immediately").
  */
 export function createMouseLock({ canvas, doc, now = () => (globalThis.performance ? performance.now() : Date.now()), onLost = () => {}, enabled = true } = {}) {
-  let locked = false, refused = false, errors = 0, unlockedAt = -1e9, on = !!enabled, disposed = false;
+  let locked = false, refused = false, errors = 0, unlockedAt = -1e9, on = !!enabled, disposed = false, letting = false;
   const has = () => !!canvas && !!doc && typeof canvas.requestPointerLock === 'function';
   const failed = () => { if (now() - unlockedAt < LOCK_COOLDOWN_MS) return; if (++errors >= LOCK_REFUSALS) refused = true; };
   const change = () => {
     const isNow = !!doc && doc.pointerLockElement === canvas;
-    if (locked && !isNow) { unlockedAt = now(); locked = false; try { onLost(); } catch (e) { /* the station's problem */ } return; }
+    const meant = letting; letting = false;                 // one release answers one change, however it went
+    if (locked && !isNow) { unlockedAt = now(); locked = false; if (!meant) { try { onLost(); } catch (e) { /* the station's problem */ } } return; }
     if (isNow) errors = 0;
     locked = isNow;
   };
@@ -49,9 +52,11 @@ export function createMouseLock({ canvas, doc, now = () => (globalThis.performan
         return true;
       } catch (err) { failed(); return false; }
     },
+    /** Lets the mouse go on purpose: the change it causes is meant, not lost, so `onLost` stays quiet. */
     release() {
       if (!doc || doc.pointerLockElement !== canvas) return;
-      try { doc.exitPointerLock(); } catch (err) { /* noop */ }
+      letting = true;
+      try { doc.exitPointerLock(); } catch (err) { letting = false; }
     },
     setEnabled(next) { on = !!next; if (!on) this.release(); },
     get locked() { return locked; },
