@@ -929,6 +929,7 @@ public class BubbleService : IDisposable
                 // Outside sessions, bubbles are always clickable (no UI toggle exists for this setting)
                 var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;
                 var bubble = CreateAmbientBubble(screen, isClickable);
+                MarkIfNatasha(bubble);
                 _bubbles.Add(bubble);
 
                 App.Logger?.Debug("Spawned bubble, total: {Count}", _bubbles.Count);
@@ -977,6 +978,7 @@ public class BubbleService : IDisposable
                 var screen = screens[_random.Next(screens.Length)];
                 var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;
                 var bubble = CreateAmbientBubble(screen, isClickable);
+                MarkIfNatasha(bubble);
                 _bubbles.Add(bubble);
 
                 App.Logger?.Debug("SpawnOnce: spawned trigger bubble, total: {Count}", _bubbles.Count);
@@ -989,6 +991,20 @@ public class BubbleService : IDisposable
     }
 
     private void OnPop(Bubble bubble) => AwardAmbientPop(bubble);
+
+    /// <summary>Natasha's favourite: about one ambient bubble in ten wears red, and only while
+    /// that price can actually land (tab on, linked, row on, no safety hold). Rolled per spawn
+    /// so a field never carries a cue it cannot charge.</summary>
+    private void MarkIfNatasha(Bubble bubble)
+    {
+        try
+        {
+            if (App.Chaster?.CanBook(Chaster.NatashasFavourite.EventId) == true
+                && Chaster.NatashasFavourite.Roll(_random))
+                bubble.MarkNatasha();
+        }
+        catch (Exception ex) { Diag.Swallowed(ex, "natasha mark"); }
+    }
 
     /// <summary>The standard ambient-pop reward: lucky roll, pop sound, XP, achievement, haptic.
     /// Shared by plain bubbles (<see cref="OnPop"/>) and trigger bubbles (whose benign-pop path
@@ -1029,6 +1045,9 @@ public class BubbleService : IDisposable
 
         // Track for achievement
         App.Achievements?.TrackBubblePopped();
+
+        // Natasha's favourite: the red one popped. +3:00 on the tab (inert unless the row is on).
+        if (bubble.IsNatasha) App.Chaster?.Note("natasha");
 
         // Haptic feedback with combo system
         _ = App.Haptics?.BubblePopAsync();
@@ -2587,6 +2606,8 @@ internal class Bubble
     private bool _hasVariantSprite;   // a per-variant sprite replaced the tinted bubble.png
     private bool _isDrainBubble;      // Bubbles v2 Brain Drain bubble: breathes, glows violet
     private bool _isMagnetBubble;     // Bubbles v2 Magnet bubble: homes on the cursor, pulses steel blue
+    private bool _isNatasha;          // Natasha's favourite: faint red halo, blinks red now and then, +3:00 on pop
+    private DropShadowEffect? _natashaGlow;   // per-window path only: the halo, flared on the blink
     private double _magnetLifeMs;     // its full treat life, the denominator of the early window
     private Chaos.MagnetBubble.Velocity _magnetV;   // its free velocity, DIPs per frame
     private readonly bool _isAmbientTrigger;        // a dashboard trigger bubble (payload or not)
@@ -2724,6 +2745,40 @@ internal class Bubble
         _isAmbientTrigger && _isAlive && !_isDestroyed && !_isPopping;
     /// <summary>Bubbles v2 Magnet bubble: the cursor-homing kind.</summary>
     internal bool IsMagnetBubble => _isMagnetBubble;
+
+    internal bool IsNatasha => _isNatasha;
+
+    /// <summary>Deal this bubble to Natasha. Called right after construction, so the draw
+    /// state may already exist on either render path: the halo is added to whichever is up.
+    /// Never replaces a glow the bubble already wears (a lucky gold, a magnet blue).</summary>
+    internal void MarkNatasha()
+    {
+        _isNatasha = true;
+        if (!PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier)) return;
+        try
+        {
+            if (_layerItem != null)
+            {
+                if (_layerItem.HasGlow) return;
+                _layerItem.HasGlow = true;
+                _layerItem.GlowColor = new SkiaSharp.SKColor(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B);
+                _layerItem.GlowBlurDip = (float)Chaster.NatashasFavourite.HaloBlurDip;
+                _layerItem.GlowOpacity = (float)Chaster.NatashasFavourite.HaloOpacity;
+            }
+            else if (_bubbleImage != null && _bubbleImage.Effect == null)
+            {
+                _natashaGlow = new DropShadowEffect
+                {
+                    Color = Color.FromRgb(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B),
+                    BlurRadius = Math.Min(Chaster.NatashasFavourite.HaloBlurDip, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
+                    ShadowDepth = 0,
+                    Opacity = Chaster.NatashasFavourite.HaloOpacity
+                };
+                _bubbleImage.Effect = _natashaGlow;
+            }
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+    }
     /// <summary>
     /// What THIS pop is worth as a multiple of the ordinary ambient-pop XP. 1 for every bubble in
     /// the game but the Magnet, which pays double when it is taken inside its early window (and
@@ -2848,6 +2903,12 @@ internal class Bubble
             }
         }
 
+        // Natasha's favourite: a thin red halo, only when nothing louder is already on.
+        if (!hasGlow && _isNatasha && PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+        {
+            glowColor = new SkiaSharp.SKColor(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B);
+            glowBlur = (float)Chaster.NatashasFavourite.HaloBlurDip; glowOp = (float)Chaster.NatashasFavourite.HaloOpacity; hasGlow = true;
+        }
         var item = new Compositor.BubbleLayer.BubbleItem
         {
             DpiScale = (float)_dpiScale,
@@ -2892,6 +2953,7 @@ internal class Bubble
         it.Scale = (float)currentScale;
         it.Angle = (float)_angle;
         it.Opacity = (float)opacity;
+        it.RedWash = _isNatasha && !_isPopping ? (float)Chaster.NatashasFavourite.WashAlphaAt(_timeAlive) : 0f;
 
         if (_fuseRing != null)
         {
@@ -4127,6 +4189,10 @@ internal class Bubble
             // shallower than the drain's breathe, which is how the two tell themselves apart.
             if (_isMagnetBubble && !_isPopping)
                 opacity *= Chaos.MagnetBubble.RingPulseAt(_timeAlive);
+            // Natasha's favourite, per-window path: the halo itself flares on the blink (the
+            // compositor path draws a wash over the body instead; same clock, same envelope).
+            if (_natashaGlow != null && !_isPopping)
+                _natashaGlow.Opacity = Chaster.NatashasFavourite.HaloOpacity + 2.0 * Chaster.NatashasFavourite.WashAlphaAt(_timeAlive);
             _fxTarget.Opacity = opacity;
             if (_useLayer)
             {

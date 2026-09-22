@@ -73,6 +73,8 @@ public sealed class FlashLayer : BaseLayer
         internal SKColor GlowColor;
         internal float GlowSigmaPx;
         internal double GlowOpacity;
+        /// <summary>Natasha's favourite: a short red blink across the picture now and then.</summary>
+        internal bool NatashaCue;
         internal bool LuckyPulse;
 
         internal double ElapsedSec;          // pulse clock, advanced by Update
@@ -390,6 +392,17 @@ public sealed class FlashLayer : BaseLayer
 
             _imagePaint.Color = new SKColor(255, 255, 255, alpha);
             canvas.DrawImage(image, fit, _imagePaint);
+            if (item.NatashaCue)
+            {
+                var wash = Chaster.NatashasFavourite.WashAlphaAt(item.ElapsedSec);
+                if (wash > 0.003)
+                {
+                    _fillPaint.MaskFilter = null;
+                    _fillPaint.Color = new SKColor(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B,
+                        (byte)Math.Clamp(wash * alpha, 0, 255));
+                    canvas.DrawRoundRect(new SKRoundRect(fit, item.CornerRadiusPx), _fillPaint);
+                }
+            }
             canvas.RestoreToCount(saves);
         }
     }

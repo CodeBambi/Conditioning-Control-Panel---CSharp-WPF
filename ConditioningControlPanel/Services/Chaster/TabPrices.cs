@@ -34,6 +34,9 @@ public static class TabPrices
         new TabPrice("typo", 15, TabPriceGate.Free, PerUnit: true),
         new TabPrice("lockcard", -30, TabPriceGate.Free),
         new TabPrice("attention", 120, TabPriceGate.Free),
+        // About one bubble in ten and one flash in ten wears red; that bubble popped, or that
+        // flash seen, is 3:00. The roll and the cue live in NatashasFavourite.
+        new TabPrice(NatashasFavourite.EventId, NatashasFavourite.Seconds, TabPriceGate.Free),
         new TabPrice("mantra", 10, TabPriceGate.Free, PerUnit: true),
         new TabPrice("session", -600, TabPriceGate.Free),
         new TabPrice("quest", -300, TabPriceGate.Free),

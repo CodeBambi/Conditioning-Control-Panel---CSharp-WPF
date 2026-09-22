@@ -101,6 +101,16 @@ public sealed partial class ChasterService : IDisposable
         get { lock (_gate) return _tab.Day == CircesTab.DayKey(_localNow()) ? _tab.DayAddedSeconds : 0; }
     }
 
+    /// <summary>Would a Note for this row book right now: tab on, account linked, row switched
+    /// on, not a way-out id, and no safety hold running. For the cues that are dealt BEFORE the
+    /// event (Natasha's red bubble), so nothing wears a price it cannot charge.</summary>
+    public bool CanBook(string eventId)
+    {
+        if (string.IsNullOrEmpty(eventId) || TabPrices.NeverPriced.Contains(eventId)) return false;
+        if (!Active(out var options) || !options.Prices.Contains(eventId) || TabPrices.Find(eventId) == null) return false;
+        lock (_gate) return _utcNow() >= _safetyUntilUtc;
+    }
+
     private bool Active(out ChasterOptions options)
     {
         options = _options() ?? ChasterOptions.Off;
