@@ -1,7 +1,7 @@
 /* node --test game.test.js - the state machine and the saturation ladder, nothing visual. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DOME_AIM_TURNS, DOME_AIM_AT, domeAims, PADDLE, SPLIT_CHANCE, BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
+import { DOME_AIM_TURNS, DOME_AIM_AT, DOME_AIM_FEW, DOME_AIM_TURNS_FEW, DOME_TURN_JITTER, domeAims, domeAimTurns, steerToward, PADDLE, SPLIT_CHANCE, BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 // These scoring/state fixtures use one-hit walls; durability has its own integration suite.
@@ -831,7 +831,7 @@ test('the dome spiral holds its ball until the throw points at a brick, and give
   };
   const two = aimed((br, i) => i === 3 || i === 4);
   assert.ok(two.released >= two.due - .1, 'never before its turns are done');
-  assert.ok(two.released < two.due + (DOME_AIM_TURNS + .1) * Math.PI * 2);
+  assert.ok(two.released < two.due + (domeAimTurns(2) + .1) * Math.PI * 2);
   const sp = Math.hypot(two.ball.vx, two.ball.vy), ux = two.ball.vx / sp, uy = two.ball.vy / sp;
   const onLine = two.s.bricks.filter(br => br.alive).some(br => { const dx = br.x + br.w / 2 - two.ball.x, dy = br.y + br.h / 2 - two.ball.y;
     return dx * ux + dy * uy > 0 && Math.abs(dx * uy - dy * ux) < Math.hypot(br.w, br.h) / 2 + two.ball.r + 8; });
@@ -843,6 +843,43 @@ test('the dome spiral holds its ball until the throw points at a brick, and give
   assert.ok(early.released >= early.due - .1 && early.released < early.due + .3, 'with 40 percent left it lets go on time');
   const none = aimed(() => false);
   assert.ok(none.released >= none.due - .1 && none.released < none.due + .3, 'an empty wall lets go on time');
+});
+
+test('with five bricks or fewer the dome always aims, holds longer, and throws at the nearest brick when the sweep never lines one up', () => {
+  // The few-bricks rule is a floor under the quarter rule, so it also bites on a wall too small for a quarter to mean anything.
+  assert.equal(DOME_AIM_FEW, 5);
+  assert.ok(domeAims(5, 12) && domeAims(1, 12) && !domeAims(6, 12) && !domeAims(0, 12));
+  assert.equal(domeAimTurns(5), DOME_AIM_TURNS_FEW); assert.equal(domeAimTurns(6), DOME_AIM_TURNS); assert.ok(DOME_AIM_TURNS_FEW > DOME_AIM_TURNS);
+  // One brick sitting in the well's own centre: no tangent of the orbit ever points at it, so the sweep gives up and steers.
+  const { game } = make({ saturation: 0.5 }); game.jumpToWall(4);
+  const s = game.snapshot(), well = s.well, ball = s.balls[0];
+  s.bricks.forEach((br, i) => { br.alive = i === 0; });
+  const br = s.bricks[0]; br.x = well.x - br.w / 2; br.y = well.y - br.h / 2;
+  Object.assign(ball, { stuck: false, x: well.x + 70, y: well.y, vx: 0, vy: 0 }); game.step(.01);
+  assert.equal(well.captured, ball);
+  const due = ball.orbit.turns * Math.PI * 2; let released = -1;
+  for (let i = 0; i < 4000 && ball.orbit; i++) { const done = ball.orbit.done; game.step(1 / 120); if (!ball.orbit) released = done; }
+  assert.ok(released >= due + (DOME_AIM_TURNS_FEW - .1) * Math.PI * 2, 'it held for the longer few-bricks allowance');
+  const sp = Math.hypot(ball.vx, ball.vy), dx = br.x + br.w / 2 - ball.x, dy = br.y + br.h / 2 - ball.y, d = Math.hypot(dx, dy);
+  assert.ok(sp > 0 && (ball.vx * dx + ball.vy * dy) / (sp * d) > .999, 'the throw points straight at the last brick');
+  // steerToward keeps the speed and leaves a still ball alone.
+  const st = steerToward(3, 4, 0, 0, 10, 0); assert.ok(Math.abs(st.vx - 5) < 1e-9 && Math.abs(st.vy) < 1e-9);
+  assert.deepEqual(steerToward(0, 0, 0, 0, 10, 0), { vx: 0, vy: 0 });
+  assert.deepEqual(steerToward(3, 4, 1, 1, 1, 1), { vx: 3, vy: 4 });
+});
+
+test('every dome throw wears a little jitter on its turns, so a fixed catch is not a fixed throw', () => {
+  const turnsAt = (r) => {
+    const { game } = make({ saturation: 0.5, rng: () => r }); game.jumpToWall(4);
+    const s = game.snapshot(), well = s.well, ball = s.balls[0]; well.energy = 0;
+    Object.assign(ball, { stuck: false, x: well.x + 70, y: well.y, vx: 0, vy: 0 }); game.step(.01);
+    assert.equal(well.captured, ball);
+    return ball.orbit.turns;
+  };
+  const lo = turnsAt(0), hi = turnsAt(0.999);
+  assert.ok(Math.abs((hi - lo) - DOME_TURN_JITTER * .999) < 1e-6, 'the spread is the jitter constant');
+  assert.ok(lo > 0.9 && hi < 1.4, 'still about one held turn either way');
+  assert.ok(DOME_TURN_JITTER <= .4, 'small: the sweep still reads as one beat');
 });
 
 test('a newborn bubble is not solid until it can be seen and no ball is inside it', () => {

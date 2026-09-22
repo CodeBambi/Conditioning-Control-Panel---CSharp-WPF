@@ -60,7 +60,19 @@ export const SPLIT_CHANCE = 0.01;
 export const DOME_AIM_TURNS = 2;
 /** The dome only starts aiming once this share of its bricks is left (owner, 2026-09-21): on a full wall every throw finds a brick anyway, and a spiral that always aims reads as rigged. */
 export const DOME_AIM_AT = 0.25;
-export const domeAims = (alive, total) => total > 0 && alive > 0 && alive <= Math.ceil(total * DOME_AIM_AT);
+/** With this many bricks or fewer the dome always aims, holds longer, and if the sweep never lines one up it throws straight at the nearest (owner, 2026-09-22). */
+export const DOME_AIM_FEW = 5;
+/** Extra turns the dome may hold while DOME_AIM_FEW or fewer bricks are left. */
+export const DOME_AIM_TURNS_FEW = 4;
+/** Turns of jitter on every dome throw (owner, 2026-09-22): a fixed throw off a fixed catch is a loop the wall cannot break. Plus or minus half of this. */
+export const DOME_TURN_JITTER = 0.35;
+export const domeAims = (alive, total) => total > 0 && alive > 0 && (alive <= DOME_AIM_FEW || alive <= Math.ceil(total * DOME_AIM_AT));
+export const domeAimTurns = (alive) => alive > 0 && alive <= DOME_AIM_FEW ? DOME_AIM_TURNS_FEW : DOME_AIM_TURNS;
+/** The same speed, pointed at (tx, ty). A still ball stays still. */
+export const steerToward = (vx, vy, x, y, tx, ty) => {
+  const sp = Math.hypot(vx, vy), d = Math.hypot(tx - x, ty - y);
+  return sp > 0 && d > 0 ? { vx: (tx - x) / d * sp, vy: (ty - y) / d * sp } : { vx, vy };
+};
 /** How visible a newborn picture bubble must be before a ball can bounce off it. */
 export const BUBBLE_SOLID_ALPHA = 0.7;
 export const BALL_R = 8;
@@ -994,7 +1006,9 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   function capture(b, s) {
     const rx = b.x - s.x, ry = b.y - s.y;
     b.orbit = { r: clamp(Math.hypot(rx, ry), 40, 100), a: Math.atan2(ry, rx), dir: -1, turns: 1 + rng(), done: 0 };   // counter-clockwise on screen: the ball ran against the field the other way (owner, 2026-09-19)
-    if (s.persistent) b.orbit.turns = 1.15 - s.energy * .2;
+    // The dome's turns wear a little jitter (owner, 2026-09-22): a fixed catch angle and a fixed number of turns is a fixed throw, and
+    // a throw that comes back the same way is a loop the wall never breaks. Kept small so the sweep still reads as one held beat.
+    if (s.persistent) b.orbit.turns = 1.15 - s.energy * .2 + (rng() - .5) * DOME_TURN_JITTER;
     s.used = true; s.captured = b;
     emit('capture', { x: s.x, y: s.y });
   }
@@ -1010,6 +1024,16 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     return !any;                                                             // nothing left to aim at: let go
   }
+  /** The live brick nearest the ball, or null. */
+  function nearestBrick(b) {
+    let best = null, bd = Infinity;
+    for (const br of g.bricks) {
+      if (!br.alive) continue;
+      const d = Math.hypot(br.x + br.w / 2 - b.x, br.y + br.h / 2 - b.y);
+      if (d < bd) { bd = d; best = br; }
+    }
+    return best;
+  }
   function orbitStep(b, dt) {
     const s = g.well, o = b.orbit;
     if (!s || s.captured !== b) { b.orbit = null; return; }
@@ -1020,8 +1044,16 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     // The dome prefers to throw at a brick (owner, 2026-09-21: two bricks left and the spiral kept throwing past them).
     // Once its turns are done it holds on until the tangent points at one, for DOME_AIM_TURNS more at most.
     // Only late in the wall (DOME_AIM_AT of the bricks left): before that it throws wherever the turns end.
+    // With DOME_AIM_FEW or fewer left it always aims, holds DOME_AIM_TURNS_FEW, and a sweep that never lined one up
+    // throws straight at the nearest brick anyway (owner, 2026-09-22: the last few bricks were a loop).
     const due = o.done >= o.turns * TAU;
-    if (due && s.persistent && o.done < (o.turns + DOME_AIM_TURNS) * TAU && domeAims(g.bricks.reduce((n, br) => n + (br.alive ? 1 : 0), 0), g.bricks.length) && !aimsAtBrick(b)) return;
+    const alive = s.persistent && due ? g.bricks.reduce((n, br) => n + (br.alive ? 1 : 0), 0) : 0;
+    const aiming = due && s.persistent && domeAims(alive, g.bricks.length);
+    if (aiming && o.done < (o.turns + domeAimTurns(alive)) * TAU && !aimsAtBrick(b)) return;
+    if (aiming && alive <= DOME_AIM_FEW && !aimsAtBrick(b)) {
+      const br = nearestBrick(b);
+      if (br) Object.assign(b, steerToward(b.vx, b.vy, b.x, b.y, br.x + br.w / 2, br.y + br.h / 2));
+    }
     if (due) {
       b.orbit = null; s.captured = null;
       if (s.persistent) { s.used = false; s.cooldown = .7; b.domeCooldown = 1.4; b.domeBoost = .08 + s.energy * .17; }
