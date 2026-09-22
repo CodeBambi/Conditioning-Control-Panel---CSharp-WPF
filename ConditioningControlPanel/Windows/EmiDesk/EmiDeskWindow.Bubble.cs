@@ -514,6 +514,7 @@ public partial class EmiDeskWindow
     /// </summary>
     public void SpeakLine(LineDraw? line)
     {
+        if (PresentationActive) return;
         if (line == null) return;
         try
         {
@@ -555,6 +556,7 @@ public partial class EmiDeskWindow
     /// </summary>
     public void HoldFace(LineDraw? line)
     {
+        if (PresentationActive) return;
         if (line == null) return;
         try
         {
@@ -595,6 +597,7 @@ public partial class EmiDeskWindow
     /// </summary>
     public void ShowAsk(AskDraw? ask)
     {
+        if (PresentationActive) return;
         if (ask == null) return;
         try
         {

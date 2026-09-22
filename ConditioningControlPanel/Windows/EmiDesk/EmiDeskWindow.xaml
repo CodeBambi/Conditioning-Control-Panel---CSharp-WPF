@@ -16,11 +16,13 @@
         SnapsToDevicePixels="True"
         Topmost="True"
         Focusable="False"
-        Visibility="Hidden"
         Width="460" Height="458">
 
     <!--
         THE WIDGET SURFACE.
+
+        Do not set Window.Visibility in XAML. That queues a native hide which can run after
+        BeginPresentation shows a newly constructed Emi. A new Window already starts hidden.
 
         The window is deliberately BIGGER than EMI: `OverlayPad` DIPs of fully transparent air on
         every side, so the summon smoke, the sparkle scatter and (later) her speech bubble have
