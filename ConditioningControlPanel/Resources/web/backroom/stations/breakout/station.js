@@ -214,7 +214,7 @@ export async function mount(ctx) {
     paused = p; ui.paused.hidden = !p; el.classList.toggle('is-paused', p);
     const best = game ? game.snapshot().comboBest | 0 : 0, line = ui.paused.querySelector('.bo-best');   // the one quiet place the best combo shows
     if (line) { line.hidden = best < 3; line.textContent = 'Best combo x' + best; }
-    try { if (p) audio.stop(); else if (audioOn) audio.start(); } catch (e) { /* noop */ }
+    try { if (p) audio.stop(!!document.hidden); else if (audioOn) audio.start(); } catch (e) { /* noop */ }
     if (!p) lastT = 0;
   }
   function beginGame() {
@@ -716,7 +716,7 @@ export async function mount(ctx) {
     diagnostics?.dispose(); diagnostics = null;
     if (raf) cancelAnimationFrame(raf); raf = 0;
     while (off.length) { try { off.pop()(); } catch (e) { /* noop */ } }
-    try { audio && audio.stop(); } catch (e) { /* noop */ }
+    try { audio && audio.stop(true); } catch (e) { /* noop */ }
     try { voice && voice.stop(); } catch (e) { /* noop */ }
     voice = null;
     try { haptics && haptics.destroy(); } catch (e) { /* noop */ }
@@ -732,7 +732,7 @@ export async function mount(ctx) {
     officeEnding?.suspend(suspended);
     if (suspended) { try { voice && voice.stop(); } catch (e) { /* noop */ } }
     if (!audio) return;
-    try { if (suspended) audio.stop(); else if (audioOn && !paused) audio.start(); } catch (e) { /* noop */ }
+    try { if (suspended) audio.stop(true); else if (audioOn && !paused) audio.start(); } catch (e) { /* noop */ }
     if (!suspended) lastT = 0;
   }
   async function destroy() {
