@@ -22,6 +22,7 @@ import {currentMusic} from '../../shared/sound/music.js';
 import { createGame, RUNG_NAMES, RUNG_AT, W, H } from './game.js';
 import { createRenderer, prefersSoftwareCanvas } from './render.js';
 import { createMedia, createSubliminals } from './payloads.js';
+import { FLAVOURS, MINE, PICK_KEY, flavourHost, flavourById, currentFlavour, applyFlavour, nichesOf, liveSubs, toggleNiche, addNiche, removeNiche, readCustom, writeCustom, shellNiches } from './flavours.js';
 import { createAudio } from './audio.js';
 import { routeFinaleAudio } from './finale-audio.js';
 import { WORD_KEYS } from './word-fx.js';
@@ -84,7 +85,7 @@ export async function mount(ctx) {
     try { voice.speak({ text: String(text), volume: VOICE_LEVEL*audioLevels.sub }).catch(() => {}); } catch (e) { /* host gone */ }
   }
   let shutdownCover = null, officeEnding = null;
-  let menuOpen = true;
+  let menuOpen = true, flavourOpen = false;
   let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;
   let lastSat = -1, lastState = '', lastTimeScale = 1, lastCombo = 0, lastSp = 0, sawHit = false, sourceChanged = false;
@@ -118,6 +119,14 @@ export async function mount(ctx) {
         <div class="bo-menu-actions"><button type="button" data-menu="options">Options</button><button type="button" data-menu="exit">Exit</button></div>
         <p class="bo-menu-controls">Move your mouse or drag to steer.<br>Arrow keys to move. Space to launch.</p>
       </section>
+      <section class="bo-flavour" hidden role="dialog" aria-modal="true" aria-labelledby="bo-flavour-title">
+        <p class="bo-menu-kicker">BEFORE THE FIRST BALL</p>
+        <h2 id="bo-flavour-title">Pick a flavour</h2>
+        <p class="bo-flavour-line">It decides what the picture bricks wear.</p>
+        <div class="bo-flavour-grid"></div>
+        <button class="bo-flavour-keep" type="button"><b>Keep mine</b><span></span></button>
+        <p class="bo-flavour-foot">Add your own niches, or switch some off, in Options.</p>
+      </section>
       ${backBtn}
       <div class="bo-hud">
         <span class="bo-sp"><b>0</b> ${t('br_breakout_sp', 'SP')}</span>
@@ -127,7 +136,7 @@ export async function mount(ctx) {
       <p class="bo-ghost-hint" hidden></p>
       <button class="bo-pause-button" type="button" aria-label="Pause game">&#9208; Pause</button>
       <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><p class="bo-best" hidden></p><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="options">Options</button></div></div>
-      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><label>Colour intensity<input class="bo-option-colour" type="range" min="0" max="1" step="0.05"></label><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
+      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><fieldset class="bo-pictures" hidden><legend>Pictures</legend><div class="bo-pic-tabs" role="group" aria-label="Flavour"></div><div class="bo-pic-niches" aria-label="Niches inside"></div><form class="bo-pic-add"><span aria-hidden="true">r/</span><input type="text" aria-label="Add a niche" placeholder="add a niche" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" maxlength="60"><button type="submit">Add</button></form><p class="bo-pic-note" aria-live="polite"></p></fieldset><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
       <button class="bo-gear" type="button" aria-label="${t('br_breakout_dev', 'dev toggles')}" aria-expanded="false"></button>
       <div class="bo-dev" hidden>
         <div class="bo-dev-header"><strong>Developer tools</strong><button type="button" data-do="performance">Performance</button><button type="button" data-do="hide-tools">Hide all (F2)</button></div>
@@ -179,7 +188,11 @@ export async function mount(ctx) {
     });
     const wordsRow = el.querySelector('.bo-words');
     for (const key of WORD_KEYS) { const b = document.createElement('button'); b.type = 'button'; b.dataset.word = key; b.textContent = key.toLowerCase(); wordsRow.appendChild(b); }
-    setDevOpen(store.get(DEV_KEY) === '1');
+    // Hidden for now (owner, 2026-09-21): players see no gear and no panel, and a panel left open last time stays shut.
+    // F2 still brings both back for whoever knows it; ?dev or the dev.html harness opens with them showing.
+    const tools = q.has('dev') || (typeof location !== 'undefined' && location.pathname.endsWith('/dev.html'));
+    ui.gear.hidden = !tools;
+    setDevOpen(tools && store.get(DEV_KEY) === '1');
   }
   function setDevOpen(open) {
     ui.dev.hidden = !open; ui.gear.setAttribute('aria-expanded', String(!!open)); el.classList.toggle('is-dev', !!open);
@@ -201,7 +214,7 @@ export async function mount(ctx) {
     paused = p; ui.paused.hidden = !p; el.classList.toggle('is-paused', p);
     const best = game ? game.snapshot().comboBest | 0 : 0, line = ui.paused.querySelector('.bo-best');   // the one quiet place the best combo shows
     if (line) { line.hidden = best < 3; line.textContent = 'Best combo x' + best; }
-    try { if (p) audio.stop(); else if (audioOn) audio.start(); } catch (e) { /* noop */ }
+    try { if (p) audio.stop(!!document.hidden); else if (audioOn) audio.start(); } catch (e) { /* noop */ }
     if (!p) lastT = 0;
   }
   function beginGame() {
@@ -215,6 +228,75 @@ export async function mount(ctx) {
     startAudio();
     canvas.focus({ preventScroll: true });
   }
+  /* Start asks one thing first, where a shell can answer it: which niches the pictures come from (flavours.js). */
+  function closeFlavour() { if (ui.flavour) ui.flavour.hidden = true; flavourOpen = false; }
+  function pressStart() {
+    if (!menuOpen || !game || flavourOpen) return;
+    const shell = flavourHost();
+    if (!shell || q.has('noflavour')) { beginGame(); return; }
+    const all = readCustom(store), mine = currentFlavour(shell, all);
+    for (const b of ui.flavour.querySelectorAll('[data-flavour]')) {
+      b.classList.toggle('is-current', !!mine && b.dataset.flavour === mine.id);
+      b.querySelector('small').textContent = liveSubs(flavourById(b.dataset.flavour), all[b.dataset.flavour]).map(s => 'r/' + s).join('  ');
+    }
+    // The way out is small and grey, and says what it keeps: the niches already set, or the built-in pictures.
+    let kept = ''; try { const now = shell.get(); kept = now.mode === 'scrolller' ? now.sources.filter(s => !(now.disabledSources || []).includes(s)).map(s => 'r/' + s).join('  ') : now.mode === 'local' ? 'my own files' : 'the built-in pictures'; } catch (e) { /* the label is optional */ }
+    ui.flavour.querySelector('.bo-flavour-keep span').textContent = kept;
+    flavourOpen = true; ui.flavour.hidden = false;
+    (ui.flavour.querySelector('.is-current') || ui.flavour.querySelector('[data-flavour]')).focus({ preventScroll: true });
+  }
+  function pickFlavour(id) {
+    if (!flavourOpen) return;
+    closeFlavour(); beginGame();
+    useFlavour(id);
+  }
+  // The game never waits for this: the new pictures are dealt in when they are warm, and a refusal changes nothing.
+  function useFlavour(id) {
+    const shell = flavourHost(), flavour = flavourById(id);
+    if (!shell || !flavour) return;
+    store.set(PICK_KEY, flavour.id);
+    applyFlavour(shell, flavour, readCustom(store)[flavour.id]).then((ok) => {
+      if (!ok || !media) return;
+      return media.redeal().then((dealt) => { if (dealt && game && typeof game.setWords === 'function') game.setWords(media.words.map(w => w.text)); });
+    }).catch(() => {});
+  }
+
+  /* ---- Options > Pictures: the flavours again, opened up. Every niche inside is shown; any can be switched off, a
+     suggested one switched on, the player's own added (one r/ field and pills, never a comma list). Applied once, when
+     Options closes, because every change to the shell is a fresh fetch. ---- */
+  let picSel = null, picDirty = false;
+  function openPictures() {
+    const box = ui.pictures; if (!box) return;
+    const shell = flavourHost(); box.hidden = !shell; if (!shell) return;
+    const all = readCustom(store), now = currentFlavour(shell, all);
+    // A list that is nobody's is the player's own: it becomes Mine the first time, so nothing they had is lost.
+    if (!now && !(all[MINE.id] && (all[MINE.id].added || []).length)) { const live = shellNiches(shell); if (live && live.length) { all[MINE.id] = { on: [], off: [], added: live.slice(0, 8) }; writeCustom(store, all); } }
+    picSel = (now || currentFlavour(shell, all) || flavourById(store.get(PICK_KEY)) || FLAVOURS[0]).id; picDirty = false;
+    drawPictures('');
+  }
+  function drawPictures(note) {
+    const box = ui.pictures, all = readCustom(store), flavour = flavourById(picSel) || FLAVOURS[0];
+    const tabs = box.querySelector('.bo-pic-tabs'), pills = box.querySelector('.bo-pic-niches'); tabs.textContent = ''; pills.textContent = '';
+    for (const f of [...FLAVOURS, MINE]) {
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.pic = f.id; b.textContent = f.name; b.style.setProperty('--tint', f.tint);
+      b.setAttribute('aria-pressed', String(f.id === flavour.id)); tabs.append(b);
+    }
+    for (const n of nichesOf(flavour, all[flavour.id])) {
+      const pill = document.createElement('span'); pill.className = 'bo-pic-pill' + (n.on ? ' is-on' : '');
+      const tog = document.createElement('button'); tog.type = 'button'; tog.dataset.niche = n.name; tog.setAttribute('aria-pressed', String(n.on));
+      tog.textContent = 'r/' + n.name; tog.title = n.on ? 'On. Click to switch it off.' : n.kind === 'extra' ? 'A suggestion. Click to switch it on.' : 'Off. Click to switch it on.';
+      pill.append(tog);
+      if (n.kind === 'added') { const x = document.createElement('button'); x.type = 'button'; x.className = 'bo-pic-remove'; x.dataset.remove = n.name; x.setAttribute('aria-label', 'Remove r/' + n.name); x.textContent = '\u00d7'; pill.append(x); }
+      pills.append(pill);
+    }
+    const live = liveSubs(flavour, all[flavour.id]).length;
+    box.querySelector('.bo-pic-note').textContent = note || (live ? live + ' on. Bright ones are on, dim ones are off. New pictures arrive when you close Options.' : flavour.id === MINE.id ? 'Empty. Add a niche below.' : 'All switched off. Switch one on, or nothing changes.');
+  }
+  function changePictures(fn) {
+    const all = readCustom(store), flavour = flavourById(picSel) || FLAVOURS[0];
+    const out = fn(flavour, all[flavour.id]); all[flavour.id] = out.custom || out; writeCustom(store, all); picDirty = true; drawPictures(out.error || '');
+  }
+  function closePictures() { if (picDirty && picSel) useFlavour(picSel); picDirty = false; }
   function firstMove() { if (moved) return; moved = true; el.classList.add('is-played'); }
 
   /* ------------------------------------------------------------ events */
@@ -422,7 +504,7 @@ export async function mount(ctx) {
     if (!running) return;
     raf = requestAnimationFrame(frame);
     // The pad is polled before the pause gate so its Start button can pause and resume.
-    try { const pad = gamepad?.poll(input, { menuOpen, paused, suspended }); if (pad?.pause && !menuOpen) setPaused(!paused); if (pad?.start && menuOpen) beginGame(); if (pad?.any) startAudio(); if (pad?.moved) firstMove(); } catch (e) { /* pad optional */ }
+    try { const pad = gamepad?.poll(input, { menuOpen, paused, suspended }); if (pad?.pause && !menuOpen) setPaused(!paused); if (pad?.start && menuOpen) pressStart(); if (pad?.any) startAudio(); if (pad?.moved) firstMove(); } catch (e) { /* pad optional */ }
     const frameMs = lastT ? ts-lastT : 1000/60;
     const dt = Math.min(0.05, frameMs/1000);
     lastT = ts;
@@ -476,7 +558,7 @@ export async function mount(ctx) {
   /* ------------------------------------------------------------ lifecycle */
   async function open() {
     if (el) return;
-    menuOpen = true;
+    menuOpen = true; flavourOpen = false;
     build();
     if (q.has('perf')) { diagnostics = createPerfPanel(el.querySelector('.bo-perf-slot'));setDevOpen(true); }
     audio = createAudio({ bpm: num(q, 'bpm', 96) });
@@ -504,14 +586,24 @@ export async function mount(ctx) {
     on(window, 'resize', resize);
     if (window.visualViewport) on(window.visualViewport, 'resize', resize);
     on(window, 'br-media-changed', () => { sourceChanged = true; });
-    on(ui.play, 'click', beginGame);
+    on(ui.play, 'click', pressStart);
+    ui.flavour = el.querySelector('.bo-flavour');
+    const grid = ui.flavour.querySelector('.bo-flavour-grid');
+    for (const f of FLAVOURS) {
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.flavour = f.id; b.style.setProperty('--tint', f.tint);
+      const name = document.createElement('b'), line = document.createElement('span'), inside = document.createElement('small'); name.textContent = f.name; line.textContent = f.line; b.append(name, line, inside); grid.append(b);
+    }
+    on(ui.flavour, 'click', (e) => {
+      const b = e.target.closest('[data-flavour]');
+      if (b) pickFlavour(b.dataset.flavour); else if (e.target.closest('.bo-flavour-keep')) pickFlavour(null);
+    });
     on(ui.endingActions,'click',async e=>{
       const button=e.target.closest('[data-ending]');if(!button||button.disabled)return;
       const replay=button.dataset.ending==='replay';
       for(const b of ui.endingActions.querySelectorAll('button'))b.disabled=true;
       await close();audio?.destroy?.();audio=null;await open();if(replay)beginGame();
     });
-    const options=el.querySelector('.bo-options'),pace=el.querySelector('.bo-option-pace'),colour=el.querySelector('.bo-option-colour');
+    const options=el.querySelector('.bo-options'),pace=el.querySelector('.bo-option-pace');
     let optionsFrom=null;
     on(el.querySelector('.bo-pause-button'),'click',()=>{setPaused(true);el.querySelector('[data-menu="resume"]').focus();});
     on(el,'click',e=>{
@@ -521,18 +613,29 @@ export async function mount(ctx) {
       if(action==='exit'&&globalThis.chrome?.webview)back();
       if(action==='options'){
         optionsFrom=button;if(!menuOpen)setPaused(true);
-        pace.value=String(game.snapshot().speedScale);colour.value=game.snapshot().sat;
+        pace.value=String(game.snapshot().speedScale);
         for(const slider of options.querySelectorAll('[data-audio]')){slider.value=audioLevels[slider.dataset.audio];slider.nextElementSibling.value=Math.round(Number(slider.value)*100)+'%';}
-        options.hidden=false;pace.focus();
+        openPictures();options.hidden=false;pace.focus();
       }
-      if(action==='close-options'){options.hidden=true;optionsFrom?.focus();}
+      if(action==='close-options'){options.hidden=true;closePictures();optionsFrom?.focus();}
     });
     for(const slider of options.querySelectorAll('[data-audio]')){
       on(slider,'input',()=>{const value=Number(slider.value);slider.nextElementSibling.value=Math.round(value*100)+'%';applyAudioLevel(slider.dataset.audio,value);});
       on(slider,'change',()=>applyAudioLevel(slider.dataset.audio,Number(slider.value),true));
     }
+    ui.pictures=options.querySelector('.bo-pictures');
+    on(ui.pictures,'click',e=>{
+      const tab=e.target.closest('[data-pic]'),rem=e.target.closest('[data-remove]'),tog=e.target.closest('[data-niche]');
+      if(tab){picSel=tab.dataset.pic;picDirty=true;drawPictures('');ui.pictures.querySelector('[data-pic="'+picSel+'"]')?.focus();}
+      else if(rem)changePictures((f,c)=>removeNiche(c,rem.dataset.remove));
+      else if(tog)changePictures((f,c)=>toggleNiche(f,c,tog.dataset.niche));
+    });
+    on(ui.pictures.querySelector('.bo-pic-add'),'submit',e=>{
+      e.preventDefault();const field=e.target.querySelector('input'),typed=field.value;
+      changePictures((f,c)=>addNiche(f,c,typed));
+      if(!ui.pictures.querySelector('.bo-pic-note').textContent.startsWith('That'))field.value='';field.focus();
+    });
     on(pace,'change' ,()=>game.setSpeedScale(Number(pace.value)));
-    on(colour,'input',()=>game.setSaturation(Number(colour.value)));
 
     const steer = (e) => {
       if (e.pointerType !== 'touch') { touchDrag = null; return pointerX(e); }
@@ -551,7 +654,9 @@ export async function mount(ctx) {
     });
     on(canvas, 'touchstart', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
     on(window, 'keydown', (e) => {
-      if(!options.hidden){if(e.key==='Escape'){e.preventDefault();options.hidden=true;optionsFrom?.focus();}return;}
+      const typing=e.target instanceof HTMLElement&&(e.target.isContentEditable||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'||(e.target.tagName==='INPUT'&&!['range','checkbox','radio','button'].includes(e.target.type)));
+      if(!options.hidden){if(e.key==='Escape'){e.preventDefault();options.hidden=true;closePictures();optionsFrom?.focus();}return;}
+      if(typing)return;
       if(!menuOpen&&game.snapshot().finale?.phase!=='outro'&&(e.key==='Escape'||e.key.toLowerCase()==='p')){
         e.preventDefault();setPaused(!paused);if(paused)el.querySelector('[data-menu="resume"]').focus();else canvas.focus();return;
       }
@@ -559,11 +664,15 @@ export async function mount(ctx) {
       if(e.key==='Escape' && game.snapshot().finale?.phase==='outro') {
         e.preventDefault();if(game.snapshot().finale.outroAge>=3.8)officeEnding.skip();return;
       }
+      if (flavourOpen) {
+        if (e.key === 'Escape') { e.preventDefault(); closeFlavour(); ui.play.focus({ preventScroll: true }); }
+        return;                                                // the tiles are buttons: Enter and Space are theirs
+      }
       if (menuOpen) {
         if (e.key === 'Escape') { e.preventDefault(); back(); }
         else if ((e.key === 'Enter' || e.key === ' ') &&
           (e.target === ui.play || e.target === document.body || e.target === el)) {
-          e.preventDefault(); beginGame();
+          e.preventDefault(); pressStart();
         }
         return;
       }
@@ -607,7 +716,7 @@ export async function mount(ctx) {
     diagnostics?.dispose(); diagnostics = null;
     if (raf) cancelAnimationFrame(raf); raf = 0;
     while (off.length) { try { off.pop()(); } catch (e) { /* noop */ } }
-    try { audio && audio.stop(); } catch (e) { /* noop */ }
+    try { audio && audio.stop(true); } catch (e) { /* noop */ }
     try { voice && voice.stop(); } catch (e) { /* noop */ }
     voice = null;
     try { haptics && haptics.destroy(); } catch (e) { /* noop */ }
@@ -615,7 +724,7 @@ export async function mount(ctx) {
     try { media && media.dispose(); } catch (e) { /* noop */ }
     try { renderer && renderer.dispose(); } catch (e) { /* noop */ }
     if (el && el.parentNode) el.parentNode.removeChild(el);
-    el = canvas = null; menuOpen = true; audioOn = false; paused = false; moved = false;
+    el = canvas = null; menuOpen = true; flavourOpen = false; audioOn = false; paused = false; moved = false;
     lastSat = -1; lastState = ''; lastTimeScale = 1; lastCombo = 0; lastSp = 0; sawHit = false; sourceChanged = false;
   }
   function suspend(onOff) {
@@ -623,7 +732,7 @@ export async function mount(ctx) {
     officeEnding?.suspend(suspended);
     if (suspended) { try { voice && voice.stop(); } catch (e) { /* noop */ } }
     if (!audio) return;
-    try { if (suspended) audio.stop(); else if (audioOn && !paused) audio.start(); } catch (e) { /* noop */ }
+    try { if (suspended) audio.stop(true); else if (audioOn && !paused) audio.start(); } catch (e) { /* noop */ }
     if (!suspended) lastT = 0;
   }
   async function destroy() {

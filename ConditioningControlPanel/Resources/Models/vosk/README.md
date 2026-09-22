@@ -12,12 +12,21 @@ fires. No crash, no prompt.
 
 Two options (both support the runtime grammar JSON we build in `SpeechService.BuildRecognizer`):
 
-- **`vosk-model-en-us-0.22-lgraph`** (~128 MB) — **recommended.** Much more accurate acoustic model,
-  so command/grammar recognition is noticeably more reliable than the small model. Still supports
-  the dynamic grammar constructor (it's the `-lgraph` / large-graph variant).
-- `vosk-model-small-en-us-0.15` (~40 MB) — the original lightweight model; fine but less accurate.
+- **`vosk-model-small-en-us-0.15`** (~40 MB) - **start here.** Lightweight, grammar-capable, and
+  the one every working install in the wild is running.
+- `vosk-model-en-us-0.22-lgraph` (~128 MB) - a more accurate acoustic model, so command/grammar
+  recognition is a little more reliable. Still supports the dynamic grammar constructor (it's the
+  `-lgraph` / large-graph variant).
 
 Get either from <https://alphacephei.com/vosk/models>.
+
+> **The 128 MB one is not harder for the app; it is harder to unpack.** Every support thread about
+> it has been a LAYOUT problem, not a size or a memory one: its zip is bigger, so people reach for
+> "Extract All", which defaults to a subfolder named after the zip and lands the model one level
+> deeper than the instructions below describe. Until 2026-09-21 the resolver only looked one level
+> down and reported that as *no model at all* - the hint read "no speech model installed yet" while
+> the user was staring at the model they had just put there. Two levels are searched now, so both
+> unpack styles work, but check the layout first if a model does not take.
 
 > ⚠️ Do **not** ship the full `vosk-model-en-us-0.22` (1.8 GB). Its static HCLG graph **ignores the
 > grammar JSON** we pass, so closed-command recognition silently degrades to open dictation. Only the
@@ -32,18 +41,40 @@ You can drop the lgraph model in **alongside** the old small folder — `Resolve
 
 ## How to install it
 
-Unpack the zip so this folder contains **either**:
+**Where this folder is:** `%LOCALAPPDATA%\Programs\ConditioningControlPanel\Resources\Models\vosk`,
+beside the executable. It ships with the app (this README is in it), so it is normally already
+there.
+
+> **It is NOT the folder the Assets page opens.** That button opens the user-data folder, where
+> your media and content packs live, and there is no `Resources` inside it. Looking for
+> `Resources\Models\vosk` under that folder is the single most common way this goes wrong - it was
+> the whole of a support thread on 2026-09-17.
+
+Rather than navigating there by hand: when the voice hint says the model is missing (Bambi
+Takeover, or the She's Listening status card), **Open the models folder** takes you straight to it,
+creating it first in the unlikely case it has gone missing.
+
+If the app is installed somewhere you cannot write to, copying files in will need the elevation
+prompt Windows shows for that folder, or an administrator. The default per-user install under
+`%LOCALAPPDATA%` does not.
+
+Unpack the zip so this folder contains **any** of:
 
 1. the model files directly here:
    ```
    Resources/Models/vosk/am/  conf/  graph/  ivector/  README
    ```
-2. **or** a single nested model folder (the way the official zip unpacks):
+2. a single nested model folder (the way the official zip unpacks):
    ```
    Resources/Models/vosk/vosk-model-small-en-us-0.15/am/ conf/ ...
    ```
+3. the same folder twice, which is what Windows' "Extract All" produces:
+   ```
+   Resources/Models/vosk/vosk-model-en-us-0.22-lgraph/vosk-model-en-us-0.22-lgraph/am/ conf/ ...
+   ```
 
-`SpeechService.ResolveModelDir()` accepts both layouts (it looks for a dir containing `am/` + `conf/`).
+`SpeechService.ResolveModelDir()` accepts all three (it looks, two levels down, for a dir
+containing `am/` + `conf/`). Deeper than that is not searched: move the model up.
 
 The existing `Resources\Models\**\*` content glob in `ConditioningControlPanel.csproj` copies
 everything here to the output/publish folder automatically — no csproj change needed.

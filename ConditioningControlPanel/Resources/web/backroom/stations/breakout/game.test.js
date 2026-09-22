@@ -1,7 +1,7 @@
 /* node --test game.test.js - the state machine and the saturation ladder, nothing visual. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
+import { DOME_AIM_TURNS, DOME_AIM_AT, DOME_AIM_FEW, DOME_AIM_TURNS_FEW, DOME_TURN_JITTER, DOME_DRAW_RATE, TAIL_BRICKS, TAIL_LIMIT_S, TAIL_DROP_GAP_S, domeAims, domeAimTurns, steerToward, turnToward, PADDLE, SPLIT_CHANCE, BUBBLE_DRIFT, BUBBLE_PUSH, BUBBLE_MAX, createGame, gifScaleForWall, bubbleTier, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 // These scoring/state fixtures use one-hit walls; durability has its own integration suite.
@@ -780,4 +780,187 @@ test('keys ease in to full speed in about 120 ms and stop dead on release', () =
   assert.ok(moves[3] < moves[7], 'it builds'); assert.ok(Math.abs(moves[11] - 640 * dt) < 1e-6, 'to the full 640 px/s');
   const x = s.paddle.x; game.step(dt, {}); assert.equal(s.paddle.x, x);
   game.step(dt, { right: true }); assert.ok(s.paddle.x - x < 640 * dt * 0.1, 'a reversal starts from rest');
+});
+
+test('a hit bubble jiggles, is shoved away from the ball and settles back to its drift', () => {
+  const { game, events } = make({ saturation: 0.5 });
+  const s = game.snapshot();
+  s.colliders.push({ x: 600, y: 420, r: 50, vx: BUBBLE_DRIFT, vy: 0, hits: 0, pulse: 0, alpha: 1, fading: false, gif: 0, tier: 3, age: 1, jelly: 0, ph: 1 });
+  s.balls = [{ ...s.balls[0], x: 600, y: 480, vx: 0, vy: -300, stuck: false, ghost: false, trail: [] }];
+  game.step(1 / 60); game.step(1 / 60);
+  const c = s.colliders[0]; assert.equal(c.hits, 1);
+  assert.ok(c.jelly > .9 && c.jny > .9, 'jelly rings along the hit normal');
+  assert.ok(c.vy < -BUBBLE_PUSH * .8, 'pushed up, away from a ball that came from below');
+  const hit = events.find(e => e[0] === 'gif')[1];
+  assert.ok(Math.abs(hit.hx - 600) < 2 && Math.abs(hit.hy - 470) < 2 && hit.ny > .9, 'the event carries the contact point');
+  s.balls = [{ ...s.balls[0], x: 100, y: 650, vx: 0, vy: 0, stuck: true }];
+  for (let i = 0; i < 240; i++) game.step(1 / 60);
+  assert.equal(c.jelly, 0); assert.ok(Math.abs(Math.hypot(c.vx, c.vy) - BUBBLE_DRIFT) < .5, 'back to the resting drift');
+});
+
+test('a bubble hammered by several balls never leaves faster than its cap', () => {
+  const { game } = make({ saturation: 0.5 });
+  const s = game.snapshot();
+  s.colliders.push({ x: 600, y: 420, r: 50, vx: 0, vy: 0, hits: 0, pulse: 0, alpha: 1, fading: false, gif: 0, tier: 9, age: 1, jelly: 0, ph: 0 });
+  for (let i = 0; i < 6; i++) {
+    const c = s.colliders[0]; c.x = 600; c.y = 420;
+    s.balls = [{ ...s.balls[0], x: 600, y: 480, vx: 0, vy: -300, stuck: false, ghost: false, trail: [] }];
+    game.step(1 / 60); game.step(1 / 60);
+  }
+  assert.ok(s.colliders[0].hits >= 4); assert.ok(Math.hypot(s.colliders[0].vx, s.colliders[0].vy) <= BUBBLE_MAX + 1e-6);
+});
+
+test('the colour paddle grows by half at full saturation, no more; split bricks are rare', () => {
+  assert.equal(PADDLE.grow, 0.5); assert.ok(SPLIT_CHANCE <= 0.025);
+  const { game } = make({ saturation: 1 });
+  const s = game.snapshot(); game.step(1 / 60);
+  assert.ok(Math.abs(s.paddle.w - PADDLE.baseW * (1 + PADDLE.grow * s.sat) * s.mod.paddleW) < 1e-6);
+  assert.ok(s.paddle.w <= PADDLE.baseW * 1.5 + 1e-6);
+});
+
+test('the dome spiral holds its ball until the throw points at a brick, and gives up after its extra turns', () => {
+  const aimed = (keep) => {
+    const { game } = make({ saturation: 0.5 }); game.jumpToWall(4);
+    const s = game.snapshot(), well = s.well, ball = s.balls[0];
+    s.bricks.forEach((br, i) => { br.alive = keep(br, i); });
+    Object.assign(ball, { stuck: false, x: well.x + 70, y: well.y, vx: 0, vy: 0 }); game.step(.01);
+    assert.equal(well.captured, ball);
+    const due = ball.orbit.turns * Math.PI * 2; let released = -1;
+    for (let i = 0; i < 2000 && ball.orbit; i++) { const done = ball.orbit.done; game.step(1 / 120); if (!ball.orbit) released = done; }
+    return { s, ball, due, released };
+  };
+  const two = aimed((br, i) => i === 3 || i === 4);
+  assert.ok(two.released >= two.due - .1, 'never before its turns are done');
+  assert.ok(two.released < two.due + (domeAimTurns(2) + .1) * Math.PI * 2);
+  const sp = Math.hypot(two.ball.vx, two.ball.vy), ux = two.ball.vx / sp, uy = two.ball.vy / sp;
+  const onLine = two.s.bricks.filter(br => br.alive).some(br => { const dx = br.x + br.w / 2 - two.ball.x, dy = br.y + br.h / 2 - two.ball.y;
+    return dx * ux + dy * uy > 0 && Math.abs(dx * uy - dy * ux) < Math.hypot(br.w, br.h) / 2 + two.ball.r + 8; });
+  assert.ok(onLine, 'the throw is on a line with one of the two bricks left');
+  // Above a quarter of the wall left, the spiral does not aim at all: it lets go on time wherever that points.
+  assert.equal(DOME_AIM_AT, .25);
+  assert.ok(!domeAims(85, 85) && !domeAims(23, 85) && domeAims(22, 85) && domeAims(2, 85) && !domeAims(0, 85) && !domeAims(0, 0));
+  const total = two.s.bricks.length, early = aimed((br, i) => i < Math.ceil(total * .4));
+  assert.ok(early.released >= early.due - .1 && early.released < early.due + .3, 'with 40 percent left it lets go on time');
+  const none = aimed(() => false);
+  assert.ok(none.released >= none.due - .1 && none.released < none.due + .3, 'an empty wall lets go on time');
+});
+
+test('with five bricks or fewer the dome always aims, holds longer, and throws at the nearest brick when the sweep never lines one up', () => {
+  // The few-bricks rule is a floor under the quarter rule, so it also bites on a wall too small for a quarter to mean anything.
+  assert.equal(DOME_AIM_FEW, 5);
+  assert.ok(domeAims(5, 12) && domeAims(1, 12) && !domeAims(6, 12) && !domeAims(0, 12));
+  assert.equal(domeAimTurns(5), DOME_AIM_TURNS_FEW); assert.equal(domeAimTurns(6), DOME_AIM_TURNS); assert.ok(DOME_AIM_TURNS_FEW > DOME_AIM_TURNS);
+  // One brick sitting in the well's own centre: no tangent of the orbit ever points at it, so the sweep gives up and steers.
+  const { game } = make({ saturation: 0.5 }); game.jumpToWall(4);
+  const s = game.snapshot(), well = s.well, ball = s.balls[0];
+  s.bricks.forEach((br, i) => { br.alive = i === 0; });
+  const br = s.bricks[0]; br.x = well.x - br.w / 2; br.y = well.y - br.h / 2;
+  Object.assign(ball, { stuck: false, x: well.x + 70, y: well.y, vx: 0, vy: 0 }); game.step(.01);
+  assert.equal(well.captured, ball);
+  const due = ball.orbit.turns * Math.PI * 2; let released = -1;
+  for (let i = 0; i < 4000 && ball.orbit; i++) { const done = ball.orbit.done; game.step(1 / 120); if (!ball.orbit) released = done; }
+  assert.ok(released >= due + (DOME_AIM_TURNS_FEW - .1) * Math.PI * 2, 'it held for the longer few-bricks allowance');
+  const sp = Math.hypot(ball.vx, ball.vy), dx = br.x + br.w / 2 - ball.x, dy = br.y + br.h / 2 - ball.y, d = Math.hypot(dx, dy);
+  assert.ok(sp > 0 && (ball.vx * dx + ball.vy * dy) / (sp * d) > .999, 'the throw points straight at the last brick');
+  // steerToward keeps the speed and leaves a still ball alone.
+  const st = steerToward(3, 4, 0, 0, 10, 0); assert.ok(Math.abs(st.vx - 5) < 1e-9 && Math.abs(st.vy) < 1e-9);
+  assert.deepEqual(steerToward(0, 0, 0, 0, 10, 0), { vx: 0, vy: 0 });
+  assert.deepEqual(steerToward(3, 4, 1, 1, 1, 1), { vx: 3, vy: 4 });
+});
+
+test('a flat dome throw reaches its brick: the shuttle rule does not bend an aimed ball until it touches a wall or the paddle', () => {
+  // One brick left, level with the well and far to its left: the straight line is 7 degrees off horizontal, under the 14 the shuttle rule wants.
+  const { game, events } = make({ saturation: 0.5 }); game.jumpToWall(4);
+  const s = game.snapshot(), well = s.well, ball = s.balls[0]; s.noLose = true;
+  s.bricks.forEach((br, i) => { br.alive = i === 0; });
+  const br = s.bricks[0]; br.x = well.x - 400 - br.w / 2; br.y = well.y - 50 - br.h / 2; br.hp = 1; br.strength = 0;
+  Object.assign(ball, { stuck: false, x: well.x + 70, y: well.y, vx: 0, vy: 0 }); game.step(.01);
+  assert.equal(well.captured, ball);
+  for (let i = 0; i < 4000 && ball.orbit; i++) game.step(1 / 120);
+  assert.equal(ball.orbit, null, 'thrown');
+  const sp = Math.hypot(ball.vx, ball.vy);
+  assert.ok(Math.abs(ball.vy) < .25 * sp, 'the throw is flatter than the shuttle rule allows');
+  assert.ok(ball.aimed > 0);
+  events.length = 0;
+  for (let i = 0; i < 240 && br.alive; i++) game.step(1 / 120);
+  assert.ok(!br.alive, 'the brick is hit inside two seconds');
+  assert.ok(!events.some(e => e[0] === 'wallhit'), 'without touching a wall first');
+  // A ball that is not aimed still obeys the rule.
+  const { game: g2 } = make({ saturation: 0.5 }); const s2 = g2.snapshot(); s2.bricks = []; s2.noLose = true;
+  const b2 = s2.balls[0]; Object.assign(b2, { stuck: false, x: 640, y: 300, vx: 400, vy: 10, aimed: 0 }); g2.step(1 / 120);
+  assert.ok(Math.abs(b2.vy) >= .24 * Math.hypot(b2.vx, b2.vy), 'an unaimed flat ball is bent to the minimum');
+  // turnToward is bounded and keeps the speed.
+  const t = turnToward(10, 0, 0, 0, 0, 10, Math.PI / 4);
+  assert.ok(Math.abs(Math.hypot(t.vx, t.vy) - 10) < 1e-9 && Math.abs(t.vx - t.vy) < 1e-9 && t.vy > 0);
+  assert.deepEqual(turnToward(0, 0, 0, 0, 5, 5, 1), { vx: 0, vy: 0 });
+});
+
+test('with five bricks or fewer the dome draws a free ball outside its reach back in, and never above five', () => {
+  const ride = (alive) => {
+    const { game } = make({ saturation: 0.5 }); game.jumpToWall(4);
+    const s = game.snapshot(), well = s.well, ball = s.balls[0]; s.noLose = true;
+    s.bricks.forEach((br, i) => { br.alive = i < alive; });
+    // Riding the right edge top to bottom, 450 px from the well: the loop the owner saw.
+    Object.assign(ball, { stuck: false, x: well.x + 450, y: well.y + 200, vx: 5, vy: -420 });
+    let captured = false, minD = Infinity;
+    for (let i = 0; i < 120 * 8 && !captured; i++) { game.step(1 / 120); if (ball.orbit) captured = true; minD = Math.min(minD, Math.hypot(ball.x - well.x, ball.y - well.y)); }
+    return { captured, minD };
+  };
+  assert.ok(DOME_DRAW_RATE > 0);
+  assert.ok(ride(DOME_AIM_FEW).captured, 'five left: drawn in and caught inside eight seconds');
+  const many = ride(DOME_AIM_FEW + 20);
+  assert.ok(!many.captured && many.minD > 300, 'with a wall still up the edge ride is left alone');
+});
+
+test('the tail: five bricks or fewer for two minutes and the rest fall off on their own, lowest first', () => {
+  assert.equal(TAIL_BRICKS, 5); assert.equal(TAIL_LIMIT_S, 120);
+  const { game, events } = make({ saturation: 0.5 });   // wall one: still bricks (wall two's tide would carry the parked ones back in)
+  const s = game.snapshot(); s.noLose = true;
+  // Three bricks left, parked above the field where no ball can reach them.
+  s.bricks.forEach((br, i) => { br.alive = i < 3; if (br.alive) br.y = -1000 - i * 40; });
+  const walls = s.stats.walls;
+  const secs = (n) => { for (let i = 0; i < Math.round(n * 120); i++) game.step(1 / 120); };
+  secs(TAIL_LIMIT_S - 1);
+  assert.equal(s.bricks.filter(b => b.alive).length, 3, 'nothing falls before the limit');
+  assert.ok(s.tail > TAIL_LIMIT_S - 4 && s.tail < TAIL_LIMIT_S, 'the clock runs');
+  secs(1 + TAIL_DROP_GAP_S + .05);
+  const drops = events.filter(e => e[0] === 'tailDrop');
+  assert.equal(drops.length, 1, 'one brick lets go at the limit');
+  assert.equal(drops[0][1].y, s.bricks[0].y + s.bricks[0].h / 2, 'the lowest brick first');
+  secs(TAIL_DROP_GAP_S * 3 + 3);
+  assert.equal(s.stats.walls, walls + 1, 'the wall clears through the ordinary break');
+  assert.equal(s.tail, 0, 'the clock resets with the wall');
+  // Six bricks: no clock.
+  const { game: g2 } = make({ saturation: 0.5 }); const s2 = g2.snapshot(); s2.noLose = true;
+  s2.bricks.forEach((br, i) => { br.alive = i < 6; if (br.alive) br.y = -1000 - i * 40; });
+  for (let i = 0; i < 120 * 5; i++) g2.step(1 / 120);
+  assert.equal(s2.tail, 0);
+});
+
+test('every dome throw wears a little jitter on its turns, so a fixed catch is not a fixed throw', () => {
+  const turnsAt = (r) => {
+    const { game } = make({ saturation: 0.5, rng: () => r }); game.jumpToWall(4);
+    const s = game.snapshot(), well = s.well, ball = s.balls[0]; well.energy = 0;
+    Object.assign(ball, { stuck: false, x: well.x + 70, y: well.y, vx: 0, vy: 0 }); game.step(.01);
+    assert.equal(well.captured, ball);
+    return ball.orbit.turns;
+  };
+  const lo = turnsAt(0), hi = turnsAt(0.999);
+  assert.ok(Math.abs((hi - lo) - DOME_TURN_JITTER * .999) < 1e-6, 'the spread is the jitter constant');
+  assert.ok(lo > 0.9 && hi < 1.4, 'still about one held turn either way');
+  assert.ok(DOME_TURN_JITTER <= .4, 'small: the sweep still reads as one beat');
+});
+
+test('a newborn bubble is not solid until it can be seen and no ball is inside it', () => {
+  const { game } = make({ saturation: 0.5 });
+  const s = game.snapshot(); s.bricks = [];
+  const fly = () => { s.balls = [{ ...s.balls[0], x: 600, y: 470, vx: 0, vy: -300, stuck: false, ghost: false, trail: [] }]; return s.balls[0]; };
+  s.colliders.push({ x: 600, y: 420, r: 50, vx: 0, vy: 0, hits: 0, pulse: 0, alpha: 0, fading: false, solid: false, gif: 0, tier: 3, age: 0, jelly: 0, ph: 0 });
+  let b = fly(); for (let i = 0; i < 12; i++) game.step(1 / 120);
+  assert.equal(s.colliders[0].hits, 0, 'still fading in: the ball passes through'); assert.ok(b.vy < 0, 'and keeps its heading');
+  b = fly(); b.x = 600; b.y = 420; b.vx = 0; b.vy = 0; s.colliders[0].alpha = 1;
+  game.step(1 / 120); assert.equal(s.colliders[0].solid, false, 'visible, but a ball is inside: it waits'); assert.equal(b.x, 600);
+  b = fly(); b.y = 600; game.step(1 / 120); assert.equal(s.colliders[0].solid, true, 'clear and visible: solid from here on');
+  b = fly(); b.y = 480; for (let i = 0; i < 6 && !s.colliders[0].hits; i++) game.step(1 / 120);
+  assert.equal(s.colliders[0].hits, 1, 'and now it bounces');
 });

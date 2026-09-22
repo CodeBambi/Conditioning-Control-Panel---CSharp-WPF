@@ -588,7 +588,12 @@ public static class ChaosMeta
         double Score, double TrickleDrops, bool DripFeedMaxed,
         int BestCombo, int Defused, double ElapsedSec);
 
-    public static int AwardRunRewards(in ChaosRunRewardInput run)
+    /// <param name="countsAsRun">False for a descent that was LEFT too early to be one (see
+    /// <see cref="DtrhRunPayoutRule"/>). It still banks its pro rata Sparks and its seconds,
+    /// but <c>RunsCompleted</c> does not move - and with it neither the one-time first-fall
+    /// bonus, the rank gates, the Warren's shelf reveals, nor the scripted first descent, which
+    /// is keyed on <c>RunsCompleted == 0</c> and can only be spent once.</param>
+    public static int AwardRunRewards(in ChaosRunRewardInput run, bool countsAsRun = true)
     {
         const double COMPLETION_BONUS_BASE = 35.0;   // the predictable per-descent Spark floor
         const double SCORE_SQRT_SCALE = 1.5;
@@ -610,10 +615,10 @@ public static class ChaosMeta
 
         // One-time cold-start kindness ("first fall"): +25 the first time RunsCompleted
         // goes 0→1 (guarded so it only ever applies once). Displayed on the recap card.
-        if (State.RunsCompleted == 0) sparks += FIRST_FALL_BONUS;
+        if (countsAsRun && State.RunsCompleted == 0) sparks += FIRST_FALL_BONUS;
 
         State.Sparks += Math.Max(0, sparks);
-        State.RunsCompleted += 1;
+        if (countsAsRun) State.RunsCompleted += 1;
         State.BestScore = Math.Max(State.BestScore, (long)run.Score);
         State.BestCombo = Math.Max(State.BestCombo, run.BestCombo);
         State.TotalDefused += run.Defused;

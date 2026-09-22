@@ -192,10 +192,18 @@ public sealed class BrainDrainMeltPayload : EffectPayload
                 return;
             }
 
+            // The pop borrows the user's own blur dial, so a dial at 0 means this bubble has no
+            // picture to show either. XP is already paid; the bubble is its own reward.
+            var strength = App.Settings?.Current?.BrainDrainBlurStrength ?? 50;
+            if (BrainDrainVisualPolicy.IsSilent(strength))
+            {
+                App.Logger?.Information("Bubble: brain drain pop paid XP only - the blur dial is at 0");
+                return;
+            }
+
             var kind = BrainDrainBubble.OverlayKindFor(MotionFx.Level);
             overlay.ShowOverlayTimed(kind, BrainDrainBubble.OverlayMs,
-                                     BrainDrainBubble.OverlayOpacity(
-                                         App.Settings?.Current?.BrainDrainBlurStrength ?? 50));
+                                     BrainDrainBubble.OverlayOpacity(strength));
         }
         catch (Exception ex) { App.Logger?.Debug("BrainDrainMeltPayload: {E}", ex.Message); }
     }

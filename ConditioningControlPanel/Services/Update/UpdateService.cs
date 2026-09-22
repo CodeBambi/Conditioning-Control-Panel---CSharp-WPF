@@ -20,13 +20,31 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.10.1";
+        public const string AppVersion = "6.10.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.10.1 - Let the games begin
+        public const string CurrentPatchNotes = @"v6.10.3 - Let the games begin
+
+NEW IN 6.10.3
+- the launcher plays a tune. moving across the tiles picks out a little melody instead of the same note over and over, and no two sweeps of the grid come out the same.
+- a speaker button in the launcher title bar turns the launcher's own sounds off. a session or a game behind it keeps its voice, and the master volume is still behind the Media button.
+
+NEW IN 6.10.2
+- the v2 flashes and bubbles can be bought where you use them: a Get it row in the Flashes and Bubble Pop options, 30 Sparkle Points each, no trip to the Back Room needed.
+- pendulum flashes each hang from their own nail instead of swinging as one stack, the v2 marker no longer covers the light or the question mark on a tile, and the motion picker is readable on every skin.
+- the Deeper library fills from every door. it used to open blank from the dashboard tile and from Ctrl+K. editor rules that sit past the end of a clip can be seen and clicked.
+- a game goes fullscreen on the monitor it is on, not always the main one.
+- two escapes inside Racing Thoughts, Goon or the Graded Intake close the game, not the whole app.
+- leaving Down the Rabbit Hole early still books the run: Sparks are paid for the time you played, and it counts as a run after a minute. picture flashes inside it reach your toy again, and the achievement share prompt waits in the Inbox instead of landing over the two doors.
+- Settings, Account grows a Reconnect Patreon button when this PC has lost touch with Patreon, so a paid tier that reads as locked is one click to fix.
+- Ctrl+K understands more of the words people actually type, the ramp link chips say Master volume and Whisper volume, and Brain Drain blur goes all the way down to 0.
+- the online niche box says why it refused a name, instead of doing nothing.
+- voice control finds a speech model that Windows unzipped two folders deep, and there is a button that opens the models folder.
+- media history keeps online items, with Copy link and Go to source.
+- the companion picks up the new persona after a mod switch, and the prompt editor starts from the persona you are wearing.
 
 CC LABS
 - the app now opens on a launcher, with the panel on one side and the games on the other: the Back Room, Down the Rabbit Hole, the Arcademy, Goon and the Graded Intake. you sign in there first, since every game wants an account, though the Back Room is happy with a free one.
@@ -68,7 +86,7 @@ FIXES
 - a blank second account from a mobile sign in is recovered rather than kept, free quests stop asking for premium, the nav rail no longer sticks open, and the Arcademy annex opens like it should.
 - the Graded Intake pass is weekly and says so, with unlimited runs at tier 2.
 
-full nerd changelog in pull requests 1107 through 1430.";
+full nerd changelog in pull requests 1107 through 1500.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

@@ -1979,6 +1979,16 @@ namespace ConditioningControlPanel.Services
         private static bool FeedOwnsTheScreen =>
             Fyp.FypHostService.IsActive && !Fyp.FypHostService.IsGhosted;
 
+        /// <summary>
+        /// Pure decision for #1239 ("the Test video button does nothing while the feed is open"):
+        /// whether a trigger stood down for the feed owes the user a toast. Only a press the user
+        /// just made does. The ambient scheduler deferring is not news, and a video EARNED by a
+        /// bubble pop never defers at all (it plays over the feed), so it has nothing to announce.
+        /// Extracted so the rule is testable without LibVLC, like EvaluateTriggerGuard.
+        /// </summary>
+        internal static bool ShouldAnnounceFeedDefer(bool feedOwnsTheScreen, bool userInitiated, bool userEarned)
+            => feedOwnsTheScreen && userInitiated && !userEarned;
+
         /// <summary>True while a trigger is parked waiting for the For You feed to leave the screen
         /// (#1073). One pending replay at a time, exactly like the cascade defer — a feed session that
         /// swallows several triggers replays one video, not a backlog. Cleared by <see cref="Stop"/>
@@ -2165,7 +2175,15 @@ namespace ConditioningControlPanel.Services
         /// run that asked for it has ended (#1201). Zero - the default - is a video the user or the
         /// scheduler asked for, which nothing here may cancel.
         /// </param>
-        public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null, bool userEarned = false, int chaosToken = 0)
+        /// <param name="userInitiated">
+        /// True when a BUTTON the user just pressed asked for this video (today: Test Video on the
+        /// Videos card). Unlike <paramref name="userEarned"/> it changes no guard - it only decides
+        /// whether a guard that stands the video down says so out loud, because a button that
+        /// produces nothing at all reads as broken (#1239). Same idea, and the same name, as the
+        /// browser's <c>NavigateToUrlInBrowser(userInitiated:)</c>.
+        /// </param>
+        public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null, bool userEarned = false,
+            int chaosToken = 0, bool userInitiated = false)
         {
             App.Logger?.Information("VideoService: TriggerVideo called (userEarned={UserEarned})", userEarned);
 
@@ -2277,6 +2295,12 @@ namespace ConditioningControlPanel.Services
             else if (FeedOwnsTheScreen)
             {
                 App.Logger?.Information("VideoService: TriggerVideo deferred - For You feed on screen");
+                // #1239: the defer is right, the SILENCE was not. A button the user just pressed
+                // that produces nothing at all reads as broken, so an explicit press gets a word
+                // about who has the screen. The scheduler deferring is not news and says nothing.
+                if (ShouldAnnounceFeedDefer(FeedOwnsTheScreen, userInitiated, userEarned))
+                    App.Notifications?.Show(Loc.Get("video_toast_feed_has_the_screen"),
+                        NotificationType.Info, TimeSpan.FromSeconds(6));
                 // Same release as the cascade guard: when this trigger was DEQUEUED the queue already
                 // claimed the Video slot for us, and holding it across the wait would block every
                 // interaction for the 5-minute stuck window. The replay re-enters the queue normally.

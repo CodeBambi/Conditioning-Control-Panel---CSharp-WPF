@@ -2736,6 +2736,16 @@ namespace ConditioningControlPanel.Models
             set { _launcherSkipToPanel = value; OnPropertyChanged(); }
         }
 
+        // The launcher's own cues: the hover melody, the clicks, the open and exit stings. The
+        // speaker button in its title bar writes this. It is the launcher's chrome only and never
+        // touches a session, a game or the master volume (that lives behind the Media button).
+        private bool _launcherSoundEnabled = true;
+        public bool LauncherSoundEnabled
+        {
+            get => _launcherSoundEnabled;
+            set { _launcherSoundEnabled = value; OnPropertyChanged(); }
+        }
+
         private bool _panicKeyEnabled = true; // ESC to stop
         public bool PanicKeyEnabled
         {
@@ -4909,19 +4919,26 @@ namespace ConditioningControlPanel.Models
             set { _brainDrainHighRefresh = value; OnPropertyChanged(); }
         }
 
-        private int _brainDrainBlurStrength = 50; // 1-100
+        private int _brainDrainBlurStrength = 50; // 0-100
         /// <summary>
-        /// Strength of the Brain Drain SCREEN BLUR (1-100). Deliberately separate from
+        /// Strength of the Brain Drain SCREEN BLUR (0-100). Deliberately separate from
         /// <see cref="BrainDrainIntensity"/>, which is the AUDIO half's per-minute trigger
         /// probability - the rework gave the visual its own dial. Drives both the gaussian
         /// sigma and the draw alpha on the compositor layer (see BrainDrainLayer.SetIntensity);
         /// applied live via OverlayService's settings hook while the overlay is showing.
+        ///
+        /// <para><b>ZERO IS OFF, and off is a real setting.</b> The floor was 1 until 2026-09-21,
+        /// and 1 is not off: the alpha curve starts at its own floor there, so the quietest blur
+        /// the app offered was still a visible haze (accessibility report 2026-09-20, "doesn't go
+        /// below 1% which still hurts my eyes"). Zero takes the picture away and leaves the audio
+        /// half running - see <c>Services/Notifications/BrainDrainVisualPolicy</c>. Widening the
+        /// range rewrites nobody's saved choice: a file holding 1 still loads as 1.</para>
         /// </summary>
         [JsonProperty]
         public int BrainDrainBlurStrength
         {
             get => _brainDrainBlurStrength;
-            set { _brainDrainBlurStrength = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+            set { _brainDrainBlurStrength = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
         private bool _brainDrainMeltEnabled = false;
@@ -5811,6 +5828,22 @@ namespace ConditioningControlPanel.Models
         {
             get => _personaVoiceFenceUtc;
             set { _personaVoiceFenceUtc = value; OnPropertyChanged(); }
+        }
+
+        private DateTime? _personaIdentityFenceUtc;
+        /// <summary>
+        /// UTC moment the companion's NAME last changed under the user - a mod switch from one
+        /// companion to a different one. The voice fence above keeps the user's own pre-switch
+        /// turns, which is right for a preset change and wrong here: "hi Circe, ..." still sitting
+        /// in the window reads as one unbroken conversation with Circe, so the model answers as
+        /// Circe under a CCP Default prompt (Kathryn, 2026-09-14). Turns older than this moment
+        /// leave the WIRE window entirely, whatever their role. Nothing is deleted: the stored
+        /// session, the visible bubbles and the memory panel keep everything.
+        /// </summary>
+        public DateTime? PersonaIdentityFenceUtc
+        {
+            get => _personaIdentityFenceUtc;
+            set { _personaIdentityFenceUtc = value; OnPropertyChanged(); }
         }
 
         private List<PersonalityPreset> _userPersonalityPresets = new();

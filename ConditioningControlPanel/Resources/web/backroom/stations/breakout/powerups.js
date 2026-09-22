@@ -1,8 +1,16 @@
 import {junctionProtected} from './junction-shield.js';
 import {metalActive} from './grey-metal.js';
 import {rotatedBrickContact} from './reform.js';
-export const POWER_DURATION={multiball:12,fireball:8,laser:8,shield:20};
+/** Seconds. The shooting paddle lasts 4 (was 8: owner, 2026-09-21, half the time). */
+export const POWER_DURATION={multiball:12,fireball:8,laser:4,shield:20};
+/** An ordinary brick's chance to hold a power-up. Was .085; 15 percent fewer OVERALL (owner, 2026-09-21): split bricks (game.js SPLIT_CHANCE, 1 percent) still always drop, so this one carries the whole cut. */
+export const POWER_CHANCE=.07;
 export const POWER_KINDS=Object.keys(POWER_DURATION);
+/** The random drop's mix. Multiball also falls from every split brick, so it takes the small share here (owner, 2026-09-21: way too many). */
+export const POWER_WEIGHT={multiball:1,fireball:3,laser:3,shield:3};
+const WEIGHT_SUM=POWER_KINDS.reduce((n,k)=>n+POWER_WEIGHT[k],0);
+/** One roll 0..1 to a kind, by weight. One rng call, as before, so the wall's dice stay where they were. */
+export function pickPower(roll){let r=Math.max(0,Math.min(.999999,roll))*WEIGHT_SUM;for(const k of POWER_KINDS){r-=POWER_WEIGHT[k];if(r<0)return k;}return POWER_KINDS[POWER_KINDS.length-1];}
 /** Seconds left when a timed power warns, the drop's fall (px/s, px/s2, cap) and its catch reach past the paddle edge. */
 export const WARN_AT=2, DROP_V0=118, DROP_ACCEL=20, DROP_VMAX=190, DROP_REACH=14, MUZZLE_S=.11;
 /** Eighth notes fire the laser; the shot leaves this much of an eighth early so its quantised pluck lands ON the eighth. */
@@ -25,13 +33,13 @@ export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=nu
   }
   function retire() {
     const live=s.balls.filter(b=>!b.lost&&!b.falling);
-    if(live.length&&!live.some(b=>!b.temporary))live[0].temporary=false;
+    if(live.length&&!live.some(b=>!b.temporary)){live[0].temporary=false;live[0].tint=0;}   // the promoted copy IS the player's ball now: violet again
     s.balls=s.balls.filter(b=>{if(!b.temporary)return true;if(s.well?.captured===b){s.well.captured=null;s.well.used=false;}return false;});
   }
   function reset(){p.epoch=(p.epoch||0)+1;retire();p.drops.length=p.shots.length=0;for(const k of POWER_KINDS)p[k]=0;p.charges=0;p.muzzle=0;p.eighth=null;for(const b of s.balls)b.fireContacts?.clear();}
   function assign(br){
     if(br.split||br.gif>=0||br.word||br.spiral||br.jackpot||br.strength||!ordinaryTarget({...br,finaleRing:false},s))return;
-    if(rng()<.085)br.powerup=POWER_KINDS[Math.floor(rng()*POWER_KINDS.length)];
+    if(rng()<POWER_CHANCE)br.powerup=pickPower(rng());
   }
   function drop(br){
     if(s.state!=='colour')return;
@@ -47,15 +55,20 @@ export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=nu
     if(s.state!=='colour')return;
     p[kind]=POWER_DURATION[kind];
     if(kind==='shield')p.charges=Math.min(2,p.charges+1);
+    let split=null;
     if(kind==='multiball'){
       const source=s.balls.find(b=>!b.lost&&!b.falling&&!b.stuck)||s.balls.find(b=>!b.lost&&!b.falling);
+      let made=0;split=source?{x:source.x,y:source.y}:null;
       if(source)for(const sign of [-1,1]){
         if(s.balls.length>=maxBalls)break;
         const speed=Math.max(220,Math.hypot(source.vx,source.vy)),a=sign*.5;
-        s.balls.push({...newBall(s.state==='grey'),x:source.x,y:source.y,vx:Math.sin(a)*speed,vy:-Math.cos(a)*speed,stuck:false,temporary:true});
+        // tint: each copy wears its own colour (feedback.js BALL_TINTS), so three balls read as three.
+        s.balls.push({...newBall(s.state==='grey'),x:source.x,y:source.y,vx:Math.sin(a)*speed,vy:-Math.cos(a)*speed,stuck:false,temporary:true,tint:sign<0?1:2});made++;
       }
+      if(!made)split=null;
     }
     emit('powerCatch',{kind,x:s.paddle.x,y:s.paddle.y});
+    if(split)emit('multiSplit',split);                                   // after the catch, so the catch still speaks first
   }
   function step(dt){
     if(s.state!=='colour'){

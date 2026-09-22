@@ -58,7 +58,7 @@ test('the laser plucks a tone of the chord under the bar it lands in, beside the
 });
 test('reactions honour grey and reduced motion, and wear the pickup colours',()=>{
   function fx(over){const log=[];const rec=n=>(...a)=>log.push([n,...a]);
-    return {log,P:{burst:rec('burst'),spray:rec('spray')},stamps:{push:rec('stamp')},cam:{kick:rec('kick')},reduced:false,colour:true,rungs:()=>true,
+    return {log,P:{burst:rec('burst'),spray:rec('spray'),rects:rec('rects')},shockwaves:{push:rec('shock')},stamps:{push:rec('stamp')},cam:{kick:rec('kick')},reduced:false,colour:true,rungs:()=>true,
       colours:{WHITE:[255,255,255]},flash:rec('flash'),aberr:rec('aberr'),...over};}
   const snap={paddle:{x:640,y:680,w:160}};
   for(const name of Object.keys(REACT))for(const kind of POWER_KINDS){
@@ -71,7 +71,7 @@ test('reactions honour grey and reduced motion, and wear the pickup colours',()=
   assert.ok(f.log.find(e=>e[0]==='kick')[1]<=4&&f.log.find(e=>e[0]==='flash')[1]<=.15);
 });
 test('the power layer draws every state without throwing, draws nothing in grey, and its fire has a ceiling',()=>{
-  let calls=0;const g=new Proxy({},{get:(_,k)=>k==='calls'?calls:()=>{calls++;},set:()=>true});
+  let calls=0;const g=new Proxy({},{get:(_,k)=>k==='calls'?calls:()=>{calls++;return {addColorStop(){}};},set:()=>true});
   const trail=[];for(let i=0;i<40;i++)trail.push(100+i,300-i);
   const s={w:1280,h:720,state:'colour',time:3.2,paddle:{x:10,y:680,w:160,h:12},balls:Array.from({length:8},(_,i)=>({x:100+i,y:300,r:7,trail})).concat({x:1,y:1,r:7,lost:true}),
     power:{drops:[{kind:'laser',x:50,y:200,age:1,vy:140,x0:50,ph:1},{kind:'shield',x:60,y:20}],shots:[{x:5,y:400},{x:9,y:300}],multiball:1.5,fireball:8,laser:.5,shield:20,charges:2,muzzle:.1}};
@@ -79,4 +79,16 @@ test('the power layer draws every state without throwing, draws nothing in grey,
   calls=0;drawPowerups(g,{...s,reduced:true});assert.ok(calls>20&&calls<full);
   calls=0;drawPowerups(g,{...s,state:'grey'});drawPowerups(g,{...s,power:null});assert.equal(calls,0);
   calls=0;drawPowerups(g,{...s,balls:[{x:1,y:1}],power:{...s.power,drops:[],shots:[]}});assert.ok(calls>0);
+});
+test('the split, the shield save and a burning brick each get their own reaction, in their own colour',()=>{
+  function fx(over){const log=[];const rec=n=>(...a)=>log.push([n,...a]);
+    return {log,P:{burst:rec('burst'),spray:rec('spray'),rects:rec('rects')},shockwaves:{push:rec('shock')},stamps:{push:rec('stamp')},cam:{kick:rec('kick')},reduced:false,colour:true,rungs:()=>true,
+      colours:{WHITE:[255,255,255]},flash:rec('flash'),aberr:rec('aberr'),...over};}
+  const split=fx();REACT.multiSplit(split,{x:300,y:200,n:2});
+  assert.ok(!split.log.some(e=>e[0]==='shock')&&split.log.some(e=>e[0]==='kick'),'a little pop, not the breakout shockwave');
+  assert.ok(split.log.filter(e=>e[0]==='burst').length>=3,'the pop carries the ball colour and both copy colours');
+  assert.ok(split.log.find(e=>e[0]==='kick')[1]<=5);
+  const save=fx();REACT.powerSave(save,{x:300,y:700});assert.deepEqual(save.log.find(e=>e[0]==='spray')[5],KIND_RGB.shield);
+  const cold=fx();REACT.brick(cold,{x:1,y:1},{power:{fireball:0}});assert.equal(cold.log.length,0,'no embers without the fireball');
+  const hot=fx();REACT.brick(hot,{x:1,y:1},{power:{fireball:3}});assert.deepEqual(hot.log[0][3],KIND_RGB.fireball);
 });

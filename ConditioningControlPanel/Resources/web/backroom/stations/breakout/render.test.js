@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRenderer, prefersSoftwareCanvas } from './render.js';
+import { postProcess, hitGlowAlpha, HIT_GLOW } from './render-fx.js';
 import { createGame } from './game.js';
 
 function canvasStub(log = []) {
@@ -499,4 +500,81 @@ for (const reduced of [false, true]) test(`the last brick leans the camera in an
     assert.equal(zooms().length, 0, 'the camera is home again');
     renderer.dispose();
   } finally { globalThis.document = oldDocument; }
+});
+
+test('the comet is a colour thing: a grey ball draws no trail, a tinted copy draws its own colour', () => {
+  const oldDocument = globalThis.document;
+  globalThis.document = { createElement: () => canvasStub() };
+  try {
+    const trail = []; for (let x = 0; x <= 300; x += 5) trail.push(x, 400);
+    const strokes = (state, ball) => {
+      const log = [], styles = [];
+      const stub = canvasStub(log), ctx = stub.getContext();
+      const renderer = createRenderer({ ...stub, getContext: () => new Proxy(ctx, { set(t, k, v) { if (k === 'strokeStyle') styles.push(String(v)); t[k] = v; return true; }, get: (t, k) => t[k] }) }, { rng: () => 0.5 });
+      renderer.resize(480, 720);
+      const snap = { ...createGame({ rng: () => 0.5 }).snapshot(), state, sat: state === 'colour' ? .5 : 0, balls: [ball], colliders: [], pops: [], bricks: [] };
+      renderer.draw(snap, { now: 1, dt: 0.016 });
+      return { n: log.filter(op => op[0] === 'stroke').length, styles };
+    };
+    const ball = { x: 300, y: 400, r: 8, vx: 420, vy: 0, trail, spin: 0 };
+    const bare = { ...ball, trail: [] };
+    assert.equal(strokes('grey', ball).n, strokes('grey', bare).n, 'grey: the trail adds nothing');
+    assert.ok(strokes('colour', ball).n > strokes('colour', bare).n + 10, 'colour: the comet is there');
+    const own = strokes('colour', ball).styles.join('|'), copy = strokes('colour', { ...ball, tint: 2 }).styles.join('|');
+    assert.notEqual(own, copy, 'a copy strokes its trail in its own colour');
+  } finally { globalThis.document = oldDocument; }
+});
+
+test('the grey paddle is a dead slab: no face, no stretch, no bounce, no lean; colour gives all of it back', () => {
+  const oldDocument = globalThis.document;
+  globalThis.document = { createElement: () => canvasStub() };
+  try {
+    const look = (state) => {
+      const log = [];
+      const renderer = createRenderer(canvasStub(log), { rng: () => 0.5 });
+      renderer.resize(480, 720);
+      const base = createGame({ rng: () => 0.5 }).snapshot();
+      const paddle = { ...base.paddle, x: 240, stretch: 1, vx: 900 };
+      const snap = { ...base, state, sat: state === 'colour' ? .5 : 0, rungs: base.rungs.map(() => true), paddle,
+        balls: [{ x: 120, y: 300, r: 8, vx: 100, vy: -100, trail: [], squash: 1, sqx: 0, sqy: 1 }], colliders: [], pops: [], bricks: [] };
+      renderer.onEvent('paddle', { x: 240, t: 0 });                       // a bounce: recoil is at its peak
+      renderer.draw(snap, { now: 1, dt: 0.016 });
+      const p = paddle;
+      return {
+        slab: log.filter(op => op[0] === 'fillRect' && op[1] === p.x - p.w / 2 && op[2] === p.y - p.h / 2 && op[3] === p.w && op[4] === p.h).length,
+        eyes: log.filter(op => op[0] === 'arc' && op[3] === 4.6).length,
+        mouth: log.filter(op => op[0] === 'quadraticCurveTo').length,
+        shear: log.filter(op => op[0] === 'transform').length,
+      };
+    };
+    const grey = look('grey'), colour = look('colour');
+    assert.deepEqual(grey, { slab: 1, eyes: 0, mouth: 0, shear: 0 }, 'grey: one flat rectangle at the rest size and place');
+    assert.equal(colour.slab, 0); assert.equal(colour.eyes, 2); assert.ok(colour.mouth >= 1 && colour.shear >= 1, 'colour: the face and the lean are back');
+  } finally { globalThis.document = oldDocument; }
+});
+
+test('the hit glow is low, pink and fades from zero: never a white sheet', () => {
+  assert.equal(hitGlowAlpha(0), 0, 'no floor: it fades out, it does not cut off');
+  assert.ok(hitGlowAlpha(.35) * 2 < .09 && hitGlowAlpha(.35) * 2 > .05, 'an ordinary brick hit: visible, under 9 percent (was 23)');
+  assert.ok(hitGlowAlpha(1) * 2 <= .24, 'the hardest hit stays under 24 percent (was 36)');
+  assert.ok(hitGlowAlpha(5) === hitGlowAlpha(1));
+  const oldDocument = globalThis.document;
+  const layerLog = [];
+  globalThis.document = { createElement: () => canvasStub(layerLog) };
+  try {
+    const log = [], offLog = [], canvas = canvasStub(log), off = canvasStub(offLog);
+    postProcess(canvas.getContext(), canvas, off, { aberr: .8 });
+    const fill = offLog.findIndex(op => op[0] === 'fillRect');
+    assert.ok(fill >= 0, 'the added light is tinted before it is screened on');
+    assert.ok(/^#ff[0-9a-f]{4}$/.test(HIT_GLOW.tint) && HIT_GLOW.tint !== '#ffffff');
+    assert.ok(log.some(op => op[0] === 'drawImage'), 'and then screened over the frame once');
+  } finally { globalThis.document = oldDocument; }
+});
+
+test('brick knocks: a crack moves the camera a little, a break more, and both stay modest', async () => {
+  const { BRICK_KNOCK } = await import('./render.js');
+  assert.ok(BRICK_KNOCK.hit >= 1 && BRICK_KNOCK.hit < BRICK_KNOCK.broke, 'a crack is at least a whole pixel');
+  assert.ok(BRICK_KNOCK.broke >= 2.5 && BRICK_KNOCK.broke <= 4, 'a break is seen, and is not a quake');
+  assert.ok(BRICK_KNOCK.combo >= BRICK_KNOCK.broke && BRICK_KNOCK.comboMax <= 6);
+  assert.ok(Math.exp(-BRICK_KNOCK.decay * .25) < .05, 'gone inside a quarter second');
 });

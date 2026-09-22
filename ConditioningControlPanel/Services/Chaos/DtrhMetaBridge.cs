@@ -65,7 +65,9 @@ internal sealed class DtrhMetaBridge
 
     /// <summary>Bank a completed web run through the SAME formula/banking as the WPF game
     /// (ChaosMeta.AwardRunRewards overload). Returns sparks earned.</summary>
-    public int AwardRun(in ChaosMeta.ChaosRunRewardInput input)
+    /// <param name="countsAsRun">False for a descent left too early to be one: it banks its pro
+    /// rata Sparks but RunsCompleted does not move. See <see cref="DtrhRunPayoutRule"/>.</param>
+    public int AwardRun(in ChaosMeta.ChaosRunRewardInput input, bool countsAsRun = true)
     {
         int sparks;
         if (_testMode)
@@ -73,13 +75,13 @@ internal sealed class DtrhMetaBridge
             // Mirror the formula against the clone so the real save never moves.
             sparks = ComputeSparksOnly(input);
             _testState!.Sparks += sparks;
-            _testState.RunsCompleted += 1;
+            if (countsAsRun) _testState.RunsCompleted += 1;
             _testState.BestScore = Math.Max(_testState.BestScore, (long)input.Score);
             SaveNow();
         }
         else
         {
-            sparks = ChaosMeta.AwardRunRewards(input);   // persists internally
+            sparks = ChaosMeta.AwardRunRewards(input, countsAsRun);   // persists internally
         }
         Bump();
         return sparks;

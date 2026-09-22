@@ -181,6 +181,7 @@
                                         <Button Grid.Column="3" Content="📂" Style="{StaticResource MlChip}"
                                                 Padding="7,4" VerticalAlignment="Center"
                                                 Click="OpenFolder_Click" Tag="{Binding}"
+                                                Visibility="{Binding FolderButtonVisibility, Mode=OneTime}"
                                                 ToolTip="{loc:Str tooltip_reveal_in_explorer}"/>
                                     </Grid>
                                 </DataTemplate>
@@ -224,18 +225,35 @@
                         <StackPanel Grid.Row="1" Margin="0,12,0,0">
                             <TextBlock x:Name="PreviewName" Foreground="White" FontSize="14" FontWeight="Bold"
                                        TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="PreviewPath" Foreground="#7A7A90" FontSize="11" Margin="0,4,0,0"
-                                       TextWrapping="Wrap" MaxHeight="54"/>
+                            <!-- Read-only TextBox, not a TextBlock: an online entry's source is a
+                                 link people want to select and copy (#1233). -->
+                            <TextBox x:Name="PreviewPath" Foreground="#9A9AB0" FontSize="11" Margin="0,4,0,0"
+                                     Background="Transparent" BorderThickness="0" Padding="0"
+                                     IsReadOnly="True" IsReadOnlyCaretVisible="True" Cursor="IBeam"
+                                     SelectionBrush="{DynamicResource PinkBrush}"
+                                     TextWrapping="Wrap" MaxHeight="54"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"/>
                         </StackPanel>
 
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,12,0,0">
+                        <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,12,0,0">
                             <Button x:Name="BtnPreviewOpenFolder" Content="{loc:Str btn_open_in_folder}"
                                     Style="{StaticResource MlChip}" Click="PreviewOpenFolder_Click"
-                                    Margin="0,0,8,0" IsEnabled="False"/>
+                                    Margin="0,0,8,6" IsEnabled="False"/>
                             <Button x:Name="BtnPreviewOpenFile" Content="{loc:Str btn_open_file}"
                                     Style="{StaticResource MlChip}" Click="PreviewOpenFile_Click"
-                                    IsEnabled="False"/>
-                        </StackPanel>
+                                    Margin="0,0,8,6" IsEnabled="False"/>
+                            <Button x:Name="BtnPreviewLoad" Content="{loc:Str btn_load_preview}"
+                                    Style="{StaticResource MlChip}" Click="PreviewLoad_Click"
+                                    Margin="0,0,8,6" Visibility="Collapsed"
+                                    ToolTip="{loc:Str tooltip_load_preview}"/>
+                            <Button x:Name="BtnPreviewCopyLink" Content="{loc:Str btn_copy_link}"
+                                    Style="{StaticResource MlChip}" Click="PreviewCopyLink_Click"
+                                    Margin="0,0,8,6" Visibility="Collapsed"/>
+                            <Button x:Name="BtnPreviewOpenSource" Content="{loc:Str btn_open_source}"
+                                    Style="{StaticResource MlChip}" Click="PreviewOpenSource_Click"
+                                    Margin="0,0,0,6" Visibility="Collapsed"
+                                    ToolTip="{loc:Str tooltip_open_source}"/>
+                        </WrapPanel>
                     </Grid>
                 </Border>
             </Grid>

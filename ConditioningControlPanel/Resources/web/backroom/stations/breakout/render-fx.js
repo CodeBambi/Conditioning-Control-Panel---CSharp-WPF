@@ -230,6 +230,16 @@ export function makeScanTile() {
  */
 // Build the soft optical pass at quarter resolution. Only one blend touches the full frame.
 const opticalBuffers = new WeakMap();
+/**
+ * The hit glow. Every brick hit in colour fires this pass, and it screens copies of the WHOLE frame back over itself,
+ * so its level is how hard the screen flashes. It was .08 + aberr * .1 per copy: a fixed floor that cut off instead of
+ * fading, and near-white on a bright board (owner, 2026-09-21: "too white and too bright, it's hurting my eyes").
+ * Now it scales from zero, sits well under the old level, and the added light is tinted pink.
+ */
+// .055 was tried first and the owner could barely see it, and the jolt went with it: the two sideways copies ARE part of
+// how a hit reads as a shake. .11 is the middle: about 40 percent of the old jump, still pink, still fading from zero.
+export const HIT_GLOW = { perCopy: .11, tint: '#ff8cc8' };
+export const hitGlowAlpha = aberr => Math.max(0, Math.min(1, aberr || 0)) * HIT_GLOW.perCopy;
 export function postProcess(g, canvas, off, { aberr = 0, bloom = 0, glitch = false, scan = null, rng = Math.random }) {
   const cw = canvas.width, ch = canvas.height;
   g.setTransform(1, 0, 0, 1, 0, 0);
@@ -254,8 +264,12 @@ export function postProcess(g, canvas, off, { aberr = 0, bloom = 0, glitch = fal
       const x = layer.getContext('2d'); x.clearRect(0, 0, ow, oh);
       x.globalCompositeOperation = 'lighter';
       if (aberr > 0) {
+        // Pink, not white: MULTIPLY the copy by the tint before it is added, so the tint can only take light away.
+        // (Mixing toward pink was tried and measured: on a dark board it added light of its own.) The copy is opaque
+        // and the glitch rows above have already read it, so it is safe to colour in place.
+        og.globalCompositeOperation = 'multiply'; og.fillStyle = HIT_GLOW.tint; og.fillRect(0, 0, ow, oh); og.globalCompositeOperation = 'source-over';
         const dx = Math.max(.125, aberr * 3 * cw / 480 / 4);
-        x.globalAlpha = .08 + aberr * .1;
+        x.globalAlpha = hitGlowAlpha(aberr);
         x.drawImage(off, dx, 0); x.drawImage(off, -dx, 0);
       }
       if (bloom > 0) {

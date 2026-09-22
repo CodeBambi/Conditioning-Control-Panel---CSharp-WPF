@@ -104,9 +104,13 @@ public class BrainDrainBubbleTests
     [InlineData(50, 0.50)]
     [InlineData(1, 0.01)]
     [InlineData(100, 1.00)]
-    [InlineData(0, 0.01)]      // clamped: the primitive treats 0 as "no overlay at all"
+    // Floored at 0 since 2026-09-21, not 1: the blur slider reaches 0 now and 0 means "no
+    // picture", so clamping it up here would have left the last path that could blur a screen
+    // which had asked for none. BrainDrainMeltPayload checks the dial and skips the overlay
+    // outright, so the pop still pays its XP and shows nothing.
+    [InlineData(0, 0.00)]
     [InlineData(250, 1.00)]
-    [InlineData(-5, 0.01)]
+    [InlineData(-5, 0.00)]
     public void Opacity_tracks_the_users_blur_strength(int strength, double expected)
         => Assert.Equal(expected, BrainDrainBubble.OverlayOpacity(strength), 6);
 

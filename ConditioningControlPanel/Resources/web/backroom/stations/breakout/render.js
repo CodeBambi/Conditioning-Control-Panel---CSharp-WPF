@@ -1,6 +1,13 @@
-import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean } from './feedback.js';
+import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle, wordTrailPoints, WORD_TRAIL } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
-import {drawPowerIcon,drawPowerups} from './powerups-render.js';
+import {drawPowerIcon,drawPowerups,glyphIdle} from './powerups-render.js';
+import { createBrickWobble } from './brick-wobble.js';
+/**
+ * The brick knock, in REAL field pixels each way. It has its own channel because cam.kick is scaled by shakeGain
+ * (.175 on the first wall), so a kick of 7.5 moved the screen two thirds of a pixel: three rounds of "a bit more"
+ * on that number changed nothing the owner could see (2026-09-21). decay is per second, exponential: gone in about .2 s.
+ */
+export const BRICK_KNOCK = { hit: 2, broke: 4, combo: 4, comboStep: .2, comboMax: 6, decay: 14 };
 import { junctionProtected } from './junction-shield.js';
 import { shieldY as junctionShieldY } from './words/let-go.js';
 import {metalActive} from './grey-metal.js';
@@ -72,7 +79,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   let last = null, glitch = 0, wipe = 0, crackFlash = 0, spin = 0, aberr = 0, recoil = 0, lastNow = 0, lastCombo = 0, comboPop = 0;
   let happy = 0, pushIn = null, layerGlow = 0, layerRgb = MINT;   // feel pass: the last-brick push-in, the music-layer glow
   const smoke = createParticles({ max: 120, rng });
-  let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, flash = 0, lastFlashAt = -1;
+  const idleWobble = createBrickWobble(rng);
+  let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, knock = 0, flash = 0, lastFlashAt = -1;
   const shockwaves = [], drifters = [];
   const rewardPick = createRewardPicker(rng);
   const levelIntro = createLevelIntro();
@@ -164,7 +172,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
           debris.spawn(x, y, (d.w || 82) * (.08 + rng() * .09), (d.h || 27) * (.2 + rng() * .22), dust, rng);
         }
       }
-      if (rungs(5) && colour && !last?.iris) cam.kick(4);
+      if (rungs(5) && colour && !last?.iris) { cam.kick(5.5); knock = Math.max(knock, BRICK_KNOCK.broke); }
       if (d.jackpot) cam.kick(6, 1, 0.01);
       if (d.ghost && (d.plus | 0) > 1) stamps.push({ kind: 'text', text: '+' + (d.plus | 0), x: d.x, y: d.y - 8, life: 0.8, rgb: WHITE, size: 18 });
     } else if (name === 'popOut') {
@@ -184,8 +192,9 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     } else if (name === 'hit') {
       if (d.kind === 'paddle') recoil = 1;
       if (d.kind === 'gif') { cam.kick(7); if (rungs(8)) { glitch = 0.14; aberr = 1; } }
-      if (d.kind === 'brick' && (d.combo | 0) >= 5 && colour && !last?.iris) { cam.kick(6 + Math.min(8, d.combo * 0.5), 1, 0.012); aberr = Math.max(aberr, 0.8); }
-      else if (d.kind === 'brick' && colour && rungs(5) && !last?.iris) aberr = Math.max(aberr, 0.35);
+      if (d.kind === 'brick' && (d.combo | 0) >= 5 && colour && !last?.iris) { cam.kick(6 + Math.min(8, d.combo * 0.5), 1, 0.012); knock = Math.max(knock, Math.min(BRICK_KNOCK.comboMax, BRICK_KNOCK.combo + d.combo * BRICK_KNOCK.comboStep)); aberr = Math.max(aberr, 0.8); }
+      // A brick that only cracks used to move nothing at all; it gets a small knock of its own now.
+      else if (d.kind === 'brick' && colour && rungs(5) && !last?.iris) { knock = Math.max(knock, BRICK_KNOCK.hit); aberr = Math.max(aberr, 0.35); }
     } else if (name === 'paddle') {
       recoil = 1;
       if (colour && rungs(3) && last) {
@@ -195,8 +204,17 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     } else if (name === 'wordSwap') {
       if (colour) { P.rects(d.x, d.y, MINT, 2, { speed: 70, life: 0.35, size: 3 }); P.burst(d.x, d.y, PINK, 3, 60, 0.4, { rise: 20, gv: 30, r0: 1, r1: 1.5 }); }
     } else if (name === 'gif') {
-      P.burst(d.x, d.y, VIOLET, d.popped ? 24 : 8, 150, 0.45);
-      P.rects(d.x, d.y, VIOLET, 4, { speed: 150, life: 0.6, size: 5 });
+      // In the colour of the skin that took the hit (pink, purple, deep violet), thrown off the point the ball struck.
+      const rgb = tierColour(Math.max(1, (d.tier || 1) - (d.hits || 1) + 1));
+      const hx = Number.isFinite(d.hx) ? d.hx : d.x, hy = Number.isFinite(d.hy) ? d.hy : d.y;
+      P.burst(d.x, d.y, rgb, d.popped ? 30 : 8, d.popped ? 210 : 150, d.popped ? 0.6 : 0.45);
+      P.rects(d.x, d.y, rgb, d.popped ? 8 : 4, { speed: 150, life: 0.6, size: 5 });
+      if (!reduced && Number.isFinite(d.nx)) {
+        const out = Math.atan2(d.ny, d.nx);
+        P.spray(hx, hy, out, 1.5, rgb, 16, 240, 0.5, { gv: 160 });
+        P.spray(hx, hy, out, 2.2, WHITE, 5, 150, 0.3, { gv: 80 });
+        stamps.push({ kind: 'ring', x: hx, y: hy, r0: 3, r1: d.popped ? 54 : 26, life: 0.25, rgb });
+      }
     } else if (name === 'capture') {
       // The well swallowing the ball: everything falls inward, then the release throws it back out.
       if (colour) P.implode(d.x, d.y, MINT, 30, 190, 0.6, { from: 115 });
@@ -238,7 +256,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: H - 20, r0: 8, r1: 80, life: 0.5, rgb: GREY });
     } else if (name === 'relapse') {
       landscape.reset();
-      wipe = 0.1; breakoutFlash = 0; pushIn = null; layerGlow = 0; P.clear(); shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset(); wellFx.reset();
+      wipe = 0.1; breakoutFlash = 0; pushIn = null; layerGlow = 0; P.clear(); shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset(); knock = 0; idleWobble.reset(); wellFx.reset();
 
     } else if (name === 'breakoutStart') {
       if (!reduced) flash = Math.max(flash, 0.3);
@@ -483,7 +501,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.save();
       g.globalAlpha = (landing ? Math.min(1, arrival * 12) : 1) * (1 - hide) * (br.irisAlpha ?? 1);
       if (outro) pullFinalePiece(cx, cy, outro);
-      g.translate(cx, cy); if (br.angle) g.rotate(br.angle); g.scale(sx, sy);
+      const wob = idleWobble.of(br);
+      g.translate(cx, cy); if (br.angle || wob.rot) g.rotate((br.angle || 0) + wob.rot); g.scale(sx * wob.sx, sy * wob.sy);
       if(metalActive(br,s.state)) {
         g.drawImage(metalFace(),-br.w/2,-br.h/2,br.w,br.h);
         g.restore();continue;
@@ -584,7 +603,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         if (br.split) {
           // Twin pearls and an orbit distinguish extra balls without a live blur pass.
           const orbit = reduced ? 0 : spin * .8;
-          g.save();
+          const idle = glyphIdle(s.time, br.x, br.y, reduced || s.state !== 'colour');
+          g.save(); g.translate(0, idle.dy); g.scale(idle.scale, idle.scale);
           g.strokeStyle = col(MINT, mix, .85); g.lineWidth = 1.2;
           g.beginPath(); g.ellipse(0, 0, 12, 6, 0, 0, Math.PI * 2); g.stroke();
           for (const x of [-4, 4]) {
@@ -601,7 +621,11 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         if (br.word) { g.save(); roundRect(g, -br.w / 2, -br.h / 2, br.w, br.h, 3); g.clip(); drawWordLabel(br, s, mix); g.restore(); }
         else if (letter) { g.save(); if (br.angle) g.rotate(-br.angle); drawLetter(letter,(s.spell || br.finaleMotif === 'spell') ? Math.min(25, Math.min(br.w, br.h) * .72) : 11,.5); g.restore(); }
       }
-      if(s.state==='colour'&&br.powerup)drawPowerIcon(g,br.powerup,0,0,Math.min(9,br.h*.36),s.state==='grey');
+      if(s.state==='colour'&&br.powerup){
+        // The prize waits: a slow bob and a breath, each brick on its own phase. Colour only, so grey never sees it.
+        const idle=glyphIdle(s.time,br.x,br.y,reduced);
+        drawPowerIcon(g,br.powerup,0,idle.dy,Math.min(9,br.h*.36)*idle.scale,false);
+      }
       if (!br.finaleWord && !br.irisCore && !br.pendulumAnchor && !br.finaleHinge) {
         g.drawImage(finishTile(),-br.w/2,-br.h/2,br.w,br.h);
       }
@@ -790,8 +814,17 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   function drawColliders(s, mix) {
     for (const c of s.colliders) {
       const inflate = easeOutBack((typeof c.age === 'number' ? c.age : 1) / INFLATE_S);
-      const r = c.r * (1 + c.pulse * 0.25) * Math.max(0.02, inflate), frame = media ? media.frame(c.gif) : null;
+      const idle = reduced ? null : bubbleIdle(c.age || 0, c.ph || 0), jel = !reduced && c.jelly > 0 ? jellyScale(c.jelly) : null;
+      const r = c.r * (1 + c.pulse * 0.25) * Math.max(0.02, inflate) * (idle ? idle.breath : 1), frame = media ? media.frame(c.gif) : null;
       const a = clamp(c.alpha, 0, 1), remaining = Math.max(1, (c.tier || 1) - c.hits), tint = tierColour(remaining);
+      // Display only: the bubble wobbles at rest and rings like jelly along the normal of a hit. The collider stays a circle.
+      g.save();
+      if (idle || jel) {
+        g.translate(c.x, c.y);
+        if (idle) { g.rotate(idle.tilt); g.scale(idle.sx, idle.sy); g.rotate(-idle.tilt); }
+        if (jel) { const n = Math.atan2(c.jny || 0, c.jnx || 0); g.rotate(n); g.scale(jel.along, jel.across); g.rotate(-n); }
+        g.translate(-c.x, -c.y);
+      }
       if (s.state === 'colour') tierAura(remaining, c.x, c.y, r * 2 + 30, r * 2 + 30, a * 0.60);
       g.save(); g.globalAlpha = a;
       g.beginPath(); g.arc(c.x, c.y, r, 0, 7); g.closePath();
@@ -814,23 +847,30 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       for (let skin = 1; skin < remaining; skin++) {
         drawBubble(c.x, c.y, r * (1 - skin * .18), a * .25);
       }
+      g.restore();
     }
   }
   function drawBall(s, b, mix, words) {
     const hgt = clamp((H - 40 - b.y) / (H - 40), 0, 1);                        // soft shadow, grows with height
     g.fillStyle = `rgba(0,0,0,${0.28 - hgt * 0.16})`;
     g.beginPath(); g.ellipse(b.x, b.y + b.r + 3 + hgt * 10, b.r * (1 + hgt * 1.2), b.r * 0.45 * (1 + hgt * 0.6), 0, 0, 7); g.fill();
-    if (!reduced) {
+    const tints = BALL_TINTS[b.tint | 0] || null;                              // a multiball copy wears its own colour
+    // No trail in the grey world (owner, 2026-09-21): the comet is a colour thing.
+    if (!reduced && s.state !== 'grey' && !b.ghost) {
       g.save(); g.lineCap = 'round';
       let trailIndex = 0;
       for (const segment of cometSegments(b)) {
-        g.strokeStyle = col(b.ghost ? GREY : VIOLET, mix, segment.alpha * .6);
+        g.strokeStyle = col(tints ? tints[1] : VIOLET, mix, segment.alpha * .6);
         g.lineWidth = Math.max(.5, b.r * 1.7 * segment.alpha);
         g.beginPath(); g.moveTo(segment.x, segment.y); g.lineTo(segment.nx, segment.ny); g.stroke();
-        if (s.state === 'colour' && !b.ghost && s.sat >= .7 && words?.length && trailIndex++ % 5 === 0) {
-          g.font = '700 7px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
-          g.fillStyle = col(PINK, mix, segment.alpha * .5);
-          g.fillText(words[(wordIdx + trailIndex) % words.length], segment.x, segment.y);
+      }
+      // The words follow the ball further than the streak does, and over it: they are the tail (owner, 2026-09-21).
+      if (s.state === 'colour' && !b.ghost && s.sat >= .7 && words?.length) {
+        g.font = `700 ${WORD_TRAIL.size}px ` + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
+        let turn = 0;
+        for (const p of wordTrailPoints(b)) {
+          g.fillStyle = col(turn++ % 2 ? MINT : (tints ? tints[1] : PINK), mix, Math.min(1, p.alpha * 1.4) * WORD_TRAIL.alpha);
+          g.fillText(words[(wordIdx + ++trailIndex) % words.length], p.x, p.y);
         }
       }
       g.restore();
@@ -838,11 +878,13 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     // A ball waiting on the paddle breathes with the beat, harder as its launch nears; a bounce squashes it (feedback.js).
     const wait = b.stuck && !reduced ? clamp((s.launchTimer || 0) / 1.2, 0, 1) : 0;
     const pulse = b.stuck && !reduced ? 1 + (.06 + .12 * wait) * Math.pow(1 - (s.beatPhase || 0), 3) : 1;
-    const sq = !reduced && b.squash > 0 ? squashScale(b.squash) : null;
-    if (b.ghost || s.state === 'grey') {
+    // The grey world is bad on purpose (owner, 2026-09-21): there a ball neither breathes nor squashes.
+    const dead = s.state === 'grey';
+    const sq = !reduced && !dead && b.squash > 0 ? squashScale(b.squash) : null;
+    if (b.ghost || dead) {
       g.save(); g.globalAlpha = 0.72;
       if (sq) { const n = Math.atan2(b.sqy, b.sqx); g.translate(b.x, b.y); g.rotate(n); g.scale(1 - (1 - sq.along) * .5, 1 + (sq.across - 1) * .5); g.rotate(-n); g.translate(-b.x, -b.y); }
-      g.fillStyle = '#9a9a9a'; g.beginPath(); g.arc(b.x, b.y, b.r * pulse, 0, 7); g.fill();
+      g.fillStyle = '#9a9a9a'; g.beginPath(); g.arc(b.x, b.y, b.r * (dead ? 1 : pulse), 0, 7); g.fill();
       g.strokeStyle = '#d0d0d0'; g.lineWidth = 1; g.stroke();
       g.fillStyle = '#2a2a2a'; g.font = `700 4.2px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText('OLD SELF', b.x, b.y + 0.3);
@@ -851,7 +893,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     }
     if (rungs(3)) {
       const grd = g.createRadialGradient(b.x, b.y, b.r, b.x, b.y, b.r * 3.2);
-      grd.addColorStop(0, col(PINK, mix, 0.45)); grd.addColorStop(1, col(PINK, mix, 0));
+      const glow = tints ? tints[1] : PINK;
+      grd.addColorStop(0, col(glow, mix, 0.45)); grd.addColorStop(1, col(glow, mix, 0));
       g.fillStyle = grd; g.beginPath(); g.arc(b.x, b.y, b.r * 3.2, 0, 7); g.fill();
     }
     const sp = Math.hypot(b.vx || 0, b.vy || 0), ref = s.speed || 420;
@@ -865,7 +908,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     g.fillStyle = '#fffdf5'; g.strokeStyle = '#21162f'; g.lineWidth = 2.5;
     g.beginPath(); g.arc(0, 0, b.r, 0, 7); g.fill(); g.stroke();
     g.beginPath(); g.arc(0, 0, b.r - 0.5, 0, 7); g.clip();
-    drawSpiral(g, 0, 0, b.r * .85, rot, col(VIOLET, mix), 0.55, 2);
+    drawSpiral(g, 0, 0, b.r * .85, rot, col(tints ? tints[0] : VIOLET, mix), 0.55, 2);
     g.fillStyle = '#ffffff'; g.beginPath(); g.arc(0, 0, b.r * .32, 0, 7); g.fill();
     g.restore();
   }
@@ -884,7 +927,15 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     g.restore();
   }
   function drawPaddle(s, mix, dt) {
-    const p = s.paddle, st = rungs(2) ? p.stretch : 0;
+    const p = s.paddle;
+    // The grey world is bad on purpose (owner, 2026-09-21): a flat office slab. It does not stretch, bounce, lean or
+    // look at the ball. All of that, and the face, comes back with the colour.
+    if (s.state === 'grey') {
+      g.fillStyle = '#7d7d7d'; g.fillRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+      g.strokeStyle = '#565656'; g.lineWidth = 1; g.strokeRect(p.x - p.w / 2 + .5, p.y - p.h / 2 + .5, p.w - 1, p.h - 1);
+      return;
+    }
+    const st = rungs(2) ? p.stretch : 0;
     const w = p.w * (1 + st * 0.25 + recoil * 0.1), h = p.h * (1 - st * 0.3), py = p.y + recoil * 5;
     const lean = reduced ? 0 : paddleLean(p.vx);                            // the top edge tips into the direction of travel
     g.save(); if (lean) { g.translate(p.x, py + h / 2); g.transform(1, 0, -lean * 2.2, 1, 0, 0); g.rotate(lean * .12); g.translate(-p.x, -(py + h / 2)); }
@@ -984,7 +1035,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       }
       g.restore(); breakoutFlash = Math.max(0, breakoutFlash - dt);
     }
-    if (flash > 0) { flash = Math.max(0, flash - dt * 2.5); g.fillStyle = `rgba(255,255,255,${flash * 0.175})`; g.fillRect(0, 0, W, H); }
+    // The event flash (perfect, last brick, power catches): pink and low, never a white sheet (owner, 2026-09-21).
+    if (flash > 0) { flash = Math.max(0, flash - dt * 2.5); g.fillStyle = `rgba(255,140,200,${flash * 0.11})`; g.fillRect(0, 0, W, H); }
     if (wipe > 0) {                                    // the RELAPSE wipe: 100 ms sweep of grey
       wipe -= dt; const t = clamp(1 - wipe / 0.1, 0, 1);
       g.fillStyle = 'rgba(120,120,120,.9)'; g.fillRect(0, 0, W * t, H);
@@ -1283,10 +1335,17 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     const words = extras && Array.isArray(extras.words) ? extras.words : null;
     const beat = typeof s.beatPhase === 'number' ? Math.pow(1 - s.beatPhase, 3) : 0;
     const camera = cam.step(dt, rng);
+    // Idle life: now and then a hittable brick wobbles on its own. Colour only, never while the wall lands or in the finale.
+    idleWobble.step(dt, s.bricks, !reduced && s.state === 'colour' && s.wallAge >= 1.9 && !s.finale && !s.iris,
+      br => !metalActive(br, s.state) && !br.irisCore && !br.finaleWord && !br.finaleHinge && !br.finaleRing && !br.pendulumAnchor);
     const dropping = s.fx && s.fx.active.some(f => f.key === 'DROP');
     // Keep the level ramp, with all camera shake at half its previous strength.
     const shakeGain = dropping ? 0 : .175 + .175 * clamp((s.stats?.walls || 0) / 7, 0, 1);
-    const shk = { sx: camera.sx * shakeGain, sy: camera.sy * shakeGain,
+    // The brick knock rides on top at its own size, never through shakeGain. Nothing under reduced motion or in a DROP.
+    if (reduced || dropping) knock = 0;
+    const kx = knock > .05 ? (rng() - .5) * 2 * knock : 0, ky = knock > .05 ? (rng() - .5) * 2 * knock : 0;
+    knock *= Math.exp(-BRICK_KNOCK.decay * Math.max(0, dt || 0));
+    const shk = { sx: camera.sx * shakeGain + kx, sy: camera.sy * shakeGain + ky,
       rot: camera.rot * shakeGain, zoom: 1 + (camera.zoom - 1) * shakeGain };
 
     g.setTransform(1, 0, 0, 1, 0, 0);

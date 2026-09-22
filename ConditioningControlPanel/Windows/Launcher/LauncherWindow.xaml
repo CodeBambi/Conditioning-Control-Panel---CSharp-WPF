@@ -432,6 +432,21 @@
                                            Foreground="{DynamicResource TextSecondaryBrush}"/>
                             </StackPanel>
                         </Button>
+                        <!-- The launcher's own sound: the hover melody and the clicks. Chrome only,
+                             never a session or the master volume (those live behind Media). -->
+                        <Button x:Name="BtnSound" Style="{StaticResource LauncherBarPill}"
+                                Click="BtnSound_Click" Padding="10,0" Margin="0,0,6,0">
+                            <Grid Width="19" Height="17" VerticalAlignment="Center">
+                                <Path x:Name="SoundCone" Data="M1,6 L5,6 L10,1.5 L10,15.5 L5,11 L1,11 Z"
+                                      Fill="{DynamicResource PanelAccentBrush}"/>
+                                <Path x:Name="SoundWaves" Data="M12.5,5 A5,5 0 0 1 12.5,12"
+                                      Stroke="{DynamicResource PanelAccentBrush}" StrokeThickness="1.6"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                <Path x:Name="SoundSlash" Data="M12.5,5.5 L18,11.5 M18,5.5 L12.5,11.5"
+                                      Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.6"
+                                      StrokeStartLineCap="Round" Visibility="Collapsed"/>
+                            </Grid>
+                        </Button>
                         <!-- "Media": source, niches, asset preset and the master volume for every room -->
                         <Button x:Name="BtnGear" Style="{StaticResource LauncherBarPill}"
                                 ToolTip="{loc:Str launcher_media_tooltip}"

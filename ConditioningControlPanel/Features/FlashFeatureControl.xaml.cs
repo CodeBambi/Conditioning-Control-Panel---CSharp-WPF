@@ -33,6 +33,8 @@ namespace ConditioningControlPanel.Features
             // mod switch must repaint them (a popup instance never lived long enough to care).
             ApplyFeatureArt();
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
+            RowGetFlashesV2.Configure(V2PurchaseRule.FlashesPrizeId, "v2_get_flash_blurb", "section_flash_v2");
+            RowGetFlashesV2.RowChanged += OnGetRowChanged;
             RefreshV2Box();
         }
 
@@ -41,7 +43,13 @@ namespace ConditioningControlPanel.Features
             PrizeGrants.GrantsChanged -= OnGrantsChanged;
             _settingsHook?.Unhook();
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+            RowGetFlashesV2.RowChanged -= OnGetRowChanged;
         }
+
+        // The Get it row decides its own visibility; the box only needs to know whether anything is
+        // left in it. It repaints on its own schedule (a counter read landing, a sign-in), which is
+        // why the box is re-measured from the row rather than from ownership alone.
+        private void OnGetRowChanged(object? sender, EventArgs e) => RefreshV2Box();
 
         // The Flashes v2 box and its rows: visibility is ownership, never settings (the dashboard
         // flash card's own v2 pill counts these prizes too - that check lives in
@@ -60,7 +68,10 @@ namespace ConditioningControlPanel.Features
             RowDraggable.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
             // Shatter dresses the way that same picture leaves, so it rides those grants too.
             RowShatter.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
-            BoxFlashV2.Visibility = (remix || motion) ? Visibility.Visible : Visibility.Collapsed;
+            // The box no longer collapses on ownership alone: with nothing owned it holds the offer
+            // to buy the prize, which is the whole point of that row being there.
+            BoxFlashV2.Visibility = (remix || motion || !RowGetFlashesV2.IsRowHidden)
+                ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // One hook for both ownership-driven pieces of this control: the motion picker's rows
@@ -375,22 +386,33 @@ namespace ConditioningControlPanel.Features
             finally { _isLoading = wasLoading; }
         }
 
+        /// <summary>
+        /// The app-wide "a ComboBox needs an explicit black Foreground" rule is about the STOCK
+        /// template, whose popup is a light system surface. This picker is styled
+        /// <c>DarkComboBoxStyle</c>, whose popup is ElevatedSurface (#222240) - and no mod
+        /// overrides that key, so black rows measured 1.7:1 on every skin (Wobberjockey read them
+        /// on Circe, tier2 2026-09-19). Theme text, like the Bubble Pop picker beside it.
+        /// The closed box shows a VisualBrush of the selected row, so this one brush paints both.
+        /// </summary>
+        private static System.Windows.Media.Brush RowTextBrush()
+            => (System.Windows.Media.Brush?)Application.Current?.TryFindResource("TextLightBrush")
+               ?? System.Windows.Media.Brushes.White;
+
         private void AddMotionChoice(Models.FlashMotionStyle style, string key, bool v2)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal };
             row.Children.Add(new TextBlock
             {
                 Text = Localization.Loc.Get(key),
-                Foreground = System.Windows.Media.Brushes.Black,
+                Foreground = RowTextBrush(),
                 VerticalAlignment = VerticalAlignment.Center,
             });
             if (v2) row.Children.Add(FeatureCard.NewV2Badge(new Thickness(8, 0, 0, 0)));
-            CmbMotion.Items.Add(new ComboBoxItem
-            {
-                Content = row,
-                Tag = style,
-                Foreground = System.Windows.Media.Brushes.Black,
-            });
+            // No Foreground on the CONTAINER: a local value beats a style trigger, so setting one
+            // here would suppress DarkComboBoxStyle's own IsHighlighted / IsSelected foregrounds
+            // and the hovered row would stop lifting. The row's TextBlock carries the colour, the
+            // same way the Bubble Pop picker does it.
+            CmbMotion.Items.Add(new ComboBoxItem { Content = row, Tag = style });
         }
 
         /// <summary>

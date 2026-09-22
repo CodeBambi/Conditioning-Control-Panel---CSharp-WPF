@@ -45,6 +45,19 @@ internal sealed class ChaosWebViewHost : IDisposable
         /// <summary>true = game surface (activatable, focusable, topmost); false = passive backdrop.</summary>
         public bool InputEnabled { get; init; }
 
+        /// <summary>
+        /// This window is a GAME the player is inside: DtRH, the race, the Back Room, the
+        /// Arcademy, the Goon Game, Piece by Piece, Graded Intake, Just Drop.
+        ///
+        /// <para>The startup ladder reads it (<see cref="AnyGameActive"/>) and goes quiet while
+        /// one is up, because the panel is not on screen behind it and anything that opened over
+        /// it would land on the thing the player is trying to click. Deliberately narrower than
+        /// <see cref="AnyHostActive"/>, which also counts the For You feed, the Loom editor, the
+        /// codex, the Bureau and the Emergency Exit card - windows people leave open for hours,
+        /// and the ladder parks on this without a clock.</para>
+        /// </summary>
+        public bool IsGame { get; init; }
+
         /// <summary>Raised for every page message except the built-in "ready"/"log" handling.</summary>
         public Action<JObject>? OnMessage { get; init; }
 
@@ -289,12 +302,24 @@ internal sealed class ChaosWebViewHost : IDisposable
         _window.Show();
         _countedActive = true;
         System.Threading.Interlocked.Increment(ref _activeHostCount);
-        if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
-        if (_opts.InputEnabled) { try { _window.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); } }
+        if (_opts.IsGame) { _countedGame = true; System.Threading.Interlocked.Increment(ref _activeGameCount); }
+        try
+        {
+            if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
+            if (_opts.InputEnabled) { try { _window.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); } }
 
-        _ = InitWebAsync();
-        App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Host}",
-            _opts.LogTag, _opts.InputEnabled, _isFullscreen, Services.Logging.UrlLog.Host(_opts.StartUrl));
+            _ = InitWebAsync();
+            App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Host}",
+                _opts.LogTag, _opts.InputEnabled, _isFullscreen, Services.Logging.UrlLog.Host(_opts.StartUrl));
+        }
+        catch
+        {
+            // A constructor that dies after Show never reaches Dispose, and these counts are read
+            // by the avatar tube's raise and by the startup ladder's quiet window - stuck true,
+            // they silence every ladder modal for the life of the process.
+            ReleaseActiveCounts();
+            throw;
+        }
     }
 
     /// <summary>Lay the window out as borderless-fullscreen or a normal titled window.</summary>
@@ -308,43 +333,215 @@ internal sealed class ChaosWebViewHost : IDisposable
             UpdateChromeToggle();
             return;
         }
+        // Remember where the window was BEFORE the mode flips, so leaving fullscreen puts it back
+        // on the monitor (and at the size) the user had it on. CaptureWindowedFrame refuses while
+        // _isFullscreen is already set, hence the order.
+        if (fullscreen) CaptureWindowedFrame();
+        // Set BEFORE the style/state churn below, because the deferred fullscreen pin reads it to
+        // decide whether its move is still wanted. Nothing between here and the end of this method
+        // may read _isFullscreen as "the mode the window is in right now" - it is the mode the
+        // window is being put into, and the frame does not agree with it until the branch is done.
+        _isFullscreen = fullscreen;
+
         if (fullscreen)
         {
             _window.WindowState = WindowState.Normal;   // manual bounds cover the whole screen (taskbar included)
             _window.WindowStyle = WindowStyle.None;
             _window.ResizeMode = ResizeMode.NoResize;
-            _window.Left = 0; _window.Top = 0;
-            _window.Width = SystemParameters.PrimaryScreenWidth;
-            _window.Height = SystemParameters.PrimaryScreenHeight;
+            // #1239: this used to be the PRIMARY screen, full stop, so a game dragged to a second
+            // monitor went fullscreen on the wrong one - and on a 1440p-primary desk it was not
+            // even the right SIZE for the monitor it landed on.
+            var screen = TargetScreen();
+            var r = HostWindowBounds.Fullscreen(ScreenBounds(screen), BubbleCountWindow.GetDpiForScreen(screen));
+            _window.Left = r.Left; _window.Top = r.Top;
+            _window.Width = r.Width; _window.Height = r.Height;
+            PinFullscreenToScreen(screen);
         }
         else
         {
             _window.WindowStyle = WindowStyle.SingleBorderWindow;   // title bar = free Alt-Tab / minimize / move
             _window.ResizeMode = ResizeMode.CanResize;
-            CenterDefaultWindowedBounds();
-            _window.WindowState = WindowState.Normal;
+            bool restored = RestoreCapturedFrame();
+            if (!restored) CenterDefaultWindowedBounds();
+            _window.WindowState = _frameWasMaximized && restored
+                ? WindowState.Maximized
+                : WindowState.Normal;
         }
-        _isFullscreen = fullscreen;
         // WindowStyle/ResizeMode churn re-stamps the frame; re-assert the owner link so a
         // fullscreen toggle can never silently unglue the window from main.
         RefreshNativeOwner();
     }
 
-    /// <summary>The fallback windowed frame: 85% of the primary screen, centered. Used at launch
-    /// and whenever fullscreen is left without a remembered frame to go back to.</summary>
+    /// <summary>The fallback windowed frame: 85% of a screen, centered. Used at launch and whenever
+    /// fullscreen is left without a remembered frame to go back to. The screen is the one this
+    /// window is on (or, before it exists, the one the game was started from) - not the primary,
+    /// for the same reason the fullscreen branch stopped using it.</summary>
     private void CenterDefaultWindowedBounds()
     {
         if (_window == null) return;
-        double sw = SystemParameters.PrimaryScreenWidth, sh = SystemParameters.PrimaryScreenHeight;
-        double w = Math.Min(_windowedW, sw), h = Math.Min(_windowedH, sh);
-        _window.Width = w; _window.Height = h;
+        var screen = TargetScreen();
+        var r = HostWindowBounds.Centred(ScreenBounds(screen), BubbleCountWindow.GetDpiForScreen(screen),
+                                         _windowedW, _windowedH);
+        _window.Width = r.Width; _window.Height = r.Height;
 
         // Centre on MainWindow when the host asked for it AND main is actually a usable rectangle.
-        // Everything else keeps the historic primary-screen centring.
-        if (_opts.CenterOnMainWindow && TryCenterOnMainWindow(w, h)) return;
+        // Everything else keeps the monitor centring above.
+        if (_opts.CenterOnMainWindow && TryCenterOnMainWindow(r.Width, r.Height)) return;
 
-        _window.Left = Math.Max(0, (sw - w) / 2);
-        _window.Top = Math.Max(0, (sh - h) / 2);
+        _window.Left = r.Left;
+        _window.Top = r.Top;
+    }
+
+    /// <summary>A monitor's PHYSICAL bounds as a Rect, for <see cref="HostWindowBounds"/>.</summary>
+    private static Rect ScreenBounds(System.Windows.Forms.Screen screen)
+        => new(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height);
+
+    /// <summary>
+    /// Put the window back on the frame <see cref="CaptureWindowedFrame"/> took, and say whether it
+    /// could. False when there is no captured frame, or when that frame no longer touches any live
+    /// monitor: go fullscreen on a second screen, undock, leave fullscreen, and restoring it
+    /// faithfully would hand the user a window they cannot reach. The caller then falls back to the
+    /// centred default, which is what this path always did before the frame was remembered at all.
+    /// </summary>
+    private bool RestoreCapturedFrame()
+    {
+        if (_window == null || !_hasWindowedFrame) return false;
+        var frame = new Rect(_frameLeft, _frameTop, _frameW, _frameH);
+        if (!HostWindowBounds.IntersectsAnyScreen(frame, ScreensInDips()))
+        {
+            App.Logger?.Information("{Tag}: the windowed frame is off every live monitor now - centring instead", _opts.LogTag);
+            return false;
+        }
+        _window.Left = frame.Left; _window.Top = frame.Top;
+        _window.Width = frame.Width; _window.Height = frame.Height;
+        return true;
+    }
+
+    /// <summary>Every live monitor in DIPs, each converted with its OWN scale. Best effort by
+    /// construction (WPF's DIP space is not one uniform grid across a mixed-DPI desk), which is all
+    /// the "is this frame still reachable" question needs.</summary>
+    private static List<Rect> ScreensInDips()
+    {
+        var list = new List<Rect>();
+        try
+        {
+            foreach (var s in System.Windows.Forms.Screen.AllScreens)
+                list.Add(HostWindowBounds.Fullscreen(ScreenBounds(s), BubbleCountWindow.GetDpiForScreen(s)));
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+        return list;
+    }
+
+    /// <summary>
+    /// The monitor this window belongs on. Our own HWND when there is one (Screen.FromHandle is
+    /// MonitorFromWindow(MONITOR_DEFAULTTONEAREST), i.e. the monitor Windows itself says the window
+    /// lives on); otherwise the window the game was started from, because the layout runs before
+    /// <c>Show</c> and a brand-new window has no position to read. Never throws: a probe that fails
+    /// falls back to the primary screen, which is where this code used to send everything.
+    /// </summary>
+    private System.Windows.Forms.Screen TargetScreen()
+    {
+        try
+        {
+            var own = _window == null ? IntPtr.Zero : new WindowInteropHelper(_window).Handle;
+            var owner = LaunchingWindowHandle();
+            var choice = HostWindowBounds.ChooseScreen(own != IntPtr.Zero, owner != IntPtr.Zero);
+            var hwnd = choice switch
+            {
+                HostWindowBounds.ScreenChoice.Self => own,
+                HostWindowBounds.ScreenChoice.Owner => owner,
+                _ => IntPtr.Zero,
+            };
+            if (hwnd != IntPtr.Zero)
+            {
+                var s = System.Windows.Forms.Screen.FromHandle(hwnd);
+                if (s != null) return s;
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.TargetScreen: {E}", _opts.LogTag, ex.Message); }
+        return System.Windows.Forms.Screen.PrimaryScreen ?? System.Windows.Forms.Screen.AllScreens[0];
+    }
+
+    /// <summary>The app window the game came from: the CC Labs launcher while it is up (it is still
+    /// on screen when a tile calls Launch - it only hides once the host reports a window), then the
+    /// control panel. A hidden panel still answers with the monitor it was last on, which is a
+    /// better guess than the primary.</summary>
+    private static IntPtr LaunchingWindowHandle()
+    {
+        static IntPtr Handle(Window? w)
+        {
+            try { return w == null ? IntPtr.Zero : new WindowInteropHelper(w).Handle; }
+            catch (Exception ex) { Diag.Swallowed(ex); return IntPtr.Zero; }
+        }
+
+        try
+        {
+            var launcher = Services.Launcher.LauncherHost.WindowRef;
+            if (launcher is { IsVisible: true })
+            {
+                var h = Handle(launcher);
+                if (h != IntPtr.Zero) return h;
+            }
+            return Handle((Window?)App.MainWindowRef ?? Application.Current?.MainWindow);
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); return IntPtr.Zero; }
+    }
+
+    /// <summary>
+    /// Pin the borderless frame to the monitor's true PHYSICAL bounds, exactly as
+    /// <c>BrowserVideoWindow.PinToScreen</c> does. The app is PerMonitorV2-aware, so the DIP bounds
+    /// set above are realized in the CREATION monitor's scale: on a mixed-DPI desk that leaves a
+    /// part-width window until this runs. SetWindowPos works in real pixels and settles it.
+    /// Deferred to SourceInitialized when the window has no HWND yet (the fullscreen-at-launch
+    /// path lays the window out before Show), and applied AGAIN on Loaded, exactly as
+    /// BrowserVideoWindow does: WM_DPICHANGED arrives when the frame crosses onto a monitor at a
+    /// different scale and resizes the window back after our move, so a game launched fullscreen
+    /// onto the 100% side of a 125%-primary desk needs the second pass to hold its size.
+    /// </summary>
+    private void PinFullscreenToScreen(System.Windows.Forms.Screen screen)
+    {
+        void Apply()
+        {
+            try
+            {
+                if (_window == null || !_isFullscreen) return;   // left fullscreen before this landed
+                var hwnd = new WindowInteropHelper(_window).Handle;
+                if (hwnd == IntPtr.Zero) return;
+                var b = screen.Bounds;
+                SetWindowPos(hwnd, IntPtr.Zero, b.X, b.Y, b.Width, b.Height,
+                    SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            catch (Exception ex) { App.Logger?.Debug("{Tag}.PinFullscreenToScreen: {E}", _opts.LogTag, ex.Message); }
+        }
+
+        try
+        {
+            if (_window == null) return;
+            bool realized = new WindowInteropHelper(_window).Handle != IntPtr.Zero;
+            if (realized) Apply();
+            else
+            {
+                void OnSource(object? s, EventArgs e)
+                {
+                    if (_window != null) _window.SourceInitialized -= OnSource;
+                    Apply();
+                }
+                _window.SourceInitialized += OnSource;
+            }
+            // The second pass, and only while there is still a Loaded to come: a toggle on a window
+            // that is already loaded would otherwise leave a dead handler behind on every press,
+            // and the inline Apply above has already done that window's work.
+            if (!_window.IsLoaded)
+            {
+                void OnLoaded(object s, RoutedEventArgs e)
+                {
+                    if (_window != null) _window.Loaded -= OnLoaded;
+                    Apply();
+                }
+                _window.Loaded += OnLoaded;
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.PinFullscreenToScreen: {E}", _opts.LogTag, ex.Message); }
     }
 
     /// <summary>Place a w x h frame at the centre of MainWindow, clamped to the virtual desktop so a
@@ -515,6 +712,17 @@ internal sealed class ChaosWebViewHost : IDisposable
         if (_window.WindowState != WindowState.Normal) _window.WindowState = WindowState.Normal;
         _window.WindowStyle = WindowStyle.None;
         _window.ResizeMode = ResizeMode.NoResize;
+        // Maximize lands on the monitor the window is ALREADY on, which is the whole answer once
+        // there is one - but fullscreen-at-launch runs before Show, where there is no window and
+        // Windows picks the primary (#1239). Put the frame on the launching monitor first.
+        if (!_window.IsVisible)
+        {
+            var launchScreen = TargetScreen();
+            var start = HostWindowBounds.Fullscreen(ScreenBounds(launchScreen),
+                                                    BubbleCountWindow.GetDpiForScreen(launchScreen));
+            _window.Left = start.Left; _window.Top = start.Top;
+            _window.Width = start.Width; _window.Height = start.Height;
+        }
         RefreshNativeOwner();
         if (_window.IsVisible)
         {
@@ -537,16 +745,16 @@ internal sealed class ChaosWebViewHost : IDisposable
         _window.WindowState = WindowState.Normal;
         _window.WindowStyle = WindowStyle.SingleBorderWindow;
         _window.ResizeMode = ResizeMode.CanResize;
-        if (_hasWindowedFrame)
+        if (RestoreCapturedFrame())
         {
-            _window.Left = _frameLeft; _window.Top = _frameTop;
-            _window.Width = _frameW; _window.Height = _frameH;
             if (_frameWasMaximized) _window.WindowState = WindowState.Maximized;
         }
         else
         {
-            // Launched straight into fullscreen (the shelf replay): there is no prior frame to owe
-            // the user, so the default centered one is the honest answer.
+            // Launched straight into fullscreen (the shelf replay), or the frame we remembered is
+            // off every live monitor now (the second screen was unplugged while we were on it):
+            // there is no reachable frame to owe the user, so the default centered one is the
+            // honest answer.
             CenterDefaultWindowedBounds();
         }
         RefreshNativeOwner();
@@ -1462,16 +1670,32 @@ internal sealed class ChaosWebViewHost : IDisposable
         try { DetachMainWindowGlue(); } catch (Exception ex) { Diag.Swallowed(ex); }
         try { _web?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
         try { _window?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
-        if (_countedActive) { _countedActive = false; System.Threading.Interlocked.Decrement(ref _activeHostCount); }
+        ReleaseActiveCounts();
         _web = null; _window = null; IsReady = false; _pending.Clear();
     }
 
-    // How many game hosts (Bureau / Graded Intake / DtRH) currently have a window up. The ATTACHED
-    // avatar tube consults this before its focus-stealing raise: an attached tube rides at main's
-    // level by definition, so it must not lift itself over a game page the user is working in.
+    // How many hosts (Bureau / Graded Intake / DtRH / the For You feed / the Loom / ...) currently
+    // have a window up. The ATTACHED avatar tube consults this before its focus-stealing raise: an
+    // attached tube rides at main's level by definition, so it must not lift itself over a page
+    // the user is working in.
     private static int _activeHostCount;
     private bool _countedActive;
     internal static bool AnyHostActive => System.Threading.Volatile.Read(ref _activeHostCount) > 0;
+
+    // ...and how many of those are GAMES (Options.IsGame). The startup ladder reads this one: it
+    // parks without a clock while a game is up, which would be wrong for a feed or an editor
+    // somebody left open all evening.
+    private static int _activeGameCount;
+    private bool _countedGame;
+    internal static bool AnyGameActive => System.Threading.Volatile.Read(ref _activeGameCount) > 0;
+
+    /// <summary>Give back whatever this host is holding on the two counters. Idempotent, because
+    /// both a failed constructor and Dispose call it.</summary>
+    private void ReleaseActiveCounts()
+    {
+        if (_countedActive) { _countedActive = false; System.Threading.Interlocked.Decrement(ref _activeHostCount); }
+        if (_countedGame) { _countedGame = false; System.Threading.Interlocked.Decrement(ref _activeGameCount); }
+    }
 
     // Passive backdrops absorb clicks (no WS_EX_TRANSPARENT) but never steal focus / show in Alt-Tab.
     private static void ApplyPassiveExStyles(Window w)

@@ -165,6 +165,7 @@ internal static class CaucusHostService
                 // Own browser profile: the descent's WebView2 state stays untouched.
                 UserDataFolderName = "browser_data_race",
                 InputEnabled = true,
+                IsGame = true,   // the startup ladder goes quiet while a game is up
                 // A normal titled window at launch; the page's fullscreen-set toggles the
                 // borderless mode through the host (never the browser Fullscreen API, which
                 // would take Esc away from the page).

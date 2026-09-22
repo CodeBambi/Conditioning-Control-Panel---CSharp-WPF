@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from './game.js';
-import {createPowerups,ordinaryTarget,swayX,DROP_REACH} from './powerups.js';
+import {pickPower,POWER_WEIGHT,createPowerups,ordinaryTarget,swayX,DROP_REACH} from './powerups.js';
 function fixture(opts={}){
  const events=[],s={w:1280,h:720,state:'colour',wallAge:3,paddle:{x:640,y:680,w:160,h:12},balls:[{x:640,y:600,vx:30,vy:-220}],bricks:[]};
  const damage=[];const power=createPowerups(s,{rng:()=>.5,emit:(...e)=>events.push(e),newBall:()=>({r:7,trail:[]}),damage:br=>damage.push(br),...opts});
@@ -121,4 +121,38 @@ test('grey and reset are silent: no shot, warning, expiry or miss after the colo
  for(const k of ['laser','fireball'])catchDrop(f,k);f.s.power.drops.push({kind:'shield',x:20,y:600,age:0});
  const mid=f.events.length;f.s.state='grey';for(let i=0;i<120;i++)f.power.step(.1);assert.equal(f.events.length,mid);
  assert.equal(f.s.power.muzzle,0);assert.equal(f.s.power.eighth,null);
+});
+test('multiball copies wear their own tints and the split speaks after the catch',()=>{
+ const f=fixture();catchDrop(f,'multiball');
+ assert.deepEqual(f.s.balls.map(b=>b.tint|0),[0,1,2]);
+ assert.deepEqual(f.events.map(e=>e[0]),['powerCatch','multiSplit']);assert.deepEqual(f.events[1][1],{x:640,y:600});
+ const full=fixture({maxBalls:1});catchDrop(full,'multiball');assert.deepEqual(full.events.map(e=>e[0]),['powerCatch'],'no copies, no split');
+});
+test('a copy promoted to the last ball drops its tint: the player ball is violet again',()=>{
+ const f=fixture();catchDrop(f,'multiball');f.s.balls.shift();f.power.step(13);
+ assert.equal(f.s.balls.length,1);assert.equal(f.s.balls[0].temporary,false);assert.equal(f.s.balls[0].tint,0);
+});
+test('the random drop mix: multiball is the rare one, every kind still falls, one roll picks',()=>{
+ const n={multiball:0,fireball:0,laser:0,shield:0};for(let i=0;i<1000;i++)n[pickPower(i/1000)]++;
+ assert.deepEqual(n,{multiball:100,fireball:300,laser:300,shield:300});
+ assert.equal(pickPower(0),'multiball');assert.equal(pickPower(1),'shield');assert.equal(pickPower(-1),'multiball');
+ assert.ok(POWER_WEIGHT.multiball<POWER_WEIGHT.laser);
+});
+
+test('a power-up glyph in a brick bobs and breathes a little, never under reduced motion', async () => {
+  const { glyphIdle, GLYPH_IDLE } = await import('./powerups-render.js');
+  assert.deepEqual(glyphIdle(3.3, 100, 80, true), { dy: 0, scale: 1 });
+  let lo = 9, hi = -9, sLo = 9, sHi = 0;
+  for (let t = 0; t < 6; t += .02) { const i = glyphIdle(t, 100, 80); lo = Math.min(lo, i.dy); hi = Math.max(hi, i.dy); sLo = Math.min(sLo, i.scale); sHi = Math.max(sHi, i.scale); }
+  assert.ok(hi > 1 && lo < -1 && hi <= GLYPH_IDLE.bob && lo >= -GLYPH_IDLE.bob, 'it moves, and only slightly');
+  assert.ok(sHi > 1.05 && sLo < .95 && sHi <= 1.1 && sLo >= .9, 'it breathes within ten percent');
+  assert.notEqual(glyphIdle(1, 100, 80).dy, glyphIdle(1, 182, 80).dy, 'neighbours are out of phase');
+});
+
+test('the shooting paddle lasts half as long, and fifteen percent fewer power-ups fall overall', async () => {
+  const { POWER_CHANCE, POWER_DURATION } = await import('./powerups.js');
+  const { SPLIT_CHANCE } = await import('./game.js');
+  assert.equal(POWER_DURATION.laser, 4);
+  const was = .085 + .01, now = POWER_CHANCE + SPLIT_CHANCE;
+  assert.ok(Math.abs(now / was - .85) < .02, 'drops per brick: ' + (now / was).toFixed(3));
 });
