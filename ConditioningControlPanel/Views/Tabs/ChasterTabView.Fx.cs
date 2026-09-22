@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Chaster;
@@ -20,7 +21,10 @@ namespace ConditioningControlPanel.Views.Tabs
     /// Circe's tab, the motion. The launcher's playbook, page-sized: an ambient fog and dust
     /// canvas behind the cards, a spiral watermark turning once every 90 s, a sheen crossing the
     /// hero every dozen seconds, the art on a slow drift, the cards arriving in a stagger, and one
-    /// event vocabulary - a pop, a burst and a ring - for every press and every booking.
+    /// event vocabulary - a pop, a burst and a ring - for every press and every booking. On top of
+    /// that, the lock's own beats: the paper tag swings, tonight's link breathes and a comet runs
+    /// the chain into it, a turned key throws a ring and lights its rows one after another, and
+    /// the trailer's picture drifts under the app's own floating figure.
     ///
     /// <para>Rails, the same as the launcher's: every tween is gated on <see cref="MotionFx"/>
     /// (loops on <c>AllowAmbientLoops</c>, particles on <c>AllowParticles</c>, the rest on
@@ -43,13 +47,30 @@ namespace ConditioningControlPanel.Views.Tabs
         private const double ShockwaveFrom = 16;
         private const double ShockwaveTo = 260;
         private const double HeroRadius = 18;
+        private const double TagSwingFrom = -7;
+        private const double TagSwingTo = -3;
+        private const double TagSwingSeconds = 3.6;
+        private const double ChainBobPx = 3;
+        private const double ChainBobSeconds = 1.1;
+        private const int ChainCometEveryMs = 6500;
+        private const int ChainCometMs = 1600;
+        private const int KeyFlickerStepMs = 28;
+        private const double TrailerDriftTo = 1.09;
+        private const double TrailerDriftSeconds = 7;
+        private const int TrailerDriftFps = 20;
+        private const int TrailerFigureEveryMs = 1700;
 
         private bool _fxStarted;
         private bool _spiralBuilt;
         private CardSheenAdorner? _heroSheen;
         private PerimeterCometAdorner? _linkComet;
+        private FrameworkElement? _tonightLink;
+        private DispatcherTimer? _chainComet;
+        private DispatcherTimer? _trailerFigure;
+        private ChasterBookedFlash? _trailerFlash;
+        private TabPrice? _trailerPrice;
 
-        /// <summary>Once, from the constructor: the hover lifts, the press squishes, the tile hues.</summary>
+        /// <summary>Once, from the constructor: the hover lifts, the press squishes, the key hues.</summary>
         private void FxInit()
         {
             try
@@ -72,8 +93,9 @@ namespace ConditioningControlPanel.Views.Tabs
                 // replacing each other's (MotionFx swaps a lone identity transform for its own).
                 foreach (var moving in new FrameworkElement[]
                          {
-                             HeroCard, StatTab, StatToday, StatRun, PricesHeader, SwitchPill, TxtBalance, ConsentCard,
+                             HeroCard, ChainRow, StatTab, StatToday, StatRun, PricesHeader, SwitchPill, TxtBalance, ConsentCard,
                              BtnPresetGentle, BtnPresetStrict, BtnPresetCirce, BtnPresetCustom, BtnLink, BtnConsentOk,
+                             CostBoard, EarnBoard, JackpotRow, FootRow,
                          }.Concat(FactRow.Children.OfType<FrameworkElement>()))
                 {
                     moving.RenderTransform = new TransformGroup { Children = { new ScaleTransform(1, 1), new TranslateTransform() } };
@@ -125,6 +147,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 StartSpiralTurn();
                 StartHeroSheen();
                 StartArtDrift();
+                StartTagSwing();
+                StartChainLoops();
                 if (_clockLead is { } lead) MotionFx.Odometer(lead.Block, 0, lead.Value, "{0:0}", 0.9);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx on shown"); }
@@ -156,6 +180,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 foreach (var fact in FactRow.Children.OfType<FrameworkElement>()) yield return fact;
                 yield break;
             }
+            if (ChainRow.Visibility == Visibility.Visible) yield return ChainRow;
             yield return StatTab;
             yield return StatToday;
             yield return StatRun;
@@ -164,6 +189,10 @@ namespace ConditioningControlPanel.Views.Tabs
             yield return BtnPresetStrict;
             yield return BtnPresetCirce;
             yield return BtnPresetCustom;
+            yield return CostBoard;
+            yield return EarnBoard;
+            yield return JackpotRow;
+            yield return FootRow;
         }
 
         /// <summary>The page hid: park every loop where it is, keep the composed state.</summary>
@@ -175,6 +204,9 @@ namespace ConditioningControlPanel.Views.Tabs
                 HoldSpiral();
                 DetachSheen();
                 StopArtDrift();
+                StopTagSwing();
+                StopChainLoops();
+                FxTrailerStop();
                 PerimeterCometAdorner.Detach(_linkComet);
                 _linkComet = null;
             }
@@ -270,6 +302,26 @@ namespace ConditioningControlPanel.Views.Tabs
             HeroArtScale.ScaleX = HeroArtScale.ScaleY = 1;
         }
 
+        /// <summary>The paper tag swings a few degrees on its string, slowly, like a tag on a hook does.</summary>
+        private void StartTagSwing()
+        {
+            if (!MotionFx.AllowAmbientLoops) { StopTagSwing(); return; }
+            var swing = new DoubleAnimation(TagSwingFrom, TagSwingTo, TimeSpan.FromSeconds(TagSwingSeconds))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            };
+            Timeline.SetDesiredFrameRate(swing, ArtDriftFps * 2);
+            TagSwing.BeginAnimation(RotateTransform.AngleProperty, swing);
+        }
+
+        private void StopTagSwing()
+        {
+            TagSwing.BeginAnimation(RotateTransform.AngleProperty, null);
+            TagSwing.Angle = (TagSwingFrom + TagSwingTo) / 2;
+        }
+
         /// <summary>The art plate: rounded on the card's right corners only, and a fade from the
         /// card's own surface on its left edge so the picture emerges instead of starting.</summary>
         private void HeroArtPlate_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -295,9 +347,183 @@ namespace ConditioningControlPanel.Views.Tabs
             catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
+        // ------------------------------------------------------------------ the chain
+
+        /// <summary>A chain was rebuilt: forget the old tonight link and its clocks.</summary>
+        private void FxChainReset()
+        {
+            StopChainLoops();
+            _tonightLink = null;
+        }
+
+        /// <summary>Tonight's link glows red (perf-gated) and, once the page is up, breathes.</summary>
+        private void FxChainTonight(FrameworkElement link)
+        {
+            _tonightLink = link;
+            try
+            {
+                if (PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+                {
+                    link.Effect = new DropShadowEffect
+                    {
+                        Color = CostColour, ShadowDepth = 0, Opacity = 0.8,
+                        BlurRadius = Math.Min(16, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
+                        RenderingBias = RenderingBias.Performance,
+                    };
+                }
+                link.RenderTransformOrigin = new Point(0.5, 0.5);
+                link.RenderTransform = new ScaleTransform(1, 1);
+                if (IsVisible) StartChainLoops();
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx chain"); }
+        }
+
+        /// <summary>The tag under tonight's link bobs, the link breathes, and every few seconds a
+        /// comet runs the chain from the open end into tonight and lands with a pulse.</summary>
+        private void StartChainLoops()
+        {
+            StopChainLoops();
+            if (_tonightLink == null || !MotionFx.AllowAmbientLoops) return;
+            var bob = new DoubleAnimation(0, ChainBobPx, TimeSpan.FromSeconds(ChainBobSeconds))
+            {
+                AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            };
+            Timeline.SetDesiredFrameRate(bob, 20);
+            ChainTagBob.BeginAnimation(TranslateTransform.YProperty, bob);
+            MotionFx.GlowBreath(_tonightLink, 0.72, 1.0, 2.2);
+            _chainComet = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(ChainCometEveryMs) };
+            _chainComet.Tick += (_, _) => ChainComet();
+            _chainComet.Start();
+        }
+
+        private void StopChainLoops()
+        {
+            _chainComet?.Stop();
+            _chainComet = null;
+            ChainTagBob.BeginAnimation(TranslateTransform.YProperty, null);
+            ChainTagBob.Y = 0;
+            if (_tonightLink != null) MotionFx.Stop(_tonightLink);
+        }
+
+        /// <summary>One comet: a bright dot that runs from the open link to tonight's and pops it.</summary>
+        private void ChainComet()
+        {
+            try
+            {
+                if (!IsVisible || !MotionFx.AllowAmbientLoops || _tonightLink == null || Chain.Children.Count < 2) return;
+                if (Chain.Children[^1] is not FrameworkElement open) return;
+                var from = open.TransformToVisual(ShockwaveCanvas).Transform(new Point(open.ActualWidth / 2, open.ActualHeight / 2));
+                var to = _tonightLink.TransformToVisual(ShockwaveCanvas).Transform(new Point(_tonightLink.ActualWidth / 2, _tonightLink.ActualHeight / 2));
+                if (double.IsNaN(from.X) || double.IsNaN(to.X)) return;
+
+                var slide = new TranslateTransform(from.X, from.Y);
+                var comet = new Ellipse
+                {
+                    Width = 8, Height = 8, Fill = Brushes.White, Opacity = 0, IsHitTestVisible = false,
+                    RenderTransform = slide, Margin = new Thickness(-4, -4, 0, 0),
+                };
+                if (PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+                    comet.Effect = new DropShadowEffect { Color = CostColour, ShadowDepth = 0, BlurRadius = 12, Opacity = 0.9, RenderingBias = RenderingBias.Performance };
+                ShockwaveCanvas.Children.Add(comet);
+
+                var duration = TimeSpan.FromMilliseconds(ChainCometMs);
+                var run = new DoubleAnimation(from.X, to.X, duration) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } };
+                var drop = new DoubleAnimation(from.Y, to.Y, duration) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } };
+                var fade = new DoubleAnimationUsingKeyFrames { Duration = duration };
+                fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+                fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.1)));
+                fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.92)));
+                fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
+                fade.Completed += (_, _) =>
+                {
+                    try
+                    {
+                        ShockwaveCanvas.Children.Remove(comet);
+                        if (_tonightLink != null) FxPop(_tonightLink, 1.3);
+                    }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
+                };
+                slide.BeginAnimation(TranslateTransform.XProperty, run);
+                slide.BeginAnimation(TranslateTransform.YProperty, drop);
+                comet.BeginAnimation(UIElement.OpacityProperty, fade);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx comet"); }
+        }
+
+        // ------------------------------------------------------------------ the trailer
+
+        /// <summary>The trailer opened: the picture drifts, and every couple of seconds the app's
+        /// own floating figure says the row's price off the plate.</summary>
+        private void FxTrailerStart(TabPrice price)
+        {
+            FxTrailerStop();
+            _trailerPrice = price;
+            try
+            {
+                if (MotionFx.AllowAmbientLoops)
+                {
+                    var drift = new DoubleAnimation(1.0, TrailerDriftTo, TimeSpan.FromSeconds(TrailerDriftSeconds))
+                    {
+                        AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                    };
+                    var pan = new DoubleAnimation(6, -6, TimeSpan.FromSeconds(TrailerDriftSeconds * 1.3))
+                    {
+                        AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                    };
+                    Timeline.SetDesiredFrameRate(drift, TrailerDriftFps);
+                    Timeline.SetDesiredFrameRate(pan, TrailerDriftFps);
+                    TrailerArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, drift);
+                    TrailerArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, drift);
+                    TrailerArtPan.BeginAnimation(TranslateTransform.XProperty, pan);
+                }
+                // The first figure lands as soon as the popup has a layer; then on a loop.
+                _trailerFigure = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(TrailerFigureEveryMs) };
+                _trailerFigure.Tick += (_, _) => TrailerFigure();
+                _trailerFigure.Start();
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(TrailerFigure));
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx trailer"); }
+        }
+
+        /// <summary>One "+0:30" off the plate, the exact figure the padlock throws when this row books.</summary>
+        private void TrailerFigure()
+        {
+            try
+            {
+                if (!_trailerShown || _trailerPrice is not { } price) return;
+                var plan = BookedFlashPlan.For(price.Id, price.Seconds, MotionFx.Level);
+                if (plan is not { } fresh) return;
+                _trailerFlash?.Dismiss();
+                _trailerFlash = ChasterBookedFlash.Show(TrailerFigureAnchor, fresh);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private void FxTrailerStop()
+        {
+            try
+            {
+                _trailerFigure?.Stop();
+                _trailerFigure = null;
+                _trailerFlash?.Dismiss();
+                _trailerFlash = null;
+                _trailerPrice = null;
+                TrailerArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                TrailerArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                TrailerArtPan.BeginAnimation(TranslateTransform.XProperty, null);
+                TrailerArtScale.ScaleX = TrailerArtScale.ScaleY = 1;
+                TrailerArtPan.X = 0;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx trailer stop"); }
+        }
+
         // ------------------------------------------------------------------ the events
 
-        /// <summary>A price landed: the balance pops in the booking's colour, sparks off it, a ring out of its card.</summary>
+        /// <summary>A price landed: the balance pops in the booking's colour, sparks off it, a ring
+        /// out of its card, and the paper tag jumps on its string.</summary>
         private void FxBooked(int seconds, string eventId)
         {
             try
@@ -306,6 +532,9 @@ namespace ConditioningControlPanel.Views.Tabs
                 FxPop(TxtBalance, 1.14);
                 BurstAt(TxtBalance, colour, 36);
                 Shockwave(StatTab, colour);
+                FxPop(PaperTag, 1.06);
+                FxPop(TxtTagAmount, 1.12);
+                if (ChainTag.Visibility == Visibility.Visible) FxPop(ChainTag, 1.2);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx booked"); }
         }
@@ -321,14 +550,38 @@ namespace ConditioningControlPanel.Views.Tabs
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx preset"); }
         }
 
-        private void FxChip(ToggleButton chip, bool on, Color hue)
+        /// <summary>A key turned: the rows it opens light one after another, top to bottom.</summary>
+        private void FxKeyTurned(IEnumerable<ToggleButton> lit)
+        {
+            if (!MotionFx.AllowTransitions) return;
+            try
+            {
+                var i = 0;
+                foreach (var row in lit)
+                {
+                    var self = row;
+                    var delay = TimeSpan.FromMilliseconds(KeyFlickerStepMs * i++);
+                    var scale = EnsureScale(self);
+                    if (scale == null) continue;
+                    var flick = new DoubleAnimationUsingKeyFrames { BeginTime = delay, Duration = TimeSpan.FromMilliseconds(260) };
+                    flick.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromPercent(0)));
+                    flick.KeyFrames.Add(new EasingDoubleKeyFrame(1.06, KeyTime.FromPercent(0.4), new QuadraticEase { EasingMode = EasingMode.EaseOut }));
+                    flick.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromPercent(1), new QuadraticEase { EasingMode = EasingMode.EaseInOut }));
+                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, flick);
+                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, flick);
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx key"); }
+        }
+
+        private void FxRow(ToggleButton row, bool on, Color hue)
         {
             try
             {
-                FxPop(chip, 1.1);
-                if (on) BurstAt(chip, hue, 14);
+                FxPop(row, 1.06);
+                if (on) BurstAt(row, hue, 16);
             }
-            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx chip"); }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx row"); }
         }
 
         private void FxSwitch(bool on)

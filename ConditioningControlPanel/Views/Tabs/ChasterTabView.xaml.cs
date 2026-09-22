@@ -6,8 +6,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using System.Windows.Threading;
+using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Chaster;
@@ -18,12 +22,14 @@ namespace ConditioningControlPanel.Views.Tabs
     /// Circe's tab, the page. Reads <see cref="ChasterService"/>, writes four settings, decides
     /// nothing: every rule (what books, what is capped, what reaches the lock) lives in
     /// Services/Chaster and is tested there, and every string the page composes comes out of
-    /// <see cref="TabPageText"/> or <see cref="TabPresets"/> so it is tested without a window.
+    /// <see cref="TabPageText"/>, <see cref="TabPresets"/> or <see cref="TabMenuCopy"/> so it is
+    /// tested without a window.
     ///
-    /// <para>This partial is the DATA: what each figure, pill and chip says. The motion (the
-    /// bursts, rings, sheen, the cards arriving) is <c>ChasterTabView.Fx.cs</c>, which this file
-    /// only ever calls into through the <c>Fx*</c> hooks, every one of which is safe to call with
-    /// nothing on screen and does nothing under MotionFx Off.</para>
+    /// <para>This partial is the DATA: what each figure, pill, link and row says. The motion (the
+    /// bursts, rings, sheen, the cards arriving, the chain's comet, the trailer's drift) is
+    /// <c>ChasterTabView.Fx.cs</c>, which this file only ever calls into through the <c>Fx*</c>
+    /// hooks, every one of which is safe to call with nothing on screen and does nothing under
+    /// MotionFx Off.</para>
     /// </summary>
     public partial class ChasterTabView : UserControl
     {
@@ -37,6 +43,8 @@ namespace ConditioningControlPanel.Views.Tabs
 
         private static readonly Brush CostBrush = Frozen(CostColour);
         private static readonly Brush EarnBrush = Frozen(EarnColour);
+        private static readonly Brush JackpotBrush = Frozen(JackpotColour);
+        private static readonly Brush ChainBrush = Frozen(Color.FromRgb(0x6E, 0x66, 0x86));
         private static readonly FontFamily Display = new("/Fonts/#Fredoka, Segoe UI");
         private static readonly FontFamily Mono = new("Consolas, Courier New");
 
@@ -45,12 +53,29 @@ namespace ConditioningControlPanel.Views.Tabs
         private static readonly TimeSpan SlowTick = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan HoldTick = TimeSpan.FromSeconds(1);
 
+        /// <summary>The chain draws one link a day up to this many, then the links shrink so a
+        /// long lock still fits on one line.</summary>
+        internal const int ChainWideLinks = 18;
+        internal const int ChainMaxLinks = 40;
+
+        /// <summary>The hover-to-trailer delay, and the grace for the pointer to cross from the
+        /// row to its popup.</summary>
+        private static readonly TimeSpan TrailerOpenDelay = TimeSpan.FromMilliseconds(150);
+        private static readonly TimeSpan TrailerCloseGrace = TimeSpan.FromMilliseconds(140);
+
         private bool _loading;
-        private bool _chipsBuilt;
+        private bool _menuBuilt;
         private bool _subscribed;
         private double _capFraction;
         private readonly Dictionary<string, ToggleButton> _priceToggles = new();
+        private readonly Dictionary<string, Border> _rowDims = new();
         private readonly DispatcherTimer _tick;
+        private readonly DispatcherTimer _trailerOpen;
+        private readonly DispatcherTimer _trailerClose;
+        private ToggleButton? _trailerRow;
+        private bool _trailerShown;
+        private bool _overTrailer;
+        private int _chainLinks;
 
         /// <summary>The first number of the countdown and its value, for the count-up on show.</summary>
         private (TextBlock Block, int Value)? _clockLead;
@@ -60,8 +85,13 @@ namespace ConditioningControlPanel.Views.Tabs
             InitializeComponent();
             _tick = new DispatcherTimer(DispatcherPriority.Background) { Interval = SlowTick };
             _tick.Tick += (_, _) => { RefreshHero(); RefreshDay(animate: false); };
+            _trailerOpen = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TrailerOpenDelay };
+            _trailerOpen.Tick += (_, _) => { _trailerOpen.Stop(); OpenTrailer(); };
+            _trailerClose = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TrailerCloseGrace };
+            _trailerClose.Tick += (_, _) => { _trailerClose.Stop(); if (!_overTrailer) HideTrailer(); };
             // Only listen while the page is on screen: Booked fires on every priced event.
-            IsVisibleChanged += (_, _) => Subscribe(IsVisible);
+            IsVisibleChanged += (_, _) => { Subscribe(IsVisible); if (!IsVisible) HideTrailer(); };
+            Chain.SizeChanged += (_, _) => PlaceChainTag();
             FxInit();
         }
 
@@ -126,6 +156,7 @@ namespace ConditioningControlPanel.Views.Tabs
             FactRow.Visibility = linked ? Visibility.Collapsed : Visibility.Visible;
             LinkedPanel.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
             SwitchPill.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
+            PaperTag.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
             BtnLink.IsEnabled = chaster != null;
             ShowLinking(chaster?.IsLinking == true);
             RefreshHero();
@@ -139,9 +170,7 @@ namespace ConditioningControlPanel.Views.Tabs
             PaintSwitch(on);
             ConsentCard.Visibility = Visibility.Collapsed;
 
-            // A set the player built by hand is worth showing, so the chips open on it. A preset,
-            // or nothing at all, reads better as the four tiles alone.
-            ShowCustomize(TabPresets.Match(settings?.ChasterPrices) == TabPresets.Custom);
+            ApplyPriceToggles();
             RefreshPresets();
             RefreshNumbers(animate: false);
         }
@@ -154,6 +183,7 @@ namespace ConditioningControlPanel.Views.Tabs
             TxtBalance.Text = balance == 0 ? CircesTab.Format(0, signed: false) : CircesTab.Format(balance);
             TxtBalance.Foreground = FigureBrush(balance);
             TxtBalanceCaption.Text = Loc.Get(balance < 0 ? "chaster_credit_caption" : "chaster_balance_caption");
+            RefreshTag(balance);
             RefreshDay(animate);
             RefreshRun();
             if (ReceiptHost.Visibility == Visibility.Visible) BuildBill();
@@ -162,7 +192,7 @@ namespace ConditioningControlPanel.Views.Tabs
         private Brush FigureBrush(int seconds) =>
             seconds > 0 ? CostBrush : seconds < 0 ? EarnBrush : (Brush)FindResource("TextLightBrush");
 
-        // ============================== 1. the lock ==============================
+        // ============================== 1. the lock, and the tag on it ==============================
 
         internal void RefreshHero()
         {
@@ -181,6 +211,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 HeroPills.Children.Clear();
                 HeroPills.Visibility = Visibility.Collapsed;
                 LockRow.Visibility = Visibility.Collapsed;
+                BuildChain(null);
                 return;
             }
 
@@ -231,6 +262,7 @@ namespace ConditioningControlPanel.Views.Tabs
             TxtHeroEnds.Visibility = ends == null ? Visibility.Collapsed : Visibility.Visible;
 
             RefreshPills(lookup, snapshot, chaster!.SafetyHoldRemaining);
+            BuildChain(left);
         }
 
         /// <summary>The single-letter units under the big digits: the long keys are the chip's
@@ -280,15 +312,110 @@ namespace ConditioningControlPanel.Views.Tabs
             return pill;
         }
 
-        // ============================== 2. today, and this run ==============================
+        /// <summary>The paper tag: the tab's amount in ink, when it lands, and a stamp that says
+        /// UNPAID while there is something to pay, CLEAR at zero, CREDIT below it.</summary>
+        internal void RefreshTag(int balance)
+        {
+            TxtTagAmount.Text = balance == 0 ? CircesTab.Format(0, signed: false) : CircesTab.Format(balance);
+            TxtTagAmount.Foreground = balance > 0 ? Frozen(Color.FromRgb(0xC8, 0x24, 0x4A))
+                : balance < 0 ? Frozen(Color.FromRgb(0x1E, 0x8A, 0x6E)) : Frozen(Color.FromRgb(0x24, 0x1A, 0x2E));
+            TxtTagLands.Text = balance > 0 ? Loc.GetF("chaster_tag_lands", "00:00") : Loc.Get("chaster_tag_credit_lands");
+            TxtTagStamp.Text = Loc.Get(balance > 0 ? "chaster_tag_unpaid" : balance < 0 ? "chaster_tag_credit" : "chaster_tag_clear");
+            var stampColour = balance > 0 ? Color.FromRgb(0xC8, 0x24, 0x4A) : balance < 0 ? Color.FromRgb(0x1E, 0x8A, 0x6E) : Color.FromRgb(0x6E, 0x66, 0x86);
+            TagStamp.BorderBrush = Frozen(stampColour);
+            TxtTagStamp.Foreground = Frozen(stampColour);
+            TxtChainTag.Text = CircesTab.Format(balance);
+            ChainTag.Visibility = balance > 0 && _chainLinks > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // ============================== 2. the chain ==============================
+
+        /// <summary>How many links the chain draws for a lock with this long left: one a day,
+        /// starting with tonight, plus the one that opens. No lock, no chain.</summary>
+        internal static int ChainLinksFor(TimeSpan? remaining)
+        {
+            if (remaining is not { } left || left <= TimeSpan.Zero) return 0;
+            var days = (int)Math.Ceiling(left.TotalDays);
+            return Math.Clamp(days, 1, ChainMaxLinks - 1) + 1;
+        }
+
+        /// <summary>One link a day until the lock opens. Tonight's link is red and carries the
+        /// tab's tag; the last is dashed gold, the one that opens. Past a couple of weeks the links
+        /// shrink so a long lock still reads as one chain.</summary>
+        internal void BuildChain(TimeSpan? remaining)
+        {
+            var links = ChainLinksFor(remaining);
+            _chainLinks = links;
+            Chain.Children.Clear();
+            FxChainReset();
+            if (links == 0)
+            {
+                ChainRow.Visibility = Visibility.Collapsed;
+                ChainTag.Visibility = Visibility.Collapsed;
+                return;
+            }
+            ChainRow.Visibility = Visibility.Visible;
+            var wide = links <= ChainWideLinks;
+            double w = wide ? 34 : 20, h = wide ? 18 : 12, overlap = wide ? -6 : -4;
+            for (var i = 0; i < links; i++)
+            {
+                var last = i == links - 1;
+                var tonight = i == 0;
+                FrameworkElement link;
+                if (last)
+                {
+                    link = new Rectangle
+                    {
+                        Width = w, Height = h, RadiusX = h / 2, RadiusY = h / 2,
+                        Stroke = JackpotBrush, StrokeThickness = 2.2, StrokeDashArray = new DoubleCollection { 3, 2 },
+                        ToolTip = Loc.Get("chaster_chain_open"),
+                    };
+                }
+                else
+                {
+                    link = new Border
+                    {
+                        Width = w, Height = h, CornerRadius = new CornerRadius(h / 2),
+                        BorderThickness = new Thickness(tonight ? 3 : 2.2),
+                        BorderBrush = tonight ? CostBrush : ChainBrush,
+                        Background = tonight ? new SolidColorBrush(Color.FromArgb(0x33, CostColour.R, CostColour.G, CostColour.B)) : null,
+                        ToolTip = tonight ? Loc.Get("chaster_chain_tonight") : Loc.GetF("chaster_chain_day", i + 1),
+                    };
+                }
+                // every other link sits a touch lower, so the row reads as links woven, not beads
+                link.Margin = new Thickness(i == 0 ? 0 : overlap, (i & 1) == 1 ? h * 0.35 : 0, 0, 0);
+                link.VerticalAlignment = VerticalAlignment.Top;
+                Chain.Children.Add(link);
+                if (tonight) FxChainTonight(link);
+            }
+            RefreshTag(App.Chaster?.BalanceSeconds ?? 0);
+            PlaceChainTag();
+        }
+
+        /// <summary>Park the tag under the first link, wherever the centred chain put it.</summary>
+        private void PlaceChainTag()
+        {
+            try
+            {
+                if (Chain.Children.Count == 0 || Chain.Children[0] is not FrameworkElement first || !first.IsVisible) return;
+                var bounds = first.TransformToVisual(ChainRow).TransformBounds(new Rect(0, 0, first.ActualWidth, first.ActualHeight));
+                var x = bounds.X + bounds.Width / 2 - ChainTag.ActualWidth / 2;
+                ChainTag.Margin = new Thickness(Math.Max(0, x), bounds.Bottom + 6, 0, 0);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        // ============================== 3. today, and this run ==============================
 
         internal void RefreshDay(bool animate = true)
         {
             var chaster = App.Chaster;
             if (chaster == null) return;
             var today = chaster.TodayAddedSeconds;
+            var cap = CircesTab.Format(CircesTab.DailyCapSeconds, signed: false);
             TxtToday.Text = CircesTab.Format(today, signed: false);
-            TxtTodayCap.Text = "/ " + CircesTab.Format(CircesTab.DailyCapSeconds, signed: false);
+            TxtTodayCap.Text = "/ " + cap;
+            TxtTodaySub.Text = Loc.GetF("chaster_stat_today_sub", cap);
             _capFraction = TabPageText.CapFraction(today);
             LayoutCap(animate);
 
@@ -331,6 +458,7 @@ namespace ConditioningControlPanel.Views.Tabs
             ReceiptHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
             TxtRunChevron.RenderTransform = new RotateTransform(open ? 180 : 0);
             FxPop(StatRun, 1.04);
+            if (ReferenceEquals(sender, PaperTag)) FxPop(PaperTag, 1.05);
         }
 
         internal void BuildBill() => Receipt.Show(App.Chaster?.Bill());
@@ -477,15 +605,14 @@ namespace ConditioningControlPanel.Views.Tabs
             _ = App.Chaster?.RefreshLockAsync();
         }
 
-        // ============================== 3. prices: tiles first, chips behind ==============================
+        // ============================== 4. the keys ==============================
 
         private void Preset_Click(object sender, RoutedEventArgs e)
         {
             if ((sender as ToggleButton)?.Tag is not string id || sender is not ToggleButton tile) return;
             if (id == TabPresets.Custom)
             {
-                // The fourth tile opens and closes the chips; it never rewrites the set.
-                ShowCustomize(CustomizeHost.Visibility != Visibility.Visible);
+                // The fourth key is a mirror of a hand-built set; pressing it rewrites nothing.
                 RefreshPresets();
                 FxPreset(tile, CustomColour);
                 return;
@@ -498,6 +625,7 @@ namespace ConditioningControlPanel.Views.Tabs
             ApplyPriceToggles();
             RefreshPresets();
             FxPreset(tile, PresetColour(id));
+            FxKeyTurned(LitRows());
         }
 
         internal static Color PresetColour(string id) => id switch
@@ -508,80 +636,138 @@ namespace ConditioningControlPanel.Views.Tabs
             _ => CustomColour,
         };
 
-        private void ShowCustomize(bool show)
-        {
-            if (show) ApplyPriceToggles();
-            CustomizeHost.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        /// <summary>Light the tile for the set that is on. The fourth tile lights for a hand-built
-        /// set, and while the chips are open.</summary>
+        /// <summary>Light the key for the set that is on. The fourth key lights for a hand-built set.</summary>
         internal void RefreshPresets()
         {
             var match = TabPresets.Match(App.Settings?.Current?.ChasterPrices);
             BtnPresetGentle.IsChecked = match == TabPresets.Gentle;
             BtnPresetStrict.IsChecked = match == TabPresets.Strict;
             BtnPresetCirce.IsChecked = match == TabPresets.Circe;
-            BtnPresetCustom.IsChecked = match == TabPresets.Custom || CustomizeHost.Visibility == Visibility.Visible;
+            BtnPresetCustom.IsChecked = match == TabPresets.Custom;
         }
 
-        /// <summary>Push the saved set onto the chips. Never the other way round: the settings
-        /// list is the truth and the chips are a view of it.</summary>
+        /// <summary>Push the saved set onto the rows. Never the other way round: the settings
+        /// list is the truth and the rows are a view of it.</summary>
         internal void ApplyPriceToggles()
         {
-            BuildPriceRows();
+            BuildMenu();
             var on = new HashSet<string>(App.Settings?.Current?.ChasterPrices ?? new List<string>(), StringComparer.Ordinal);
             _loading = true;
-            try { foreach (var (id, chip) in _priceToggles) chip.IsChecked = on.Contains(id); }
+            try
+            {
+                foreach (var (id, row) in _priceToggles)
+                {
+                    row.IsChecked = on.Contains(id);
+                    PaintRowLit(id, on.Contains(id));
+                }
+            }
             finally { _loading = false; }
         }
 
-        internal void BuildPriceRows()
+        private IEnumerable<ToggleButton> LitRows() =>
+            _priceToggles.Values.Where(r => r.IsChecked == true);
+
+        // ============================== 5. the menu ==============================
+
+        internal void BuildMenu()
         {
-            if (_chipsBuilt) return;
-            _chipsBuilt = true;
+            if (_menuBuilt) return;
+            _menuBuilt = true;
             var (costs, earnBacks) = TabPageText.Split(TabPrices.All);
-            foreach (var price in costs) CostRows.Children.Add(Chip(price, CostColour));
-            foreach (var price in earnBacks) EarnRows.Children.Add(Chip(price, EarnColour));
+            foreach (var price in costs) CostRows.Children.Add(Row(price, CostColour));
+            foreach (var price in earnBacks) EarnRows.Children.Add(Row(price, EarnColour));
         }
 
-        /// <summary>A chip is a name and a price. The one row that charges for staying away says
-        /// how in its tooltip, and nowhere on the page.</summary>
-        private ToggleButton Chip(TabPrice price, Color colour)
+        /// <summary>A row is a picture, a short name, where it happens, a tier sign when the
+        /// feature needs one, and the price on a stamp. The one row that charges for staying away
+        /// says how in its tooltip, and nowhere on the page.</summary>
+        private ToggleButton Row(TabPrice price, Color colour)
         {
-            var brush = new SolidColorBrush(colour);
-            brush.Freeze();
-            var name = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+            var brush = Frozen(colour);
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // the picture, dimmed to a shade while the row is off
+            var thumb = new Border { Width = 40, Height = 40, CornerRadius = new CornerRadius(8), ClipToBounds = true, Margin = new Thickness(0, 0, 10, 0) };
+            var art = TabMenuCopy.ArtFor(price.Id);
+            var dim = new Border { CornerRadius = new CornerRadius(8), Background = Frozen(Color.FromRgb(0x1A, 0x12, 0x30)), Opacity = 0.62, IsHitTestVisible = false };
+            var plate = new Grid();
+            if (art != null)
+            {
+                var image = new Image { Stretch = Stretch.UniformToFill };
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+                try { image.Source = new BitmapImage(new Uri("pack://application:,,,/Resources/" + art)); }
+                catch (Exception ex) { Diag.Swallowed(ex, "chaster row art " + art); }
+                plate.Children.Add(image);
+            }
+            else plate.Background = Frozen(Color.FromArgb(0x30, colour.R, colour.G, colour.B));
+            plate.Children.Add(dim);
+            thumb.Child = plate;
+            Grid.SetColumn(thumb, 0);
+            grid.Children.Add(thumb);
+            _rowDims[price.Id] = dim;
+
+            // the words: a short name, and where it happens with the tier sign beside it
+            var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            var name = new TextBlock
+            {
+                Text = TabMenuCopy.ShortName(price.Id, Loc.Get), FontFamily = Display, FontSize = 13.5, FontWeight = FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
             name.SetResourceReference(TextBlock.ForegroundProperty, "TextLightBrush");
-            name.SetBinding(TextBlock.TextProperty, Bound(TabPageText.NameKey(price.Id)));
-            var figure = new TextBlock
+            words.Children.Add(name);
+            var whereRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 0) };
+            var where = new TextBlock { FontSize = 10.5, Opacity = 0.85, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+            where.SetResourceReference(TextBlock.ForegroundProperty, "TextMutedBrush");
+            where.SetBinding(TextBlock.TextProperty, Bound(TabMenuCopy.WhereKey(price.Id)));
+            whereRow.Children.Add(where);
+            var tier = TabMenuCopy.BadgeTier(price.Gate);
+            if (tier > 0)
+            {
+                var badge = new TierBadge { Tier = tier, MaxWidthOverride = 46, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+                whereRow.Children.Add(badge);
+            }
+            words.Children.Add(whereRow);
+            Grid.SetColumn(words, 1);
+            grid.Children.Add(words);
+
+            // the stamp
+            var stamp = new TextBlock
             {
                 Text = TabPageText.Price(price, Loc.Get("chaster_each")),
-                FontFamily = Mono, FontSize = 11, FontWeight = FontWeights.SemiBold,
-                Foreground = brush, VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(8, 0, 0, 0),
+                FontFamily = Mono, FontSize = 12.5, FontWeight = FontWeights.Bold,
+                Foreground = brush, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0),
+                RenderTransformOrigin = new Point(0.5, 0.5),
             };
-            var row = new StackPanel { Orientation = Orientation.Horizontal };
-            row.Children.Add(name);
-            row.Children.Add(figure);
+            Grid.SetColumn(stamp, 2);
+            grid.Children.Add(stamp);
 
-            var chip = new ToggleButton
+            var row = new ToggleButton
             {
-                Style = (Style)FindResource("CirceChip"),
+                Style = (Style)FindResource("CirceRow"),
                 Tag = price.Id,
                 Background = brush,
                 BorderBrush = brush,
-                Content = row,
+                Content = grid,
             };
             if (price.Id == CircesMisses.EventId)
             {
                 var tip = new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = 320 };
                 tip.SetBinding(TextBlock.TextProperty, Bound("chaster_misses_hint"));
-                chip.ToolTip = tip;
+                row.ToolTip = tip;
             }
-            chip.Click += PriceToggle_Changed;
-            _priceToggles[price.Id] = chip;
-            return chip;
+            row.Click += PriceToggle_Changed;
+            row.MouseEnter += Row_MouseEnter;
+            row.MouseLeave += Row_MouseLeave;
+            _priceToggles[price.Id] = row;
+            return row;
+        }
+
+        private void PaintRowLit(string id, bool on)
+        {
+            if (_rowDims.TryGetValue(id, out var dim)) dim.Opacity = on ? 0 : 0.62;
         }
 
         private static Binding Bound(string key) =>
@@ -590,8 +776,8 @@ namespace ConditioningControlPanel.Views.Tabs
         private void PriceToggle_Changed(object sender, RoutedEventArgs e)
         {
             if (_loading || App.Settings?.Current is not { } settings) return;
-            if (sender is not ToggleButton chip || chip.Tag is not string id) return;
-            var on = chip.IsChecked == true;
+            if (sender is not ToggleButton row || row.Tag is not string id) return;
+            var on = row.IsChecked == true;
             // A new list every time: the service reads the setting fresh on each event, maybe
             // from another thread, and must never see a list that is being edited.
             var next = new List<string>(settings.ChasterPrices ?? new List<string>());
@@ -599,9 +785,81 @@ namespace ConditioningControlPanel.Views.Tabs
             if (on) next.Add(id);
             settings.ChasterPrices = next;
             App.Settings?.Save();
-            // One hand-flipped chip can land exactly on a preset, or step off one. Say which.
+            PaintRowLit(id, on);
+            // One hand-flipped row can land exactly on a preset, or step off one. Say which.
             RefreshPresets();
-            FxChip(chip, on, ((SolidColorBrush)chip.BorderBrush).Color);
+            FxRow(row, on, ((SolidColorBrush)row.BorderBrush).Color);
+        }
+
+        // ============================== the trailer ==============================
+
+        private void Row_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (sender is not ToggleButton row) return;
+            _trailerClose.Stop();
+            _trailerRow = row;
+            if (_trailerShown) OpenTrailer();
+            else { _trailerOpen.Stop(); _trailerOpen.Start(); }
+        }
+
+        private void Row_MouseLeave(object sender, MouseEventArgs e)
+        {
+            _trailerOpen.Stop();
+            _trailerClose.Stop();
+            _trailerClose.Start();
+        }
+
+        private void Trailer_MouseEnter(object sender, MouseEventArgs e)
+        {
+            _overTrailer = true;
+            _trailerClose.Stop();
+        }
+
+        private void Trailer_MouseLeave(object sender, MouseEventArgs e)
+        {
+            _overTrailer = false;
+            _trailerClose.Stop();
+            _trailerClose.Start();
+        }
+
+        /// <summary>The id the trailer is aimed at while it is up, for the tests. Null when closed.
+        /// Kept apart from the popup's own IsOpen: without a window behind it a Popup may refuse
+        /// to open, and the dressing must still be right.</summary>
+        internal string? TrailerId => _trailerShown ? _trailerRow?.Tag as string : null;
+
+        /// <summary>Aim the one popup at the hovered row and dress it for that row's price.</summary>
+        internal void OpenTrailer(ToggleButton? row = null)
+        {
+            row ??= _trailerRow;
+            if (row?.Tag is not string id || TabPrices.Find(id) is not { } price) return;
+            _trailerRow = row;
+            try
+            {
+                var art = TabMenuCopy.ArtFor(id);
+                TrailerArt.Source = art == null ? null : new BitmapImage(new Uri("pack://application:,,,/Resources/" + art));
+                TxtTrailerFlavour.Text = Loc.Get(TabMenuCopy.FlavourKey(id));
+                TxtTrailerWhy.Text = Loc.Get(TabMenuCopy.WhyKey(id));
+                var tier = TabMenuCopy.BadgeTier(price.Gate);
+                TrailerBadgeHost.Child = tier > 0 ? new TierBadge { Tier = tier, MaxWidthOverride = 64 } : null;
+                Trailer.PlacementTarget = row;
+                _trailerShown = true;
+                FxTrailerStart(price);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster trailer"); }
+            try { Trailer.IsOpen = true; }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster trailer open"); }
+        }
+
+        internal void HideTrailer()
+        {
+            _trailerOpen.Stop();
+            _trailerClose.Stop();
+            _overTrailer = false;
+            if (!_trailerShown) return;
+            _trailerShown = false;
+            FxTrailerStop();
+            try { Trailer.IsOpen = false; }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster trailer close"); }
         }
     }
 }
