@@ -56,6 +56,24 @@ export const timeScaleCents = s => SLOWMO_CENTS * clamp((1 - num(s, 1)) / (1 - S
 export const PAUSE_FADE_S = 0.15, RESUME_FADE_S = 0.2, PAUSE_CUTOFF = 300, OPEN_CUTOFF = 20000;
 /** A streak cue and station.js's own au('perfect') arrive in the same moment; perfect() skips inside this window. */
 export const PERFECT_GUARD_S = 0.05;
+// The iris voice: whole recordings, drawn from a shuffle bag so every clip is heard before any comes round again and
+// the same clip never plays twice running, even across the bag's refill. `rng` is injectable for the tests.
+export const VOICE_LEVEL = 0.35, VOICE_FADE_S = 0.04, VOICE_RELEASE_S = 0.15;
+export function createVoiceBag(count, rng = Math.random) {
+  const n = Math.max(0, Math.floor(num(count, 0)));
+  let bag = [], last = -1;
+  const refill = () => {
+    bag = Array.from({ length: n }, (_, i) => i);
+    for (let i = n - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
+    // The refill's first draw sits at the END of the array (draws pop). Never let it equal the last one played.
+    if (n > 1 && bag[n - 1] === last) { const j = Math.floor(rng() * (n - 1)); [bag[n - 1], bag[j]] = [bag[j], bag[n - 1]]; }
+  };
+  return {
+    get size() { return n; },
+    get last() { return last; },
+    next() { if (!n) return -1; if (!bag.length) refill(); last = bag.pop(); return last; },
+  };
+}
 
 /** Pure beat math. `origin` is the clock time of step 0; rebase() moves it when the clock changes. */
 export function createBeat(bpm = 96, origin = 0) {
@@ -83,12 +101,12 @@ const MELODY = [
   [48, 4, 2], [52, 2, 2], [56, 1, 3], [60, 0, 4],
 ];
 
-export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } = {}) {
+export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null, rng = Math.random } = {}) {
   const perf = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
   const perfOrigin = perf();
   const beat = createBeat(bpm, 0);
   let ctx = null, out = null, lp = null, room = null, noiseBuf = null, timer = 0, destroyed = false, running = false;
-  let snapBuffer = null, irisBuffers = [], irisLoading = false, irisSource = null, irisIndex = 0;
+  let snapBuffer = null, irisBuffers = [], irisLoading = false, irisVoiceNow = null, irisBag = null;
   const mixGains={}, mixLevels={bed:1,sfx:1,sub:1,word:1};
   const bus = { bed: null, sfx: null, sub: null, word: null };   // word: the word triggers' own cues, never ducked
   const layer = { melody: null, arp: null };
@@ -363,25 +381,41 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
         }catch(e){/* Unavailable voice never blocks play. */}
       }
     },
+    /**
+     * The eye speaks ONE WHOLE recording (17-23 s each, the Rabbit Hole drift lines), never a slice: the old build chopped
+     * the first 1.9 s off each clip and glued four of them, so every core hit sounded like the same mid-word loop
+     * (owner, 2026-09-22). Clips come from a shuffle bag with no back-to-back repeat, the way DtRH's driftChain rotates
+     * its pool. One voice at a time: a call while a line is still playing is dropped, so the eye never talks over
+     * itself (six cores can die inside one line). Each clip wears its own 40 ms fade in and out against clicks and
+     * runs for `buffer.duration`, so the timing follows the recording, never a fixed window. Returns true when a line
+     * was started.
+     */
     irisVoice() {
-      if(!running||!live()||!irisBuffers.length)return;
-      if(irisSource)for(const source of irisSource){try{source.stop();}catch(e){}}
-      const gain=ctx.createGain(), t=ctx.currentTime;
-      gain.connect(bus.word);gain.gain.setValueAtTime(0,t);
-      gain.gain.linearRampToValueAtTime(.35,t+.25);
-      gain.gain.setValueAtTime(.35,t+6.85);gain.gain.linearRampToValueAtTime(0,t+7.6);
-      const sources=[];let ended=0;
-      for(let i=0;i<4;i++) {
-        const source=ctx.createBufferSource();source.buffer=irisBuffers[irisIndex++%irisBuffers.length];
-        source.playbackRate.value=1;
-        const splice=ctx.createGain(), start=t+i*1.9, end=t+(i+1)*1.9;
-        source.connect(splice);splice.connect(gain);
-        splice.gain.setValueAtTime(0,start);splice.gain.linearRampToValueAtTime(1,start+.08);
-        splice.gain.setValueAtTime(1,end-.08);splice.gain.linearRampToValueAtTime(0,end);
-        source.onended=()=>{source.disconnect();splice.disconnect();if(++ended===4){gain.disconnect();if(irisSource===sources)irisSource=null;}};
-        source.start(t+i*1.9);source.stop(t+(i+1)*1.9);sources.push(source);
-      }
-      irisSource=sources;
+      if(!running||!live()||!irisBuffers.length)return false;
+      if(irisVoiceNow&&irisVoiceNow.until>ctx.currentTime)return false;
+      if(!irisBag||irisBag.size!==irisBuffers.length)irisBag=createVoiceBag(irisBuffers.length,rng);
+      const index=irisBag.next(), buffer=irisBuffers[index], dur=Math.max(VOICE_FADE_S*2,num(buffer&&buffer.duration,0));
+      const gain=ctx.createGain(), t=ctx.currentTime, end=t+dur;
+      gain.connect(bus.word);
+      gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(VOICE_LEVEL,t+VOICE_FADE_S);
+      gain.gain.setValueAtTime(VOICE_LEVEL,end-VOICE_FADE_S);gain.gain.linearRampToValueAtTime(0,end);
+      const source=ctx.createBufferSource();source.buffer=buffer;
+      source.connect(gain);
+      const voice={source,gain,index,until:end};
+      source.onended=()=>{try{source.disconnect();gain.disconnect();}catch(e){}if(irisVoiceNow===voice)irisVoiceNow=null;};
+      source.start(t);source.stop(end);
+      irisVoiceNow=voice;
+      return true;
+    },
+    /** Let the eye go quiet without a click: 150 ms fade, then the source stops. Safe when nothing is playing. */
+    irisVoiceRelease() {
+      const voice=irisVoiceNow;if(!voice||!live())return;
+      irisVoiceNow=null;
+      const t=ctx.currentTime;
+      try{
+        voice.gain.gain.cancelScheduledValues(t);voice.gain.gain.setValueAtTime(VOICE_LEVEL,t);
+        voice.gain.gain.linearRampToValueAtTime(0,t+VOICE_RELEASE_S);voice.source.stop(t+VOICE_RELEASE_S);
+      }catch(e){}
     },
     /**
      * Hold everything; start() brings it back on the same grid. THE PAUSE SWEEP: the gate and its low-pass close over
@@ -408,7 +442,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     },
     destroy() {
       setMusicScene('normal');
-      destroyed = true; running = false; wantRunning = false;
+      destroyed = true; running = false; wantRunning = false; irisVoiceNow = null;
       if (timer) { clearInterval(timer); timer = 0; }
       if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = 0; }
       if (ctx) { try { ctx.close().catch(() => {}); } catch (e) { /* already */ } }
