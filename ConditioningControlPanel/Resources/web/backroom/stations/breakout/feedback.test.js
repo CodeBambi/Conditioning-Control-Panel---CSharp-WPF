@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { durabilityColour, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, relativeDrag, cometLength, COMET_BONUS, COMET_MAX, wordTrailLength, wordTrailPoints, WORD_TRAIL, jellyScale, bubbleIdle, BALL_TINTS } from './feedback.js';
+import { durabilityColour, ROW_HUES, brickHueIndex, brickHueOf, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, relativeDrag, cometLength, COMET_BONUS, COMET_MAX, wordTrailLength, wordTrailPoints, WORD_TRAIL, jellyScale, bubbleIdle, BALL_TINTS } from './feedback.js';
 import { createParticles } from './particles.js';
 
 const luminance = rgb => rgb.map(v => {v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;}).reduce((n,v,i)=>n+v*[.2126,.7152,.0722][i],0);
@@ -11,6 +11,38 @@ test('damage gets brighter across theme hues and dull mode', () => {
     assert(luminance(colours[1])<luminance(colours[2]));
     if(grey) colours.forEach(c=>assert.equal(new Set(c).size,1));
   }
+});
+const hsl = ([r, g, b]) => { r /= 255; g /= 255; b /= 255; const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+  const s = max === min ? 0 : (max - min) / (1 - Math.abs(2 * l - 1)); return { s, l }; };
+test('iris bricks wear a mix of palette hues, never white, and the core is the dark rung', () => {
+  const hues = new Set(), cores = [];
+  for (let arm = 0; arm < 6; arm++) {
+    const core = { irisCore: true, arm, col: 0, row: arm, hp: 3 };
+    const guard = { irisGuard: true, arm, col: 4, row: arm };
+    assert.equal(brickHueIndex(guard), brickHueIndex(core), 'a guard keeps its core\'s hue');
+    cores.push(durabilityColour(core.hp, false, brickHueOf(core)));
+    for (let col = 0; col < 20; col++) {
+      const br = { arm, col, row: arm, irisAge: col * 1.4 };
+      const rgb = durabilityColour(1, false, brickHueOf(br));
+      const { s, l } = hsl(rgb);
+      assert.ok(s >= .7, `arm ${arm} col ${col} is washed out: ${rgb}`);
+      assert.ok(l <= .82 && Math.max(...rgb) < 250, `arm ${arm} col ${col} reads white: ${rgb}`);
+      assert.ok(ROW_HUES.includes(brickHueOf(br)));
+      hues.add(brickHueOf(br));
+    }
+  }
+  assert.ok(hues.size >= 3, 'at least three distinct hues across the arms, got ' + hues.size);
+  assert.equal(new Set([0, 1, 2, 3, 4, 5].map(arm => brickHueIndex({ arm, col: 0 }))).size, 6, 'six arms, six starting hues');
+  for (const rgb of cores) assert.ok(hsl(rgb).l < .4, 'a 3-hit core is the dark rung: ' + rgb);
+  // a brick drifts hue along its stream, deterministically from its spawn index
+  assert.notEqual(brickHueIndex({ arm: 0, col: 0 }), brickHueIndex({ arm: 0, col: 8 }));
+  assert.equal(brickHueIndex({ arm: 2, col: 5 }), brickHueIndex({ arm: 2, col: 5 }));
+});
+test('ordinary walls take their hue from the row; a brick with neither row nor arm keeps the fallback', () => {
+  assert.equal(brickHueOf({ row: 2, col: 7 }), ROW_HUES[2]);
+  assert.equal(brickHueOf({ row: 9, col: 0 }), ROW_HUES[9 % ROW_HUES.length]);
+  assert.equal(brickHueOf({}, 270), 270);
+  assert.equal(brickHueOf(null, 123), 123);
 });
 test('comet follows bounce history, grows with speed, and stops at teleports',()=>{
   const trail=[];for(let x=0;x<=300;x+=5)trail.push(x,0);

@@ -1,8 +1,24 @@
 // Shared visual rules. Themes change the hue; remaining hits control brightness.
+/** The row palette as hues (the renderer's ROWS, pink to mint). A wall reads as a mix of these, one per row;
+ *  PR #1472 had replaced it with a single lavender for every plain brick, which the iris wall (no rows, every
+ *  brick plain and small) showed up as "they read all white" (owner, 2026-09-22). */
+export const ROW_HUES = Object.freeze([330, 329, 282, 263, 213, 164]);
+/** Which palette hue a brick wears. Ordinary walls: its row. The iris wall: each stream (arm) starts on its own
+ *  hue and the spawned bricks drift one step every four spawns along it (col is the spawn index), so the six arms
+ *  read as a mix; a core and its guards keep the arm's own hue. Pure: no rng, so no seeded draw moves. */
+export function brickHueIndex(br) {
+  const n = ROW_HUES.length;
+  if (br && Number.isFinite(br.arm)) {
+    const drift = br.irisCore || br.irisGuard ? 0 : ((br.col | 0) >> 2);
+    return (((br.arm | 0) + drift) % n + n) % n;
+  }
+  return (((br?.row | 0) % n) + n) % n;
+}
+export const brickHueOf = (br, fallback = 270) => (br && (Number.isFinite(br.arm) || Number.isFinite(br.row))) ? ROW_HUES[brickHueIndex(br)] : fallback;
 export function durabilityColour(hp, grey = false, hue = 270) {
-  const light = [0, .78, .56, .34][Math.max(1, Math.min(3, hp || 1))];
+  const light = [0, .74, .54, .34][Math.max(1, Math.min(3, hp || 1))];   // the 1-hit rung sits where the old row palette did (l about .7), not at a pastel .78
   if (grey) return Array(3).fill(Math.round(light * 255));
-  const saturation = .55, a = saturation * Math.min(light, 1 - light);
+  const saturation = .8, a = saturation * Math.min(light, 1 - light);
   return [0, 8, 4].map(n => {
     const k = (n + hue / 30) % 12;
     return Math.round(255 * (light - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
