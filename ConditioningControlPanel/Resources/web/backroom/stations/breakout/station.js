@@ -209,6 +209,8 @@ export async function mount(ctx) {
     if (show) { ui.combo.textContent = 'x' + c; if (c > lastCombo) pop(ui.combo); }
     lastCombo = c;
   }
+  /** The ending is running (the core hit at the spiral centre onward): the mouse is free for its card and never re-taken. */
+  const endingUnderway = () => { const f = game?.snapshot().finale; return !!f && (f.phase === 'outro' || f.phase === 'interrupt'); };
   function setPaused(p) {
     officeEnding?.suspend(p);
     if (paused === p) return;
@@ -320,6 +322,7 @@ export async function mount(ctx) {
     try { haptics?.onEvent(name, d, s); } catch (e) { /* haptics optional */ }
     switch (name) {
       case 'finaleCoreReached':
+        mouseLock?.release();                        // the ending card wants a visible pointer, from this frame on
         shutdownCover?.remove();
         shutdownCover=document.createElement('div');
         shutdownCover.style.cssText='position:fixed;inset:0;z-index:2147483647;pointer-events:none';
@@ -512,7 +515,7 @@ export async function mount(ctx) {
     const dt = Math.min(0.05, frameMs/1000);
     lastT = ts;
     if (menuOpen || suspended || paused) { try { haptics?.stop(); } catch (e) { /* noop */ } diagnostics?.idle(); renderBudget.idle(ts); return; }
-    if (mouseLock?.locked && game.snapshot().finale?.phase === 'outro') mouseLock.release();   // the ending card wants a visible pointer
+    if (mouseLock?.locked && endingUnderway()) mouseLock.release();   // backstop for the release on finaleCoreReached (a dev jump skips the event)
     const perfStart = performance.now();
     if (budgetResize) { resize(); budgetResize = false; }
     // The stylesheet lands after the first measure and the room can reshape the root without a window resize.
@@ -613,7 +616,7 @@ export async function mount(ctx) {
     on(el,'click',e=>{
       const button=e.target.closest('[data-menu]');if(!button)return;
       const action=button.dataset.menu;
-      if(action==='resume'){setPaused(false);canvas.focus();if(e.pointerType!=='touch')mouseLock?.request({pointerType:'mouse'});}   // the Resume click is the gesture that re-takes the mouse
+      if(action==='resume'){setPaused(false);canvas.focus();if(e.pointerType!=='touch'&&!endingUnderway())mouseLock?.request({pointerType:'mouse'});}   // the Resume click is the gesture that re-takes the mouse; the ending keeps it free
       if(action==='exit'&&globalThis.chrome?.webview)back();
       if(action==='options'){
         optionsFrom=button;if(!menuOpen)setPaused(true);
@@ -643,7 +646,8 @@ export async function mount(ctx) {
 
     // THE MOUSE IS CAPTURED WHILE PLAYING (owner, 2026-09-22: the paddle stopped answering the moment the mouse left the browser
     // window). Locked, moves arrive as deltas with no edge; Esc (or a tab switch) lets go, and that pauses so the card is clickable.
-    mouseLock = createMouseLock({ canvas, doc: document, enabled: readEnabled(store), onLost: () => { if (!menuOpen && !paused) setPaused(true); } });
+    // Never during the ending: it has no card to resume into, and a pause there froze the ending on every frame (2026-09-22).
+    mouseLock = createMouseLock({ canvas, doc: document, enabled: readEnabled(store), onLost: () => { if (!menuOpen && !paused && !endingUnderway()) setPaused(true); } });
     const lockBox = options.querySelector('[data-mouselock]');
     if (lockBox) { lockBox.checked = mouseLock.enabled; on(lockBox, 'change', () => { mouseLock.setEnabled(lockBox.checked); store.set(LOCK_KEY, lockBox.checked ? '1' : '0'); }); }
     /** Field px per CSS px, measured through the renderer's own mapping so a resize or a room reshape is always current. */
