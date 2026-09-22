@@ -1076,6 +1076,7 @@ namespace ConditioningControlPanel
         /// </param>
         private void MaybeShowFeatureIntro(string key, string? doorTab = null)
         {
+            if (Services.FirstShow.FirstShowService.IsActive) return;
             try
             {
                 // Through the presenter, like the dashboard's own card: inside the quiet window
