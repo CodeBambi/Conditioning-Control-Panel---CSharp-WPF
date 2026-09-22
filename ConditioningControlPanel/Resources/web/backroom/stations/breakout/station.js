@@ -33,6 +33,7 @@ import { createRenderBudget } from './render-budget.js';
 import { createHaptics } from './haptics.js';
 import { createGamepad } from './gamepad.js';
 import { relativeDrag } from './feedback.js';
+import { createMouseLock, lockedSteer, readEnabled, STORE_KEY as LOCK_KEY } from './mouse-lock.js';
 
 export const roomStage = false;
 
@@ -94,6 +95,7 @@ export async function mount(ctx) {
   const keysDown = { l: false, r: false, last: 0 };   // arrows and A / D; the newest key wins, the older one resumes on release
   const syncKeys = () => { input.left = keysDown.l && (!keysDown.r || keysDown.last < 0); input.right = keysDown.r && (!keysDown.l || keysDown.last > 0); };
   let touchDrag = null;                              // touch steers by relative drag (feedback.js relativeDrag); mouse and pen stay absolute
+  let mouseLock = null;                              // the mouse under pointer lock while playing (mouse-lock.js): relative moves, no window edge
   const off = [];
   const on = (target, ev, fn, opts) => { target.addEventListener(ev, fn, opts); off.push(() => target.removeEventListener(ev, fn, opts)); };
   const ui = {};
@@ -136,7 +138,7 @@ export async function mount(ctx) {
       <p class="bo-ghost-hint" hidden></p>
       <button class="bo-pause-button" type="button" aria-label="Pause game">&#9208; Pause</button>
       <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><p class="bo-best" hidden></p><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="options">Options</button></div></div>
-      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><fieldset class="bo-pictures" hidden><legend>Pictures</legend><div class="bo-pic-tabs" role="group" aria-label="Flavour"></div><div class="bo-pic-niches" aria-label="Niches inside"></div><form class="bo-pic-add"><span aria-hidden="true">r/</span><input type="text" aria-label="Add a niche" placeholder="add a niche" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" maxlength="60"><button type="submit">Add</button></form><p class="bo-pic-note" aria-live="polite"></p></fieldset><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>Escape or P to pause.</p><button type="button" data-menu="close-options">Back</button></div></section>
+      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><fieldset class="bo-pictures" hidden><legend>Pictures</legend><div class="bo-pic-tabs" role="group" aria-label="Flavour"></div><div class="bo-pic-niches" aria-label="Niches inside"></div><form class="bo-pic-add"><span aria-hidden="true">r/</span><input type="text" aria-label="Add a niche" placeholder="add a niche" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" maxlength="60"><button type="submit">Add</button></form><p class="bo-pic-note" aria-live="polite"></p></fieldset><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><label class="bo-lock-row"><span><input type="checkbox" data-mouselock>Capture the mouse while playing</span></label><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>A click captures the mouse; Escape frees it and pauses.</p><button type="button" data-menu="close-options">Back</button></div></section>
       <button class="bo-gear" type="button" aria-label="${t('br_breakout_dev', 'dev toggles')}" aria-expanded="false"></button>
       <div class="bo-dev" hidden>
         <div class="bo-dev-header"><strong>Developer tools</strong><button type="button" data-do="performance">Performance</button><button type="button" data-do="hide-tools">Hide all (F2)</button></div>
@@ -212,6 +214,7 @@ export async function mount(ctx) {
     if (paused === p) return;
     input.left = input.right = input.launch = false; keysDown.l = keysDown.r = false; touchDrag = null;
     paused = p; ui.paused.hidden = !p; el.classList.toggle('is-paused', p);
+    if (p) mouseLock?.release();                     // the card needs a visible pointer
     const best = game ? game.snapshot().comboBest | 0 : 0, line = ui.paused.querySelector('.bo-best');   // the one quiet place the best combo shows
     if (line) { line.hidden = best < 3; line.textContent = 'Best combo x' + best; }
     try { if (p) audio.stop(!!document.hidden); else if (audioOn) audio.start(); } catch (e) { /* noop */ }
@@ -509,6 +512,7 @@ export async function mount(ctx) {
     const dt = Math.min(0.05, frameMs/1000);
     lastT = ts;
     if (menuOpen || suspended || paused) { try { haptics?.stop(); } catch (e) { /* noop */ } diagnostics?.idle(); renderBudget.idle(ts); return; }
+    if (mouseLock?.locked && game.snapshot().finale?.phase === 'outro') mouseLock.release();   // the ending card wants a visible pointer
     const perfStart = performance.now();
     if (budgetResize) { resize(); budgetResize = false; }
     // The stylesheet lands after the first measure and the room can reshape the root without a window resize.
@@ -609,7 +613,7 @@ export async function mount(ctx) {
     on(el,'click',e=>{
       const button=e.target.closest('[data-menu]');if(!button)return;
       const action=button.dataset.menu;
-      if(action==='resume'){setPaused(false);canvas.focus();}
+      if(action==='resume'){setPaused(false);canvas.focus();if(e.pointerType!=='touch')mouseLock?.request({pointerType:'mouse'});}   // the Resume click is the gesture that re-takes the mouse
       if(action==='exit'&&globalThis.chrome?.webview)back();
       if(action==='options'){
         optionsFrom=button;if(!menuOpen)setPaused(true);
@@ -637,7 +641,16 @@ export async function mount(ctx) {
     });
     on(pace,'change' ,()=>game.setSpeedScale(Number(pace.value)));
 
+    // THE MOUSE IS CAPTURED WHILE PLAYING (owner, 2026-09-22: the paddle stopped answering the moment the mouse left the browser
+    // window). Locked, moves arrive as deltas with no edge; Esc (or a tab switch) lets go, and that pauses so the card is clickable.
+    mouseLock = createMouseLock({ canvas, doc: document, enabled: readEnabled(store), onLost: () => { if (!menuOpen && !paused) setPaused(true); } });
+    const lockBox = options.querySelector('[data-mouselock]');
+    if (lockBox) { lockBox.checked = mouseLock.enabled; on(lockBox, 'change', () => { mouseLock.setEnabled(lockBox.checked); store.set(LOCK_KEY, lockBox.checked ? '1' : '0'); }); }
+    /** Field px per CSS px, measured through the renderer's own mapping so a resize or a room reshape is always current. */
+    const fieldPerCss = () => renderer.toField(dpr, 0).x - renderer.toField(0, 0).x;
+
     const steer = (e) => {
+      if (mouseLock?.locked && e.pointerType !== 'touch') { touchDrag = null; const p = game.snapshot().paddle; return lockedSteer(input.x ?? p.x, e.movementX, fieldPerCss(), p.w / 2, W); }
       if (e.pointerType !== 'touch') { touchDrag = null; return pointerX(e); }
       const p = game.snapshot().paddle;
       touchDrag = touchDrag && touchDrag.id === e.pointerId ? touchDrag : { id: e.pointerId, sx: pointerX(e), px: p.x };
@@ -650,7 +663,8 @@ export async function mount(ctx) {
       if (menuOpen || paused || !e.isPrimary) return;
       canvas.setPointerCapture(e.pointerId);
       touchDrag = null;
-      startAudio(); input.x = steer(e); input.launch = true; firstMove(); if (paused) setPaused(false);
+      const took = mouseLock?.request(e);            // a mouse click takes the mouse; the press itself still steers and launches
+      startAudio(); if (!took) input.x = steer(e); input.launch = true; firstMove(); if (paused) setPaused(false);
     });
     on(canvas, 'touchstart', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
     on(window, 'keydown', (e) => {
@@ -717,6 +731,8 @@ export async function mount(ctx) {
     if (raf) cancelAnimationFrame(raf); raf = 0;
     while (off.length) { try { off.pop()(); } catch (e) { /* noop */ } }
     try { audio && audio.stop(true); } catch (e) { /* noop */ }
+    try { mouseLock && mouseLock.dispose(); } catch (e) { /* noop */ }
+    mouseLock = null;
     try { voice && voice.stop(); } catch (e) { /* noop */ }
     voice = null;
     try { haptics && haptics.destroy(); } catch (e) { /* noop */ }
