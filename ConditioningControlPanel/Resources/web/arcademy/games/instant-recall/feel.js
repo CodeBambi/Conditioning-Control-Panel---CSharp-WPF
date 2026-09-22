@@ -1,5 +1,6 @@
 import { makeRound, picture, PICTURES, report } from './feel-model.js';
 import { css } from './feel-style.js';
+import { makeRng } from '../../core/rng.js';
 
 // Preview and future host use this same game. No progression is read or written.
 export function create(ctx) {
@@ -154,7 +155,7 @@ export function create(ctx) {
     if (sent || dead) return;
     phase = 'complete'; host.classList.add('ir-final');
     title(tr('feel_recall_finished', 'Room restored.'), `${correct} of 6 caught. Every picture back where it belongs.`);
-    stage.innerHTML = '<div class="ir-seal" aria-hidden="true">✧</div>';
+    stage.replaceChildren(at('.ir-mosaic'));
     feedback.innerHTML = '<p>Nothing missing. Nicely done.</p>';
     at('.ir-mosaic-label').textContent = tr('feel_recall_mosaic', 'Your restored room.');
     tone([261.63, 329.63, 392, 523.25]);
@@ -206,7 +207,7 @@ export function create(ctx) {
   return {
     start(spec = {}) {
       if (dead || started) return;
-      started = true; rng = typeof spec.random === 'function' ? spec.random : Math.random;
+      started = true; rng = typeof spec.random === 'function' ? spec.random : makeRng(spec.seed || 'recall-feel');
       unlockSound(); beginRound(); syncPause();
     },
     pause() { paused = true; syncPause(); },
