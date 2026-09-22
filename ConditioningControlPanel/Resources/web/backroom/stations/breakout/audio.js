@@ -97,6 +97,10 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
   let finaleMuted=false, finaleGrey=false, musicGate=null, musicDrive=null;
   // The pause sweep lives AFTER the master, so it never touches musicGate, the duck() buses or setMaster().
   let pauseGate = null, pauseLp = null, greyDip = null, pauseTimer = 0, faded = false, wantRunning = false, perfectCuedAt = -1;
+  // parked: the fade is done and the bed scheduler idles; the context keeps RUNNING unless stop(true) released it (a hidden page).
+  // Suspending on every in-game pause made the browser tear down and reopen its output stream each time, and a player heard the
+  // audio "get crunchier every time you press pause and play again" (owner, 2026-09-22). A silent running context is cheap.
+  let parked = false;
   let saturation = 0, state = 'colour', stepIndex = 0, nextStepTime = 0;
   const level = clamp(num(master, 0.8), 0, 1);
 
@@ -163,7 +167,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
    */
   function voice(n, t, dest) {
     if (!live()) return;
-    const dur = Math.max(0.005, n.dur), g = ctx.createGain(), nodes = [g];
+    const dur = Math.max(0.005, n.dur), g = ctx.createGain(), nodes = [g], detuneIns = [];
     let src, head;
     if (n.k === 'noise') {
       src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
@@ -176,7 +180,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       src.frequency.setValueAtTime(n.hz, t);
       if (n.hzTo && n.hzTo !== n.hz) src.frequency.exponentialRampToValueAtTime(n.hzTo, t + dur);
       if (src.detune && isBedDest(dest)) {                            // the bed follows slow-mo and the grey wobble
-        try { if (bedDetune) bedDetune.connect(src.detune); if (wobbleGain) wobbleGain.connect(src.detune); } catch (e) { /* straight */ }
+        try { if (bedDetune) { bedDetune.connect(src.detune); detuneIns.push(bedDetune); } if (wobbleGain) { wobbleGain.connect(src.detune); detuneIns.push(wobbleGain); } } catch (e) { /* straight */ }
       }
       head = src;
     }
@@ -195,7 +199,11 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     }
     tail.connect(dest);
     if (n.wet && room) tail.connect(room);
-    src.onended = () => { for (const x of nodes) { try { x.disconnect(); } catch (e) { /* gone */ } } };
+    src.onended = () => {
+      for (const x of nodes) { try { x.disconnect(); } catch (e) { /* gone */ } }
+      // A node's own disconnect() does not drop what feeds its params: the detune inputs held every dead bed voice alive.
+      for (const d of detuneIns) { try { d.disconnect(src.detune); } catch (e) { /* gone */ } }
+    };
     src.start(t); src.stop(t + dur + 0.02);
   }
   const play = (notes, t, dest) => { for (const n of notes) { try { voice(n, t + (n.at || 0), dest); } catch (e) { /* a note never breaks a beat */ } } };
@@ -234,7 +242,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     }
   }
   function pump() {
-    if (!running || !live() || finaleMuted) return;
+    if (!running || parked || !live() || finaleMuted) return;
     const cur = ctx.currentTime;
     if (nextStepTime < cur) {                                         // the tab slept: skip, never catch up in a burst
       const k = Math.ceil((cur - nextStepTime) / beat.sixteenth); stepIndex += k; nextStepTime += k * beat.sixteenth;
@@ -296,7 +304,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     start() {
       if (destroyed) return false;
       if (!ctx && !build()) return false;
-      wantRunning = true;
+      wantRunning = true; parked = false;                              // the bed picks its grid back up on the next pump (the sleep-skip)
       if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = 0; }     // start() inside the fade: the suspend never happens
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
       if (faded) {                                                      // the way back up: gate linear, filter exponential
@@ -376,12 +384,13 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       irisSource=sources;
     },
     /**
-     * Hold everything; start() brings it back on the same grid (ctx time stops with it). THE PAUSE SWEEP: the gate and
-     * its low-pass close over PAUSE_FADE_S and only then does the context suspend, so a pause breathes out instead of
-     * cutting dead. The beat origin, stepIndex and nextStepTime are never touched. Safe to call twice; start() inside
-     * the fade cancels the suspend; a start() that lands while suspend() is still settling resumes again afterwards.
+     * Hold everything; start() brings it back on the same grid. THE PAUSE SWEEP: the gate and its low-pass close over
+     * PAUSE_FADE_S, then the bed scheduler parks. The context keeps running (an in-game pause) unless `release` is true
+     * (the page went hidden), when it suspends after the fade. The beat origin is never touched; the pump's sleep-skip
+     * carries stepIndex past the gap. Safe to call twice; start() inside the fade cancels the park and the suspend; a
+     * start() that lands while suspend() is still settling resumes again afterwards.
      */
-    stop() {
+    stop(release = false) {
       wantRunning = false;
       if (!live() || ctx.state !== 'running' || pauseTimer) return;
       faded = true;
@@ -390,6 +399,8 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       pauseTimer = setTimeout(() => {
         pauseTimer = 0;
         if (!live() || wantRunning || ctx.state !== 'running') return;
+        parked = true;                                                  // the bed stops writing notes into a closed gate
+        if (!release) return;                                           // an in-game pause keeps the context (and the output stream) alive
         const c = ctx;
         c.suspend().then(() => { if (wantRunning && c === ctx && live()) c.resume().catch(() => {}); }).catch(() => {});
       }, PAUSE_FADE_S * 1000 + 10);
@@ -560,6 +571,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     get pauseLevel() { return pauseGate ? pauseGate.gain.value : 1; },
     get pauseCutoff() { return pauseLp ? pauseLp.frequency.value : OPEN_CUTOFF; },
     get pausing() { return !!pauseTimer; },
+    get parked() { return parked; },
     get context() { return ctx; },
     get running() { return running; },
     get state() { return state; },

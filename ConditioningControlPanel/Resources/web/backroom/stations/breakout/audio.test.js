@@ -3,7 +3,7 @@ import {routeFinaleAudio} from './finale-audio.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, timeScaleCents, LOOP_STEPS, MIN_LEAD_S, WOBBLE_CENTS,
-  PAUSE_FADE_S, PAUSE_CUTOFF, PERFECT_GUARD_S, GREY_LEVEL } from './audio.js';
+  PAUSE_FADE_S, PAUSE_CUTOFF, PERFECT_GUARD_S, GREY_LEVEL, TICK_MS } from './audio.js';
 import { ROOT_HZ } from '../../shared/sound/kit.js';
 
 /* ---- a fake Web Audio graph: enough surface for the module, every scheduled start is counted ---- */
@@ -168,7 +168,7 @@ test('relapse goes grey by itself, breakout comes back to colour; one-shots sche
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const FADE_MS = PAUSE_FADE_S * 1000 + 60;
 
-test('stop sweeps down and THEN suspends, start resumes and opens up, destroy closes and makes everything a no-op', async () => {
+test('stop sweeps down and parks the bed with the context still running; stop(true) suspends; start opens up; destroy closes', async () => {
   const { audio, ctx } = make();
   audio.start();
   const c = ctx();
@@ -180,13 +180,25 @@ test('stop sweeps down and THEN suspends, start resumes and opens up, destroy cl
   assert.ok(audio.pauseLevel < 0.001, 'the gate glides shut');
   assert.equal(audio.pauseCutoff, PAUSE_CUTOFF, 'under a closing low-pass');
   await wait(FADE_MS);
-  assert.equal(c.state, 'suspended');
+  assert.equal(c.state, 'running', 'an in-game pause never suspends: the output stream stays open (the crunch report, 2026-09-22)');
   assert.equal(audio.pausing, false);
+  assert.equal(audio.parked, true, 'the bed scheduler idles instead');
+  const written = c.log.starts.length; c.currentTime += 2; await wait(TICK_MS * 3);
+  assert.equal(c.log.starts.length, written, 'nothing is written into a closed gate while parked');
   audio.start();
+  assert.equal(audio.parked, false);
   assert.equal(c.state, 'running');
   assert.equal(audio.pauseLevel, 1);
   assert.ok(audio.pauseCutoff > 15000, 'the filter is open again');
   assert.equal(audio.beat.origin, origin, 'the same grid on the way back');
+  c.currentTime += 0.5; await wait(TICK_MS * 3);
+  assert.ok(c.log.starts.length > written, 'the bed writes again once started');
+  // A hidden page releases the context after the same fade.
+  audio.stop(true);
+  await wait(FADE_MS);
+  assert.equal(c.state, 'suspended');
+  audio.start();
+  assert.equal(c.state, 'running');
   audio.destroy();
   assert.equal(c.state, 'closed');
   assert.equal(audio.start(), false);
@@ -324,10 +336,11 @@ test('pause sweep: start() inside the fade cancels the suspend; the context neve
   audio.start();
   const c = ctx();
   let suspends = 0; const suspend = c.suspend; c.suspend = () => { suspends++; return suspend(); };
-  audio.stop();
+  audio.stop(true);
   assert.ok(audio.pausing);
   audio.start();
   assert.equal(audio.pausing, false, 'the pending suspend is gone');
+  assert.equal(audio.parked, false, 'and the bed never parked');
   assert.equal(audio.pauseLevel, 1, 'and the gate is on its way back up');
   await wait(FADE_MS);
   assert.equal(suspends, 0);
@@ -341,12 +354,12 @@ test('pause sweep: stop twice is one fade and one suspend; stop while suspended 
   audio.start();
   const c = ctx();
   let suspends = 0; const suspend = c.suspend; c.suspend = () => { suspends++; return suspend(); };
-  audio.stop(); audio.stop(); audio.stop();
+  audio.stop(true); audio.stop(true); audio.stop(true);
   await wait(FADE_MS);
   assert.equal(suspends, 1);
-  audio.stop();
+  audio.stop(true);
   assert.equal(audio.pausing, false, 'already suspended: nothing to fade');
-  audio.start(); audio.stop(); audio.destroy();
+  audio.start(); audio.stop(true); audio.destroy();
   await wait(FADE_MS);
   assert.equal(suspends, 1, 'destroy() drops the pending suspend');
   assert.equal(c.state, 'closed');
@@ -359,7 +372,7 @@ test('pause sweep: a start() that lands while suspend() is still settling resume
   const c = ctx();
   let settle = null;
   c.suspend = () => new Promise(r => { settle = () => { c.state = 'suspended'; r(); }; });
-  audio.stop();
+  audio.stop(true);
   await wait(FADE_MS);
   assert.ok(settle, 'suspend() was asked for');
   audio.start();                                  // the state still reads running, so a plain resume would be skipped
@@ -420,4 +433,41 @@ test('the eye voice loads from the station own assets first, and the three clips
   const fs = await import('node:fs'), src = fs.readFileSync(new URL('./audio.js', import.meta.url), 'utf8');
   assert.ok(src.indexOf("./assets/voice/drift-") > 0 && src.indexOf("./assets/voice/drift-") < src.indexOf('dtrh/assets/barks'), 'own assets before the cross-tree fallback');
   for (let i = 1; i <= 3; i++) assert.ok(fs.statSync(new URL('./assets/voice/drift-' + i + '.mp3', import.meta.url)).size > 100000, 'a real mp3, not a pointer');
+});
+
+test('ten in-game pause cycles never suspend, never stack the bed, and keep the grid (the crunch report, 2026-09-22)', async () => {
+  const { audio, ctx } = make();
+  audio.start();
+  const c = ctx();
+  let suspends = 0; const suspend = c.suspend; c.suspend = () => { suspends++; return suspend(); };
+  const origin = audio.beat.origin;
+  const rate = async () => { const n = c.log.starts.length; c.currentTime += 1; await wait(TICK_MS * 3); return c.log.starts.length - n; };
+  const before = await rate();
+  for (let i = 0; i < 10; i++) { audio.stop(); await wait(FADE_MS); audio.start(); c.currentTime += 0.5; await wait(TICK_MS * 2); }
+  const after = await rate();
+  assert.equal(suspends, 0);
+  assert.equal(c.state, 'running');
+  assert.equal(audio.beat.origin, origin);
+  assert.ok(after <= before + 2 && after >= before - 2, `one bed, not eleven: ${before} then ${after} voices a second`);
+  audio.destroy();
+});
+
+test('a bed voice drops its detune inputs when it ends, so dead voices are not kept alive by the slow-mo source', async () => {
+  let c = null; const dropped = [];
+  const AudioContext = function () {
+    c = fakeContext();
+    const cs = c.createConstantSource, cg = c.createGain;
+    c.createConstantSource = () => { const n = cs(); n.disconnect = (...a) => dropped.push(['const', ...a]); return n; };
+    c.createGain = () => { const n = cg(); const d = n.disconnect; n.disconnect = (...a) => { if (a.length) dropped.push(['gain', ...a]); return d.apply(n, a); }; return n; };
+    return c;
+  };
+  const audio = createAudio({ AudioContext });
+  audio.start(); c.state = 'running';
+  const oscs = []; const co = c.createOscillator; c.createOscillator = () => { const o = co(); oscs.push(o); return o; };
+  c.currentTime += 0.3; await wait(TICK_MS * 3);
+  const bed = oscs.filter(o => o.onended); assert.ok(bed.length > 0, 'the bed wrote voices');
+  for (const o of bed) o.onended();
+  const params = new Set(dropped.filter(d => d[1] && typeof d[1] === 'object').map(d => d[1]));
+  assert.ok(bed.some(o => params.has(o.detune)), 'each ended voice disconnected the detune feeds from its own detune param');
+  audio.destroy();
 });
