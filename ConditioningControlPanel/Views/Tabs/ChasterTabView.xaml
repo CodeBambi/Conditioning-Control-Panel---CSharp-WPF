@@ -6,210 +6,525 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:ctrl="clr-namespace:ConditioningControlPanel.Controls"
              mc:Ignorable="d"
-             d:DesignHeight="600" d:DesignWidth="800">
-    <!-- CIRCE'S TAB. Two states and nothing else: not linked (what it is, one button) and linked.
-         The linked page reads top to bottom as the lock's story: the LOCK first (it is the thing
-         the player actually cares about, not a running total), then TODAY (how much of the daily
-         60:00 is spent and when the next push is), then the balance and the master switch, then
-         prices and this run's bill behind expanders.
-         All logic is in Services/Chaster; this view only reads ChasterService and writes four
-         settings (ChasterTabEnabled, ChasterConsentSeen, ChasterLockId, ChasterPrices). -->
-    <Border Style="{StaticResource SectionPanel}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel MaxWidth="640" HorizontalAlignment="Left" Margin="0,0,12,0">
-                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str chaster_title}" Margin="0"/>
-                <TextBlock Text="{loc:Str chaster_subtitle}" TextWrapping="Wrap"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,4,0,16"/>
+             d:DesignHeight="900" d:DesignWidth="1000">
+    <!-- CIRCE'S TAB, dressed like the launcher (owner, 2026-09-22: "bring it on par with the
+         launcher style and polish, juice it up, the less text the better").
 
-                <!-- NOT LINKED -->
-                <StackPanel x:Name="UnlinkedPanel">
-                    <TextBlock Text="{loc:Str chaster_intro_1}" TextWrapping="Wrap" FontSize="13"
-                               Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,8"/>
-                    <TextBlock Text="{loc:Str chaster_intro_2}" TextWrapping="Wrap" FontSize="13"
-                               Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,8"/>
-                    <TextBlock Text="{loc:Str chaster_intro_3}" TextWrapping="Wrap" FontSize="13"
-                               Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,16"/>
-                    <Button x:Name="BtnLink" Style="{StaticResource PinkButton}" Content="{loc:Str chaster_link}"
-                            HorizontalAlignment="Left" Padding="18,8" Click="BtnLink_Click"/>
-                    <!-- What pressing it actually does, and the cheapest way to try the whole thing. -->
-                    <TextBlock Text="{loc:Str chaster_link_browser_hint}" TextWrapping="Wrap" FontSize="11"
-                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,10,0,0"/>
-                    <TextBlock Text="{loc:Str chaster_link_test_hint}" TextWrapping="Wrap" FontSize="11"
-                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,0"/>
-                    <StackPanel x:Name="LinkingRow" Orientation="Horizontal" Visibility="Collapsed" Margin="0,10,0,0">
-                        <TextBlock Text="{loc:Str chaster_linking}" VerticalAlignment="Center" FontSize="13"
-                                   Foreground="{DynamicResource TextLightBrush}" Margin="0,0,14,0"/>
-                        <Button Style="{StaticResource SecondaryButton}" Content="{loc:Str chaster_cancel}"
-                                Padding="14,6" Click="BtnCancelLink_Click"/>
-                    </StackPanel>
-                    <TextBlock x:Name="TxtLinkNote" Visibility="Collapsed" TextWrapping="Wrap" FontSize="12"
-                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,12,0,0"/>
-                </StackPanel>
+         The same recipe as Windows/Launcher/LauncherWindow.xaml: a radial ground with a spiral
+         watermark, a glow pool and a vignette, one ambient canvas (fog + dust) behind glass cards,
+         Fredoka for every figure, and event layers on top for the rings and the bursts.
 
-                <!-- LINKED -->
-                <StackPanel x:Name="LinkedPanel" Visibility="Collapsed">
+         The page is FIGURES, not sentences. Linked, it reads top to bottom:
+           1. the LOCK hero: title, the countdown in big digits, when it ends, a state pill or two,
+              and the neon art bleeding in from the right;
+           2. three stat cards: on the tab / today (with the cap meter) / this run (click = the bill);
+           3. four preset tiles (Gentle, Strict, Circe's choice, Build your own) and, behind the
+              fourth, the price chips in two colours.
+         Unlinked, it is the hero with one big call to action and three fact tiles.
 
-                    <!-- 1. THE LOCK. The hero, because it is the one number the player cannot move. -->
-                    <Border x:Name="HeroCard" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10"
-                            Padding="16,14,16,14" Margin="0,0,0,14">
-                        <StackPanel>
-                            <TextBlock x:Name="TxtHeroTitle" FontSize="12" TextTrimming="CharacterEllipsis"
-                                       Foreground="{DynamicResource TextMutedBrush}" Visibility="Collapsed"/>
-                            <StackPanel x:Name="HeroClockRow" Orientation="Horizontal" Margin="0,2,0,0"
-                                        Visibility="Collapsed">
-                                <TextBlock x:Name="TxtHeroClock" FontSize="32" FontWeight="Bold"
-                                           FontFamily="Consolas, Courier New"
-                                           Foreground="{DynamicResource TextLightBrush}"/>
-                                <TextBlock Text="{loc:Str chaster_hero_caption}" FontSize="12" VerticalAlignment="Bottom"
-                                           Margin="10,0,0,6" Foreground="{DynamicResource TextMutedBrush}"/>
-                            </StackPanel>
-                            <TextBlock x:Name="TxtHeroEnds" FontSize="12" Margin="0,4,0,0" Visibility="Collapsed"
-                                       Foreground="{DynamicResource TextMutedBrush}"/>
-                            <TextBlock x:Name="TxtHeroState" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
-                                       Visibility="Collapsed" Foreground="#FFC98A"/>
+         Every rule lives in Services/Chaster; this view reads ChasterService and writes four
+         settings (ChasterTabEnabled, ChasterConsentSeen, ChasterLockId, ChasterPrices). All the
+         motion is in ChasterTabView.Fx.cs and is gated on MotionFx like the launcher's. -->
+    <UserControl.Resources>
+        <!-- A glass card, the launcher tile's body. -->
+        <Style x:Key="CirceCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="Padding" Value="20,16"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+        </Style>
 
-                            <Grid x:Name="LockRow" Margin="0,12,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{loc:Str chaster_lock_label}" Style="{StaticResource SettingLabel}"
-                                           FontSize="13" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="TxtLock" Grid.Column="1" FontSize="12" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource TextMutedBrush}"/>
-                                <ComboBox x:Name="CmbLock" Grid.Column="1" Visibility="Collapsed"
-                                          Style="{StaticResource DarkComboBoxStyle}" FontSize="11"
-                                          Foreground="{DynamicResource TextLightBrush}"
-                                          Width="220" MinHeight="28" VerticalAlignment="Center"
-                                          SelectionChanged="CmbLock_SelectionChanged"/>
-                            </Grid>
+        <Style x:Key="CirceEyebrow" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- The big numbers: the launcher's stat figure. -->
+        <Style x:Key="CirceFigure" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="38"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="RenderTransformOrigin" Value="0,1"/>
+        </Style>
+
+        <!-- The one big call to action, the launcher's CTA at page height. -->
+        <Style x:Key="CirceCta" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="19"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Height" Value="56"/>
+            <Setter Property="Padding" Value="28,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="12"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Opacity" Value="0.92"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bg" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A text link: no box, underline on hover. -->
+        <Style x:Key="CirceLink" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Txt" Property="TextDecorations" Value="Underline"/>
+                                <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A preset tile: outline in its hue at rest, the hue floods in when it is the set that
+             is on. The code hands each tile its Background (the fill) and BorderBrush (the rim). -->
+        <Style x:Key="CircePresetTile" TargetType="ToggleButton">
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+            <Setter Property="MinHeight" Value="104"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="16" Opacity="0"/>
+                            <Border x:Name="Rim" Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="16" Opacity="0.55"/>
+                            <ContentPresenter x:Name="Cp" Margin="16,14" VerticalAlignment="Center"/>
+                            <!-- the tick that means "this is the one" -->
+                            <Border x:Name="Tick" Width="22" Height="22" CornerRadius="11" Opacity="0"
+                                    Background="{TemplateBinding BorderBrush}"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0">
+                                <TextBlock Text="&#x2713;" FontSize="12" FontWeight="Bold" Foreground="#FF14101E"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Rim" Property="Opacity" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Rim" Property="Opacity" Value="1"/>
+                                <Setter TargetName="Rim" Property="Background" Value="Transparent"/>
+                                <Setter TargetName="Fill" Property="Opacity" Value="0.22"/>
+                                <Setter TargetName="Tick" Property="Opacity" Value="1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A price chip: a pill that lights in its colour when the price is on. -->
+        <Style x:Key="CirceChip" TargetType="ToggleButton">
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="15" Opacity="0"/>
+                            <Border x:Name="Rim" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="15" Opacity="0.4"/>
+                            <ContentPresenter x:Name="Cp" Margin="12,6" Opacity="0.55"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Rim" Property="Opacity" Value="0.9"/>
+                                <Setter TargetName="Cp" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Rim" Property="Opacity" Value="1"/>
+                                <Setter TargetName="Fill" Property="Opacity" Value="0.2"/>
+                                <Setter TargetName="Cp" Property="Opacity" Value="1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A fact tile: one glyph, a few words. -->
+        <Style x:Key="CirceFact" TargetType="Border">
+            <Setter Property="Background" Value="#14FFFFFF"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="14,12"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+        </Style>
+        <Style x:Key="CirceFactGlyph" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="Opacity" Value="0.9"/>
+        </Style>
+        <Style x:Key="CirceFactText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid x:Name="PageRoot" ClipToBounds="True">
+        <!-- ================= the ground (the launcher's backdrop) ================= -->
+        <Border CornerRadius="18">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.22,0.18" Center="0.22,0.18" RadiusX="1.0" RadiusY="0.95">
+                    <GradientStop Color="#FF2C1450" Offset="0"/>
+                    <GradientStop Color="#FF1C1233" Offset="0.42"/>
+                    <GradientStop Color="#FF100A1E" Offset="0.74"/>
+                    <GradientStop Color="#FF07040F" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <!-- The spiral watermark, turning once every 90 s under the hero. -->
+        <Grid x:Name="SpiralLayer" Width="760" Height="760" HorizontalAlignment="Right" VerticalAlignment="Top"
+              Margin="0,-300,-260,0" Opacity="0.1" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+            <Grid.CacheMode>
+                <BitmapCache/>
+            </Grid.CacheMode>
+            <Grid.RenderTransform>
+                <RotateTransform x:Name="SpiralTurn"/>
+            </Grid.RenderTransform>
+            <Path x:Name="SpiralPath" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
+                <Path.Stroke>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                        <GradientStop Color="{DynamicResource FxParticleColor}" Offset="1"/>
+                    </LinearGradientBrush>
+                </Path.Stroke>
+            </Path>
+        </Grid>
+        <Border x:Name="GlowLayer" Opacity="0.3" IsHitTestVisible="False" CornerRadius="18">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.78,0.12" Center="0.78,0.12" RadiusX="0.5" RadiusY="0.55">
+                    <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border IsHitTestVisible="False" CornerRadius="18">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.5,0.45" Center="0.5,0.45" RadiusX="0.85" RadiusY="0.85">
+                    <GradientStop Color="#00000000" Offset="0.45"/>
+                    <GradientStop Color="#55000000" Offset="0.8"/>
+                    <GradientStop Color="#B0000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <ctrl:AmbientFxCanvas x:Name="Ambient" x:FieldModifier="internal" IsHitTestVisible="False"/>
+
+        <!-- ================= the page ================= -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly">
+            <Grid Margin="26,22,26,20" MaxWidth="1080" HorizontalAlignment="Stretch">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- header: the name, and the switch -->
+                <Grid Grid.Row="0" Margin="4,0,4,14">
+                    <TextBlock Text="{loc:Str chaster_title}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="28"
+                               FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                    <!-- The master switch as a glass pill. Its rim takes the tab's red while it runs. -->
+                    <Border x:Name="SwitchPill" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed"
+                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                            BorderThickness="1.5" CornerRadius="19" Height="38" Padding="16,0,6,0" RenderTransformOrigin="0.5,0.5">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str chaster_tab_switch}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtSwitchState" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="13" FontWeight="Bold"
+                                       Margin="8,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}"/>
+                            <CheckBox x:Name="ChkTab" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                      Checked="ChkTab_Changed" Unchecked="ChkTab_Changed"/>
                         </StackPanel>
                     </Border>
+                </Grid>
 
-                    <!-- 2. TODAY. The cap is the safety rail, so it is drawn, not described. -->
-                    <StackPanel Margin="0,0,0,16">
-                        <Grid Margin="0,0,0,6">
-                            <TextBlock Text="{loc:Str chaster_day_header}" Style="{StaticResource SettingLabel}" FontSize="13"/>
-                            <TextBlock x:Name="TxtToday" HorizontalAlignment="Right" FontSize="12"
-                                       FontFamily="Consolas, Courier New"
-                                       Foreground="{DynamicResource TextMutedBrush}"/>
-                        </Grid>
-                        <Grid Height="6">
-                            <Border Background="#22FFFFFF" CornerRadius="3"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <!-- The meter is laid out, never measured: two star columns the code
-                                         weighs by the fraction, so it is right at any width with no
-                                         ActualWidth read and no SizeChanged handler. -->
-                                    <ColumnDefinition x:Name="CapFilled" Width="0*"/>
-                                    <ColumnDefinition x:Name="CapRest" Width="1*"/>
-                                </Grid.ColumnDefinitions>
-                                <Border x:Name="CapFill" Background="#FF6B8A" CornerRadius="3"/>
-                            </Grid>
-                        </Grid>
-                        <TextBlock Text="{loc:Str chaster_settle_line}" TextWrapping="Wrap" FontSize="11"
-                                   Foreground="{DynamicResource TextMutedBrush}" Margin="0,8,0,0"/>
-                        <TextBlock x:Name="TxtHold" TextWrapping="Wrap" FontSize="11" Visibility="Collapsed"
-                                   Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,0"/>
-                    </StackPanel>
-
-                    <!-- 3. THE BALANCE AND THE SWITCH -->
-                    <Grid Margin="0,0,0,8">
+                <!-- ================= 1. THE LOCK ================= -->
+                <Border x:Name="HeroCard" Grid.Row="1" Style="{StaticResource CirceCard}" Padding="0" Height="224"
+                        BorderBrush="{DynamicResource PanelAccentBrush}" Margin="0,0,0,14">
+                    <Grid x:Name="HeroBody">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
-                            <TextBlock x:Name="TxtBalance" Text="0:00" FontSize="36" FontWeight="Bold"
-                                       FontFamily="Consolas, Courier New" Foreground="{DynamicResource TextLightBrush}"/>
-                            <TextBlock x:Name="TxtBalanceCaption" Text="{loc:Str chaster_balance_caption}" FontSize="13"
-                                       VerticalAlignment="Bottom" Margin="10,0,0,7"
-                                       Foreground="{DynamicResource TextMutedBrush}"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="0,0,0,8">
-                            <TextBlock Text="{loc:Str chaster_tab_switch}" Style="{StaticResource SettingLabel}"
-                                       FontSize="13" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                            <CheckBox x:Name="ChkTab" Style="{StaticResource ToggleStyle}"
-                                      VerticalAlignment="Center" Checked="ChkTab_Changed" Unchecked="ChkTab_Changed"/>
-                        </StackPanel>
-                    </Grid>
+                        <!-- the neon art, bleeding in from the right and fading into the card -->
+                        <Grid x:Name="HeroArtPlate" Grid.Column="1" Width="360" ClipToBounds="True" SizeChanged="HeroArtPlate_SizeChanged">
+                            <Image x:Name="HeroArt" Source="pack://application:,,,/Resources/features/Phrase_Lock.png"
+                                   Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" Opacity="0.85"
+                                   RenderTransformOrigin="0.5,0.5">
+                                <Image.RenderTransform>
+                                    <ScaleTransform x:Name="HeroArtScale"/>
+                                </Image.RenderTransform>
+                            </Image>
+                            <Border x:Name="HeroArtFade" IsHitTestVisible="False"/>
+                        </Grid>
 
-                    <!-- The first switch-on, and only the first: four facts, inline, no modal. -->
-                    <Border x:Name="ConsentCard" Visibility="Collapsed" Margin="0,0,0,14"
-                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#FF8FA3"
-                            BorderThickness="1" CornerRadius="10" Padding="14,12,14,12">
-                        <StackPanel>
-                            <TextBlock Text="{loc:Str chaster_consent_title}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,8"/>
-                            <TextBlock Text="{loc:Str chaster_consent_1}" TextWrapping="Wrap" FontSize="12"
-                                       Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{loc:Str chaster_consent_2}" TextWrapping="Wrap" FontSize="12"
-                                       Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{loc:Str chaster_consent_3}" TextWrapping="Wrap" FontSize="12"
-                                       Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{loc:Str chaster_consent_4}" TextWrapping="Wrap" FontSize="12"
-                                       Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,4"/>
-                            <Button x:Name="BtnConsentOk" Style="{StaticResource PinkButton}"
-                                    Content="{loc:Str chaster_consent_ok}" HorizontalAlignment="Left"
-                                    Padding="16,6" Margin="0,10,0,0" Click="BtnConsentOk_Click"/>
-                        </StackPanel>
-                    </Border>
+                        <!-- the words and the digits, LEFT, over the art's fade -->
+                        <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Margin="26,20,26,20" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtHeroTitle" Style="{StaticResource CirceEyebrow}" FontSize="12"
+                                       TextTrimming="CharacterEllipsis" Visibility="Collapsed"/>
+                            <!-- the countdown: number, unit, number, unit, built in code -->
+                            <StackPanel x:Name="HeroClockRow" Orientation="Horizontal" Margin="0,2,0,0" Visibility="Collapsed"
+                                        RenderTransformOrigin="0,1">
+                                <StackPanel x:Name="HeroClock" Orientation="Horizontal"/>
+                                <TextBlock Text="{loc:Str chaster_lock_lead}" FontSize="13" VerticalAlignment="Bottom"
+                                           Margin="12,0,0,12" Foreground="{DynamicResource TextMutedBrush}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtHeroEnds" FontSize="13" Margin="0,2,0,0" Visibility="Collapsed"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <!-- the state pills: test lock, frozen, hidden, offline, no lock, on hold -->
+                            <WrapPanel x:Name="HeroPills" Margin="0,12,0,0"/>
+                            <!-- More than one lock: the picker. One lock: the hero already names it. -->
+                            <Grid x:Name="LockRow" Margin="0,12,0,0" Visibility="Collapsed" HorizontalAlignment="Left">
+                                <ComboBox x:Name="CmbLock" Style="{StaticResource DarkComboBoxStyle}" FontSize="12"
+                                          Foreground="{DynamicResource TextLightBrush}" Width="240" MinHeight="30"
+                                          SelectionChanged="CmbLock_SelectionChanged"/>
+                            </Grid>
 
-                    <!-- 4. PRICES. Presets lead; the twenty-two switches live behind Customize. -->
-                    <Expander x:Name="PricesExpander" Header="{loc:Str chaster_prices_header}"
-                              Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" Margin="0,0,0,8">
-                        <StackPanel Margin="4,8,0,4">
-                            <TextBlock Text="{loc:Str chaster_preset_header}" FontSize="12" TextWrapping="Wrap"
-                                       Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,8"/>
-                            <WrapPanel x:Name="PresetRow">
-                                <Button x:Name="BtnPresetGentle" Style="{StaticResource OutlineButton}" Tag="gentle"
-                                        Content="{loc:Str chaster_preset_gentle}" FontSize="12" Padding="14,5"
-                                        Margin="0,0,8,8" Click="Preset_Click"/>
-                                <Button x:Name="BtnPresetStrict" Style="{StaticResource OutlineButton}" Tag="strict"
-                                        Content="{loc:Str chaster_preset_strict}" FontSize="12" Padding="14,5"
-                                        Margin="0,0,8,8" Click="Preset_Click"/>
-                                <Button x:Name="BtnPresetCirce" Style="{StaticResource OutlineButton}" Tag="circe"
-                                        Content="{loc:Str chaster_preset_circe}" FontSize="12" Padding="14,5"
-                                        Margin="0,0,8,8" Click="Preset_Click"/>
-                                <!-- Not a button you press: the chip that lights when the set is the
-                                     player's own. It sits with the presets because that is where they
-                                     look to find out which one they are on. -->
-                                <Button x:Name="BtnPresetCustom" Style="{StaticResource OutlineButton}" Tag="custom"
-                                        Content="{loc:Str chaster_preset_custom}" FontSize="12" Padding="14,5"
-                                        Margin="0,0,8,8" IsHitTestVisible="False" Focusable="False"
-                                        Visibility="Collapsed"/>
-                                <Button x:Name="BtnCustomize" Style="{StaticResource SecondaryButton}"
-                                        Content="{loc:Str chaster_preset_customize}" FontSize="12" Padding="14,5"
-                                        Margin="0,0,8,8" Click="BtnCustomize_Click"/>
-                            </WrapPanel>
-                            <TextBlock x:Name="TxtPresetHint" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"
-                                       Foreground="{DynamicResource TextMutedBrush}"/>
-
-                            <StackPanel x:Name="CustomizeHost" Visibility="Collapsed" Margin="0,8,0,0">
-                                <TextBlock Text="{loc:Str chaster_prices_hint}" FontSize="12" Margin="0,0,0,8"
-                                           Foreground="{DynamicResource TextMutedBrush}"/>
-                                <TextBlock Text="{loc:Str chaster_costs_header}" FontSize="11" FontWeight="SemiBold"
-                                           Foreground="#FF8FA3" Margin="0,4,0,4"/>
-                                <StackPanel x:Name="CostRows"/>
-                                <TextBlock Text="{loc:Str chaster_earns_header}" FontSize="11" FontWeight="SemiBold"
-                                           Foreground="#5FFFD0" Margin="0,12,0,4"/>
-                                <StackPanel x:Name="EarnRows"/>
+                            <!-- NOT LINKED: the same hero, one ask. -->
+                            <StackPanel x:Name="UnlinkedPanel" Visibility="Collapsed">
+                                <TextBlock Text="{loc:Str chaster_intro_1}" TextWrapping="Wrap" FontSize="14" MaxWidth="460"
+                                           HorizontalAlignment="Left" LineHeight="21"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,18"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="BtnLink" Style="{StaticResource CirceCta}" Content="{loc:Str chaster_link}"
+                                            MinWidth="220" Click="BtnLink_Click"
+                                            ToolTip="{loc:Str chaster_link_test_hint}"/>
+                                    <StackPanel x:Name="LinkingRow" Orientation="Horizontal" Visibility="Collapsed" Margin="16,0,0,0"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Str chaster_linking}" VerticalAlignment="Center" FontSize="13"
+                                                   Foreground="{DynamicResource TextLightBrush}" Margin="0,0,10,0"/>
+                                        <Button Style="{StaticResource CirceLink}" Content="{loc:Str chaster_cancel}" Click="BtnCancelLink_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock Text="{loc:Str chaster_link_browser_hint}" TextWrapping="Wrap" FontSize="11" MaxWidth="460"
+                                           HorizontalAlignment="Left" Foreground="{DynamicResource TextMutedBrush}" Margin="2,10,0,0"/>
+                                <TextBlock x:Name="TxtLinkNote" Visibility="Collapsed" TextWrapping="Wrap" FontSize="12"
+                                           Foreground="#FFC98A" Margin="2,8,0,0"/>
                             </StackPanel>
                         </StackPanel>
-                    </Expander>
+                    </Grid>
+                </Border>
 
-                    <!-- 5. THE BILL, on paper. -->
-                    <Expander Header="{loc:Str chaster_bill_header}" Expanded="BillExpander_Expanded"
-                              Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" Margin="0,0,0,14">
-                        <ctrl:ChasterReceiptView x:Name="Receipt" HorizontalAlignment="Left" Margin="4,8,0,4"/>
-                    </Expander>
+                <StackPanel Grid.Row="2">
+                    <!-- Unlinked: three facts, no paragraphs. -->
+                    <UniformGrid x:Name="FactRow" Columns="3" Visibility="Collapsed" Margin="0,0,-10,0">
+                        <Border Style="{StaticResource CirceFact}">
+                            <StackPanel>
+                                <TextBlock Text="60:00" Style="{StaticResource CirceFactGlyph}"/>
+                                <TextBlock Text="{loc:Str chaster_fact_cap}" Style="{StaticResource CirceFactText}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource CirceFact}">
+                            <StackPanel>
+                                <TextBlock Text="&#x21BA;" Style="{StaticResource CirceFactGlyph}"/>
+                                <TextBlock Text="{loc:Str chaster_fact_floor}" Style="{StaticResource CirceFactText}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource CirceFact}">
+                            <StackPanel>
+                                <TextBlock Text="PANIC" Style="{StaticResource CirceFactGlyph}" Foreground="#FF6B8A"/>
+                                <TextBlock Text="{loc:Str chaster_fact_panic}" Style="{StaticResource CirceFactText}"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
 
-                    <TextBlock Text="{loc:Str chaster_intro_3}" TextWrapping="Wrap" FontSize="11"
-                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
-                    <Button Style="{StaticResource SecondaryButton}" Content="{loc:Str chaster_unlink}"
-                            HorizontalAlignment="Left" Padding="14,6" Click="BtnUnlink_Click"/>
+                    <!-- LINKED -->
+                    <StackPanel x:Name="LinkedPanel" Visibility="Collapsed">
+
+                        <!-- ================= 2. THREE NUMBERS ================= -->
+                        <UniformGrid Columns="3" Margin="0,0,-12,14">
+                            <Border x:Name="StatTab" Style="{StaticResource CirceCard}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtBalance" Text="0:00" Style="{StaticResource CirceFigure}"/>
+                                    <TextBlock x:Name="TxtBalanceCaption" Text="{loc:Str chaster_balance_caption}"
+                                               Style="{StaticResource CirceEyebrow}" Margin="1,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="StatToday" Style="{StaticResource CirceCard}" Margin="0,0,12,0"
+                                    ToolTip="{loc:Str chaster_settle_line}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="TxtToday" Text="0:00" Style="{StaticResource CirceFigure}"/>
+                                        <TextBlock x:Name="TxtTodayCap" Text="/ 60:00" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="15"
+                                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Bottom" Margin="8,0,0,8"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{loc:Str chaster_stat_today}" Style="{StaticResource CirceEyebrow}" Margin="1,2,0,0"/>
+                                    <!-- the cap meter: a track, a fill the code widens, a bloom at the tip -->
+                                    <Grid x:Name="CapTrack" Height="6" Margin="0,12,0,0" SizeChanged="CapTrack_SizeChanged">
+                                        <Border Background="#22FFFFFF" CornerRadius="3"/>
+                                        <Border x:Name="CapFill" Width="0" HorizontalAlignment="Left" CornerRadius="3" Background="#FF6B8A"/>
+                                        <Border x:Name="CapBloom" Width="0" HorizontalAlignment="Left" CornerRadius="3" Background="#FFFFC0CB" Opacity="0"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            <!-- Click: the bill on paper. -->
+                            <Border x:Name="StatRun" Style="{StaticResource CirceCard}" Margin="0,0,12,0" Cursor="Hand"
+                                    MouseLeftButtonUp="StatRun_Click">
+                                <Grid>
+                                    <StackPanel>
+                                        <TextBlock x:Name="TxtRun" Text="0:00" Style="{StaticResource CirceFigure}"/>
+                                        <TextBlock Text="{loc:Str chaster_stat_run}" Style="{StaticResource CirceEyebrow}" Margin="1,2,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtRunChevron" Text="&#x25BE;" FontSize="14" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                               Foreground="{DynamicResource TextMutedBrush}" RenderTransformOrigin="0.5,0.5"/>
+                                </Grid>
+                            </Border>
+                        </UniformGrid>
+
+                        <!-- the receipt, unfolded under the numbers -->
+                        <Border x:Name="ReceiptHost" Visibility="Collapsed" Margin="0,0,0,14" HorizontalAlignment="Left">
+                            <ctrl:ChasterReceiptView x:Name="Receipt" HorizontalAlignment="Left"/>
+                        </Border>
+
+                        <!-- The first switch-on, and only the first: four facts, one button. -->
+                        <Border x:Name="ConsentCard" Visibility="Collapsed" Style="{StaticResource CirceCard}"
+                                BorderBrush="#FF6B8A" BorderThickness="1.5" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str chaster_consent_title}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="18"
+                                           FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,12"/>
+                                <UniformGrid Columns="4" Margin="0,0,-10,0">
+                                    <Border Style="{StaticResource CirceFact}">
+                                        <StackPanel>
+                                            <TextBlock Text="60:00" Style="{StaticResource CirceFactGlyph}"/>
+                                            <TextBlock Text="{loc:Str chaster_fact_cap}" Style="{StaticResource CirceFactText}"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource CirceFact}">
+                                        <StackPanel>
+                                            <TextBlock Text="&#x21BA;" Style="{StaticResource CirceFactGlyph}"/>
+                                            <TextBlock Text="{loc:Str chaster_fact_floor}" Style="{StaticResource CirceFactText}"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource CirceFact}">
+                                        <StackPanel>
+                                            <TextBlock Text="PANIC" Style="{StaticResource CirceFactGlyph}" Foreground="#FF6B8A"/>
+                                            <TextBlock Text="{loc:Str chaster_fact_panic}" Style="{StaticResource CirceFactText}"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource CirceFact}">
+                                        <StackPanel>
+                                            <TextBlock Text="1&#x00D7;" Style="{StaticResource CirceFactGlyph}"/>
+                                            <TextBlock Text="{loc:Str chaster_fact_push}" Style="{StaticResource CirceFactText}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </UniformGrid>
+                                <Button x:Name="BtnConsentOk" Style="{StaticResource CirceCta}" Content="{loc:Str chaster_consent_ok}"
+                                        HorizontalAlignment="Left" Height="46" FontSize="16" Margin="0,14,0,0" Click="BtnConsentOk_Click"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ================= 3. PRICES ================= -->
+                        <TextBlock x:Name="PricesHeader" Text="{loc:Str chaster_prices_eyebrow}" Style="{StaticResource CirceEyebrow}" Margin="4,4,0,8"/>
+                        <UniformGrid x:Name="PresetRow" Columns="4" Margin="0,0,-12,0">
+                            <ToggleButton x:Name="BtnPresetGentle" Style="{StaticResource CircePresetTile}" Tag="gentle" Click="Preset_Click">
+                                <StackPanel>
+                                    <TextBlock Text="&#x25D4;" FontSize="22" Foreground="#5FFFD0"/>
+                                    <TextBlock Text="{loc:Str chaster_preset_gentle}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17"
+                                               FontWeight="SemiBold" Margin="0,6,0,0"/>
+                                    <TextBlock Text="{loc:Str chaster_preset_gentle_hint}" FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <ToggleButton x:Name="BtnPresetStrict" Style="{StaticResource CircePresetTile}" Tag="strict" Click="Preset_Click">
+                                <StackPanel>
+                                    <TextBlock Text="&#x25C6;" FontSize="22" Foreground="#FF6B8A"/>
+                                    <TextBlock Text="{loc:Str chaster_preset_strict}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17"
+                                               FontWeight="SemiBold" Margin="0,6,0,0"/>
+                                    <TextBlock Text="{loc:Str chaster_preset_strict_hint}" FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <ToggleButton x:Name="BtnPresetCirce" Style="{StaticResource CircePresetTile}" Tag="circe" Click="Preset_Click">
+                                <StackPanel>
+                                    <TextBlock Text="&#x2726;" FontSize="22" Foreground="#E0B052"/>
+                                    <TextBlock Text="{loc:Str chaster_preset_circe}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17"
+                                               FontWeight="SemiBold" Margin="0,6,0,0"/>
+                                    <TextBlock Text="{loc:Str chaster_preset_circe_hint}" FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <!-- The fourth tile is the player's own set: pressing it opens the chips, and it
+                                 lights whenever the set matches no preset. -->
+                            <ToggleButton x:Name="BtnPresetCustom" Style="{StaticResource CircePresetTile}" Tag="custom" Click="Preset_Click">
+                                <StackPanel>
+                                    <TextBlock Text="&#x2699;" FontSize="22" Foreground="#C9A6FF"/>
+                                    <TextBlock Text="{loc:Str chaster_preset_custom_pick}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17"
+                                               FontWeight="SemiBold" Margin="0,6,0,0"/>
+                                    <TextBlock Text="{loc:Str chaster_preset_custom_hint}" FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </ToggleButton>
+                        </UniformGrid>
+
+                        <!-- the chips: every price, two colours, no sentences -->
+                        <Border x:Name="CustomizeHost" Visibility="Collapsed" Style="{StaticResource CirceCard}" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str chaster_costs_header}" Style="{StaticResource CirceEyebrow}" Foreground="#FF8FA3" Margin="2,0,0,8"/>
+                                <WrapPanel x:Name="CostRows"/>
+                                <TextBlock Text="{loc:Str chaster_earns_header}" Style="{StaticResource CirceEyebrow}" Foreground="#5FFFD0" Margin="2,8,0,8"/>
+                                <WrapPanel x:Name="EarnRows"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Button Style="{StaticResource CirceLink}" Content="{loc:Str chaster_unlink}"
+                                HorizontalAlignment="Right" Margin="0,18,0,0" Click="BtnUnlink_Click"/>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </ScrollViewer>
-    </Border>
+
+        <!-- ================= event layers over the page ================= -->
+        <Canvas x:Name="ShockwaveCanvas" IsHitTestVisible="False" ClipToBounds="True"/>
+        <ctrl:AmbientFxCanvas x:Name="BurstLayer" x:FieldModifier="internal" IsHitTestVisible="False"/>
+        <!-- the page's edge, the launcher's window edge at card weight -->
+        <Border BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1.5" CornerRadius="18" Opacity="0.45" IsHitTestVisible="False"/>
+    </Grid>
 </UserControl>
