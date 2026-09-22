@@ -11,6 +11,7 @@ namespace ConditioningControlPanel.Services.Chaster;
 public sealed partial class ChasterService
 {
     private Timer? _settleTimer;
+    private Timer? _lockTimer;
     private string? _lastSettleDay;
 
     public static ChasterService CreateForApp() => new(
@@ -31,6 +32,27 @@ public sealed partial class ChasterService
     public void StartDailySettle()
     {
         _settleTimer ??= new Timer(_ => _ = SettleIfNewDayAsync(), null, TimeSpan.FromMinutes(1), TimeSpan.FromHours(1));
+        StartLockRefresh();
+    }
+
+    /// <summary>How often the rail chip's clock is allowed to be wrong. Fifteen minutes on a
+    /// countdown that prints minutes means the digits are only ever stale by a rounding error,
+    /// and the chip counts the rest of the way down locally between fetches.</summary>
+    public static readonly TimeSpan LockRefreshEvery = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// The lock's own clock. Five seconds after launch (late enough to be out of the startup
+    /// crush, early enough that the rail chip is not showing an empty padlock while the player
+    /// looks at it), then every <see cref="LockRefreshEvery"/>.
+    ///
+    /// <para>Its own timer rather than a share of the settle's: the settle is hourly and must stay
+    /// hourly, and the two have nothing to say to each other. Costs no extra token refresh - the
+    /// fetch takes whatever access token is already valid, and only mints one when that token has
+    /// aged out, which it would have to do for the settle anyway.</para>
+    /// </summary>
+    public void StartLockRefresh()
+    {
+        _lockTimer ??= new Timer(_ => _ = RefreshLockAsync(), null, TimeSpan.FromSeconds(5), LockRefreshEvery);
     }
 
     /// <summary>Settle at most once per local day per run. Never throws: it runs on a timer thread.</summary>
@@ -48,6 +70,11 @@ public sealed partial class ChasterService
             // A try-later keeps the day open, so the next hourly tick goes again. So does a lock
             // nobody picked yet: once the player picks one, the push follows within the hour.
             if (outcome is not (SettleOutcome.TryLater or SettleOutcome.NoLockChosen)) _lastSettleDay = today;
+            // A push is the one moment the lock is known to have moved, so the snapshot every
+            // surface reads is re-read here rather than waiting up to a quarter of an hour to show
+            // the time this app just added. A settle that pushed nothing moved nothing, and pays
+            // for no call.
+            if (outcome == SettleOutcome.Pushed) await RefreshLockAsync().ConfigureAwait(false);
             return outcome;
         }
         catch (Exception ex)

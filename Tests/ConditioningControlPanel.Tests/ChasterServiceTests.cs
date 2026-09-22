@@ -294,7 +294,9 @@ public class ChasterServiceTests : IDisposable
         _options = _options with { LockId = "lock2" };
         _http.Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
         Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
-        Assert.Equal("/locks/lock2/update-time", _http.Seen.Last().Path);
+        // A settle now ends by re-reading the lock, so the last call is that GET. The push is the
+        // last WRITE - see The_settle_re_reads_the_lock_it_just_moved.
+        Assert.Equal("/locks/lock2/update-time", _http.Seen.Last(s => s.Path.EndsWith("update-time")).Path);
     }
 
     [Fact]
@@ -429,6 +431,130 @@ public class ChasterServiceTests : IDisposable
         Assert.Equal(SettleOutcome.Nothing, await service.SettleIfNewDayAsync());
         _utc = _utc.AddDays(1);
         Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
+    }
+
+    // ============================== the lock snapshot the chip reads ==============================
+
+    private const string TwoLocks = "[{\"_id\":\"lock1\",\"role\":\"wearer\",\"title\":\"Circe\",\"endDate\":\"2026-09-24T10:00:00Z\"},"
+                                  + "{\"_id\":\"other\",\"role\":\"wearer\"}]";
+
+    private void AnswerLocks(string json) =>
+        _http.Answer = p => p == "/locks" ? Json(200, json) : new HttpResponseMessage(HttpStatusCode.NoContent);
+
+    [Fact]
+    public async Task The_chosen_lock_is_the_one_kept_even_when_several_are_active()
+    {
+        AnswerLocks(TwoLocks);
+        using var service = Make();
+
+        var snapshot = await service.RefreshLockAsync();
+
+        Assert.Equal(LockLookup.Chosen, service.LockLookup);
+        Assert.Equal("lock1", snapshot!.Id);
+        Assert.Equal("Circe", snapshot.Title);
+        Assert.Equal(new DateTime(2026, 9, 24, 10, 0, 0, DateTimeKind.Utc), snapshot.EndsAtUtc);
+        Assert.Equal(TimeSpan.FromDays(3), snapshot.Remaining(_utc));
+    }
+
+    [Fact]
+    public async Task The_only_active_lock_is_taken_when_none_was_picked()
+    {
+        _options = _options with { LockId = null };
+        AnswerLocks("[{\"_id\":\"solo9\",\"role\":\"wearer\"}]");
+        using var service = Make();
+
+        var snapshot = await service.RefreshLockAsync();
+
+        Assert.Equal(LockLookup.Chosen, service.LockLookup);
+        Assert.Equal("solo9", snapshot!.Id);
+    }
+
+    [Fact]
+    public async Task Several_locks_and_no_pick_is_ambiguous_and_never_guessed()
+    {
+        _options = _options with { LockId = null };
+        AnswerLocks(TwoLocks);
+        using var service = Make();
+
+        Assert.Null(await service.RefreshLockAsync());
+        Assert.Equal(LockLookup.Ambiguous, service.LockLookup);
+    }
+
+    [Fact]
+    public async Task No_active_lock_reads_none_with_nothing_held()
+    {
+        AnswerLocks("[]");
+        using var service = Make();
+
+        Assert.Null(await service.RefreshLockAsync());
+        Assert.Equal(LockLookup.None, service.LockLookup);
+    }
+
+    [Fact]
+    public async Task An_unlinked_account_holds_no_lock_at_all()
+    {
+        _store.Tokens = null;
+        using var service = Make();
+
+        Assert.Null(await service.RefreshLockAsync());
+        Assert.Equal(LockLookup.Unlinked, service.LockLookup);
+        Assert.Empty(_http.Seen);
+    }
+
+    [Fact]
+    public async Task Chaster_being_away_keeps_the_last_snapshot_rather_than_blanking_the_clock()
+    {
+        AnswerLocks(TwoLocks);
+        using var service = Make();
+        var first = await service.RefreshLockAsync();
+
+        _http.Answer = _ => Json(503, "");
+        var second = await service.RefreshLockAsync();
+
+        Assert.Equal(LockLookup.Away, service.LockLookup);
+        Assert.Equal(first, second);
+        Assert.Equal(first, service.Lock);
+    }
+
+    [Fact]
+    public async Task The_snapshot_changing_is_announced_once_per_real_change()
+    {
+        AnswerLocks(TwoLocks);
+        using var service = Make();
+        var announced = 0;
+        service.LockChanged += () => announced++;
+
+        await service.RefreshLockAsync();
+        await service.RefreshLockAsync();   // the same answer twice is not a change
+
+        Assert.Equal(1, announced);
+    }
+
+    [Fact]
+    public async Task The_settle_re_reads_the_lock_it_just_moved()
+    {
+        AnswerLocks(TwoLocks);
+        using var service = Make();
+        service.NoteSeconds("watcher", 600);
+
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
+
+        Assert.Contains(_http.Seen, s => s.Path == "/locks/lock1/update-time");
+        Assert.Equal("/locks", _http.Seen.Last().Path);
+        Assert.Equal(LockLookup.Chosen, service.LockLookup);
+    }
+
+    [Fact]
+    public async Task A_settle_that_pushed_nothing_pays_for_no_call()
+    {
+        AnswerLocks(TwoLocks);
+        using var service = Make();
+
+        Assert.Equal(SettleOutcome.Nothing, await service.SettleIfNewDayAsync());
+        Assert.Equal(SettleOutcome.Nothing, await service.SettleIfNewDayAsync());
+
+        // Nothing moved, so there is nothing to re-read: the re-read rides the push, not the tick.
+        Assert.Empty(_http.Seen);
     }
 
     [Fact]

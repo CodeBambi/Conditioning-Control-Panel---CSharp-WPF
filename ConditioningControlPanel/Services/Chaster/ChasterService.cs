@@ -377,6 +377,7 @@ public sealed partial class ChasterService : IDisposable
     {
         CancelLink();
         _settleTimer?.Dispose();
+        _lockTimer?.Dispose();   // ChasterService.App.cs
         _settleGate.Dispose();
         _refreshGate.Dispose();
     }
