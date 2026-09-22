@@ -19,7 +19,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 
 /** A clip source small enough to be honest about: the shape clip-source.js returns, recording its ticks. */
 function fakeClip() {
-  return { canvas: { width: 64, height: 48 }, animated: true, clip: true, frames: 0, index: 0, ticks: [], disposed: false,
+  return { canvas: { width: 64, height: 48 }, animated: true, clip: true, frames: 1, index: 0, ticks: [], disposed: false,
     tick(now, still) { this.ticks.push(!!still); return !still; }, dispose() { this.disposed = true; } };
 }
 
@@ -113,4 +113,15 @@ test('a load cancelled by the seat being left is silent', async t => {
   await pending;
   assert.equal(images.length, 0);
   assert.deepEqual(logged, []);
+});
+
+test('an unpainted clip keeps fallback art until its first frame arrives', async t => {
+  const clip = fakeClip(); clip.frames = 0;
+  const { media } = setup(t, { clip: async () => clip });
+  await media.deal({ gifs: [{ key: 'g0', url: CLIP }] });
+  assert.equal(media.gif(0), null);
+  assert.equal(media.gif(0, true), null);
+  clip.frames = 1;
+  assert.equal(media.gif(0), clip.canvas);
+  assert.equal(media.gif(0, true), clip.canvas);
 });
