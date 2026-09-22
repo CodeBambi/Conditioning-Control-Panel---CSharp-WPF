@@ -668,22 +668,22 @@
             </Grid>
         </ScrollViewer>
 
-        <!-- ================= THE TRAILER: one popup, re-aimed at whichever row is hovered ================= -->
-        <Popup x:Name="Trailer" AllowsTransparency="True" Placement="Bottom" VerticalOffset="6" PopupAnimation="Fade"
+        <!-- ================= THE TRAILER: one popup, re-aimed at whichever row is hovered =================
+             The scene is the saved mockup's vignette engine in a WebView2 (ChasterTrailerView),
+             created once and reused for every row. A WebView2 is a native child HWND and does not
+             paint under AllowsTransparency, so this popup is OPAQUE and square; the still picture
+             sits under the browser as its loading frame and as the fallback when there is no
+             runtime. The figure, the badge and the two lines live BELOW the plate, where the
+             browser's airspace cannot swallow them. -->
+        <Popup x:Name="Trailer" AllowsTransparency="False" Placement="Bottom" VerticalOffset="6" PopupAnimation="None"
                StaysOpen="True" MouseEnter="Trailer_MouseEnter" MouseLeave="Trailer_MouseLeave">
             <Border x:Name="TrailerCard" Width="320" Background="#FF1A1230" BorderBrush="{DynamicResource GlassBorderBrush}"
-                    BorderThickness="1" CornerRadius="14" Padding="8" Margin="12">
-                <Border.Effect>
-                    <DropShadowEffect Color="#000000" BlurRadius="24" ShadowDepth="6" Opacity="0.6"/>
-                </Border.Effect>
+                    BorderThickness="1" Padding="8">
                 <AdornerDecorator>
                     <StackPanel>
-                        <!-- the picture, on a slow drift, with the app's own floating figure over it -->
-                        <Grid x:Name="TrailerPlate" Height="170" ClipToBounds="True">
-                            <Border CornerRadius="10" ClipToBounds="True">
-                                <Border.Background>
-                                    <SolidColorBrush Color="#FF120C1F"/>
-                                </Border.Background>
+                        <!-- the scene: 320x200 logical, so the plate keeps that aspect -->
+                        <Grid x:Name="TrailerPlate" Height="190" ClipToBounds="True">
+                            <Border Background="#FF120C1F">
                                 <Image x:Name="TrailerArt" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"
                                        RenderTransformOrigin="0.5,0.5">
                                     <Image.RenderTransform>
@@ -694,22 +694,27 @@
                                     </Image.RenderTransform>
                                 </Image>
                             </Border>
-                            <Border IsHitTestVisible="False" CornerRadius="10">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                        <GradientStop Color="#00120C1F" Offset="0.5"/>
-                                        <GradientStop Color="#B0120C1F" Offset="1"/>
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                            </Border>
-                            <!-- the figure floats off this: parked low right, where the padlock would be -->
-                            <Border x:Name="TrailerFigureAnchor" Width="56" Height="22" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,14,14"/>
-                            <Border x:Name="TrailerBadgeHost" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,6,0,0"/>
+                            <ctrl:ChasterTrailerView x:Name="TrailerWeb" Visibility="Collapsed"/>
                         </Grid>
-                        <TextBlock x:Name="TxtTrailerFlavour" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="14" FontWeight="Medium"
-                                   Foreground="{DynamicResource TextLightBrush}" TextWrapping="Wrap" Margin="6,8,6,0"/>
-                        <TextBlock x:Name="TxtTrailerWhy" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Opacity="0.85"
-                                   TextWrapping="Wrap" Margin="6,4,6,4"/>
+                        <Grid Margin="6,8,6,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="TxtTrailerFlavour" Grid.Column="0" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="14" FontWeight="Medium"
+                                       Foreground="{DynamicResource TextLightBrush}" TextWrapping="Wrap"/>
+                            <Border x:Name="TrailerBadgeHost" Grid.Column="1" VerticalAlignment="Top" Margin="8,0,0,0"/>
+                        </Grid>
+                        <Grid Margin="6,4,6,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="TxtTrailerWhy" Grid.Column="0" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Opacity="0.85"
+                                       TextWrapping="Wrap"/>
+                            <!-- the figure floats up off this, the way it floats off the padlock -->
+                            <Border x:Name="TrailerFigureAnchor" Grid.Column="1" Width="56" Height="22" VerticalAlignment="Bottom" Margin="8,0,0,0"/>
+                        </Grid>
                     </StackPanel>
                 </AdornerDecorator>
             </Border>

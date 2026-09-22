@@ -51,6 +51,22 @@ public static class TabMenuCopy
         [JackpotId] = "features/backroom.png",
     };
 
+    /// <summary>Rows that play another row's scene: the trailers page has 27 scenes and two
+    /// rows about the same feature share one.</summary>
+    private static readonly Dictionary<string, string> Vignette = new(StringComparer.Ordinal)
+    {
+        ["lockcard"] = "typo",
+        ["quest_weekly"] = "quest",
+        ["program_done"] = "program",
+        ["program_skipped"] = "program",
+        ["remote_video"] = "remote_media",
+        ["natasha"] = "bubbles",
+    };
+
+    /// <summary>The scene id the trailers page mounts for a row: its own id unless it shares one.</summary>
+    public static string VignetteFor(string id) =>
+        id != null && Vignette.TryGetValue(id, out var v) ? v : id ?? "";
+
     /// <summary>The art for a row, or null when it has none.</summary>
     public static string? ArtFor(string? id) =>
         id != null && Art.TryGetValue(id, out var art) ? art : null;

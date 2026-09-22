@@ -92,6 +92,8 @@ namespace ConditioningControlPanel.Views.Tabs
             // Only listen while the page is on screen: Booked fires on every priced event.
             IsVisibleChanged += (_, _) => { Subscribe(IsVisible); if (!IsVisible) HideTrailer(); };
             Chain.SizeChanged += (_, _) => PlaceChainTag();
+            // No runtime, dead process, bad page: the still picture under the browser is the trailer.
+            TrailerWeb.Failed += (_, _) => TrailerWeb.Visibility = Visibility.Collapsed;
             FxInit();
         }
 
@@ -841,6 +843,14 @@ namespace ConditioningControlPanel.Views.Tabs
                 TxtTrailerWhy.Text = Loc.Get(TabMenuCopy.WhyKey(id));
                 var tier = TabMenuCopy.BadgeTier(price.Gate);
                 TrailerBadgeHost.Child = tier > 0 ? new TierBadge { Tier = tier, MaxWidthOverride = 64 } : null;
+                // The saved scene, in the one shared browser; the picture stays under it as the
+                // loading frame and takes over if the browser cannot.
+                if (ChasterTrailerView.BrowserEnabled && !TrailerWeb.HasFailed)
+                {
+                    TrailerWeb.Visibility = Visibility.Visible;
+                    TrailerWeb.Show(TabMenuCopy.VignetteFor(id));
+                }
+                else TrailerWeb.Visibility = Visibility.Collapsed;
                 Trailer.PlacementTarget = row;
                 _trailerShown = true;
                 FxTrailerStart(price);

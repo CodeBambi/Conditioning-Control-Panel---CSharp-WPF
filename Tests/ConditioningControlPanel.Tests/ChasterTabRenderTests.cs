@@ -24,6 +24,36 @@ namespace ConditioningControlPanel.Tests;
 [Collection(CompanionWpfRenderCollection.Name)]
 public class ChasterTabRenderTests
 {
+    static ChasterTabRenderTests()
+    {
+        // The trailer's scene is a WebView2; with no window behind the page there is no browser
+        // to build, and the still picture under it is the trailer.
+        ChasterTrailerView.BrowserEnabled = false;
+    }
+
+    [Fact]
+    public void Every_row_maps_to_a_scene_the_trailers_page_defines_and_the_page_can_mount_one()
+    {
+        var page = System.IO.Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "web", "chaster", "trailers.html");
+        Assert.True(File.Exists(page), "trailers.html is missing");
+        var html = File.ReadAllText(page);
+        Assert.Contains("window.__mount", html);
+        Assert.Contains("CT.run=function(wrap,id)", html);
+        Assert.Contains("CT.I.receipt=", html);
+        foreach (var id in TabPrices.All.Select(p => p.Id).Append(TabMenuCopy.JackpotId))
+        {
+            var scene = TabMenuCopy.VignetteFor(id);
+            Assert.Contains("V." + scene + "=", html);
+        }
+        Assert.Equal("typo", TabMenuCopy.VignetteFor("lockcard"));
+        Assert.Equal("program", TabMenuCopy.VignetteFor("program_skipped"));
+        Assert.Equal("bubbles", TabMenuCopy.VignetteFor("natasha"));
+        Assert.Equal("escape", TabMenuCopy.VignetteFor("escape"));
+        // the mount script never lets a quote through to the page
+        Assert.Equal("window.__mount && window.__mount('typo')", ChasterTrailerView.MountScript("typo"));
+        Assert.DoesNotContain("'", ChasterTrailerView.MountScript("a'b").Replace("__mount('", "").Replace("')", ""));
+    }
+
     private static void Realize(FrameworkElement element, double width, double height)
     {
         var host = new Grid { Width = width, Height = height };
@@ -237,6 +267,7 @@ public class ChasterTabRenderTests
             Assert.Equal(Localization.Loc.Get(TabMenuCopy.FlavourKey("escape")), tab.TxtTrailerFlavour.Text);
             Assert.Equal(Localization.Loc.Get(TabMenuCopy.WhyKey("escape")), tab.TxtTrailerWhy.Text);
             Assert.NotNull(tab.TrailerArt.Source);
+            Assert.Equal(Visibility.Collapsed, tab.TrailerWeb.Visibility); // no browser in the harness: the still picture is the trailer
             Assert.IsType<TierBadge>(tab.TrailerBadgeHost.Child); // Lockdown is tier 1
 
             var typo = Rows(tab).Single(r => (string)r.Tag == "typo");
