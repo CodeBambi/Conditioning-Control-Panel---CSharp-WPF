@@ -15,6 +15,8 @@ export function pickPower(roll){let r=Math.max(0,Math.min(.999999,roll))*WEIGHT_
 export const WARN_AT=2, DROP_V0=118, DROP_ACCEL=20, DROP_VMAX=190, DROP_REACH=14, MUZZLE_S=.11;
 /** Eighth notes fire the laser; the shot leaves this much of an eighth early so its quantised pluck lands ON the eighth. */
 export const LASER_LEAD=.16, FALLBACK_SPB=60/96;
+/** Sim seconds a handed beat clock may stand still before the laser's grid runs on the sim clock instead (one beat at 96 bpm). */
+export const BEAT_STALL_S=FALLBACK_SPB;
 /** A drop's sway around the column it fell from. Eases in so it leaves the brick's centre; the renderer reuses it for the trail. */
 export const swayX=(d,age=d.age)=>(d.x0??d.x)+Math.sin(age*2.4+(d.ph||0))*6*Math.min(1,Math.max(0,age)*2);
 export function ordinaryTarget(br,s) {
@@ -23,12 +25,18 @@ export function ordinaryTarget(br,s) {
     !br.finaleWord&&!br.irisCore&&!br.pendulumAnchor&&!br.finaleHinge&&s.finale?.phase!=='approach'&&s.finale?.phase!=='locked';
 }
 export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=null}) {
-  s.power={drops:[],shots:[],multiball:0,fireball:0,laser:0,shield:0,charges:0,clock:0,eighth:null,muzzle:0};
+  s.power={drops:[],shots:[],multiball:0,fireball:0,laser:0,shield:0,charges:0,clock:0,eighth:null,muzzle:0,beatSeen:null,beatSeenAt:0};
   const p=s.power;
-  /** The laser's grid position in eighths: the bed's beat clock when the game hands one over, else the sim clock at 96 bpm. */
+  /** The laser's grid position in eighths: the bed's beat clock when the game hands one over, else the sim clock at 96 bpm.
+   * A handed clock that stops moving (an AudioContext left suspended or interrupted keeps its currentTime still while the
+   * game plays on) must not stop the laser: after BEAT_STALL_S of sim time with no movement the sim clock carries the grid on
+   * from where it stalled, and the handed clock takes over again the moment it moves. */
   function eighth(){
     let beats=NaN;try{if(typeof beatTime==='function')beats=Number(beatTime());}catch(e){/* sim clock */}
-    if(!Number.isFinite(beats))beats=p.clock/FALLBACK_SPB;
+    if(Number.isFinite(beats)&&beats!==p.beatSeen){p.beatSeen=beats;p.beatSeenAt=p.clock;}
+    if(p.beatSeen==null)beats=p.clock/FALLBACK_SPB;
+    else if(p.clock-p.beatSeenAt>BEAT_STALL_S)beats=p.beatSeen+(p.clock-p.beatSeenAt)/FALLBACK_SPB;
+    else beats=p.beatSeen;
     return Math.floor(beats*2+LASER_LEAD);
   }
   function retire() {

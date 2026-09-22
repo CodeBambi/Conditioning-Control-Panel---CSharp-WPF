@@ -156,3 +156,49 @@ test('the shooting paddle lasts half as long, and fifteen percent fewer power-up
   const was = .085 + .01, now = POWER_CHANCE + SPLIT_CHANCE;
   assert.ok(Math.abs(now / was - .85) < .02, 'drops per brick: ' + (now / was).toFixed(3));
 });
+
+test('laser keeps firing when the handed beat clock stands still (a suspended AudioContext), and follows it again when it moves',()=>{
+ let beats=0;const f=fixture({beatTime:()=>beats});catchDrop(f,'laser');
+ for(let i=0;i<60;i++){beats+=1/120/.625;f.power.step(1/120);}
+ const before=names(f,'laserShot').length;assert.ok(before>=1);
+ for(let i=0;i<240;i++)f.power.step(1/120);                                            // two seconds with the clock frozen
+ const during=names(f,'laserShot').length-before;
+ assert.ok(during>=4&&during<=6,'sim clock carried the grid: '+during);               // 2 s minus one beat of grace = about 4.4 eighths
+ beats+=1/120/.625*30;f.power.step(1/120);                                              // the handed clock moves: it leads again
+ const n=names(f,'laserShot').length;for(let i=0;i<30;i++){beats+=1/120/.625;f.power.step(1/120);}
+ assert.ok(names(f,'laserShot').length>n);
+});
+function simAudio(){return new Proxy({beat:{spb:60/96}},{get:(t,k)=>k==='now'?undefined:(k in t?t[k]:()=>0)});}
+test('a laser shot takes exactly one hit off a three-hit brick through the real game: 3, 2, 1, gone',()=>{
+ const evs=[];const game=createGame({rng:()=>.5,greyMetal:false,audio:simAudio(),onEvent:(n,d)=>evs.push([n,d])}),s=game.snapshot();
+ s.state='colour';s.wallAge=3;for(const b of s.bricks)b.alive=false;
+ const br=s.bricks[0];Object.assign(br,{alive:true,x:620,y:300,w:40,h:20,strength:3,hp:3,angle:0,gif:-1,word:null,spiral:null,split:false,jackpot:false,powerup:null});
+ s.power.laser=4;
+ const shoot=()=>{s.power.shots.push({x:640,y:br.y+br.h+5,r:3});game.step(1/120,{x:640});};
+ shoot();assert.equal(br.hp,2);assert.equal(br.alive,true);assert.equal(s.power.shots.length,0,'the shot is spent on the hit');
+ shoot();assert.equal(br.hp,1);assert.equal(br.alive,true);
+ shoot();assert.equal(br.alive,false);
+ assert.equal(evs.filter(e=>e[0]==='laserHit').length,3);assert.equal(evs.filter(e=>e[0]==='brickDamage').length,2);assert.equal(evs.filter(e=>e[0]==='brick').length,1);
+});
+test('the laser lands hits on every wall 1-8 and damages bricks on every wall the ball can damage',()=>{
+ const STEP=1/120;
+ for(let wall=1;wall<=8;wall++){
+  let seed=7;const rng=()=>(seed=(seed*1664525+1013904223)%4294967296)/4294967296;let evs=[];
+  const game=createGame({words:['SINK','DROP','RELAX','LET GO','DEEPER','BLANK'],rng,audio:simAudio(),onEvent:(n,d)=>evs.push([n,d])});
+  const s=game.snapshot();s.noLose=true;game.breakoutNow();game.jumpToWall(wall);s.noLose=true;
+  for(let i=0;i<240;i++){game.step(STEP,{x:s.balls[0]?.x??640,launch:i%60===0});if(s.state!=='colour'&&!s.transition)game.breakoutNow();}
+  evs=[];s.power.laser=4;let hits=0,laserDamage=0;
+  for(let i=0;i<120*4.5;i++){
+   const low=s.balls.filter(b=>!b.lost&&!b.stuck).sort((a,c)=>c.y-a.y)[0];const input=low?{x:low.x}:{};
+   if(s.balls.some(b=>b.stuck)&&i%60===0)input.launch=true;
+   const hpBefore=new Map(s.bricks.filter(b=>b.alive).map(b=>[b,b.hp||1]));
+   game.step(STEP,input);if(s.state!=='colour'&&!s.transition)game.breakoutNow();
+   const lh=evs.filter(e=>e[0]==='laserHit');hits+=lh.length;
+   // a brick that lost hp this step at a laser impact point: the laser did it (the game emits "hit" for every brick break, so it is no ball marker)
+   if(lh.length)for(const [b,hp] of hpBefore){const now=b.alive?(b.hp||1):0;if(now<hp&&lh.some(h=>Math.abs(h[1].x-(b.x+b.w/2))<b.w/2+4&&Math.abs(h[1].y-(b.y+b.h/2))<b.h/2+8))laserDamage++;}
+   evs=[];
+  }
+  assert.ok(hits>=1,'wall '+wall+' laser hit nothing');
+  if(wall<8)assert.ok(laserDamage>=1,'wall '+wall+' laser damaged nothing');            // wall 8 is the finale: rings and defenses are excluded on purpose
+ }
+});
