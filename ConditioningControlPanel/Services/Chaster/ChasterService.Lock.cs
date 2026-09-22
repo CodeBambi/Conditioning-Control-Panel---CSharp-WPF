@@ -11,6 +11,10 @@ namespace ConditioningControlPanel.Services.Chaster;
 public sealed record LockSnapshot(string Id, string? Title, DateTime? EndsAtUtc, bool IsFrozen,
     bool TimerHidden, bool IsTestLock, DateTime FetchedAtUtc)
 {
+    /// <summary>When the lock started, for the calendar. Null when Chaster did not say; the
+    /// page then counts from today.</summary>
+    public DateTime? StartedAtUtc { get; init; }
+
     /// <summary>Time left on the lock, counted locally from the end date. Null when the timer
     /// is hidden or the lock has no end date. A frozen lock does not run down, so it reads what
     /// was left at the fetch.</summary>
@@ -76,7 +80,8 @@ public sealed partial class ChasterService
             var pick = locks.FirstOrDefault(l => l.Id == chosenId) ?? (locks.Count == 1 ? locks[0] : null);
             if (pick == null) return SetLock(null, locks.Count == 0 ? LockLookup.None : LockLookup.Ambiguous);
             var ends = pick.EndDate is { } end ? (end.Kind == DateTimeKind.Utc ? end : end.ToUniversalTime()) : (DateTime?)null;
-            return SetLock(new LockSnapshot(pick.Id, pick.Title, ends, pick.IsFrozen, pick.TimerHidden, pick.IsTestLock, _utcNow()), LockLookup.Chosen);
+            var started = pick.StartDate is { } from ? (from.Kind == DateTimeKind.Utc ? from : from.ToUniversalTime()) : (DateTime?)null;
+            return SetLock(new LockSnapshot(pick.Id, pick.Title, ends, pick.IsFrozen, pick.TimerHidden, pick.IsTestLock, _utcNow()) { StartedAtUtc = started }, LockLookup.Chosen);
         }
         catch (Exception ex)
         {

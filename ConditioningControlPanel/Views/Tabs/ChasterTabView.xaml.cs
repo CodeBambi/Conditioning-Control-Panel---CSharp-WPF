@@ -25,8 +25,8 @@ namespace ConditioningControlPanel.Views.Tabs
     /// <see cref="TabPageText"/>, <see cref="TabPresets"/> or <see cref="TabMenuCopy"/> so it is
     /// tested without a window.
     ///
-    /// <para>This partial is the DATA: what each figure, pill, link and row says. The motion (the
-    /// bursts, rings, sheen, the cards arriving, the chain's comet, the trailer's drift) is
+    /// <para>This partial is the DATA: what each figure, pill, square and row says. The motion (the
+    /// bursts, rings, sheen, the cards arriving, the calendar's comet, the trailer's drift) is
     /// <c>ChasterTabView.Fx.cs</c>, which this file only ever calls into through the <c>Fx*</c>
     /// hooks, every one of which is safe to call with nothing on screen and does nothing under
     /// MotionFx Off.</para>
@@ -44,7 +44,6 @@ namespace ConditioningControlPanel.Views.Tabs
         private static readonly Brush CostBrush = Frozen(CostColour);
         private static readonly Brush EarnBrush = Frozen(EarnColour);
         private static readonly Brush JackpotBrush = Frozen(JackpotColour);
-        private static readonly Brush ChainBrush = Frozen(Color.FromRgb(0x6E, 0x66, 0x86));
         private static readonly FontFamily Display = new("/Fonts/#Fredoka, Segoe UI");
         private static readonly FontFamily Mono = new("Consolas, Courier New");
 
@@ -52,11 +51,6 @@ namespace ConditioningControlPanel.Views.Tabs
         /// in seconds because it is the one number the player is sitting there waiting out.</summary>
         private static readonly TimeSpan SlowTick = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan HoldTick = TimeSpan.FromSeconds(1);
-
-        /// <summary>The chain draws one link a day up to this many, then the links shrink so a
-        /// long lock still fits on one line.</summary>
-        internal const int ChainWideLinks = 18;
-        internal const int ChainMaxLinks = 40;
 
         /// <summary>The hover-to-trailer delay, and the grace for the pointer to cross from the
         /// row to its popup.</summary>
@@ -75,7 +69,12 @@ namespace ConditioningControlPanel.Views.Tabs
         private ToggleButton? _trailerRow;
         private bool _trailerShown;
         private bool _overTrailer;
-        private int _chainLinks;
+        /// <summary>What the calendar was built for, so a tick that changes nothing redraws nothing.</summary>
+        private (DateTime Start, DateTime End, DateTime Today)? _calendarKey;
+        private FrameworkElement? _tonightCell;
+        private FrameworkElement? _keyCell;
+        /// <summary>The crosses, padlocks and key in calendar order, for the draw-in.</summary>
+        private readonly List<FrameworkElement> _calendarDraws = new();
 
         /// <summary>The first number of the countdown and its value, for the count-up on show.</summary>
         private (TextBlock Block, int Value)? _clockLead;
@@ -91,7 +90,7 @@ namespace ConditioningControlPanel.Views.Tabs
             _trailerClose.Tick += (_, _) => { _trailerClose.Stop(); if (!_overTrailer) HideTrailer(); };
             // Only listen while the page is on screen: Booked fires on every priced event.
             IsVisibleChanged += (_, _) => { Subscribe(IsVisible); if (!IsVisible) HideTrailer(); };
-            Chain.SizeChanged += (_, _) => PlaceChainTag();
+            Calendar.SizeChanged += (_, _) => PlaceCalendarTag();
             // No runtime, dead process, bad page: the still picture under the browser is the trailer.
             TrailerWeb.Failed += (_, _) => TrailerWeb.Visibility = Visibility.Collapsed;
             FxInit();
@@ -207,20 +206,20 @@ namespace ConditioningControlPanel.Views.Tabs
             if (!linked)
             {
                 // The hero is the ask: nothing about a lock it cannot know.
-                TxtHeroTitle.Visibility = Visibility.Collapsed;
+                HeroTitle.Visibility = Visibility.Collapsed;
                 HeroClockRow.Visibility = Visibility.Collapsed;
                 TxtHeroEnds.Visibility = Visibility.Collapsed;
                 HeroPills.Children.Clear();
                 HeroPills.Visibility = Visibility.Collapsed;
                 LockRow.Visibility = Visibility.Collapsed;
-                BuildChain(null);
+                BuildCalendar(null);
                 return;
             }
 
             var title = snapshot == null ? null
                 : string.IsNullOrWhiteSpace(snapshot.Title) ? Loc.Get("chaster_lock_untitled") : snapshot.Title;
-            TxtHeroTitle.Text = (title ?? "").ToUpperInvariant();
-            TxtHeroTitle.Visibility = title == null ? Visibility.Collapsed : Visibility.Visible;
+            HeroTitle.Text = title ?? "";
+            HeroTitle.Visibility = title == null ? Visibility.Collapsed : Visibility.Visible;
 
             // No countdown means no clock at all: the pills under it say why.
             HeroClock.Children.Clear();
@@ -264,7 +263,7 @@ namespace ConditioningControlPanel.Views.Tabs
             TxtHeroEnds.Visibility = ends == null ? Visibility.Collapsed : Visibility.Visible;
 
             RefreshPills(lookup, snapshot, chaster!.SafetyHoldRemaining);
-            BuildChain(left);
+            BuildCalendar(snapshot);
         }
 
         /// <summary>The single-letter units under the big digits: the long keys are the chip's
@@ -326,83 +325,203 @@ namespace ConditioningControlPanel.Views.Tabs
             var stampColour = balance > 0 ? Color.FromRgb(0xC8, 0x24, 0x4A) : balance < 0 ? Color.FromRgb(0x1E, 0x8A, 0x6E) : Color.FromRgb(0x6E, 0x66, 0x86);
             TagStamp.BorderBrush = Frozen(stampColour);
             TxtTagStamp.Foreground = Frozen(stampColour);
-            TxtChainTag.Text = CircesTab.Format(balance);
-            ChainTag.Visibility = balance > 0 && _chainLinks > 0 ? Visibility.Visible : Visibility.Collapsed;
+            TxtCalendarTag.Text = CircesTab.Format(balance);
+            CalendarTag.Visibility = balance > 0 && _tonightCell != null ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        // ============================== 2. the chain ==============================
+        // ============================== 2. the calendar ==============================
 
-        /// <summary>How many links the chain draws for a lock with this long left: one a day,
-        /// starting with tonight, plus the one that opens. No lock, no chain.</summary>
-        internal static int ChainLinksFor(TimeSpan? remaining)
+        internal const double CellSize = 32;
+        private const double CellGap = 1.5;
+        private static readonly Brush CellPlate = Frozen(Color.FromRgb(0x1A, 0x12, 0x30));
+        private static readonly Brush CellRim = Frozen(Color.FromArgb(0x2E, 0xC9, 0xA6, 0xFF));
+        private static readonly Brush LilacBrush = Frozen(CustomColour);
+        private static readonly Brush IceBrush = Frozen(IceColour);
+        private static readonly Brush HotPink = Frozen(Color.FromRgb(0xFF, 0x3D, 0x7A));
+        private static readonly Geometry KeyGlyph = Geometry.Parse(
+            "M 8,0 A 8,8 0 1 0 8,16 A 8,8 0 1 0 8,0 Z M 8,4.5 A 3.5,3.5 0 1 0 8,11.5 A 3.5,3.5 0 1 0 8,4.5 Z M 15,5.5 H 42 V 11 H 38.5 V 8.5 H 34.5 V 12.5 H 30.5 V 8.5 H 15 Z");
+        private static ImageBrush? _padlockMask;
+
+        /// <summary>The days of this lock in local time, first to last, for the calendar. Nothing
+        /// when there is no lock, no end, or a hidden timer. A lock that never said when it
+        /// started counts from today, so the calendar is what is left of it.</summary>
+        internal static (DateTime Start, DateTime End)? CalendarSpan(LockSnapshot? snapshot, DateTime localToday)
         {
-            if (remaining is not { } left || left <= TimeSpan.Zero) return 0;
-            var days = (int)Math.Ceiling(left.TotalDays);
-            return Math.Clamp(days, 1, ChainMaxLinks - 1) + 1;
+            if (snapshot is not { TimerHidden: false, EndsAtUtc: { } endUtc }) return null;
+            var end = endUtc.ToLocalTime();
+            var start = snapshot.StartedAtUtc is { } startUtc ? startUtc.ToLocalTime() : localToday;
+            return (start, end);
         }
 
-        /// <summary>One link a day until the lock opens. Tonight's link is red and carries the
-        /// tab's tag; the last is dashed gold, the one that opens. Past a couple of weeks the links
-        /// shrink so a long lock still reads as one chain.</summary>
-        internal void BuildChain(TimeSpan? remaining)
+        internal void BuildCalendar(LockSnapshot? snapshot) => BuildCalendar(CalendarSpan(snapshot, DateTime.Now), DateTime.Now);
+
+        /// <summary>One square a day, a served day crossed out, tonight's square red with the
+        /// tab's tag under it, the days still to serve wearing a small padlock, and the key after
+        /// the last. Rebuilt only when the lock or the day changes: the hero's tick calls this
+        /// every half minute and must not redraw a calendar that has not moved.</summary>
+        internal void BuildCalendar((DateTime Start, DateTime End)? span, DateTime today)
         {
-            var links = ChainLinksFor(remaining);
-            _chainLinks = links;
-            Chain.Children.Clear();
-            FxChainReset();
-            if (links == 0)
+            if (span is not { } lockSpan)
             {
-                ChainRow.Visibility = Visibility.Collapsed;
-                ChainTag.Visibility = Visibility.Collapsed;
+                ClearCalendar();
                 return;
             }
-            ChainRow.Visibility = Visibility.Visible;
-            var wide = links <= ChainWideLinks;
-            double w = wide ? 34 : 20, h = wide ? 18 : 12, overlap = wide ? -6 : -4;
-            for (var i = 0; i < links; i++)
+            var key = (lockSpan.Start.Date, lockSpan.End.Date, today.Date);
+            if (_calendarKey == key && CalendarRow.Visibility == Visibility.Visible)
             {
-                var last = i == links - 1;
-                var tonight = i == 0;
-                FrameworkElement link;
-                if (last)
-                {
-                    link = new Rectangle
-                    {
-                        Width = w, Height = h, RadiusX = h / 2, RadiusY = h / 2,
-                        Stroke = JackpotBrush, StrokeThickness = 2.2, StrokeDashArray = new DoubleCollection { 3, 2 },
-                        ToolTip = Loc.Get("chaster_chain_open"),
-                    };
-                }
-                else
-                {
-                    link = new Border
-                    {
-                        Width = w, Height = h, CornerRadius = new CornerRadius(h / 2),
-                        BorderThickness = new Thickness(tonight ? 3 : 2.2),
-                        BorderBrush = tonight ? CostBrush : ChainBrush,
-                        Background = tonight ? new SolidColorBrush(Color.FromArgb(0x33, CostColour.R, CostColour.G, CostColour.B)) : null,
-                        ToolTip = tonight ? Loc.Get("chaster_chain_tonight") : Loc.GetF("chaster_chain_day", i + 1),
-                    };
-                }
-                // every other link sits a touch lower, so the row reads as links woven, not beads
-                link.Margin = new Thickness(i == 0 ? 0 : overlap, (i & 1) == 1 ? h * 0.35 : 0, 0, 0);
-                link.VerticalAlignment = VerticalAlignment.Top;
-                Chain.Children.Add(link);
-                if (tonight) FxChainTonight(link);
+                RefreshTag(App.Chaster?.BalanceSeconds ?? 0);
+                return;
             }
+            _calendarKey = key;
+            Calendar.Children.Clear();
+            FxCalendarReset();
+
+            var cells = LockCalendar.CellsFor(lockSpan.Start, lockSpan.End, today);
+            var elided = LockCalendar.ElidedDays(lockSpan.Start, lockSpan.End);
+            foreach (var day in cells)
+            {
+                var dayNumber = (day.Date - lockSpan.Start.Date).Days + 1;
+                var square = Cell(day, dayNumber, elided);
+                Calendar.Children.Add(square);
+                if (day.Today) FxCalendarTonight(square);
+                if (day.IsKey) _keyCell = square;
+            }
+            CalendarRow.Visibility = Visibility.Visible;
             RefreshTag(App.Chaster?.BalanceSeconds ?? 0);
-            PlaceChainTag();
+            PlaceCalendarTag();
+            if (IsVisible) FxCalendarDrawIn();
         }
 
-        /// <summary>Park the tag under the first link, wherever the centred chain put it.</summary>
-        private void PlaceChainTag()
+        private void ClearCalendar()
+        {
+            _calendarKey = null;
+            Calendar.Children.Clear();
+            FxCalendarReset();
+            CalendarRow.Visibility = Visibility.Collapsed;
+            CalendarTag.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>A day: a small dark plate with its number in ice at the corner, and on it
+        /// either a hand-drawn cross (served), a padlock (still to serve), or the key.</summary>
+        private FrameworkElement Cell(LockDay day, int dayNumber, int elided)
+        {
+            var plate = new Grid();
+            var square = new Border
+            {
+                Width = CellSize, Height = CellSize, Margin = new Thickness(CellGap),
+                Background = CellPlate, BorderBrush = day.Today ? HotPink : day.IsKey ? JackpotBrush : CellRim,
+                BorderThickness = new Thickness(day.Today ? 2 : 1), CornerRadius = new CornerRadius(6),
+                Child = plate, SnapsToDevicePixels = true,
+            };
+            if (!day.IsKey)
+            {
+                plate.Children.Add(new TextBlock
+                {
+                    Text = day.DayOfMonth.ToString(), FontSize = 11, FontWeight = FontWeights.SemiBold, FontFamily = Display,
+                    Foreground = day.Today ? HotPink : IceBrush, Opacity = day.Served ? 0.55 : 0.9,
+                    HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(3, 1, 0, 0),
+                });
+            }
+
+            if (day.IsKey)
+            {
+                var keyGlyph = new Path
+                {
+                    Data = KeyGlyph, Fill = JackpotBrush, Stretch = Stretch.Uniform, Width = 22, Height = 9,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                    RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1),
+                };
+                plate.Children.Add(keyGlyph);
+                _calendarDraws.Add(keyGlyph);
+                square.ToolTip = Loc.Get("chaster_chain_open");
+            }
+            else if (day.Served)
+            {
+                var cross = Cross(dayNumber);
+                plate.Children.Add(cross);
+                _calendarDraws.Add(cross);
+                square.ToolTip = Loc.GetF("chaster_cal_served", dayNumber);
+            }
+            else if (day.Today)
+            {
+                square.ToolTip = Loc.Get("chaster_chain_tonight");
+            }
+            else
+            {
+                var padlock = new Rectangle
+                {
+                    Width = 9, Height = 12.5, Fill = LilacBrush, Opacity = 0.8, OpacityMask = PadlockMask(),
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(0, 0, 0, 3),
+                    RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1),
+                };
+                plate.Children.Add(padlock);
+                _calendarDraws.Add(padlock);
+                square.ToolTip = Loc.GetF("chaster_cal_locked", dayNumber);
+            }
+
+            if (day.Elided)
+            {
+                // the first square shown stands for every day before it
+                plate.Children.Add(new TextBlock
+                {
+                    Text = "...", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = IceBrush, Opacity = 0.8,
+                    HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(0, 0, 3, -1), IsHitTestVisible = false,
+                });
+                square.ToolTip = Loc.GetF("chaster_cal_elided", elided);
+            }
+            return square;
+        }
+
+        /// <summary>A crossed-out day: two strokes that do not quite meet in the middle and lean
+        /// a little differently from one day to the next, so a month of them reads as a hand.</summary>
+        private static Canvas Cross(int seed)
+        {
+            var wobble = (seed % 3) - 1;          // -1, 0, 1
+            var lean = ((seed * 7) % 5) - 2;      // -2 .. 2
+            double a = 7 + lean * 0.4, b = CellSize - 7 - lean * 0.4;
+            var canvas = new Canvas
+            {
+                Width = CellSize, Height = CellSize, IsHitTestVisible = false,
+                RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1),
+            };
+            // invariant: a comma is a separator in path data, whatever the culture's decimal is
+            canvas.Children.Add(Stroke(FormattableString.Invariant(
+                $"M {a},{a + wobble} L {CellSize / 2 + wobble * 0.6},{CellSize / 2 - 0.4} L {b},{b - wobble}")));
+            canvas.Children.Add(Stroke(FormattableString.Invariant(
+                $"M {b - lean * 0.3},{a} L {CellSize / 2 - wobble * 0.5},{CellSize / 2 + 0.6} L {a + lean * 0.3},{b}")));
+            return canvas;
+        }
+
+        private static Path Stroke(string data) => new()
+        {
+            Data = Geometry.Parse(data),
+            Stroke = HotPink, StrokeThickness = 2.5, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round, Opacity = 0.92,
+        };
+
+        private static ImageBrush PadlockMask()
+        {
+            if (_padlockMask != null) return _padlockMask;
+            var mask = new ImageBrush { Stretch = Stretch.Uniform };
+            try { mask.ImageSource = new BitmapImage(new Uri(LockTitle.PadlockArt)); }
+            catch (Exception ex) { Diag.Swallowed(ex, "calendar padlock art"); }
+            mask.Freeze();
+            _padlockMask = mask;
+            return mask;
+        }
+
+        /// <summary>Park the tag under tonight's square, wherever the grid put it.</summary>
+        private void PlaceCalendarTag()
         {
             try
             {
-                if (Chain.Children.Count == 0 || Chain.Children[0] is not FrameworkElement first || !first.IsVisible) return;
-                var bounds = first.TransformToVisual(ChainRow).TransformBounds(new Rect(0, 0, first.ActualWidth, first.ActualHeight));
-                var x = bounds.X + bounds.Width / 2 - ChainTag.ActualWidth / 2;
-                ChainTag.Margin = new Thickness(Math.Max(0, x), bounds.Bottom + 6, 0, 0);
+                if (_tonightCell is not { IsVisible: true } cell) return;
+                var bounds = cell.TransformToVisual(CalendarRow).TransformBounds(new Rect(0, 0, cell.ActualWidth, cell.ActualHeight));
+                var x = bounds.X + bounds.Width / 2 - CalendarTag.ActualWidth / 2;
+                CalendarTag.Margin = new Thickness(Math.Max(0, x), bounds.Bottom - 4, 0, 0);
             }
             catch (Exception ex) { Diag.Swallowed(ex); }
         }

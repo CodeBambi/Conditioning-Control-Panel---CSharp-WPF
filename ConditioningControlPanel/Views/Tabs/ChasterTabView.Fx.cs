@@ -12,6 +12,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using ConditioningControlPanel.Controls;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Chaster;
 
@@ -22,8 +23,9 @@ namespace ConditioningControlPanel.Views.Tabs
     /// canvas behind the cards, a spiral watermark turning once every 90 s, a sheen crossing the
     /// hero every dozen seconds, the art on a slow drift, the cards arriving in a stagger, and one
     /// event vocabulary - a pop, a burst and a ring - for every press and every booking. On top of
-    /// that, the lock's own beats: the paper tag swings, tonight's link breathes and a comet runs
-    /// the chain into it, a turned key throws a ring and lights its rows one after another, and
+    /// that, the lock's own beats: the paper tag swings, the title's padlocks breathe, the
+    /// calendar's marks draw in and tonight's square breathes with a comet running the key into
+    /// it, a turned key throws a ring and lights its rows one after another, and
     /// the trailer's picture drifts under the app's own floating figure.
     ///
     /// <para>Rails, the same as the launcher's: every tween is gated on <see cref="MotionFx"/>
@@ -50,10 +52,12 @@ namespace ConditioningControlPanel.Views.Tabs
         private const double TagSwingFrom = -7;
         private const double TagSwingTo = -3;
         private const double TagSwingSeconds = 3.6;
-        private const double ChainBobPx = 3;
-        private const double ChainBobSeconds = 1.1;
-        private const int ChainCometEveryMs = 6500;
-        private const int ChainCometMs = 1600;
+        private const double CalendarBobPx = 3;
+        private const double CalendarBobSeconds = 1.1;
+        private const int CalendarCometEveryMs = 6500;
+        private const int CalendarCometMs = 1600;
+        private const int CalendarDrawStepMs = 45;
+        private const int CalendarDrawMs = 320;
         private const int KeyFlickerStepMs = 28;
         private const double TrailerDriftTo = 1.09;
         private const double TrailerDriftSeconds = 7;
@@ -64,8 +68,7 @@ namespace ConditioningControlPanel.Views.Tabs
         private bool _spiralBuilt;
         private CardSheenAdorner? _heroSheen;
         private PerimeterCometAdorner? _linkComet;
-        private FrameworkElement? _tonightLink;
-        private DispatcherTimer? _chainComet;
+        private DispatcherTimer? _calendarComet;
         private DispatcherTimer? _trailerFigure;
         private ChasterBookedFlash? _trailerFlash;
         private TabPrice? _trailerPrice;
@@ -93,7 +96,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 // replacing each other's (MotionFx swaps a lone identity transform for its own).
                 foreach (var moving in new FrameworkElement[]
                          {
-                             HeroCard, ChainRow, StatTab, StatToday, StatRun, PricesHeader, SwitchPill, TxtBalance, ConsentCard,
+                             HeroCard, StatTab, StatToday, StatRun, PricesHeader, SwitchPill, TxtBalance, ConsentCard,
                              BtnPresetGentle, BtnPresetStrict, BtnPresetCirce, BtnPresetCustom, BtnLink, BtnConsentOk,
                              CostBoard, EarnBoard, JackpotRow, FootRow,
                          }.Concat(FactRow.Children.OfType<FrameworkElement>()))
@@ -148,7 +151,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 StartHeroSheen();
                 StartArtDrift();
                 StartTagSwing();
-                StartChainLoops();
+                StartCalendarLoops();
+                HeroTitle.Start();
                 if (_clockLead is { } lead) MotionFx.Odometer(lead.Block, 0, lead.Value, "{0:0}", 0.9);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx on shown"); }
@@ -180,7 +184,6 @@ namespace ConditioningControlPanel.Views.Tabs
                 foreach (var fact in FactRow.Children.OfType<FrameworkElement>()) yield return fact;
                 yield break;
             }
-            if (ChainRow.Visibility == Visibility.Visible) yield return ChainRow;
             yield return StatTab;
             yield return StatToday;
             yield return StatRun;
@@ -205,7 +208,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 DetachSheen();
                 StopArtDrift();
                 StopTagSwing();
-                StopChainLoops();
+                StopCalendarLoops();
+                HeroTitle.Stop();
                 FxTrailerStop();
                 PerimeterCometAdorner.Detach(_linkComet);
                 _linkComet = null;
@@ -347,74 +351,111 @@ namespace ConditioningControlPanel.Views.Tabs
             catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
-        // ------------------------------------------------------------------ the chain
+        // ------------------------------------------------------------------ the calendar
 
-        /// <summary>A chain was rebuilt: forget the old tonight link and its clocks.</summary>
-        private void FxChainReset()
+        /// <summary>A calendar was rebuilt: forget the old squares and their clocks.</summary>
+        private void FxCalendarReset()
         {
-            StopChainLoops();
-            _tonightLink = null;
+            StopCalendarLoops();
+            _tonightCell = null;
+            _keyCell = null;
+            _calendarDraws.Clear();
         }
 
-        /// <summary>Tonight's link glows red (perf-gated) and, once the page is up, breathes.</summary>
-        private void FxChainTonight(FrameworkElement link)
+        /// <summary>Tonight's square glows red (perf-gated) and, once the page is up, breathes.</summary>
+        private void FxCalendarTonight(FrameworkElement cell)
         {
-            _tonightLink = link;
+            _tonightCell = cell;
             try
             {
                 if (PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
                 {
-                    link.Effect = new DropShadowEffect
+                    cell.Effect = new DropShadowEffect
                     {
                         Color = CostColour, ShadowDepth = 0, Opacity = 0.8,
-                        BlurRadius = Math.Min(16, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
+                        BlurRadius = Math.Min(14, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
                         RenderingBias = RenderingBias.Performance,
                     };
                 }
-                link.RenderTransformOrigin = new Point(0.5, 0.5);
-                link.RenderTransform = new ScaleTransform(1, 1);
-                if (IsVisible) StartChainLoops();
+                cell.RenderTransformOrigin = new Point(0.5, 0.5);
+                cell.RenderTransform = new ScaleTransform(1, 1);
+                if (IsVisible) StartCalendarLoops();
             }
-            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx chain"); }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx calendar"); }
         }
 
-        /// <summary>The tag under tonight's link bobs, the link breathes, and every few seconds a
-        /// comet runs the chain from the open end into tonight and lands with a pulse.</summary>
-        private void StartChainLoops()
+        /// <summary>The marks arrive one after another, 45 ms apart: each cross and padlock pops
+        /// in from nothing with a little overshoot. Reduced motion and Off get the final state.</summary>
+        private void FxCalendarDrawIn()
         {
-            StopChainLoops();
-            if (_tonightLink == null || !MotionFx.AllowAmbientLoops) return;
-            var bob = new DoubleAnimation(0, ChainBobPx, TimeSpan.FromSeconds(ChainBobSeconds))
+            if (MotionFx.Level != MotionLevel.Full) return;
+            try
+            {
+                var i = 0;
+                foreach (var mark in _calendarDraws)
+                {
+                    if (mark.RenderTransform is not ScaleTransform scale) continue;
+                    var self = scale;
+                    var delay = TimeSpan.FromMilliseconds(CalendarDrawStepMs * i++);
+                    self.ScaleX = self.ScaleY = 0;
+                    var grow = new DoubleAnimationUsingKeyFrames { BeginTime = delay, Duration = TimeSpan.FromMilliseconds(CalendarDrawMs) };
+                    grow.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+                    grow.KeyFrames.Add(new EasingDoubleKeyFrame(1.22, KeyTime.FromPercent(0.55), new QuadraticEase { EasingMode = EasingMode.EaseOut }));
+                    grow.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromPercent(1), new QuadraticEase { EasingMode = EasingMode.EaseInOut }));
+                    grow.Completed += (_, _) =>
+                    {
+                        try
+                        {
+                            self.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                            self.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                            self.ScaleX = self.ScaleY = 1;
+                        }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
+                    };
+                    self.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+                    self.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster fx calendar draw"); }
+        }
+
+        /// <summary>The tag under tonight's square bobs, the square breathes, and every few seconds
+        /// a comet runs from the key into tonight and lands with a pulse.</summary>
+        private void StartCalendarLoops()
+        {
+            StopCalendarLoops();
+            if (_tonightCell == null || !MotionFx.AllowAmbientLoops) return;
+            var bob = new DoubleAnimation(0, CalendarBobPx, TimeSpan.FromSeconds(CalendarBobSeconds))
             {
                 AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
             };
             Timeline.SetDesiredFrameRate(bob, 20);
-            ChainTagBob.BeginAnimation(TranslateTransform.YProperty, bob);
-            MotionFx.GlowBreath(_tonightLink, 0.72, 1.0, 2.2);
-            _chainComet = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(ChainCometEveryMs) };
-            _chainComet.Tick += (_, _) => ChainComet();
-            _chainComet.Start();
+            CalendarTagBob.BeginAnimation(TranslateTransform.YProperty, bob);
+            MotionFx.GlowBreath(_tonightCell, 0.72, 1.0, 2.2);
+            _calendarComet = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(CalendarCometEveryMs) };
+            _calendarComet.Tick += (_, _) => CalendarComet();
+            _calendarComet.Start();
         }
 
-        private void StopChainLoops()
+        private void StopCalendarLoops()
         {
-            _chainComet?.Stop();
-            _chainComet = null;
-            ChainTagBob.BeginAnimation(TranslateTransform.YProperty, null);
-            ChainTagBob.Y = 0;
-            if (_tonightLink != null) MotionFx.Stop(_tonightLink);
+            _calendarComet?.Stop();
+            _calendarComet = null;
+            CalendarTagBob.BeginAnimation(TranslateTransform.YProperty, null);
+            CalendarTagBob.Y = 0;
+            if (_tonightCell != null) MotionFx.Stop(_tonightCell);
         }
 
-        /// <summary>One comet: a bright dot that runs from the open link to tonight's and pops it.</summary>
-        private void ChainComet()
+        /// <summary>One comet: a bright dot that runs from the key to tonight's square and pops it.</summary>
+        private void CalendarComet()
         {
             try
             {
-                if (!IsVisible || !MotionFx.AllowAmbientLoops || _tonightLink == null || Chain.Children.Count < 2) return;
-                if (Chain.Children[^1] is not FrameworkElement open) return;
+                if (!IsVisible || !MotionFx.AllowAmbientLoops || _tonightCell == null || _keyCell == null) return;
+                var open = _keyCell;
                 var from = open.TransformToVisual(ShockwaveCanvas).Transform(new Point(open.ActualWidth / 2, open.ActualHeight / 2));
-                var to = _tonightLink.TransformToVisual(ShockwaveCanvas).Transform(new Point(_tonightLink.ActualWidth / 2, _tonightLink.ActualHeight / 2));
+                var to = _tonightCell.TransformToVisual(ShockwaveCanvas).Transform(new Point(_tonightCell.ActualWidth / 2, _tonightCell.ActualHeight / 2));
                 if (double.IsNaN(from.X) || double.IsNaN(to.X)) return;
 
                 var slide = new TranslateTransform(from.X, from.Y);
@@ -427,7 +468,7 @@ namespace ConditioningControlPanel.Views.Tabs
                     comet.Effect = new DropShadowEffect { Color = CostColour, ShadowDepth = 0, BlurRadius = 12, Opacity = 0.9, RenderingBias = RenderingBias.Performance };
                 ShockwaveCanvas.Children.Add(comet);
 
-                var duration = TimeSpan.FromMilliseconds(ChainCometMs);
+                var duration = TimeSpan.FromMilliseconds(CalendarCometMs);
                 var run = new DoubleAnimation(from.X, to.X, duration) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } };
                 var drop = new DoubleAnimation(from.Y, to.Y, duration) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } };
                 var fade = new DoubleAnimationUsingKeyFrames { Duration = duration };
@@ -440,7 +481,7 @@ namespace ConditioningControlPanel.Views.Tabs
                     try
                     {
                         ShockwaveCanvas.Children.Remove(comet);
-                        if (_tonightLink != null) FxPop(_tonightLink, 1.3);
+                        if (_tonightCell != null) FxPop(_tonightCell, 1.25);
                     }
                     catch (Exception ex) { Diag.Swallowed(ex); }
                 };
@@ -534,7 +575,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 Shockwave(StatTab, colour);
                 FxPop(PaperTag, 1.06);
                 FxPop(TxtTagAmount, 1.12);
-                if (ChainTag.Visibility == Visibility.Visible) FxPop(ChainTag, 1.2);
+                if (CalendarTag.Visibility == Visibility.Visible) FxPop(CalendarTag, 1.2);
+                if (_tonightCell != null) FxPop(_tonightCell, 1.18);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx booked"); }
         }

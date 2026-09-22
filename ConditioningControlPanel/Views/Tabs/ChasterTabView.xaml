@@ -329,7 +329,7 @@
                 </Grid>
 
                 <!-- ================= 1. THE LOCK ================= -->
-                <Border x:Name="HeroCard" Grid.Row="1" Style="{StaticResource CirceCard}" Padding="0" Height="236"
+                <Border x:Name="HeroCard" Grid.Row="1" Style="{StaticResource CirceCard}" Padding="0" Height="330"
                         BorderBrush="{DynamicResource PanelAccentBrush}" Margin="0,0,0,10">
                     <Grid x:Name="HeroBody">
                         <Grid.ColumnDefinitions>
@@ -390,26 +390,49 @@
                             </Border>
                         </Grid>
 
-                        <!-- the words and the digits, LEFT, over the art's fade -->
-                        <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Margin="26,20,26,20" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtHeroTitle" Style="{StaticResource CirceEyebrow}" FontSize="12"
-                                       TextTrimming="CharacterEllipsis" Visibility="Collapsed"/>
-                            <!-- the countdown: number, unit, number, unit, built in code -->
-                            <StackPanel x:Name="HeroClockRow" Orientation="Horizontal" Margin="0,2,0,0" Visibility="Collapsed"
-                                        RenderTransformOrigin="0,1">
-                                <StackPanel x:Name="HeroClock" Orientation="Horizontal"/>
-                                <TextBlock Text="{loc:Str chaster_lock_lead}" FontSize="13" VerticalAlignment="Bottom"
-                                           Margin="12,0,0,12" Foreground="{DynamicResource TextMutedBrush}"/>
-                            </StackPanel>
-                            <TextBlock x:Name="TxtHeroEnds" FontSize="13" Margin="0,2,0,0" Visibility="Collapsed"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
-                            <!-- the state pills: test lock, frozen, hidden, offline, no lock, on hold -->
-                            <WrapPanel x:Name="HeroPills" Margin="0,12,0,0"/>
-                            <!-- More than one lock: the picker. One lock: the hero already names it. -->
-                            <Grid x:Name="LockRow" Margin="0,12,0,0" Visibility="Collapsed" HorizontalAlignment="Left">
-                                <ComboBox x:Name="CmbLock" Style="{StaticResource DarkComboBoxStyle}" FontSize="12"
-                                          Foreground="{DynamicResource TextLightBrush}" Width="240" MinHeight="30"
-                                          SelectionChanged="CmbLock_SelectionChanged"/>
+                        <!-- the words and the digits, over the art's fade -->
+                        <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Margin="26,14,26,14" VerticalAlignment="Center">
+                            <!-- the lock's name, big and candy, every o a padlock -->
+                            <ctrl:LockTitle x:Name="HeroTitle" FontSize="60" HorizontalAlignment="Center" Margin="0,0,0,10"
+                                            Visibility="Collapsed"/>
+                            <!-- under it: the calendar, one square a day, and the countdown beside it -->
+                            <Grid x:Name="HeroLower">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid x:Name="CalendarRow" Grid.Column="0" Visibility="Collapsed" VerticalAlignment="Top" Margin="0,0,18,0">
+                                    <UniformGrid x:Name="Calendar" Columns="12" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                    <!-- tonight's tag, parked under today's square by the code -->
+                                    <Border x:Name="CalendarTag" HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed"
+                                            Panel.ZIndex="5" Background="#E6120C1F" BorderBrush="#FF6B8A" BorderThickness="1"
+                                            CornerRadius="5" Padding="5,1" ToolTip="{loc:Str chaster_chain_tonight}" RenderTransformOrigin="0.5,0">
+                                        <Border.RenderTransform>
+                                            <TranslateTransform x:Name="CalendarTagBob"/>
+                                        </Border.RenderTransform>
+                                        <TextBlock x:Name="TxtCalendarTag" Text="+0:00" FontFamily="Consolas, Courier New" FontSize="11"
+                                                   FontWeight="Bold" Foreground="#FF6B8A"/>
+                                    </Border>
+                                </Grid>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                    <!-- the countdown: number, unit, number, unit, built in code -->
+                                    <StackPanel x:Name="HeroClockRow" Orientation="Horizontal" Margin="0,-6,0,0" Visibility="Collapsed"
+                                                RenderTransformOrigin="0,1">
+                                        <StackPanel x:Name="HeroClock" Orientation="Horizontal"/>
+                                        <TextBlock Text="{loc:Str chaster_lock_lead}" FontSize="13" VerticalAlignment="Bottom"
+                                                   Margin="12,0,0,12" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtHeroEnds" FontSize="13" Margin="0,2,0,0" Visibility="Collapsed"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <!-- the state pills: test lock, frozen, hidden, offline, no lock, on hold -->
+                                    <WrapPanel x:Name="HeroPills" Margin="0,10,0,0"/>
+                                    <!-- More than one lock: the picker. One lock: the hero already names it. -->
+                                    <Grid x:Name="LockRow" Margin="0,8,0,0" Visibility="Collapsed" HorizontalAlignment="Left">
+                                        <ComboBox x:Name="CmbLock" Style="{StaticResource DarkComboBoxStyle}" FontSize="12"
+                                                  Foreground="{DynamicResource TextLightBrush}" Width="240" MinHeight="30"
+                                                  SelectionChanged="CmbLock_SelectionChanged"/>
+                                    </Grid>
+                                </StackPanel>
                             </Grid>
 
                             <!-- NOT LINKED: the same hero, one ask. -->
@@ -462,20 +485,6 @@
 
                     <!-- LINKED -->
                     <StackPanel x:Name="LinkedPanel" Visibility="Collapsed">
-
-                        <!-- ================= 2. THE CHAIN: a link a day until it opens ================= -->
-                        <Grid x:Name="ChainRow" Margin="0,0,0,14" Height="64" Visibility="Collapsed">
-                            <StackPanel x:Name="Chain" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0"/>
-                            <!-- tonight's tag, parked under the first link by the code -->
-                            <Border x:Name="ChainTag" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,40,0,0" Visibility="Collapsed"
-                                    Background="#E6120C1F" BorderBrush="#FF6B8A" BorderThickness="1" CornerRadius="5" Padding="5,2"
-                                    ToolTip="{loc:Str chaster_chain_tonight}" RenderTransformOrigin="0.5,0">
-                                <Border.RenderTransform>
-                                    <TranslateTransform x:Name="ChainTagBob"/>
-                                </Border.RenderTransform>
-                                <TextBlock x:Name="TxtChainTag" Text="+0:00" FontFamily="Consolas, Courier New" FontSize="11" FontWeight="Bold" Foreground="#FF6B8A"/>
-                            </Border>
-                        </Grid>
 
                         <!-- ================= 3. THREE NUMBERS ================= -->
                         <UniformGrid Columns="3" Margin="0,0,-12,14">

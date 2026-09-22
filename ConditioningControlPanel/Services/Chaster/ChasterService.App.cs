@@ -69,6 +69,8 @@ public sealed partial class ChasterService
     private sealed class DemoChaster : HttpMessageHandler
     {
         private static readonly DateTime Ends = DateTime.UtcNow.AddDays(12).AddHours(4);
+        // 31 days first to last, so the demo calendar fills every cell it has.
+        private static readonly DateTime Started = Ends.AddDays(-30);
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
@@ -76,7 +78,7 @@ public sealed partial class ChasterService
             if (path == "/chaster/refresh")
                 return Task.FromResult(Json("{\"access_token\":\"demo\",\"expires_in\":300}"));
             if (path == "/locks")
-                return Task.FromResult(Json("[{\"_id\":\"demo-lock\",\"title\":\"Locktober\",\"status\":\"locked\",\"role\":\"wearer\",\"endDate\":\""
+                return Task.FromResult(Json("[{\"_id\":\"demo-lock\",\"title\":\"Locktober\",\"status\":\"locked\",\"role\":\"wearer\",\"startDate\":\"" + Started.ToString("o") + "\",\"endDate\":\""
                     + Ends.ToString("o") + "\",\"isFrozen\":false,\"displayRemainingTime\":true,\"isAllowedToViewTime\":true,\"isTestLock\":true}]"));
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NoContent));
         }

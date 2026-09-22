@@ -29,6 +29,7 @@ public sealed class ChasterLock
     [JsonProperty("title")] public string? Title { get; set; }
     [JsonProperty("status")] public string? Status { get; set; }
     [JsonProperty("role")] public string? Role { get; set; }
+    [JsonProperty("startDate")] public DateTime? StartDate { get; set; }
     [JsonProperty("endDate")] public DateTime? EndDate { get; set; }
     [JsonProperty("isFrozen")] public bool IsFrozen { get; set; }
     [JsonProperty("displayRemainingTime")] public bool DisplayRemainingTime { get; set; } = true;

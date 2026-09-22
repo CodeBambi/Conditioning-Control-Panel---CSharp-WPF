@@ -18,8 +18,9 @@ namespace ConditioningControlPanel.Tests;
 /// Circe's tab as it actually lays out. A missing StaticResource in a tab view is a crash the
 /// first time someone opens the page and nothing at compile time, so the page is realized here:
 /// with no service it shows the unlinked hero and a dead Link button; linked, the menu builds one
-/// row per price on two boards, the chain draws a link a day, the paper tag says what is on the
-/// tab, and the trailer dresses itself for whichever row it is aimed at.
+/// row per price on two boards, the title hangs a padlock on every o, the calendar draws a square
+/// a day and the key, the paper tag says what is on the tab, and the trailer dresses itself for
+/// whichever row it is aimed at.
 /// </summary>
 [Collection(CompanionWpfRenderCollection.Name)]
 public class ChasterTabRenderTests
@@ -95,7 +96,8 @@ public class ChasterTabRenderTests
             Assert.Equal(Visibility.Collapsed, tab.HeroClockRow.Visibility);
             Assert.Equal(Visibility.Collapsed, tab.TxtHeroEnds.Visibility);
             Assert.Equal(Visibility.Collapsed, tab.HeroPills.Visibility);
-            Assert.Equal(Visibility.Collapsed, tab.ChainRow.Visibility);
+            Assert.Equal(Visibility.Collapsed, tab.CalendarRow.Visibility);
+            Assert.Equal(Visibility.Collapsed, tab.HeroTitle.Visibility);
             Assert.False(tab.Trailer.IsOpen);
         });
     }
@@ -184,41 +186,125 @@ public class ChasterTabRenderTests
     }
 
     [Fact]
-    public void The_chain_is_a_link_a_day_plus_the_one_that_opens_and_shrinks_for_a_long_lock()
+    public void The_title_hangs_a_padlock_on_every_o_and_leans_them_alternately()
     {
-        Assert.Equal(0, ChasterTabView.ChainLinksFor(null));
-        Assert.Equal(0, ChasterTabView.ChainLinksFor(TimeSpan.Zero));
-        Assert.Equal(2, ChasterTabView.ChainLinksFor(TimeSpan.FromHours(3)));
-        Assert.Equal(14, ChasterTabView.ChainLinksFor(TimeSpan.FromDays(12.1)));
-        Assert.Equal(ChasterTabView.ChainMaxLinks, ChasterTabView.ChainLinksFor(TimeSpan.FromDays(400)));
+        var runs = LockTitle.Split("Locktober");
+        Assert.Equal(new[] { ("L", false), ("o", true), ("ckt", false), ("o", true), ("ber", false) }, runs.Select(r => (r.Run, r.Padlock)));
+        Assert.Empty(LockTitle.Split(""));
+        Assert.Equal(new[] { ("O", true), ("O", true) }, LockTitle.Split("OO").Select(r => (r.Run, r.Padlock)));
+
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var title = new LockTitle { Text = "Locktober", FontSize = 60 };
+            Realize(title, 800, 120);
+
+            Assert.Equal(2, title.PadlockCount);
+            var glyphs = title.Glyphs.ToList();
+            Assert.Equal(5, glyphs.Count);
+            Assert.All(glyphs, g => Assert.True(g.ActualWidth > 0 && g.ActualHeight > 0, "a glyph did not lay out"));
+            var padlocks = glyphs.OfType<Image>().ToList();
+            Assert.Equal(2, padlocks.Count);
+            // the padlock stands on the cap line, not the full line box, and leans opposite ways
+            Assert.All(padlocks, p => Assert.InRange(p.Height, 60 * 0.6, 60 * 0.95));
+            var tilts = padlocks.Select(p => ((TransformGroup)p.RenderTransform).Children.OfType<RotateTransform>().Single().Angle).ToList();
+            Assert.Equal(-tilts[0], tilts[1]);
+            Assert.NotEqual(0, tilts[0]);
+            // the letters wear the candy gradient, under an ice sliver
+            var texts = glyphs.OfType<Grid>().SelectMany(g => g.Children.OfType<TextBlock>()).ToList();
+            Assert.Equal(6, texts.Count);
+            Assert.Contains(texts, t => t.Foreground is LinearGradientBrush);
+            Assert.Contains(texts, t => t.OpacityMask != null);
+
+            title.Text = "no ring";
+            title.UpdateLayout();
+            Assert.Equal(1, title.PadlockCount);
+            title.Text = "";
+            Assert.Equal(0, title.PadlockCount);
+            Assert.Empty(title.Glyphs);
+        });
+    }
+
+    [Fact]
+    public void The_calendar_is_a_square_a_day_for_the_demo_lock_with_the_key_after_the_last()
+    {
+        // the demo lock's shape: 31 days first to last, today 19 days in
+        var today = new DateTime(2026, 9, 22, 10, 0, 0);
+        var span = (today.AddDays(-18), today.AddDays(12).AddHours(4));
 
         WpfRenderHarness.OnStaThread(() =>
         {
             var tab = new ChasterTabView();
             tab.LinkedPanel.Visibility = Visibility.Visible;
-            tab.BuildChain(TimeSpan.FromDays(12.1));
+            tab.BuildCalendar(span, today);
             Realize(tab, 1000, 1400);
 
-            Assert.Equal(Visibility.Visible, tab.ChainRow.Visibility);
-            var links = tab.Chain.Children.OfType<FrameworkElement>().ToList();
-            Assert.Equal(14, links.Count);
-            Assert.All(links, l => Assert.True(l.ActualWidth > 0));
-            // the last link is the dashed one that opens, the first is tonight's
-            Assert.IsType<Rectangle>(links[^1]);
-            Assert.NotNull(((Rectangle)links[^1]).StrokeDashArray);
-            Assert.IsType<Border>(links[0]);
+            Assert.Equal(Visibility.Visible, tab.CalendarRow.Visibility);
+            var squares = tab.Calendar.Children.OfType<Border>().ToList();
+            Assert.Equal(32, squares.Count);
+            Assert.All(squares, sq => Assert.True(sq.ActualWidth > 0 && sq.ActualHeight > 0, "a square did not lay out"));
+            Assert.True(tab.Calendar.ActualWidth <= 12 * (ChasterTabView.CellSize + 3) + 1, "the grid is wider than twelve columns");
+            Assert.True(tab.Calendar.ActualHeight >= 3 * ChasterTabView.CellSize, "a month did not take three rows");
 
-            var wide = links[0].ActualWidth;
-            tab.BuildChain(TimeSpan.FromDays(35));
+            // 18 crossed out, tonight red, 12 padlocks still to serve, then the key
+            var crosses = squares.Where(sq => Descendants(sq).OfType<Canvas>().Any(c => c.Children.OfType<System.Windows.Shapes.Path>().Count() == 2)).ToList();
+            Assert.Equal(18, crosses.Count);
+            var tonight = squares[18];
+            Assert.Equal(2, tonight.BorderThickness.Left);
+            Assert.DoesNotContain(tonight, crosses);
+            var padlocks = squares.Where(sq => Descendants(sq).OfType<Rectangle>().Any(r => r.OpacityMask is ImageBrush)).ToList();
+            Assert.Equal(12, padlocks.Count);
+            var key = squares[^1];
+            Assert.Contains(Descendants(key), d => d is System.Windows.Shapes.Path { Fill: SolidColorBrush });
+            Assert.DoesNotContain(Descendants(key), d => d is TextBlock);
+            // the numerals are the day of the month
+            Assert.Equal("4", Descendants(squares[0]).OfType<TextBlock>().First().Text);
+            Assert.Equal("22", Descendants(tonight).OfType<TextBlock>().First().Text);
+
+            // the tag hangs under tonight's square while there is something on the tab
+            tab.RefreshTag(750);
+            Assert.Equal("+12:30", tab.TxtCalendarTag.Text);
+            Assert.Equal(Visibility.Visible, tab.CalendarTag.Visibility);
+            tab.RefreshTag(0);
+            Assert.Equal(Visibility.Collapsed, tab.CalendarTag.Visibility);
+
+            // the same day again is not a rebuild; a new day is
+            var before = squares[0];
+            tab.BuildCalendar(span, today.AddHours(3));
+            Assert.Same(before, tab.Calendar.Children[0]);
+            tab.BuildCalendar(span, today.AddDays(1));
+            Assert.NotSame(before, tab.Calendar.Children[0]);
+            Assert.Equal(19, tab.Calendar.Children.OfType<Border>().Count(sq => Descendants(sq).OfType<Canvas>().Any()));
+
+            // a year-long lock shows its last 31 days and says so on the first
+            tab.BuildCalendar((today.AddDays(-300), today.AddDays(12)), today);
             tab.UpdateLayout();
-            var longLinks = tab.Chain.Children.OfType<FrameworkElement>().ToList();
-            Assert.Equal(36, longLinks.Count);
-            Assert.True(longLinks[0].ActualWidth < wide, "a long lock's links did not shrink");
-            Assert.True(tab.Chain.ActualWidth <= 1000, "the chain ran off the page");
+            var longSquares = tab.Calendar.Children.OfType<Border>().ToList();
+            Assert.Equal(32, longSquares.Count);
+            Assert.Contains(Descendants(longSquares[0]).OfType<TextBlock>(), t => t.Text == "...");
 
-            tab.BuildChain(null);
-            Assert.Equal(Visibility.Collapsed, tab.ChainRow.Visibility);
+            tab.BuildCalendar(null, today);
+            Assert.Equal(Visibility.Collapsed, tab.CalendarRow.Visibility);
+            Assert.Empty(tab.Calendar.Children);
         });
+    }
+
+    [Fact]
+    public void The_calendar_span_is_the_lock_in_local_days_and_counts_from_today_without_a_start()
+    {
+        var today = new DateTime(2026, 9, 22, 10, 0, 0, DateTimeKind.Local);
+        var end = DateTime.UtcNow.AddDays(12);
+        var known = new LockSnapshot("l", "Locktober", end, false, false, true, DateTime.UtcNow) { StartedAtUtc = DateTime.UtcNow.AddDays(-18) };
+        var span = ChasterTabView.CalendarSpan(known, today);
+        Assert.NotNull(span);
+        Assert.Equal(DateTime.UtcNow.AddDays(-18).ToLocalTime().Date, span!.Value.Start.Date);
+        Assert.Equal(end.ToLocalTime().Date, span.Value.End.Date);
+
+        var unknown = new LockSnapshot("l", "Locktober", end, false, false, true, DateTime.UtcNow);
+        Assert.Equal(today, ChasterTabView.CalendarSpan(unknown, today)!.Value.Start);
+
+        Assert.Null(ChasterTabView.CalendarSpan(null, today));
+        Assert.Null(ChasterTabView.CalendarSpan(new LockSnapshot("l", "t", null, false, false, false, DateTime.UtcNow), today));
+        Assert.Null(ChasterTabView.CalendarSpan(new LockSnapshot("l", "t", end, false, TimerHidden: true, false, DateTime.UtcNow), today));
     }
 
     [Fact]
@@ -229,19 +315,20 @@ public class ChasterTabRenderTests
             var tab = new ChasterTabView();
             tab.LinkedPanel.Visibility = Visibility.Visible;
             tab.PaperTag.Visibility = Visibility.Visible;
-            tab.BuildChain(TimeSpan.FromDays(3));
+            var today = new DateTime(2026, 9, 22, 10, 0, 0);
+            tab.BuildCalendar((today, today.AddDays(3)), today);
             Realize(tab, 1000, 1400);
 
             tab.RefreshTag(750);
             Assert.Equal("+12:30", tab.TxtTagAmount.Text);
             Assert.Equal("UNPAID", tab.TxtTagStamp.Text);
-            Assert.Equal("+12:30", tab.TxtChainTag.Text);
-            Assert.Equal(Visibility.Visible, tab.ChainTag.Visibility);
+            Assert.Equal("+12:30", tab.TxtCalendarTag.Text);
+            Assert.Equal(Visibility.Visible, tab.CalendarTag.Visibility);
 
             tab.RefreshTag(0);
             Assert.Equal("0:00", tab.TxtTagAmount.Text);
             Assert.Equal("CLEAR", tab.TxtTagStamp.Text);
-            Assert.Equal(Visibility.Collapsed, tab.ChainTag.Visibility);
+            Assert.Equal(Visibility.Collapsed, tab.CalendarTag.Visibility);
 
             tab.RefreshTag(-90);
             Assert.Equal("-1:30", tab.TxtTagAmount.Text);
