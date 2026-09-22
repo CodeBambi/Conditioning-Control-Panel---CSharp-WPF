@@ -283,7 +283,8 @@ namespace ConditioningControlPanel.Views.Tabs
                     LockRow.Visibility = Visibility.Collapsed;
                     return;
                 }
-                LockRow.Visibility = Visibility.Visible;
+                // One lock: the hero already names it, so the row would say it twice.
+                LockRow.Visibility = locks.Count == 1 ? Visibility.Collapsed : Visibility.Visible;
                 CmbLock.Visibility = locks.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
                 TxtLock.Visibility = locks.Count > 1 ? Visibility.Collapsed : Visibility.Visible;
                 if (locks.Count == 0) TxtLock.Text = Loc.Get("chaster_lock_none");

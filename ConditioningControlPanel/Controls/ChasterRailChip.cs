@@ -178,9 +178,11 @@ namespace ConditioningControlPanel.Controls
                 MinWidth = 13,
                 CornerRadius = new CornerRadius(6.5),
                 Background = _badgeBrush,
-                HorizontalAlignment = HorizontalAlignment.Center,
+                // Right-aligned to the chip's own 56px edge, never offset past it: a badge hung off
+                // the ring's corner clipped to "+5:4" in the shut rail.
+                HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(26, 2, 0, 0),
+                Margin = new Thickness(0, 2, 0, 0),
                 Visibility = Visibility.Collapsed,
                 IsHitTestVisible = false,
                 Child = _badgeText,

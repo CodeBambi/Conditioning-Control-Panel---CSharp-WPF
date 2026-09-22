@@ -49,15 +49,6 @@ namespace ConditioningControlPanel
                 var receipt = new ChasterReceiptView { Width = 320 };
                 receipt.Show(bill);
 
-                var title = new TextBlock
-                {
-                    Text = Loc.Get("chaster_bill_title"),
-                    FontSize = 18,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = Brushes.White,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    Margin = new Thickness(0, 0, 0, 10),
-                };
                 var countdown = new TextBlock
                 {
                     FontSize = 12,
@@ -66,7 +57,6 @@ namespace ConditioningControlPanel
                     Margin = new Thickness(0, 10, 0, 0),
                 };
                 var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-                stack.Children.Add(title);
                 stack.Children.Add(receipt);
                 stack.Children.Add(countdown);
 

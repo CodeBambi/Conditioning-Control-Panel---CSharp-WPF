@@ -146,7 +146,9 @@ namespace ConditioningControlPanel.Controls
             _layer = null;
         }
 
-        protected override int VisualChildrenCount => _children.Count;
+        // The Adorner base constructor asks for this before the derived fields exist, so a
+        // plain `_children.Count` throws out of `new` and the figure never shows.
+        protected override int VisualChildrenCount => _children?.Count ?? 0;
 
         protected override Visual GetVisualChild(int index) => _children[index];
 
