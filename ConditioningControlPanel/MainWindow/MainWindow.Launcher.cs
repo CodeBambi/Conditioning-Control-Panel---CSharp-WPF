@@ -123,8 +123,11 @@ namespace ConditioningControlPanel
         {
             if (App.Lockdown?.IsActive == true) return;
 
-            _exitRequested = true;
             if (_isRunning) StopEngine();
+            // Circe's bill holds the exit for a few seconds, then calls back in here.
+            if (TryShowExitBill(RequestExit)) return;
+
+            _exitRequested = true;
 
             App.KillAllAudio();
 

@@ -184,6 +184,7 @@
   "chaster_bill_earned": "Earned back",
   "chaster_bill_pushed_label": "Sent to the lock",
   "chaster_bill_stamp": "NET",
+  "chaster_bill_closing": "Closing in {0} s. Click anywhere to close now.",
   "chaster_link_browser_hint": "The browser opens Chaster's own consent page. Nothing moves until you say yes there.",
   "chaster_link_test_hint": "A free chaster.app account with a self-lock ticked as a test lock is enough to try it.",
   "chaster_price_typo": "Lock card typo",

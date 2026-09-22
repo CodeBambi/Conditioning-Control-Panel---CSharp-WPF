@@ -103,11 +103,9 @@ namespace ConditioningControlPanel
                     _chasterFlash = null;
                 }
 
-                // TODO(merge, lane CHIP): the rail chip gains `public void Pulse(Color tint)` on
-                // feat/chaster-ux-chip - a 250ms tint pulse on the ring. This lane must not edit
-                // Controls/ChasterRailChip.cs, so the call is left here for whoever merges the two
-                // branches. One line, right below, once the method exists:
-                //     if (plan is { } pulse) (anchor as ChasterRailChip)?.Pulse(pulse.Colour);
+                // The ring takes the figure's colour for a beat, so the chip and the number read as
+                // one event. A net-zero merge has no plan and no pulse.
+                if (plan is { } pulse) (anchor as ChasterRailChip)?.Pulse(pulse.Colour);
             }
             catch (Exception ex) { App.Logger?.Debug("[Chaster] booked flash: {E}", ex.Message); }
         }
