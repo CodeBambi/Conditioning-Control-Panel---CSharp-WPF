@@ -58,3 +58,27 @@ test('header dimensions cover PNG and extended WebP',()=>{
  const webp=new Uint8Array(30),w=new DataView(webp.buffer);webp.set(new TextEncoder().encode('RIFF'),0);webp.set(new TextEncoder().encode('WEBPVP8X'),8);w.setUint32(16,10,true);webp[24]=99;webp[27]=49;
  assert.deepEqual(imageDimensions(webp.buffer,'image/webp'),[100,50]);
 });
+
+test('native decoder reopens for loop wrap and still rewind instead of hanging',async t=>{
+ const stats=native(t,{frames:3});
+ globalThis.document={createElement:()=>({getContext:()=>({drawImage(){},clearRect(){}})})};
+ const Native=globalThis.ImageDecoder;
+ globalThis.ImageDecoder=class extends Native {
+   last=-1;
+   decode({frameIndex}) {
+     if(frameIndex<this.last)return new Promise(()=>{}); // Firefox backwards decode never settles.
+     this.last=frameIndex;return super.decode();
+   }
+ };
+ globalThis.fetch=async()=>new Response(gif(30,40),{headers:{'content-type':'image/gif'}});
+ const src=await decodedSource('/loop.gif');
+ const step=async(now,still=false)=>{src.tick(now,still);await new Promise(resolve=>setImmediate(resolve));return src.index;};
+ assert.equal(await step(0),1);
+ assert.equal(await step(200),2);
+ assert.equal(await step(400),0);
+ assert.equal(await step(600),1);
+ assert.equal(await step(800,true),0);
+ assert.equal(await step(1000),1);
+ assert.equal(stats.created,3);
+ src.dispose();assert.equal(stats.closed,3);
+});
