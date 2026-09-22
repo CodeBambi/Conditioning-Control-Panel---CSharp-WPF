@@ -5675,5 +5675,6 @@
   "launcher_media_library": "Bibliothek",
   "launcher_media_preset": "Datei-Preset",
   "launcher_media_preset_hint": "Welche deiner Bilder und Clips die Spiele verwenden. Gespeichert im Datei-Browser des Panels.",
-  "launcher_media_open_browser": "Datei-Browser öffnen"
+  "launcher_media_open_browser": "Datei-Browser öffnen",
+  "br_opt_drag_look": "Zum Umsehen klicken und ziehen"
 }

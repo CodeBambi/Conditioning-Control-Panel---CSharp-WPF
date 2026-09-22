@@ -5675,5 +5675,6 @@
   "launcher_media_library": "라이브러리",
   "launcher_media_preset": "에셋 프리셋",
   "launcher_media_preset_hint": "게임이 사용할 사진과 클립을 고릅니다. 패널의 에셋 브라우저에 저장됩니다.",
-  "launcher_media_open_browser": "에셋 브라우저 열기"
+  "launcher_media_open_browser": "에셋 브라우저 열기",
+  "br_opt_drag_look": "클릭하고 드래그하여 둘러보기"
 }

@@ -136,11 +136,12 @@ export function createHud(o) {
   };
   const tunnel = switchRow('tunnel', L('br_opt_tunnel', 'Tunnel vision'));
   const melt = switchRow('melt', L('br_opt_melt', 'Melt'));
+  const dragLook = switchRow('dragLook', L('br_opt_drag_look', 'Click and drag to look'));
   const invert = switchRow('invertLook', L('br_opt_invert', 'Invert camera'));
   const bellOpt = switchRow('bellOptIn', L('br_bell_optin', 'Show my name on the floor bell'),
     (on) => { if (typeof o.onBellOpt === 'function') o.onBellOpt(on); });
   paintSwitch(bellOpt.b, false);
-  panel.append(el('span', 'br-opt-name', L('br_opt_effects', 'Effects')), segRow, forcedNote, tunnel.row, melt.row, invert.row, bellOpt.row);
+  panel.append(el('span', 'br-opt-name', L('br_opt_effects', 'Effects')), segRow, forcedNote, tunnel.row, melt.row, invert.row, dragLook.row, bellOpt.row);
   // THREE LEVELS (10.14). The room used to have one Music slider and nothing else, which meant the
   // only way to turn the whisper down was the app's own SubAudioVolume - and that moved the whisper
   // while leaving every lever, reel and win exactly where it was. The room owns its own mix now.
@@ -435,6 +436,7 @@ export function createHud(o) {
       paintSwitch(tunnel.b, v.tunnel);
       paintSwitch(melt.b, v.melt);
       paintSwitch(invert.b, v.invertLook);
+      paintSwitch(dragLook.b, v.dragLook);
       // The host's frame has the last word on all three of these, exactly like the switches above.
       if (v.media) { mediaState = { ...mediaState, ...v.media }; mediaMessage = ''; paintMedia(); }
       if (v.levels) for (const row of levelRows) {

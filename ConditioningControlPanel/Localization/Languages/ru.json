@@ -5675,5 +5675,6 @@
   "launcher_media_library": "Библиотека",
   "launcher_media_preset": "Пресет ассетов",
   "launcher_media_preset_hint": "Какие из ваших картинок и клипов используют игры. Хранится в браузере ассетов панели.",
-  "launcher_media_open_browser": "Открыть браузер ассетов"
+  "launcher_media_open_browser": "Открыть браузер ассетов",
+  "br_opt_drag_look": "Обзор нажатием и перетаскиванием"
 }

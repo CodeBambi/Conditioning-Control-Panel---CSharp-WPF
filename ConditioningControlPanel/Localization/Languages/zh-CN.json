@@ -6187,5 +6187,6 @@
   "launcher_media_library": "素材库",
   "launcher_media_preset": "资源预设",
   "launcher_media_preset_hint": "游戏使用你的哪些图片和视频片段。保存在面板的资源浏览器中。",
-  "launcher_media_open_browser": "打开资源浏览器"
+  "launcher_media_open_browser": "打开资源浏览器",
+  "br_opt_drag_look": "点击并拖动以环顾四周"
 }
