@@ -635,6 +635,10 @@ namespace ConditioningControlPanel
             // collection before any of them are.
             InitializeInboxBadge();
 
+            // Discord homework: the "Homework due" card and the verified watch. Idle unless the
+            // proxy says the feature is on for this account (App.Homework).
+            InitializeHomework();
+
             // Initialize scheduler timer (checks every 30 seconds)
             _schedulerTimer = new DispatcherTimer
             {
