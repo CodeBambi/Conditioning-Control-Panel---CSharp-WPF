@@ -94,6 +94,9 @@ import {
 import { perfLite } from './perfTier.js';
 import { isAnimatedMedia } from './media.js';
 import { governorHold } from './loadGovernor.js';
+// The juice pass (2026-09-23): a flash LANDS (drop, overshoot, settle) and
+// LEAVES (shrink, fade) on fixed timings layered over its CSS hold.
+import { landFlash, scheduleFlashExit, cancelMotion } from './motion.js';
 
 export const MAX_LIVE = 20;          // concurrent <img> nodes, hydra children included
 /* The LITE tier's cap (exec/perfTier.js — phones). Half the field: each flash is
@@ -489,6 +492,10 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     rec.remainMs = Math.max(0, rec.bornAt + rec.holdMs - nowMs());   // the clock stops here
     rec.fly = null;
     flying.delete(rec);
+    // In hand the inline transform is the truth; a running entrance would outrank it.
+    rec.grabbed = true;
+    try { clearTimeout(rec.exitTimer); } catch (_e) { /* ignore */ }
+    cancelMotion(rec.node);
     try { rec.node.classList.add('gg-flash--grabbed', 'is-held'); } catch (_e) { /* ignore */ }
     lift(d);
     paint(rec);
@@ -915,7 +922,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       sizeVmin, baseSizeVmin: sizeVmin,       // current vs. born size (the wheel clamp)
       held: false, fly: null,                 // in hand / gliding on a fling
       bornAt: nowMs(), holdMs: tune.holdMs, remainMs: tune.holdMs,
-      safety: 0, expTimer: 0,
+      safety: 0, expTimer: 0, exitTimer: 0, grabbed: false,
       // Charged against ANIM_LIVE_LITE while this rec is live. A frozen flash
       // is animated MEDIA but not an animated NODE, so it charges nothing.
       animPlaying: animated && !mustFreeze,
@@ -930,6 +937,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       flying.delete(rec);
       try { clearTimeout(rec.safety); } catch (_e) { /* ignore */ }
       try { clearTimeout(rec.expTimer); } catch (_e) { /* ignore */ }
+      try { clearTimeout(rec.exitTimer); } catch (_e) { /* ignore */ }
       // If it dies in someone's hand, the hand is empty now — not stuck.
       if (drag && drag.rec === rec) forgetDrag();
       try { img.remove(); } catch (_e) { /* already detached */ }
@@ -953,6 +961,18 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       img.src = handle.url;
       host.appendChild(img);
     }
+    // THE ENTRANCE AND THE EXIT (juice pass). A gen-0 flash drops in from a
+    // little above its spot, tilted further, overshoots to ~1.12 and settles
+    // (300 ms); a hatched child already has its CSS overshoot and keeps it.
+    // The exit is scheduled INSIDE the hold (motion.scheduleFlashExit ends on
+    // tune.holdMs), so the CSS animationend teardown and its timing are
+    // untouched. A grabbed or popped flash owns its own exit and is skipped.
+    if (gen === 0) landFlash(img, { dx: 0, dy: -46, rot: Number(rot), opacity: tune.opacity });
+    rec.exitTimer = scheduleFlashExit(img, tune.holdMs, {
+      rot: Number(rot),
+      opacity: tune.opacity,
+      stillOwned: () => !rec.popped && !rec.held && !rec.grabbed,
+    });
     // Safety net: a throttled/hidden tab (and prefers-reduced-motion, which has no
     // animation at all) may never deliver animationend, and a leaked node is a
     // leak for the rest of the match. The FIRST grab cancels this and hands the
@@ -984,6 +1004,8 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     live.delete(rec);                       // the slot is free the instant it is clicked
     flying.delete(rec);
     try { clearTimeout(rec.expTimer); } catch (_e) { /* ignore */ }
+    try { clearTimeout(rec.exitTimer); } catch (_e) { /* ignore */ }
+    cancelMotion(rec.node);                 // the pop-out keyframe must not sit under an entrance
     // A flash that has been dragged pops with an OPACITY-ONLY keyframe
     // (.gg-flash--grabbed.is-popped in fx.css): animations outrank inline styles,
     // so a pop that animated transform would snap it home before it died.

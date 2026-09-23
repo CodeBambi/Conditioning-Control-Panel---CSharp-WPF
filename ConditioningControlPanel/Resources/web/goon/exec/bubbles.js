@@ -70,6 +70,12 @@ import { pickSpiralImage } from './spiralGen.js';
 import { perfLite } from './perfTier.js';
 // The lite tier's still-preferred image draw — see drawImage() below.
 import { drawStillImage } from './media.js';
+// The juice pass (2026-09-23): every pop's wash grows out of the pop point and is
+// sucked back into it, pop flashes land from the bubble, big pops shake a little.
+import {
+  growPane, shrinkPane, pulsePane, sliceShimmer, landFlash, scheduleFlashExit,
+  burst, ring, shake, shakeForStrength, tintFor, cancelMotion, canAnimate,
+} from './motion.js';
 
 export const MAX_LIVE = 26;   // hard ceiling on bubble nodes, swarm included
 /* The LITE ceiling (exec/perfTier.js — phones). Bites in refresh(), on top of
@@ -505,15 +511,19 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
   /* --------------------------------------------------------------- pop + fx */
 
   /** Sparkle burst, ported from DtRH (which ported it from the WPF BubbleService). */
-  function sparkleBurst(x, y) {
+  function sparkleBurst(x, y, kind) {
     const host = layer();
     if (!host || typeof document === 'undefined') return;
     // 9 shards is DtRH's number; the lite tier throws 5 — each shard is a
     // box-shadowed node minted mid-pop, exactly when the phone is busiest.
     const n = perfLite() ? 5 : 9;
+    // Tinted to the kind's halo (juice pass): a glitch pop sprays acid green, a
+    // spiral cyan. Never white.
+    const tint = kind ? tintFor(kind) : '';
     for (let i = 0; i < n; i++) {
       const p = document.createElement('div');
       p.className = 'gg-spark';
+      if (tint) p.style.setProperty('color', tint);
       const ang = (Math.PI * 2 * i) / n + rand(-0.35, 0.35);
       const dist = rand(42, 112);
       p.style.setProperty('left', `${x}px`);
@@ -545,6 +555,9 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     if (!host || typeof document === 'undefined') return null;
     const el = document.createElement('div');
     el.className = cls;
+    // Motion owns this pane's in and out now (holdOn): the CSS opacity
+    // transition would fight the Web Animation on a re-shown pane.
+    if (canAnimate(el)) el.style.setProperty('transition', 'none');
     host.appendChild(el);
     h = holds[kind] = { el, cls, gen: 0, hideTimer: 0, glitchTimer: 0, handle: (h && h.handle) || null };
     return h;
@@ -557,15 +570,34 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
    * compositor pass. `gen` is what keeps a fresh pop from being torn down by the
    * previous pop's removal timer.
    */
-  function holdOn(kind, cls, opacity, durMs) {
+  function holdOn(kind, cls, opacity, durMs, origin) {
     const h = ensureHold(kind, cls);
     if (!h) return null;
     if (h.hideTimer) { try { clearTimeout(h.hideTimer); } catch (_e) { /* ignore */ } h.hideTimer = 0; }
     const gen = ++h.gen;
+    // THE ENTRANCE (juice pass 2026-09-23). This pane used to snap to full
+    // opacity on the pop's own frame ("I pop a glitch bubble and we instantly
+    // see the fullscreen gif"). Now a fresh pane GROWS OUT OF THE POP POINT
+    // (motion.growPane, 340 ms, overshoot) and a pane already up takes a small
+    // swell instead of re-growing. The spiral bed spins on its own transform,
+    // so it grows on the `scale` property and keeps spinning underneath.
+    const spinning = kind === 'spiral';
+    const pane = { spinning, restScale: spinning ? 1.6 : 1 };
+    const fresh = !h.shown;
+    h.shown = true;
+    h.op = opacity;
+    cancelMotion(h.el);
     h.el.style.setProperty('opacity', String(opacity));
+    const o = origin || {};
+    if (fresh) growPane(h.el, Object.assign({ x: o.x, y: o.y, opacity }, pane));
+    else pulsePane(h.el, pane);
     h.hideTimer = soon(() => {
       if (h.gen !== gen) return;
       h.hideTimer = 0;
+      h.shown = false;
+      // ...and THE EXIT: sucked back into where it came from, fast. The inline
+      // opacity 0 below is still the truth (the removal timer keys off it).
+      if (h.el) shrinkPane(h.el, Object.assign({ opacity: h.op }, pane));
       if (h.el) h.el.style.setProperty('opacity', '0');
       releaseHold(h);
       soon(() => {
@@ -621,8 +653,26 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     return (handle && handle.url) ? handle : null;
   }
 
+  /** Land a pop flash FROM the pop point: the offset is (pop point - its own
+   *  spot) in px, read off the vw/vh it was placed at. No origin (a headless
+   *  caller, a pop with no coordinates) = a short drop from above. */
+  function landFromPop(img, origin, opacity) {
+    let dx = 0;
+    let dy = -40;
+    const w = viewportWidth();
+    const vh = (typeof window !== 'undefined' && window && Number(window.innerHeight) > 0) ? Number(window.innerHeight) : 0;
+    if (origin && typeof origin.x === 'number' && typeof origin.y === 'number' && w > 0 && vh > 0) {
+      const tx = (parseFloat(img.style.getPropertyValue('left')) || 50) * w / 100;
+      const ty = (parseFloat(img.style.getPropertyValue('top')) || 50) * vh / 100;
+      dx = origin.x - tx;
+      dy = origin.y - ty;
+    }
+    const rot = parseFloat(img.style.getPropertyValue('--gg-flash-rot')) || 0;
+    landFlash(img, { dx, dy, rot, opacity });
+  }
+
   /** The scattered flash a popped flash-bubble throws (payloadFx.flash, bounded). */
-  function popFlash(strength, peer) {
+  function popFlash(strength, peer, origin) {
     pruneFlashes();
     const host = layer();
     if (!host || typeof document === 'undefined') return;
@@ -656,13 +706,17 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
       img.onerror = kill;
       img.src = handle.url;
       host.appendChild(img);
+      // It LANDS from the bubble that threw it (juice pass): travel from the
+      // pop point to its spot, overshoot, settle; exits inside its own hold.
+      landFromPop(img, origin, 0.95);
+      scheduleFlashExit(img, dur, { opacity: 0.95, rot: parseFloat(img.style.getPropertyValue('--gg-flash-rot')) || 0 });
       soon(kill, dur + 600);
     }
   }
 
   /** The drain wash: dim + blur-behind with a faint image over it (showBraindrain). */
-  function popDrain(strength, peer) {
-    const h = holdOn('drain', 'gg-drain', scaleD(0.35, 0.62, strength), scale(1500, 4500, strength));
+  function popDrain(strength, peer, origin) {
+    const h = holdOn('drain', 'gg-drain', scaleD(0.35, 0.62, strength), scale(1500, 4500, strength), origin);
     if (!h) return h;
     const handle = drawImage(peer);
     if (handle) {
@@ -687,10 +741,10 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
    *
    * @param {boolean} [peer] the bubble was minted by an inbound swarm — see drawImage
    */
-  function popFx(kind, strength, peer) {
+  function popFx(kind, strength, peer, origin) {
     switch (kind) {
       case 'flash':
-        popFlash(strength, peer);
+        popFlash(strength, peer, origin);
         break;
       case 'spiral': {
         // The wash wears exec/spiral.js's own class, so it inherits that bed's
@@ -699,7 +753,7 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
         // 1.5-4.5s spin of a baked still, and a pop landing while the stack was
         // hot showed a photograph fading in and out — which is not a spiral,
         // it is a slide.
-        const h = holdOn('spiral', 'gg-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength));
+        const h = holdOn('spiral', 'gg-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength), origin);
         if (h) {
           // '' means the host could not bake one; the wash still reads without a
           // picture, and `url('')` would be worse than nothing.
@@ -709,17 +763,20 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
         break;
       }
       case 'pinkfilter':
-        holdOn('pink', 'gg-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength));
+        holdOn('pink', 'gg-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength), origin);
         break;
       case 'braindrain':
-        popDrain(strength, peer);
+        popDrain(strength, peer, origin);
         break;
       case 'glitch': {
         // RGB-split shudder OVER the drain wash — DtRH's showGlitch, hard-capped
         // so a fat bubble can never strobe forever.
-        const h = popDrain(strength, peer);
+        const h = popDrain(strength, peer, origin);
         if (!h) break;
         h.el.classList.add('is-glitching');
+        // The broken-signal read on arrival: bands of the picture knocked
+        // sideways ONCE (motion.sliceShimmer), not a strobe.
+        sliceShimmer(h.el, { tint: tintFor('glitch') });
         const ms = Math.min(4000, scale(1200, 3000, strength));
         try { clearTimeout(h.glitchTimer); } catch (_e) { /* ignore */ }
         h.glitchTimer = soon(() => { if (h.el) h.el.classList.remove('is-glitching'); }, ms);
@@ -776,14 +833,30 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
   function pop(rec, x, y) {
     rec.popped = true;
     rec.bubble.classList.add('is-pop');
-    sparkleBurst(x, y);
+    sparkleBurst(x, y, rec.kind);
     sfx(popCue(rec));
     announcePop(rec, x, y);
     // Bubble size IS the strength dial in the Fall; same here.
     const strength = Math.round(clamp01((rec.size - BUB_MIN_PX) / (BUB_MAX_PX - BUB_MIN_PX)) * 100);
+    // IMPACT, several small channels at once (juice pass 2026-09-23, Breakout's
+    // rule): the squash is the CSS pop keyframe, the sparks above, a shockwave
+    // ring every pop, and for an EFFECT bubble a second tinted burst plus a
+    // small real-pixel shake of the fx tier sized by the bubble (2..7 px). A
+    // swarm's clutter and a plain pop stay light: juice is earned.
+    const host = layer();
+    const effect = rec.kind && rec.kind !== 'normal' && !rec.fromPayload;
+    try {
+      ring(host, x, y, { color: tintFor(rec.kind), size: Math.round(rec.size * 0.9) });
+      if (effect) {
+        burst(host, x, y, { n: 12, color: tintFor(rec.kind), minR: 50, maxR: 150, size: 8 });
+        const fx = layers && typeof layers.get === 'function' ? layers.get('fx') : null;
+        shake(fx, shakeForStrength(strength));
+      }
+    } catch (e) { warn(`pop juice threw: ${e && e.message}`); }
     // `fromPayload` rides along: a bubble the opponent's swarm minted bursts into
     // THEIR media when they have landed some (drawImage), a field bubble into ours.
-    try { popFx(rec.kind, strength, rec.fromPayload); }
+    // The pop point rides too: every wash grows out of it.
+    try { popFx(rec.kind, strength, rec.fromPayload, { x, y }); }
     catch (e) { warn(`popFx ${rec.kind} threw: ${e && e.message}`); }
     rec.bubble.addEventListener('animationend', () => recycle(rec), { once: true });
     soon(() => recycle(rec), 600);

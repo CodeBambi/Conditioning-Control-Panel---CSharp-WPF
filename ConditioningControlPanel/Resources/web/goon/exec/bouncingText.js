@@ -18,6 +18,9 @@
  * ==========================================================================*/
 
 import { resolvePhrases } from './subliminals.js';
+// Juice pass (2026-09-23): a phrase fades in and out instead of popping into
+// being. OPACITY ONLY: the rAF loop owns this node's transform.
+import { play } from './motion.js';
 
 const MAX_WORDS = 3;
 const FALLBACK_TICK_MS = 33;   // headless / no-rAF cadence
@@ -88,6 +91,7 @@ export function createBouncingText({ layers, media, audio, logger, phrases } = {
     };
     node.style.setProperty('--gg-bounce-op', String(tune.opacity));
     place(m);
+    play(node, [{ opacity: 0 }, { opacity: tune.opacity }], { duration: 320, easing: 'ease-out' });
     return m;
   }
 
@@ -108,7 +112,10 @@ export function createBouncingText({ layers, media, audio, logger, phrases } = {
     const want = Math.min(MAX_WORDS, bounceTuning(intensity, calm).count + extra);
     while (movers.length > want) {
       const m = movers.pop();
-      try { m.node.remove(); } catch (_e) { /* ignore */ }
+      const node = m.node;
+      const gone = () => { try { node.remove(); } catch (_e) { /* ignore */ } };
+      const a = play(node, [{ opacity: Number(node.style && node.style.getPropertyValue ? node.style.getPropertyValue('--gg-bounce-op') : 0.5) || 0.5 }, { opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' });
+      if (a) { try { a.addEventListener('finish', gone, { once: true }); } catch (_e) { gone(); } setTimeout(gone, 400); } else gone();
     }
     while (movers.length < want) {
       const m = makeMover();
