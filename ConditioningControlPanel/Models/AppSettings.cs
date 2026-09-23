@@ -7975,6 +7975,57 @@ namespace ConditioningControlPanel.Models
             set { _goonLastOpponentJson = value ?? ""; OnPropertyChanged(); }
         }
 
+        private string _goonMediaFlavour = "";
+        /// <summary>
+        /// The Goon Game's picture flavour (trance, pink, frills, shiny, censored, mine), or ""
+        /// when the player never picked. A non-empty pick IS the player's opt-in to online
+        /// pictures for this game only; the app-wide MediaSource is not read. Written by
+        /// GoonHostService from the page's media-flavour frame, echoed in init.
+        /// </summary>
+        [JsonProperty("goonMediaFlavour")]
+        public string GoonMediaFlavour
+        {
+            get => _goonMediaFlavour;
+            set { _goonMediaFlavour = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _goonMediaCustom = "";
+        /// <summary>
+        /// The page's per-flavour niche edits, as a JSON object string
+        /// { flavourId: { on:[], off:[], added:[] } }. Opaque to the host beyond a size cap
+        /// and a parse check; the page owns its shape. "" = no edits.
+        /// </summary>
+        [JsonProperty("goonMediaCustom")]
+        public string GoonMediaCustom
+        {
+            get => _goonMediaCustom;
+            set { _goonMediaCustom = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _goonMediaSubs = "";
+        /// <summary>
+        /// The last validated niche list the page computed for the pick (comma-joined, max 8),
+        /// so a returning player's pictures start at page ready before the page says anything.
+        /// </summary>
+        [JsonProperty("goonMediaSubs")]
+        public string GoonMediaSubs
+        {
+            get => _goonMediaSubs;
+            set { _goonMediaSubs = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _goonMediaOnline = true;
+        /// <summary>
+        /// Online pictures for the Goon Game. Off = the host fetches nothing and posts
+        /// online-media state 'off'. Default on, but nothing is fetched until a flavour is picked.
+        /// </summary>
+        [JsonProperty("goonMediaOnline")]
+        public bool GoonMediaOnline
+        {
+            get => _goonMediaOnline;
+            set { _goonMediaOnline = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region The Arcademy (webview mini-game hub)
