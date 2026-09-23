@@ -79,6 +79,6 @@ public static class TabPrices
         var price = Find(id);
         if (price == null || enabledIds == null || !enabledIds.Contains(id)) return 0;
         var n = price.PerUnit ? Math.Clamp(units, 0, 1000) : 1;
-        return (int)Math.Clamp((long)price.Seconds * n, -CircesTab.DailyCapSeconds, CircesTab.DailyCapSeconds);
+        return (int)Math.Clamp((long)price.Seconds * n, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds);
     }
 }

@@ -190,7 +190,7 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task A_settle_adds_the_balance_to_the_chosen_lock_once_a_day()
+    public async Task Every_settle_adds_what_is_waiting_to_the_chosen_lock()
     {
         using var service = Make();
         service.NoteSeconds("watcher", 600);
@@ -198,14 +198,17 @@ public class ChasterServiceTests : IDisposable
         var first = await service.SettleAsync();
         service.Note("typo");
         var again = await service.SettleAsync();
+        var empty = await service.SettleAsync();
 
         Assert.Equal(SettleOutcome.Pushed, first);
-        Assert.Equal(SettleOutcome.Nothing, again);
-        Assert.Equal(15, service.BalanceSeconds);
-        Assert.Equal(600, service.Bill().PushedSeconds);
-        var call = Assert.Single(_http.Seen);
-        Assert.Equal("/locks/lock1/update-time", call.Path);
-        Assert.Contains("\"duration\":600", call.Body);
+        Assert.Equal(SettleOutcome.Pushed, again);
+        Assert.Equal(SettleOutcome.Nothing, empty);
+        Assert.Equal(0, service.BalanceSeconds);
+        Assert.Equal(615, service.Bill().PushedSeconds);
+        Assert.Equal(2, _http.Seen.Count);
+        Assert.All(_http.Seen, c => Assert.Equal("/locks/lock1/update-time", c.Path));
+        Assert.Contains("\"duration\":600", _http.Seen[0].Body);
+        Assert.Contains("\"duration\":15", _http.Seen[1].Body);
     }
 
     [Fact]
@@ -287,13 +290,13 @@ public class ChasterServiceTests : IDisposable
         using var service = Make();
         service.NoteSeconds("watcher", 300);
 
-        Assert.Equal(SettleOutcome.NoLockChosen, await service.SettleIfNewDayAsync());
+        Assert.Equal(SettleOutcome.NoLockChosen, await service.TickAsync());
         Assert.Equal(300, service.BalanceSeconds);
         Assert.True(service.IsLinked);
 
         _options = _options with { LockId = "lock2" };
         _http.Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
-        Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
+        Assert.Equal(SettleOutcome.Pushed, await service.TickAsync());
         // A settle now ends by re-reading the lock, so the last call is that GET. The push is the
         // last WRITE - see The_settle_re_reads_the_lock_it_just_moved.
         Assert.Equal("/locks/lock2/update-time", _http.Seen.Last(s => s.Path.EndsWith("update-time")).Path);
@@ -320,19 +323,29 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task A_backlog_lands_an_hour_at_a_time()
+    public async Task A_backlog_lands_in_one_push()
     {
         using var service = Make();
-        for (var day = 0; day < 3; day++)
-        {
-            service.NoteSeconds("watcher", 3600);
-            _utc = _utc.AddDays(1);
-        }
+        for (var i = 0; i < 3; i++) service.NoteSeconds("watcher", 3600);
 
         await service.SettleAsync();
 
-        Assert.Contains("\"duration\":3600", _http.Seen.Single().Body);
-        Assert.Equal(7200, service.BalanceSeconds);
+        Assert.Contains("\"duration\":10800", _http.Seen.Single().Body);
+        Assert.Equal(0, service.BalanceSeconds);
+    }
+
+    [Fact]
+    public void The_limits_the_player_set_are_the_ones_a_booking_reads()
+    {
+        _options = _options with { Limits = TabLimits.FromMinutes(15, 60) };
+        using var service = Make();
+
+        service.NoteSeconds("watcher", 600);
+        var clamped = service.NoteSeconds("watcher", 600);
+
+        Assert.Equal(new TabBooking(300, TabRefusal.DailyCap), clamped);
+        Assert.Equal(900, service.TodayAddedSeconds);
+        Assert.Equal(900, service.Caps.DailySeconds);
     }
 
     [Fact]
@@ -417,20 +430,20 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task The_daily_clock_settles_once_per_local_day_and_goes_again_after_a_try_later()
+    public async Task The_tick_retries_after_a_try_later_and_pushes_whatever_is_new()
     {
         _http.Answer = _ => Json(503, "");
         using var service = Make();
         service.NoteSeconds("watcher", 300);
 
-        Assert.Equal(SettleOutcome.TryLater, await service.SettleIfNewDayAsync());
+        Assert.Equal(SettleOutcome.TryLater, await service.TickAsync());
+        Assert.Equal(300, service.BalanceSeconds);
         _http.Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
-        Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
+        Assert.Equal(SettleOutcome.Pushed, await service.TickAsync());
+        Assert.Equal(SettleOutcome.Nothing, await service.TickAsync());
 
         service.NoteSeconds("watcher", 300);
-        Assert.Equal(SettleOutcome.Nothing, await service.SettleIfNewDayAsync());
-        _utc = _utc.AddDays(1);
-        Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
+        Assert.Equal(SettleOutcome.Pushed, await service.TickAsync());
     }
 
     // ============================== the lock snapshot the chip reads ==============================
@@ -537,7 +550,7 @@ public class ChasterServiceTests : IDisposable
         using var service = Make();
         service.NoteSeconds("watcher", 600);
 
-        Assert.Equal(SettleOutcome.Pushed, await service.SettleIfNewDayAsync());
+        Assert.Equal(SettleOutcome.Pushed, await service.TickAsync());
 
         Assert.Contains(_http.Seen, s => s.Path == "/locks/lock1/update-time");
         Assert.Equal("/locks", _http.Seen.Last().Path);
@@ -550,8 +563,8 @@ public class ChasterServiceTests : IDisposable
         AnswerLocks(TwoLocks);
         using var service = Make();
 
-        Assert.Equal(SettleOutcome.Nothing, await service.SettleIfNewDayAsync());
-        Assert.Equal(SettleOutcome.Nothing, await service.SettleIfNewDayAsync());
+        Assert.Equal(SettleOutcome.Nothing, await service.TickAsync());
+        Assert.Equal(SettleOutcome.Nothing, await service.TickAsync());
 
         // Nothing moved, so there is nothing to re-read: the re-read rides the push, not the tick.
         Assert.Empty(_http.Seen);

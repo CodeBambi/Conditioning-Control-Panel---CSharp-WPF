@@ -499,7 +499,7 @@
                     <UniformGrid x:Name="FactRow" Columns="3" Visibility="Collapsed" Margin="0,4,-10,0">
                         <Border Style="{StaticResource CirceFact}">
                             <StackPanel>
-                                <TextBlock Text="60:00" Style="{StaticResource CirceFactGlyph}"/>
+                                <TextBlock x:Name="TxtFactCap1" Text="3:00:00" Style="{StaticResource CirceFactGlyph}"/>
                                 <TextBlock Text="{loc:Str chaster_fact_cap}" Style="{StaticResource CirceFactText}"/>
                             </StackPanel>
                         </Border>
@@ -577,7 +577,7 @@
                                 <UniformGrid Columns="4" Margin="0,0,-10,0">
                                     <Border Style="{StaticResource CirceFact}">
                                         <StackPanel>
-                                            <TextBlock Text="60:00" Style="{StaticResource CirceFactGlyph}"/>
+                                            <TextBlock x:Name="TxtFactCap2" Text="3:00:00" Style="{StaticResource CirceFactGlyph}"/>
                                             <TextBlock Text="{loc:Str chaster_fact_cap}" Style="{StaticResource CirceFactText}"/>
                                         </StackPanel>
                                     </Border>
@@ -595,7 +595,7 @@
                                     </Border>
                                     <Border Style="{StaticResource CirceFact}">
                                         <StackPanel>
-                                            <TextBlock Text="1&#x00D7;" Style="{StaticResource CirceFactGlyph}"/>
+                                            <TextBlock Text="LIVE" Style="{StaticResource CirceFactGlyph}"/>
                                             <TextBlock Text="{loc:Str chaster_fact_push}" Style="{StaticResource CirceFactText}"/>
                                         </StackPanel>
                                     </Border>
@@ -686,7 +686,7 @@
                             </Border>
                             <Border Style="{StaticResource CirceFoot}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="1&#x00D7;" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextLightBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="LIVE" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextLightBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
                                     <TextBlock Text="{loc:Str chaster_fact_push_launch}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
@@ -704,8 +704,40 @@
                             </Border>
                         </WrapPanel>
 
-                        <Button Style="{StaticResource CirceLink}" Content="{loc:Str chaster_unlink}"
-                                HorizontalAlignment="Right" Margin="0,10,0,0" Click="BtnUnlink_Click"/>
+                        <!-- the two limits, behind one link: most players never touch them -->
+                        <Grid Margin="0,10,0,0">
+                            <Button x:Name="BtnLimits" Style="{StaticResource CirceLink}" Content="{loc:Str chaster_limits}"
+                                    HorizontalAlignment="Left" Click="BtnLimits_Click"/>
+                            <Button Style="{StaticResource CirceLink}" Content="{loc:Str chaster_unlink}"
+                                    HorizontalAlignment="Right" Click="BtnUnlink_Click"/>
+                        </Grid>
+                        <Border x:Name="LimitsCard" Visibility="Collapsed" Style="{StaticResource CirceCard}" Margin="0,10,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="90"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="{loc:Str chaster_limit_day}" FontSize="13" Foreground="{DynamicResource TextLightBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,16,0"/>
+                                <Slider x:Name="SliderDayLimit" Grid.Column="1" Minimum="15" Maximum="720" TickFrequency="15"
+                                        IsSnapToTickEnabled="True" SmallChange="15" LargeChange="60" VerticalAlignment="Center"
+                                        ValueChanged="LimitSlider_ValueChanged"/>
+                                <TextBlock x:Name="TxtDayLimit" Grid.Column="2" FontFamily="Consolas, Courier New" FontSize="15" FontWeight="Bold"
+                                           Foreground="#FF6B8A" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Row="1" Text="{loc:Str chaster_limit_backlog}" FontSize="13" Foreground="{DynamicResource TextLightBrush}"
+                                           VerticalAlignment="Center" Margin="0,12,16,0" ToolTip="{loc:Str chaster_limit_backlog_hint}"/>
+                                <Slider x:Name="SliderBacklogLimit" Grid.Row="1" Grid.Column="1" Minimum="60" Maximum="2880" TickFrequency="60"
+                                        IsSnapToTickEnabled="True" SmallChange="60" LargeChange="360" VerticalAlignment="Center" Margin="0,12,0,0"
+                                        ValueChanged="LimitSlider_ValueChanged" ToolTip="{loc:Str chaster_limit_backlog_hint}"/>
+                                <TextBlock x:Name="TxtBacklogLimit" Grid.Row="1" Grid.Column="2" FontFamily="Consolas, Courier New" FontSize="15"
+                                           FontWeight="Bold" Foreground="#FF6B8A" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,12,0,0"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </StackPanel>
             </Grid>

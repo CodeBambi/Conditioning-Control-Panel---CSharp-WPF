@@ -5136,6 +5136,26 @@ namespace ConditioningControlPanel.Models
             set { _chasterPrices = value ?? new List<string>(); OnPropertyChanged(); }
         }
 
+        private int _chasterDailyLimitMinutes = 180;
+        private int _chasterBacklogLimitMinutes = 720;
+
+        /// <summary>The most a day can add to the lock, in minutes (owner default 3 hours).
+        /// Clamped by TabLimits when read, so a hand edit cannot go past 12 hours.</summary>
+        [JsonProperty]
+        public int ChasterDailyLimitMinutes
+        {
+            get => _chasterDailyLimitMinutes;
+            set { _chasterDailyLimitMinutes = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>The most unpaid time the tab holds, in minutes (owner default 12 hours).</summary>
+        [JsonProperty]
+        public int ChasterBacklogLimitMinutes
+        {
+            get => _chasterBacklogLimitMinutes;
+            set { _chasterBacklogLimitMinutes = value; OnPropertyChanged(); }
+        }
+
         // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----
         // These are the room's own switches, shown in the room's Options and not in Settings, the same
         // way BackRoomTunnel and BackRoomMelt are. They are deliberately NOT the app-wide MediaSource /

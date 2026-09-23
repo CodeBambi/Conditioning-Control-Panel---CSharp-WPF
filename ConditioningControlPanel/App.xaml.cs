@@ -2597,7 +2597,7 @@ namespace ConditioningControlPanel
             // Circe's tab settles once a day, at the first chance: a minute after launch, then on
             // the hour in case the app sits in the tray across midnight. Never at exit, where a
             // call cut off mid-flight could land on the lock and not on the tab.
-            Chaster?.StartDailySettle();
+            Chaster?.StartSettle();
             if (Chaster != null) Services.Chaster.ChasterHooks.Attach(Chaster);
 
             // Initialize Discord OAuth (validate session in background)

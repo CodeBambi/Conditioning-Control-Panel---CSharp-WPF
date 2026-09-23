@@ -372,7 +372,7 @@ namespace ConditioningControlPanel.Controls
                 }
 
                 Line(text, Loc.GetF("chaster_today", CircesTab.Format(chaster.TodayAddedSeconds, signed: false),
-                    CircesTab.Format(CircesTab.DailyCapSeconds, signed: false)));
+                    CircesTab.Format(chaster.Caps.DailySeconds, signed: false)));
 
                 var balance = chaster.BalanceSeconds;
                 if (balance != 0) Line(text, Loc.GetF("chaster_chip_pending", CircesTab.Format(balance)));

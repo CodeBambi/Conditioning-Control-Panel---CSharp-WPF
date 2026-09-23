@@ -10,8 +10,10 @@ namespace ConditioningControlPanel.Services.Chaster;
 
 /// <summary>What the player chose. Read fresh on every call, so a switch flipped in Settings
 /// takes hold on the next event with no restart.</summary>
-public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string> Prices)
+public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string> Prices, TabLimits? Limits = null)
 {
+    public TabLimits Caps => Limits ?? TabLimits.Default;
+
     public static readonly ChasterOptions Off = new(false, null, new HashSet<string>());
 }
 
@@ -91,6 +93,9 @@ public sealed partial class ChasterService : IDisposable
 
     public bool IsLinked => _tokens.Read() is { RefreshToken.Length: > 0 };
 
+    /// <summary>The player's two limits, as the next booking will read them.</summary>
+    public TabLimits Caps => (_options() ?? ChasterOptions.Off).Caps;
+
     /// <summary>Seconds on the tab and not on the lock yet. Negative is credit.</summary>
     public int BalanceSeconds { get { lock (_gate) return _tab.BalanceSeconds; } }
 
@@ -150,12 +155,16 @@ public sealed partial class ChasterService : IDisposable
                 var charges = CircesMisses.Charges(CircesMisses.DaysAway(last, local));
                 for (var i = 0; i < charges.Count; i++)
                     booked += CircesTab.Book(_tab, CircesMisses.EventId, charges[i], _utcNow(),
-                        lastDay.AddDays(i + 1).AddHours(12), _runStartUtc, safetyExit: false).AppliedSeconds;
+                        lastDay.AddDays(i + 1).AddHours(12), _runStartUtc, safetyExit: false, options.Caps).AppliedSeconds;
                 if (booked > 0) _tab.ForgivableSeconds = CircesMisses.Forgivable(booked);
             }
             SaveTab();
         }
-        if (booked > 0) Booked?.Invoke(CircesMisses.EventId, new TabBooking(booked, TabRefusal.None));
+        if (booked > 0)
+        {
+            Booked?.Invoke(CircesMisses.EventId, new TabBooking(booked, TabRefusal.None));
+            SchedulePush();
+        }
         return booked;
     }
 
@@ -179,7 +188,7 @@ public sealed partial class ChasterService : IDisposable
     {
         if (!Active(out var options) || TabPrices.NeverPriced.Contains(eventId ?? "")) return new(0, TabRefusal.Nothing);
         if (!options.Prices.Contains(eventId!)) return new(0, TabRefusal.Nothing);
-        return BookSeconds(eventId!, Math.Clamp(seconds, -CircesTab.DailyCapSeconds, CircesTab.DailyCapSeconds));
+        return BookSeconds(eventId!, Math.Clamp(seconds, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds));
     }
 
     /// <summary>The jackpot. Wipes the tab, never the lock.</summary>
@@ -210,10 +219,12 @@ public sealed partial class ChasterService : IDisposable
         lock (_gate)
         {
             var now = _utcNow();
-            booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc);
+            var caps = (_options() ?? ChasterOptions.Off).Caps;
+            booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, caps);
             if (booking.Booked) SaveTab();
         }
         if (booking.Booked) Booked?.Invoke(eventId, booking);
+        if (booking.AppliedSeconds > 0) SchedulePush();
         return booking;
     }
 
@@ -253,12 +264,7 @@ public sealed partial class ChasterService : IDisposable
                     App.Logger?.Information("[Chaster] an unanswered push of {Seconds}s is counted as landed", doubted);
                 }
                 // A wearer link can only add. canRemove stays false until a link exists that can.
-                plan = CircesTab.PlanPush(_tab, _localNow(), canRemove: false);
-                if (plan.Kind != TabPushKind.Add && _tab.LastPushDay != CircesTab.DayKey(_localNow()))
-                {
-                    CircesTab.MarkSettled(_tab, _localNow());
-                    SaveTab();
-                }
+                plan = CircesTab.PlanPush(_tab, canRemove: false);
             }
             if (plan.Kind != TabPushKind.Add) return SettleOutcome.Nothing;
             // A backlog from days Chaster was unreachable still lands an hour at a time.
@@ -387,6 +393,7 @@ public sealed partial class ChasterService : IDisposable
     {
         CancelLink();
         _settleTimer?.Dispose();
+        _pushTimer?.Dispose();
         _lockTimer?.Dispose();   // ChasterService.App.cs
         _settleGate.Dispose();
         _refreshGate.Dispose();

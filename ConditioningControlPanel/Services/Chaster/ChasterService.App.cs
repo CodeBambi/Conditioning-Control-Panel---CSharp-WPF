@@ -7,13 +7,16 @@ using System.Threading.Tasks;
 
 namespace ConditioningControlPanel.Services.Chaster;
 
-/// <summary>The app's own construction and the once-a-day settle clock. Kept apart so the
+/// <summary>The app's own construction and the push clocks. Kept apart so the
 /// testable service never reaches for App.</summary>
 public sealed partial class ChasterService
 {
     private Timer? _settleTimer;
     private Timer? _lockTimer;
     private string? _lastSettleDay;
+    private Timer? _pushTimer;
+    private bool _pushArmed;
+    private volatile bool _live;
 
     public static ChasterService CreateForApp()
     {
@@ -22,7 +25,8 @@ public sealed partial class ChasterService
             var s = App.Settings?.Current;
             return s == null
                 ? ChasterOptions.Off
-                : new ChasterOptions(s.ChasterTabEnabled, s.ChasterLockId, new HashSet<string>(s.ChasterPrices ?? new List<string>(), StringComparer.Ordinal));
+                : new ChasterOptions(s.ChasterTabEnabled, s.ChasterLockId, new HashSet<string>(s.ChasterPrices ?? new List<string>(), StringComparer.Ordinal),
+                    TabLimits.FromMinutes(s.ChasterDailyLimitMinutes, s.ChasterBacklogLimitMinutes));
         };
 #if DEBUG
         if (DemoService(options) is { } demo) return demo;
@@ -88,13 +92,45 @@ public sealed partial class ChasterService
     }
 #endif
 
-    /// <summary>A minute after launch, then hourly. The hourly tick only acts when the local day
-    /// has changed since the last attempt, so a day's bookings always get the rest of that day to
-    /// be earned back before anything reaches the lock.</summary>
-    public void StartDailySettle()
+    /// <summary>How long a booking waits before it goes out, so a burst of slip-ups lands on
+    /// the lock as one line in its history instead of a line per typo.</summary>
+    public static readonly TimeSpan PushDelay = TimeSpan.FromSeconds(30);
+
+    /// <summary>The retry clock for a push that could not go out (Chaster down, no lock picked
+    /// yet), and the once-a-day "misses you" check. A minute after launch, then every ten.</summary>
+    public static readonly TimeSpan TickEvery = TimeSpan.FromMinutes(10);
+
+    /// <summary>Live from here on: bookings schedule their own push, and the tick retries.</summary>
+    public void StartSettle()
     {
-        _settleTimer ??= new Timer(_ => _ = SettleIfNewDayAsync(), null, TimeSpan.FromMinutes(1), TimeSpan.FromHours(1));
+        _live = true;
+        _settleTimer ??= new Timer(_ => _ = TickAsync(), null, TimeSpan.FromMinutes(1), TickEvery);
         StartLockRefresh();
+    }
+
+    /// <summary>A booking that added time. The first one arms the push; the ones inside the
+    /// window ride along with it.</summary>
+    private void SchedulePush()
+    {
+        if (!_live) return;
+        lock (_gate)
+        {
+            if (_pushArmed) return;
+            _pushArmed = true;
+            _pushTimer ??= new Timer(_ => _ = PushNowAsync(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _pushTimer.Change(PushDelay, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private async Task PushNowAsync()
+    {
+        lock (_gate) _pushArmed = false;
+        try
+        {
+            if (await SettleAsync().ConfigureAwait(false) == SettleOutcome.Pushed)
+                await RefreshLockAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) { Diag.Swallowed(ex, "chaster push"); }
     }
 
     /// <summary>How often the rail chip's clock is allowed to be wrong. Fifteen minutes on a
@@ -117,31 +153,27 @@ public sealed partial class ChasterService
         _lockTimer ??= new Timer(_ => _ = RefreshLockAsync(), null, TimeSpan.FromSeconds(5), LockRefreshEvery);
     }
 
-    /// <summary>Settle at most once per local day per run. Never throws: it runs on a timer thread.</summary>
-    public async Task<SettleOutcome> SettleIfNewDayAsync()
+    /// <summary>Push whatever is waiting, then, once per local day, book what being away cost.
+    /// Never throws: it runs on a timer thread.</summary>
+    public async Task<SettleOutcome> TickAsync()
     {
         try
         {
-            var today = CircesTab.DayKey(_localNow());
-            if (_lastSettleDay == today) return SettleOutcome.Nothing;
             var outcome = await SettleAsync().ConfigureAwait(false);
-            // AFTER the settle, on purpose: what being away cost lands on the tab once today's
-            // push has gone (or been found empty), so the player has the rest of the day to do
-            // the session that forgives half of it.
-            NoteSeen();
-            // A try-later keeps the day open, so the next hourly tick goes again. So does a lock
-            // nobody picked yet: once the player picks one, the push follows within the hour.
-            if (outcome is not (SettleOutcome.TryLater or SettleOutcome.NoLockChosen)) _lastSettleDay = today;
-            // A push is the one moment the lock is known to have moved, so the snapshot every
-            // surface reads is re-read here rather than waiting up to a quarter of an hour to show
-            // the time this app just added. A settle that pushed nothing moved nothing, and pays
-            // for no call.
+            var today = CircesTab.DayKey(_localNow());
+            // AFTER the push, on purpose: what being away cost is booked after the old balance
+            // went out, so the player has the rest of the day to do the session that forgives half.
+            if (_lastSettleDay != today)
+            {
+                _lastSettleDay = today;
+                NoteSeen();
+            }
             if (outcome == SettleOutcome.Pushed) await RefreshLockAsync().ConfigureAwait(false);
             return outcome;
         }
         catch (Exception ex)
         {
-            Diag.Swallowed(ex, "daily chaster settle");
+            Diag.Swallowed(ex, "chaster tick");
             return SettleOutcome.TryLater;
         }
     }

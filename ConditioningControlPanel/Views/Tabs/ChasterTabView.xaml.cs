@@ -151,7 +151,12 @@ namespace ConditioningControlPanel.Views.Tabs
             if (App.Chaster?.IsLinked == true) FxLinked();
         }));
 
-        private void OnLockChanged() => Dispatcher.BeginInvoke(new Action(RefreshHero));
+        // A push moves the lock AND empties the tab, so both halves are re-read.
+        private void OnLockChanged() => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            RefreshHero();
+            if (App.Chaster?.IsLinked == true) RefreshNumbers(animate: false);
+        }));
 
         private void Refresh()
         {
@@ -164,6 +169,7 @@ namespace ConditioningControlPanel.Views.Tabs
             PaperTag.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
             BtnLink.IsEnabled = chaster != null;
             ShowLinking(chaster?.IsLinking == true);
+            RefreshLimits();
             RefreshHero();
             if (!linked) return;
 
@@ -324,7 +330,7 @@ namespace ConditioningControlPanel.Views.Tabs
             TxtTagAmount.Text = balance == 0 ? CircesTab.Format(0, signed: false) : CircesTab.Format(balance);
             TxtTagAmount.Foreground = balance > 0 ? Frozen(Color.FromRgb(0xC8, 0x24, 0x4A))
                 : balance < 0 ? Frozen(Color.FromRgb(0x1E, 0x8A, 0x6E)) : Frozen(Color.FromRgb(0x24, 0x1A, 0x2E));
-            TxtTagLands.Text = balance > 0 ? Loc.GetF("chaster_tag_lands", "00:00") : Loc.Get("chaster_tag_credit_lands");
+            TxtTagLands.Text = Loc.Get(balance > 0 ? "chaster_tag_lands" : "chaster_tag_credit_lands");
             TxtTagStamp.Text = Loc.Get(balance > 0 ? "chaster_tag_unpaid" : balance < 0 ? "chaster_tag_credit" : "chaster_tag_clear");
             var stampColour = balance > 0 ? Color.FromRgb(0xC8, 0x24, 0x4A) : balance < 0 ? Color.FromRgb(0x1E, 0x8A, 0x6E) : Color.FromRgb(0x6E, 0x66, 0x86);
             TagStamp.BorderBrush = Frozen(stampColour);
@@ -590,16 +596,62 @@ namespace ConditioningControlPanel.Views.Tabs
 
         // ============================== 3. today, and this run ==============================
 
+        // ============================== the two limits ==============================
+
+        private void BtnLimits_Click(object sender, RoutedEventArgs e) =>
+            LimitsCard.Visibility = LimitsCard.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+
+        private void RefreshLimits()
+        {
+            var caps = App.Chaster?.Caps ?? TabLimits.Default;
+            _loading = true;
+            try
+            {
+                SliderDayLimit.Value = caps.DailySeconds / 60;
+                SliderBacklogLimit.Value = caps.BacklogSeconds / 60;
+            }
+            finally { _loading = false; }
+            PaintLimits(caps);
+        }
+
+        private void PaintLimits(TabLimits caps)
+        {
+            TxtDayLimit.Text = CircesTab.Format(caps.DailySeconds, signed: false);
+            TxtBacklogLimit.Text = CircesTab.Format(caps.BacklogSeconds, signed: false);
+            TxtFactCap1.Text = TxtFactCap2.Text = CircesTab.Format(caps.DailySeconds, signed: false);
+        }
+
+        private void LimitSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_loading || !IsLoaded) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            // The backlog never sits under the day: dragging the day past it carries it along.
+            var caps = TabLimits.FromMinutes((int)SliderDayLimit.Value, (int)SliderBacklogLimit.Value);
+            settings.ChasterDailyLimitMinutes = caps.DailySeconds / 60;
+            settings.ChasterBacklogLimitMinutes = caps.BacklogSeconds / 60;
+            if ((int)SliderBacklogLimit.Value != caps.BacklogSeconds / 60)
+            {
+                _loading = true;
+                try { SliderBacklogLimit.Value = caps.BacklogSeconds / 60; }
+                finally { _loading = false; }
+            }
+            PaintLimits(caps);
+            RefreshDay(animate: true);
+            App.Settings?.Save();
+        }
+
         internal void RefreshDay(bool animate = true)
         {
             var chaster = App.Chaster;
             if (chaster == null) return;
             var today = chaster.TodayAddedSeconds;
-            var cap = CircesTab.Format(CircesTab.DailyCapSeconds, signed: false);
+            var capSeconds = chaster.Caps.DailySeconds;
+            var cap = CircesTab.Format(capSeconds, signed: false);
             TxtToday.Text = CircesTab.Format(today, signed: false);
             TxtTodayCap.Text = "/ " + cap;
             TxtTodaySub.Text = Loc.GetF("chaster_stat_today_sub", cap);
-            _capFraction = TabPageText.CapFraction(today);
+            _capFraction = TabPageText.CapFraction(today, capSeconds);
             LayoutCap(animate);
 
             // Only spin at a second while there is a second-by-second number to show.

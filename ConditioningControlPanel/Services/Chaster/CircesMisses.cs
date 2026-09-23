@@ -21,6 +21,9 @@ public static class CircesMisses
     public const string ForgivenEventId = "misses_forgiven";
     public const int FirstDaySeconds = 5 * 60;
 
+    /// <summary>Its own ceiling, 60:00 a day away, whatever the player set as the daily limit.</summary>
+    public const int MaxDaySeconds = 60 * 60;
+
     /// <summary>More away days than this change nothing (the backlog cap is long since hit),
     /// so the loop that books them stays short whatever the file says.</summary>
     public const int MaxDaysCounted = 14;
@@ -40,7 +43,7 @@ public static class CircesMisses
     {
         var list = new List<int>();
         for (var i = 0; i < Math.Clamp(daysAway, 0, MaxDaysCounted); i++)
-            list.Add((int)Math.Min((long)FirstDaySeconds << i, CircesTab.DailyCapSeconds));
+            list.Add((int)Math.Min((long)FirstDaySeconds << i, MaxDaySeconds));
         return list;
     }
 

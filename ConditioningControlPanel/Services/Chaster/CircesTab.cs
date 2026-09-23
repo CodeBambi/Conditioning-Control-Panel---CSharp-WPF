@@ -88,13 +88,14 @@ public readonly record struct TabPush(TabPushKind Kind, int Seconds);
 /// </summary>
 public static class CircesTab
 {
-    /// <summary>The most a single local day can add, however busy the day was.</summary>
-    public const int DailyCapSeconds = 60 * 60;
+    /// <summary>The default most a single local day can add (owner, 2026-09-23: three hours).
+    /// The player can move it inside <see cref="TabLimits"/>'s range.</summary>
+    public const int DailyCapSeconds = 3 * 60 * 60;
 
-    /// <summary>The most unpaid time the tab ever holds (owner, 2026-09-21: three hours). A
-    /// month with no lock, or with Chaster unreachable, is not a month of debt waiting for the
-    /// next lock: past this, prices stop adding until some is pushed or earned back.</summary>
-    public const int BacklogCapSeconds = 3 * 60 * 60;
+    /// <summary>The default most unpaid time the tab ever holds (owner, 2026-09-23: twelve
+    /// hours). A month with no lock, or with Chaster unreachable, is not a month of debt waiting
+    /// for the next lock: past this, prices stop adding until some is pushed or earned back.</summary>
+    public const int BacklogCapSeconds = 12 * 60 * 60;
 
     /// <summary>The ledger keeps this many lines. The bill only ever reads the current run.</summary>
     public const int MaxEntries = 500;
@@ -108,8 +109,9 @@ public static class CircesTab
     /// earns back. <paramref name="runStartUtc"/> is when this run of the app began; only lines
     /// from the same run fold together, so the bill at close stays this run's bill.</summary>
     public static TabBooking Book(TabState state, string eventId, int seconds,
-        DateTime nowUtc, DateTime localNow, DateTime runStartUtc, bool safetyExit)
+        DateTime nowUtc, DateTime localNow, DateTime runStartUtc, bool safetyExit, TabLimits? limits = null)
     {
+        var caps = limits ?? TabLimits.Default;
         if (seconds == 0 || string.IsNullOrEmpty(eventId)) return new(0, TabRefusal.Nothing);
         RollDay(state, localNow);
 
@@ -117,8 +119,8 @@ public static class CircesTab
         if (seconds > 0)
         {
             if (safetyExit) return new(0, TabRefusal.SafetyExit);
-            var room = Math.Max(0, DailyCapSeconds - state.DayAddedSeconds);
-            var backlogRoom = Math.Max(0, BacklogCapSeconds - state.BalanceSeconds);
+            var room = Math.Max(0, caps.DailySeconds - state.DayAddedSeconds);
+            var backlogRoom = Math.Max(0, caps.BacklogSeconds - state.BalanceSeconds);
             applied = Math.Min(seconds, Math.Min(room, backlogRoom));
             if (applied == 0) return new(0, room == 0 ? TabRefusal.DailyCap : TabRefusal.Backlog);
             state.DayAddedSeconds += applied;
@@ -137,7 +139,7 @@ public static class CircesTab
         var clamped = applied != seconds;
         if (!clamped) return new(applied, TabRefusal.None);
         if (seconds < 0) return new(applied, TabRefusal.Floor);
-        return new(applied, state.DayAddedSeconds >= DailyCapSeconds ? TabRefusal.DailyCap : TabRefusal.Backlog);
+        return new(applied, state.DayAddedSeconds >= caps.DailySeconds ? TabRefusal.DailyCap : TabRefusal.Backlog);
     }
 
     /// <summary>The jackpot wipes the TAB. It never touches the lock: what was already pushed
@@ -151,12 +153,12 @@ public static class CircesTab
         return new(applied, TabRefusal.None);
     }
 
-    /// <summary>What to send the lock right now, if anything. One push per local day: the first
-    /// chance of the day wins. <paramref name="canRemove"/> is false for a wearer link, which
-    /// Chaster only lets add.</summary>
-    public static TabPush PlanPush(TabState state, DateTime localNow, bool canRemove)
+    /// <summary>What to send the lock right now, if anything. Live since 2026-09-23 (owner): a
+    /// positive balance goes out on the next push, and a credit stays on the tab, where it cancels
+    /// the next slip-ups before they reach the lock. <paramref name="canRemove"/> is false for a
+    /// wearer link, which Chaster only lets add.</summary>
+    public static TabPush PlanPush(TabState state, bool canRemove)
     {
-        if (state.LastPushDay == DayKey(localNow)) return new(TabPushKind.None, 0);
         if (state.BalanceSeconds > 0) return new(TabPushKind.Add, state.BalanceSeconds);
         if (state.BalanceSeconds < 0 && canRemove)
         {
@@ -183,11 +185,6 @@ public static class CircesTab
         }
         state.LastPushDay = DayKey(localNow);
     }
-
-    /// <summary>The day's settle looked and found nothing to send. The day is still spent: what
-    /// is booked later today waits for tomorrow's settle, so it always gets the rest of its own
-    /// day to be earned back, even if the app is restarted in between.</summary>
-    public static void MarkSettled(TabState state, DateTime localNow) => state.LastPushDay = DayKey(localNow);
 
     /// <summary>Write this down BEFORE an add goes out, and save. If the answer never comes the
     /// mark is still there on the next settle, and <see cref="ResolvePending"/> deals with it.</summary>
@@ -252,5 +249,24 @@ public static class CircesTab
         state.Entries.Add(new TabEntry { AtUtc = nowUtc, EventId = eventId, Seconds = applied, Count = 1 });
         if (state.Entries.Count > MaxEntries)
             state.Entries.RemoveRange(0, state.Entries.Count - MaxEntries);
+    }
+}
+
+/// <summary>The player's two limits, clamped to a range nobody can argue with: a day of
+/// 15:00 to 12 hours, a backlog of 1 to 48 hours and never under the day's own limit.</summary>
+public readonly record struct TabLimits(int DailySeconds, int BacklogSeconds)
+{
+    public const int MinDailySeconds = 15 * 60;
+    public const int MaxDailySeconds = 12 * 60 * 60;
+    public const int MinBacklogSeconds = 60 * 60;
+    public const int MaxBacklogSeconds = 48 * 60 * 60;
+
+    public static TabLimits Default => new(CircesTab.DailyCapSeconds, CircesTab.BacklogCapSeconds);
+
+    public static TabLimits FromMinutes(int dailyMinutes, int backlogMinutes)
+    {
+        var daily = Math.Clamp((long)dailyMinutes * 60, MinDailySeconds, MaxDailySeconds);
+        var backlog = Math.Clamp((long)backlogMinutes * 60, Math.Max(MinBacklogSeconds, daily), MaxBacklogSeconds);
+        return new((int)daily, (int)backlog);
     }
 }

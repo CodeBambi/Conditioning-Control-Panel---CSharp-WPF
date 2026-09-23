@@ -78,7 +78,7 @@ public sealed class ChasterClient : IDisposable
     public const string ApiBase = "https://api.chaster.app";
 
     /// <summary>One add is never more than the day's cap. A caller with a bigger number has a bug.</summary>
-    public const int MaxAddSeconds = CircesTab.DailyCapSeconds;
+    public const int MaxAddSeconds = TabLimits.MaxDailySeconds;
 
     private readonly HttpClient _http;
 

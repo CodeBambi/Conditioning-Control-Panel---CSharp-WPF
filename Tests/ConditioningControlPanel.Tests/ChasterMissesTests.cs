@@ -99,13 +99,14 @@ public class ChasterMissesTests : IDisposable
     [Fact]
     public void A_month_away_is_the_backlog_cap_and_not_a_month()
     {
+        _options = _options with { Limits = TabLimits.FromMinutes(60, 180) };
         using (var before = Make()) before.NoteSeen();
         _local = _local.AddDays(40);
         using var service = Make();
 
         service.NoteSeen();
 
-        Assert.Equal(CircesTab.BacklogCapSeconds, service.BalanceSeconds);
+        Assert.Equal(3 * 3600, service.BalanceSeconds);
     }
 
     [Fact]
@@ -125,26 +126,23 @@ public class ChasterMissesTests : IDisposable
     }
 
     [Fact]
-    public async Task What_being_away_cost_waits_on_the_tab_until_tomorrow_even_across_a_restart()
+    public async Task What_being_away_cost_is_booked_once_and_goes_out_on_the_next_tick()
     {
         using (var before = Make()) before.NoteSeen();
         _local = _local.AddDays(3);
 
         using (var back = Make())
         {
-            Assert.Equal(SettleOutcome.Nothing, await back.SettleIfNewDayAsync());
+            // The first tick pushes what was already waiting (nothing), THEN books the days away.
+            Assert.Equal(SettleOutcome.Nothing, await back.TickAsync());
             Assert.Equal(900, back.BalanceSeconds);
-        }
-        using (var restarted = Make())
-        {
-            Assert.Equal(SettleOutcome.Nothing, await restarted.SettleIfNewDayAsync());
             Assert.Empty(_http.Seen);
+            Assert.Equal(SettleOutcome.Pushed, await back.TickAsync());
         }
-
-        _local = _local.AddDays(1);
-        using var tomorrow = Make();
-        Assert.Equal(SettleOutcome.Pushed, await tomorrow.SettleIfNewDayAsync());
-        Assert.Contains("/locks/lock1/update-time", _http.Seen);
+        using var restarted = Make();
+        Assert.Equal(SettleOutcome.Nothing, await restarted.TickAsync());
+        Assert.Equal(0, restarted.BalanceSeconds);
+        Assert.Single(_http.Seen, c => c == "/locks/lock1/update-time");
     }
 
     [Fact]

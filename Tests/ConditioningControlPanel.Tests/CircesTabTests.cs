@@ -8,8 +8,8 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// Circe's tab, rule by rule: events net inside CCP, the floor, 60:00 a day, the way out never
-/// costs, the jackpot wipes the tab only, one push a day, and the bill.
+/// Circe's tab, rule by rule: events net inside CCP, the floor, the player's two limits, the way
+/// out never costs, the jackpot wipes the tab only, a positive balance pushes live, and the bill.
 /// </summary>
 public class CircesTabTests
 {
@@ -29,7 +29,7 @@ public class CircesTabTests
 
         Assert.Equal(0, s.BalanceSeconds);
         Assert.Equal(0, s.PushedNetSeconds);
-        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, Noon, canRemove: true).Kind);
+        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, canRemove: true).Kind);
     }
 
     [Fact]
@@ -58,22 +58,49 @@ public class CircesTabTests
     }
 
     [Fact]
-    public void A_day_adds_sixty_minutes_and_not_a_second_more()
+    public void A_day_adds_three_hours_by_default_and_not_a_second_more()
     {
         var s = new TabState();
-        for (var i = 0; i < 11; i++) Book(s, "watcher", 300);
+        for (var i = 0; i < 35; i++) Book(s, "watcher", 300);
         var last = Book(s, "watcher", 300);
         var over = Book(s, "typo", 15);
 
         Assert.Equal(300, last.AppliedSeconds);
-        Assert.Equal(CircesTab.DailyCapSeconds, s.BalanceSeconds);
+        Assert.Equal(3 * 3600, s.BalanceSeconds);
         Assert.Equal(new TabBooking(0, TabRefusal.DailyCap), over);
+    }
+
+    [Fact]
+    public void The_player_sets_the_day_and_the_backlog()
+    {
+        var s = new TabState();
+        var caps = TabLimits.FromMinutes(30, 60);
+
+        var first = CircesTab.Book(s, "watcher", 1500, Run, Noon, Run, false, caps);
+        var clamped = CircesTab.Book(s, "watcher", 600, Run, Noon, Run, false, caps);
+        CircesTab.Book(s, "watcher", 1500, Run, Noon.AddDays(1), Run, false, caps);
+        var full = CircesTab.Book(s, "watcher", 900, Run, Noon.AddDays(2), Run, false, caps);
+
+        Assert.Equal(1500, first.AppliedSeconds);
+        Assert.Equal(new TabBooking(300, TabRefusal.DailyCap), clamped);
+        Assert.Equal(new TabBooking(300, TabRefusal.Backlog), full);
+        Assert.Equal(3600, s.BalanceSeconds);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 15 * 60, 60 * 60)]
+    [InlineData(100000, 100000, 12 * 3600, 48 * 3600)]
+    [InlineData(600, 60, 600 * 60, 600 * 60)]
+    [InlineData(180, 720, 3 * 3600, 12 * 3600)]
+    public void Limits_stay_inside_their_range_and_the_backlog_never_under_the_day(int day, int backlog, int wantDay, int wantBacklog)
+    {
+        Assert.Equal(new TabLimits(wantDay, wantBacklog), TabLimits.FromMinutes(day, backlog));
     }
 
     [Fact]
     public void The_cap_clamps_the_last_add_and_earning_back_hands_no_room_back()
     {
-        var s = new TabState { Day = CircesTab.DayKey(Noon), DayAddedSeconds = 3590 };
+        var s = new TabState { Day = CircesTab.DayKey(Noon), DayAddedSeconds = CircesTab.DailyCapSeconds - 10 };
 
         var clamped = Book(s, "attention", 120);
         Book(s, "session", -600);
@@ -84,10 +111,10 @@ public class CircesTabTests
     }
 
     [Fact]
-    public void The_tab_never_holds_more_than_three_unpaid_hours()
+    public void The_tab_never_holds_more_than_twelve_unpaid_hours_by_default()
     {
         var s = new TabState();
-        for (var day = 0; day < 5; day++) Book(s, "watcher", 3600, Noon.AddDays(day));
+        for (var day = 0; day < 5; day++) Book(s, "watcher", 3 * 3600, Noon.AddDays(day));
 
         Assert.Equal(CircesTab.BacklogCapSeconds, s.BalanceSeconds);
         Assert.Equal(TabRefusal.Backlog, Book(s, "typo", 15, Noon.AddDays(6)).Refusal);
@@ -145,18 +172,25 @@ public class CircesTabTests
     }
 
     [Fact]
-    public void A_positive_balance_is_pushed_once_a_day()
+    public void A_positive_balance_pushes_live_and_a_credit_cancels_the_next_slip_ups()
     {
         var s = new TabState { BalanceSeconds = 750 };
 
-        var push = CircesTab.PlanPush(s, Noon, canRemove: false);
+        var push = CircesTab.PlanPush(s, canRemove: false);
         CircesTab.ApplyPush(s, push, Noon);
+        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, canRemove: false).Kind);
         Book(s, "typo", 15);
+        var again = CircesTab.PlanPush(s, canRemove: false);
 
         Assert.Equal(new TabPush(TabPushKind.Add, 750), push);
         Assert.Equal(750, s.PushedNetSeconds);
-        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, Noon.AddHours(6), canRemove: false).Kind);
-        Assert.Equal(new TabPush(TabPushKind.Add, 15), CircesTab.PlanPush(s, Noon.AddDays(1), canRemove: false));
+        Assert.Equal(new TabPush(TabPushKind.Add, 15), again);
+
+        CircesTab.ApplyPush(s, again, Noon);
+        Book(s, "session", -600);
+        Book(s, "attention", 120);
+        Assert.Equal(-480, s.BalanceSeconds);
+        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, canRemove: false).Kind);
     }
 
     [Fact]
@@ -164,11 +198,11 @@ public class CircesTabTests
     {
         var s = new TabState { BalanceSeconds = 750 };
 
-        CircesTab.PlanPush(s, Noon, canRemove: false);
+        CircesTab.PlanPush(s, canRemove: false);
 
         Assert.Equal(750, s.BalanceSeconds);
         Assert.Null(s.LastPushDay);
-        Assert.Equal(TabPushKind.Add, CircesTab.PlanPush(s, Noon, canRemove: false).Kind);
+        Assert.Equal(TabPushKind.Add, CircesTab.PlanPush(s, canRemove: false).Kind);
     }
 
     [Fact]
@@ -182,7 +216,7 @@ public class CircesTabTests
 
         Assert.Equal(0, s.BalanceSeconds);
         Assert.Equal(0, s.PushedNetSeconds);
-        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, Noon, canRemove: false).Kind);
+        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, canRemove: false).Kind);
         Assert.Equal(0, CircesTab.ResolvePending(s));
     }
 
@@ -205,7 +239,7 @@ public class CircesTabTests
     {
         var s = new TabState { BalanceSeconds = -300, PushedNetSeconds = 900 };
 
-        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, Noon, canRemove: false).Kind);
+        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, canRemove: false).Kind);
     }
 
     [Fact]
@@ -213,7 +247,7 @@ public class CircesTabTests
     {
         var s = new TabState { BalanceSeconds = -300, PushedNetSeconds = 200 };
 
-        var push = CircesTab.PlanPush(s, Noon, canRemove: true);
+        var push = CircesTab.PlanPush(s, canRemove: true);
         CircesTab.ApplyPush(s, push, Noon);
 
         Assert.Equal(new TabPush(TabPushKind.Remove, 200), push);
@@ -296,7 +330,7 @@ public class CircesTabTests
     {
         var s = new TabState { PushedNetSeconds = 900 };
         Book(s, "typo", 15);
-        CircesTab.ApplyPush(s, CircesTab.PlanPush(s, Noon, false), Noon);
+        CircesTab.ApplyPush(s, CircesTab.PlanPush(s, false), Noon);
 
         var back = JsonConvert.DeserializeObject<TabState>(JsonConvert.SerializeObject(s))!;
 
@@ -329,7 +363,7 @@ public class CircesTabTests
         var on = new HashSet<string> { "mantra", "session" };
 
         Assert.Equal(70, TabPrices.Resolve("mantra", on, units: 7));
-        Assert.Equal(CircesTab.DailyCapSeconds, TabPrices.Resolve("mantra", on, units: 100000));
+        Assert.Equal(10000, TabPrices.Resolve("mantra", on, units: 100000));
         Assert.Equal(-600, TabPrices.Resolve("session", on, units: 7));
     }
 
