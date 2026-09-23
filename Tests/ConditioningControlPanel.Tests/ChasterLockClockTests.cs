@@ -234,7 +234,9 @@ public class ChasterRailChipRenderTests
     [Fact]
     public void The_chip_builds_with_no_service_behind_it() => OnChip(chip =>
     {
-        Assert.NotNull(chip.ToolTip);
+        Assert.NotNull(chip.Peek);
+        Assert.False(chip.Peek.IsOpen);
+        chip.FillPeek(); // no service: the unlinked card, and it must not throw
         Assert.True(chip.ActualHeight > 0);
     });
 
@@ -242,11 +244,11 @@ public class ChasterRailChipRenderTests
     public void The_clock_is_tagged_so_the_rail_label_fade_leaves_it_alone() => OnChip(chip =>
     {
         // CacheNavRailParts (MainWindow.NavRail.cs) fades every rail TextBlock that is not tagged
-        // "navrailstatic", and the countdown has to survive the rail shutting - it is the reason
-        // the chip is here. The pending badge's figure is the deliberate opposite and has no tag.
+        // "navrailstatic". The countdown AND the badge figure have to survive the rail shutting:
+        // a badge that faded left an empty pink blob over the padlock (owner, 2026-09-23).
         var texts = Descendants(chip).OfType<TextBlock>().ToList();
-        Assert.Contains(texts, t => (t.Tag as string) == "navrailstatic");
-        Assert.Contains(texts, t => t.Tag == null);
+        Assert.Equal(2, texts.Count);
+        Assert.All(texts, t => Assert.Equal("navrailstatic", t.Tag as string));
     });
 
     [Fact]
@@ -259,4 +261,84 @@ public class ChasterRailChipRenderTests
     [Fact]
     public void A_pulse_on_a_chip_nobody_wired_is_harmless() =>
         OnChip(chip => chip.Pulse(Color.FromRgb(0xFF, 0x6B, 0x8A)));
+}
+
+/// <summary>The live clock: the snapshot plus what the tab will add, ticking locally.</summary>
+public class LiveLockClockTests
+{
+    private static readonly DateTime Now = new(2026, 9, 23, 12, 0, 0, DateTimeKind.Utc);
+
+    private static LockSnapshot Snap(TimeSpan left, bool frozen = false, bool hidden = false) =>
+        new("lock1", "Self-lock", Now + left, frozen, hidden, IsTestLock: true, FetchedAtUtc: Now);
+
+    [Fact]
+    public void Pending_debt_is_added_to_the_time_left()
+    {
+        var left = LiveLockClock.Remaining(Snap(TimeSpan.FromMinutes(13)), 180, Now);
+        Assert.Equal(TimeSpan.FromMinutes(16), left);
+    }
+
+    [Fact]
+    public void Credits_never_shorten_the_lock()
+    {
+        Assert.Equal(TimeSpan.FromMinutes(13), LiveLockClock.Remaining(Snap(TimeSpan.FromMinutes(13)), -600, Now));
+        Assert.Equal(0, LiveLockClock.PendingAdd(-5));
+    }
+
+    [Fact]
+    public void It_counts_down_by_the_second_without_a_new_snapshot()
+    {
+        var snap = Snap(TimeSpan.FromMinutes(13));
+        Assert.Equal("13:00", LiveLockClock.Compact(LiveLockClock.Remaining(snap, 0, Now)!.Value));
+        Assert.Equal("12:59", LiveLockClock.Compact(LiveLockClock.Remaining(snap, 0, Now.AddSeconds(1))!.Value));
+    }
+
+    [Fact]
+    public void A_frozen_lock_does_not_tick()
+    {
+        var snap = Snap(TimeSpan.FromHours(2), frozen: true);
+        Assert.False(LiveLockClock.Ticks(snap));
+        Assert.Equal(TimeSpan.FromHours(2), LiveLockClock.Remaining(snap, 0, Now.AddMinutes(30)));
+    }
+
+    [Fact]
+    public void A_hidden_timer_has_no_number_and_no_lock_has_none_either()
+    {
+        Assert.Null(LiveLockClock.Remaining(Snap(TimeSpan.FromHours(2), hidden: true), 300, Now));
+        Assert.Null(LiveLockClock.Remaining(null, 300, Now));
+        Assert.False(LiveLockClock.Ticks(Snap(TimeSpan.FromHours(2), hidden: true)));
+    }
+
+    [Fact]
+    public void An_ended_lock_stays_at_zero_whatever_is_on_the_tab()
+    {
+        Assert.Equal(TimeSpan.Zero, LiveLockClock.Remaining(Snap(TimeSpan.FromMinutes(-5)), 900, Now));
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, 0, "0:00")]
+    [InlineData(0, 0, 12, 5, "12:05")]
+    [InlineData(0, 3, 12, 45, "3:12:45")]
+    [InlineData(2, 4, 30, 0, "2d 4h")]
+    [InlineData(128, 1, 0, 0, "128d")]
+    public void Compact_fits_the_shut_rail(int d, int h, int m, int s, string expected) =>
+        Assert.Equal(expected, LiveLockClock.Compact(new TimeSpan(d, h, m, s)));
+
+    [Fact]
+    public void Big_pads_every_field_after_the_first()
+    {
+        Assert.Equal("2d 04h 12m 05s", LiveLockClock.Big(new TimeSpan(2, 4, 12, 5)));
+        Assert.Equal("3h 02m 09s", LiveLockClock.Big(new TimeSpan(0, 3, 2, 9)));
+        Assert.Equal("7m 00s", LiveLockClock.Big(TimeSpan.FromMinutes(7)));
+        Assert.Equal("0m 00s", LiveLockClock.Big(TimeSpan.Zero));
+    }
+
+    [Theory]
+    [InlineData(0, "")]
+    [InlineData(180, "+3m")]
+    [InlineData(45, "+45s")]
+    [InlineData(7200, "+2h")]
+    [InlineData(-120, "-2m")]
+    public void The_badge_is_short(int seconds, string expected) =>
+        Assert.Equal(expected, LiveLockClock.Badge(seconds));
 }

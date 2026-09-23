@@ -65,6 +65,7 @@ namespace ConditioningControlPanel.Views.Tabs
         private readonly Dictionary<string, ToggleButton> _priceToggles = new();
         private readonly Dictionary<string, Border> _rowDims = new();
         private readonly DispatcherTimer _tick;
+        private readonly DispatcherTimer _clockTick;
         private readonly DispatcherTimer _trailerOpen;
         private readonly DispatcherTimer _trailerClose;
         private ToggleButton? _trailerRow;
@@ -86,6 +87,10 @@ namespace ConditioningControlPanel.Views.Tabs
             InitializeComponent();
             _tick = new DispatcherTimer(DispatcherPriority.Background) { Interval = SlowTick };
             _tick.Tick += (_, _) => { RefreshHero(); RefreshDay(animate: false); };
+            // The hero's clock ticks every second on its own timer, apart from the slow page tick:
+            // it only rewrites digits, never the calendar or the pills.
+            _clockTick = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+            _clockTick.Tick += (_, _) => { try { PaintHeroClock(); } catch (Exception ex) { Diag.Swallowed(ex, "chaster hero clock"); } };
             _trailerOpen = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TrailerOpenDelay };
             _trailerOpen.Tick += (_, _) => { _trailerOpen.Stop(); OpenTrailer(); };
             _trailerClose = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TrailerCloseGrace };
@@ -114,6 +119,7 @@ namespace ConditioningControlPanel.Views.Tabs
             Refresh();
             _ = LoadLocksAsync();
             _ = App.Chaster?.RefreshLockAsync();
+            _leadHeldUntilUtc = DateTime.UtcNow.AddSeconds(1.2); // the count-up owns the lead number
             FxOnShown();
         }
 
@@ -128,6 +134,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 chaster.LinkChanged += OnLinkChanged;
                 chaster.LockChanged += OnLockChanged;
                 _tick.Start();
+                _clockTick.Start();
             }
             else
             {
@@ -135,6 +142,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 chaster.LinkChanged -= OnLinkChanged;
                 chaster.LockChanged -= OnLockChanged;
                 _tick.Stop();
+                _clockTick.Stop();
             }
         }
 
@@ -212,7 +220,6 @@ namespace ConditioningControlPanel.Views.Tabs
             var snapshot = chaster?.Lock;
             var lookup = chaster?.LockLookup ?? LockLookup.Unlinked;
             var linked = chaster?.IsLinked == true;
-            _clockLead = null;
             TxtAccountLock.Text = AccountLockLine(chaster);
 
             if (!linked)
@@ -228,47 +235,13 @@ namespace ConditioningControlPanel.Views.Tabs
                 return;
             }
 
-            var title = snapshot == null ? null
-                : string.IsNullOrWhiteSpace(snapshot.Title) ? Loc.Get("chaster_lock_untitled") : snapshot.Title;
-            HeroTitle.Text = title ?? "";
-            HeroTitle.Visibility = title == null ? Visibility.Collapsed : Visibility.Visible;
+            // The hero's big title is the season, not the lock's own name (owner, 2026-09-23):
+            // a default self lock is called "Self-lock", which is a poor thing to set in 88px
+            // candy. The real name rides a pill under the clock.
+            HeroTitle.Text = snapshot == null ? "" : Loc.Get("chaster_hero_title");
+            HeroTitle.Visibility = snapshot == null ? Visibility.Collapsed : Visibility.Visible;
 
-            // No countdown means no clock at all: the pills under it say why.
-            HeroClock.Children.Clear();
-            var left = snapshot?.Remaining(DateTime.UtcNow);
-            if (left is { } remaining)
-            {
-                var parts = TabPageText.Countdown(remaining);
-                if (parts.Count == 0)
-                {
-                    HeroClock.Children.Add(new TextBlock
-                    {
-                        Text = Loc.Get("chaster_left_soon"), FontFamily = Display, FontSize = 34, FontWeight = FontWeights.Bold,
-                        Foreground = (Brush)FindResource("TextLightBrush"), VerticalAlignment = VerticalAlignment.Bottom,
-                        Margin = new Thickness(0, 0, 0, 6),
-                    });
-                }
-                foreach (var part in parts)
-                {
-                    var number = new TextBlock
-                    {
-                        Text = part.Value.ToString(), FontFamily = Display, FontSize = 58, FontWeight = FontWeights.Bold,
-                        Foreground = (Brush)FindResource("TextLightBrush"), VerticalAlignment = VerticalAlignment.Bottom,
-                        RenderTransformOrigin = new Point(0, 1),
-                    };
-                    var unit = new TextBlock
-                    {
-                        Text = Loc.Get(UnitKey(part.Key)), FontFamily = Display, FontSize = 22, FontWeight = FontWeights.SemiBold,
-                        Foreground = (Brush)FindResource("TextMutedBrush"), VerticalAlignment = VerticalAlignment.Bottom,
-                        Margin = new Thickness(3, 0, 14, 11),
-                    };
-                    HeroClock.Children.Add(number);
-                    HeroClock.Children.Add(unit);
-                    _clockLead ??= (number, part.Value);
-                }
-                HeroClockRow.Visibility = Visibility.Visible;
-            }
-            else HeroClockRow.Visibility = Visibility.Collapsed;
+            PaintHeroClock();
 
             var ends = snapshot is { TimerHidden: false, EndsAtUtc: { } endUtc } ? endUtc.ToLocalTime() : (DateTime?)null;
             TxtHeroEnds.Text = ends is { } when ? Loc.GetF("chaster_hero_ends", when.ToString("ddd d MMM HH:mm")) : "";
@@ -278,10 +251,88 @@ namespace ConditioningControlPanel.Views.Tabs
             BuildCalendar(snapshot);
         }
 
-        /// <summary>The single-letter units under the big digits: the long keys are the chip's
-        /// and the tooltip's, the hero has room for a letter and no more.</summary>
-        private static string UnitKey(string longKey) =>
-            longKey.Contains("day") ? "chaster_unit_d" : longKey.Contains("hour") ? "chaster_unit_h" : "chaster_unit_m";
+        /// <summary>The unit set the clock was last built for ("dhms", "hms", "ms"), so a second
+        /// that changes only digits updates text and rebuilds nothing.</summary>
+        private string _clockShape = "";
+        private readonly List<TextBlock> _clockNumbers = new();
+        /// <summary>Until when the lead number belongs to the count-up on show.</summary>
+        private DateTime _leadHeldUntilUtc;
+
+        /// <summary>
+        /// The hero's live clock, d h m s, ticking every second (owner, 2026-09-23: CCP's clock is
+        /// the first to move; the phone catches up at the next sync). Local arithmetic only, the
+        /// same <see cref="LiveLockClock"/> the rail chip uses: the last snapshot plus what the
+        /// tab will add. No lock, a hidden timer or no end date: no clock, the pills say why.
+        /// </summary>
+        internal void PaintHeroClock()
+        {
+            var chaster = App.Chaster;
+            var snapshot = chaster?.IsLinked == true ? chaster.Lock : null;
+            var left = LiveLockClock.Remaining(snapshot, chaster?.BalanceSeconds ?? 0, DateTime.UtcNow);
+            if (left is not { } remaining)
+            {
+                HeroClock.Children.Clear();
+                _clockNumbers.Clear();
+                _clockShape = "";
+                _clockLead = null;
+                HeroClockRow.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            HeroClockRow.Visibility = Visibility.Visible;
+            if (remaining <= TimeSpan.Zero)
+            {
+                if (_clockShape == "ready") return;
+                HeroClock.Children.Clear();
+                _clockNumbers.Clear();
+                _clockShape = "ready";
+                _clockLead = null;
+                HeroClock.Children.Add(new TextBlock
+                {
+                    Text = Loc.Get("chaster_clock_ready"), FontFamily = Display, FontSize = 44, FontWeight = FontWeights.Bold,
+                    Foreground = EarnBrush, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 4),
+                });
+                return;
+            }
+
+            var parts = LiveLockClock.Parts(remaining);
+            var shape = string.Concat(parts.Select(p => p.Unit));
+            if (shape != _clockShape)
+            {
+                HeroClock.Children.Clear();
+                _clockNumbers.Clear();
+                _clockShape = shape;
+                _clockLead = null;
+                foreach (var part in parts)
+                {
+                    var number = new TextBlock
+                    {
+                        Text = part.Value, FontFamily = Display, FontSize = 62, FontWeight = FontWeights.Bold,
+                        Foreground = (Brush)FindResource("TextLightBrush"), VerticalAlignment = VerticalAlignment.Bottom,
+                        RenderTransformOrigin = new Point(0, 1),
+                    };
+                    var unit = new TextBlock
+                    {
+                        Text = Loc.Get("chaster_unit_" + part.Unit), FontFamily = Display, FontSize = 22, FontWeight = FontWeights.SemiBold,
+                        Foreground = (Brush)FindResource("TextMutedBrush"), VerticalAlignment = VerticalAlignment.Bottom,
+                        Margin = new Thickness(3, 0, 14, 11),
+                    };
+                    HeroClock.Children.Add(number);
+                    HeroClock.Children.Add(unit);
+                    _clockNumbers.Add(number);
+                    if (_clockLead == null && int.TryParse(part.Value, out var lead)) _clockLead = (number, lead);
+                }
+                _leadHeldUntilUtc = DateTime.UtcNow.AddSeconds(1.2);
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+            for (var i = 0; i < parts.Count && i < _clockNumbers.Count; i++)
+            {
+                if (i == 0 && now < _leadHeldUntilUtc) continue; // the count-up is still running it
+                if (_clockNumbers[i].Text != parts[i].Value) _clockNumbers[i].Text = parts[i].Value;
+            }
+        }
 
         /// <summary>One pill per thing worth a word: the state, a test lock, a running hold.</summary>
         private void RefreshPills(LockLookup lookup, LockSnapshot? snapshot, TimeSpan hold)
@@ -300,6 +351,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_test"), MutedColour));
             else if (state == "chaster_state_test")
                 HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_test"), MutedColour));
+            if (snapshot != null)
+                HeroPills.Children.Insert(0, Pill(string.IsNullOrWhiteSpace(snapshot.Title) ? Loc.Get("chaster_lock_untitled") : snapshot.Title!, MutedColour));
             if (hold > TimeSpan.Zero)
                 HeroPills.Children.Add(Pill(Loc.Get("chaster_stat_hold") + " " + $"{(int)hold.TotalMinutes}:{hold.Seconds:00}", MutedColour, "chaster_hold"));
             HeroPills.Visibility = HeroPills.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
