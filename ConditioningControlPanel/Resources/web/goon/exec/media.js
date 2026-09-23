@@ -443,6 +443,13 @@ export function createGoonMediaPool() {
     counts,
     acquire,
 
+    /**
+     * The deck's whole current list as plain rows {kind, url, clip?} (a copy: host + local +
+     * online, never `received`). Read by a game night duel (ui/duel/arcademyHost.js), which hands
+     * it to the real Arcademy media provider as that class's local inventory. Draws nothing.
+     */
+    list: () => entries.map((e) => (e.clip ? { kind: e.kind, url: e.url, clip: true } : { kind: e.kind, url: e.url })),
+
     /** Resolve an asset name to its virtual-host URL (null if not in the pool). */
     urlByName(name) {
       const e = name ? entries.find((x) => x.name === name) : null;

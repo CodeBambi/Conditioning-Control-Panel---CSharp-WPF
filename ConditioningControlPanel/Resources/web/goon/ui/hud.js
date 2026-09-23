@@ -854,7 +854,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const emotes = mountEmotes({ host: root, match, audio, onLog });
   // GAME NIGHT: the game card duel. Owns its own overlay (under Mercy) and pauses throws while it runs.
   const duel = createDuelController({
-    match, view: createDuelView(), audio, onLog,
+    match, view: createDuelView({ onLog }), audio, onLog,
     isPractice: () => (typeof isPractice === 'function' ? !!isPractice() : false),
   });
   led.add(() => { try { duel.dispose(); } catch (_e) { /* gone */ } });
@@ -1416,6 +1416,8 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     /** Exposed so H (or a play-test driver) can poke the desk without re-deriving it. */
     parts: {
       root, arsenal, opponent, dial, attention, emotes, announcer, fx, drops, mic,
+      /** Game night: the duel controller (state, arsenalHook), for a driver and the selftests. */
+      duel,
       /** The heat gauge: the node the drop economy paints itself onto. */
       heat: { box: heatBox, fill: heatFill, get fraction() { return drops.heatFraction; } },
       /** The zen toggle, for a driver that wants the state without the click. */

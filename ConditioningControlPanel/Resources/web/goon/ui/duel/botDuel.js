@@ -11,10 +11,12 @@
  * createBotDuel is built in one place, ui/soloDriver.js, which boot.js only
  * builds in startSolo.
  *
- * IT PLAYS THE REAL BOARD. Same seed as the player (duelSeed of the shared
- * match seed and the idx), a novice's pace and a novice's habit (mostly down
- * and left, a random move now and then). Its score is whatever that honestly
- * reaches, so it wins some and loses more, and never by fiat.
+ * IT CANNOT PLAY THE REAL GAME. A duel is now the real Arcademy class in the
+ * player's window (ui/duel/arcademyHost.js), and that is a DOM game the bot
+ * has no hands for. So the bot reports a BELIEVABLE result for the game the
+ * card holds: a per-game plausible range (ui/duel/games.js `bot`), drawn from
+ * the seeded practice rng, landing inside the player's grace window. It wins
+ * some and loses more.
  *
  * THE RECEIVER DECIDES, on the bot's side too: an inbound start is refused
  * with `sub:'busy'` while it is in a duel or its result hold, on an unexpected
@@ -30,12 +32,10 @@
  * ==========================================================================*/
 
 import { GoonMatchPhase } from '../../core/contracts.js';
-import { createBoard, openingSpawn, play, deepest } from './board.js';
-import { DUEL_INTRO_MS, duelSeed, pickLength } from './rules.js';
+import { DUEL_INTRO_MS, pickLength } from './rules.js';
+import { botResult, knownGame, normalizeGameId, pickDuelGame } from './games.js';
 import { DUEL_GAP_EXTRA_MS, DUEL_MAX_PER_MATCH } from './duelController.js';
 
-/** Moves a second while the board is up: a slow thumb to a quick one. */
-export const BOT_MOVES_PER_SEC = Object.freeze([0.8, 2.0]);
 /** How late its score lands after the clock runs out (inside the player's grace window). */
 export const BOT_REPORT_MS = Object.freeze([300, 1400]);
 /** Its own result hold, mirroring the player's. */
@@ -44,26 +44,6 @@ export const BOT_RESULT_HOLD_MS = 2600;
 export const THROW_FIRST_MS = 75000;
 export const THROW_RETRY_MS = 30000;
 export const THROW_CHANCE = 0.4;
-
-const NOVICE = Object.freeze(['down', 'left', 'down', 'left', 'right', 'down']);
-const ALL = Object.freeze(['up', 'down', 'left', 'right']);
-
-/**
- * Play `moves` inputs on a board the way a novice does. Pure given `rand`.
- * @returns {{tile:number, score:number}}
- */
-export function botPlay(board, moves, rand) {
-  for (let i = 0; i < moves; i++) {
-    let dir = rand() < 0.8 ? NOVICE[Math.floor(rand() * NOVICE.length)] : ALL[Math.floor(rand() * ALL.length)];
-    let res = play(board, dir);
-    if (!res.moved) {
-      // Stuck that way: try the others once, like a thumb that notices.
-      for (const d of ALL) { if (d === dir) continue; res = play(board, d); if (res.moved) break; }
-      if (!res.moved) break;   // locked board
-    }
-  }
-  return { tile: deepest(board), score: board.score };
-}
 
 /**
  * @param {object} o
@@ -95,12 +75,12 @@ export function createBotDuel({
     if (cur) cur.cancels.push(c);
   }
 
-  function begin(idx, len, by) {
-    cur = { idx, len: pickLength(len), by, stage: 'intro', cancels: [] };
+  function begin(idx, len, by, game) {
+    cur = { idx, len: pickLength(len), by, game: normalizeGameId(game), stage: 'intro', cancels: [] };
     nextIdx = Math.max(nextIdx, idx + 1);
     started++;
-    say('duel ' + idx + ' ' + (by === 'bot' ? 'thrown' : 'accepted') + ', ' + cur.len + 's');
-    // The board runs from the end of the intro to the end of the clock; the bot plays it all in one go
+    say('duel ' + idx + ' ' + (by === 'bot' ? 'thrown' : 'accepted') + ', ' + cur.game + ', ' + cur.len + 's');
+    // The game runs from the end of the intro to the end of the clock; the bot "finishes" it
     // at the end (nobody can see its screen) and reports a beat later, the way a person's score lands.
     at(DUEL_INTRO_MS + cur.len * 1000 + pick(BOT_REPORT_MS), report);
   }
@@ -108,12 +88,9 @@ export function createBotDuel({
   function report() {
     if (!cur || cur.stage === 'result') return;
     cur.stage = 'result';
-    const board = createBoard(duelSeed(match && match.matchSeed, cur.idx));
-    openingSpawn(board);
-    const moves = Math.round(cur.len * pick(BOT_MOVES_PER_SEC));
-    const mine = botPlay(board, moves, rand);
-    if (match) match.sendDuel({ sub: 'score', idx: cur.idx, score: mine.score, tile: mine.tile });
-    say('duel ' + cur.idx + ' reported tile ' + mine.tile + ' score ' + mine.score + ' (' + moves + ' moves)');
+    const mine = botResult(cur.game, cur.len, rand);
+    if (match) match.sendDuel({ sub: 'score', idx: cur.idx, game: cur.game, score: mine.score, tile: mine.tile | 0 });
+    say('duel ' + cur.idx + ' reported ' + cur.game + ' tile ' + (mine.tile | 0) + ' score ' + mine.score);
     at(BOT_RESULT_HOLD_MS, () => close(true));
   }
 
@@ -148,7 +125,8 @@ export function createBotDuel({
     if (cur) { refuse(f.idx, cur.stage === 'result' ? 'result-hold' : 'busy'); return; }
     if (f.idx !== nextIdx) { refuse(f.idx, 'idx'); return; }
     if (!room()) { refuse(f.idx, 'gated'); return; }
-    begin(f.idx, f.len_s, 'them');
+    if (!knownGame(f.game)) { refuse(f.idx, 'game'); return; }
+    begin(f.idx, f.len_s, 'them', f.game);
   }
 
   function onBusy(f) {
@@ -171,8 +149,9 @@ export function createBotDuel({
     if (!match || !match.peerSupportsNight) return false;
     const idx = nextIdx;
     const len = pickLength(match.peerDuelLen);
-    begin(idx, len, 'bot');
-    if (!match.sendDuel({ sub: 'start', idx, len_s: len })) {
+    const game = pickDuelGame(match.matchSeed, idx);
+    begin(idx, len, 'bot', game);
+    if (!match.sendDuel({ sub: 'start', idx, len_s: len, game })) {
       if (cur && cur.idx === idx) { nextIdx = idx; started = Math.max(0, started - 1); close(false); }
       return false;
     }
@@ -203,7 +182,7 @@ export function createBotDuel({
   return {
     tryThrow,
     get busy() { return !!cur; },
-    get state() { return cur ? { idx: cur.idx, len: cur.len, by: cur.by, stage: cur.stage } : null; },
+    get state() { return cur ? { idx: cur.idx, len: cur.len, by: cur.by, stage: cur.stage, game: cur.game } : null; },
     get nextIdx() { return nextIdx; },
     dispose() {
       stopThrows();
