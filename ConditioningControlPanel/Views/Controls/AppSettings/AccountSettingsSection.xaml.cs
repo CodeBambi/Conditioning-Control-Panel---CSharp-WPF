@@ -48,7 +48,8 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         public AccountSettingsSection()
         {
             InitializeComponent();
-            Loaded += (_, __) => { RefreshTierBadge(); RefreshChaster(); };
+            Loaded += (_, __) => { RefreshTierBadge(); RefreshChaster(); SubscribeChaster(true); };
+            Unloaded += (_, __) => SubscribeChaster(false);
             // Settings is a page you arrive at, not one you sit on: repainting when it becomes
             // visible is enough to catch a login that happened on another door, and costs nothing
             // when it does not.
@@ -115,15 +116,31 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
 
         // ------------------------------------------------------------------ Chaster
 
-        /// <summary>The Chaster row: Linked plus the lock, or Not linked. The page owns the rest.</summary>
+        private bool _chasterSubscribed;
+
+        // The username lands a moment after the link (or after launch): repaint when it does.
+        private void SubscribeChaster(bool on)
+        {
+            var chaster = App.Chaster;
+            if (chaster == null || on == _chasterSubscribed) return;
+            _chasterSubscribed = on;
+            if (on) chaster.ProfileChanged += OnChasterProfileChanged;
+            else chaster.ProfileChanged -= OnChasterProfileChanged;
+        }
+
+        private void OnChasterProfileChanged() => Dispatcher.BeginInvoke(new Action(RefreshChaster));
+
+        /// <summary>The Chaster row: the account's picture and name plus the lock, or Not linked. The page owns the rest.</summary>
         internal void RefreshChaster()
         {
             try
             {
                 var chaster = App.Chaster;
                 var linked = chaster?.IsLinked == true;
+                var profile = linked ? chaster!.Profile : null;
+                ChasterBadge.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
                 TxtChasterStatus.Text = linked
-                    ? Loc.Get("chaster_account_name") + " · " + Loc.Get("chaster_account_linked")
+                    ? Loc.Get("chaster_account_name") + " · " + (profile?.Username ?? Loc.Get("chaster_account_linked"))
                     : Loc.Get("chaster_account_name") + " · " + Loc.Get("label_not_connected");
                 TxtChasterInfo.Text = linked
                     ? Views.Tabs.ChasterTabView.AccountLockLine(chaster)

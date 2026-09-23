@@ -74,6 +74,7 @@ public sealed partial class ChasterService
         try
         {
             if (!IsLinked) return SetLock(null, LockLookup.Unlinked);
+            _ = EnsureProfileAsync(ct); // once per link; a no-op once the name is in hand
             var locks = await GetLocksAsync(ct).ConfigureAwait(false);
             if (locks == null) return SetLock(Lock, LockLookup.Away);
             var chosenId = (_options() ?? ChasterOptions.Off).LockId;

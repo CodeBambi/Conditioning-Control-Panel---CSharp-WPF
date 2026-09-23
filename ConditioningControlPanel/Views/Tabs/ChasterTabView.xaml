@@ -317,12 +317,13 @@
                     <!-- The account, in plain view: linked, which lock, and the way out. -->
                     <Border x:Name="AccountStrip" VerticalAlignment="Center" Visibility="Collapsed" Margin="0,0,10,0"
                             Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
-                            BorderThickness="1.5" CornerRadius="19" Height="38" Padding="14,0,6,0"
+                            BorderThickness="1.5" CornerRadius="19" Height="38" Padding="6,0,6,0"
                             ToolTip="{loc:Str chaster_account_strip_tip}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Ellipse Width="8" Height="8" Fill="#5FFFD0" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBlock Text="{loc:Str chaster_account_name}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                            <!-- Whose account: the Chaster picture and username (letter + "Chaster" until they arrive). -->
+                            <ctrl:ChasterAccountBadge x:Name="AccountBadge" AvatarSize="24" VerticalAlignment="Center"
+                                                      TextElement.FontFamily="/Fonts/#Fredoka, Segoe UI" TextElement.FontSize="13" TextElement.FontWeight="Bold"
+                                                      TextElement.Foreground="{DynamicResource TextLightBrush}"/>
                             <TextBlock Text="{loc:Str chaster_account_linked}" FontSize="12" Margin="6,0,0,0"
                                        Foreground="#5FFFD0" VerticalAlignment="Center"/>
                             <Rectangle Width="1" Height="16" Fill="{DynamicResource GlassBorderBrush}" Margin="10,0" VerticalAlignment="Center"/>
