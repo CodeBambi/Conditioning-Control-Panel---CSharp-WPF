@@ -633,8 +633,11 @@ export function makeMediaPrep(o = {}) {
  * silently, so the sender checks the cap before anything leaves. Fire and forget, no receipt.
  *
  *   {t:'duel', sub:'cfg',   len_s}               host only, once at Live: the duel length it picked
- *   {t:'duel', sub:'start', idx, len_s}          a game card was thrown: duel number idx begins
- *   {t:'duel', sub:'score', idx, score, tile}    this side's final board for duel idx
+ *   {t:'duel', sub:'start', idx, len_s, game}    a game card was thrown: duel number idx begins
+ *   {t:'duel', sub:'score', idx, score, tile, game}  this side's own result for duel idx
+ *
+ * `game` names the Arcademy class the card holds (ui/duel/games.js). An EMPTY game is a frame
+ * from a build that only knew The Deep End, and means the-deep-end.
  *   {t:'duel', sub:'busy',  idx}                 the receiver could not run that start: the thrower cancels
  *
  * Every number is pinned in core/wire.js CLAMPED_FIELDS, both directions.
@@ -655,6 +658,8 @@ export const DUEL_SCORE_MAX = 1000000;
 export const DUEL_TILE_MAX = 17;
 export function clampDuelNum(v) { return Math.min(clampVoiceCount(v), DUEL_SCORE_MAX); }
 export function clampDuelTile(v) { return Math.min(clampVoiceCount(v), DUEL_TILE_MAX); }
+/** An Arcademy game key: lower-case letters, digits and hyphens, 1..32. Anything else is ''. */
+export function clampDuelGame(v) { return typeof v === 'string' && /^[a-z0-9-]{1,32}$/.test(v) ? v : ''; }
 
 export function makeDuel(o = {}) {
   return {
@@ -665,6 +670,7 @@ export function makeDuel(o = {}) {
     len_s: clampDuelLen(o.len_s),
     score: clampDuelNum(o.score),
     tile: clampDuelTile(o.tile),
+    game: clampDuelGame(o.game),
   };
 }
 

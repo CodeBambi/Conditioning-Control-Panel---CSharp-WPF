@@ -2910,6 +2910,7 @@ if (typeof window !== 'undefined') {
       get match() { return currentMatch; },
       get transport() { return currentTransport; },
       get router() { return router; },
+      get hud() { return hudHandle; },
       get prefs() { return prefs; },
       get matchLog() { return matchLog; },
       get assets() { return assets; },

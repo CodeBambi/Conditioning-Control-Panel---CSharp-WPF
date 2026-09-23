@@ -2,11 +2,12 @@
  * ui/duel/duelController.js - game night duels, end to end on one side.
  *
  * A GAME CARD drops from bubble pops (ui/drops.js rolls it, ui/arsenal.js holds
- * it). Throwing it sends `t:'duel' sub:'start'`; both screens show a short
- * "incoming game" card, then the same seeded Deep End board for the duel
- * length. At the end each side sends `sub:'score'` with its own board, waits a
- * grace window for theirs and computes the same winner from the same two
- * numbers. The winner adds DUEL_WIN_BONUS to its own match score through
+ * it). Throwing it sends `t:'duel' sub:'start'` naming the game the card holds
+ * (ui/duel/games.js); both screens show a short "incoming game" card, then the
+ * REAL Arcademy class (ui/duel/arcademyHost.js, started through `runGame`) on
+ * the same duel seed for the duel length. At the end each side sends
+ * `sub:'score'` with the class's own result, waits a grace window for theirs
+ * and computes the same winner from the same numbers. The winner adds DUEL_WIN_BONUS to its own match score through
  * GoonScoring.awardBonus, which rides the next state tick. A report that never
  * arrives makes the duel a TIE: nobody wins a bonus off a dropped frame.
  *
@@ -35,10 +36,11 @@
  * ==========================================================================*/
 
 import { GoonMatchPhase } from '../../core/contracts.js';
-import { createBoard, openingSpawn, play, deepest } from './board.js';
 import {
   DUEL_INTRO_MS, DUEL_MIN_FINISHED, DUEL_REPORT_GRACE_MS, bonusFor, cardEligible, duelOutcome, duelSeed, pickLength,
 } from './rules.js';
+import { duelGame, knownGame, normalizeGameId, pickDuelGame } from './games.js';
+import { seedToString } from '../../core/rng.js';
 import { getDuelLength } from '../screens/customize.js';
 import { finishedMatches } from '../nightProgress.js';
 
@@ -86,9 +88,12 @@ export function takeFirstCardHint() {
  * @param {Function} [o.finished] finished-match count (tests)
  * @param {Function} [o.duelLength] this player's Customize pick (tests)
  * @param {Function} [o.isPractice] true in practice: the card drops from the first match (the bot plays)
+ * @param {Function} [o.runGame] ({game, seed, len, onEnd}) => handle | Promise<handle> | null, where
+ *   handle = {result(): {game, score, tile?}, destroy()}. Default: the view's startGame (the real
+ *   Arcademy class). Tests pass a fake.
  */
 export function createDuelController({
-  match, view = null, audio = null, onLog = null,
+  match, view = null, audio = null, onLog = null, runGame = null,
   now = () => Date.now(),
   later = (fn, ms) => { const t = setTimeout(fn, ms); return () => clearTimeout(t); },
   finished = finishedMatches,
@@ -96,7 +101,7 @@ export function createDuelController({
   isPractice = () => false,
 } = {}) {
   const ms = stateOf(match);
-  let cur = null;            // {idx, len, board, mine, stage, by, cancels[]}
+  let cur = null;            // {idx, len, game, seed, run, mine, stage, by, cancels[]}
   let returnCard = null;     // set by the HUD once the arsenal exists
   const peerScores = new Map();
   const unsubs = [];
@@ -130,20 +135,48 @@ export function createDuelController({
     if (cur) cur.cancels.push(cancel);
   }
 
-  function begin(idx, len, by) {
-    cur = { idx, len: pickLength(len), by, board: null, mine: null, stage: 'intro', cancels: [], endsAt: 0 };
+  /** The class runner: an injected one (tests), else the view's (the real Arcademy class). */
+  function startRun(spec) {
+    try {
+      if (typeof runGame === 'function') return runGame(spec);
+      if (view && typeof view.startGame === 'function') return view.startGame(spec);
+    } catch (e) { log({ t: 'duel-run-failed', why: String((e && e.message) || e) }); }
+    return null;
+  }
+
+  function dropRun(c) {
+    if (!c || !c.run) return;
+    const r = c.run;
+    c.run = null;
+    try { r.destroy(); } catch (_e) { /* a class that will not die must not keep the duel */ }
+  }
+
+  function begin(idx, len, by, game) {
+    const id = normalizeGameId(game);
+    cur = { idx, len: pickLength(len), game: id, seed: '', run: null, by, mine: null, stage: 'intro', cancels: [], endsAt: 0 };
     ms.nextIdx = Math.max(ms.nextIdx, idx + 1);
     ms.started++;
-    const seed = duelSeed(match && match.matchSeed, idx);
-    cur.board = createBoard(seed);
-    openingSpawn(cur.board);
+    cur.seed = 'goon-duel|' + seedToString(duelSeed(match && match.matchSeed, idx));
     sfx('gg-fire');
-    v('intro', { by, len: cur.len, hint: takeFirstCardHint() });
-    log({ t: 'duel-start', idx, len: cur.len, by });
+    const row = duelGame(id);
+    v('intro', { by, len: cur.len, game: id, name: row ? row.name : id, rule: row ? row.rule : '', hint: takeFirstCardHint() });
+    log({ t: 'duel-start', idx, len: cur.len, by, game: id });
     at(DUEL_INTRO_MS, () => {
       cur.stage = 'play';
       cur.endsAt = now() + cur.len * 1000;
-      v('board', cur.board, { secondsLeft: cur.len });
+      v('play', { game: id, secondsLeft: cur.len });
+      const mine = cur;
+      // The class may ring its own bell first (a Deep End ceiling ends the class early): its end is
+      // our end. The duel clock still wins when the class runs longer.
+      const spec = { game: id, seed: cur.seed, len: cur.len, onEnd: () => { if (cur === mine) endPlay(); } };
+      const adopt = (h) => {
+        if (!h) return;
+        if (cur !== mine || mine.stage !== 'play') { try { h.destroy(); } catch (_e) { /* gone */ } return; }
+        mine.run = h;
+      };
+      const r = startRun(spec);
+      if (r && typeof r.then === 'function') r.then(adopt, (e) => log({ t: 'duel-run-failed', why: String((e && e.message) || e) }));
+      else adopt(r);
       tick();
     });
   }
@@ -156,19 +189,22 @@ export function createDuelController({
     at(250, tick);
   }
 
-  /** One swipe / arrow. Returns the move result, or null when no board is live. */
-  function input(dir) {
-    if (!cur || cur.stage !== 'play') return null;
-    const res = play(cur.board, dir);
-    if (res.moved) v('board', cur.board, { merges: res.merges });
-    return res;
+  /** This side's result: the class's own, read at the bell. No class (it never loaded) = zero. */
+  function readMine(c) {
+    const row = duelGame(c.game);
+    let r = null;
+    try { r = c.run ? c.run.result() : null; } catch (_e) { r = null; }
+    const out = { game: c.game, score: Math.max(0, Math.round(Number(r && r.score) || 0)) };
+    if (!row || row.tiled) out.tile = Math.max(0, Math.round(Number(r && r.tile) || 0));
+    return out;
   }
 
   function endPlay() {
     if (!cur || cur.stage !== 'play') return;
     cur.stage = 'wait';
-    cur.mine = { tile: deepest(cur.board), score: cur.board.score };
-    if (match) match.sendDuel({ sub: 'score', idx: cur.idx, score: cur.mine.score, tile: cur.mine.tile });
+    cur.mine = readMine(cur);
+    dropRun(cur);
+    if (match) match.sendDuel({ sub: 'score', idx: cur.idx, game: cur.game, score: cur.mine.score, tile: cur.mine.tile | 0 });
     v('waiting');
     if (peerScores.has(cur.idx)) { resolve(); return; }
     at(DUEL_REPORT_GRACE_MS, resolve);
@@ -185,7 +221,7 @@ export function createDuelController({
     if (bonus > 0 && match && match.scoring && typeof match.scoring.awardBonus === 'function') match.scoring.awardBonus(bonus);
     if (outcome === 'win') ms.summary.won++; else if (outcome === 'lose') ms.summary.lost++; else ms.summary.tied++;
     sfx(outcome === 'win' ? 'gg-endured' : 'gg-drop-dud');
-    v('result', { outcome, bonus, mine: cur.mine, theirs: theirs || { tile: 0, score: 0 } });
+    v('result', { outcome, bonus, game: cur.game, mine: cur.mine, theirs: theirs || { game: cur.game, tile: 0, score: 0 } });
     log({ t: 'duel-end', idx: cur.idx, outcome, bonus, reported: !!theirs });
     at(RESULT_HOLD_MS, close);
   }
@@ -194,6 +230,7 @@ export function createDuelController({
   function close(played = true) {
     if (!cur) return;
     for (const c of cur.cancels) { try { c(); } catch (_e) { /* gone */ } }
+    dropRun(cur);
     peerScores.delete(cur.idx);
     if (played) ms.notBefore = now() + cur.len * 1000 + DUEL_GAP_EXTRA_MS;
     cur = null;
@@ -219,8 +256,10 @@ export function createDuelController({
     if (!isLive()) return;
     if (cur) { refuse(f.idx, cur.stage === 'result' ? 'result-hold' : 'busy'); return; }
     if (f.idx !== ms.nextIdx) { refuse(f.idx, 'idx'); return; }
+    // A game this build does not have: refuse, the thrower gets its card back.
+    if (!knownGame(f.game)) { refuse(f.idx, 'game'); return; }
     if (!roomForDuel()) { refuse(f.idx, 'gated'); return; }
-    begin(f.idx, f.len_s, 'them');
+    begin(f.idx, f.len_s, 'them', f.game);
   }
 
   function onBusy(f) {
@@ -237,7 +276,7 @@ export function createDuelController({
     if (!f) return;
     if (f.sub === 'cfg') return;   // kept by the engine (match.peerDuelLen)
     if (f.sub === 'score') {
-      peerScores.set(f.idx, { tile: f.tile, score: f.score });
+      peerScores.set(f.idx, { game: normalizeGameId(f.game), tile: f.tile, score: f.score });
       if (cur && cur.idx === f.idx && cur.stage === 'wait') resolve();
       return;
     }
@@ -257,11 +296,10 @@ export function createDuelController({
   if (match && typeof match.onDuelFrame === 'function') unsubs.push(match.onDuelFrame(onFrame));
   if (match && typeof match.onPhaseChanged === 'function') unsubs.push(match.onPhaseChanged(onPhase));
   if (isLive()) onPhase(GoonMatchPhase.Live);
-  v('bind', { input });
+  v('bind', { endNow: () => endPlay() });
 
   return {
     busy,
-    input,
     /** The HUD hands the arsenal's re-arm here once it exists (a refused throw returns the card). */
     setReturnCard(fn) { returnCard = typeof fn === 'function' ? fn : null; },
     /** The arsenal's seam for the game card slot. */
@@ -277,14 +315,17 @@ export function createDuelController({
       /** Show the slot at all: the peer speaks night, the player's second match (any practice match). */
       visible() { return !!(match && match.peerSupportsNight) && seen() >= DUEL_MIN_FINISHED; },
       busy,
-      throwCard() {
+      /** @param {{game?:string}} [o] a card that already names its game (a known id) keeps it. */
+      throwCard(o) {
         if (busy() || !isLive() || !roomForDuel()) return false;
         if (!match || !match.peerSupportsNight) return false;
         const idx = ms.nextIdx;
         const len = myLen();
         // Begin FIRST, then send: a 'busy' answer that comes back fast must find the duel it cancels.
-        begin(idx, len, 'you');
-        if (!match.sendDuel({ sub: 'start', idx, len_s: len })) {
+        // The card's game: deterministic in (match seed, idx), named in the frame so both sides agree.
+        const game = o && o.game && knownGame(o.game) ? String(o.game) : pickDuelGame(match.matchSeed, idx);
+        begin(idx, len, 'you', game);
+        if (!match.sendDuel({ sub: 'start', idx, len_s: len, game })) {
           if (cur && cur.idx === idx) { ms.nextIdx = idx; ms.started = Math.max(0, ms.started - 1); close(false); }
           return false;
         }
@@ -293,8 +334,9 @@ export function createDuelController({
       firstHint: () => takeFirstCardHint(),
     },
     /** Test seam. */
-    get state() { return cur ? { idx: cur.idx, len: cur.len, stage: cur.stage, by: cur.by } : null; },
-    get board() { return cur ? cur.board : null; },
+    get state() { return cur ? { idx: cur.idx, len: cur.len, stage: cur.stage, by: cur.by, game: cur.game, seed: cur.seed } : null; },
+    get run() { return cur ? cur.run : null; },
+    get game() { return cur ? cur.game : null; },
     get nextIdx() { return ms.nextIdx; },
     endNow() { endPlay(); },
     dispose() {

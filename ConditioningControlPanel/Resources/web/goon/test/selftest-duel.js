@@ -3,9 +3,11 @@
 //   node Resources/web/goon/test/selftest-duel.js
 //
 // Pins: the shared cap contract (caps.night, peerSpeaksNight), the `t:'duel'` frame's clamps in
-// both directions, the engine's send/receive gates, the pure 2048 rules copied from the arcademy,
-// same-seed boards on both sides, a symmetric winner, the drop eligibility rule, the arsenal slot,
-// and a full two-controller duel over a fake wire with a virtual clock.
+// both directions (now with the `game` id), the engine's send/receive gates, the games table (which
+// real Arcademy class a card holds), the fenced arcademy stylesheet, the host's pure seams (the deck
+// as a provider manifest, the in-memory store), a symmetric winner for tiled and untiled games, the
+// drop eligibility rule, the arsenal slot, and a full two-controller duel over a fake wire with a
+// virtual clock and a FAKE class runner (the real class needs a DOM: the CDP shot proves that half).
 
 import { serialize, parse } from '../core/wire.js';
 import {
@@ -15,7 +17,11 @@ import {
 import { local as localCaps } from '../core/caps.js';
 import { GoonMatchService } from '../core/match.js';
 import { GoonScoring } from '../core/scoring.js';
-import { createBoard, openingSpawn, move, play, deepest, serialize as boardText, isLocked } from '../ui/duel/board.js';
+import {
+  DUEL_GAMES, DEFAULT_DUEL_GAME, duelGame, knownGame, normalizeGameId, pickDuelGame, botResult,
+} from '../ui/duel/games.js';
+import { scopeArcCss } from '../ui/duel/arcCss.js';
+import { manifestFromDeck, memoryStore } from '../ui/duel/arcademyHost.js';
 import {
   duelSeed, duelOutcome, bonusFor, cardEligible, pickLength, DUEL_WIN_BONUS, DUEL_INTRO_MS, DUEL_REPORT_GRACE_MS,
 } from '../ui/duel/rules.js';
@@ -122,33 +128,76 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   ok(s.score === before + DUEL_WIN_BONUS, 'and ignores junk');
 }
 
-// ================================================= 5. the board
+// ================================================= 5. the games table and the host's pure seams
 {
-  const b = createBoard(123n);
-  b.tiles = [{ id: 1, tier: 1, r: 0, c: 0 }, { id: 2, tier: 1, r: 0, c: 1 }, { id: 3, tier: 1, r: 0, c: 2 }, { id: 4, tier: 1, r: 0, c: 3 }];
-  b.nextId = 5;
-  const res = move(b, 'left');
-  ok(res.moved && res.merges.length === 2, 'four in a row merge into two');
-  ok(boardText(b).split('\n')[0] === '2 2 . .', 'merges resolve toward the move', boardText(b));
-  ok(res.score === 8 && b.score === 8, 'score = sum of new tile values');
-  const m2 = move(b, 'left');
-  ok(m2.moved && deepest(b) === 3 && b.tiles.length === 1, 'one merge per tile per move, then the next move merges again');
-  const noop = move(b, 'left');
-  ok(!noop.moved, 'a move that slides nothing is a no-op');
+  ok(DUEL_GAMES.some((g) => g.id === 'the-deep-end') && DUEL_GAMES.some((g) => g.id === 'sort'), 'the table holds The Deep End and Sort');
+  ok(DEFAULT_DUEL_GAME === 'the-deep-end' && normalizeGameId(undefined) === 'the-deep-end' && normalizeGameId('') === 'the-deep-end',
+    'a frame with no game id means The Deep End (older builds)');
+  ok(knownGame('sort') && knownGame(null) && !knownGame('instant-recall-2099'), 'knownGame: table ids and the default, nothing else');
+  for (const g of DUEL_GAMES) {
+    ok(typeof g.path === 'string' && g.path.indexOf('../../../arcademy/games/' + g.id + '/') === 0, 'each row points at the real class', g.id);
+    ok(typeof g.result === 'function' && typeof g.name === 'string' && g.name.length > 0, 'each row reads its own result', g.id);
+  }
+  const deep = duelGame('the-deep-end');
+  ok(deep.tiled === true && duelGame('sort').tiled === false, 'The Deep End is tiled, Sort is not');
+  const snap = { snapshot: () => ({ bestDeepest: 7, score: 412 }) };
+  const dr = deep.result(snap);
+  ok(dr.tile === 7 && dr.score === 412, 'the Deep End result is its own best tier + score', JSON.stringify(dr));
+  const sortRow = duelGame('sort');
+  const lib = { gradeClass: (i) => ({ composite: i.correct / (i.correct + i.wrong) }) };
+  const sr = sortRow.result({ diagnostics: () => ({ live: true, correct: 3, wrong: 1, perfect: 0, passed: 0, bestRung: 1, rungCap: 8, longestChain: 3 }) }, { lib });
+  ok(Math.round(sr.score) === 750, 'the Sort result is its own composite x1000', JSON.stringify(sr));
+  ok(sortRow.result({ diagnostics: () => ({ live: false }) }, { lib }).score === 0, 'a Sort class that never started scores 0');
 
-  const a1 = createBoard(duelSeed(0xABCDEFn, 0)); openingSpawn(a1);
-  const a2 = createBoard(duelSeed(0xABCDEFn, 0)); openingSpawn(a2);
-  ok(boardText(a1) === boardText(a2), 'same duel seed = same opening board');
-  for (const dir of ['left', 'up', 'right', 'down', 'left', 'left', 'up']) { play(a1, dir); play(a2, dir); }
-  ok(boardText(a1) === boardText(a2), 'same seed + same moves = same board');
-  const c1 = createBoard(duelSeed(0xABCDEFn, 1)); openingSpawn(c1);
+  const picks = new Set();
+  for (let i = 0; i < 6; i++) picks.add(pickDuelGame(0xABCDEFn, i));
+  ok(picks.size === DUEL_GAMES.length, 'cards alternate across the whole table', [...picks].join(','));
+  ok(pickDuelGame(0xABCDEFn, 3) === pickDuelGame(0xABCDEFn, 3) && pickDuelGame(null, 0) === pickDuelGame(0n, 0), 'the pick is deterministic and null-safe');
+
+  let x = 99;
+  const rand = () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
+  const tiles = []; const scores = [];
+  for (let i = 0; i < 40; i++) { const r = botResult('the-deep-end', 60, rand); tiles.push(r.tile); scores.push(r.score); }
+  ok(Math.min(...tiles) >= 5 && Math.max(...tiles) <= 7 && Math.min(...scores) > 0, 'the bot reports a believable Deep End result', tiles.join(''));
+  const s1 = botResult('sort', 60, rand);
+  ok(s1.game === 'sort' && s1.tile === undefined && s1.score >= 320 && s1.score <= 760, 'and a believable Sort result', JSON.stringify(s1));
+  ok(botResult('nope', 60, () => 0.5).game === 'the-deep-end', 'an unknown game falls back to the default row');
+
   ok(duelSeed(0xABCDEFn, 0) !== duelSeed(0xABCDEFn, 1), 'the next duel gets its own seed');
   ok(duelSeed(null, 0) === duelSeed(0n, 0), 'a missing match seed does not throw');
 
-  const full = createBoard(1n);
-  let id = 1;
-  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) full.tiles.push({ id: id++, tier: ((r + c) % 2) + 1, r, c });
-  ok(isLocked(full), 'a checkerboard is locked');
+  // The fenced arcademy sheet: palette + class rules scoped, the page's own html/body rules dropped.
+  const css = ':root { --pink:#f0f; }\nhtml, body { margin:0 }\nbody { color:red }\n.arc-stamp { color:var(--pink) }\n'
+    + '.btn.primary, #arc-fx { x:1 }\n@keyframes arc-pop { from { opacity:0 } }\n@keyframes other { from { opacity:0 } }\n'
+    + '@media (max-width: 600px) { .arc-meter { gap:2px } body { y:1 } }\n@font-face { src:url(fonts/a.woff2) }';
+  const out = scopeArcCss(css, '.gg-arc', 'https://ccp.game/arcademy/styles.css');
+  ok(out.includes('.gg-arc{') && out.includes('--pink:#f0f'), ':root becomes the scope (the palette)', out);
+  ok(out.includes('.gg-arc .arc-stamp{') && out.includes('.gg-arc .btn.primary'), 'class rules are fenced under the scope');
+  ok(!/(^|[\s,])(html|body)\b/.test(out.replace(/\.gg-arc/g, '')) && !out.includes('#arc-fx'), 'html, body and ids never leak onto the goon page');
+  ok(out.includes('@keyframes arc-pop') && !out.includes('@keyframes other'), 'arc- keyframes kept, others dropped');
+  ok(out.includes('@media (max-width: 600px){') && out.includes('.gg-arc .arc-meter'), 'media blocks are filtered the same way');
+  ok(out.includes('https://ccp.game/arcademy/fonts/a.woff2'), 'font urls are made absolute to the sheet');
+
+  const man = manifestFromDeck([
+    { kind: 'image', url: 'https://ccp.assets/a.jpg' }, { kind: 'video', url: 'https://ccp.assets/.temp/c.webm', clip: true },
+    { kind: 'image', url: 'blob:http://x/1' }, null, { kind: 'image' },
+  ]);
+  ok(man.length === 3 && man[0] === 'https://ccp.assets/a.jpg', 'an image with an extension is the provider\'s to classify');
+  ok(man[1].kind === 'loop' && man[2].kind === 'still', 'videos deal as loops, extensionless blobs as stills', JSON.stringify(man));
+
+  const st = memoryStore();
+  st.mergeGameMeta('sort', { bestChain: 4 });
+  st.mergeGameMeta('sort', { bestRung: 2 });
+  const gm = st.gameMeta('sort');
+  ok(gm.bestChain === 4 && gm.bestRung === 2 && st.gameMeta('x') && Object.keys(st.gameMeta('x')).length === 0, 'the duel store keeps meta in memory only');
+  gm.bestChain = 99;
+  ok(st.gameMeta('sort').bestChain === 4, 'and hands out copies');
+
+  const df = makeDuel({ sub: 'start', idx: 1, len_s: 60, game: 'sort' });
+  ok(df.game === 'sort', 'the start frame carries the game id');
+  ok(makeDuel({ sub: 'start', game: 'Sort; drop' }).game === '' && makeDuel({ sub: 'start' }).game === '', 'a junk or missing game id clamps to empty');
+  const round = parse(serialize(makeDuel({ sub: 'score', idx: 0, score: 7, tile: 0, game: 'sort' })));
+  ok(round.game === 'sort', 'the game id survives the wire');
 }
 
 // ================================================= 6. rules
@@ -161,6 +210,9 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   ok(duelOutcome({ tile: 5, score: 1 }, { tile: 4, score: 9999 }) === 'win', 'highest tile wins before score');
   ok(duelOutcome({ tile: 1, score: 4 }, null) === 'win', 'a peer that never reported counts as 0');
   ok(duelOutcome({ tile: 0, score: 0 }, null) === 'tie', 'two empty boards tie');
+  ok(duelOutcome({ game: 'sort', score: 500 }, { game: 'sort', score: 400 }) === 'win', 'an untiled game is score alone');
+  ok(duelOutcome({ game: 'sort', tile: 1, score: 400 }, { game: 'sort', tile: 9, score: 500 }) === 'lose', 'a stray tile never decides an untiled game');
+  ok(duelOutcome({ game: 'the-deep-end', tile: 6, score: 1 }, { tile: 5, score: 900 }) === 'win', 'The Deep End stays tile first, then score');
   ok(bonusFor('win') === DUEL_WIN_BONUS && bonusFor('tie') === 0 && bonusFor('lose') === 0, 'only a win pays');
   ok(!cardEligible({ peerNight: true, finished: 0, inDuel: false, held: 0 }), 'first match: no game cards');
   ok(cardEligible({ peerNight: true, finished: 1, inDuel: false, held: 0 }), 'second match: game cards drop');
@@ -216,14 +268,22 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
 
   const views = { h: [], g: [] };
   const view = (tag) => new Proxy({}, { get: (_t, k) => (...a) => views[tag].push(k) });
-  const H = createDuelController({ match: host, view: view('h'), now: () => now, later, finished: () => 3, duelLength: () => 90 });
-  const G = createDuelController({ match: guest, view: view('g'), now: () => now, later, finished: () => 3, duelLength: () => 120 });
+  // The class runner: the real one mounts an Arcademy class (a DOM), this one is scripted.
+  const runs = { h: [], g: [] };
+  const runner = (tag) => (spec) => {
+    const r = { spec, tile: 0, score: 0, destroyed: 0, result() { return { game: spec.game, tile: this.tile, score: this.score }; }, destroy() { this.destroyed++; } };
+    runs[tag].push(r);
+    return r;
+  };
+  const H = createDuelController({ match: host, view: view('h'), runGame: runner('h'), now: () => now, later, finished: () => 3, duelLength: () => 90 });
+  const G = createDuelController({ match: guest, view: view('g'), runGame: runner('g'), now: () => now, later, finished: () => 3, duelLength: () => 120 });
 
   ok(wireLog.some((f) => f.sub === 'cfg' && f.len_s === 90), 'host announces its duel length at Live');
   ok(H.arsenalHook.eligible(0) && H.arsenalHook.visible(), 'second match against a night peer: a card can drop');
 
   // The GUEST throws: the host's pick (90) must win over the guest's own (120).
-  ok(G.arsenalHook.throwCard() === true, 'guest throws a game card');
+  ok(G.arsenalHook.throwCard({ game: 'the-deep-end' }) === true, 'guest throws a game card');
+  ok(wireLog.some((f) => f.sub === 'start' && f.game === 'the-deep-end'), 'the start frame names the game');
   ok(G.state && H.state && G.state.idx === 0 && H.state.idx === 0, 'both sides are in duel 0');
   ok(G.state.len === 90 && H.state.len === 90, "the host's length wins", `${G.state.len}/${H.state.len}`);
   ok(H.busy() && G.busy() && !H.arsenalHook.eligible(0), 'throws pause and no card drops mid-duel');
@@ -231,17 +291,22 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   ok(G.arsenalHook.throwCard() === false, 'a second card cannot start over a running duel');
 
   advance(DUEL_INTRO_MS + 1);
-  ok(H.state.stage === 'play' && G.state.stage === 'play', 'then the board');
-  ok(boardText(H.board) === boardText(G.board), 'same board on both screens');
+  ok(H.state.stage === 'play' && G.state.stage === 'play', 'then the game');
+  ok(runs.h.length === 1 && runs.g.length === 1 && H.run === runs.h[0], 'each side started its class');
+  ok(runs.h[0].spec.game === 'the-deep-end' && runs.g[0].spec.game === 'the-deep-end', 'the same game on both screens');
+  ok(runs.h[0].spec.seed === runs.g[0].spec.seed && /^goon-duel\|\d+$/.test(runs.h[0].spec.seed), 'the same seed on both screens', runs.h[0].spec.seed);
+  ok(runs.h[0].spec.len === 90 && typeof runs.h[0].spec.onEnd === 'function', 'the class gets the duel length and an end hook');
+  ok(views.h.includes('play'), 'the view opens its stage');
 
   // Host plays well, guest does nothing.
-  for (let i = 0; i < 40; i++) for (const dir of ['left', 'down', 'right', 'down']) H.input(dir);
-  ok(H.board.score > 0, 'host scored on its board');
+  runs.h[0].tile = 7; runs.h[0].score = 640;
   const hostBefore = host.scoring.score;
   const guestBefore = guest.scoring.score;
 
   advance(90 * 1000 + 300);
   ok(H.state && H.state.stage === 'result' && G.state && G.state.stage === 'result', 'both resolved once both scores crossed');
+  ok(runs.h[0].destroyed >= 1 && runs.g[0].destroyed >= 1 && !H.run, 'the duel bell tears both classes down');
+  ok(wireLog.some((f) => f.sub === 'score' && f.tile === 7 && f.score === 640 && f.game === 'the-deep-end'), 'the host reports its class\'s own result');
   ok(host.scoring.score === hostBefore + DUEL_WIN_BONUS, 'the winner gets the bonus', `${host.scoring.score}`);
   ok(guest.scoring.score === guestBefore, 'the loser gets nothing');
   ok(duelSummary().won >= 0, 'the recap summary is readable');
@@ -256,7 +321,6 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   ok(H.arsenalHook.throwCard() === true && H.state.idx === 1 && G.state && G.state.idx === 1, 'duel 1 on the next index');
   advance(DUEL_INTRO_MS + 90 * 1000 + 300);
   ok(H.state.stage === 'wait', 'host waits for a report that never comes');
-  for (let i = 0; i < 20; i++) for (const dir of ['left', 'down', 'right', 'down']) H.input(dir);
   const before = host.scoring.score;
   const tiedBefore = duelSummary(host).tied;
   advance(DUEL_REPORT_GRACE_MS + 10);
@@ -267,15 +331,46 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   advance(90 * 1000 + DUEL_GAP_EXTRA_MS);
 
   // Mercy mid-duel: leaving Live ends the duel with no bonus.
-  host._send = (msg) => { guest._onMessageReceived(parse(serialize(msg))); };
-  guest._send = (msg) => { host._onMessageReceived(parse(serialize(msg))); };
-  H.arsenalHook.throwCard();
+  host._send = (msg) => { wireLog.push(msg); guest._onMessageReceived(parse(serialize(msg))); };
+  guest._send = (msg) => { wireLog.push(msg); host._onMessageReceived(parse(serialize(msg))); };
+  H.arsenalHook.throwCard({ game: 'sort' });
   advance(DUEL_INTRO_MS + 1);
+  const live = runs.h[runs.h.length - 1];
+  ok(live.spec.game === 'sort' && G.state && G.state.game === 'sort', 'a Sort card plays Sort on both sides');
   const s0 = host.scoring.score;
   host._phase = GoonMatchPhase.Recap;
   host._ev.phaseChanged.emit(GoonMatchPhase.Recap, () => {});
   ok(!H.busy() && host.scoring.score === s0, 'leaving Live closes the duel, no bonus');
+  ok(live.destroyed >= 1, 'and tears the class down');
   host._phase = GoonMatchPhase.Live;
+  guest._phase = GoonMatchPhase.Recap;
+  guest._ev.phaseChanged.emit(GoonMatchPhase.Recap, () => {});
+  guest._phase = GoonMatchPhase.Live;
+
+  // The class ends on its own (a Deep End ceiling): its end is our end, before the duel clock.
+  advance(90 * 1000 + DUEL_GAP_EXTRA_MS);
+  ok(H.arsenalHook.throwCard({ game: 'the-deep-end' }) === true, 'another duel');
+  advance(DUEL_INTRO_MS + 1);
+  const early = runs.h[runs.h.length - 1];
+  early.tile = 11; early.score = 9000;
+  early.spec.onEnd({ metrics: { composite: 1 } });
+  ok(H.state && H.state.stage !== 'play', 'the class ringing its own bell ends this side at once', JSON.stringify(H.state));
+  ok(wireLog.some((f) => f.sub === 'score' && f.tile === 11), 'and reports the result it ended on');
+
+  // An unknown game id is refused like any other bad start: the thrower gets its card back.
+  advance(2 * (90 * 1000 + DUEL_GAP_EXTRA_MS) + DUEL_REPORT_GRACE_MS + 10000);
+  ok(!H.busy() && !G.busy(), 'both sides are quiet again', JSON.stringify([H.state, G.state]));
+  const nIdx = G.nextIdx;
+  const before2 = wireLog.length;
+  host._send(makeDuel({ sub: 'start', idx: nIdx, len_s: 60, game: 'instant-recall-2099' }));
+  ok(wireLog.slice(before2).some((f) => f.sub === 'busy' && f.idx === nIdx) && !G.busy(), 'an unknown game is refused with busy');
+
+  // An old frame with no game id means The Deep End.
+  const before3 = runs.g.length;
+  host._send({ t: 'duel', sub: 'start', idx: nIdx, len_s: 60 });
+  advance(DUEL_INTRO_MS + 1);
+  ok(G.state && G.state.game === 'the-deep-end' && runs.g.length === before3 + 1 && runs.g[before3].spec.game === 'the-deep-end',
+    'a start without a game id plays The Deep End', JSON.stringify(G.state));
 
   H.dispose(); G.dispose();
 }
@@ -456,11 +551,13 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
     let x = seed >>> 0;
     const rand = () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
     let card = 0;
-    const H = createDuelController({ match: host, now: () => now, later, finished: () => 0, duelLength: () => 60, isPractice: () => true });
+    const result = { tile: 0, score: 0 };
+    const runGame = (spec) => ({ result: () => ({ game: spec.game, tile: result.tile, score: result.score }), destroy() {} });
+    const H = createDuelController({ match: host, runGame, now: () => now, later, finished: () => 0, duelLength: () => 60, isPractice: () => true });
     H.setReturnCard(() => { card++; });
     const B = createBotDuel({ match: guest, rand, now: () => now, later, throws: false });
     return {
-      host, guest, H, B, log,
+      host, guest, H, B, log, result,
       flush() { held = false; while (queue.length) { const [to, f] = queue.shift(); to._onMessageReceived(f); } },
       get card() { return card; },
     };
@@ -470,7 +567,7 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   {
     const p = practicePair(7);
     ok(p.H.arsenalHook.visible() && p.H.arsenalHook.eligible(0), 'practice, first match: the game card is live');
-    ok(p.H.arsenalHook.throwCard() === true, 'the player throws a duel at the bot');
+    ok(p.H.arsenalHook.throwCard({ game: 'the-deep-end' }) === true, 'the player throws a duel at the bot');
     ok(p.B.busy && p.B.state.idx === 0 && p.B.state.len === 60, 'the bot accepts the next idx at the host length', JSON.stringify(p.B.state));
     ok(!p.log.some(([w, f]) => w === 'bot' && f.sub === 'busy'), 'accepting is silence (no busy frame)');
     advance(DUEL_INTRO_MS + 60 * 1000);
@@ -478,7 +575,7 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
     advance(1500);   // BOT_REPORT_MS tops out at 1400, well inside DUEL_REPORT_GRACE_MS
     const score = p.log.find(([w, f]) => w === 'bot' && f.sub === 'score');
     ok(!!score && score[1].idx === 0, 'the bot reports its score inside the grace window');
-    ok(!!score && score[1].tile >= 2 && score[1].score > 0, 'the bot actually played the board', JSON.stringify(score && score[1]));
+    ok(!!score && score[1].tile >= 2 && score[1].score > 0 && score[1].game === 'the-deep-end', 'the bot reports a believable result for the card\'s game', JSON.stringify(score && score[1]));
     ok(p.H.state && p.H.state.stage === 'result', 'the result lands through the same controller', JSON.stringify(p.H.state));
     const sum = duelSummary(p.host);
     ok(booked(p.host) === 1 && sum.lost === 1, 'an idle player (no moves) loses to the bot, booked in the recap tally', JSON.stringify(sum));
@@ -498,13 +595,13 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   {
     // A steady player wins some and loses some: the bot is beatable and not a pushover.
     let wins = 0; let losses = 0;
-    const dirs = ['down', 'left', 'down', 'right'];
     for (let s = 1; s <= 24; s++) {
       const p = practicePair(s * 97);
-      p.H.arsenalHook.throwCard();
+      p.H.arsenalHook.throwCard({ game: s % 2 ? 'the-deep-end' : 'sort' });
       advance(DUEL_INTRO_MS + 10);
-      const presses = 30 + (s * 13) % 90;
-      for (let i = 0; i < presses; i++) p.H.input(dirs[i % dirs.length]);
+      // A steady player: Deep End tier 5..8, Sort composite .3...8.
+      p.result.tile = 5 + (s % 4);
+      p.result.score = s % 2 ? 250 + (s * 37) % 900 : 300 + (s * 53) % 500;
       advance(60 * 1000 + DUEL_REPORT_GRACE_MS + 5000);
       const sum = duelSummary(p.host);
       wins += sum.won; losses += sum.lost;
