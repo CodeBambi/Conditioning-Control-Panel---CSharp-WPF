@@ -179,6 +179,7 @@ export function createGoonMediaPool() {
   function rebuildEntries() {
     entries = hostEntries.concat(localEntries, onlineEntries);
     deck = [];          // re-deal with the new entries in the mix
+    clipDeck = [];
     recent.length = 0;
   }
 
@@ -187,8 +188,17 @@ export function createGoonMediaPool() {
     if (!e || !e.url) return null;
     const kind = e.kind === 'video' ? 'video' : (e.kind === 'image' ? 'image' : '');
     if (!kind) return null;
-    return { kind, name: String(e.name || ''), url: String(e.url) };
+    const v = { kind, name: String(e.name || ''), url: String(e.url) };
+    // `clip`: a video that IS a gif (Scrolller's GifClip rendition), short and made to
+    // loop. Only these may stand in for a gif on a gif surface (drawClip); a player's
+    // own video files stay video-window material.
+    if (kind === 'video' && e.clip) v.clip = true;
+    return v;
   }
+
+  /** The gif clips, dealt off their own shuffle (drawClip). */
+  let clipDeck = [];
+  let lastClip = -1;
 
   function reshuffle() {
     deck = entries.map((_, i) => i);
@@ -379,6 +389,9 @@ export function createGoonMediaPool() {
    *  that shows an asset name. Keep this regex identical to dtrh/hostMedia.js's SHARE_RE. */
   const HOST_SHARE_RE = /^online(?:\d{1,3}):/i;
   const hostName = (e) => String((e && e.name) || '').replace(HOST_SHARE_RE, '');
+  /** The host manifest's remote entries carry that same stamp: its videos are the app-wide
+   *  online pool's gif clips, so they may stand in for a gif too. */
+  const isHostRemote = (e) => HOST_SHARE_RE.test(String((e && e.name) || ''));
 
   return {
     /** Swap in a manifest: {images:[{name,url}], videos:[...], skipped, truncated}. */
@@ -386,7 +399,7 @@ export function createGoonMediaPool() {
       const src = m || {};
       hostEntries = [];
       for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) hostEntries.push(v); }
-      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url }); if (v) hostEntries.push(v); }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url, clip: isHostRemote(e) }); if (v) hostEntries.push(v); }
       skipped = src.skipped | 0;
       truncated = !!src.truncated;
       rebuildEntries();
@@ -428,7 +441,7 @@ export function createGoonMediaPool() {
       const src = m || {};
       onlineEntries = [];
       for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) onlineEntries.push(v); }
-      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url }); if (v) onlineEntries.push(v); }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url, clip: true }); if (v) onlineEntries.push(v); }
       rebuildEntries();
       return counts();
     },
@@ -457,6 +470,37 @@ export function createGoonMediaPool() {
 
     /** Draw specifically an image/video (null when that kind is absent). */
     drawKind: drawKindInner,
+
+    /**
+     * A GIF CLIP for a gif surface (the glitch/drain wash, flashes), or null when the deck has
+     * none. Online stills are posters BY DESIGN (the host's GifStill tenant), so a gif surface
+     * that draws from the image lane never moves on a Scrolller-only deck; the motion lives in
+     * the GifClip video rendition, marked `clip` here. A player's own video files never come
+     * out of this draw. Its own shuffle, no immediate repeat, and it does not spend the main
+     * deck, so the image and video draws around it are unchanged.
+     */
+    drawClip() {
+      const pool = [];
+      for (let i = 0; i < entries.length; i++) if (entries[i].clip) pool.push(i);
+      if (!pool.length) { clipDeck = []; return null; }
+      clipDeck = clipDeck.filter((i) => entries[i] && entries[i].clip);
+      if (!clipDeck.length) {
+        clipDeck = pool.slice();
+        for (let i = clipDeck.length - 1; i > 0; i--) {
+          const j = (Math.random() * (i + 1)) | 0;
+          [clipDeck[i], clipDeck[j]] = [clipDeck[j], clipDeck[i]];
+        }
+        if (clipDeck.length > 1 && clipDeck[clipDeck.length - 1] === lastClip) {
+          [clipDeck[0], clipDeck[clipDeck.length - 1]] = [clipDeck[clipDeck.length - 1], clipDeck[0]];
+        }
+      }
+      const i = clipDeck.pop();
+      lastClip = i;
+      return view(entries[i]);
+    },
+
+    /** How many gif clips the deck holds (drawClip's pool). */
+    clipCount: () => entries.reduce((n, e) => n + (e.clip ? 1 : 0), 0),
 
     /**
      * A NON-CONSUMING look at what the next drawKind(kind) would most likely

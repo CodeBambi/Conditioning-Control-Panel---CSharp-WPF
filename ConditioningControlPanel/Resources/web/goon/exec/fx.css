@@ -539,6 +539,28 @@ html[data-gg-perf="lite"] .gg-ring { box-shadow: none; }
   transition: opacity var(--gg-drain-fade, 900ms) ease;
 }
 .gg-drain.is-on { opacity: var(--gg-drain-op, 0.35); }
+/* GIF CLIPS (2026-09-23, exec/clip.js). A gif surface plays the gif's video
+   rendition when the deck has one, as a muted looping <video> in the image's
+   place. A pop/payload flash is the same .gg-flash node, so its land, hold and
+   exit are untouched; `contain` is what an <img> did with its own aspect. A wash
+   clip sits INSIDE its pane (first child) and covers it like the background
+   image did; the pane's grow/shrink and opacity carry it in and out. */
+video.gg-flash {
+  object-fit: contain;
+  background: transparent;
+}
+.gg-clip { pointer-events: none; }
+.gg-clip--wash {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* The drain VEIL composes its picture under a dim and a desaturating sheet; a
+   child video sits above the pane's own background, so it wears the same two
+   as a filter instead. */
+.gg-clip--veil { filter: brightness(0.58) saturate(0.6); }
 /* Juice pass: the SUSTAINED drain veil (exec/brainDrain.js, in its own layer)
    sinks in as it ramps: from 1.06 down to 1 while its opacity rises, and back
    out the same way. The pop panes in #gg-fx-bubbles are motion.js's. */

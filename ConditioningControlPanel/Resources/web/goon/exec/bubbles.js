@@ -70,6 +70,8 @@ import { pickSpiralImage } from './spiralGen.js';
 import { perfLite } from './perfTier.js';
 // The lite tier's still-preferred image draw — see drawImage() below.
 import { drawStillImage } from './media.js';
+// A gif surface plays the gif CLIP when the deck has one (online stills are posters).
+import { drawClipHandle, prepareClip, stopClip } from './clip.js';
 // The juice pass (2026-09-23): every pop's wash grows out of the pop point and is
 // sucked back into it, pop flashes land from the bubble, big pops shake a little.
 import {
@@ -603,6 +605,7 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
       soon(() => {
         if (h.gen !== gen) return;               // a newer pop took the pane over
         if (h.glitchTimer) { try { clearTimeout(h.glitchTimer); } catch (_e) { /* ignore */ } h.glitchTimer = 0; }
+        dropClip(h);
         try { h.el.remove(); } catch (_e) { /* ignore */ }
         if (holds[kind] === h) delete holds[kind];
       }, 1000);
@@ -610,9 +613,19 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     return h;
   }
 
+  /** Stop the clip a pane is playing (the pane goes away, or a new picture takes it). */
+  function dropClip(h) {
+    if (!h) return;
+    h.clipGen = (h.clipGen | 0) + 1;       // a clip still loading for this pane is now stale
+    if (h.clip) { stopClip(h.clip); h.clip = null; }
+    try { if (h.clipHandle && h.clipHandle.release) h.clipHandle.release(); } catch (_e) { /* ignore */ }
+    h.clipHandle = null;
+  }
+
   const popFlashes = new Set();
   function pruneFlashes() {
     for (const rec of Array.from(popFlashes)) {
+      if (rec.pending) continue;              // a clip still loading owns its slot
       if (!rec.node || !rec.node.isConnected) {
         popFlashes.delete(rec);
         try { if (rec.handle && rec.handle.release) rec.handle.release(); } catch (_e) { /* ignore */ }
@@ -671,7 +684,12 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     landFlash(img, { dx, dy, rot, opacity });
   }
 
-  /** The scattered flash a popped flash-bubble throws (payloadFx.flash, bounded). */
+  /** The scattered flash a popped flash-bubble throws (payloadFx.flash, bounded).
+   *
+   *  A flash is a gif surface: when the deck holds gif clips (the online flavour's
+   *  GifClip lane) it plays one as a muted looping <video>, same class, same land and
+   *  exit. A PEER pop keeps the peer's picture (their attack is the point) and lite
+   *  keeps its still; a clip that shows no frame in time falls back to the still. */
   function popFlash(strength, peer, origin) {
     pruneFlashes();
     const host = layer();
@@ -680,49 +698,110 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     const dur = scale(900, 1600, strength);
     for (let i = 0; i < amount; i++) {
       if (popFlashes.size >= MAX_POP_FLASH) break;
+      const clip = (!peer && !perfLite()) ? drawClipHandle(media) : null;
+      if (clip) { popClipFlash(clip, dur, peer, origin); continue; }
       const handle = drawImage(peer);
       if (!handle) break;
-      const img = document.createElement('img');
+      placePopFlash(null, handle, dur, origin);
+    }
+  }
+
+  /** Load a clip for a pop flash; on a dud, the still it would have been. */
+  function popClipFlash(clip, dur, peer, origin) {
+    const slot = { pending: true, node: null, handle: clip };
+    popFlashes.add(slot);
+    prepareClip(clip, { className: 'gg-flash gg-clip' }, (v) => {
+      popFlashes.delete(slot);
+      const host = layer();
+      if (!v || !host) {
+        if (v) stopClip(v);
+        try { if (clip.release) clip.release(); } catch (_e) { /* ignore */ }
+        if (!host) return;
+        const still = drawImage(peer);
+        if (still) placePopFlash(null, still, dur, origin);
+        return;
+      }
+      placePopFlash(v, clip, dur, origin);
+    });
+  }
+
+  /** Place one pop flash: an <img> for `handle` when `node` is null, else the
+   *  ready clip. Lands from the pop point, exits inside its hold, always retires. */
+  function placePopFlash(node, handle, dur, origin) {
+    const host = layer();
+    if (!host || typeof document === 'undefined') {
+      if (node) stopClip(node);
+      try { if (handle.release) handle.release(); } catch (_e) { /* ignore */ }
+      return;
+    }
+    const isClip = !!node;
+    const img = node || document.createElement('img');
+    if (!isClip) {
       img.className = 'gg-flash';
       img.decoding = 'async';
       img.alt = '';
-      img.style.setProperty('--gg-flash-dur', `${dur}ms`);
-      img.style.setProperty('--gg-flash-op', '0.95');
-      img.style.setProperty('left', `${(14 + Math.random() * 72).toFixed(1)}vw`);
-      img.style.setProperty('top', `${(16 + Math.random() * 64).toFixed(1)}vh`);
-      img.style.setProperty('--gg-flash-rot', `${(Math.random() * 16 - 8).toFixed(1)}deg`);
-      const rec = { node: img, handle };
-      popFlashes.add(rec);
-      let killed = false;
-      const kill = () => {
-        if (killed) return;
-        killed = true;
-        popFlashes.delete(rec);
-        try { img.remove(); } catch (_e) { /* ignore */ }
-        try { img.removeAttribute('src'); } catch (_e) { /* ignore */ }
-        try { if (handle.release) handle.release(); } catch (_e) { /* ignore */ }
-      };
-      img.addEventListener('animationend', kill, { once: true });
+    }
+    img.style.setProperty('--gg-flash-dur', `${dur}ms`);
+    img.style.setProperty('--gg-flash-op', '0.95');
+    img.style.setProperty('left', `${(14 + Math.random() * 72).toFixed(1)}vw`);
+    img.style.setProperty('top', `${(16 + Math.random() * 64).toFixed(1)}vh`);
+    img.style.setProperty('--gg-flash-rot', `${(Math.random() * 16 - 8).toFixed(1)}deg`);
+    const rec = { node: img, handle };
+    popFlashes.add(rec);
+    let killed = false;
+    const kill = () => {
+      if (killed) return;
+      killed = true;
+      popFlashes.delete(rec);
+      if (isClip) stopClip(img);
+      try { img.remove(); } catch (_e) { /* ignore */ }
+      if (!isClip) { try { img.removeAttribute('src'); } catch (_e) { /* ignore */ } }
+      try { if (handle.release) handle.release(); } catch (_e) { /* ignore */ }
+    };
+    img.addEventListener('animationend', kill, { once: true });
+    if (isClip) {
+      img.addEventListener('error', kill, { once: true });
+    } else {
       img.onerror = kill;
       img.src = handle.url;
-      host.appendChild(img);
-      // It LANDS from the bubble that threw it (juice pass): travel from the
-      // pop point to its spot, overshoot, settle; exits inside its own hold.
-      landFromPop(img, origin, 0.95);
-      scheduleFlashExit(img, dur, { opacity: 0.95, rot: parseFloat(img.style.getPropertyValue('--gg-flash-rot')) || 0 });
-      soon(kill, dur + 600);
     }
+    host.appendChild(img);
+    // It LANDS from the bubble that threw it (juice pass): travel from the
+    // pop point to its spot, overshoot, settle; exits inside its own hold.
+    landFromPop(img, origin, 0.95);
+    scheduleFlashExit(img, dur, { opacity: 0.95, rot: parseFloat(img.style.getPropertyValue('--gg-flash-rot')) || 0 });
+    soon(kill, dur + 600);
   }
 
   /** The drain wash: dim + blur-behind with a faint image over it (showBraindrain). */
   function popDrain(strength, peer, origin) {
     const h = holdOn('drain', 'gg-drain', scaleD(0.35, 0.62, strength), scale(1500, 4500, strength), origin);
     if (!h) return h;
+    // THE FULLSCREEN GIF MOVES (owner, 2026-09-23: "glitch bubbles fullscreen gifs do
+    // not animate"). A gif clip plays over the pane as a muted looping <video>; the
+    // still stays underneath until its first frame, and is what a dud leaves behind.
+    const clip = (!peer && !perfLite()) ? drawClipHandle(media) : null;
     const handle = drawImage(peer);
     if (handle) {
       releaseHold(h);
       h.handle = handle;
       try { h.el.style.setProperty('background-image', `url("${handle.url}")`); } catch (_e) { /* ignore */ }
+    }
+    if (clip) {
+      dropClip(h);
+      const want = h.clipGen;
+      prepareClip(clip, { className: 'gg-clip gg-clip--wash' }, (v) => {
+        if (!v || h.clipGen !== want || !h.el || !h.el.isConnected) {
+          if (v) stopClip(v);
+          try { if (clip.release) clip.release(); } catch (_e) { /* ignore */ }
+          return;
+        }
+        h.clip = v;
+        h.clipHandle = clip;
+        try { h.el.insertBefore(v, h.el.firstChild || null); } catch (_e) { dropClip(h); }
+      });
+    } else if (handle) {
+      dropClip(h);          // a fresh still replaces the last pop's clip
     }
     return h;
   }
