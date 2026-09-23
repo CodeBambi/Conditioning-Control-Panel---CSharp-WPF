@@ -23,6 +23,9 @@
  * ==========================================================================*/
 
 import { sanitizeText, TEXT_MAX_CHARS } from './sanitize.js';
+// Juice pass (2026-09-23): an unsolved card LEAVES (shrink + fade, 220 ms)
+// instead of vanishing in one frame. A solved card has its own exit (fx.css).
+import { fadeOut } from './motion.js';
 
 /** Built-in phrases. Short, neutral, duel-flavoured; typable on any layout. */
 export const LOCK_PHRASES = Object.freeze([
@@ -232,7 +235,15 @@ export function createLockCardView(container, o = {}) {
         input.removeEventListener('paste', onPaste);
         give.removeEventListener('click', onGive);
       } catch (_e) { /* ignore */ }
-      try { card.remove(); } catch (_e) { /* ignore */ }
+      // The card's own timing is already over (dispose IS the end); the exit
+      // below is visual only and removes the node when it lands.
+      const gone = () => { try { card.remove(); } catch (_e) { /* ignore */ } };
+      const out = solved ? null : fadeOut(card);
+      if (out) {
+        try { input.disabled = true; } catch (_e) { /* ignore */ }
+        try { out.addEventListener('finish', gone, { once: true }); } catch (_e) { gone(); }
+        soon(gone, 400);
+      } else gone();
     },
     focus() {
       try { input.focus({ preventScroll: true }); } catch (_e) { try { input.focus(); } catch (_e2) { /* ignore */ } }
