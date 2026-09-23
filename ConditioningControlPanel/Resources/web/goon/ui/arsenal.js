@@ -51,6 +51,8 @@ import { GoonPayloadRateLimiter, GoonReceiptStatus } from '../core/scoring.js';
 import { localMonotonicMs } from '../core/clock.js';
 import { dressGhost } from './throwPreview.js';
 import { S } from './strings.js';
+import { GAME_CARD_COST } from './duel/rules.js';
+import { DUEL_COPY } from './duel/copy.js';
 
 /**
  * The rails, in owner order — which is also the KEYBOARD order (1..7), so new
@@ -79,6 +81,11 @@ export const ARSENAL_ITEMS = Object.freeze([
   { id: 'braindrain', rail: 'right', kind: GoonPayloadKind.BrainDrain, img: 'item_braindrain', label: 'brain drain', durationMs: 60000, cost: 3 },
   { id: 'spiral', rail: 'left', kind: GoonPayloadKind.Spiral, img: 'item_spiral', label: 'spiral', durationMs: 40000, cost: 2 },
   { id: 'emote', rail: 'right', kind: null, img: 'item_emote', label: 'emote', durationMs: 0, cost: 0 },
+  /* GAME NIGHT (2026-09-23): the Deep End game card. Not a payload (kind null, so no number key),
+     but it IS earned: `duel` makes it a drop-pool slot. Only built when mountArsenal gets a `duel`
+     hook (ui/duel/duelController.js), only visible from the player's second match against a peer
+     that speaks night, and at most one held. */
+  { id: 'gamecard', rail: 'right', kind: null, duel: true, img: 'item_gamecard', label: DUEL_COPY.cardLabel, durationMs: 0, cost: GAME_CARD_COST },
 ]);
 
 /** Payload slots, i.e. everything the number keys can reach. */
@@ -97,7 +104,7 @@ const PAYLOAD_ITEMS = ARSENAL_ITEMS.filter((i) => i.kind !== null);
  * @param {number} cost resolved cost (costOf is authority; see buildTile)
  */
 export function needsArming(item, cost) {
-  return !!item && item.kind !== null && (cost | 0) > 0;
+  return !!item && (item.kind !== null || !!item.duel) && (cost | 0) > 0;
 }
 
 /** How many of an item a single drop hands you. */
@@ -114,6 +121,8 @@ const DRAG_SLOP_PX = 6;
 const RECEIPT_KEEP = 3;
 const RECEIPT_MS = 8000;
 const TIP_MS = 1000;
+/** The first game card's one-line hint stays long enough to read. */
+const HINT_MS = 6000;
 
 // ------------------------------------------------------------------ helpers
 
@@ -238,6 +247,7 @@ export function mountArsenal({
   leftHost, rightHost, receiptsHost = null, coolHost = null,
   match, audio = null, fx = null,
   getDropTarget = null, onTargeted = null, onEmote = null, onFired = null, onLog = null,
+  duel = null,
 } = {}) {
   const led = createLedger();
   const cool = makeCooldownProbe(match);
@@ -252,6 +262,7 @@ export function mountArsenal({
   for (const item of ARSENAL_ITEMS) {
     // A kind OUR client cannot run never gets a slot at all.
     if (item.kind !== null && ourCaps && !ourCaps.includes(item.kind)) continue;
+    if (item.duel && !duel) continue;   // no duel controller, no game card slot
     const host = item.rail === 'left' ? leftHost : rightHost;
     const tile = buildTile(item, host);
     if (tile) tiles.set(item.id, tile);
@@ -263,7 +274,7 @@ export function mountArsenal({
     // contract has not landed yet (it returns Infinity for those, and an
     // Infinity weight would take that item out of the drop roll entirely).
     const known = item.kind === null ? 0 : costOf(item.kind);
-    const cost = item.kind === null ? 0 : (Number.isFinite(known) ? known : (item.cost | 0));
+    const cost = item.duel ? Number(item.cost) : item.kind === null ? 0 : (Number.isFinite(known) ? known : (item.cost | 0));
     // NO PLATE: the item art IS the button. Chrome would fight the sticker cutouts.
     const root = el('button', 'gg-item');
     if (!root) return null;
@@ -391,6 +402,7 @@ export function mountArsenal({
         paintStack(rec);
         continue;
       }
+      if (item.duel) { paintGameCard(rec); continue; }
       let state = 'ready';
       let word = '';
       if (isSpent(rec)) { state = 'used'; word = 'used'; }
@@ -415,6 +427,19 @@ export function mountArsenal({
       if (cooling) text(coolHost, 'next payload in ' + Math.ceil(coolMs / 1000) + 's');
     }
     if (armed && (armed.state !== 'ready' || !isLive())) disarm();
+  }
+
+  /** The game card slot: hidden until it can ever drop, 'busy' while a duel runs. */
+  function paintGameCard(rec) {
+    const show = rec.armed > 0 || (!!duel && duel.visible());
+    if (rec.root) rec.root.hidden = !show;
+    let state = 'ready';
+    let word = '';
+    if (rec.armed <= 0) { state = 'locked'; word = S.arsenal.locked; }
+    else if (duel && duel.busy()) { state = 'cooling'; word = DUEL_COPY.busy; }
+    setState(rec, state, word);
+    paintStack(rec);
+    cls(rec.root, 'is-glow', state === 'ready');
   }
 
   function setState(rec, state, word) {
@@ -446,12 +471,12 @@ export function mountArsenal({
 
   // ------------------------------------------------------------- firing
 
-  function tipOn(rec, message) {
+  function tipOn(rec, message, ms = TIP_MS) {
     if (!rec.tip) return;
     text(rec.tip, message);
     rec.tip.hidden = false;
     try { clearTimeout(rec.tipTimer); } catch (_e) { /* gone */ }
-    rec.tipTimer = setTimeout(() => { rec.tip.hidden = true; }, TIP_MS);
+    rec.tipTimer = setTimeout(() => { rec.tip.hidden = true; }, ms);
     led.add(() => { try { clearTimeout(rec.tipTimer); } catch (_e) { /* gone */ } });
   }
 
@@ -470,7 +495,10 @@ export function mountArsenal({
 
   /** The one path to the engine. Returns the engine's {ok,error,id}. */
   function fire(rec) {
+    if (rec && rec.item.duel) return fireGameCard(rec);
     if (!rec || rec.item.kind === null) return { ok: false, error: 'not a payload', id: null };
+    // A duel is running: throws pause until the board closes.
+    if (duel && duel.busy()) { refuse(rec, DUEL_COPY.busy); return { ok: false, error: 'duel', id: null }; }
     if (!match || typeof match.tryFirePayload !== 'function') return { ok: false, error: 'no match', id: null };
 
     // LOCKED outranks every other refusal: nothing else about the tile matters
@@ -508,6 +536,17 @@ export function mountArsenal({
     }
     paint();
     return res;
+  }
+
+  function fireGameCard(rec) {
+    if (rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return { ok: false, error: 'locked', id: null }; }
+    if (!isLive() || !duel || duel.busy() || !duel.throwCard()) { refuse(rec, DUEL_COPY.busy); paint(); return { ok: false, error: 'duel', id: null }; }
+    rec.armed--;
+    sfx(audio, 'gg-fire');
+    spark(rec);
+    if (typeof onLog === 'function') { try { onLog({ t: 'gamecard-out' }); } catch (_e) { /* ignore */ } }
+    paint();
+    return { ok: true, error: null, id: null };
   }
 
   /** A little pip of light thrown from the tile at the monitor. */
@@ -555,6 +594,10 @@ export function mountArsenal({
     const out = [];
     for (const rec of tiles.values()) {
       if (!rec.needsArm) continue;
+      if (rec.item.duel) {
+        if (duel && duel.eligible(rec.armed)) out.push({ id: rec.item.id, kind: null, cost: rec.cost, armed: rec.armed });
+        continue;
+      }
       if (isSpent(rec)) continue;
       if (!peerCanTake(rec.item.kind)) continue;
       out.push({ id: rec.item.id, kind: rec.item.kind, cost: rec.cost, armed: rec.armed });
@@ -575,9 +618,13 @@ export function mountArsenal({
   function armDrop(id, { count = DROP_STACK, from = null, silent = false } = {}) {
     const rec = tiles.get(id);
     if (!rec || !rec.needsArm) return false;
-    rec.armed += Math.max(1, count | 0);
+    if (rec.item.duel && rec.armed > 0) return false;   // one game card at a time
+    rec.armed += rec.item.duel ? 1 : Math.max(1, count | 0);
     paint();
     if (!silent) dropFlourish(rec, from);
+    if (rec.item.duel && duel && typeof duel.firstHint === 'function' && duel.firstHint()) {
+      tipOn(rec, DUEL_COPY.firstHint, HINT_MS);
+    }
     return true;
   }
 
@@ -733,7 +780,7 @@ export function mountArsenal({
     }
 
     led.listen(root, 'pointerdown', (e) => {
-      if (rec.item.kind === null) { if (typeof onEmote === 'function') onEmote(); sfx(audio, 'gg-emote'); return; }
+      if (rec.item.kind === null && !rec.item.duel) { if (typeof onEmote === 'function') onEmote(); sfx(audio, 'gg-emote'); return; }
       // A LOCKED slot is not draggable and not armable: the gesture ends here
       // with a word, so no ghost is ever minted for an item you do not have.
       if (rec.needsArm && rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return; }

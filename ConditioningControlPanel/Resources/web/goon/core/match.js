@@ -68,8 +68,9 @@ import {
   GoonConsts, PAYLOAD_ELEMENT, clampWindowCount, costOf, enumName, isClockMessage,
   makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMediaPrep, makeMercy,
   makePayloadReceipt, makeResult, makeTick, makePayload, makeVoice, peerSpeaksVoice, VOICE_SUBS,
+  makeDuel, peerSpeaksNight, DUEL_SUBS,
 } from './contracts.js';
-import { makeSong, peerSpeaksNight } from './contracts.js';
+import { makeSong } from './contracts.js';
 import { SONG_TITLE_MAX, clampSongSec, wireSongUrl } from './song.js';
 import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
 import { localMonotonicMs } from './clock.js';
@@ -277,6 +278,9 @@ export class GoonMatchService {
     // caps.voice — a revision integer, not an entitlement — and is what stops us sending into a
     // build that will drop the frames without a word (the family has no receipts to notice with).
     this._peerSupportsVoice = false;
+    // Game night: their build speaks `t:'duel'` (caps.night >= 1). Never send a duel frame otherwise.
+    this._peerSupportsNight = false;
+    this._peerDuelLen = 0;
     this._localVoiceNotes = false;
     this._remoteVoiceNotes = false;
 
@@ -366,6 +370,7 @@ export class GoonMatchService {
       connectionHealthChanged: makeEvent(),
       emoteReceived: makeEvent(),
       voiceFrameReceived: makeEvent(),
+      duelFrameReceived: makeEvent(),
       linkChanged: makeEvent(),
       mediaPrepChanged: makeEvent(),
       songChanged: makeEvent(),
@@ -421,6 +426,10 @@ export class GoonMatchService {
   get remoteVoiceNotes() { return this._remoteVoiceNotes; }
   /** Their BUILD advertised `caps.voice >= 1` in the hello. Nothing to do with consent. */
   get peerSupportsVoice() { return this._peerSupportsVoice; }
+  /** Their BUILD advertised `caps.night >= 1`: game night duel frames may be sent. */
+  get peerSupportsNight() { return this._peerSupportsNight; }
+  /** Guest: the duel length the host announced (`t:'duel' sub:'cfg'`), or 0 before it arrives. */
+  get peerDuelLen() { return this._peerDuelLen | 0; }
   /**
    * All three, ANDed — the MATCH's half of "is voice live right now". The other half is the
    * PHASE (Countdown/Live/SuddenDeath) and it is applied at the send/receive door rather than
@@ -580,6 +589,8 @@ export class GoonMatchService {
    * ran. What core owes the service is a frame that is the right shape, from the right phase.
    */
   onVoiceFrame(fn) { return this._ev.voiceFrameReceived.on(fn); }
+  /** Every inbound `t:'duel'` frame, Live/SuddenDeath only, shape-clamped by wire.js. */
+  onDuelFrame(fn) { return this._ev.duelFrameReceived.on(fn); }
   /**
    * fn(isP2P) on the EDGE of `linkIsP2P` — the transport settling on a direct channel, or
    * losing one. It exists for ui/voice/voiceService.js, whose availability bit (and therefore
@@ -992,6 +1003,21 @@ export class GoonMatchService {
   }
 
   /**
+   * GAME NIGHT: one `t:'duel'` frame. The door checks the cap (an old peer would drop it without a
+   * word), the phase (Live/SuddenDeath only) and the sub. Fire and forget.
+   * @returns {boolean} true when the frame reached the transport
+   */
+  sendDuel(fields = {}) {
+    if (this._disposed || this._ended) return false;
+    if (!this._peerSupportsNight) return false;
+    if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) return false;
+    const msg = makeDuel(fields);
+    if (msg.sub === '') return false;
+    this._send(msg);
+    return true;
+  }
+
+  /**
    * Declare whether we are still assembling a library (`media_prep`, §6).
    *
    * Pre-live only, and NOT a term: it clears no confirmation, blocks no phase
@@ -1199,6 +1225,7 @@ export class GoonMatchService {
         case 'voice': this._handleVoice(message); break;
         case 'song': this._handleSong(message); break;
         case 'media_prep': this._handleMediaPrep(message); break;
+        case 'duel': this._handleDuel(message); break;
         case 'result': this._handleRemoteResult(message); break;
         case 'round':
         case 'round_result':
@@ -1754,6 +1781,15 @@ export class GoonMatchService {
     if (!frame.sub || !VOICE_SUBS.includes(frame.sub)) return;
     frame.emote = frame.emote == null ? null : (sanitizeText(frame.emote, EMOTE_ICON_MAX_CHARS) || null);
     this._ev.voiceFrameReceived.emit(frame, (e) => this._warn(`voiceFrame handler threw: ${e && e.message}`));
+  }
+
+  /** Their `t:'duel'` frame. Live/SuddenDeath only; ui/duel/duelController.js owns the rest. */
+  _handleDuel(frame) {
+    if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) return;
+    if (!frame.sub || !DUEL_SUBS.includes(frame.sub)) return;
+    // The host's duel length is kept here so a UI that mounts after the frame still sees it.
+    if (frame.sub === 'cfg' && !this._isHost) this._peerDuelLen = frame.len_s;
+    this._ev.duelFrameReceived.emit(frame, (e) => this._warn(`duelFrame handler threw: ${e && e.message}`));
   }
 
   /**

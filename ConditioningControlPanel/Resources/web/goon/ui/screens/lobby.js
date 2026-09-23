@@ -25,6 +25,7 @@ import { GoonMatchPhase, GoonTransportState } from '../../core/contracts.js';
 import { formatRecord } from '../rivalry.js';
 import { buildSongRow } from './songRow.js';
 import { songClock } from '../../core/song.js';
+import { customizeSection } from './customize.js';
 
 const DUR_MIN_SEC = 60;
 const DUR_MAX_SEC = 3600;
@@ -197,7 +198,7 @@ export function mount(container, ctx) {
   const eyebrow = el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.lobby.eyebrowWaiting })]);
 
   container.appendChild(el('div', { class: 'gg-card gg-lobby' }, [
-    eyebrow, duel, rivalLine, connLine, prepLine, songRow.node, sheetBox, lamps, changedLine,
+    eyebrow, duel, rivalLine, connLine, prepLine, songRow.node, sheetBox, customizeSection({ isHost: match.isHost }), lamps, changedLine,
     el('div', { class: 'gg-lobby-actions' }, [leaveBtn, confirmBtn]),
   ]));
 

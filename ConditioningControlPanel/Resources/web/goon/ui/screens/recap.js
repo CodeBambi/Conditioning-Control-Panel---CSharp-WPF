@@ -27,6 +27,8 @@ import { settleOnce, formatRecord } from '../rivalry.js';
 
 /** Matches already counted by noteMatchFinished (ui/nightProgress.js). */
 const countedMatches = new WeakSet();
+import { duelSummary } from '../duel/duelController.js';
+import { DUEL_COPY } from '../duel/copy.js';
 
 const COLLAPSE_AT = 6;
 const GRACEFUL_MS = 8 * 60 * 1000;
@@ -676,6 +678,7 @@ export function mount(container, ctx) {
         el('p', { class: 'gg-recap-fine', text: S.recap.scoreFineprint }),
         el('p', { class: 'gg-recap-fine', text: S.recap.survived(result.survivedMs) }),
         el('p', { class: 'gg-rival-line', text: rivalLine() }),
+        duelSummary().won > 0 && el('p', { class: 'gg-recap-fine', text: DUEL_COPY.recapLine(duelSummary().won) }),
       ]));
     }
 
