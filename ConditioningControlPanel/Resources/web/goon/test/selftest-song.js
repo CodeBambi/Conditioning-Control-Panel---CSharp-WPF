@@ -20,8 +20,9 @@ import {
 import { local as localCaps } from '../core/caps.js';
 import {
   SONG_DRIFT_MS, SONG_HOST, clampSongSec, clampSongSub, parseSongLink, songClock,
-  songSyncAction, wireSongUrl,
+  songSyncAction, wireSongUrl, SONG_TITLE_MAX,
 } from '../core/song.js';
+import { SONG_META_API, bambicloudFileId, lookupSongMeta } from '../core/songMeta.js';
 import { GoonMatchService } from '../core/match.js';
 import { createLoopbackPair, loopbackOptions } from '../net/loopbackTransport.js';
 import { createSongPlayer } from '../ui/songPlayer.js';
@@ -306,6 +307,40 @@ async function pairOf(guestNight) {
   await tick(1000);
   ok(changes === 2 && b.song.title === 'flood 19', 'then only the latest lands', changes + ' ' + (b.song && b.song.title));
   a.dispose?.(); b.dispose?.();
+}
+
+// ============================================================ 7. the track's real name (core/songMeta.js)
+{
+  const ID = '0b7c1e2a-aaaa-bbbb-cccc-1234567890ab';
+  const reply = (body, okFlag = true) => async () => ({ ok: okFlag, json: async () => body });
+  const good = { files: [{ name: 'Rapid\u0007 Induction\n', uuid: ID, duration: 162000, audioURL: CDN, author: { username: 'x' } }] };
+
+  ok(bambicloudFileId(CDN) === ID, 'a CDN file url yields its uuid');
+  ok(bambicloudFileId('https://example.com/' + ID + '.mp3') === '', 'no uuid off another host');
+  ok(bambicloudFileId('https://' + SONG_HOST + '/folder/track.mp3') === '', 'no uuid off a non-uuid path');
+
+  let asked = null;
+  const seen = await lookupSongMeta(CDN, { fetchFn: async (u, init) => { asked = { u, init }; return reply(good)(); } });
+  ok(seen && seen.title === 'Rapid Induction', 'the API name is the title, control chars stripped', JSON.stringify(seen));
+  ok(seen && seen.url === CDN && seen.durSec === 162, 'audioURL and duration are read');
+  ok(asked && asked.u === SONG_META_API + ID && asked.init.credentials === 'omit', 'asked by uuid, no cookie');
+
+  const long = await lookupSongMeta(CDN, { fetchFn: reply({ files: [{ name: 'x'.repeat(200), audioURL: 'https://evil.example/a.mp3' }] }) });
+  ok(long && long.title.length === SONG_TITLE_MAX && long.url === '', 'a long name clips, an off-CDN audioURL is dropped');
+
+  ok(await lookupSongMeta(CDN, { fetchFn: async () => { throw new Error('offline'); } }) === null, 'a failed fetch falls back (null)');
+  ok(await lookupSongMeta(CDN, { fetchFn: reply(good, false) }) === null, 'a refused answer falls back');
+  ok(await lookupSongMeta(CDN, { fetchFn: async () => ({ ok: true, json: async () => { throw new SyntaxError('bad json'); } }) }) === null, 'bad JSON falls back');
+  ok(await lookupSongMeta(CDN, { fetchFn: reply({ files: [] }) }) === null, 'an empty list falls back');
+  ok(await lookupSongMeta(CDN, { fetchFn: reply({ files: [{ name: '\u0001 ' }] }) }) === null, 'a blank name falls back');
+  const t0 = Date.now();
+  ok(await lookupSongMeta(CDN, { fetchFn: () => new Promise(() => {}), timeoutMs: 50 }) === null && Date.now() - t0 < 1000, 'a hung API times out to null');
+  let called = false;
+  ok(await lookupSongMeta('https://example.com/a.mp3', { fetchFn: async () => { called = true; return reply(good)(); } }) === null && !called, 'a non-CDN url never asks');
+
+  // The page link maps to the CDN first, so it is looked up by the same uuid.
+  const v = parseSongLink('https://bambicloud.com/file/' + ID);
+  ok(bambicloudFileId(v.url) === ID, 'a picked page link is looked up by the same uuid');
 }
 
 console.log(`selftest-song: ${n - failures}/${n} passed`);
