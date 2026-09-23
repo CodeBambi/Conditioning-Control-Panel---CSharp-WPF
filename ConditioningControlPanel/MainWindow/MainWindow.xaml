@@ -1383,7 +1383,11 @@
                          it used to host was a native child HWND, and an HWND on the rail stole
                          the pointer from NavSidebar and made the flyout open and shut on a loop.
                          See Controls/SpiralRailHost.cs. -->
-                    <controls:SpiralRailHost x:Name="SpiralRail"/>
+                    <!-- 2026-09-21 (owner): the medallion left the rail and CIRCE'S TAB took its slot.
+                         The Spiral Room keeps its other doors (the You row, the fuse chip, the Trainer
+                         Card plate, the account menu row). Controls/SpiralRailHost.cs stays in the tree:
+                         SpiralGlyph still reads its StageNumeral. See Controls/ChasterRailChip.cs. -->
+                    <controls:ChasterRailChip x:Name="ChasterRail"/>
                     <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
                     <!-- THE FUSE RAIL CHIP (CONTRACT-FUSE-0816 2.2). A gold clock that appears
                          seven days before the migration ceremony, shakes harder the closer it gets,
@@ -2493,6 +2497,9 @@
                      "spiral" is in ChromeFxNav's Airspace set for the same reason - a browser HWND
                      does not follow a RenderTransform, so this tab crossfades and never slides. -->
                 <views:SpiralTabView x:Name="SpiralTab" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Circe's tab ("chaster"): the Chaster link and the price-per-event tab.
+                     Door: the padlock at the foot of the rail. See Views/Tabs/ChasterTabView.xaml.cs. -->
+                <views:ChasterTabView x:Name="ChasterTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
                 <!-- Lab Tab — RETIRED in Phase 6 of the UX restructure; LabTabView.xaml(.cs) deleted.
                      Its cards live on the Play wall below and "lab" is a permanent ShowTab alias onto it,

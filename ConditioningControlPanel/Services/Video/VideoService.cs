@@ -5918,6 +5918,13 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            // Circe's tab: a video played to its end earns time back. Only this path is "to the
+            // end": a skip, a panic and the black-screen watchdog all leave through other doors.
+            if (!noFrameRendered)
+            {
+                try { App.Chaster?.Note("video"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster video hook"); }
+            }
+
             var settings = App.Settings.Current;
             bool loop = false, troll = false;
 

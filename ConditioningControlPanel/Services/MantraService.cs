@@ -106,6 +106,8 @@ namespace ConditioningControlPanel.Services
         public void BreakStreak()
         {
             if (!IsActive || Streak == 0) return;
+            // Circe's tab: a broken streak pays for every rep that was in it.
+            try { App.Chaster?.Note("mantra", Streak); } catch (Exception ex) { Diag.Swallowed(ex, "chaster mantra hook"); }
             Streak = 0;
             StreakBroken?.Invoke();
             StreakChanged?.Invoke(0);

@@ -429,6 +429,11 @@ namespace ConditioningControlPanel
             // without a cached ceremony timestamp, so this is inert on every install today.
             InitializeDescentFuse();
 
+            // Circe's tab: the flashing "+0:30" over the rail padlock when a price lands.
+            // MainWindow.Chaster.cs. One event subscription on an install that never linked a
+            // Chaster account, because the service raises nothing until it is linked and on.
+            InitializeChasterFlash();
+
             // The Spiral Room's rail row: Collapsed unless this account is in the fog era or has an
             // open spiral. MainWindow.SpiralRoom.cs. Three subscriptions and one Collapsed write on
             // an account with neither, which is every install today.
@@ -1456,6 +1461,10 @@ namespace ConditioningControlPanel
             // HOLD with a five-minute silence tail, and it has to be armed even if something further
             // down this method throws - the whole point is that she says nothing after a panic.
             try { App.EmiDesk?.Fire("panicPressed", null); } catch { }
+
+            // Circe's tab: the way out never costs. Armed up here because most of the ladder below
+            // returns early into a game's own panic rung, and the hold has to cover those too.
+            try { App.Chaster?.NoteSafetyExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
 

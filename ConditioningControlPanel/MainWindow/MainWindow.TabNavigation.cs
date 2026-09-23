@@ -243,6 +243,7 @@ namespace ConditioningControlPanel
             // IsVisibleChanged (Loaded fires once) and disposes the embed on the way out, so
             // leaving the tab leaves no idle Chromium behind it.
             if (SpiralTab != null) SpiralTab.Visibility = Visibility.Collapsed;
+            if (ChasterTab != null) ChasterTab.Visibility = Visibility.Collapsed;
             if (AppSettingsTab != null) AppSettingsTab.Visibility = Visibility.Collapsed;
 
             // Phase 1: no more per-tab style swapping. The rail's active state is a real
@@ -574,6 +575,18 @@ namespace ConditioningControlPanel
                         // same "explain it where it exists" rule descent-vat follows on the
                         // Trainer Card.
                         if (SpiralTab.IsShowingSpiral) MaybeShowFeatureIntro("descent-spiral", "spiral");
+                    }
+                    break;
+
+                // CIRCE'S TAB. Its door is the padlock chip in the rail's pinned cluster, which is
+                // not a door medallion, so the key has no NavDoorMap row: nothing expands and no
+                // "you are here" ring lights, the same as the spiral medallion it replaced.
+                case "chaster":
+                    if (ChasterTab != null)
+                    {
+                        ChasterTab.Visibility = Visibility.Visible;
+                        AnimateTabIn(ChasterTab);
+                        ChasterTab.OnTabShown();
                     }
                     break;
 

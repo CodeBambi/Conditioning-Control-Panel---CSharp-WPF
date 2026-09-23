@@ -5104,6 +5104,70 @@ namespace ConditioningControlPanel.Models
             set { _friendsPresenceShared = value; OnPropertyChanged(); }
         }
 
+        // ---- CHASTER: Circe's tab (Services/Chaster) ----
+        // Device-local on purpose, like the link itself: none of these ride the cloud profile.
+        private bool _chasterTabEnabled;
+        private bool _chasterConsentSeen;
+        private string? _chasterLockId;
+        private List<string> _chasterPrices = new();
+
+        /// <summary>The master switch. Off by default; with it off nothing is ever booked, linked or not.</summary>
+        [JsonProperty]
+        public bool ChasterTabEnabled
+        {
+            get => _chasterTabEnabled;
+            set { _chasterTabEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// The player has read what switching the tab on means (the cap, the floor, that Panic never
+        /// adds, one push a day) and pressed "I understand". Set once, by the inline consent card the
+        /// page shows on the FIRST switch-on and never again. It gates nothing on its own: the master
+        /// switch above is still what the service reads.
+        /// </summary>
+        [JsonProperty]
+        public bool ChasterConsentSeen
+        {
+            get => _chasterConsentSeen;
+            set { _chasterConsentSeen = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>The lock the tab settles to. Null = the only active lock, and never a guess between two.</summary>
+        [JsonProperty]
+        public string? ChasterLockId
+        {
+            get => _chasterLockId;
+            set { _chasterLockId = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>The price rows the player switched on (TabPrices ids). Every price is opt-in, so this starts empty.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> ChasterPrices
+        {
+            get => _chasterPrices;
+            set { _chasterPrices = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private int _chasterDailyLimitMinutes = 180;
+        private int _chasterBacklogLimitMinutes = 720;
+
+        /// <summary>The most a day can add to the lock, in minutes (owner default 3 hours).
+        /// Clamped by TabLimits when read, so a hand edit cannot go past 12 hours.</summary>
+        [JsonProperty]
+        public int ChasterDailyLimitMinutes
+        {
+            get => _chasterDailyLimitMinutes;
+            set { _chasterDailyLimitMinutes = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>The most unpaid time the tab holds, in minutes (owner default 12 hours).</summary>
+        [JsonProperty]
+        public int ChasterBacklogLimitMinutes
+        {
+            get => _chasterBacklogLimitMinutes;
+            set { _chasterBacklogLimitMinutes = value; OnPropertyChanged(); }
+        }
+
         // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----
         // These are the room's own switches, shown in the room's Options and not in Settings, the same
         // way BackRoomTunnel and BackRoomMelt are. They are deliberately NOT the app-wide MediaSource /
