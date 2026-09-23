@@ -87,6 +87,12 @@ public sealed partial class ChasterService : IDisposable
     /// <summary>A price landed (or a credit, or the jackpot wipe). The flashing "+0:30".</summary>
     public event Action<string, TabBooking>? Booked;
 
+    /// <summary>The same booking as <see cref="Booked"/>, raised right after it, with the screen
+    /// point (physical desktop px) of the thing that caused it when the caller named one: the
+    /// popped bubble, the flash that showed. Null for everything else (the pop then lands at the
+    /// cursor). A separate event so the older listeners keep their signature.</summary>
+    public event Action<string, TabBooking, System.Windows.Point?>? BookedAt;
+
     /// <summary>Linked, unlinked, or the link died. Raised on whatever thread found out.</summary>
     public event Action? LinkChanged;
 
@@ -136,7 +142,11 @@ public sealed partial class ChasterService : IDisposable
 
     /// <summary>A priced event happened. Books nothing unless the tab is on, an account is linked
     /// and the player switched this row on. Safe to call from anywhere, on any thread.</summary>
-    public TabBooking Note(string eventId, int units = 1)
+    public TabBooking Note(string eventId, int units = 1) => NoteAt(eventId, null, units);
+
+    /// <summary><see cref="Note"/> with the screen point (physical px) of what caused it, so the
+    /// "+3:00" pops there rather than on the rail.</summary>
+    public TabBooking NoteAt(string eventId, System.Windows.Point? originPx, int units = 1)
     {
         if (!Active(out var options)) return new(0, TabRefusal.Nothing);
         // The first finished session after coming back forgives half of what being away cost,
@@ -144,7 +154,7 @@ public sealed partial class ChasterService : IDisposable
         if (eventId == "session") ForgiveMisses();
         // "misses" has a row so it can be switched on, but only NoteSeen ever books it.
         if (eventId == CircesMisses.EventId) return new(0, TabRefusal.Nothing);
-        return BookSeconds(eventId, TabPrices.Resolve(eventId, options.Prices, units));
+        return BookSeconds(eventId, TabPrices.Resolve(eventId, options.Prices, units), originPx);
     }
 
     /// <summary>CCP is running today. Call at launch and when the local day turns over. With
@@ -174,7 +184,7 @@ public sealed partial class ChasterService : IDisposable
         }
         if (booked > 0)
         {
-            Booked?.Invoke(CircesMisses.EventId, new TabBooking(booked, TabRefusal.None));
+            RaiseBooked(CircesMisses.EventId, new TabBooking(booked, TabRefusal.None), null);
             SchedulePush();
         }
         return booked;
@@ -190,7 +200,7 @@ public sealed partial class ChasterService : IDisposable
             _tab.ForgivableSeconds = 0;
             SaveTab();
         }
-        if (booking.Booked) Booked?.Invoke(CircesMisses.ForgivenEventId, booking);
+        if (booking.Booked) RaiseBooked(CircesMisses.ForgivenEventId, booking, null);
     }
 
     /// <summary>An event that names its own price (an Awareness trigger carries its minutes in
@@ -213,7 +223,7 @@ public sealed partial class ChasterService : IDisposable
             booking = CircesTab.Wipe(_tab, _utcNow(), _runStartUtc);
             if (booking.Booked) SaveTab();
         }
-        if (booking.Booked) Booked?.Invoke(CircesTab.JackpotEventId, booking);
+        if (booking.Booked) RaiseBooked(CircesTab.JackpotEventId, booking, null);
         return booking;
     }
 
@@ -234,7 +244,13 @@ public sealed partial class ChasterService : IDisposable
         return Math.Max(0, RemoteDailySeconds - used);
     }
 
-    private TabBooking BookSeconds(string eventId, int seconds)
+    private void RaiseBooked(string eventId, TabBooking booking, System.Windows.Point? originPx)
+    {
+        Booked?.Invoke(eventId, booking);
+        BookedAt?.Invoke(eventId, booking, originPx);
+    }
+
+    private TabBooking BookSeconds(string eventId, int seconds, System.Windows.Point? originPx = null)
     {
         if (seconds == 0) return new(0, TabRefusal.Nothing);
         TabBooking booking;
@@ -260,7 +276,7 @@ public sealed partial class ChasterService : IDisposable
             }
             if (booking.Booked) SaveTab();
         }
-        if (booking.Booked) Booked?.Invoke(eventId, booking);
+        if (booking.Booked) RaiseBooked(eventId, booking, originPx);
         if (booking.AppliedSeconds > 0) SchedulePush();
         return booking;
     }

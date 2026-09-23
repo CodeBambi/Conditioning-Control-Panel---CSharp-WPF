@@ -73,6 +73,7 @@ public class ChasterHooksTests
             .Where(id => id != CircesMisses.EventId)
             .Where(id => !source.Contains("Note(\"" + id + "\"", StringComparison.Ordinal)
                       && !source.Contains("NoteSeconds(\"" + id + "\"", StringComparison.Ordinal)
+                      && !source.Contains("NoteAt(\"" + id + "\"", StringComparison.Ordinal)
                       && !hooks.Contains("\"" + id + "\"", StringComparison.Ordinal))
             .OrderBy(id => id)
             .ToList();
