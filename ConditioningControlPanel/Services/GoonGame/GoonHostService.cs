@@ -655,6 +655,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "last-opponent-clear":
                     OnLastOpponentClear();
                     break;
+                case "open-prime":       // page's Prime sheet "See Prime": the app's own refusal and upgrade path
+                    TierGate.DemandLab("Goon Game");
+                    break;
             }
         }
 
