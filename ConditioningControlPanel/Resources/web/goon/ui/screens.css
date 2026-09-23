@@ -546,12 +546,36 @@
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
-.gg-count-num.is-beat { animation: ggCountBeat 1s cubic-bezier(.2, .7, .3, 1) 1; }
-@keyframes ggCountBeat {
-  0% { transform: scale(1.28); opacity: 0; }
-  18% { transform: scale(1); opacity: 1; }
-  100% { transform: scale(.94); opacity: .55; }
+/* THUD per number (340 ms, the house curve), then a slow sink while the next
+   second gathers. Two animations on one transform: the sink only takes over
+   after its delay, so the thud owns the landing. */
+.gg-count-num.is-beat {
+  animation: ggCountThud .34s cubic-bezier(.2, 1.5, .4, 1) both,
+             ggCountSink .62s .34s cubic-bezier(.4, 0, 1, 1) forwards;
 }
+@keyframes ggCountThud {
+  0% { transform: scale(1.9) rotate(-5deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes ggCountSink {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(.9); opacity: .5; }
+}
+.gg-count-num.is-go.is-beat {
+  animation: ggCountThud .34s cubic-bezier(.2, 1.5, .4, 1) both;
+}
+.gg-count-ring {
+  position: absolute; left: 50%; top: 50%;
+  width: clamp(10rem, 40vw, 26rem); aspect-ratio: 1;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 105, 180, 0.55);
+  transform: translate(-50%, -50%) scale(.4);
+  opacity: 0; pointer-events: none;
+}
+.gg-count-ring.is-go { border-color: rgba(255, 212, 94, 0.6); }
+html[data-gg-motion="reduced"] .gg-count-num.is-beat { animation: ggCountFadeIn .2s linear both; }
+html[data-gg-motion="reduced"] .gg-count-ring { display: none; }
+@keyframes ggCountFadeIn { from { opacity: 0; } to { opacity: 1; } }
 .gg-count-num.is-go {
   background: linear-gradient(135deg, var(--gg-gold), #ffb347);
   -webkit-background-clip: text; background-clip: text;
@@ -1063,14 +1087,23 @@ html:has(#gg-modal:not([hidden])) .gg-screen { overflow: hidden; }
   color: var(--gg-text-1);
   font-size: 0.8rem;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
-  animation: ggToastIn .22s ease-out;
+  animation: ggToastIn .3s cubic-bezier(.2, 1.5, .4, 1) both;
+  transform-origin: 50% 0;
 }
 .gg-toast--good { border-color: rgba(140, 224, 176, 0.45); }
 .gg-toast--warn { border-color: rgba(255, 212, 94, 0.45); color: var(--gg-gold); }
 .gg-toast--bad { border-color: rgba(255, 105, 180, 0.55); }
-.gg-toast.is-leaving { animation: ggToastOut .2s ease-in forwards; }
-@keyframes ggToastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-@keyframes ggToastOut { to { opacity: 0; transform: translateY(-6px); } }
+.gg-toast.is-leaving { animation: ggToastOut .2s cubic-bezier(.4, 0, 1, 1) forwards; }
+/* Drops in from above with a little weight, settles, then lifts back up and
+   shrinks away the way it came. */
+@keyframes ggToastIn {
+  0% { opacity: 0; transform: translateY(-18px) scale(.86); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes ggToastOut { to { opacity: 0; transform: translateY(-12px) scale(.9); } }
+html[data-gg-motion="reduced"] .gg-toast.is-leaving { animation: ggToastFade .2s linear forwards !important; }
+@keyframes ggToastFade { to { opacity: 0; } }
 
 /* ---------------------------------------------------------------------------
  * OPTIONS DRAWER (#gg-drawer, z70) — .sf-panel geometry, gg-* names.
@@ -1741,4 +1774,37 @@ html[data-gg-motion="reduced"] .gg-ot *, html[data-gg-motion="reduced"] .gg-ot-s
   #scr-lobby .gg-row { padding: 0.3rem 0; }
   #scr-lobby .gg-row-sub { margin: 0.2rem 0 0.1rem; }
   #scr-lobby .gg-lamps { margin: 0.6rem 0 0.2rem; padding: 0.3rem 0; }
+}
+
+/* ---------------------------------------------------------------------------
+ * JUICE (ui/juiceDom.js): screen exits, the particle layer, trails.
+ * Tints only, never white; transform + opacity only.
+ * ------------------------------------------------------------------------ */
+.gg-screen.is-leaving { pointer-events: none; z-index: 0; }
+.gg-screen.is-entering { z-index: 1; }
+
+.gg-juice-layer {
+  position: fixed; inset: 0; z-index: 46; pointer-events: none; overflow: hidden;
+  contain: strict;
+}
+.gg-juice-p {
+  position: absolute; left: 0; top: 0;
+  border-radius: 50%;
+  background: rgb(var(--gg-juice-c, 255, 105, 180));
+  box-shadow: 0 0 8px rgba(var(--gg-juice-c, 255, 105, 180), 0.55);
+  will-change: transform, opacity;
+}
+.gg-juice-p--shard { border-radius: 2px; }
+.gg-juice-p--trail { box-shadow: none; opacity: 0.8; }
+.gg-juice-throw {
+  position: fixed; left: 0; top: 0; z-index: 46;
+  width: 64px; height: 64px; object-fit: contain;
+  pointer-events: none; will-change: transform, opacity;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+}
+.gg-score-plus {
+  position: absolute; right: -0.2rem; top: -0.4rem;
+  font-weight: 900; font-size: 0.85rem; color: var(--gg-gold, #ffd45e);
+  pointer-events: none; white-space: nowrap;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }

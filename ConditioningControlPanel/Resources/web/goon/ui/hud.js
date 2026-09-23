@@ -57,6 +57,8 @@ import { avatarNode, emitAva } from './avatar.js';
 import { setPreviewMedia } from './throwPreview.js';
 import { resolveArsenalOpen, ARSENAL_OPEN_ON, ARSENAL_OPEN_OFF } from './prefs.js';
 import { S } from './strings.js';
+import { ease, countUpMs } from './juice.js';
+import { popIn as jPopIn, burst as jBurst, centreOf as jCentre, play as jPlay, isCalm as jCalm } from './juiceDom.js';
 
 /** exec/bubbles.js's economy seam. Kept as a literal so ui/ never imports exec/. */
 export const BUBBLE_POP_EVENT = 'gg-bubble-pop';
@@ -209,8 +211,10 @@ const GOAL_DWELL_MS = 60000;
  */
 const NO_HEAT_REASONS = Object.freeze(['clutter', 'phase', 'no-arsenal']);
 
-/** Score count-up window. */
+/** Score count-up window: the floor (a bigger jump takes longer, see countUpMs). */
 const SCORE_LERP_MS = 250;
+/** A score bump smaller than this gets the count and the pop, not the burst. */
+const SCORE_BURST_MIN = 5;
 /** Concurrent chrome animations, and how long a queued one may wait. */
 const ANIM_BUDGET = 2;
 const ANIM_STALE_MS = 600;
@@ -1105,6 +1109,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   let targetScore = 0;
   let lerpFrom = 0;
   let lerpAt = 0;
+  let lerpMs = SCORE_LERP_MS;
   let lastTickSecond = -1;
 
   function durationMs() {
@@ -1118,13 +1123,49 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     const s = match.scoring;
     const next = s ? (s.score | 0) : 0;
     if (next !== targetScore) {
+      const gain = next - targetScore;
       lerpFrom = shownScore;
       targetScore = next;
       lerpAt = nowMs();
+      lerpMs = countUpMs(lerpFrom, next, { min: SCORE_LERP_MS, max: 900, perUnit: 6 });
+      if (gain > 0) scoreBump(gain);
     }
-    const t = Math.min(1, (nowMs() - lerpAt) / SCORE_LERP_MS);
-    shownScore = Math.round(lerpFrom + (targetScore - lerpFrom) * t);
+    const t = Math.min(1, (nowMs() - lerpAt) / lerpMs);
+    // Ease out: the number rushes, then settles onto the total. Never overshoots.
+    shownScore = Math.round(lerpFrom + (targetScore - lerpFrom) * ease.outCubic(t));
     text(scoreEl, String(shownScore));
+  }
+
+  /**
+   * A score rise (juice pass 2026-09-23): the number pops, a gold "+N" lifts
+   * off it and fades, and a big enough gain throws a few sparks. All of it is
+   * transform/opacity and leaves no node behind.
+   */
+  function scoreBump(gain) {
+    try {
+      jPopIn(scoreEl, { from: 0.85, over: 1.22, ms: 300 });
+      const d = doc();
+      if (!d || !scoreBox) return;
+      const chip = el('span', 'gg-score-plus', '+' + gain);
+      if (!chip) return;
+      add(scoreBox, chip);
+      const calm = jCalm();
+      const a = jPlay(chip, calm
+        ? [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0 }]
+        : [
+          { opacity: 0, transform: 'translateY(6px) scale(.6)' },
+          { opacity: 1, transform: 'translateY(-4px) scale(1.15)', offset: 0.25 },
+          { opacity: 1, transform: 'translateY(-10px) scale(1)', offset: 0.6 },
+          { opacity: 0, transform: 'translateY(-22px) scale(.9)' },
+        ], { duration: 900, easing: 'ease-out', fill: 'forwards' });
+      const kill = () => { try { chip.remove(); } catch (_e) { /* gone */ } };
+      if (a) a.onfinish = kill;
+      setTimeout(kill, 1000);
+      if (gain >= SCORE_BURST_MIN) {
+        const c = jCentre(scoreEl);
+        if (c && c.w) jBurst(c.x, c.y, { count: 8, dist: 34, spread: 26, life: 460, sizeMin: 3, sizeMax: 6, color: '255, 212, 94' });
+      }
+    } catch (_e) { /* chrome only */ }
   }
 
   /* `paintCharges()` was here: it memoised `match.scoring.charges` on

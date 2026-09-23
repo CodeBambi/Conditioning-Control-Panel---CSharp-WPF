@@ -26,8 +26,13 @@
 import { GoonPayloadKind } from '../core/contracts.js';
 import { GoonReceiptStatus } from '../core/scoring.js';
 import { localMonotonicMs } from '../core/clock.js';
+import { shake } from './juiceDom.js';
 
-export const STAMP_MS = 950;
+/* 1250 ms (was 950): THUD in, a readable hold, then the stamp lifts away and
+   shrinks instead of just fading where it stood (juice pass 2026-09-23). */
+export const STAMP_MS = 1250;
+/** How hard a HIT knocks the HUD, in real pixels. */
+export const HIT_KNOCK_PX = 5;
 export const STAMP_MAX = 3;
 const PARTICLES = 14;
 
@@ -129,6 +134,10 @@ export function createHitStamps({ audio = null, prefs = null, logger = null } = 
         }
       }
       host.appendChild(node);
+      if (!calm && spec.tone === 'hit') {
+        // The knock lands with the slam (about a sixth of the way in).
+        later(() => { try { shake(document.getElementById('gg-hud'), HIT_KNOCK_PX); } catch (_e) { /* ignore */ } }, 150);
+      }
       later(() => { try { node.remove(); } catch (_e) { /* gone */ } }, STAMP_MS);
     } catch (e) {
       try { logger?.warn?.('hit stamp failed: ' + ((e && e.message) || e)); } catch (_e) { /* optional */ }
