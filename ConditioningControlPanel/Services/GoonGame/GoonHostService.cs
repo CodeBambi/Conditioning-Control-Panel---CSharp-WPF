@@ -180,6 +180,10 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // A mapping whose folder does not exist is silently DROPPED by WebView2, which
                 // reads later as "the page's art 404s for no reason". Add the optional roots only
                 // when they're really there, and say so in the log when they are not.
+                // Online pictures (GoonOnlineMedia) land under {assets}\.temp and are served through
+                // ccp.assets. A player with no local library may have no assets folder yet, and a
+                // missing folder drops the mapping, so make sure it exists before mapping it.
+                try { App.GetMediaTempPath(); } catch { }
                 AddIfPresent(mappings, "ccp.assets", App.EffectiveAssetsPath);
                 AddIfPresent(mappings, "ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"));
                 // ONE vhost for the whole transfer cache: art/ + prv/ (the user's own compressed
@@ -380,6 +384,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                     // the page gets a `discord` echo when it lands; the page's box is reserved from
                     // first paint either way, so nothing shifts.
                     discord = BuildDiscordBlock(includeLastOpponent: true),
+                    // Online pictures for THIS game (the flavour pick is the opt-in). The page
+                    // owns the custom blob's shape; the host only stores and echoes it.
+                    media = BuildMediaBlock(),
                 });
                 // ...and top the own avatar up off-thread. No-op unless the user is linked AND
                 // sharing, so a player who shares nothing never touches the Discord CDN.
@@ -410,6 +417,10 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // pool before the first cache-state lands. (The inbox needs no prune here anymore -
                 // the ephemeral wipe above already emptied it.)
                 GoonCacheBridge.Attach(_host);
+
+                // Online pictures: a returning player's saved pick starts fetching now, so the
+                // first pictures can land before they press anything.
+                StartOnlineMediaFromSettings();
 
                 // ...and tell the page which window it is actually painted in. Its affordances read
                 // the echoed state, never the requested one.
@@ -654,6 +665,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                     break;
                 case "last-opponent-clear":
                     OnLastOpponentClear();
+                    break;
+                case "media-flavour":    // flavour card / options sheet: the pick, the edits, the niches
+                    OnMediaFlavour(o);
                     break;
                 case "open-prime":       // page's Prime sheet "See Prime": the app's own refusal and upgrade path
                     TierGate.DemandLab("Goon Game");
@@ -1653,6 +1667,96 @@ namespace ConditioningControlPanel.Services.GoonGame
             _exitWatchdog = null;
         }
 
+        // ============================ online pictures ============================
+        //
+        // The Goon Game is playable with no local library: the page's flavour card (the five
+        // Breakout flavours) picks a set of Scrolller niches and GoonOnlineMedia fills a small
+        // deck of stills and clips. The pick itself is the opt-in, for THIS game only, so the
+        // app-wide MediaSource / HasRemoteMediaConsent are deliberately not read here; the
+        // player's own switch is GoonMediaOnline. Every niche the page sends is re-validated
+        // (same grammar as its cleanNiche) and capped at 8 before it reaches the feed.
+
+        private static GoonOnlineMedia? _onlineMedia;
+
+        private static object BuildMediaBlock()
+        {
+            var s = App.Settings?.Current;
+            return new
+            {
+                flavour = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour),
+                custom = GoonOnlineMediaRules.ParseCustom(s?.GoonMediaCustom),
+                online = s?.GoonMediaOnline ?? true,
+            };
+        }
+
+        /// <summary>page -> host <c>media-flavour { flavour, custom, subs, online }</c>: store the
+        /// pick and restart the fetch. Sent once per real change, never per keystroke.</summary>
+        private static void OnMediaFlavour(JObject o)
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+                var flavour = GoonOnlineMediaRules.CleanFlavour((string?)o["flavour"]);
+                var subs = GoonOnlineMediaRules.CleanSubs(
+                    (o["subs"] as JArray)?.Select(t => t.Type == JTokenType.String ? (string?)t : null));
+                s.GoonMediaFlavour = flavour;
+                if (o["custom"] is JObject)
+                    s.GoonMediaCustom = GoonOnlineMediaRules.CleanCustom(o["custom"]);
+                s.GoonMediaSubs = GoonOnlineMediaRules.JoinSubs(subs);
+                if (o["online"]?.Type == JTokenType.Boolean) s.GoonMediaOnline = (bool)o["online"]!;
+                try { App.Settings?.Save(); } catch (Exception ex) { App.Logger?.Debug("GoonHostService: media save: {E}", ex.Message); }
+                App.Logger?.Information("GoonHostService: media-flavour {F} ({N} niches, online {O})",
+                    flavour == "" ? "(none)" : flavour, subs.Count, s.GoonMediaOnline);
+                StartOnlineMediaFromSettings();
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnMediaFlavour: {E}", ex.Message); }
+        }
+
+        /// <summary>Fetch (or stop) from what is stored. Off = post 'off' and hold nothing; no
+        /// pick yet = say nothing (the page's flavour card is up and owns that moment).</summary>
+        private static void StartOnlineMediaFromSettings()
+        {
+            try
+            {
+                if (_host == null) return;
+                var s = App.Settings?.Current;
+                bool online = s?.GoonMediaOnline ?? true;
+                var flavour = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour);
+                var subs = GoonOnlineMediaRules.SplitSubs(s?.GoonMediaSubs);
+                _onlineMedia ??= new GoonOnlineMedia(PostOnlineMedia);
+                if (!online) { _onlineMedia.Off(); return; }
+                if (!GoonOnlineMediaRules.ShouldFetch(online, flavour, subs))
+                {
+                    // A pick with no niches left (every pill switched off) is an honest 'empty'.
+                    if (flavour != "") _onlineMedia.Start(Array.Empty<string>());
+                    return;
+                }
+                _onlineMedia.Start(subs);
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.StartOnlineMedia: {E}", ex.Message); }
+        }
+
+        /// <summary>Worker thread -> UI thread -> page. The whole current list every time.</summary>
+        private static void PostOnlineMedia(GoonOnlineMedia.Snapshot snap)
+        {
+            var frame = new
+            {
+                type = "online-media",
+                state = snap.State,
+                subs = snap.Subs,
+                images = snap.Images.Select(i => new { name = i.Name, url = i.Url }).ToList(),
+                videos = snap.Videos.Select(i => new { name = i.Name, url = i.Url }).ToList(),
+                progress = new { have = snap.Have, want = snap.Want },
+            };
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null) return;
+            disp.BeginInvoke(new Action(() =>
+            {
+                try { _host?.Post(frame); } catch { }
+            }));
+        }
+
         private static void DisposeAll()
         {
             if (_disposing) return;   // _host.Dispose() closes the window, re-raising Closed -> here
@@ -1679,6 +1783,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // the connection, an RPC pipe open). No-op when GG never set it.
                 try { App.DiscordRpc?.SetGoonActivity("off"); } catch { }
                 try { ResetPeerCardState(); } catch { }
+                // Online pictures: stop fetching and hand back every temp file this window owned.
+                try { _onlineMedia?.Dispose(); } catch { }
+                _onlineMedia = null;
                 try { _host?.Dispose(); } catch { }
                 _host = null;
                 // The handler dies with the core it was attached to; forgetting the reference is
