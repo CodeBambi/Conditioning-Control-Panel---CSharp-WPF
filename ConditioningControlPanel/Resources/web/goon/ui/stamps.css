@@ -14,7 +14,7 @@
 .gg-stamp {
   grid-area: 1 / 1; position: relative;
   transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg));
-  animation: gg-stamp-slam 950ms cubic-bezier(.2, 1.5, .4, 1) both;
+  animation: gg-stamp-slam 1250ms linear both;
 }
 
 .gg-stamp-face {
@@ -45,13 +45,15 @@
   animation: gg-stamp-ink 620ms cubic-bezier(.15, .8, .3, 1) both;
 }
 
+/* 1250 ms: a slam from above (0-14%, about 175 ms), a squash-and-settle
+   (to 32%), a hold you can read (to 80%), then a lift-and-shrink exit
+   (250 ms) so the stamp goes somewhere instead of dissolving in place. */
 @keyframes gg-stamp-slam {
-  0%   { opacity: 0; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(calc(var(--gg-stamp-rot, -6deg) * 2.2)) scale(2.4); }
-  18%  { opacity: 1; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(0.92); }
-  30%  { transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1.04); }
-  42%  { transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1); }
-  78%  { opacity: 1; }
-  100% { opacity: 0; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1); }
+  0%   { opacity: 0; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(calc(var(--gg-stamp-rot, -6deg) * 2.2)) scale(2.4); animation-timing-function: cubic-bezier(.5, 0, .9, .5); }
+  14%  { opacity: 1; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(0.9, 0.86); animation-timing-function: cubic-bezier(.2, 1.5, .4, 1); }
+  32%  { transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1); }
+  80%  { opacity: 1; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1); animation-timing-function: cubic-bezier(.4, 0, 1, 1); }
+  100% { opacity: 0; transform: translateY(calc(var(--gg-stamp-y, -6vh) - 9vh)) rotate(calc(var(--gg-stamp-rot, -6deg) * 0.4)) scale(0.55); }
 }
 
 @keyframes gg-stamp-dud {
@@ -72,11 +74,11 @@
   100% { opacity: 0; }
 }
 
-.gg-stamp.is-calm { animation: gg-stamp-fade 950ms linear both; }
+.gg-stamp.is-calm { animation: gg-stamp-fade 1250ms linear both; }
 .gg-stamp.is-calm .gg-stamp-ink { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .gg-stamp { animation: gg-stamp-fade 950ms linear both !important; }
+  .gg-stamp { animation: gg-stamp-fade 1250ms linear both !important; }
   .gg-stamp-ink { display: none; }
 }
 
