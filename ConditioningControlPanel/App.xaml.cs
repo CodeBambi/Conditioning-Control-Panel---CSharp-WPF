@@ -526,6 +526,8 @@ namespace ConditioningControlPanel
         public static Services.Prizes.OwnershipService? Ownership { get; private set; }
         /// <summary>Buying a v2 prize from the options panel (see Services/Prizes/V2PurchaseService).</summary>
         public static Services.Prizes.V2PurchaseService? V2Purchase { get; private set; }
+        /// <summary>Daily Discord homework (opt-in, server-gated). Idle unless the proxy says enabled.</summary>
+        public static Services.Homework.HomeworkService? Homework { get; private set; }
         /// <summary>Eight-hole intake punch card (see IntakePunchCardService).</summary>
         public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
@@ -2103,6 +2105,11 @@ namespace ConditioningControlPanel
                     s.SkillPoints = next;
                     Settings.Save();
                 })));
+            // Homework: pure constructor, the first refresh is fire-and-forget and fails quiet.
+            Homework = new Services.Homework.HomeworkService(
+                new Services.Homework.HomeworkApi(null, Services.BackRoom.BackRoomApi.AppIdentity),
+                () => Services.BackRoom.BackRoomApi.AppIdentity()?.UnifiedId);
+            Homework.Start();
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); Patreon is constructed above too.
             Programs = new Services.Program.ProgramService();
