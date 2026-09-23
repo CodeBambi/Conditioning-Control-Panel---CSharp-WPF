@@ -93,6 +93,9 @@ import {
 } from './pinch.js';
 import { perfLite } from './perfTier.js';
 import { isAnimatedMedia } from './media.js';
+// A flash is a gif surface: it plays the gif CLIP when the deck has one (online
+// stills are posters by design, the motion lives in the GifClip lane).
+import { drawClipHandle, prepareClip, stopClip } from './clip.js';
 import { governorHold } from './loadGovernor.js';
 // The juice pass (2026-09-23): a flash LANDS (drop, overshoot, settle) and
 // LEAVES (shrink, fade) on fixed timings layered over its CSS hold.
@@ -851,7 +854,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     prune();
     const host = layer();
     if (!host || typeof document === 'undefined') return;
-    if (live.size >= liveCap()) return;
+    if (live.size + clipPending >= liveCap()) return;
     if (!media || typeof media.drawKind !== 'function') return;
 
     // media.js kinds are image|video; GIFs ride as images. A PEER run spends
@@ -860,6 +863,32 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     // library is the last resort, not the rest of the burst.
     const drawWith = takeTag(run);
     const wantPeer = !!(run && run.peer);
+    // THE GIF MOVES (owner, 2026-09-23). Our own flash, full tier: a gif clip when the
+    // deck has one, as a muted looping <video> with the same class, land and exit. A
+    // peer run keeps its peer-first ladder (their picture is the point), lite keeps its
+    // stills, and a clip with no frame in time comes back here as the still it would
+    // have been (noClip).
+    if (!drawWith && !wantPeer && !(opts && opts.noClip) && !perfLite()) {
+      const clip = drawClipHandle(media);
+      if (clip) {
+        clipPending++;
+        prepareClip(clip, { className: '' }, (v) => {
+          clipPending = Math.max(0, clipPending - 1);
+          if (!v) {
+            try { if (clip.release) clip.release(); } catch (_e) { /* ignore */ }
+            if (!run || run.alive !== false) showOne(tune, Object.assign({}, opts || {}, { noClip: true }), run);
+            return;
+          }
+          if (run && run.alive === false) {       // the run was stopped while it loaded
+            stopClip(v);
+            try { if (clip.release) clip.release(); } catch (_e) { /* ignore */ }
+            return;
+          }
+          spawn(tune, opts, run, clip, null, v);
+        });
+        return;
+      }
+    }
     let entry = (drawWith && typeof media.drawFor === 'function')
       ? media.drawFor('image', drawWith)
       : null;
@@ -870,7 +899,24 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     if (!entry) return;
     const handle = (typeof media.acquire === 'function') ? media.acquire(entry) : null;
     if (!handle || !handle.url) return;
+    spawn(tune, opts, run, handle, entry, null);
+  }
 
+  /** Clips still loading, counted against the live cap so a burst cannot overshoot it. */
+  let clipPending = 0;
+
+  /**
+   * Place, animate and retire one flash: an <img> (or a frozen canvas) for `entry`,
+   * or the ready gif clip `clipNode`. `handle` is released exactly once, on kill.
+   */
+  function spawn(tune, opts, run, handle, entry, clipNode) {
+    const host = layer();
+    if (!host || typeof document === 'undefined' || live.size >= liveCap()) {
+      if (clipNode) stopClip(clipNode);
+      try { if (handle && handle.release) handle.release(); } catch (_e) { /* ignore */ }
+      return;
+    }
+    const wantPeer = !!(run && run.peer);
     const gen = Math.max(0, (opts && opts.gen) | 0);
     const pos = place(opts && opts.nearX, opts && opts.nearY);
     // Children are handed an ABSOLUTE size by their parent (already tapered off
@@ -883,11 +929,13 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     // its spawn path is byte-identical to the pre-budget one. Over budget, the
     // flash lands FROZEN (a frame-0 canvas instead of an <img>); a host that
     // cannot freeze skips it, which is what the cap already does when full.
-    const animated = perfLite() && isAnimatedMedia(entry);
+    const animated = !clipNode && perfLite() && isAnimatedMedia(entry);
     const mustFreeze = animated && countAnimPlaying() >= ANIM_LIVE_LITE;
 
     let img;
-    if (mustFreeze) {
+    if (clipNode) {
+      img = clipNode;
+    } else if (mustFreeze) {
       img = frozenCanvas();
       if (!img) {
         try { if (handle.release) handle.release(); } catch (_e) { /* ignore */ }
@@ -940,6 +988,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       try { clearTimeout(rec.exitTimer); } catch (_e) { /* ignore */ }
       // If it dies in someone's hand, the hand is empty now — not stuck.
       if (drag && drag.rec === rec) forgetDrag();
+      if (clipNode) stopClip(img);
       try { img.remove(); } catch (_e) { /* already detached */ }
       try { img.removeAttribute('src'); } catch (_e) { /* ignore */ }
       try { if (handle && handle.release) handle.release(); } catch (_e) { /* ignore */ }
@@ -956,6 +1005,9 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       // paintFrameZero owns both, and its failures land on the same kill.
       host.appendChild(img);
       paintFrameZero(img, handle.url, rec);
+    } else if (clipNode) {
+      img.addEventListener('error', kill, { once: true });
+      host.appendChild(img);
     } else {
       img.onerror = kill;                     // a dud entry is a skipped beat, never a throw
       img.src = handle.url;
