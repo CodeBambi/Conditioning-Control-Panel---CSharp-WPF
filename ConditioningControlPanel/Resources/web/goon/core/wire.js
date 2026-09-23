@@ -6,6 +6,7 @@
 import {
   GoonConsts, MessageFactories, PROTOCOL_VERSION,
   clampVoiceCount, clampVoiceSub, clampWindowCount,
+  clampDuelSub, clampDuelIdx, clampDuelLen, clampDuelNum,
 } from './contracts.js';
 import { seedFromAny, seedToString } from './rng.js';
 
@@ -53,6 +54,14 @@ const CLAMPED_FIELDS = Object.freeze({
     bytes: clampVoiceCount,
     parts: clampVoiceCount,
     durMs: clampVoiceCount,
+  }),
+  /** Game night duels (2026-09-23): every number pinned, the `voice` precedent. */
+  duel: Object.freeze({
+    sub: clampDuelSub,
+    idx: clampDuelIdx,
+    len_s: clampDuelLen,
+    score: clampDuelNum,
+    tile: clampDuelNum,
   }),
 });
 

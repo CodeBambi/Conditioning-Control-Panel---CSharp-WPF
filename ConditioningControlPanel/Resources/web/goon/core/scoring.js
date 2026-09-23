@@ -169,6 +169,15 @@ export class GoonScoring {
     }
   }
 
+  /**
+   * A flat score bonus (game night: winning a duel). Added to THIS side's own score, which is
+   * authoritative for this side and rides the next state tick like every other point.
+   */
+  awardBonus(points) {
+    const p = Math.trunc(Number(points) || 0);
+    if (p > 0) this._scoreExact += p;
+  }
+
   /** +1 charge for taking an incoming payload all the way to its end. */
   awardPayloadEndured() { this._addCharge('payload endured'); }
 

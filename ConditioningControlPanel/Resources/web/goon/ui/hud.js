@@ -50,6 +50,8 @@ import { mountEmotes } from './emotes.js';
 import { mountAnnouncer } from './announcer.js';
 import { mountMicHud } from './voice/micHud.js';
 import { createDropRoller } from './drops.js';
+import { createDuelController } from './duel/duelController.js';
+import { createDuelView } from './duel/duelView.js';
 import { COACH } from './coach.js';
 import { avatarNode, emitAva } from './avatar.js';
 import { setPreviewMedia } from './throwPreview.js';
@@ -846,7 +848,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // there: no store, no memory, everything else identical.
   const opponent = mountOpponent({ host: monHost, match, audio, fx, prefs });
   const emotes = mountEmotes({ host: root, match, audio, onLog });
+  // GAME NIGHT: the game card duel. Owns its own overlay (under Mercy) and pauses throws while it runs.
+  const duel = createDuelController({ match, view: createDuelView(), audio, onLog });
+  led.add(() => { try { duel.dispose(); } catch (_e) { /* gone */ } });
   const arsenal = mountArsenal({
+    duel: duel.arsenalHook,
     leftHost: leftRail,
     rightHost: rightRail,
     receiptsHost,
