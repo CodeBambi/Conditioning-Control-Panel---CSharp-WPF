@@ -145,7 +145,7 @@ async function pairOf(guestNight) {
 
   // Past the lobby, a frame changes nothing.
   a.setSong({ url: CDN, title: 'late', durSec: 200 });
-  await tick(40);
+  await tick(1000);   // the guest applies song frames about once a second (latest wins)
   b._phase = GoonMatchPhase.Live;
   b._handleSong(parse(JSON.stringify({ t: 'song', sub: 'clear' }), { logger: quiet }));
   ok(b.song && b.song.title === 'late', 'a song frame during Live is ignored');
@@ -246,6 +246,48 @@ async function pairOf(guestNight) {
   const all = JSON.stringify(Object.entries(S.song).map(([k, v]) => (typeof v === 'function' ? v('t', '1:00') : v)));
   ok(!all.includes(String.fromCharCode(0x2014)), 'no em-dashes in the song copy');
   ok(!/!/.test(all), 'no exclamation marks in the song copy');
+}
+
+// ============================================================ review fixes: skip, counter-proposals, floods
+{
+  const { a, b } = await pairOf(true);
+  a.setSong({ url: CDN, title: 'one', durSec: 247 });
+  await tick(60);
+  ok(a.consentSheet.live_duration_sec === 247, 'the pick sets the length');
+  a.setSong(null, { fallbackSec: 900 });
+  ok(a.consentSheet.live_duration_sec === 900, 'skip re-proposes the remembered length', String(a.consentSheet.live_duration_sec));
+  a.setSong({ url: CDN, title: 'two', durSec: 247 });
+  a.setSong(null);
+  ok(a.consentSheet.live_duration_sec === 720, 'skip with no remembered length goes back to the default');
+  a.setSong({ url: CDN, title: 'three', durSec: 300 });
+  await tick(1000);
+  ok(b.song && b.song.title === 'three', 'the guest ends on the latest pick');
+
+  // A counter-proposal (an older guest that never heard of songs) moves the length: the song goes.
+  const sheet = Object.assign({}, a.consentSheet, { live_duration_sec: 600, confirmed: false });
+  let dropped = 0;
+  a.onSongChanged((s) => { if (s === null) dropped++; });
+  a._handleConsent(sheet);
+  ok(a.song === null && dropped === 1, 'a length moved off the song drops the host song');
+  ok(a.consentSheet.live_duration_sec === 600, 'and the counter-proposed length stands');
+  a.dispose?.(); b.dispose?.();
+}
+{
+  const { a, b } = await pairOf(true);
+  let changes = 0;
+  b.onSongChanged(() => { changes++; });
+  const frame = () => parse(JSON.stringify({ t: 'song', sub: 'set', url: CDN, title: 'same', dur_sec: 300 }), { logger: quiet });
+  b._lastSongFrameMs = -Infinity;
+  b._handleSong(frame());
+  ok(changes === 1, 'the first song frame lands');
+  b._lastSongFrameMs = -Infinity;
+  b._handleSong(frame());
+  ok(changes === 1, 'an identical song frame is ignored');
+  for (let i = 0; i < 20; i++) b._handleSong(parse(JSON.stringify({ t: 'song', sub: 'set', url: CDN, title: 'flood ' + i, dur_sec: 300 }), { logger: quiet }));
+  ok(changes === 1, 'a flood inside a second changes nothing yet');
+  await tick(1000);
+  ok(changes === 2 && b.song.title === 'flood 19', 'then only the latest lands', changes + ' ' + (b.song && b.song.title));
+  a.dispose?.(); b.dispose?.();
 }
 
 console.log(`selftest-song: ${n - failures}/${n} passed`);

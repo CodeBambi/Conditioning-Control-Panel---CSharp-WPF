@@ -68,9 +68,8 @@ import {
   GoonConsts, PAYLOAD_ELEMENT, clampWindowCount, costOf, enumName, isClockMessage,
   makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMediaPrep, makeMercy,
   makePayloadReceipt, makeResult, makeTick, makePayload, makeVoice, peerSpeaksVoice, VOICE_SUBS,
-  makeDuel, peerSpeaksNight, DUEL_SUBS,
+  makeDuel, peerSpeaksNight, DUEL_SUBS, makeSong,
 } from './contracts.js';
-import { makeSong } from './contracts.js';
 import { SONG_TITLE_MAX, clampSongSec, wireSongUrl } from './song.js';
 import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
 import { localMonotonicMs } from './clock.js';
@@ -95,6 +94,13 @@ const MAX_PAYLOAD_DURATION_MS = 180000;
    — the per-second rate tops out near 3 (risk x attention), so even a 24-hour sitting lands around
    265k — because this is a sanity clamp on an untrusted number, not a balance rule. */
 const MAX_REPORTED_SCORE = 1000000;
+/** Guest: the least gap between two song frames it will act on. */
+const SONG_FRAME_MIN_GAP_MS = 900;
+
+function sameSong(a, b) {
+  if (!a || !b) return !a && !b;
+  return a.url === b.url && a.title === b.title && a.durSec === b.durSec;
+}
 
 /** Freshness of the opponent's state ticks. */
 export const GoonConnectionHealth = Object.freeze({ Fresh: 0, Wobbly: 1, Dead: 2 });
@@ -291,12 +297,14 @@ export class GoonMatchService {
     this._localMediaPrep = false;
     this._remoteMediaPrep = false;
 
-    // GAME NIGHT, THE SONG. `_peerSupportsNight` off caps.night (never send into a build that
-    // would drop the frame); `_localSong` is what THIS side picked (host only), `_remoteSong` what
-    // the host told us. Each is null or {url, title, durSec}. Neither is a consent term: the
-    // length the match runs is the sheet's, proposed through proposeConsent.
-    this._peerSupportsNight = false;
+    // GAME NIGHT, THE SONG. `_peerSupportsNight` (set above) gates it like the duel: never send
+    // into a build that would drop the frame. `_localSong` is what THIS side picked (host only),
+    // `_remoteSong` what the host told us. Each is null or {url, title, durSec}. Neither is a
+    // consent term: the length the match runs is the sheet's, proposed through proposeConsent.
     this._localSong = null;
+    this._lastSongFrameMs = -Infinity;
+    this._pendingSongFrame = null;
+    this._songFrameTimer = 0;
     this._remoteSong = null;
 
     this._localSeedContribution = null;
@@ -480,8 +488,6 @@ export class GoonMatchService {
   get localMediaPrep() { return this._localMediaPrep; }
   /** Are THEY? Absent frame -> false, so an older peer reads as "ready". */
   get remoteMediaPrep() { return this._remoteMediaPrep; }
-  /** Their build speaks Game Night frames (caps.night >= 1). */
-  get peerSupportsNight() { return this._peerSupportsNight; }
   get localSong() { return this._localSong; }
   get remoteSong() { return this._remoteSong; }
   /** The song this match plays: the host's pick, on both sides. null = today's default. */
@@ -1353,6 +1359,7 @@ export class GoonMatchService {
       this._consentSheet = cloneSheet(sheet, false, this._localMediaTransfer, this._localVoiceNotes);
       this._localConsentConfirmed = false;
       this._remoteConsentConfirmed = !!sheet.confirmed;
+      this._dropSongIfLengthMoved();
       this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
       return;
     }
@@ -1785,10 +1792,15 @@ export class GoonMatchService {
 
   /** Their `t:'duel'` frame. Live/SuddenDeath only; ui/duel/duelController.js owns the rest. */
   _handleDuel(frame) {
-    if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) return;
     if (!frame.sub || !DUEL_SUBS.includes(frame.sub)) return;
-    // The host's duel length is kept here so a UI that mounts after the frame still sees it.
-    if (frame.sub === 'cfg' && !this._isHost) this._peerDuelLen = frame.len_s;
+    // The host's duel length is kept here so a UI that mounts after the frame still sees it. It
+    // is also accepted in Countdown: the host sends it as its Live starts, and a guest whose
+    // clock is a hair behind must not drop it.
+    if (frame.sub === 'cfg') {
+      const p = this._phase;
+      if (p !== GoonMatchPhase.Countdown && p !== GoonMatchPhase.Live && p !== GoonMatchPhase.SuddenDeath) return;
+      if (!this._isHost) this._peerDuelLen = frame.len_s;
+    } else if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) return;
     this._ev.duelFrameReceived.emit(frame, (e) => this._warn(`duelFrame handler threw: ${e && e.message}`));
   }
 
@@ -1812,11 +1824,12 @@ export class GoonMatchService {
    *
    * HOST ONLY and PRE-LIVE ONLY (Lobby/Consent). The length goes through proposeConsent, so it
    * clears both lamps like any other change of terms and both players sign the length they saw.
-   * A null song leaves the sheet as it is (the player's slider is free again).
+   * A null song (skip) re-proposes the usual length: `fallbackSec` (the player's remembered
+   * length) or LiveDurationSecDefault, so a skipped song never leaves its length behind.
    *
    * @returns {boolean} true when the pick was taken
    */
-  setSong(song) {
+  setSong(song, { fallbackSec = null } = {}) {
     if (!this._isHost) return false;
     if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return false;
     let next = null;
@@ -1827,13 +1840,30 @@ export class GoonMatchService {
       next = { url, title: sanitizeText(song.title, SONG_TITLE_MAX), durSec };
     }
     this._localSong = next;
+    const s = this._consentSheet;
     if (next) {
-      const s = this._consentSheet;
       this.proposeConsent(next.durSec, s.toy_cap, s.payload_min_gap_ms);
+    } else {
+      const want = Math.trunc(Number(fallbackSec));
+      const dur = Number.isFinite(want) && want >= 60 && want <= 3600 ? want : GoonConsts.LiveDurationSecDefault;
+      if (s.live_duration_sec !== dur) this.proposeConsent(dur, s.toy_cap, s.payload_min_gap_ms);
     }
     this._sendSong();
     this._ev.songChanged.emit(next, (e) => this._warn(`songChanged handler threw: ${e && e.message}`));
     return true;
+  }
+
+  /**
+   * A counter-proposal moved the length away from the song (an older or C# guest that never
+   * heard of songs, say). The song no longer IS the match timer, so it goes: host clears it on
+   * both sides, guest forgets the host's. The sheet's length stands either way.
+   */
+  _dropSongIfLengthMoved() {
+    const song = this.song;
+    if (!song || this._consentSheet.live_duration_sec === song.durSec) return;
+    this._info(`length moved off the song (${this._consentSheet.live_duration_sec}s vs ${song.durSec}s): dropping it`);
+    if (this._isHost) { this._localSong = null; this._sendSong(); } else this._remoteSong = null;
+    this._ev.songChanged.emit(null, (e) => this._warn(`songChanged handler threw: ${e && e.message}`));
   }
 
   /** One `song` frame, and only to a peer that said caps.night >= 1. */
@@ -1853,6 +1883,22 @@ export class GoonMatchService {
   _handleSong(frame) {
     if (this._isHost) return;
     if (!this._isPreLive(this._phase)) return;
+    // About one song frame a second. Inside the gap only the LATEST frame is kept and applied
+    // when the gap ends (a clear-then-pick must still land the pick); a flood costs one timer.
+    const nowMs = localMonotonicMs();
+    const wait = SONG_FRAME_MIN_GAP_MS - (nowMs - this._lastSongFrameMs);
+    if (wait > 0) {
+      this._pendingSongFrame = frame;
+      if (!this._songFrameTimer) {
+        this._songFrameTimer = setTimeout(() => {
+          this._songFrameTimer = 0;
+          const f = this._pendingSongFrame;
+          this._pendingSongFrame = null;
+          if (f && !this._disposed) this._handleSong(f);
+        }, wait);
+      }
+      return;
+    }
     let next;
     if (frame.sub === 'clear') next = null;
     else if (frame.sub === 'set') {
@@ -1860,6 +1906,8 @@ export class GoonMatchService {
       if (!url) return;
       next = { url, title: sanitizeText(frame.title, SONG_TITLE_MAX), durSec: clampSongSec(frame.dur_sec) };
     } else return;
+    this._lastSongFrameMs = nowMs;
+    if (sameSong(next, this._remoteSong)) return;
     this._remoteSong = next;
     this._info(`opponent song -> ${next ? next.durSec + 's' : 'none'}`);
     this._ev.songChanged.emit(next, (e) => this._warn(`songChanged handler threw: ${e && e.message}`));
@@ -2262,6 +2310,7 @@ export class GoonMatchService {
   dispose() {
     if (this._disposed) return;
     this._disposed = true;
+    if (this._songFrameTimer) { try { clearTimeout(this._songFrameTimer); } catch (_e) { /* gone */ } this._songFrameTimer = 0; }
 
     for (const off of this._transportUnsubs) { try { off(); } catch { /* already gone */ } }
     this._transportUnsubs = [];

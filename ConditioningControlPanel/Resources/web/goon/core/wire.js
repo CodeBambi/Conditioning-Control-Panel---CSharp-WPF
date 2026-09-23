@@ -6,7 +6,7 @@
 import {
   GoonConsts, MessageFactories, PROTOCOL_VERSION,
   clampVoiceCount, clampVoiceSub, clampWindowCount,
-  clampDuelSub, clampDuelIdx, clampDuelLen, clampDuelNum,
+  clampDuelSub, clampDuelIdx, clampDuelLen, clampDuelNum, clampDuelTile,
 } from './contracts.js';
 import { seedFromAny, seedToString } from './rng.js';
 import { clampSongSec, clampSongSub } from './song.js';
@@ -71,7 +71,7 @@ const CLAMPED_FIELDS = Object.freeze({
     idx: clampDuelIdx,
     len_s: clampDuelLen,
     score: clampDuelNum,
-    tile: clampDuelNum,
+    tile: clampDuelTile,
   }),
 });
 

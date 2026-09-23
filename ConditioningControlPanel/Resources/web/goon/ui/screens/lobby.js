@@ -26,6 +26,7 @@ import { formatRecord } from '../rivalry.js';
 import { buildSongRow } from './songRow.js';
 import { songClock } from '../../core/song.js';
 import { customizeSection } from './customize.js';
+import { finishedMatches } from '../nightProgress.js';
 
 const DUR_MIN_SEC = 60;
 const DUR_MAX_SEC = 3600;
@@ -179,11 +180,22 @@ export function mount(container, ctx) {
   /* GAME NIGHT: "Pick a song". Outside the consent box, which is inert until the
    * opponent arrives; picking a song is what a host does while waiting. */
   const songRow = buildSongRow({
-    ledger, match, audio,
+    ledger, match, audio, prefs,
     origin: (typeof location !== 'undefined' && location && location.origin) || null,
   });
 
   /* ---------------------------------------------------------- confirm UI */
+
+  /* GAME NIGHT: the Customize expander holds only the duel length, so it shows only when the
+   * opponent's build speaks night and this is the player's second match or later. Polled: the
+   * cap arrives with their hello, which has no edge of its own on this screen. */
+  const customBox = customizeSection({ isHost: match.isHost });
+  function paintCustomize() {
+    if (!customBox) return;
+    customBox.hidden = !(match.peerSupportsNight && finishedMatches() >= 1);
+  }
+  paintCustomize();
+  ledger.interval(paintCustomize, 1000);
 
   const lampYou = el('span', { class: 'gg-lamp' }, [el('i'), el('span', { text: S.lobby.lampYou })]);
   const lampThem = el('span', { class: 'gg-lamp' }, [el('i'), el('span', { text: S.lobby.lampThem })]);
@@ -198,7 +210,7 @@ export function mount(container, ctx) {
   const eyebrow = el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.lobby.eyebrowWaiting })]);
 
   container.appendChild(el('div', { class: 'gg-card gg-lobby' }, [
-    eyebrow, duel, rivalLine, connLine, prepLine, songRow.node, sheetBox, customizeSection({ isHost: match.isHost }), lamps, changedLine,
+    eyebrow, duel, rivalLine, connLine, prepLine, songRow.node, sheetBox, customBox, lamps, changedLine,
     el('div', { class: 'gg-lobby-actions' }, [leaveBtn, confirmBtn]),
   ]));
 

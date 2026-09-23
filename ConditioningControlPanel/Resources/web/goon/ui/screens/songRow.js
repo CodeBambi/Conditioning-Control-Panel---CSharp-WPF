@@ -52,7 +52,7 @@ export function probeSongDuration(url, { timeoutMs = SONG_LOAD_TIMEOUT_MS } = {}
   });
 }
 
-export function buildSongRow({ ledger, match, audio = null, origin = null, probe = probeSongDuration }) {
+export function buildSongRow({ ledger, match, audio = null, origin = null, probe = probeSongDuration, prefs = null }) {
   const input = el('input', {
     type: 'url',
     class: 'gg-song-input',
@@ -111,7 +111,10 @@ export function buildSongRow({ ledger, match, audio = null, origin = null, probe
     if (!editable()) return;
     note = '';
     input.value = '';
-    match.setSong(null);
+    // Skip puts the usual length back (the remembered one, or the default).
+    let fallbackSec = null;
+    try { fallbackSec = prefs ? prefs.get('matchLengthSec') : null; } catch (_e) { fallbackSec = null; }
+    match.setSong(null, { fallbackSec });
     paint();
   }
 

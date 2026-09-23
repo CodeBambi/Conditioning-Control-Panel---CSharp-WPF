@@ -118,8 +118,21 @@ export function createDuelView() {
   const reset = () => { while (card.firstChild) card.removeChild(card.firstChild); cells = []; gridEl = null; };
 
   const KEYS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right' };
+  /** Typing somewhere, or a z70 modal/drawer is up: the keys are not the board's. */
+  function keysBelongElsewhere(e) {
+    const t = e && e.target;
+    const tag = t && t.tagName ? String(t.tagName).toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable)) return true;
+    for (const id of ['gg-modal', 'gg-drawer']) {
+      const host = d.getElementById(id);
+      if (host && !host.hidden && host.childElementCount > 0) return true;
+    }
+    return false;
+  }
+
   function onKey(e) {
     if (!playing || !input || !e || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (keysBelongElsewhere(e)) return;
     const dir = KEYS[e.key];
     if (!dir) return;
     e.preventDefault();

@@ -354,7 +354,7 @@ function logTo(sink, entry) {
  * @returns {{unmount:Function}}
  */
 export function mountHud({ match, session = null, audio = null, prefs = null, media = null,
-  matchLog = null, discord = null, voice = null, coach = null } = {}) {
+  matchLog = null, discord = null, voice = null, coach = null, isPractice = null } = {}) {
   const led = createLedger();
   const fx = createFx();
   const d = doc();
@@ -849,7 +849,10 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const opponent = mountOpponent({ host: monHost, match, audio, fx, prefs });
   const emotes = mountEmotes({ host: root, match, audio, onLog });
   // GAME NIGHT: the game card duel. Owns its own overlay (under Mercy) and pauses throws while it runs.
-  const duel = createDuelController({ match, view: createDuelView(), audio, onLog });
+  const duel = createDuelController({
+    match, view: createDuelView(), audio, onLog,
+    isPractice: () => (typeof isPractice === 'function' ? !!isPractice() : false),
+  });
   led.add(() => { try { duel.dispose(); } catch (_e) { /* gone */ } });
   const arsenal = mountArsenal({
     duel: duel.arsenalHook,
@@ -890,6 +893,8 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // the only listener. A pop while a drawer is open still rolls — the roll is
   // silent bookkeeping, only its flourish rides the animation budget.
   const drops = createDropRoller({ match, arsenal, audio, onLog });
+  // A duel the receiver refused ('busy') hands the game card back to the slot.
+  duel.setReturnCard(() => arsenal.armDrop('gamecard', { silent: true }));
   led.listen(d, BUBBLE_POP_EVENT, (e) => {
     try {
       const res = drops.onPop(e && e.detail);

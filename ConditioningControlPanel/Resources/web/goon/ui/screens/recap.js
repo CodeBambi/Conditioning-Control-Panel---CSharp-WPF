@@ -23,7 +23,7 @@ import { avatarSlot, emitAva } from '../avatar.js';
 import { GoonEndReason, GoonMatchPhase } from '../../core/contracts.js';
 import { evidenceFor, submitReport, NOTE_MAX, REPORT_REASONS } from '../report.js';
 import { noteMatchFinished } from '../nightProgress.js';
-import { settleOnce, formatRecord } from '../rivalry.js';
+import { settleOnce, formatRecord, outcomeOf } from '../rivalry.js';
 
 /** Matches already counted by noteMatchFinished (ui/nightProgress.js). */
 const countedMatches = new WeakSet();
@@ -678,7 +678,7 @@ export function mount(container, ctx) {
         el('p', { class: 'gg-recap-fine', text: S.recap.scoreFineprint }),
         el('p', { class: 'gg-recap-fine', text: S.recap.survived(result.survivedMs) }),
         el('p', { class: 'gg-rival-line', text: rivalLine() }),
-        duelSummary().won > 0 && el('p', { class: 'gg-recap-fine', text: DUEL_COPY.recapLine(duelSummary().won) }),
+        duelSummary(match).won > 0 && el('p', { class: 'gg-recap-fine', text: DUEL_COPY.recapLine(duelSummary(match).won) }),
       ]));
     }
 
@@ -772,11 +772,19 @@ export function mount(container, ctx) {
   }
   if (prefs) prefs.set('matchesPlayed', (prefs.get('matchesPlayed') | 0) + 1);
   // Game Night's own count (ui/nightProgress.js): game cards unlock from the second one.
-  // Once per match object: the recap can be shown again for the same match.
-  if (!practice && match && !countedMatches.has(match)) {
+  // Once per match object (the recap can be shown again for the same match), and only for a
+  // REAL result: an early abandon or a result that never finalized counts for nothing. The
+  // result can land after this screen mounts, so the check rides the same repaint hooks.
+  function countFinished() {
+    if (practice || !match || countedMatches.has(match)) return;
+    let real = false;
+    try { real = outcomeOf(match.result) != null; } catch (_e) { real = false; }
+    if (!real) return;
     countedMatches.add(match);
     try { noteMatchFinished(); } catch (_e) { /* never breaks the recap */ }
   }
+  countFinished();
+  if (match) ledger.sub(match.onResultFinalized(() => countFinished()));
 
   paint();
   try { audio?.sfx?.('recap-reveal'); } catch (_e) { /* stub bus */ }

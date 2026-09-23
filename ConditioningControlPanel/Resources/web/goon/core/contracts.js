@@ -635,10 +635,11 @@ export function makeMediaPrep(o = {}) {
  *   {t:'duel', sub:'cfg',   len_s}               host only, once at Live: the duel length it picked
  *   {t:'duel', sub:'start', idx, len_s}          a game card was thrown: duel number idx begins
  *   {t:'duel', sub:'score', idx, score, tile}    this side's final board for duel idx
+ *   {t:'duel', sub:'busy',  idx}                 the receiver could not run that start: the thrower cancels
  *
  * Every number is pinned in core/wire.js CLAMPED_FIELDS, both directions.
  */
-export const DUEL_SUBS = Object.freeze(['cfg', 'start', 'score']);
+export const DUEL_SUBS = Object.freeze(['cfg', 'start', 'score', 'busy']);
 /** The duel lengths Customize offers. Anything else collapses to the first. */
 export const DUEL_LENGTHS_SEC = Object.freeze([60, 90, 120]);
 export function clampDuelSub(v) { return DUEL_SUBS.includes(v) ? v : ''; }
@@ -648,8 +649,12 @@ export function clampDuelLen(v) {
 }
 /** Duel index: small non-negative integer. A match never sees more than a handful. */
 export function clampDuelIdx(v) { return Math.min(clampVoiceCount(v), 999); }
-/** A 2048 score or a tile tier. Generous ceiling, it is a sanity clamp on an untrusted number. */
-export function clampDuelNum(v) { return Math.min(clampVoiceCount(v), 10000000); }
+/** A 2048 score: 0..1,000,000, far above anything a timed 4x4 board can reach. */
+export const DUEL_SCORE_MAX = 1000000;
+/** A tile TIER (1 = 2, 11 = 2048). 17 is the 4x4 board's theoretical ceiling. */
+export const DUEL_TILE_MAX = 17;
+export function clampDuelNum(v) { return Math.min(clampVoiceCount(v), DUEL_SCORE_MAX); }
+export function clampDuelTile(v) { return Math.min(clampVoiceCount(v), DUEL_TILE_MAX); }
 
 export function makeDuel(o = {}) {
   return {
@@ -659,7 +664,7 @@ export function makeDuel(o = {}) {
     idx: clampDuelIdx(o.idx),
     len_s: clampDuelLen(o.len_s),
     score: clampDuelNum(o.score),
-    tile: clampDuelNum(o.tile),
+    tile: clampDuelTile(o.tile),
   };
 }
 

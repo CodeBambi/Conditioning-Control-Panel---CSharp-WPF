@@ -45,7 +45,26 @@ export function createSongPlayer({ match, audio = null, logger = null, makeAudio
   let playing = false;
   let failed = false;
   let disposed = false;
+  // A refused play() (autoplay policy) waits for the next pointerdown instead of retrying
+  // every tick: one log line, one listener, one retry.
+  let blocked = false;
+  let unblockOff = null;
   const unsubs = [];
+
+  /** The drone bed goes quiet while the song is actually audible, and comes back after. */
+  function setPlaying(next) {
+    if (next === playing) return;
+    playing = next;
+    try { audio?.muteDrone?.(next); } catch (_e) { /* stub bus */ }
+  }
+
+  function waitForGesture() {
+    if (unblockOff || typeof document === 'undefined' || !document.addEventListener) return;
+    const onDown = () => { clearUnblock(); blocked = false; tick(); };
+    document.addEventListener('pointerdown', onDown, true);
+    unblockOff = () => { try { document.removeEventListener('pointerdown', onDown, true); } catch (_e) { /* gone */ } };
+  }
+  function clearUnblock() { if (unblockOff) { const f = unblockOff; unblockOff = null; f(); } }
 
   function volume() {
     try {
@@ -58,7 +77,9 @@ export function createSongPlayer({ match, audio = null, logger = null, makeAudio
 
   function drop() {
     stopTick();
-    playing = false;
+    setPlaying(false);
+    clearUnblock();
+    blocked = false;
     if (!el) return;
     try { el.pause(); } catch (_e) { /* gone */ }
     try { el.removeAttribute?.('src'); el.load?.(); } catch (_e) { /* gone */ }
@@ -103,13 +124,20 @@ export function createSongPlayer({ match, audio = null, logger = null, makeAudio
     if (act && typeof act.seek === 'number' && el.readyState > 0) {
       try { el.currentTime = act.seek; } catch (_e) { /* not seekable yet */ }
     }
-    if (el.paused) {
+    if (el.paused && !blocked) {
       try {
         const p = el.play();
-        if (p && typeof p.then === 'function') p.then(undefined, (e) => log('play refused: ' + (e && e.name)));
+        if (p && typeof p.then === 'function') {
+          p.then(() => setPlaying(!!el && !el.paused), (e) => {
+            if (blocked) return;
+            blocked = true;
+            log('play refused: ' + (e && e.name) + ', waiting for a tap');
+            waitForGesture();
+          });
+        }
       } catch (e) { log('play threw: ' + (e && e.message)); }
     }
-    playing = !el.paused;
+    setPlaying(!!el && !el.paused);
   }
 
   function start() {
@@ -120,7 +148,9 @@ export function createSongPlayer({ match, audio = null, logger = null, makeAudio
 
   function stop() {
     stopTick();
-    playing = false;
+    setPlaying(false);
+    clearUnblock();
+    blocked = false;
     if (el) { try { el.pause(); } catch (_e) { /* gone */ } }
   }
 

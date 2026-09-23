@@ -982,13 +982,14 @@ function createMatchLog() {
  * so the relay fallback can rebuild a match without this knowledge leaking into
  * the transport layer.
  * -------------------------------------------------------------------------- */
-function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName = null } = {}) {
+function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName = null, night = true } = {}) {
   const match = new GoonMatchService(transport, isHost, {
     rngFactory: (seed) => new GoonRng(seed),
     logger,
     displayName: displayName || (session.identity && session.identity.displayName) || 'Player',
     appVersion: (session.identity && session.identity.appVersion) || '',
-    caps: localCaps(),
+    // The practice bot never speaks Game Night (no duels against a bot that cannot play one).
+    caps: night ? localCaps() : Object.assign({}, localCaps(), { night: 0 }),
     tag: isHost ? 'GG:host' : 'GG:guest',
   });
 
@@ -1597,6 +1598,7 @@ function mountHudNow() {
       // extra key is inert — and handing it over here means the mic lands as one
       // line in ui/hud.js rather than as a second wiring pass through this file.
       match: currentMatch, session, audio, prefs, media, matchLog, discord, voice, coach,
+      isPractice: () => !!soloPair,
     }) || null;
   } catch (e) { logger.error('mountHud threw: ' + ((e && e.stack) || e)); hudHandle = null; }
 }
@@ -2157,7 +2159,7 @@ async function startSolo() {
   soloPair = createLoopbackPair(opts);
 
   const local = buildMatch(soloPair.host, true);
-  soloOpponent = buildMatch(soloPair.guest, false, { withSuddenDeathUi: false, displayName: 'Practice' });
+  soloOpponent = buildMatch(soloPair.guest, false, { withSuddenDeathUi: false, displayName: 'Practice', night: false });
   soloDriver = createSoloDriver({ match: soloOpponent, logger });
 
   attachMatch(local, soloPair.host);

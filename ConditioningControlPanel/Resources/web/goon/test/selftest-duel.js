@@ -19,7 +19,7 @@ import { createBoard, openingSpawn, move, play, deepest, serialize as boardText,
 import {
   duelSeed, duelOutcome, bonusFor, cardEligible, pickLength, DUEL_WIN_BONUS, DUEL_INTRO_MS, DUEL_REPORT_GRACE_MS,
 } from '../ui/duel/rules.js';
-import { createDuelController, duelSummary } from '../ui/duel/duelController.js';
+import { createDuelController, duelSummary, DUEL_GAP_EXTRA_MS, DUEL_MAX_PER_MATCH } from '../ui/duel/duelController.js';
 import { mountArsenal } from '../ui/arsenal.js';
 import { pickDrop } from '../ui/drops.js';
 
@@ -61,7 +61,10 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   ok(inbound && inbound.idx === 0 && inbound.score === 12 && inbound.tile === 0 && inbound.len_s === 60,
     'inbound numbers are clamped (negative, quoted, boolean, off-menu)', JSON.stringify(inbound));
   const out = JSON.parse(serialize(Object.assign(makeDuel({ sub: 'score' }), { score: -5, idx: 'x', tile: 1e12 })));
-  ok(out.score === 0 && out.idx === 0 && out.tile === 10000000, 'outbound numbers are clamped too', JSON.stringify(out));
+  ok(out.score === 0 && out.idx === 0 && out.tile === 17, 'outbound numbers are clamped too (tile tops out at 17)', JSON.stringify(out));
+  const big = parse('{"t":"duel","v":1,"sub":"score","idx":1,"score":99999999,"tile":40}');
+  ok(big.score === 1000000 && big.tile === 17, 'score caps at 1,000,000 and tile at 17, separately', JSON.stringify(big));
+  ok(parse('{"t":"duel","v":1,"sub":"busy","idx":2}').sub === 'busy', 'busy is a known sub');
   ok(parse(serialize(makeDuel({ sub: 'score', idx: 3, score: 1234, tile: 7 }))).score === 1234, 'a sane score round-trips');
 }
 
@@ -95,6 +98,13 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   m._phase = GoonMatchPhase.Recap;
   m._onMessageReceived(parse(serialize(makeDuel({ sub: 'start', idx: 1 }))));
   ok(got.length === 1, 'outside Live/SuddenDeath an inbound duel frame is dropped');
+  const g2 = mk.call(null);
+  Object.defineProperty(g2, '_isHost', { value: false, writable: true });
+  g2._phase = GoonMatchPhase.Countdown;
+  g2._onMessageReceived(parse(serialize(makeDuel({ sub: 'cfg', len_s: 120 }))));
+  ok(g2.peerDuelLen === 120, "the host's cfg is kept in Countdown too");
+  g2._onMessageReceived(parse(serialize(makeDuel({ sub: 'start', idx: 0, len_s: 90 }))));
+  ok(g2.peerDuelLen === 120, 'but a start in Countdown is dropped');
 
   const old = mk();
   old._handleHello(makeHello({ caps: localCaps({ voice: 1 }) }));
@@ -237,17 +247,23 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   advance(5000);
   ok(!H.busy() && !G.busy(), 'the overlay closes and throws come back');
 
-  // A silent peer: the host throws, the guest never reports.
+  // The gap: no new duel until the last one's length + 30 s has passed.
+  ok(H.arsenalHook.throwCard() === false && !H.arsenalHook.eligible(0), 'right after a duel the card is gated (len + 30 s)');
+  advance(90 * 1000 + DUEL_GAP_EXTRA_MS);
+  // A silent peer: the host throws, the guest never reports. Silence is a TIE, never a win.
   guest._send = () => {};   // the guest's frames vanish
   ok(H.arsenalHook.throwCard() === true && H.state.idx === 1 && G.state && G.state.idx === 1, 'duel 1 on the next index');
   advance(DUEL_INTRO_MS + 90 * 1000 + 300);
   ok(H.state.stage === 'wait', 'host waits for a report that never comes');
+  for (let i = 0; i < 20; i++) for (const dir of ['left', 'down', 'right', 'down']) H.input(dir);
   const before = host.scoring.score;
-  H.input('left');
+  const tiedBefore = duelSummary(host).tied;
   advance(DUEL_REPORT_GRACE_MS + 10);
   ok(H.state.stage === 'result', 'the grace window resolves it');
-  ok(host.scoring.score >= before, 'silence counts as 0 (host board >= 0)');
+  ok(host.scoring.score === before && duelSummary(host).tied === tiedBefore + 1, 'a missing report is a tie: no bonus');
   advance(5000);
+  ok(duelSummary(host).won === 1, 'the summary is keyed on the match object', JSON.stringify(duelSummary(host)));
+  advance(90 * 1000 + DUEL_GAP_EXTRA_MS);
 
   // Mercy mid-duel: leaving Live ends the duel with no bonus.
   host._send = (msg) => { guest._onMessageReceived(parse(serialize(msg))); };
@@ -258,8 +274,139 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   host._phase = GoonMatchPhase.Recap;
   host._ev.phaseChanged.emit(GoonMatchPhase.Recap, () => {});
   ok(!H.busy() && host.scoring.score === s0, 'leaving Live closes the duel, no bonus');
+  host._phase = GoonMatchPhase.Live;
 
   H.dispose(); G.dispose();
+}
+
+// ================================================= 8b. the receiver's gates, busy, collisions, practice
+{
+  let now = 0;
+  const timers = [];
+  const later = (fn, ms) => { const t = { at: now + ms, fn, dead: false }; timers.push(t); return () => { t.dead = true; }; };
+  const advance = (ms) => {
+    const end = now + ms;
+    for (;;) {
+      timers.sort((a, b) => a.at - b.at);
+      const t = timers.find((x) => !x.dead && x.at <= end);
+      if (!t) break;
+      now = t.at; t.dead = true; t.fn();
+    }
+    now = end;
+  };
+  const mk = (isHost) => {
+    const m = new GoonMatchService({
+      state: GoonTransportState.ConnectedP2P,
+      send() { return Promise.resolve(true); },
+      onMessageReceived() { return () => {}; },
+      onStateChanged() { return () => {}; },
+    }, isHost, { logger: quiet, tag: isHost ? 'GG:h2' : 'GG:g2' });
+    m._peerSupportsNight = true;
+    m._matchSeed = 77n;
+    m._phase = GoonMatchPhase.Live;
+    return m;
+  };
+  /* A wire that can be HELD: frames queue until flush(), so two throws can cross. */
+  function pair({ hostFinished = 3, guestFinished = 3, guestPractice = false } = {}) {
+    const host = mk(true);
+    const guest = mk(false);
+    const queue = [];
+    let held = false;
+    const deliver = (to, msg) => { const f = parse(serialize(msg)); if (held) queue.push([to, f]); else to._onMessageReceived(f); };
+    const log = [];
+    host._send = (msg) => { log.push(['h', msg]); deliver(guest, msg); };
+    guest._send = (msg) => { log.push(['g', msg]); deliver(host, msg); };
+    let hostCard = 0; let guestCard = 0;
+    const H = createDuelController({ match: host, now: () => now, later, finished: () => hostFinished, duelLength: () => 120 });
+    const G = createDuelController({ match: guest, now: () => now, later, finished: () => guestFinished, duelLength: () => 60, isPractice: () => guestPractice });
+    H.setReturnCard(() => { hostCard++; });
+    G.setReturnCard(() => { guestCard++; });
+    return {
+      host, guest, H, G, log,
+      hold() { held = true; },
+      flush() { held = false; while (queue.length) { const [to, f] = queue.shift(); to._onMessageReceived(f); } },
+      get hostCard() { return hostCard; }, get guestCard() { return guestCard; },
+    };
+  }
+
+  // 1. the RECEIVER's own gate: first match on the receiving side -> busy, card back.
+  {
+    const p = pair({ guestFinished: 0 });
+    ok(p.H.arsenalHook.throwCard() === true, 'host throws');
+    ok(!p.G.busy(), 'a receiver on its first match refuses the start');
+    ok(p.log.some(([who, f]) => who === 'g' && f.sub === 'busy' && f.idx === 0), 'and answers busy');
+    ok(!p.H.busy() && p.hostCard === 1 && p.H.nextIdx === 0, 'the thrower cancels, gets the card back and rolls its idx back');
+    p.H.dispose(); p.G.dispose();
+  }
+  // 1. wrong idx -> busy
+  {
+    const p = pair();
+    p.host._onMessageReceived(parse(serialize(makeDuel({ sub: 'start', idx: 3, len_s: 60 }))));
+    ok(!p.H.busy() && p.log.some(([who, f]) => who === 'h' && f.sub === 'busy' && f.idx === 3), 'a start with an unexpected idx is refused');
+    p.H.dispose(); p.G.dispose();
+  }
+  // 1. the gap and the per-match cap, on the receiver
+  {
+    const p = pair();
+    p.H.arsenalHook.throwCard();
+    advance(DUEL_INTRO_MS + 120 * 1000 + DUEL_REPORT_GRACE_MS + 3000);
+    ok(!p.H.busy() && !p.G.busy(), 'duel 0 done on both sides');
+    // A forged/early start from the peer inside the gap is refused by the receiver.
+    p.guest._onMessageReceived(parse(serialize(makeDuel({ sub: 'start', idx: 1, len_s: 60 }))));
+    ok(!p.G.busy() && p.log.some(([who, f]) => who === 'g' && f.sub === 'busy' && f.idx === 1), 'a start inside the gap is refused');
+    let played = 1;
+    for (let i = 0; i < 10; i++) {
+      advance(120 * 1000 + DUEL_GAP_EXTRA_MS + 10);
+      if (!p.H.arsenalHook.throwCard()) break;
+      played++;
+      advance(DUEL_INTRO_MS + 120 * 1000 + DUEL_REPORT_GRACE_MS + 3000);
+    }
+    ok(played === DUEL_MAX_PER_MATCH, 'a match holds at most five duels', String(played));
+    p.guest._onMessageReceived(parse(serialize(makeDuel({ sub: 'start', idx: DUEL_MAX_PER_MATCH, len_s: 60 }))));
+    ok(!p.G.busy(), 'and the receiver refuses a sixth even at the right idx');
+    p.H.dispose(); p.G.dispose();
+  }
+  // 2. busy while the receiver is holding a result
+  {
+    const p = pair();
+    p.H.arsenalHook.throwCard();
+    advance(DUEL_INTRO_MS + 120 * 1000 + 300);    // both reported, both in the result hold
+    ok(p.G.state && p.G.state.stage === 'result', 'guest is in its result hold');
+    p.guest._onMessageReceived(parse(serialize(makeDuel({ sub: 'start', idx: 1, len_s: 60 }))));
+    ok(p.G.state.idx === 0 && p.log.some(([who, f]) => who === 'g' && f.sub === 'busy' && f.idx === 1), 'a start during the result hold gets busy');
+    p.H.dispose(); p.G.dispose();
+  }
+  // 2. practice: no card, no inbound duel
+  {
+    const p = pair({ guestPractice: true });
+    ok(!p.G.arsenalHook.eligible(0) && !p.G.arsenalHook.visible(), 'practice never drops or shows the card');
+    ok(p.H.arsenalHook.throwCard() === true && !p.G.busy() && p.hostCard === 1, 'a start into practice is answered busy');
+    p.H.dispose(); p.G.dispose();
+  }
+  // 3. collision: both throw at once, the host's start and length win
+  {
+    const p = pair();
+    p.hold();
+    ok(p.H.arsenalHook.throwCard() && p.G.arsenalHook.throwCard(), 'both throw before either frame lands');
+    ok(p.H.state.len === 120 && p.G.state.len === 120, "the guest already carries the host's cfg length", p.G.state.len + '');
+    p.flush();
+    ok(p.H.state && p.G.state && p.H.state.idx === 0 && p.G.state.idx === 0, 'both stay in duel 0');
+    ok(!p.log.some(([, f]) => f.sub === 'busy'), 'a collision is not a refusal');
+    p.H.dispose(); p.G.dispose();
+  }
+  {
+    // A guest that never got the cfg starts on its own length (60); the host's start (120) wins.
+    const p = pair();
+    p.guest._peerDuelLen = 0;
+    p.hold();
+    ok(p.H.arsenalHook.throwCard() && p.G.arsenalHook.throwCard(), 'crossing throws without a cfg');
+    ok(p.G.state.len === 60, 'the guest started on its own length', String(p.G.state.len));
+    p.flush();
+    ok(p.H.state && p.G.state && p.H.state.idx === p.G.state.idx, 'both stay in the SAME duel');
+    ok(p.G.state.len === 120 && p.H.state.len === 120, "the guest adopts the host's start and length", p.G.state.len + '/' + p.H.state.len);
+    ok(!p.log.some(([, f]) => f.sub === 'busy'), 'still no refusal');
+    p.H.dispose(); p.G.dispose();
+  }
 }
 
 // ================================================= 9. the arsenal slot (headless)
