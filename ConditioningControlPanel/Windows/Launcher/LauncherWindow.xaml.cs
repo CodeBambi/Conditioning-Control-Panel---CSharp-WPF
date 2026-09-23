@@ -100,6 +100,7 @@ public partial class LauncherWindow : Window
             RefreshLockdownVeil();
             HookEngine();
             _statusTimer.Start();
+            StartOpenTables();
 
             if (MotionFx.AllowTransitions)
                 foreach (var t in _tiles) t.Opacity = 0;
@@ -115,6 +116,7 @@ public partial class LauncherWindow : Window
     private void OnHidden()
     {
         _statusTimer.Stop();
+        StopOpenTables();
         RestoreRootOpacity();
         try { FxOnHidden(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnHidden threw"); }
     }
@@ -137,6 +139,7 @@ public partial class LauncherWindow : Window
         _fadeGuard?.Stop();
         _statusTimer.Stop();
         _shortcutTextTimer.Stop();
+        StopOpenTables();
         LauncherHost.RequestSignIn = null;
         UnhookEngine();
         var mods = App.Mods;

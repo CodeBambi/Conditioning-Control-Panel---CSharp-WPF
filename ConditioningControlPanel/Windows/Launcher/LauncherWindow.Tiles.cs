@@ -145,6 +145,7 @@ public partial class LauncherWindow
         });
         if (needsAccount) plate.Children.Add(BuildSignInPill());
         else if (locked) plate.Children.Add(BuildPrimePill());
+        if (OpenTablesBadgeFor(entry, revealed && !needsAccount) is { } openBadge) plate.Children.Add(openBadge);
 
         var shortcutBtn = new Button
         {
