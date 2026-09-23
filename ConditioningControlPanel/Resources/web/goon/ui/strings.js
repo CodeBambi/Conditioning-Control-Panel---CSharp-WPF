@@ -209,6 +209,24 @@ export const S = Object.freeze({
     eyebrowPicking: 'they are getting set up',
     prepPicking: (name) => (name || 'they') + ' joined — picking their media…',
   },
+  /* --- GAME NIGHT: the song (ui/screens/songRow.js). The match lasts as long
+     as the song. One row, one paste box, skip is the default. --- */
+  song: {
+    label: 'Pick a song',
+    placeholder: 'paste a bambicloud track link',
+    pick: 'use it',
+    skip: 'skip',
+    sub: 'the match lasts as long as the song. skip it and you get the usual length.',
+    none: 'no song. usual length.',
+    loading: 'listening for how long it is',
+    failed: 'that track would not load. usual length it is.',
+    empty: 'paste a track link first.',
+    refusedPage: 'that is a page link, not a track link. open it over there and copy the track link.',
+    refusedHost: 'only bambicloud track links work here.',
+    picked: (title, clock) => (title || 'a song') + ' · ' + clock,
+    lengthHost: 'match length follows the song.',
+    lengthGuest: 'their pick. the match lasts as long as it does.',
+  },
 
   /* -------------------------------------------------------------- discord
    * The sharing panel, the VS splash, the HUD minis and the recap plates.

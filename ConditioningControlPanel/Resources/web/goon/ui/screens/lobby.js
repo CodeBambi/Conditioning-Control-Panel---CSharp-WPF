@@ -23,6 +23,8 @@ import { S, minutes } from '../strings.js';
 import { buildDiscordSection, askSharePrompt } from '../discord.js';
 import { GoonMatchPhase, GoonTransportState } from '../../core/contracts.js';
 import { formatRecord } from '../rivalry.js';
+import { buildSongRow } from './songRow.js';
+import { songClock } from '../../core/song.js';
 
 const DUR_MIN_SEC = 60;
 const DUR_MAX_SEC = 3600;
@@ -173,6 +175,13 @@ export function mount(container, ctx) {
     durRow.row, toyRow.row, gapRow.row, xferRow.row, xferRow.sub, voiceRow.row, voiceRow.sub,
   ]);
 
+  /* GAME NIGHT: "Pick a song". Outside the consent box, which is inert until the
+   * opponent arrives; picking a song is what a host does while waiting. */
+  const songRow = buildSongRow({
+    ledger, match, audio,
+    origin: (typeof location !== 'undefined' && location && location.origin) || null,
+  });
+
   /* ---------------------------------------------------------- confirm UI */
 
   const lampYou = el('span', { class: 'gg-lamp' }, [el('i'), el('span', { text: S.lobby.lampYou })]);
@@ -188,7 +197,7 @@ export function mount(container, ctx) {
   const eyebrow = el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.lobby.eyebrowWaiting })]);
 
   container.appendChild(el('div', { class: 'gg-card gg-lobby' }, [
-    eyebrow, duel, rivalLine, connLine, prepLine, sheetBox, lamps, changedLine,
+    eyebrow, duel, rivalLine, connLine, prepLine, songRow.node, sheetBox, lamps, changedLine,
     el('div', { class: 'gg-lobby-actions' }, [leaveBtn, confirmBtn]),
   ]));
 
@@ -272,12 +281,13 @@ export function mount(container, ctx) {
     const gapSec = Math.round(s.payload_min_gap_ms / 1000);
 
     if (document.activeElement !== durRow.input) durRow.input.value = String(durSec);
-    durRow.value.textContent = minutes(durSec);
+    durRow.value.textContent = match.song ? songClock(durSec) : minutes(durSec);
     if (document.activeElement !== gapRow.input) gapRow.input.value = String(gapSec);
     gapRow.value.textContent = S.lobby.gapValue(gapSec);
 
     const editable = match.phase === GoonMatchPhase.Consent;
-    durRow.input.disabled = !editable;
+    // A picked song owns the length: the slider would only fight it.
+    durRow.input.disabled = !editable || !!match.song;
     gapRow.input.disabled = !editable;
   }
 
@@ -625,6 +635,7 @@ export function mount(container, ctx) {
     ledger.sub(match.onMediaPrepChanged(() => paintIdentity()));
   }
   ledger.sub(match.onPhaseChanged(() => { paintAll(); }));
+  if (typeof match.onSongChanged === 'function') ledger.sub(match.onSongChanged(() => paintSheet()));
   /* The pref is the truth and this screen is one of its readers — ui/screens/
    * voice.js and the options drawer's Reset can both move it out from under us,
    * and a checkbox that disagrees with the thing it controls is worse than no
@@ -657,7 +668,7 @@ export function mount(container, ctx) {
   // as the proposer. The engine's host-authored opening proposal has already
   // fired by then; this only replaces it when the player has a remembered
   // preference that differs, so a guest never sees two proposals for nothing.
-  if (match.isHost && match.phase === GoonMatchPhase.Consent && prefs) {
+  if (match.isHost && match.phase === GoonMatchPhase.Consent && prefs && !match.song) {
     const wantDur = clampNum(prefs.get('matchLengthSec'), DUR_MIN_SEC, DUR_MAX_SEC);
     const wantGap = clampNum(prefs.get('payloadGapSec'), GAP_MIN_SEC, GAP_MAX_SEC);
     const s = match.consentSheet;

@@ -328,11 +328,13 @@ export function makeCaps(o = {}) {
     min_v: o.min_v ?? PROTOCOL_VERSION,
     transfer: o.transfer ?? false,
     voice: clampVoiceCount(o.voice),
+    night: clampVoiceCount(o.night),
   };
 }
 
 /** The voice-note protocol revision THIS build speaks. Advertised as `caps.voice`. */
 export const VOICE_CAP_VERSION = 1;
+export const NIGHT_CAP_VERSION = 1;
 
 /**
  * A peer's `caps.voice`, from an UNTRUSTED hello, as a plain boolean "can we send to them".
@@ -345,6 +347,7 @@ export const VOICE_CAP_VERSION = 1;
 export function peerSpeaksVoice(caps) {
   return clampVoiceCount(caps && caps.voice) >= 1;
 }
+export function peerSpeaksNight(caps) { return clampVoiceCount(caps && caps.night) >= 1; }
 
 export function makeHello(o = {}) {
   return {
@@ -570,6 +573,33 @@ export function makeVoice(o = {}) {
 }
 
 /**
+ * GAME NIGHT: THE SONG (2026-09-23). One frame, host -> guest, before Live:
+ *
+ *   {t:'song', sub:'set',   url, title, dur_sec}   the host picked a track
+ *   {t:'song', sub:'clear'}                        the host went back to the default length
+ *
+ * GATED BY `caps.night`, never by version: an older peer drops an unknown `t` without a word,
+ * so core/match.js only ever sends this to a peer whose hello said night >= 1 (peerSpeaksNight).
+ * It enters no intersection and can never fail a lobby.
+ *
+ * IT IS NOT A TERM. The length the match actually runs is the consent sheet's
+ * live_duration_sec, proposed by the host through the ordinary proposeConsent road, so both
+ * lamps clear and both players sign the length they saw. `dur_sec` here is only the label.
+ * The url is re-checked on arrival (core/song.js wireSongUrl: https, cdn.bambicloud.com, nothing
+ * else) and the title sanitized, in core/match.js. The numbers are pinned in wire.js.
+ */
+export function makeSong(o = {}) {
+  return {
+    t: 'song',
+    v: o.v ?? PROTOCOL_VERSION,
+    sub: o.sub ?? '',
+    url: o.url ?? null,
+    title: o.title ?? null,
+    dur_sec: o.dur_sec ?? 0,
+  };
+}
+
+/**
  * "I am still getting my library together" (protocol §6, v1.4).
  *
  * A PRESENCE HINT, not a term and not a phase. A first-time guest who arrived on
@@ -643,6 +673,7 @@ export const MessageFactories = Object.freeze({
   mercy: makeMercy,
   emote: makeEmote,
   voice: makeVoice,
+  song: makeSong,
   media_prep: makeMediaPrep,
   result: makeResult,
   clock_ping: makeClockPing,

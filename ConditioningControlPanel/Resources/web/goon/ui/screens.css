@@ -1529,3 +1529,24 @@ html[data-gg-motion="reduced"] .gg-draft.is-sealed::after { display: none; }
   .gg-assets-grid { grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); }
   .gg-assets-search { flex-basis: 100%; }
 }
+
+/* GAME NIGHT: "Pick a song" (ui/screens/songRow.js). One row above the terms. */
+.gg-song { margin: 0 0 0.9rem; padding: 0.7rem 0.8rem 0.6rem; border-radius: var(--gg-radius-plate); background: var(--gg-plate-bg); border: var(--gg-plate-border); }
+.gg-song.has-song { border-color: rgba(255, 105, 180, 0.45); }
+.gg-song-head { margin: 0; }
+.gg-song-head .gg-btn { margin-left: auto; padding: 0.2rem 0.7rem; font-size: 0.74rem; }
+.gg-song-form { display: flex; gap: 0.5rem; margin-top: 0.45rem; }
+.gg-song-input {
+  flex: 1 1 auto; min-width: 0; padding: 0.45rem 0.6rem; border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(0, 0, 0, 0.35);
+  color: inherit; font: inherit; font-size: 0.82rem;
+}
+.gg-song-input:focus { outline: none; border-color: var(--gg-pink); }
+.gg-song-picked { margin: 0.45rem 0 0; font-weight: 700; font-size: 0.95rem; word-break: break-word; }
+.gg-song-picked.is-stamped { animation: ggSongStamp .42s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes ggSongStamp {
+  0% { transform: scale(1.6) rotate(-6deg); opacity: 0; }
+  60% { transform: scale(0.94) rotate(-2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-1.5deg); opacity: 1; }
+}
+html[data-gg-motion="reduced"] .gg-song-picked.is-stamped { animation: none !important; transform: rotate(-1.5deg); }

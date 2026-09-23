@@ -69,6 +69,8 @@ import {
   makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMediaPrep, makeMercy,
   makePayloadReceipt, makeResult, makeTick, makePayload, makeVoice, peerSpeaksVoice, VOICE_SUBS,
 } from './contracts.js';
+import { makeSong, peerSpeaksNight } from './contracts.js';
+import { SONG_TITLE_MAX, clampSongSec, wireSongUrl } from './song.js';
 import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
 import { localMonotonicMs } from './clock.js';
 import { ticker } from './scheduler.js';
@@ -285,6 +287,14 @@ export class GoonMatchService {
     this._localMediaPrep = false;
     this._remoteMediaPrep = false;
 
+    // GAME NIGHT, THE SONG. `_peerSupportsNight` off caps.night (never send into a build that
+    // would drop the frame); `_localSong` is what THIS side picked (host only), `_remoteSong` what
+    // the host told us. Each is null or {url, title, durSec}. Neither is a consent term: the
+    // length the match runs is the sheet's, proposed through proposeConsent.
+    this._peerSupportsNight = false;
+    this._localSong = null;
+    this._remoteSong = null;
+
     this._localSeedContribution = null;
     this._remoteSeedContribution = null;
 
@@ -358,6 +368,7 @@ export class GoonMatchService {
       voiceFrameReceived: makeEvent(),
       linkChanged: makeEvent(),
       mediaPrepChanged: makeEvent(),
+      songChanged: makeEvent(),
       interactionCheckDue: makeEvent(),
       lobbyFailed: makeEvent(),
       matchEnded: makeEvent(),
@@ -460,6 +471,12 @@ export class GoonMatchService {
   get localMediaPrep() { return this._localMediaPrep; }
   /** Are THEY? Absent frame -> false, so an older peer reads as "ready". */
   get remoteMediaPrep() { return this._remoteMediaPrep; }
+  /** Their build speaks Game Night frames (caps.night >= 1). */
+  get peerSupportsNight() { return this._peerSupportsNight; }
+  get localSong() { return this._localSong; }
+  get remoteSong() { return this._remoteSong; }
+  /** The song this match plays: the host's pick, on both sides. null = today's default. */
+  get song() { return this._isHost ? this._localSong : this._remoteSong; }
 
   /** What WE allow (canonical, always-on element excluded). */
   get localAllowedElements() { return this._localAllowed; }
@@ -574,6 +591,8 @@ export class GoonMatchService {
   onLinkChanged(fn) { return this._ev.linkChanged.on(fn); }
   /** fn(preparing) whenever the OPPONENT's `media_prep` declaration changes. */
   onMediaPrepChanged(fn) { return this._ev.mediaPrepChanged.on(fn); }
+  /** fn(song|null) whenever the song in effect for this match changes (either side). */
+  onSongChanged(fn) { return this._ev.songChanged.on(fn); }
   /** No-cam only: prompt an interaction check, then call reportInteractionCheck(). */
   onInteractionCheckDue(fn) { return this._ev.interactionCheckDue.on(fn); }
   onLobbyFailed(fn) { return this._ev.lobbyFailed.on(fn); }
@@ -1178,6 +1197,7 @@ export class GoonMatchService {
         case 'mercy': this._handleRemoteMercy(message); break;
         case 'emote': this._handleEmote(message); break;
         case 'voice': this._handleVoice(message); break;
+        case 'song': this._handleSong(message); break;
         case 'media_prep': this._handleMediaPrep(message); break;
         case 'result': this._handleRemoteResult(message); break;
         case 'round':
@@ -1245,6 +1265,9 @@ export class GoonMatchService {
     // see the helper in core/contracts.js. False for every peer that predates the family, which
     // is what keeps a fire-and-forget send from disappearing into a build that cannot hear it.
     this._peerSupportsVoice = peerSpeaksVoice(caps);
+    // Game Night, on the same terms. A host that picked before the guest arrived tells them now.
+    this._peerSupportsNight = peerSpeaksNight(caps);
+    if (this._isHost && this._localSong) this._sendSong();
 
     if (caps && caps.min_v > GoonConsts.ProtocolVersion) {
       this._failLobby(`opponent requires protocol v${caps.min_v}, this client speaks v${GoonConsts.ProtocolVersion} - update required`);
@@ -1744,6 +1767,66 @@ export class GoonMatchService {
     this._remoteMediaPrep = next;
     this._info(`opponent media_prep -> ${next ? 'picking' : 'ready'}`);
     this._ev.mediaPrepChanged.emit(next, (e) => this._warn(`mediaPrepChanged handler threw: ${e && e.message}`));
+  }
+
+  // ------------------------------------------------------ game night: the song
+
+  /**
+   * The host picks (or clears) the match's song. `song` = {url, title, durSec} or null.
+   *
+   * HOST ONLY and PRE-LIVE ONLY (Lobby/Consent). The length goes through proposeConsent, so it
+   * clears both lamps like any other change of terms and both players sign the length they saw.
+   * A null song leaves the sheet as it is (the player's slider is free again).
+   *
+   * @returns {boolean} true when the pick was taken
+   */
+  setSong(song) {
+    if (!this._isHost) return false;
+    if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return false;
+    let next = null;
+    if (song) {
+      const url = String(song.url || '');
+      const durSec = clampSongSec(song.durSec);
+      if (!url || !durSec) return false;
+      next = { url, title: sanitizeText(song.title, SONG_TITLE_MAX), durSec };
+    }
+    this._localSong = next;
+    if (next) {
+      const s = this._consentSheet;
+      this.proposeConsent(next.durSec, s.toy_cap, s.payload_min_gap_ms);
+    }
+    this._sendSong();
+    this._ev.songChanged.emit(next, (e) => this._warn(`songChanged handler threw: ${e && e.message}`));
+    return true;
+  }
+
+  /** One `song` frame, and only to a peer that said caps.night >= 1. */
+  _sendSong() {
+    if (!this._peerSupportsNight) return;
+    const s = this._localSong;
+    this._send(s
+      ? makeSong({ sub: 'set', url: s.url, title: s.title, dur_sec: s.durSec })
+      : makeSong({ sub: 'clear' }));
+  }
+
+  /**
+   * Their song frame. The GUEST reads it, pre-live only, and the url must pass wireSongUrl
+   * (https, cdn.bambicloud.com, nothing else) or the frame is ignored. A song is a label and a
+   * soundtrack, never a term: the consent sheet still carries the length.
+   */
+  _handleSong(frame) {
+    if (this._isHost) return;
+    if (!this._isPreLive(this._phase)) return;
+    let next;
+    if (frame.sub === 'clear') next = null;
+    else if (frame.sub === 'set') {
+      const url = wireSongUrl(frame.url);
+      if (!url) return;
+      next = { url, title: sanitizeText(frame.title, SONG_TITLE_MAX), durSec: clampSongSec(frame.dur_sec) };
+    } else return;
+    this._remoteSong = next;
+    this._info(`opponent song -> ${next ? next.durSec + 's' : 'none'}`);
+    this._ev.songChanged.emit(next, (e) => this._warn(`songChanged handler threw: ${e && e.message}`));
   }
 
   _handleRemoteMercy(mercy) {
