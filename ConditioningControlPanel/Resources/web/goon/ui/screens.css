@@ -1021,14 +1021,24 @@
 /* ---------------------------------------------------------------------------
  * SHEETS (#gg-modal, z70)
  * ------------------------------------------------------------------------ */
+/* Centred in the VIEWPORT (owner, 2026-09-23): #gg-modal is fixed to the viewport,
+   the dock fills it and centres the card both ways, and the screen underneath stops
+   scrolling while a sheet is up. `safe` keeps a sheet taller than the window from
+   losing its top edge; the dock scrolls instead. */
 .gg-sheet-dock {
   position: absolute;
-  inset: auto 0 0 0;
+  inset: 0;
   display: flex;
+  align-items: safe center;
   justify-content: center;
-  padding: 0 clamp(0.5rem, 3vw, 2rem);
+  padding: calc(clamp(0.75rem, 3vw, 2rem) + env(safe-area-inset-top, 0px))
+           clamp(0.75rem, 3vw, 2rem)
+           calc(clamp(0.75rem, 3vw, 2rem) + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.gg-sheet--modal { width: min(30rem, 100%); text-align: center; }
+.gg-sheet--modal { width: min(30rem, 100%); text-align: center; border-radius: var(--gg-radius-card); max-height: none; }
+html:has(#gg-modal:not([hidden])) .gg-screen { overflow: hidden; }
 .gg-sheet-icon { font-size: 1.8rem; line-height: 1; margin-bottom: 0.5rem; }
 .gg-sheet-headline { margin: 0; font-size: 1.15rem; font-weight: 700; }
 .gg-sheet-line { margin: 0.5rem 0 0; color: var(--gg-text-2); font-size: 0.9rem; line-height: 1.6; }
@@ -1705,4 +1715,30 @@ html[data-gg-motion="reduced"] .gg-song-picked.is-stamped { animation: none !imp
 html[data-gg-motion="reduced"] .gg-ot *, html[data-gg-motion="reduced"] .gg-ot-stamp span { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .gg-ot *, .gg-ot-stamp span { animation: none !important; transition: none !important; }
+}
+
+/* ---------------------------------------------------------------------------
+ * LOBBY ON A DESKTOP (owner, 2026-09-23: one long column with empty sides).
+ * A wide window puts the terms card and the Discord card side by side and
+ * tightens the rows, so the whole lobby fits without a long scroll. Phones and
+ * portrait windows keep the single column above. Layout only: no motion here.
+ * ------------------------------------------------------------------------ */
+@media (min-width: 1100px) and (orientation: landscape) {
+  #scr-lobby:has(> .gg-dc) {
+    display: grid;
+    grid-template-columns: minmax(0, 40rem) minmax(0, 28rem);
+    justify-content: center;
+    align-content: safe center;
+    align-items: start;
+    gap: 1.25rem;
+  }
+  #scr-lobby:has(> .gg-dc) > * { margin: 0; min-width: 0; max-width: none; }
+  #scr-lobby .gg-lobby, #scr-lobby .gg-dc { padding: 1.25rem 1.5rem; }
+  #scr-lobby .gg-duel { margin: 0.7rem 0 0.4rem; gap: 0.6rem; }
+  #scr-lobby .gg-duel-side { padding: 0.55rem 0.7rem; }
+  #scr-lobby .gg-conn { margin: 0 0 0.6rem; }
+  #scr-lobby .gg-song { margin: 0 0 0.5rem; padding: 0.55rem 0.7rem 0.45rem; }
+  #scr-lobby .gg-row { padding: 0.3rem 0; }
+  #scr-lobby .gg-row-sub { margin: 0.2rem 0 0.1rem; }
+  #scr-lobby .gg-lamps { margin: 0.6rem 0 0.2rem; padding: 0.3rem 0; }
 }

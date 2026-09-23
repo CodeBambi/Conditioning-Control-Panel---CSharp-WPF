@@ -2083,7 +2083,10 @@ function mountRecap(result, extra = {}) {
   me.proposeConsent(60, 0, 30000);
   await wait(60);
   me.confirmConsent();
-  await wait(400);
+  // The bot thinks 700-1600 ms before it signs (soloDriver CONSENT_THINK_MS): a fixed 400 ms
+  // wait left the terms unsigned most runs, and this check plus the three payload checks
+  // under it failed together (the "4 practice checks" flake). Wait for the signature instead.
+  for (let i = 0; i < 30 && me.phase === GoonMatchPhase.Consent; i++) await wait(100);
   for (let i = 0; i < 40 && me.phase === GoonMatchPhase.Draft; i++) { me.confirmDraft(); await wait(120); }
   ok(me.phase === GoonMatchPhase.Countdown || me.phase === GoonMatchPhase.Live,
     'practice reaches the countdown with the bot signed', String(me.phase));
