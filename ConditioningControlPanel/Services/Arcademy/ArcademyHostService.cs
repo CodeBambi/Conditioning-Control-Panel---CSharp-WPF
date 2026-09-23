@@ -326,6 +326,7 @@ internal static class ArcademyHostService
             catch (Exception ex) { App.Logger?.Debug("ArcademyHost: minimize main window failed: {E}", ex.Message); }
 
             App.Logger?.Information("ArcademyHostService: launched");
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Arcademy);
         }
         catch (Exception ex)
         {
@@ -6069,6 +6070,7 @@ internal static class ArcademyHostService
                 try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             App.Logger?.Information("ArcademyHostService: closed");
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
         }
         finally { _disposing = false; }
     }

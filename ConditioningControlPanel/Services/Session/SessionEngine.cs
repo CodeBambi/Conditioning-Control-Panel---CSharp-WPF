@@ -250,6 +250,7 @@ namespace ConditioningControlPanel.Services
 
             // Fire started event
             SessionStarted?.Invoke(this, EventArgs.Empty);
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Session);
 
             // EMI Desk: reset the per-session latches, then announce.
             _emiRampStep = 0;
@@ -393,6 +394,7 @@ namespace ConditioningControlPanel.Services
             
             // Fire events
             SessionStopped?.Invoke(this, EventArgs.Empty);
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
 
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();

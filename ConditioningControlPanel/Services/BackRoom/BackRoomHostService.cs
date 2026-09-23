@@ -279,6 +279,7 @@ internal static class BackRoomHostService
                 w.Activated += (_, _) => OnWindowActivated();
             }
             App.Logger?.Information("BackRoomHostService: launched");
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom);
         }
         catch (Exception ex)
         {
@@ -619,6 +620,7 @@ internal static class BackRoomHostService
             // sweep still clears anything a crash left behind.
             _panicSuspended = _minimised = false;
             App.Logger?.Information("BackRoomHostService: closed");
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
         }
         finally { _disposing = false; }
     }
