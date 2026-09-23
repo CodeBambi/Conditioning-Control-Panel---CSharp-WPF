@@ -1021,14 +1021,24 @@
 /* ---------------------------------------------------------------------------
  * SHEETS (#gg-modal, z70)
  * ------------------------------------------------------------------------ */
+/* Centred in the VIEWPORT (owner, 2026-09-23): #gg-modal is fixed to the viewport,
+   the dock fills it and centres the card both ways, and the screen underneath stops
+   scrolling while a sheet is up. `safe` keeps a sheet taller than the window from
+   losing its top edge; the dock scrolls instead. */
 .gg-sheet-dock {
   position: absolute;
-  inset: auto 0 0 0;
+  inset: 0;
   display: flex;
+  align-items: safe center;
   justify-content: center;
-  padding: 0 clamp(0.5rem, 3vw, 2rem);
+  padding: calc(clamp(0.75rem, 3vw, 2rem) + env(safe-area-inset-top, 0px))
+           clamp(0.75rem, 3vw, 2rem)
+           calc(clamp(0.75rem, 3vw, 2rem) + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.gg-sheet--modal { width: min(30rem, 100%); text-align: center; }
+.gg-sheet--modal { width: min(30rem, 100%); text-align: center; border-radius: var(--gg-radius-card); max-height: none; }
+html:has(#gg-modal:not([hidden])) .gg-screen { overflow: hidden; }
 .gg-sheet-icon { font-size: 1.8rem; line-height: 1; margin-bottom: 0.5rem; }
 .gg-sheet-headline { margin: 0; font-size: 1.15rem; font-weight: 700; }
 .gg-sheet-line { margin: 0.5rem 0 0; color: var(--gg-text-2); font-size: 0.9rem; line-height: 1.6; }
@@ -1550,3 +1560,185 @@ html[data-gg-motion="reduced"] .gg-draft.is-sealed::after { display: none; }
   100% { transform: scale(1) rotate(-1.5deg); opacity: 1; }
 }
 html[data-gg-motion="reduced"] .gg-song-picked.is-stamped { animation: none !important; transform: rotate(-1.5deg); }
+
+/* ============================================================================
+ * OPEN TABLES (2026-09-23) - the home screen (ui/screens/title.js), the host's
+ * waiting table (ui/screens/host.js), the Prime sheet and the SEATED stamp.
+ * Built to the approved mockup: list left, rail right, glass rows, mint Sit
+ * down, cyan PRIME chips. Offline by construction: system fonts only. All
+ * motion here is decorative and parks under both reduced-motion switches.
+ * ==========================================================================*/
+.gg-ot {
+  --ot-glass: rgba(255, 255, 255, 0.055);
+  --ot-glass2: rgba(255, 255, 255, 0.09);
+  --ot-line: rgba(185, 156, 255, 0.22);
+  --ot-ink: #f3ecff;
+  --ot-dim: #a99bc9;
+  --ot-faint: #6f6391;
+  --ot-pink: #ff5fa2;
+  --ot-mint: #5fffd0;
+  --ot-lilac: #b99cff;
+  --ot-gold: #ffcf6b;
+  --ot-cyan: #5fd8ff;
+  --ot-display: "Fredoka", "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif;
+  --ot-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  width: min(1120px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 22px;
+  align-items: start;
+  color: var(--ot-ink);
+}
+@media (max-width: 860px) { .gg-ot { grid-template-columns: minmax(0, 1fr); } }
+.gg-ot .gg-host-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start; margin: 0; }
+.gg-ot-col, .gg-ot-rail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.gg-ot-logo { width: 96px; max-width: 30vw; height: auto; border-radius: 12px; opacity: 0.9; }
+.gg-ot-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.gg-ot-eyebrow { display: block; font: 600 12px var(--ot-mono); color: var(--ot-dim); letter-spacing: 0.06em; margin-bottom: 4px; }
+.gg-ot-h2 {
+  font: 700 40px/1.08 var(--ot-display); margin: 0; padding-bottom: 2px; letter-spacing: -0.01em;
+  background: linear-gradient(95deg, var(--ot-lilac), var(--ot-pink));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.gg-ot-live { font: 700 12px var(--ot-mono); color: var(--ot-mint); display: flex; align-items: center; gap: 6px; }
+.gg-ot-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--ot-mint); box-shadow: 0 0 10px var(--ot-mint); animation: gg-ot-blink 1.6s ease-in-out infinite; }
+.gg-ot-live.is-quiet { color: var(--ot-faint); }
+.gg-ot-live.is-quiet i { background: var(--ot-faint); box-shadow: none; animation: none; }
+.gg-ot-live[hidden] { display: none; }
+@keyframes gg-ot-blink { 50% { opacity: 0.35; } }
+.gg-ot-list { display: flex; flex-direction: column; gap: 16px; }
+.gg-ot-group { display: flex; flex-direction: column; gap: 8px; }
+.gg-ot-gh { display: flex; align-items: center; gap: 8px; font: 700 11px var(--ot-mono); letter-spacing: 0.1em; color: var(--ot-dim); text-transform: uppercase; }
+.gg-ot-gh em { font-style: normal; color: var(--ot-faint); }
+.gg-ot-row {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 12px; background: var(--ot-glass); border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform 0.15s, background 0.15s, border-color 0.15s, opacity 0.2s;
+  animation: gg-ot-in 0.32s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+.gg-ot-row:hover { background: var(--ot-glass2); border-color: var(--ot-line); transform: translateX(2px); }
+.gg-ot-row.is-friend { border-color: rgba(95, 255, 208, 0.22); }
+.gg-ot-row.is-gone { opacity: 0.45; }
+.gg-ot-row.is-preview { animation: none; }
+@keyframes gg-ot-in { from { opacity: 0; transform: translateY(6px); } }
+.gg-ot-av {
+  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; position: relative;
+  font: 700 18px var(--ot-display); color: #1b1233; overflow: visible;
+}
+.gg-ot-av img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.gg-ot-av.is-on::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: var(--ot-mint); border: 2px solid #150f26; }
+.gg-ot-who { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.gg-ot-who b { font: 600 16px var(--ot-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gg-ot-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.gg-ot-tag { font: 600 11px var(--ot-mono); color: var(--ot-dim); background: rgba(0, 0, 0, 0.25); border-radius: 5px; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; }
+.gg-ot-tag svg { width: 12px; height: 12px; }
+.gg-ot-tag.is-rec { color: var(--ot-gold); }
+.gg-ot-tag.is-wait { color: var(--ot-faint); background: none; padding-inline: 0; }
+.gg-ot-join {
+  font: 700 14px var(--ot-display); color: #1b1233; background: var(--ot-mint); border: 0; border-radius: 10px; padding: 9px 16px; cursor: pointer;
+  box-shadow: 0 3px 0 #1f9e7e, 0 0 18px rgba(95, 255, 208, 0.25); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.08s;
+}
+.gg-ot-join:active { transform: translateY(2px); box-shadow: 0 1px 0 #1f9e7e; }
+.gg-ot-join.is-locked { background: rgba(95, 216, 255, 0.1); color: var(--ot-cyan); box-shadow: inset 0 0 0 1px rgba(95, 216, 255, 0.5); }
+.gg-ot-join.is-taken, .gg-ot-join.is-busy { background: #3b2e5c; color: var(--ot-dim); box-shadow: none; cursor: default; }
+.gg-ot-empty { padding: 18px; border-radius: 12px; border: 1px dashed var(--ot-line); color: var(--ot-dim); display: flex; flex-direction: column; gap: 6px; }
+.gg-ot-empty b { font: 600 17px var(--ot-display); color: var(--ot-ink); }
+.gg-ot-more { margin: 0; color: var(--ot-faint); font-size: 12px; }
+.gg-ot-more[hidden] { display: none; }
+.gg-ot-act {
+  position: relative; text-align: left; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 6px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.08); background: var(--ot-glass); color: var(--ot-ink); font: inherit;
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+.gg-ot-act:hover { transform: translateY(-1px); }
+.gg-ot-act:active { transform: translateY(1px) scale(0.99); }
+.gg-ot-act h3 { margin: 0; font: 700 22px var(--ot-display); }
+.gg-ot-act p { margin: 0; color: var(--ot-dim); font-size: 13px; }
+.gg-ot-act--host { background: linear-gradient(140deg, rgba(255, 95, 162, 0.35), rgba(185, 156, 255, 0.18)); border-color: rgba(255, 95, 162, 0.45); }
+.gg-ot-act--host:hover { box-shadow: 0 0 30px rgba(255, 95, 162, 0.25); }
+.gg-ot-act--host.is-locked { filter: saturate(0.55); }
+.gg-ot-act--prac { border-color: rgba(255, 207, 107, 0.3); }
+.gg-ot-act .gg-menu-note { font-size: 12px; color: var(--ot-cyan); }
+.gg-ot-corner { position: absolute; top: 12px; right: 12px; }
+.gg-ot-chip-prime, .gg-ot-chip-free { font: 700 10px var(--ot-mono); letter-spacing: 0.08em; border-radius: 4px; padding: 2px 6px; display: inline-flex; align-items: center; gap: 3px; }
+.gg-ot-chip-prime { color: var(--ot-cyan); border: 1px solid var(--ot-cyan); text-shadow: 0 0 8px rgba(95, 216, 255, 0.7); box-shadow: 0 0 10px rgba(95, 216, 255, 0.25) inset; }
+.gg-ot-chip-free { color: var(--ot-dim); border: 1px solid var(--ot-faint); }
+.gg-ot-card { border-radius: 14px; background: var(--ot-glass); border: 1px solid rgba(255, 255, 255, 0.07); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.gg-ot-card[hidden], .gg-ot-cust-slot[hidden] { display: none; }
+.gg-ot-card h4 { margin: 0; font: 700 16px var(--ot-display); }
+.gg-ot-code { display: flex; gap: 6px; }
+.gg-ot-code-in { flex: 1; min-width: 0; font: 700 16px var(--ot-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ot-ink); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--ot-line); border-radius: 10px; padding: 10px 12px; }
+.gg-ot-code-go { font: 700 14px var(--ot-display); border: 0; border-radius: 10px; padding: 0 14px; background: var(--ot-lilac); color: #1b1233; cursor: pointer; display: inline-flex; align-items: center; }
+.gg-ot-menu { display: flex; flex-wrap: wrap; gap: 6px; }
+.gg-ot .gg-menu-item { width: auto; }
+.gg-ot-act.gg-menu-item { text-align: left; padding: 16px; font-size: inherit; }
+.gg-ot-act .gg-menu-note { position: static; letter-spacing: 0.02em; }
+.gg-ot-menu-item.gg-menu-item { font-size: 0.8rem; padding: 0.35rem 0.8rem; }
+.gg-ot-small { font-size: 12px; color: var(--ot-faint); }
+.gg-ot-hint { font-size: 13px; color: var(--ot-dim); }
+
+/* the host's table */
+.gg-ot-waiting { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 14px; background: rgba(0, 0, 0, 0.22); }
+.gg-ot-waiting b { font: 600 18px var(--ot-display); }
+.gg-ot-seat { width: 54px; height: 54px; flex: none; border-radius: 50%; border: 2px dashed var(--ot-lilac); display: grid; place-items: center; color: var(--ot-lilac); font: 700 22px var(--ot-display); animation: gg-ot-pulse 2s ease-in-out infinite; }
+@keyframes gg-ot-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(185, 156, 255, 0.35); } 50% { box-shadow: 0 0 0 10px rgba(185, 156, 255, 0); } }
+.gg-ot-who-sees { display: flex; flex-direction: column; gap: 8px; }
+.gg-ot-seg { display: inline-flex; align-self: flex-start; background: rgba(0, 0, 0, 0.3); border-radius: 12px; padding: 4px; gap: 4px; border: 1px solid rgba(255, 255, 255, 0.06); }
+.gg-ot-seg-btn { font: 700 14px var(--ot-display); color: var(--ot-dim); background: none; border: 0; border-radius: 9px; padding: 8px 16px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.gg-ot-seg-btn[aria-pressed="true"] { background: var(--ot-ink); color: #1b1233; }
+.gg-ot-seg-btn.is-any[aria-pressed="true"] { background: var(--ot-pink); color: #1b1233; }
+.gg-ot-leave { align-self: flex-start; }
+.gg-ot-bigcode { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.gg-ot-bigcode-c { font: 700 40px var(--ot-mono); letter-spacing: 0.12em; color: var(--ot-faint); cursor: pointer; user-select: all; }
+.gg-ot-bigcode-c.is-live { color: var(--ot-gold); text-shadow: 0 0 22px rgba(255, 207, 107, 0.35); }
+
+/* the Prime sheet */
+.gg-sheet--prime { text-align: center; border-color: rgba(95, 216, 255, 0.45); background: linear-gradient(160deg, #10243a, #1a1230 60%); box-shadow: 0 0 50px rgba(95, 216, 255, 0.2); }
+.gg-prime-neon {
+  display: inline-block; margin: 0 auto 10px; font: 700 22px "Fredoka", "Arial Rounded MT Bold", "Segoe UI", sans-serif; color: #5fd8ff; letter-spacing: 0.06em;
+  text-shadow: 0 0 6px #5fd8ff, 0 0 22px rgba(95, 216, 255, 0.7); border: 2px solid #5fd8ff; border-radius: 10px; padding: 6px 16px;
+  box-shadow: 0 0 18px rgba(95, 216, 255, 0.45), inset 0 0 12px rgba(95, 216, 255, 0.3);
+}
+.gg-btn--prime { border-color: transparent; background: #5fd8ff; color: #06202b; font-weight: 700; }
+.gg-btn--prime:hover { background: #7fe2ff; }
+
+/* the SEATED stamp */
+.gg-ot-stamp { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 90; }
+.gg-ot-stamp span {
+  font: 700 64px "Fredoka", "Arial Rounded MT Bold", "Segoe UI", sans-serif; color: #5fffd0; border: 6px solid #5fffd0; border-radius: 14px; padding: 4px 24px;
+  transform: rotate(-8deg); text-shadow: 0 0 20px rgba(95, 255, 208, 0.5); background: rgba(13, 9, 25, 0.6);
+  animation: gg-ot-thud 0.34s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+@keyframes gg-ot-thud { from { transform: rotate(-8deg) scale(2.2); opacity: 0; } }
+
+html[data-gg-motion="reduced"] .gg-ot *, html[data-gg-motion="reduced"] .gg-ot-stamp span { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .gg-ot *, .gg-ot-stamp span { animation: none !important; transition: none !important; }
+}
+
+/* ---------------------------------------------------------------------------
+ * LOBBY ON A DESKTOP (owner, 2026-09-23: one long column with empty sides).
+ * A wide window puts the terms card and the Discord card side by side and
+ * tightens the rows, so the whole lobby fits without a long scroll. Phones and
+ * portrait windows keep the single column above. Layout only: no motion here.
+ * ------------------------------------------------------------------------ */
+@media (min-width: 1100px) and (orientation: landscape) {
+  #scr-lobby:has(> .gg-dc) {
+    display: grid;
+    grid-template-columns: minmax(0, 40rem) minmax(0, 28rem);
+    justify-content: center;
+    align-content: safe center;
+    align-items: start;
+    gap: 1.25rem;
+  }
+  #scr-lobby:has(> .gg-dc) > * { margin: 0; min-width: 0; max-width: none; }
+  #scr-lobby .gg-lobby, #scr-lobby .gg-dc { padding: 1.25rem 1.5rem; }
+  #scr-lobby .gg-duel { margin: 0.7rem 0 0.4rem; gap: 0.6rem; }
+  #scr-lobby .gg-duel-side { padding: 0.55rem 0.7rem; }
+  #scr-lobby .gg-conn { margin: 0 0 0.6rem; }
+  #scr-lobby .gg-song { margin: 0 0 0.5rem; padding: 0.55rem 0.7rem 0.45rem; }
+  #scr-lobby .gg-row { padding: 0.3rem 0; }
+  #scr-lobby .gg-row-sub { margin: 0.2rem 0 0.1rem; }
+  #scr-lobby .gg-lamps { margin: 0.6rem 0 0.2rem; padding: 0.3rem 0; }
+}

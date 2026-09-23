@@ -52,6 +52,7 @@ import {
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
 import { GoonSession } from './net/session.js';
+import { GoonSignalingClient, normalizeCode } from './net/signaling.js';
 import { createLoopbackPair, loopbackPresets } from './net/loopbackTransport.js';
 import { createMediaQueue } from './net/mediaQueue.js';
 import { probeDecodeCodecs } from './net/codecs.js';
@@ -338,6 +339,9 @@ bridge.on('init', (m) => {
     anonymous: idm.anonymous === true,
   };
   session.caps = m.caps || null;
+  /* OPEN TABLES (desk seam, 2026-09-23): the friends drawer's Join opens the game with a
+   * TOP-LEVEL `joinCode`. Absent or "" = nothing to join. Tolerated missing on older hosts. */
+  session.joinCode = typeof m.joinCode === 'string' && m.joinCode ? normalizeCode(m.joinCode) : (session.joinCode || '');
   session.consent = m.consent || null;
   session.match = m.match || null;
   session.prefs = m.prefs || null;
@@ -378,6 +382,21 @@ bridge.on('fullscreen', (m) => {
 });
 
 bridge.on('ping', (m) => bridge.send({ type: 'pong', t: m && m.t }));
+
+/* OPEN TABLES (desk seam): a Join pressed in the friends drawer while this window is
+ * already open. Only acted on between matches: a live match is never yanked out from
+ * under the player by a click somewhere else. The join screen owns every failure. */
+bridge.on('join-code', (m) => {
+  const code = normalizeCode(m && m.code);
+  if (!/^[A-Z0-9]{4,12}$/.test(code)) return;
+  // bridge.on REPLAYS a pre-buffered frame during module evaluation, before `router`
+  // and friends exist; reading them then throws. Park the code for openFirstScreen.
+  let state = 'early';
+  try { state = !router ? 'early' : ((currentMatch || soloPair) ? 'busy' : 'ready'); } catch (_e) { state = 'early'; }
+  if (state === 'early') { session.joinCode = code; return; }
+  if (state === 'busy') return;
+  router.show('join', { autoCode: code });
+});
 
 bridge.on('end-run', () => finishExit('end-run'));
 
@@ -469,6 +488,12 @@ function openFirstScreen() {
     && guestSeat.at && (Date.now() - guestSeat.at) < GUEST_SEAT_FRESH_MS) {
     code = guestSeat.code;
     bridge.log('resuming guest seat in ' + code);
+  }
+  // The desk's friends-drawer Join (init.joinCode) is an explicit ask too, one level below a link.
+  if (!code && session.joinCode && /^[A-Z0-9]{4,12}$/.test(session.joinCode)) {
+    code = session.joinCode;
+    session.joinCode = '';
+    bridge.log('desk join: joining ' + code);
   }
   if (code) {
     bridge.log('invite link: joining ' + code);
@@ -1921,10 +1946,82 @@ async function teardownEverything() {
   purgeReceived('teardown');
 }
 
+/* ----------------------------------------------------------------------------
+ * OPEN TABLES (2026-09-23) - the lobby's own signaling client.
+ *
+ * The match's GoonSession builds and disposes a client per attempt; the list
+ * poll lives OUTSIDE any match (it runs on the home screen), so it gets one
+ * long-lived client of its own. Same identity, same transport, same auth. It
+ * never joins or hosts anything: /open and /list only.
+ * -------------------------------------------------------------------------- */
+let lobbyClient = null;
+function lobbyNet() {
+  const id = session.identity || {};
+  if (!lobbyClient) lobbyClient = new GoonSignalingClient({ logger });
+  lobbyClient.setIdentity({ unifiedId: id.unifiedId || '', appVersion: id.appVersion || '', displayName: id.displayName || '' });
+  return lobbyClient;
+}
+
+/** Where "See Prime" goes outside the app. Hosted, the desk opens its own Prime page. */
+const PRIME_URL = 'https://app.cclabs.app/subscribe';
+
+/** The SEATED stamp: one thud over everything, gone in a second. CSS owns motion and its off switch. */
+function stampSeated() {
+  if (!hasDom() || !document.body) return;
+  try {
+    const s = document.createElement('div');
+    s.className = 'gg-ot-stamp';
+    s.setAttribute('aria-hidden', 'true');
+    const span = document.createElement('span');
+    span.textContent = S.tables.seated;
+    s.appendChild(span);
+    document.body.appendChild(s);
+    setTimeout(() => { try { s.remove(); } catch (_e) { /* gone */ } }, 1200);
+    try { audio?.sfx?.('lamp-confirm'); } catch (_e) { /* stub bus */ }
+  } catch (_e) { /* a stamp is never load-bearing */ }
+}
+
 const actions = {
   goTitle() { router.show('title'); },
   goHost() { router.show('host'); },
   goJoin() { router.show('join'); },
+  /** Open tables: a code typed on the home screen goes straight into the join flow. */
+  goJoinCode(code) { router.show('join', { autoCode: String(code || '') }); },
+
+  /**
+   * OPEN TABLES: the rows this account may see. No account = no list (the server
+   * would 401 anyway); the home screen says "sign in" and keeps Practice live.
+   * @returns {Promise<{ok:true, data:object}|{ok:false, error:object}>}
+   */
+  async openTables() {
+    const id = session.identity || {};
+    if (id.anonymous || !id.unifiedId) return { ok: false, error: { kind: 'signin' } };
+    const net = lobbyNet();
+    const data = await net.open();
+    if (data) return { ok: true, data };
+    return { ok: false, error: net.lastErrorInfo || { kind: 'network' } };
+  },
+
+  /**
+   * OPEN TABLES: list / renew / unlist the room this page is hosting. Only the
+   * code, a visibility and four flags travel; never anything the host typed.
+   * @returns {Promise<{ok:boolean, data?:object, error?:object}>}
+   */
+  async listTable(code, opts) {
+    const net = lobbyNet();
+    let token = '';
+    try { token = (goonSession && goonSession.transport && goonSession.transport.token) || ''; } catch (_e) { token = ''; }
+    const data = await net.list(code, Object.assign({}, opts || {}, { token }));
+    if (data) return { ok: true, data };
+    return { ok: false, error: net.lastErrorInfo || { kind: 'network' } };
+  },
+
+  /** The Prime sheet's "See Prime". Hosted, the desk owns the page; out here, a new tab. */
+  seePrime() {
+    if (session.hosted) { try { bridge.send({ type: 'open-prime' }); } catch (_e) { /* ignore */ } return; }
+    try { if (typeof window !== 'undefined' && window.open) window.open(PRIME_URL, '_blank', 'noopener'); }
+    catch (_e) { /* a blocked popup is not an error */ }
+  },
   /** @param {{filter?:string}} [args] e.g. {filter:'needs'} from a "N need compressing" prompt. */
   goAssets(args) { router.show('assets', args || null); },
   /** ui/screens/voice.js — the pre-recorded note library. Title menu only:
@@ -1979,6 +2076,9 @@ const actions = {
       }
       return { ok: false, error: err };
     }
+
+    // OPEN TABLES: the seat is yours. One thud, then the lobby takes over.
+    stampSeated();
 
     /* THE FIRST-RUN MEDIA STEP, decided HERE and nowhere else — one join, one
      * answer. A duel plays the player's OWN library at them, so a joiner with an
@@ -2213,6 +2313,8 @@ function buildApp() {
    * mounted — this only builds the ledger. */
   coach = createCoach({ prefs, toasts, logger });
   sheets = createSheets({ audio, logger });
+  /* OPEN TABLES: the Prime sheet's two ways out. Practice is free, always. */
+  sheets.setPrimeActions({ see: () => actions.seePrime(), practice: () => { void actions.goPractice(); } });
   matchLog = createMatchLog();
   // ONE store, built once, and the only thing on the page allowed to register a
   // cache-* handler (bridge.on throws on a duplicate and the assets screen

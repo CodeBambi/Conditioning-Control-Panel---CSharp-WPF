@@ -65,9 +65,28 @@ export function songTitleOf(u) {
   return (s || u.host).slice(0, SONG_TITLE_MAX);
 }
 
+/** What a track picked by its page link is called: the page link carries no name. */
+export const SONG_FILE_TITLE = 'bambicloud track';
+const FILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A track's PAGE link (what copying a link on BambiCloud hands out,
+ * `https://bambicloud.com/file/<uuid>`) -> its audio file on the CDN, or ''.
+ * The CDN keeps every file at `https://cdn.bambicloud.com/<uuid>.mp3`: that is how
+ * every level in race/levels.json is written down (id and url agree on all of
+ * them, checked 2026-09-23), so this is a rename, not a lookup. No network. Only
+ * the one path shape is read: a playlist or any other page stays refused as a page.
+ */
+export function bambicloudFileToCdn(u) {
+  if (!u || !/^(www\.)?bambicloud\.com$/i.test(u.hostname) || u.port) return '';
+  const parts = u.pathname.split('/').filter(Boolean);
+  if (parts.length !== 2 || parts[0].toLowerCase() !== 'file' || !FILE_ID.test(parts[1])) return '';
+  return 'https://' + SONG_HOST + '/' + parts[1].toLowerCase() + '.mp3';
+}
+
 /**
  * The LOCAL paste box. One link in, one verdict out, no network:
- *   { url, title }                      playable (the CDN, or same origin)
+ *   { url, title }                      playable (the CDN, a track page mapped to it, or same origin)
  *   { refused: 'page' }                 a bambicloud.com page, not a file
  *   { refused: 'host' }                 some other site
  *   { refused: 'empty' | 'bad' }        nothing, or not a link at all
@@ -84,6 +103,8 @@ export function parseSongLink(text, origin = null) {
   if (u.username || u.password) return { refused: 'bad' };
   if (u.host === SONG_HOST && u.protocol === 'https:') return { url: u.href, title: songTitleOf(u) };
   if (origin && u.origin === origin) return { url: u.href, title: songTitleOf(u) };
+  const fileUrl = bambicloudFileToCdn(u);
+  if (fileUrl) return { url: fileUrl, title: SONG_FILE_TITLE };
   if (/(^|\.)bambicloud\.com$/i.test(u.hostname)) return { refused: 'page' };
   return { refused: 'host' };
 }
