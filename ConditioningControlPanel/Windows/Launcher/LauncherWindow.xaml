@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
+        xmlns:friends="clr-namespace:ConditioningControlPanel.Controls.Friends"
         xmlns:emi="clr-namespace:ConditioningControlPanel.Services.EmiDesk"
         Title="CC Labs"
         Icon="pack://application:,,,/Resources/app.ico"
@@ -562,6 +563,7 @@
                     Margin="28,0,28,0" Padding="0,0,0,0">
                 <Grid>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                        <friends:FriendsRailChip x:Name="FriendsChip" Margin="-8,0,10,0"/>
                         <Button Content="{loc:Str launcher_link_whats_new}" Style="{StaticResource LauncherLink}" Click="WhatsNew_Click"/>
                     </StackPanel>
                     <CheckBox x:Name="SkipToPanel" Content="{loc:Str launcher_skip_to_panel}" HorizontalAlignment="Right"

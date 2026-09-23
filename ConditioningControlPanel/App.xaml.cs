@@ -560,6 +560,11 @@ namespace ConditioningControlPanel
         public static UpdateService Update { get; private set; } = null!;
         public static ProfileSyncService ProfileSync { get; private set; } = null!;
 
+        /// <summary>FRIENDS (2026-09-23): the friend list, presence and the preset inbox. Null until
+        /// startup builds it and after exit; every caller guards with <c>App.Friends?.</c>.</summary>
+        public static Services.Friends.IFriendsService? Friends { get; private set; }
+        private static Services.Friends.FriendsService? _friendsService;
+
         /// <summary>
         /// THE DESCENT — reader for the server's `descent` block (the vat, the stage
         /// ladder, the relapse bonus). Nullable and normally EMPTY: the server ships
@@ -2305,6 +2310,16 @@ namespace ConditioningControlPanel
             // - moves within about a minute instead of whenever something unrelated
             // next happens to sync.
             ProfileSync.AttachXpNudge();
+            // FRIENDS: builds with no request; the poll reads the account itself on every tick
+            // (there is no sign-out event), and a loaded profile is the sign-in moment to poll now.
+            try
+            {
+                _friendsService = Services.Friends.FriendsService.CreateForApp();
+                Friends = _friendsService;
+                ProfileSync.ProfileLoaded += (_, _) => _friendsService?.Kick();
+                _friendsService.Start();
+            }
+            catch (Exception ex) { Logger?.Warning("Friends service failed to start: {E}", ex.Message); }
             // Constructing it costs nothing and issues no request: it fetches only when a
             // surface asks. The ungated 60s background poll that used to start here was
             // retired in the Redis bandwidth pass (2026-09-15) - the cross-device XP adopt
@@ -2421,6 +2436,11 @@ namespace ConditioningControlPanel
             // and Speech all have to exist first, and this is the first point at which they all do.
             try { EmiDesk?.WireAppEvents(); }
             catch (Exception exWire) { Logger?.Debug(exWire, "[EmiDesk] app event wiring failed"); }
+
+            // Friends: what a poke, an invite or a watch does when it lands. Attaches itself to
+            // App.Friends whenever that exists; harmless while it is null.
+            try { Services.Friends.FriendsLanding.Start(); }
+            catch (Exception exFl) { Logger?.Debug(exFl, "[Friends] landing start failed"); }
 
             // Initialize content packs service
             ContentPacks = new ContentPackService();
@@ -5635,6 +5655,8 @@ Application State:
             Patreon?.Dispose();
             Update?.Dispose();
             ProfileSync?.Dispose();
+            _friendsService?.Dispose();
+            Friends = null;
             Leaderboard?.Dispose();
             DiscordRpc?.Dispose();
             Discord?.Dispose();

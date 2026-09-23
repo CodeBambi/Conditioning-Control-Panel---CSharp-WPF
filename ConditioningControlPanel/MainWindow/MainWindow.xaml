@@ -8,6 +8,7 @@
         xmlns:local="clr-namespace:ConditioningControlPanel"
         xmlns:views="clr-namespace:ConditioningControlPanel.Views.Tabs"
         xmlns:controls="clr-namespace:ConditioningControlPanel.Controls"
+        xmlns:friends="clr-namespace:ConditioningControlPanel.Controls.Friends"
         xmlns:poss="clr-namespace:ConditioningControlPanel.Services.Possession"
         Title="Conditioning Control Panel"
         Height="943" Width="1563"
@@ -1481,6 +1482,9 @@
                          of those). Self-wiring like the fuse chip: adding the element is the whole
                          integration. See Controls/EmiDock.xaml. -->
                     <controls:EmiDock x:Name="EmiDockChip"/>
+                    <!-- FRIENDS: you, bottom-left, the Hearthstone way. Opens the friends drawer upward over the
+                         rail. Self-wiring and not a door, like the dock chip above. See Controls/Friends/FriendsRailChip.cs. -->
+                    <friends:FriendsRailChip x:Name="FriendsChip"/>
                 </StackPanel>
             </Grid>
         </Border>

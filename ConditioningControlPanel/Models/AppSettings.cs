@@ -5092,6 +5092,18 @@ namespace ConditioningControlPanel.Models
             set { _backRoomInvertLook = value; OnPropertyChanged(); }
         }
 
+        private bool _friendsPresenceShared;
+        /// <summary>
+        /// FRIENDS (2026-09-23): whether this account publishes what it is doing to its friends list.
+        /// Off by default; the drawer asks once. Never synced, never in a preset.
+        /// </summary>
+        [JsonProperty]
+        public bool FriendsPresenceShared
+        {
+            get => _friendsPresenceShared;
+            set { _friendsPresenceShared = value; OnPropertyChanged(); }
+        }
+
         // ---- CHASTER: Circe's tab (Services/Chaster) ----
         // Device-local on purpose, like the link itself: none of these ride the cloud profile.
         private bool _chasterTabEnabled;
