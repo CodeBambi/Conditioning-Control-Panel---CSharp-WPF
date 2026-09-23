@@ -120,7 +120,22 @@ export function createRivalry({ store = defaultStore(), now = () => Date.now() }
     return { w: row.w, l: row.l, d: row.d, known: true };
   }
 
-  return { recordFor, note };
+  /** The last few opponents, newest first: [{name, w, l, d, at}]. Local only. */
+  function recent(limit = 3) {
+    const all = readAll();
+    const rows = [];
+    for (const k of Object.keys(all)) {
+      const r = all[k];
+      if (!r || typeof r !== 'object') continue;
+      const name = cleanName(r.name);
+      if (!name) continue;
+      rows.push({ name, w: toCount(r.w), l: toCount(r.l), d: toCount(r.d), at: Number(r.at) || 0 });
+    }
+    rows.sort((a, b) => b.at - a.at);
+    return rows.slice(0, Math.max(0, limit | 0));
+  }
+
+  return { recordFor, note, recent };
 }
 
 /** "you 3 - 2 Sam", plus the draws when there are any. '' for a stranger. */

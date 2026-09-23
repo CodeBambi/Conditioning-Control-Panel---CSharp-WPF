@@ -429,8 +429,10 @@ function mountTitle(sessionShape) {
   // HOSTED + refused: visible, dimmed, and carrying the reason.
   const m = mountTitle({ hosted: true, caps: { canHost: false } });
   ok(!!m.host, 'the Host item is still RENDERED when hosting is refused — a missing row reads as broken');
-  ok(m.host.disabled === true, 'but disabled');
-  ok(m.host._classes.has('is-disabled'), 'and dimmed with the lobby-row class');
+  /* OPEN TABLES (2026-09-23): locked, not disabled. The click is what opens the Prime
+   * sheet now, so the button has to stay clickable; the guard lives in the handler. */
+  ok(m.host.disabled !== true, 'still clickable, so it can open the Prime sheet');
+  ok(m.host._classes.has('is-locked'), 'and dimmed with the lock');
   ok(m.host.getAttribute('aria-disabled') === 'true', 'and announced as disabled');
   const note = findAll(m.host, 'gg-menu-note')[0];
   ok(!!note && note.textContent === S.title.hostNoLab, 'with the supporter-perk note under it');

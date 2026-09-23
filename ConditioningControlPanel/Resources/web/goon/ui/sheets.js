@@ -126,8 +126,14 @@ export function createSheets({ root = null, audio = null, logger = null } = {}) 
       // The host gate, and the weekly pass it replaced. `no_pass` is retired server-side and is
       // kept here only so an OLD server in front of a new client still produces a product message
       // instead of falling through to "check your connection" about a server that answered fine.
+      // OPEN TABLES (2026-09-23): every 1v1 is Prime, so a refused join is the same sheet.
+      case 'no_join_access':
+        return showPrime();
+      case 'signin':
+        return open({ icon: S.sheets.signIn.icon, headline: S.sheets.signIn.headline, line: S.sheets.signIn.line });
       case 'no_host_access':
       case 'no_pass':
+        if (primeActions) return showPrime();
         return open({
           icon: S.sheets.noHostAccess.icon,
           headline: S.sheets.noHostAccess.headline,
@@ -186,10 +192,46 @@ export function createSheets({ root = null, audio = null, logger = null } = {}) 
     return p;
   }
 
+  /**
+   * THE PRIME SHEET (open tables, 2026-09-23). Every 1v1 is a Prime perk; practice
+   * is free. Two ways out, both useful: See Prime, or play the bot right now.
+   * boot.js hands in what those two do (setPrimeActions); the sheet runs the one
+   * picked and resolves with its id, so a caller knows not to route on top of it.
+   * @returns {Promise<'prime'|'practice'|null>}
+   */
+  let primeActions = null;
+  function setPrimeActions(a) { primeActions = (a && typeof a === 'object') ? a : null; }
+
+  function showPrime() {
+    const p = open({
+      headline: S.prime.headline,
+      line: S.prime.line,
+      actions: [
+        { id: 'practice', label: S.prime.practice, variant: 'ghost' },
+        { id: 'prime', label: S.prime.see, variant: 'prime' },
+      ],
+    });
+    const sheet = host ? host.querySelector('.gg-sheet') : null;
+    if (sheet) {
+      sheet.classList.add('gg-sheet--prime');
+      sheet.setAttribute('aria-label', S.prime.headline);
+      sheet.prepend(el('span', { class: 'gg-prime-neon', text: S.prime.badge }));
+    }
+    return p.then((id) => {
+      try {
+        if (id === 'prime') primeActions?.see?.();
+        else if (id === 'practice') primeActions?.practice?.();
+      } catch (_e) { /* an action never breaks the sheet */ }
+      return id;
+    });
+  }
+
   return {
     open,
     openNode,
     showSignalError,
+    showPrime,
+    setPrimeActions,
     close: (v) => close(v === undefined ? null : v),
     get isOpen() { return openState !== null; },
     dispose() { close(null); },
