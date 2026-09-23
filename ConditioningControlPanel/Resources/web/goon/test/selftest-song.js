@@ -43,6 +43,24 @@ const CDN = 'https://' + SONG_HOST + '/0b7c1e2a-aaaa-bbbb-cccc-1234567890ab.mp3'
   ok(good.url === CDN, 'a cdn track link is playable', JSON.stringify(good));
   ok(typeof good.title === 'string' && good.title.length > 0, 'and gets a readable title');
   ok(parseSongLink('https://bambicloud.com/file/abc').refused === 'page', 'a bambicloud PAGE link is refused as a page');
+  // The owner's paste (2026-09-23): a track's PAGE link maps straight onto its CDN file.
+  const ID = 'a15c22e0-d347-4d92-9f78-0fb37099e549';
+  const WANT = 'https://' + SONG_HOST + '/' + ID + '.mp3';
+  for (const link of [
+    'https://bambicloud.com/file/' + ID,
+    'https://www.bambicloud.com/file/' + ID,
+    'http://bambicloud.com/file/' + ID,
+    'https://bambicloud.com/file/' + ID + '/',
+    'https://bambicloud.com/file/' + ID + '?ref=share#top',
+    'https://BambiCloud.com/file/' + ID.toUpperCase(),
+  ]) {
+    const v = parseSongLink('  ' + link + ' ');
+    ok(v.url === WANT, 'a track page link plays its cdn file: ' + link, JSON.stringify(v));
+    ok(v.url && wireSongUrl(v.url) === WANT, 'and that url passes the wire rule too: ' + link);
+  }
+  ok(parseSongLink('https://bambicloud.com/playlist/' + ID).refused === 'page', 'a playlist link is still a page');
+  ok(parseSongLink('https://bambicloud.com/file/' + ID + '/extra').refused === 'page', 'a deeper path is still a page');
+  ok(parseSongLink('https://evil.bambicloud.com/file/' + ID).refused === 'page', 'only bambicloud.com and www map a file link');
   ok(parseSongLink('https://evil.example/x.mp3').refused === 'host', 'another host is refused');
   ok(parseSongLink('').refused === 'empty', 'nothing is "empty"');
   ok(parseSongLink('not a link').refused === 'bad', 'not a link is "bad"');

@@ -18,52 +18,55 @@ import { DUEL_COPY } from './copy.js';
 import { grid, TIER_MAX } from './board.js';
 import { tileValue } from './rules.js';
 
-const STYLE_ID = 'gg-duel-style';
+// The prefix is gg-nduel, NOT gg-duel: the lobby's YOU vs THEM card owns .gg-duel and
+// .gg-duel-name, and this sheet's fixed full-screen .gg-duel lifted that card out of the
+// lobby and over the terms (owner, 2026-09-23).
+const STYLE_ID = 'gg-nduel-style';
 const SWIPE_MIN_PX = 24;
 const SPARKS_PER_MERGE = 6;
 
 const CSS = `
-.gg-duel { position: fixed; inset: 0; z-index: 56; pointer-events: none; display: flex;
+.gg-nduel { position: fixed; inset: 0; z-index: 56; pointer-events: none; display: flex;
   align-items: center; justify-content: center; background: rgba(8, 3, 14, 0.55); }
-.gg-duel[hidden] { display: none; }
-.gg-duel-card { pointer-events: auto; position: relative; width: min(22rem, 90vw);
+.gg-nduel[hidden] { display: none; }
+.gg-nduel-card { pointer-events: auto; position: relative; width: min(22rem, 90vw);
   padding: 1rem 1rem 1.1rem; border-radius: 16px; background: rgba(24, 10, 34, 0.96);
   border: 2px solid var(--gg-pink, #ff69b4); box-shadow: 0 0 36px rgba(255, 105, 180, 0.35);
   color: #fff; font-family: var(--gg-font, system-ui, sans-serif); text-align: center; }
-.gg-duel-stamp { display: inline-block; margin: 0.2rem 0 0.4rem; padding: 0.25rem 0.8rem;
+.gg-nduel-stamp { display: inline-block; margin: 0.2rem 0 0.4rem; padding: 0.25rem 0.8rem;
   border: 4px solid currentColor; border-radius: 8px; font-weight: 900; letter-spacing: 0.08em;
   text-transform: uppercase; font-size: 1.7rem; color: var(--gg-pink, #ff69b4); transform: rotate(-6deg);
   animation: ggDuelStamp 380ms cubic-bezier(.2, 1.6, .4, 1) both; }
-.gg-duel-stamp.is-win { color: #6effc8; }
-.gg-duel-stamp.is-lose { color: #9a8fb0; }
-.gg-duel-name { font-weight: 800; font-size: 1.1rem; margin: 0.2rem 0; }
-.gg-duel-fine { opacity: 0.75; font-size: 0.85rem; margin: 0.25rem 0; }
-.gg-duel-hint { margin: 0.5rem 0 0; font-size: 0.9rem; color: #ffd36e; }
-.gg-duel-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;
+.gg-nduel-stamp.is-win { color: #6effc8; }
+.gg-nduel-stamp.is-lose { color: #9a8fb0; }
+.gg-nduel-name { font-weight: 800; font-size: 1.1rem; margin: 0.2rem 0; }
+.gg-nduel-fine { opacity: 0.75; font-size: 0.85rem; margin: 0.25rem 0; }
+.gg-nduel-hint { margin: 0.5rem 0 0; font-size: 0.9rem; color: #ffd36e; }
+.gg-nduel-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;
   font-variant-numeric: tabular-nums; }
-.gg-duel-score { font-size: 1.6rem; font-weight: 900; }
-.gg-duel-time { font-size: 1rem; opacity: 0.8; }
-.gg-duel-time.is-low { color: #ff6b8a; opacity: 1; }
-.gg-duel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px;
+.gg-nduel-score { font-size: 1.6rem; font-weight: 900; }
+.gg-nduel-time { font-size: 1rem; opacity: 0.8; }
+.gg-nduel-time.is-low { color: #ff6b8a; opacity: 1; }
+.gg-nduel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px;
   border-radius: 12px; background: rgba(255, 255, 255, 0.06); touch-action: none; user-select: none; }
-.gg-duel-cell { aspect-ratio: 1; border-radius: 8px; background: rgba(255, 255, 255, 0.05);
+.gg-nduel-cell { aspect-ratio: 1; border-radius: 8px; background: rgba(255, 255, 255, 0.05);
   display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.35rem; }
-.gg-duel-cell.t1 { background: #3b2350; } .gg-duel-cell.t2 { background: #4a2466; }
-.gg-duel-cell.t3 { background: #6a2a8a; } .gg-duel-cell.t4 { background: #8a2c9c; }
-.gg-duel-cell.t5 { background: #b02f9c; } .gg-duel-cell.t6 { background: #d9338f; }
-.gg-duel-cell.t7 { background: #ff4f8f; } .gg-duel-cell.t8 { background: #ff7a6b; color: #2a0b1c; }
-.gg-duel-cell.t9 { background: #ffb24f; color: #2a0b1c; } .gg-duel-cell.t10 { background: #ffd36e; color: #2a0b1c; }
-.gg-duel-cell.t11 { background: #6effc8; color: #06281d; box-shadow: 0 0 18px #6effc8; }
-.gg-duel-cell.is-merge { animation: ggDuelPop 180ms ease-out; }
-.gg-duel-spark { position: fixed; width: 7px; height: 7px; border-radius: 50%; pointer-events: none;
+.gg-nduel-cell.t1 { background: #3b2350; } .gg-nduel-cell.t2 { background: #4a2466; }
+.gg-nduel-cell.t3 { background: #6a2a8a; } .gg-nduel-cell.t4 { background: #8a2c9c; }
+.gg-nduel-cell.t5 { background: #b02f9c; } .gg-nduel-cell.t6 { background: #d9338f; }
+.gg-nduel-cell.t7 { background: #ff4f8f; } .gg-nduel-cell.t8 { background: #ff7a6b; color: #2a0b1c; }
+.gg-nduel-cell.t9 { background: #ffb24f; color: #2a0b1c; } .gg-nduel-cell.t10 { background: #ffd36e; color: #2a0b1c; }
+.gg-nduel-cell.t11 { background: #6effc8; color: #06281d; box-shadow: 0 0 18px #6effc8; }
+.gg-nduel-cell.is-merge { animation: ggDuelPop 180ms ease-out; }
+.gg-nduel-spark { position: fixed; width: 7px; height: 7px; border-radius: 50%; pointer-events: none;
   z-index: 57; background: #ffd36e; box-shadow: 0 0 8px #ff69b4; transition: transform 420ms ease-out, opacity 420ms ease-out; }
 @keyframes ggDuelStamp { 0% { transform: rotate(-6deg) scale(2.4); opacity: 0; } 100% { transform: rotate(-6deg) scale(1); opacity: 1; } }
 @keyframes ggDuelPop { 0% { transform: scale(1); } 50% { transform: scale(1.18); } 100% { transform: scale(1); } }
-html[data-gg-motion="reduced"] .gg-duel-stamp, html[data-gg-motion="reduced"] .gg-duel-cell.is-merge { animation: none; }
-html[data-gg-motion="reduced"] .gg-duel-spark { display: none; }
+html[data-gg-motion="reduced"] .gg-nduel-stamp, html[data-gg-motion="reduced"] .gg-nduel-cell.is-merge { animation: none; }
+html[data-gg-motion="reduced"] .gg-nduel-spark { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  .gg-duel-stamp, .gg-duel-cell.is-merge { animation: none; }
-  .gg-duel-spark { display: none; }
+  .gg-nduel-stamp, .gg-nduel-cell.is-merge { animation: none; }
+  .gg-nduel-spark { display: none; }
 }
 .gg-customize { margin-top: 0.6rem; }
 .gg-customize-sum { cursor: pointer; opacity: 0.8; font-size: 0.9rem; }
@@ -95,10 +98,10 @@ export function createDuelView() {
   injectDuelStyle(d);
 
   const root = d.createElement('div');
-  root.className = 'gg-duel';
+  root.className = 'gg-nduel';
   root.hidden = true;
   const card = d.createElement('div');
-  card.className = 'gg-duel-card';
+  card.className = 'gg-nduel-card';
   root.appendChild(card);
   d.body.appendChild(root);
 
@@ -153,14 +156,14 @@ export function createDuelView() {
 
   function buildBoard() {
     reset();
-    const top = mk('div', 'gg-duel-top');
-    scoreEl = mk('span', 'gg-duel-score', '0');
-    timeEl = mk('span', 'gg-duel-time', '');
+    const top = mk('div', 'gg-nduel-top');
+    scoreEl = mk('span', 'gg-nduel-score', '0');
+    timeEl = mk('span', 'gg-nduel-time', '');
     top.appendChild(scoreEl);
     top.appendChild(timeEl);
     card.appendChild(top);
-    gridEl = mk('div', 'gg-duel-grid');
-    for (let i = 0; i < 16; i++) { const c = mk('div', 'gg-duel-cell'); cells.push(c); gridEl.appendChild(c); }
+    gridEl = mk('div', 'gg-nduel-grid');
+    for (let i = 0; i < 16; i++) { const c = mk('div', 'gg-nduel-cell'); cells.push(c); gridEl.appendChild(c); }
     gridEl.addEventListener('pointerdown', onDown);
     gridEl.addEventListener('pointerup', onUp);
     gridEl.addEventListener('pointercancel', () => { pid = null; });
@@ -172,7 +175,7 @@ export function createDuelView() {
     const r = cell.getBoundingClientRect();
     const cx = r.left + r.width / 2; const cy = r.top + r.height / 2;
     for (let i = 0; i < SPARKS_PER_MERGE; i++) {
-      const s = mk('i', 'gg-duel-spark');
+      const s = mk('i', 'gg-nduel-spark');
       s.style.left = cx + 'px';
       s.style.top = cy + 'px';
       d.body.appendChild(s);
@@ -191,10 +194,10 @@ export function createDuelView() {
     intro({ by, hint }) {
       playing = false;
       reset();
-      card.appendChild(mk('div', 'gg-duel-stamp', by === 'you' ? DUEL_COPY.incomingYou : DUEL_COPY.incomingThem));
-      card.appendChild(mk('div', 'gg-duel-name', DUEL_COPY.gameName));
-      card.appendChild(mk('p', 'gg-duel-fine', DUEL_COPY.rule));
-      if (hint) card.appendChild(mk('p', 'gg-duel-hint', DUEL_COPY.firstHint));
+      card.appendChild(mk('div', 'gg-nduel-stamp', by === 'you' ? DUEL_COPY.incomingYou : DUEL_COPY.incomingThem));
+      card.appendChild(mk('div', 'gg-nduel-name', DUEL_COPY.gameName));
+      card.appendChild(mk('p', 'gg-nduel-fine', DUEL_COPY.rule));
+      if (hint) card.appendChild(mk('p', 'gg-nduel-hint', DUEL_COPY.firstHint));
       root.hidden = false;
     },
     board(board, { secondsLeft, merges } = {}) {
@@ -208,7 +211,7 @@ export function createDuelView() {
           const t = g[r][c];
           const cell = cells[r * 4 + c];
           const tier = t ? Math.min(t.tier, TIER_MAX) : 0;
-          cell.className = 'gg-duel-cell' + (tier ? ' t' + tier : '');
+          cell.className = 'gg-nduel-cell' + (tier ? ' t' + tier : '');
           cell.textContent = tier ? String(tileValue(tier)) : '';
           if (merged.has(r * 4 + c)) {
             void cell.offsetWidth;   // restart the pop
@@ -233,9 +236,9 @@ export function createDuelView() {
       playing = false;
       reset();
       const word = outcome === 'win' ? DUEL_COPY.won(bonus) : outcome === 'lose' ? DUEL_COPY.lost : DUEL_COPY.tied;
-      card.appendChild(mk('div', 'gg-duel-stamp is-' + outcome, word));
-      card.appendChild(mk('p', 'gg-duel-fine', DUEL_COPY.youLine(tileValue(mine.tile), mine.score)));
-      card.appendChild(mk('p', 'gg-duel-fine', DUEL_COPY.themLine(tileValue(theirs.tile), theirs.score)));
+      card.appendChild(mk('div', 'gg-nduel-stamp is-' + outcome, word));
+      card.appendChild(mk('p', 'gg-nduel-fine', DUEL_COPY.youLine(tileValue(mine.tile), mine.score)));
+      card.appendChild(mk('p', 'gg-nduel-fine', DUEL_COPY.themLine(tileValue(theirs.tile), theirs.score)));
     },
     close() { playing = false; reset(); root.hidden = true; },
     dispose() {

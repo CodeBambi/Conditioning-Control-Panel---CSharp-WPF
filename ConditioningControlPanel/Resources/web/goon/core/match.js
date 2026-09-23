@@ -265,6 +265,8 @@ export class GoonMatchService {
     this._helloSent = false;
     this._localConsentConfirmed = false;
     this._remoteConsentConfirmed = false;
+    this._consentExchanged = false;   // a consent frame has crossed the wire (see proposeConsent)
+    this._remoteConsentSeen = false;  // their first consent frame has landed (see _handleConsent)
     this._localDraftConfirmed = false;
     this._remoteDraftConfirmed = false;
     this._startProposed = false;
@@ -676,6 +678,22 @@ export class GoonMatchService {
   /** Publishes a new sheet. ANY change clears BOTH confirmations. */
   proposeConsent(liveDurationSec, toyCap, payloadMinGapMs) {
     if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return;
+
+    /* NO CHANGE OF TERMS, NO CLEAR (2026-09-23, owner: practice never started). Once a sheet
+     * has crossed the wire, re-proposing the SAME terms (the lobby's remembered-length seed, a
+     * song whose length equals the sheet, a slider let go where it was) used to clear BOTH lamps
+     * here while the peer read the frame as a plain "not confirmed" and kept its OWN lamp lit.
+     * The practice bot then never re-signed (it only signs when its lamp is off) and the match
+     * sat on "Settings changed" forever. Same terms = nothing to sign again. The opening proposal
+     * still goes out: nothing has crossed the wire yet. */
+    const want = {
+      live_duration_sec: clamp(liveDurationSec, 60, 3600),
+      toy_cap: clamp(toyCap, 0.0, 1.0),
+      payload_min_gap_ms: Math.max(GoonConsts.PayloadMinGapMs, payloadMinGapMs),
+    };
+    if (this._consentExchanged && this._phase === GoonMatchPhase.Consent && sameSheet(want, this._consentSheet)) return;
+    // A proposal made in the Lobby has nobody to reach yet: only one made in Consent has crossed.
+    if (this._phase === GoonMatchPhase.Consent) this._consentExchanged = true;
 
     this._consentSheet = makeConsent({
       live_duration_sec: clamp(liveDurationSec, 60, 3600),
@@ -1347,10 +1365,18 @@ export class GoonMatchService {
     if (this._phase === GoonMatchPhase.Lobby) this._setPhase(GoonMatchPhase.Consent);
     if (this._phase !== GoonMatchPhase.Consent) return;
 
+    this._consentExchanged = true;
     // Their declaration rides EVERY consent frame, counter-proposal or not, so it is read on both
     // branches before anything else is decided. It is theirs alone: it never touches our own flag.
+    const declMoved = this._remoteConsentSeen && (this._remoteMediaTransfer !== !!sheet.media_transfer
+      || this._remoteVoiceNotes !== !!sheet.voice_notes);
+    this._remoteConsentSeen = true;
     this._remoteMediaTransfer = !!sheet.media_transfer;
     this._remoteVoiceNotes = !!sheet.voice_notes;
+    /* They flipped a declaration (media or voice), which cleared BOTH lamps on their side. Our
+     * signature was on the old declaration, so it goes here too, or the two sides disagree about
+     * our lamp and neither ever re-signs (the practice bot waits for its lamp to go dark). */
+    if (declMoved && this._localConsentConfirmed) this._localConsentConfirmed = false;
 
     if (!sameSheet(sheet, this._consentSheet)) {
       // A counter-proposal: adopt it and clear BOTH confirms so nobody can be advanced onto

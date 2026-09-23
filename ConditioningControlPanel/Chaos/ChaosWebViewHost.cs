@@ -306,7 +306,15 @@ internal sealed class ChaosWebViewHost : IDisposable
         try
         {
             if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
-            if (_opts.InputEnabled) { try { _window.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); } }
+            if (_opts.InputEnabled)
+            {
+                // Raise, do not just Activate: the window that opened us (the launcher, the tray-hidden
+                // panel) is about to go away, and a plain Activate from a process whose foreground
+                // window is leaving can land under everything. Again once the first frame is up.
+                BringToFront();
+                _window.ContentRendered += OnFirstRender;
+                if (_opts.IsGame) _frontGame = new WeakReference<ChaosWebViewHost>(this);
+            }
 
             _ = InitWebAsync();
             App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Host}",
@@ -791,6 +799,62 @@ internal sealed class ChaosWebViewHost : IDisposable
                 _pending.Add(json);
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.Post: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    private void OnFirstRender(object? sender, EventArgs e)
+    {
+        if (_window != null) _window.ContentRendered -= OnFirstRender;
+        BringToFront();
+    }
+
+    // The newest input-taking GAME host, so the launcher can hand the foreground back to it once
+    // its own hide has run (a hide can pass activation on to whatever sits next in the z-order).
+    private static WeakReference<ChaosWebViewHost>? _frontGame;
+
+    /// <summary>Raise the newest live game window to the foreground. Safe to call with none up.</summary>
+    internal static void BringActiveGameToFront()
+    {
+        if (_frontGame != null && _frontGame.TryGetTarget(out var host) && !host._disposed)
+            host.BringToFront();
+    }
+
+    /// <summary>
+    /// Bring the window to the front and give it keyboard focus: show it, restore it from a
+    /// minimize, pulse it topmost (natively, without touching the owner) so it lands above every
+    /// other window, then take the foreground. The launcher and the tray-hidden panel are the
+    /// usual callers' parents, and neither is on screen by the time the page wants the player.
+    /// </summary>
+    public void BringToFront()
+    {
+        if (_window == null || _disposed) return;
+        try
+        {
+            if (!_window.IsVisible) _window.Show();
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            if (hwnd == IntPtr.Zero) { _window.Activate(); return; }
+            if (_window.WindowState == WindowState.Minimized) ShowWindow(hwnd, SW_RESTORE);
+            if (!_opts.InputEnabled) return;
+
+            // A window that is legitimately topmost (host-owned fullscreen) keeps its claim.
+            const uint flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags);
+            if (!_window.Topmost) SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+
+            if (!SetForegroundWindow(hwnd) && GetForegroundWindow() != hwnd)
+            {
+                // Foreground lock: borrow the current foreground thread's input state for one call.
+                uint fgThread = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);
+                uint ourThread = GetCurrentThreadId();
+                if (fgThread != 0 && fgThread != ourThread && AttachThreadInput(ourThread, fgThread, true))
+                {
+                    try { SetForegroundWindow(hwnd); }
+                    finally { AttachThreadInput(ourThread, fgThread, false); }
+                }
+            }
+            _window.Activate();
+            _web?.Focus();
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>Return Win32 focus to the game surface (e.g. after a payload window closed).</summary>
@@ -1732,4 +1796,11 @@ internal sealed class ChaosWebViewHost : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_RESTORE = 9;
+    private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lpdwProcessId);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
 }
