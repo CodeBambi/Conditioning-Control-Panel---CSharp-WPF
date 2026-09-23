@@ -365,6 +365,13 @@ export function mount(container, ctx) {
       || t.state === GoonTransportState.ConnectingP2P));
     const editable = match.phase === GoonMatchPhase.Consent || match.phase === GoonMatchPhase.Lobby;
 
+    /* SENDING IS A PATRON OPTION (owner, 2026-09-23): a free player never sees the
+     * row at all - a greyed box in the match path read as an upsell. */
+    const entitled = caps.mediaTransfer === true;
+    xferRow.row.hidden = !entitled;
+    xferRow.sub.hidden = !entitled;
+    if (!entitled) return;
+
     let why = '';
     if (caps.mediaTransfer !== true) why = S.lobby.transferOff;
     else if (!match.peerSupportsTransfer) why = S.lobby.transferPeerOld;
