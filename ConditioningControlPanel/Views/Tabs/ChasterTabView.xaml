@@ -743,6 +743,7 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
                                 <TextBlock Text="{loc:Str chaster_limit_day}" FontSize="13" Foreground="{DynamicResource TextLightBrush}"
                                            VerticalAlignment="Center" Margin="0,0,16,0"/>
@@ -758,6 +759,10 @@
                                         ValueChanged="LimitSlider_ValueChanged" ToolTip="{loc:Str chaster_limit_backlog_hint}"/>
                                 <TextBlock x:Name="TxtBacklogLimit" Grid.Row="1" Grid.Column="2" FontFamily="Consolas, Courier New" FontSize="15"
                                            FontWeight="Bold" Foreground="#FF6B8A" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,12,0,0"/>
+                                <CheckBox x:Name="ChkRelock" Grid.Row="2" Grid.ColumnSpan="3" Margin="0,14,0,0"
+                                          Content="{loc:Str chaster_relock}" ToolTip="{loc:Str chaster_relock_hint}"
+                                          Foreground="{DynamicResource TextLightBrush}" FontSize="13"
+                                          Checked="ChkRelock_Changed" Unchecked="ChkRelock_Changed"/>
                             </Grid>
                         </Border>
                     </StackPanel>

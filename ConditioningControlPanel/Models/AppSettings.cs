@@ -5168,6 +5168,17 @@ namespace ConditioningControlPanel.Models
             set { _chasterBacklogLimitMinutes = value; OnPropertyChanged(); }
         }
 
+        private bool _chasterRelockPastEnd;
+
+        /// <summary>Opt-in (owner, 2026-09-23): when the lock's timer already ran out, a push first
+        /// catches its end up to now so the price locks it again. Off by default.</summary>
+        [JsonProperty]
+        public bool ChasterRelockPastEnd
+        {
+            get => _chasterRelockPastEnd;
+            set { _chasterRelockPastEnd = value; OnPropertyChanged(); }
+        }
+
         // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----
         // These are the room's own switches, shown in the room's Options and not in Settings, the same
         // way BackRoomTunnel and BackRoomMelt are. They are deliberately NOT the app-wide MediaSource /

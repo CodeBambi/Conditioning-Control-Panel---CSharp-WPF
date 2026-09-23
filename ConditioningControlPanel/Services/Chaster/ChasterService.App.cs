@@ -28,7 +28,8 @@ public sealed partial class ChasterService
                 : new ChasterOptions(s.ChasterTabEnabled, s.ChasterLockId, new HashSet<string>(s.ChasterPrices ?? new List<string>(), StringComparer.Ordinal),
                     TabLimits.FromMinutes(s.ChasterDailyLimitMinutes, s.ChasterBacklogLimitMinutes),
                     RemoteOpen: App.RemoteControl?.IsActive == true,
-                    PanicArmed: s.PanicKeyEnabled);
+                    PanicArmed: s.PanicKeyEnabled,
+                    RelockPastEnd: s.ChasterRelockPastEnd);
         };
 #if DEBUG
         if (DemoService(options) is { } demo) return demo;
