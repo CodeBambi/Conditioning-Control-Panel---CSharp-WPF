@@ -86,7 +86,9 @@ public sealed partial class ChasterService
             // Being away only counts from the day the account was linked.
             lock (_gate) { _tab.LastSeenDay = CircesTab.DayKey(_localNow()); SaveTab(); }
             App.Logger?.Information("[Chaster] linked (offline token: {Offline})", tokens.Value.RefreshExpiresIn == 0);
+            ForgetProfile();
             LinkChanged?.Invoke();
+            _ = EnsureProfileAsync();
             return LinkOutcome.Linked;
         }
         catch (OperationCanceledException)

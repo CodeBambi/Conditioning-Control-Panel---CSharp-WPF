@@ -368,6 +368,7 @@ public sealed partial class ChasterService : IDisposable
     {
         var tokens = _tokens.Read();
         _tokens.Clear();
+        ForgetProfile();
         LinkChanged?.Invoke();
         if (tokens is { RefreshToken.Length: > 0 }) await _client.RevokeAsync(tokens.RefreshToken).ConfigureAwait(false);
     }
@@ -401,6 +402,7 @@ public sealed partial class ChasterService : IDisposable
     private void DropLink()
     {
         _tokens.Clear();
+        ForgetProfile();
         App.Logger?.Information("[Chaster] the link expired; the tab is kept");
         LinkChanged?.Invoke();
     }

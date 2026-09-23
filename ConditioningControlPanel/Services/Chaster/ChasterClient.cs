@@ -41,6 +41,10 @@ public sealed class ChasterLock
     [JsonIgnore] public bool TimerHidden => !DisplayRemainingTime || !IsAllowedToViewTime || EndDate == null;
 }
 
+/// <summary>Who the linked account is, from GET /auth/profile. Only the two fields the account
+/// strip shows are kept; the profile carries email, birth date and more, and none of it is read.</summary>
+public sealed record ChasterProfile(string Username, Uri? Avatar);
+
 public enum ChasterStatus
 {
     Ok,
@@ -140,6 +144,78 @@ public sealed class ChasterClient : IDisposable
                 .Where(l => !string.IsNullOrEmpty(l.Id) && !string.Equals(l.Role, "keyholder", StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The linked account's name and picture (scope <c>profile</c>). Read-only.</summary>
+    public async Task<ChasterResult<ChasterProfile>> GetProfileAsync(string accessToken, CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/auth/profile");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        var result = await SendAsync(req, ParseProfile, ct).ConfigureAwait(false);
+        // A 200 with no username in it is a body we cannot use: same as an outage, try later.
+        return result.Ok && result.Value == null ? new(ChasterStatus.Unavailable, null) : result;
+    }
+
+    /// <summary>Username and avatar out of a CurrentUser body. Null when there is no username.
+    /// The avatar is kept only when <see cref="SafeAvatarUri"/> accepts it.</summary>
+    public static ChasterProfile? ParseProfile(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        Newtonsoft.Json.Linq.JObject obj;
+        try { obj = Newtonsoft.Json.Linq.JObject.Parse(json); }
+        catch (JsonException) { return null; }
+        var name = (obj["username"] as Newtonsoft.Json.Linq.JValue)?.Value as string;
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        var avatar = (obj["avatarUrl"] as Newtonsoft.Json.Linq.JValue)?.Value as string;
+        return new ChasterProfile(name.Trim(), SafeAvatarUri(avatar));
+    }
+
+    /// <summary>A picture is only ever fetched over https from Chaster's own hosts
+    /// (chaster.app or a subdomain; today avatars live on api.chaster.app) on the default port.
+    /// Anything else is dropped and the strip shows the letter instead.</summary>
+    public static Uri? SafeAvatarUri(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || url.Length > 2048) return null;
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)) return null;
+        if (uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.UserInfo)) return null;
+        var host = uri.IdnHost.ToLowerInvariant();
+        return host == "chaster.app" || host.EndsWith(".chaster.app", StringComparison.Ordinal) ? uri : null;
+    }
+
+    /// <summary>Largest avatar file read. A profile picture is tens of KB; past this it is not one.</summary>
+    public const int MaxAvatarBytes = 1024 * 1024;
+
+    /// <summary>The picture's bytes, or null. No token is sent (the file is public), the size is
+    /// capped while reading, and a redirect that leaves Chaster's hosts is thrown away.</summary>
+    public async Task<byte[]?> GetAvatarBytesAsync(Uri avatar, CancellationToken ct = default)
+    {
+        if (SafeAvatarUri(avatar.AbsoluteUri) == null) return null;
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, avatar);
+            using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode) return null;
+            if (res.RequestMessage?.RequestUri is { } final && SafeAvatarUri(final.AbsoluteUri) == null) return null;
+            if (res.Content.Headers.ContentLength > MaxAvatarBytes) return null;
+            var type = res.Content.Headers.ContentType?.MediaType;
+            if (type != null && !type.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return null;
+            await using var stream = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            using var buffer = new System.IO.MemoryStream();
+            var chunk = new byte[16 * 1024];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
+            {
+                if (buffer.Length + read > MaxAvatarBytes) return null;
+                buffer.Write(chunk, 0, read);
+            }
+            return buffer.Length == 0 ? null : buffer.ToArray();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.IO.IOException)
+        {
+            Diag.Swallowed(ex, "chaster avatar fetch, the letter stays");
+            return null;
+        }
     }
 
     /// <summary>Add time to a lock. Add only: a wearer token cannot remove, and this method will
