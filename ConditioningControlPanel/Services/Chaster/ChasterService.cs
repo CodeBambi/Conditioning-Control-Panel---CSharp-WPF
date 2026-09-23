@@ -9,8 +9,10 @@ using Newtonsoft.Json;
 namespace ConditioningControlPanel.Services.Chaster;
 
 /// <summary>What the player chose. Read fresh on every call, so a switch flipped in Settings
-/// takes hold on the next event with no restart.</summary>
-public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string> Prices, TabLimits? Limits = null)
+/// takes hold on the next event with no restart. <paramref name="RemoteOpen"/> is a Remote
+/// session running right now; <paramref name="PanicArmed"/> is the panic key switched on.</summary>
+public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string> Prices, TabLimits? Limits = null,
+    bool RemoteOpen = false, bool PanicArmed = true)
 {
     public TabLimits Caps => Limits ?? TabLimits.Default;
 
@@ -57,6 +59,16 @@ public sealed partial class ChasterService : IDisposable
     /// <summary>After a panic press or an emergency exit, nothing adds for this long. Long
     /// enough that leaving is never priced, short enough that one press is not a free day.</summary>
     public static readonly TimeSpan SafetyHold = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// The most a local day can add while a Remote session is open, whatever the player's own
+    /// daily limit (2026-09-23 security pass). A controller drives flashes, lock cards, bubbles and
+    /// sessions, and every one of those can carry a price, so this counts EVERY add booked while
+    /// the session is open, not only the two remote rows. Per day, not per session, so reconnecting
+    /// does not hand out a fresh share. And with the panic key switched off (a controller can send
+    /// disable_panic) nothing adds at all: the safety hold hangs off that key.
+    /// </summary>
+    public const int RemoteDailySeconds = 30 * 60;
 
     private readonly ChasterClient _client;
     private readonly IChasterTokenStore _tokens;
@@ -113,7 +125,7 @@ public sealed partial class ChasterService : IDisposable
     {
         if (string.IsNullOrEmpty(eventId) || TabPrices.NeverPriced.Contains(eventId)) return false;
         if (!Active(out var options) || !options.Prices.Contains(eventId) || TabPrices.Find(eventId) == null) return false;
-        lock (_gate) return _utcNow() >= _safetyUntilUtc;
+        lock (_gate) return _utcNow() >= _safetyUntilUtc && RemoteRoom(options) > 0;
     }
 
     private bool Active(out ChasterOptions options)
@@ -212,6 +224,16 @@ public sealed partial class ChasterService : IDisposable
         lock (_gate) _safetyUntilUtc = _utcNow() + SafetyHold;
     }
 
+    // Caller holds _gate. What an add may still book today with a Remote session open: all of it
+    // when none is open, nothing with the panic key off.
+    private int RemoteRoom(ChasterOptions options)
+    {
+        if (!options.RemoteOpen) return int.MaxValue;
+        if (!options.PanicArmed) return 0;
+        var used = _tab.RemoteDay == CircesTab.DayKey(_localNow()) ? Math.Max(0, _tab.RemoteDaySeconds) : 0;
+        return Math.Max(0, RemoteDailySeconds - used);
+    }
+
     private TabBooking BookSeconds(string eventId, int seconds)
     {
         if (seconds == 0) return new(0, TabRefusal.Nothing);
@@ -219,8 +241,23 @@ public sealed partial class ChasterService : IDisposable
         lock (_gate)
         {
             var now = _utcNow();
-            var caps = (_options() ?? ChasterOptions.Off).Caps;
-            booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, caps);
+            var options = _options() ?? ChasterOptions.Off;
+            var remote = seconds > 0 && options.RemoteOpen;
+            if (remote)
+            {
+                var room = RemoteRoom(options);
+                if (room == 0) return new(0, TabRefusal.Remote);
+                seconds = Math.Min(seconds, room);
+            }
+            booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps);
+            if (remote && booking.AppliedSeconds > 0)
+            {
+                var today = CircesTab.DayKey(_localNow());
+                if (_tab.RemoteDay != today) { _tab.RemoteDay = today; _tab.RemoteDaySeconds = 0; }
+                _tab.RemoteDaySeconds += booking.AppliedSeconds;
+                if (booking.Refusal == TabRefusal.None && _tab.RemoteDaySeconds >= RemoteDailySeconds)
+                    booking = booking with { Refusal = TabRefusal.Remote };
+            }
             if (booking.Booked) SaveTab();
         }
         if (booking.Booked) Booked?.Invoke(eventId, booking);
@@ -256,6 +293,12 @@ public sealed partial class ChasterService : IDisposable
             TabPush plan;
             lock (_gate)
             {
+                // The file on disk is not trusted: clamp it before anything is planned from it.
+                if (CircesTab.Sanitise(_tab, options.Caps))
+                {
+                    SaveTab();
+                    App.Logger?.Warning("[Chaster] the tab file held numbers outside its limits; clamped");
+                }
                 // An add from last time that was never answered: counted as landed, never resent.
                 var doubted = CircesTab.ResolvePending(_tab);
                 if (doubted > 0)
@@ -264,7 +307,9 @@ public sealed partial class ChasterService : IDisposable
                     App.Logger?.Information("[Chaster] an unanswered push of {Seconds}s is counted as landed", doubted);
                 }
                 // A wearer link can only add. canRemove stays false until a link exists that can.
-                plan = CircesTab.PlanPush(_tab, canRemove: false);
+                // Never more than the daily limit reaches the lock in one local day, however big
+                // the balance is.
+                plan = CircesTab.PlanPush(_tab, canRemove: false, options.Caps, _localNow());
             }
             if (plan.Kind != TabPushKind.Add) return SettleOutcome.Nothing;
             // A backlog from days Chaster was unreachable still lands an hour at a time.

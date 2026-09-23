@@ -62,28 +62,36 @@ public class ChasterLinkTests : IDisposable
     }
 
     // The listener is up and the consent url is out before LinkAsync first yields.
-    private (Task<LinkOutcome> Flow, string State) Start()
+    private (Task<LinkOutcome> Flow, string State) Start() => Start(out _);
+
+    private (Task<LinkOutcome> Flow, string State) Start(out string challenge)
     {
         string? url = null;
         var flow = _service.LinkAsync(u => url = u);
         Assert.NotNull(url);
-        return (flow, url![(url.IndexOf("state=", StringComparison.Ordinal) + 6)..]);
+        var query = System.Web.HttpUtility.ParseQueryString(new Uri(url!).Query);
+        challenge = query["code_challenge"]!;
+        return (flow, query["state"]!);
     }
 
     [Fact]
     public async Task The_bounce_with_the_right_state_links_the_account()
     {
-        var (flow, state) = Start();
+        var (flow, state) = Start(out var challenge);
         var changed = 0;
         _service.LinkChanged += () => changed++;
 
-        var page = await _browser.GetStringAsync(Callback + "?state=" + state);
+        var page = await _browser.GetStringAsync(Callback + "?code=the-code&state=" + state);
 
         Assert.Equal(LinkOutcome.Linked, await flow);
         Assert.Contains("Linked", page);
         Assert.True(_service.IsLinked);
         Assert.Equal(1, changed);
-        Assert.Equal(state, JObject.Parse(Assert.Single(_broker.Bodies))["state"]!.Value<string>());
+        // The code goes back with the verifier that matches the challenge the flow opened with.
+        var sent = JObject.Parse(Assert.Single(_broker.Bodies));
+        Assert.Equal("the-code", sent["code"]!.Value<string>());
+        Assert.Equal(challenge, ChasterClient.Challenge(sent["code_verifier"]!.Value<string>()!));
+        Assert.Null(sent["state"]);
         Assert.False(_service.IsLinking);
     }
 
@@ -92,13 +100,25 @@ public class ChasterLinkTests : IDisposable
     {
         var (flow, state) = Start();
 
-        var stray = await _browser.GetStringAsync(Callback + "?state=" + new string('0', 32));
+        var stray = await _browser.GetStringAsync(Callback + "?code=stolen&state=" + new string('0', 32));
         Assert.Contains("Not linked", stray);
         Assert.False(flow.IsCompleted);
         Assert.Empty(_broker.Bodies);
 
-        await _browser.GetStringAsync(Callback + "?state=" + state);
+        await _browser.GetStringAsync(Callback + "?code=the-code&state=" + state);
         Assert.Equal(LinkOutcome.Linked, await flow);
+    }
+
+    [Fact]
+    public async Task A_bounce_with_no_code_links_nothing()
+    {
+        var (flow, state) = Start();
+
+        var page = await _browser.GetStringAsync(Callback + "?state=" + state);
+
+        Assert.Equal(LinkOutcome.Failed, await flow);
+        Assert.Contains("Not linked", page);
+        Assert.Empty(_broker.Bodies);
     }
 
     [Fact]

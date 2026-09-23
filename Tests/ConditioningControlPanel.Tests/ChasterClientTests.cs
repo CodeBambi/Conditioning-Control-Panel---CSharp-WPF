@@ -41,9 +41,9 @@ public class ChasterClientTests
     {
         var h = new FakeHandler { Answer = _ => Json(200, Tokens) };
         using var client = new ChasterClient(h);
-        var state = ChasterClient.NewState();
+        var verifier = ChasterClient.NewVerifier();
 
-        var got = await client.ExchangeAsync(state);
+        var got = await client.ExchangeAsync("the-code", verifier);
         await client.RefreshAsync("RT");
 
         Assert.True(got.Ok);
@@ -51,7 +51,9 @@ public class ChasterClientTests
         Assert.Equal(0, got.Value.RefreshExpiresIn);
         Assert.All(h.Seen, s => Assert.Equal("codebambi-proxy.vercel.app", s.Url.Host));
         Assert.All(h.Seen, s => Assert.Null(s.Bearer));
-        Assert.Equal(state, JObject.Parse(h.Seen[0].Body!)["state"]!.Value<string>());
+        Assert.EndsWith("/chaster/token", h.Seen[0].Url.AbsolutePath);
+        Assert.Equal("the-code", JObject.Parse(h.Seen[0].Body!)["code"]!.Value<string>());
+        Assert.Equal(verifier, JObject.Parse(h.Seen[0].Body!)["code_verifier"]!.Value<string>());
         Assert.Equal("RT", JObject.Parse(h.Seen[1].Body!)["refresh_token"]!.Value<string>());
     }
 
@@ -62,7 +64,18 @@ public class ChasterClientTests
 
         Assert.Matches("^[A-F0-9]{32}$", state);
         Assert.NotEqual(state, ChasterClient.NewState());
-        Assert.EndsWith("/chaster/authorize?state=" + state, ChasterClient.AuthorizeUrl(state));
+        Assert.EndsWith("/chaster/authorize?state=" + state + "&code_challenge=abc", ChasterClient.AuthorizeUrl(state, "abc"));
+    }
+
+    [Fact]
+    public void The_pkce_pair_is_rfc_7636_s256()
+    {
+        // RFC 7636 appendix B.
+        Assert.Equal("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", ChasterClient.Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"));
+        var verifier = ChasterClient.NewVerifier();
+        Assert.Matches("^[A-Za-z0-9_-]{43}$", verifier);
+        Assert.Matches("^[A-Za-z0-9_-]{43}$", ChasterClient.Challenge(verifier));
+        Assert.NotEqual(verifier, ChasterClient.NewVerifier());
     }
 
     [Fact]

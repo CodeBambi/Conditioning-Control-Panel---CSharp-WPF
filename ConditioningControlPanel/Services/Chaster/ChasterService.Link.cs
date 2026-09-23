@@ -9,9 +9,11 @@ namespace ConditioningControlPanel.Services.Chaster;
 public enum LinkOutcome { Linked, Denied, TimedOut, Cancelled, Failed }
 
 /// <summary>
-/// The link flow, SubscribeStar's bridge with Chaster's names: open the browser at the proxy's
-/// /chaster/authorize, wait on a loopback listener for the proxy's bounce, check the state, then
-/// pull the tokens the proxy stashed. The client secret never comes near this machine.
+/// The link flow: open the browser at the proxy's /chaster/authorize with a PKCE challenge, wait
+/// on a loopback listener for the one-time code, check the state, then trade the code and the
+/// verifier for tokens through the proxy (which adds the client secret). The proxy never keeps a
+/// token: a stash keyed by a state the STARTER chose let anyone who sent a stranger a consent
+/// link collect that stranger's lock (fixed 2026-09-23). The secret never comes near this machine.
 /// </summary>
 public sealed partial class ChasterService
 {
@@ -44,14 +46,15 @@ public sealed partial class ChasterService
         }
         _linkCancelled = false;
         var state = ChasterClient.NewState();
+        var verifier = ChasterClient.NewVerifier();
         using var listener = new HttpListener();
         try
         {
             listener.Prefixes.Add($"http://localhost:{LoopbackPort}/callback/");
             listener.Start();
-            openBrowser(ChasterClient.AuthorizeUrl(state));
+            openBrowser(ChasterClient.AuthorizeUrl(state, ChasterClient.Challenge(verifier)));
 
-            string? error;
+            string? error, code;
             while (true)
             {
                 var contextTask = listener.GetContextAsync();
@@ -64,8 +67,9 @@ public sealed partial class ChasterService
                 var context = await contextTask.ConfigureAwait(false);
                 var query = context.Request.QueryString;
                 error = query["error"];
+                code = query["code"];
                 var stateOk = SecurityHelper.SecureCompare(state, query["state"] ?? "");
-                await RespondAsync(context, stateOk && string.IsNullOrEmpty(error)).ConfigureAwait(false);
+                await RespondAsync(context, stateOk && string.IsNullOrEmpty(error) && !string.IsNullOrEmpty(code)).ConfigureAwait(false);
                 // A knock with the wrong state is a stale tab from an earlier try, or some other
                 // program on this machine. It gets the "not linked" page and the wait goes on;
                 // it must not be able to end a real attempt.
@@ -73,8 +77,9 @@ public sealed partial class ChasterService
             }
 
             if (!string.IsNullOrEmpty(error)) return error == "denied" ? LinkOutcome.Denied : LinkOutcome.Failed;
+            if (string.IsNullOrEmpty(code)) return LinkOutcome.Failed;
 
-            var tokens = await _client.ExchangeAsync(state, cts.Token).ConfigureAwait(false);
+            var tokens = await _client.ExchangeAsync(code, verifier, cts.Token).ConfigureAwait(false);
             if (!tokens.Ok || string.IsNullOrEmpty(tokens.Value!.RefreshToken)) return LinkOutcome.Failed;
 
             StoreTokens(tokens.Value, null);

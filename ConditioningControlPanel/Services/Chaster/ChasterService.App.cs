@@ -26,7 +26,9 @@ public sealed partial class ChasterService
             return s == null
                 ? ChasterOptions.Off
                 : new ChasterOptions(s.ChasterTabEnabled, s.ChasterLockId, new HashSet<string>(s.ChasterPrices ?? new List<string>(), StringComparer.Ordinal),
-                    TabLimits.FromMinutes(s.ChasterDailyLimitMinutes, s.ChasterBacklogLimitMinutes));
+                    TabLimits.FromMinutes(s.ChasterDailyLimitMinutes, s.ChasterBacklogLimitMinutes),
+                    RemoteOpen: App.RemoteControl?.IsActive == true,
+                    PanicArmed: s.PanicKeyEnabled);
         };
 #if DEBUG
         if (DemoService(options) is { } demo) return demo;

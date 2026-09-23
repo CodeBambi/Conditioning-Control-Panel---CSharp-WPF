@@ -45,6 +45,15 @@ public sealed class TabState
 
     /// <summary>Half of the last "misses you" charge, waiting for the first finished session.</summary>
     [JsonProperty("forgivable")] public int ForgivableSeconds { get; set; }
+
+    /// <summary>What actually went to the lock on <see cref="PushDay"/> (landed or in doubt).
+    /// The push side's own ceiling reads this, never the booking ledger.</summary>
+    [JsonProperty("push_day")] public string? PushDay { get; set; }
+    [JsonProperty("push_day_s")] public int PushDaySeconds { get; set; }
+
+    /// <summary>Adds booked on <see cref="RemoteDay"/> while a Remote controller was connected.</summary>
+    [JsonProperty("remote_day")] public string? RemoteDay { get; set; }
+    [JsonProperty("remote_day_s")] public int RemoteDaySeconds { get; set; }
 }
 
 public enum TabRefusal
@@ -59,6 +68,9 @@ public enum TabRefusal
     Backlog,
     /// <summary>The credit would take back more than CCP ever put on the lock.</summary>
     Floor,
+    /// <summary>A Remote session is open and either its day's share is spent or the controller
+    /// switched the panic key off. See <see cref="ChasterService.RemoteDailySeconds"/>.</summary>
+    Remote,
     Nothing,
 }
 
@@ -157,9 +169,20 @@ public static class CircesTab
     /// positive balance goes out on the next push, and a credit stays on the tab, where it cancels
     /// the next slip-ups before they reach the lock. <paramref name="canRemove"/> is false for a
     /// wearer link, which Chaster only lets add.</summary>
-    public static TabPush PlanPush(TabState state, bool canRemove)
+    ///
+    /// <para>THE PUSH SIDE HAS ITS OWN CEILING (2026-09-23 security pass). The day limit and the
+    /// backlog limit are checked when time is BOOKED; this checks what is SENT, against what went
+    /// to the lock today. Whatever made the balance (a bug, a hand-edited tab file, a backlog from
+    /// a week with no lock), no local day ever puts more than the player's daily limit on the lock.
+    /// The rest waits for tomorrow.</para>
+    public static TabPush PlanPush(TabState state, bool canRemove, TabLimits limits, DateTime localNow)
     {
-        if (state.BalanceSeconds > 0) return new(TabPushKind.Add, state.BalanceSeconds);
+        if (state.BalanceSeconds > 0)
+        {
+            var room = Math.Max(0, limits.DailySeconds - PushedToday(state, localNow));
+            var add = Math.Min(state.BalanceSeconds, room);
+            return add > 0 ? new(TabPushKind.Add, add) : new(TabPushKind.None, 0);
+        }
         if (state.BalanceSeconds < 0 && canRemove)
         {
             var take = Math.Min(-state.BalanceSeconds, Math.Max(0, state.PushedNetSeconds));
@@ -177,6 +200,7 @@ public static class CircesTab
         {
             state.BalanceSeconds -= push.Seconds;
             state.PushedNetSeconds += push.Seconds;
+            NotePushed(state, DayKey(localNow), push.Seconds);
         }
         else
         {
@@ -212,8 +236,42 @@ public static class CircesTab
         if (seconds <= 0) { ClearPending(state); return 0; }
         state.BalanceSeconds -= Math.Min(seconds, Math.Max(0, state.BalanceSeconds));
         state.LastPushDay = state.PendingDay ?? state.LastPushDay;
+        // In doubt counts against the day's push ceiling too: it may well be on the lock.
+        if (state.PendingDay != null) NotePushed(state, state.PendingDay, seconds);
         ClearPending(state);
         return seconds;
+    }
+
+    /// <summary>What went to the lock on this local day, landed or in doubt.</summary>
+    public static int PushedToday(TabState state, DateTime localNow) =>
+        state.PushDay == DayKey(localNow) ? Math.Max(0, state.PushDaySeconds) : 0;
+
+    private static void NotePushed(TabState state, string day, int seconds)
+    {
+        if (state.PushDay != day) { state.PushDay = day; state.PushDaySeconds = 0; }
+        state.PushDaySeconds += Math.Max(0, seconds);
+    }
+
+    /// <summary>
+    /// A tab read off disk is not trusted: it is a plain file anyone (or a bug) can write. Before
+    /// anything is planned from it, the balance is held to the backlog limit, a doubt to one day,
+    /// and every counter to a sign that means something. Every clamp goes the player's way.
+    /// Returns true when something had to change.
+    /// </summary>
+    public static bool Sanitise(TabState state, TabLimits limits)
+    {
+        var before = (state.BalanceSeconds, state.PendingSeconds, state.PushedNetSeconds, state.DayAddedSeconds, state.PushDaySeconds, state.RemoteDaySeconds, state.ForgivableSeconds);
+        state.BalanceSeconds = Math.Min(state.BalanceSeconds, limits.BacklogSeconds);
+        state.BalanceSeconds = Math.Max(state.BalanceSeconds, -Math.Max(0, state.PushedNetSeconds));
+        state.PendingSeconds = Math.Clamp(state.PendingSeconds, 0, TabLimits.MaxDailySeconds);
+        state.PushedNetSeconds = Math.Max(0, state.PushedNetSeconds);
+        // Counters that only ever hold time back may read high, never low.
+        state.DayAddedSeconds = Math.Max(0, state.DayAddedSeconds);
+        state.PushDaySeconds = Math.Max(0, state.PushDaySeconds);
+        state.RemoteDaySeconds = Math.Max(0, state.RemoteDaySeconds);
+        state.ForgivableSeconds = Math.Max(0, state.ForgivableSeconds);
+        state.Entries ??= new List<TabEntry>();
+        return before != (state.BalanceSeconds, state.PendingSeconds, state.PushedNetSeconds, state.DayAddedSeconds, state.PushDaySeconds, state.RemoteDaySeconds, state.ForgivableSeconds);
     }
 
     /// <summary>"+0:30", "-10:00", "+1:05:00". The number that flashes when a price lands, and the

@@ -335,6 +335,62 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_hand_edited_tab_file_never_sends_more_than_one_day_limit_a_day()
+    {
+        _options = _options with { Limits = TabLimits.FromMinutes(60, 180) };
+        File.WriteAllText(Path.Combine(_dir, "tab.json"), "{\"balance\":999999999,\"pushed_net\":0}");
+        using var service = Make();
+
+        for (var i = 0; i < 6; i++) await service.SettleAsync();
+
+        // Clamped to the backlog (3 h), and only the day's hour of it went out.
+        Assert.Contains("\"duration\":3600", _http.Seen.Single().Body);
+        Assert.Equal(2 * 3600, service.BalanceSeconds);
+
+        _utc = _utc.AddDays(1);
+        await service.SettleAsync();
+        Assert.Equal(2, _http.Seen.Count(c => c.Path == "/locks/lock1/update-time"));
+    }
+
+    [Fact]
+    public void A_remote_session_adds_at_most_half_an_hour_a_day_from_every_source()
+    {
+        _options = _options with { RemoteOpen = true };
+        using var service = Make();
+
+        var first = service.NoteSeconds("watcher", 1500);
+        var second = service.NoteSeconds("watcher", 1500);
+        var third = service.Note("typo");
+
+        Assert.Equal(new TabBooking(1500, TabRefusal.None), first);
+        Assert.Equal(new TabBooking(300, TabRefusal.Remote), second);
+        Assert.Equal(new TabBooking(0, TabRefusal.Remote), third);
+        Assert.False(service.CanBook("typo"));
+        // Credits still land: the cap only ever holds time back.
+        Assert.True(service.Note("session").Booked);
+
+        // Reconnecting is no fresh share; tomorrow is.
+        using (var again = Make()) Assert.False(again.Note("typo").Booked);
+        _utc = _utc.AddDays(1);
+        using var tomorrow = Make();
+        Assert.True(tomorrow.Note("typo").Booked);
+    }
+
+    [Fact]
+    public void With_a_remote_session_open_and_the_panic_key_off_nothing_adds()
+    {
+        _options = _options with { RemoteOpen = true, PanicArmed = false };
+        using var service = Make();
+
+        Assert.Equal(new TabBooking(0, TabRefusal.Remote), service.Note("typo"));
+        Assert.False(service.CanBook("typo"));
+
+        // Alone, a player may run with the panic key off: only a Remote session changes that.
+        _options = _options with { RemoteOpen = false };
+        Assert.True(service.Note("typo").Booked);
+    }
+
+    [Fact]
     public void The_limits_the_player_set_are_the_ones_a_booking_reads()
     {
         _options = _options with { Limits = TabLimits.FromMinutes(15, 60) };

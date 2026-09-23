@@ -89,7 +89,8 @@ public sealed class ChasterClient : IDisposable
         if (!string.IsNullOrEmpty(userAgent)) _http.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
     }
 
-    public static string AuthorizeUrl(string state) => $"{ProxyBase}/chaster/authorize?state={state}";
+    public static string AuthorizeUrl(string state, string challenge) =>
+        $"{ProxyBase}/chaster/authorize?state={state}&code_challenge={challenge}";
 
     /// <summary>16 random bytes as hex: the only state shape the broker accepts.</summary>
     public static string NewState() =>
@@ -100,9 +101,21 @@ public sealed class ChasterClient : IDisposable
     public static bool NeedsRefresh(DateTime expiresAtUtc, DateTime nowUtc) =>
         expiresAtUtc - nowUtc < TimeSpan.FromSeconds(60);
 
-    /// <summary>Pull the tokens the proxy stashed under this state. Single use, 120 s.</summary>
-    public Task<ChasterResult<ChasterTokens>> ExchangeAsync(string state, CancellationToken ct = default) =>
-        PostProxyAsync("/chaster/exchange", new { state }, ct);
+    /// <summary>PKCE (RFC 7636): 32 random bytes, base64url. Never leaves this machine until the
+    /// exchange, so a code read out of browser history or caught by another program is useless.</summary>
+    public static string NewVerifier() => Base64Url(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+
+    /// <summary>The S256 challenge the consent page is opened with.</summary>
+    public static string Challenge(string verifier) =>
+        Base64Url(System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+
+    private static string Base64Url(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    /// <summary>Turn the one-time code the loopback caught into tokens. The proxy adds the
+    /// secret; Chaster checks the verifier against the challenge the flow started with.</summary>
+    public Task<ChasterResult<ChasterTokens>> ExchangeAsync(string code, string verifier, CancellationToken ct = default) =>
+        PostProxyAsync("/chaster/token", new { code, code_verifier = verifier }, ct);
 
     public Task<ChasterResult<ChasterTokens>> RefreshAsync(string refreshToken, CancellationToken ct = default) =>
         PostProxyAsync("/chaster/refresh", new { refresh_token = refreshToken }, ct);
