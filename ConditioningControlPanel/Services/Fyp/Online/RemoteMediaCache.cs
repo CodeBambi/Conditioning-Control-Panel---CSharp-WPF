@@ -135,8 +135,13 @@ internal static class RemoteMediaCache
     /// if it forgets (or crashes), the cleanup-above-N rule and the startup sweep both still
     /// catch the file. A fresh file per call, exactly like the content-pack path — sharing one
     /// file between two players is how you get a locked handle mid-playback.
+    ///
+    /// <paramref name="ownerReleases"/>: the caller holds the file for a long time (a whole game's
+    /// picture pool) and ALWAYS releases it itself. Such a file stays out of the cleanup-above-N
+    /// list, so a burst of flashes elsewhere in the app cannot delete a picture a game is still
+    /// showing. The startup sweep still catches it after a crash.
     /// </summary>
-    public static async Task<string?> MaterializeAsync(string url, CancellationToken ct)
+    public static async Task<string?> MaterializeAsync(string url, CancellationToken ct, bool ownerReleases = false)
     {
         var bytes = await GetBytesAsync(url, ct).ConfigureAwait(false);
         if (bytes == null) return null;
@@ -161,7 +166,7 @@ internal static class RemoteMediaCache
             return null;
         }
 
-        TrackTempFile(path);
+        if (!ownerReleases) TrackTempFile(path);
         return path;
     }
 
