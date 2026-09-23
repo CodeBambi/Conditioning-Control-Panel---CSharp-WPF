@@ -22,6 +22,7 @@ import { createLedger, el, button } from '../router.js';
 import { S, minutes } from '../strings.js';
 import { buildDiscordSection, askSharePrompt } from '../discord.js';
 import { GoonMatchPhase, GoonTransportState } from '../../core/contracts.js';
+import { formatRecord } from '../rivalry.js';
 
 const DUR_MIN_SEC = 60;
 const DUR_MAX_SEC = 3600;
@@ -69,6 +70,10 @@ export function mount(container, ctx) {
     el('span', { class: 'gg-duel-vs', text: 'vs', 'aria-hidden': 'true' }),
     them.side,
   ]);
+
+  /* Game Night: "you 3 - 2 them" under the duel card once we know who they are
+   * and have met before (ui/rivalry.js). Empty for a stranger, practice included. */
+  const rivalLine = el('p', { class: 'gg-rival-line', text: '' });
 
   const connLine = el('p', { class: 'gg-conn', text: S.lobby.connecting });
 
@@ -183,7 +188,7 @@ export function mount(container, ctx) {
   const eyebrow = el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.lobby.eyebrowWaiting })]);
 
   container.appendChild(el('div', { class: 'gg-card gg-lobby' }, [
-    eyebrow, duel, connLine, prepLine, sheetBox, lamps, changedLine,
+    eyebrow, duel, rivalLine, connLine, prepLine, sheetBox, lamps, changedLine,
     el('div', { class: 'gg-lobby-actions' }, [leaveBtn, confirmBtn]),
   ]));
 
@@ -226,6 +231,11 @@ export function mount(container, ctx) {
       ? el('span', { class: 'gg-badge', text: opp.attentionMode === 0 ? S.lobby.cam : S.lobby.noCam })
       : el('span', { class: 'gg-badge is-ghost', text: '…' }));
     them.version.textContent = known && opp.appVersion ? 'v' + opp.appVersion : '';
+    try {
+      const practice = typeof ctx.isPractice === 'function' && ctx.isPractice();
+      rivalLine.textContent = (known && !practice && ctx.rivalry)
+        ? formatRecord(ctx.rivalry.recordFor(opp.displayName), opp.displayName) : '';
+    } catch (_e) { rivalLine.textContent = ''; }
 
     // THEY ARE HERE, THEY ARE JUST BUSY. `remoteMediaPrep` outranks the plain
     // "waiting for them" eyebrow because it answers a different question: not

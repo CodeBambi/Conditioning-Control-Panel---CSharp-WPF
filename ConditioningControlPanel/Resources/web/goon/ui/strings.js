@@ -336,6 +336,10 @@ export const S = Object.freeze({
     titles: 'titles',
     rematch: 'Rematch',
     rematchSoon: 'soon',
+    /* Game Night rematch: the room is spent, so it is a fresh one. The note says which half you do. */
+    rematchHost: 'new link',
+    rematchGuest: 'paste their link',
+    rematchPractice: 'go again',
     back: 'Back to menu',
     chipLanded: 'landed',
     chipEndured: 'endured',
