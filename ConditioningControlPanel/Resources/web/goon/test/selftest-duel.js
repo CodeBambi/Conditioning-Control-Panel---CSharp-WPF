@@ -20,6 +20,7 @@ import {
   duelSeed, duelOutcome, bonusFor, cardEligible, pickLength, DUEL_WIN_BONUS, DUEL_INTRO_MS, DUEL_REPORT_GRACE_MS,
 } from '../ui/duel/rules.js';
 import { createDuelController, duelSummary, DUEL_GAP_EXTRA_MS, DUEL_MAX_PER_MATCH } from '../ui/duel/duelController.js';
+import { createBotDuel } from '../ui/duel/botDuel.js';
 import { mountArsenal } from '../ui/arsenal.js';
 import { pickDrop } from '../ui/drops.js';
 
@@ -376,11 +377,17 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
     ok(p.G.state.idx === 0 && p.log.some(([who, f]) => who === 'g' && f.sub === 'busy' && f.idx === 1), 'a start during the result hold gets busy');
     p.H.dispose(); p.G.dispose();
   }
-  // 2. practice: no card, no inbound duel
+  // 2. practice (owner, 2026-09-23): the card drops and duels run from the FIRST practice match
   {
-    const p = pair({ guestPractice: true });
-    ok(!p.G.arsenalHook.eligible(0) && !p.G.arsenalHook.visible(), 'practice never drops or shows the card');
-    ok(p.H.arsenalHook.throwCard() === true && !p.G.busy() && p.hostCard === 1, 'a start into practice is answered busy');
+    const p = pair({ guestPractice: true, guestFinished: 0 });
+    ok(p.G.arsenalHook.eligible(0) && p.G.arsenalHook.visible(), 'practice shows and drops the card on the first match');
+    ok(p.H.arsenalHook.throwCard() === true && p.G.busy() && p.hostCard === 0, 'a start into practice is played, not refused');
+    p.H.dispose(); p.G.dispose();
+  }
+  {
+    // ...while a REAL peer on its first match still shows no card (the rule practice skips is unchanged).
+    const p = pair({ guestPractice: false, guestFinished: 0 });
+    ok(!p.G.arsenalHook.eligible(0) && !p.G.arsenalHook.visible(), 'a real first match still shows no card');
     p.H.dispose(); p.G.dispose();
   }
   // 3. collision: both throw at once, the host's start and length win
@@ -406,6 +413,131 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
     ok(p.G.state.len === 120 && p.H.state.len === 120, "the guest adopts the host's start and length", p.G.state.len + '/' + p.H.state.len);
     ok(!p.log.some(([, f]) => f.sub === 'busy'), 'still no refusal');
     p.H.dispose(); p.G.dispose();
+  }
+}
+
+// ================================================= 8c. the practice bot plays duels (ui/duel/botDuel.js)
+{
+  let now = 0;
+  const timers = [];
+  const later = (fn, ms) => { const t = { at: now + ms, fn, dead: false }; timers.push(t); return () => { t.dead = true; }; };
+  const advance = (ms) => {
+    const end = now + ms;
+    for (;;) {
+      timers.sort((a, b) => a.at - b.at);
+      const t = timers.find((x) => !x.dead && x.at <= end);
+      if (!t) break;
+      now = t.at; t.dead = true; t.fn();
+    }
+    now = end;
+  };
+  const mk = (isHost) => {
+    const m = new GoonMatchService({
+      state: GoonTransportState.ConnectedP2P,
+      send() { return Promise.resolve(true); },
+      onMessageReceived() { return () => {}; },
+      onStateChanged() { return () => {}; },
+    }, isHost, { logger: quiet, tag: isHost ? 'GG:ph' : 'GG:pbot' });
+    m._peerSupportsNight = true;
+    m._matchSeed = 4242n;
+    m._phase = GoonMatchPhase.Live;
+    return m;
+  };
+  /** The player's HOST controller (practice, first match ever) against the bot on the guest match. */
+  function practicePair(seed = 1, { hold = false } = {}) {
+    const host = mk(true);
+    const guest = mk(false);
+    const log = [];
+    const queue = [];
+    let held = hold;
+    const deliver = (to, msg) => { const f = parse(serialize(msg)); if (held) queue.push([to, f]); else to._onMessageReceived(f); };
+    host._send = (msg) => { log.push(['h', msg]); deliver(guest, msg); };
+    guest._send = (msg) => { log.push(['bot', msg]); deliver(host, msg); };
+    let x = seed >>> 0;
+    const rand = () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
+    let card = 0;
+    const H = createDuelController({ match: host, now: () => now, later, finished: () => 0, duelLength: () => 60, isPractice: () => true });
+    H.setReturnCard(() => { card++; });
+    const B = createBotDuel({ match: guest, rand, now: () => now, later, throws: false });
+    return {
+      host, guest, H, B, log,
+      flush() { held = false; while (queue.length) { const [to, f] = queue.shift(); to._onMessageReceived(f); } },
+      get card() { return card; },
+    };
+  }
+  const booked = (m) => { const s = duelSummary(m); return s.won + s.lost + s.tied; };
+
+  {
+    const p = practicePair(7);
+    ok(p.H.arsenalHook.visible() && p.H.arsenalHook.eligible(0), 'practice, first match: the game card is live');
+    ok(p.H.arsenalHook.throwCard() === true, 'the player throws a duel at the bot');
+    ok(p.B.busy && p.B.state.idx === 0 && p.B.state.len === 60, 'the bot accepts the next idx at the host length', JSON.stringify(p.B.state));
+    ok(!p.log.some(([w, f]) => w === 'bot' && f.sub === 'busy'), 'accepting is silence (no busy frame)');
+    advance(DUEL_INTRO_MS + 60 * 1000);
+    ok(p.H.state && p.H.state.stage === 'wait', 'the player board closed and waits for the bot', JSON.stringify(p.H.state));
+    advance(1500);   // BOT_REPORT_MS tops out at 1400, well inside DUEL_REPORT_GRACE_MS
+    const score = p.log.find(([w, f]) => w === 'bot' && f.sub === 'score');
+    ok(!!score && score[1].idx === 0, 'the bot reports its score inside the grace window');
+    ok(!!score && score[1].tile >= 2 && score[1].score > 0, 'the bot actually played the board', JSON.stringify(score && score[1]));
+    ok(p.H.state && p.H.state.stage === 'result', 'the result lands through the same controller', JSON.stringify(p.H.state));
+    const sum = duelSummary(p.host);
+    ok(booked(p.host) === 1 && sum.lost === 1, 'an idle player (no moves) loses to the bot, booked in the recap tally', JSON.stringify(sum));
+    advance(5000);
+    ok(!p.H.busy() && !p.B.busy, 'both sides close');
+    ok(p.H.arsenalHook.throwCard() === false, 'the player side keeps the gap');
+    p.host._send(makeDuel({ sub: 'start', idx: 1, len_s: 60 }));
+    ok(p.log.some(([w, f]) => w === 'bot' && f.sub === 'busy' && f.idx === 1), 'the bot refuses a start inside its gap');
+    p.H.dispose(); p.B.dispose();
+  }
+  {
+    const p = practicePair(3);
+    p.host._send(makeDuel({ sub: 'start', idx: 4, len_s: 60 }));
+    ok(p.log.some(([w, f]) => w === 'bot' && f.sub === 'busy' && f.idx === 4) && !p.B.busy, 'the bot refuses an unexpected idx');
+    p.H.dispose(); p.B.dispose();
+  }
+  {
+    // A steady player wins some and loses some: the bot is beatable and not a pushover.
+    let wins = 0; let losses = 0;
+    const dirs = ['down', 'left', 'down', 'right'];
+    for (let s = 1; s <= 24; s++) {
+      const p = practicePair(s * 97);
+      p.H.arsenalHook.throwCard();
+      advance(DUEL_INTRO_MS + 10);
+      const presses = 30 + (s * 13) % 90;
+      for (let i = 0; i < presses; i++) p.H.input(dirs[i % dirs.length]);
+      advance(60 * 1000 + DUEL_REPORT_GRACE_MS + 5000);
+      const sum = duelSummary(p.host);
+      wins += sum.won; losses += sum.lost;
+      p.H.dispose(); p.B.dispose();
+    }
+    ok(wins > 0 && losses > 0, 'a steady player wins some and loses some against the bot', wins + 'W ' + losses + 'L');
+  }
+  {
+    const p = practicePair(11);
+    ok(p.B.tryThrow() === true && p.B.state.by === 'bot', 'the bot throws a card');
+    ok(!!p.H.state && p.H.state.by === 'them' && p.H.state.idx === 0, 'the player sees an incoming duel', JSON.stringify(p.H.state));
+    advance(DUEL_INTRO_MS + 60 * 1000 + DUEL_REPORT_GRACE_MS + 5000);
+    ok(!p.H.busy() && !p.B.busy && booked(p.host) === 1, 'and it resolves');
+    p.H.dispose(); p.B.dispose();
+  }
+  {
+    const p = practicePair(5, { hold: true });
+    ok(p.H.arsenalHook.throwCard() && p.B.tryThrow(), 'player and bot throw before either frame lands');
+    p.flush();
+    ok(!!p.H.state && !!p.B.state && p.H.state.idx === 0 && p.B.state.idx === 0 && p.B.state.by === 'them', 'both stay in duel 0, the bot yields');
+    ok(!p.log.some(([, f]) => f.sub === 'busy'), 'a collision is not a refusal');
+    advance(DUEL_INTRO_MS + 60 * 1000 + DUEL_REPORT_GRACE_MS + 5000);
+    ok(booked(p.host) === 1, 'exactly one duel booked');
+    p.H.dispose(); p.B.dispose();
+  }
+  {
+    // Wiring: the solo driver builds the bot, boot's practice opponent speaks night and holds a card.
+    const fs = await import('node:fs');
+    const solo = fs.readFileSync(new URL('../ui/soloDriver.js', import.meta.url), 'utf8');
+    const boot = fs.readFileSync(new URL('../boot.js', import.meta.url), 'utf8');
+    ok(solo.includes('createBotDuel('), 'ui/soloDriver.js builds the bot duel side');
+    ok(!boot.includes("displayName: 'Practice', night: false"), 'boot no longer mutes night on the practice bot');
+    ok(boot.includes("armDrop('gamecard'"), 'practice seeds a game card at Live');
   }
 }
 

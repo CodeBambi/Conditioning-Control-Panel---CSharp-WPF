@@ -1093,7 +1093,8 @@ function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName =
     logger,
     displayName: displayName || (session.identity && session.identity.displayName) || 'Player',
     appVersion: (session.identity && session.identity.appVersion) || '',
-    // The practice bot never speaks Game Night (no duels against a bot that cannot play one).
+    // `night: false` advertises no Game Night. The practice bot DOES speak it since 2026-09-23
+    // (ui/duel/botDuel.js plays duels over the loopback), so nothing passes false today.
     caps: night ? localCaps() : Object.assign({}, localCaps(), { night: 0 }),
     tag: isHost ? 'GG:host' : 'GG:guest',
   });
@@ -2328,6 +2329,10 @@ function seedPracticeArsenal() {
     // a reward. It would also fire before the HUD has finished its entrance.
     if (arsenal.armDrop(seed.id, { count: 1, silent: true })) armed++;
   }
+  /* GAME NIGHT: practice also starts holding a game card, so a duel against the bot is one press
+   * away (owner, 2026-09-23: "make in practice the minigame happen so i test"). Kept off
+   * PRACTICE_SEED on purpose: that table is the flash + video pair the coach line names. */
+  try { if (arsenal.armDrop('gamecard', { silent: true })) logger.info('practice: seeded the game card'); } catch (_e) { /* a nicety */ }
   if (!armed) return;
   logger.info('practice: seeded ' + armed + ' arsenal slot(s)');
   /* ...AND SAY SO. The seed is silent by design (`silent: true` above — a gift,
@@ -2366,7 +2371,7 @@ async function startSolo() {
   soloPair = createLoopbackPair(opts);
 
   const local = buildMatch(soloPair.host, true);
-  soloOpponent = buildMatch(soloPair.guest, false, { withSuddenDeathUi: false, displayName: 'Practice', night: false });
+  soloOpponent = buildMatch(soloPair.guest, false, { withSuddenDeathUi: false, displayName: 'Practice' });
   soloDriver = createSoloDriver({ match: soloOpponent, logger });
 
   attachMatch(local, soloPair.host);

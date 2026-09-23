@@ -12,7 +12,7 @@
  *
  * THE RECEIVER DECIDES WHETHER A DUEL HAPPENS. An inbound start is refused
  * unless it is the expected next idx, the receiver is past its first finished
- * match, it is not practice, no duel or result hold is running, the gap after
+ * match (practice always is: the bot plays duels), no duel or result hold is running, the gap after
  * the last duel (its length + 30 s) has passed and the match has had fewer than
  * DUEL_MAX_PER_MATCH duels. A refusal answers `sub:'busy'`; the thrower cancels
  * its local duel, rolls its counter back and gets the card back.
@@ -37,7 +37,7 @@
 import { GoonMatchPhase } from '../../core/contracts.js';
 import { createBoard, openingSpawn, play, deepest } from './board.js';
 import {
-  DUEL_INTRO_MS, DUEL_REPORT_GRACE_MS, bonusFor, cardEligible, duelOutcome, duelSeed, pickLength,
+  DUEL_INTRO_MS, DUEL_MIN_FINISHED, DUEL_REPORT_GRACE_MS, bonusFor, cardEligible, duelOutcome, duelSeed, pickLength,
 } from './rules.js';
 import { getDuelLength } from '../screens/customize.js';
 import { finishedMatches } from '../nightProgress.js';
@@ -85,7 +85,7 @@ export function takeFirstCardHint() {
  * @param {Function} [o.later] (fn, ms) => cancel (tests)
  * @param {Function} [o.finished] finished-match count (tests)
  * @param {Function} [o.duelLength] this player's Customize pick (tests)
- * @param {Function} [o.isPractice] true in practice: no card, no inbound duel
+ * @param {Function} [o.isPractice] true in practice: the card drops from the first match (the bot plays)
  */
 export function createDuelController({
   match, view = null, audio = null, onLog = null,
@@ -112,9 +112,17 @@ export function createDuelController({
     if (match && match.isHost) return pickLength(duelLength());
     return pickLength(match && match.peerDuelLen);
   }
+  /**
+   * Finished matches as the gates see them. PRACTICE counts as past the first match (owner,
+   * 2026-09-23: "make in practice the minigame happen so i test"): the bot (ui/duel/botDuel.js)
+   * speaks night over the loopback, so the card drops from the very first practice match.
+   * Against a real peer the rule is unchanged: the second finished match.
+   */
+  function seen() { return practice() ? Math.max(finished(), DUEL_MIN_FINISHED) : finished(); }
+
   /** The rules both sides apply before a duel may begin (not counting "am I busy"). */
   function roomForDuel() {
-    return !practice() && finished() >= 1 && ms.started < DUEL_MAX_PER_MATCH && now() >= ms.notBefore;
+    return seen() >= DUEL_MIN_FINISHED && ms.started < DUEL_MAX_PER_MATCH && now() >= ms.notBefore;
   }
 
   function at(delay, fn) {
@@ -259,15 +267,15 @@ export function createDuelController({
     /** The arsenal's seam for the game card slot. */
     arsenalHook: {
       eligible(held) {
-        return !practice() && cardEligible({
+        return cardEligible({
           peerNight: !!(match && match.peerSupportsNight),
-          finished: finished(),
+          finished: seen(),
           inDuel: busy(),
           held,
         }) && roomForDuel();
       },
-      /** Show the slot at all: the peer speaks night, not practice, the player's second match. */
-      visible() { return !practice() && !!(match && match.peerSupportsNight) && finished() >= 1; },
+      /** Show the slot at all: the peer speaks night, the player's second match (any practice match). */
+      visible() { return !!(match && match.peerSupportsNight) && seen() >= DUEL_MIN_FINISHED; },
       busy,
       throwCard() {
         if (busy() || !isLive() || !roomForDuel()) return false;
