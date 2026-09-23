@@ -140,7 +140,7 @@ export function createGoonMediaPool() {
   let hostEntries = [];   // the host's manifest — the user's active preset
   let localEntries = [];  // standalone: files the player picked in this browser
   let onlineEntries = []; // the in-game flavour's Scrolller pictures (host `online-media` frame)
-  let entries = [];       // hostEntries + localEntries + onlineEntries — what the deck indexes
+  let entries = [];       // hostEntries + localEntries + onlineEntries - what the deck indexes
   let skipped = 0;    // reported by the host (browser-undecodable formats etc.)
   let truncated = false;
   let deck = [];      // shuffled indices into entries, drawn from the end

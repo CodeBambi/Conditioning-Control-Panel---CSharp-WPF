@@ -105,7 +105,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 {
   const all = JSON.stringify(S.flavour) + [S.flavour.live.ready(3), S.flavour.live.loadingN(1), S.flavour.removeNiche('x')].join(' ')
     + S.mediaSetup.note + S.mediaSetup.notePatron + S.mediaSetup.backToFlavours;
-  ok(!/[–—]/.test(all), 'no em or en dashes in the new copy');
+  ok(!new RegExp('[' + String.fromCharCode(0x2013, 0x2014) + ']').test(all), 'no em or en dashes in the new copy');
   ok(!/!/.test(all), 'no exclamation marks in the new copy');
   ok(/scrolller/i.test(S.flavour.sub) && /reddit/i.test(S.flavour.sub), 'the card says where pictures come from (the opt-in)');
   ok(liveLine(null, false) === S.flavour.live.idle, 'the live line before a pick invites one');
