@@ -248,6 +248,7 @@ public class FriendsApiTests
     [InlineData(200, "{\"ok\":true,\"status\":\"offline\"}", SendResult.Offline)]
     [InlineData(200, "{\"ok\":false,\"reason\":\"not_friends\"}", SendResult.NotFriends)]
     [InlineData(200, "{\"ok\":false,\"reason\":\"refused\"}", SendResult.Refused)]
+    [InlineData(200, "{\"ok\":false,\"reason\":\"bad_input\"}", SendResult.Refused)]
     [InlineData(429, "{\"ok\":false,\"reason\":\"too_fast\"}", SendResult.TooFast)]
     [InlineData(429, "", SendResult.TooFast)]
     [InlineData(404, "<html>not here</html>", SendResult.TryLater)]
@@ -269,6 +270,8 @@ public class FriendsApiTests
     [InlineData("{\"ok\":true,\"status\":\"accepted\"}", AddResult.Accepted)]
     [InlineData("{\"ok\":true,\"status\":\"not_found\"}", AddResult.NotFound)]
     [InlineData("{\"ok\":true,\"status\":\"full\"}", AddResult.Full)]
+    [InlineData("{\"ok\":false,\"reason\":\"bad_input\"}", AddResult.NotFound)]
+    [InlineData("{\"ok\":false,\"reason\":\"busy\"}", AddResult.TryLater)]
     [InlineData("<html></html>", AddResult.TryLater)]
     public async Task RequestWording(string body, AddResult expected)
     {
@@ -316,6 +319,13 @@ public class FriendsApiTests
         Assert.Equal(12, s.Friends[1].Presence.LockDay);
         Assert.Equal("Ann", s.Incoming.Single().Via);
         Assert.Equal(1, s.OnlineCount);
+    }
+
+    [Fact]
+    public async Task BusyStateIsNoSnapshot()
+    {
+        var (api, _) = Make(_ => Reply(HttpStatusCode.OK, "{\"ok\":false,\"reason\":\"busy\"}"));
+        Assert.Null(await api.StateAsync());
     }
 
     [Fact]

@@ -116,7 +116,7 @@ public sealed class FriendsApi : IFriendsApi
         "too_fast" => SendResult.TooFast,
         "not_friends" => SendResult.NotFriends,
         "offline" => SendResult.Offline,
-        "refused" => SendResult.Refused,
+        "refused" or "bad_input" => SendResult.Refused,
         _ => SendResult.TryLater,
     };
 
@@ -125,7 +125,7 @@ public sealed class FriendsApi : IFriendsApi
         "sent" => AddResult.Sent,
         "accepted" => AddResult.Accepted,
         "already" => AddResult.Already,
-        "not_found" => AddResult.NotFound,
+        "not_found" or "bad_input" => AddResult.NotFound,
         "blocked" => AddResult.Blocked,
         "self" => AddResult.Self,
         "full" => AddResult.Full,
