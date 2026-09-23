@@ -1,0 +1,28 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.HomeworkGateCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             Visibility="Collapsed" Opacity="0">
+
+    <!-- "Homework due". Stands over the panel body (MainWindow.Homework.cs puts it in the same cell
+         as the remote-control overlay, one Z step under it) until the video is watched or homework
+         is left. Never shown over a session, a game or a fullscreen effect: HomeworkGateRule. -->
+    <Border Background="#E6000000">
+        <Border HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="360" MaxWidth="520"
+                Padding="34,28" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1.5">
+            <StackPanel>
+                <TextBlock Text="{loc:Str homework_gate_title}" Foreground="{DynamicResource PinkBrush}"
+                           FontSize="26" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtVideoTitle" Foreground="White" FontSize="17" FontWeight="SemiBold"
+                           TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,12,0,6"/>
+                <TextBlock Text="{loc:Str homework_gate_hint}" Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="12" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center"/>
+                <Button x:Name="BtnWatch" Content="{loc:Str homework_btn_watch}" Style="{StaticResource PinkButton}"
+                        HorizontalAlignment="Center" MinWidth="200" Margin="0,22,0,10" Click="BtnWatch_Click"/>
+                <Button Content="{loc:Str homework_btn_leave}" Style="{StaticResource OutlineButton}"
+                        HorizontalAlignment="Center" Padding="14,6" Click="BtnLeave_Click"/>
+            </StackPanel>
+        </Border>
+    </Border>
+</UserControl>

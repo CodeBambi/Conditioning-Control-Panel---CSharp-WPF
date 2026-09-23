@@ -327,6 +327,16 @@ public static partial class LauncherHost
             return false;
         }
 
+        // Homework due: every game tile leads to the same card first. The panel comes up and
+        // the card lands there (MainWindow.Homework.cs); nothing launches until it is watched
+        // or homework is left.
+        if (App.MainWindowRef?.HomeworkBlocksGames == true)
+        {
+            Log.Information("[Launcher] {Id} waits: homework is due", entry.Id);
+            OpenPanel(null, () => App.MainWindowRef?.PresentHomeworkFromLauncher());
+            return true;
+        }
+
         _panelRequested = false;
         if (!LauncherCatalogue.TryLaunch(entry.Id)) return false;
 

@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.AppSettingsSections"
              mc:Ignorable="d" d:DesignWidth="760">
 
     <!-- ================================================================
@@ -223,6 +224,9 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <!-- Homework (opt-in, server-gated): collapsed unless App.Homework says it is on. -->
+        <local:HomeworkSettingsCard/>
 
         <!-- ==== MOVED from PatreonTabView.xaml:127-152 ====
              Starts Collapsed; shown only with a cloud identity. -->
