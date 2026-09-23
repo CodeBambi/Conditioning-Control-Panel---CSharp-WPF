@@ -1126,6 +1126,8 @@ namespace ConditioningControlPanel.Services
                         // Light tier
                         case "trigger_flash":
                             App.Flash?.TriggerFlashOnce();
+                            // Circe's tab: what the controller sends lands on the wearer's tab.
+                            try { App.Chaster?.Note("remote_media"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster remote hook"); }
                             break;
 
                         case "trigger_subliminal":
@@ -1235,6 +1237,7 @@ namespace ConditioningControlPanel.Services
                         // Standard tier
                         case "trigger_video":
                             App.Video?.TriggerVideo();
+                            try { App.Chaster?.Note("remote_video"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster remote hook"); }
                             break;
 
                         case "start_video":

@@ -131,6 +131,9 @@ namespace ConditioningControlPanel.Services
             // The Spiral Room borrows the spiral overlay's art: it is the only spiral we drew,
             // and the room is where a spiral means something rather than where one is switched on.
             ["tab.spiral"] = Cover("features/spiral_overlay.png"),
+            // Circe's tab borrows the phrase lock: the one padlock in the feature art. Its own
+            // picture is owed (owner art call); the rail chip itself is a vector padlock.
+            ["tab.chaster"] = Cover("features/Phrase_Lock.png"),
 
             // --- rooms with no art of their own -------------------------------------
             // These twelve had no picture that stands for the room, so the first pass left them

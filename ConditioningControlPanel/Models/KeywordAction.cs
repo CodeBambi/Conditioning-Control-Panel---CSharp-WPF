@@ -138,8 +138,8 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
-    /// STUB: Declared so preset JSONs can reference it. Chaster integration is
-    /// pending (see chaster_integration_plan.md) — dispatch logs and no-ops.
+    /// Puts minutes on Circe's tab (Services/Chaster). Books nothing unless the tab is on
+    /// and a Chaster account is linked; the tab settles to the lock once a day.
     /// </summary>
     public class ChasterAddTimeAction : KeywordAction
     {

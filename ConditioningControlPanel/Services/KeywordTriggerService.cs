@@ -1571,7 +1571,9 @@ namespace ConditioningControlPanel.Services
                     return 0;
 
                 case ChasterAddTimeAction chas:
-                    App.Logger?.Information("KeywordTriggerService: ChasterAddTimeAction stubbed (+{Min}m) — Chaster integration pending", chas.Minutes);
+                    // Goes on Circe's tab, not straight to the lock: same daily cap, same safety hold,
+                    // and it books nothing unless the tab is on and a Chaster account is linked.
+                    App.Chaster?.NoteSeconds("watcher", Math.Clamp(chas.Minutes, 0, 60) * 60);
                     return 0;
 
                 default:

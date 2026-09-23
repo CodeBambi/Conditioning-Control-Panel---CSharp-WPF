@@ -227,6 +227,15 @@ public sealed class BubbleLayer : BaseLayer
             }
             canvas.RestoreToCount(saved);
 
+            // ---- Natasha's favourite: a short red blink across the body ----
+            if (item.RedWash > 0.003f)
+            {
+                _fill.Shader = null;
+                _fill.Color = new SKColor(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B)
+                    .WithAlpha((byte)Math.Clamp(item.RedWash * item.Opacity * 255f, 0f, 255f));
+                canvas.DrawCircle(cx, cy, half * item.Scale * 0.97f, _fill);
+            }
+
             // ---- Glassy specular shine (chaos plain bubbles) ----
             if (item.HasShine)
             {
@@ -435,6 +444,8 @@ public sealed class BubbleLayer : BaseLayer
         public SKColor GlowColor;
         public float GlowBlurDip;
         public float GlowOpacity;
+        /// <summary>Natasha's favourite: alpha of the red wash over the body this frame (0 = none).</summary>
+        public float RedWash;
         public SKImage? PrismGhost;         // shared, cached, never disposed here
         public SKPoint[][]? Cracks;         // DIP points in the 0.._size box
         public string? HintText;

@@ -70,7 +70,8 @@ public class WebNudgeTests
     {
         var xaml = ReadSource("MainWindow", "MainWindow.xaml");
 
-        var spiral = xaml.IndexOf("x:Name=\"SpiralRail\"", StringComparison.Ordinal);
+        // The cluster's first landmark was the spiral medallion until Circe's tab took its slot.
+        var spiral = xaml.IndexOf("x:Name=\"ChasterRail\"", StringComparison.Ordinal);
         var web = xaml.IndexOf("x:Name=\"DoorWebApp\"", StringComparison.Ordinal);
         var settings = xaml.IndexOf("x:Name=\"DoorSettings\"", StringComparison.Ordinal);
 

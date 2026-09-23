@@ -769,6 +769,11 @@ public class AchievementService : IDisposable
         // Track for quests
         App.Quests?.TrackLockCardCompleted();
 
+        // Circe's tab: every typo on the card costs, the finished card pays a little back.
+        // Inert unless the player linked Chaster and switched these rows on.
+        try { App.Chaster?.Note("typo", errors); App.Chaster?.Note("lockcard"); }
+        catch (Exception ex) { Diag.Swallowed(ex, "chaster lock card hook"); }
+
         // Word Perfect (50 lock cards completed)
         if (_progress.TotalLockCardsCompleted >= WordPerfectLockCards)
         {
@@ -822,6 +827,7 @@ public class AchievementService : IDisposable
     /// </summary>
     public void TrackAttentionCheckFailed()
     {
+        try { App.Chaster?.Note("attention"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster attention hook"); }
         _progress.AttentionCheckFailures++;
         _isDirty = true;
         
@@ -1002,6 +1008,7 @@ public class AchievementService : IDisposable
 
         // Track for quests
         App.Quests?.TrackSessionCompleted();
+        try { App.Chaster?.Note("session"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster session hook"); }
 
         _isDirty = true;
     }
@@ -1091,6 +1098,7 @@ public class AchievementService : IDisposable
     /// </summary>
     public void TrackVideoAttentionCheckFailed()
     {
+        try { App.Chaster?.Note("attention"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster attention hook"); }
         _progress.VideoAttentionChecksFailed++;
         _isDirty = true;
     }
