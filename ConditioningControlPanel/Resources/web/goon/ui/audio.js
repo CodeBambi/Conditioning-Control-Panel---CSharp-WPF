@@ -103,6 +103,7 @@ import {
 // writer for every such pref). This tier only needs to be able to answer with
 // the same number — see mediaVolume() on the api.
 import { mediaGain } from './prefs.js';
+import { pentaHz, rungGain } from './juice.js';
 
 /* ----------------------------------------------------------------------------
  * URL RESOLUTION — pure, exported, and testable without a network.
@@ -785,6 +786,46 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
         livePlays.push(rec);
         stats.played++;
         note('sfx:' + id);
+        return true;
+      } catch (_e) { stats.dropped++; return false; }
+    },
+
+    /**
+     * A tiny synthesised pluck on rung `i` of the C pentatonic ladder (C5 root,
+     * the key Breakout and the Back Room kit share), for count-ups and staggered
+     * reveals that want to climb. Juice pass 2026-09-23. Quiet by rule: the
+     * gain stays in 0.03..0.13 and tilts down as the ladder climbs, the note is
+     * about 140 ms, and it rides the GAME bus so the match slider owns it.
+     * Pentatonic has no semitone clashes, so any two rungs can overlap. Same
+     * throttle and autoplay rules as a cue: dropped, never queued.
+     */
+    tone(i, { gain = null, ms = 140, octave = 0 } = {}) {
+      if (disposed) return false;
+      const c = ensureCtx();
+      if (!c || c.state !== 'running') { stats.dropped++; return false; }
+      const t = now();
+      const key = 'tone';
+      const prev = lastAt.get(key);
+      if (prev != null && t - prev < 40) { stats.throttled++; return false; }
+      lastAt.set(key, t);
+      try {
+        const at = c.currentTime;
+        const osc = c.createOscillator();
+        const g = c.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = pentaHz(i, octave);
+        const peak = gain == null ? rungGain(i) : Math.max(0.03, Math.min(0.13, Number(gain) || 0.06));
+        const dur = Math.max(0.06, Math.min(0.4, (Number(ms) || 140) / 1000));
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.linearRampToValueAtTime(peak, at + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+        osc.connect(g);
+        g.connect(gameBus || c.destination);
+        osc.start(at);
+        osc.stop(at + dur + 0.02);
+        osc.onended = () => { try { osc.disconnect(); g.disconnect(); } catch (_e) { /* gone */ } };
+        stats.played++;
+        note('tone:' + i);
         return true;
       } catch (_e) { stats.dropped++; return false; }
     },

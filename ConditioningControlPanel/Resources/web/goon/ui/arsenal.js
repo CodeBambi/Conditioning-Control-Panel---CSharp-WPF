@@ -53,6 +53,7 @@ import { dressGhost } from './throwPreview.js';
 import { S } from './strings.js';
 import { GAME_CARD_COST } from './duel/rules.js';
 import { DUEL_COPY } from './duel/copy.js';
+import { burst, centreOf, flyArc, popIn, shake, squash } from './juiceDom.js';
 
 /**
  * The rails, in owner order — which is also the KEYBOARD order (1..7), so new
@@ -444,6 +445,9 @@ export function mountArsenal({
 
   function setState(rec, state, word) {
     if (rec.state !== state) {
+      // READY POP: a slot coming off cooldown (or out of locked) pops back up
+      // with a spark, so the player sees the moment it can be thrown again.
+      if (state === 'ready' && (rec.state === 'cooling' || rec.state === 'locked')) readyPop(rec);
       // ('poor' left this list on 2026-08-05 with the charge requirement.)
       for (const s of ['ready', 'cooling', 'used', 'filtered', 'locked']) cls(rec.root, 'is-' + s, s === state);
       rec.state = state;
@@ -458,6 +462,13 @@ export function mountArsenal({
    * moves, so re-writing nine textContents four times a second would be pure
    * churn on a page that is already carrying an effect stack.
    */
+  function readyPop(rec) {
+    const art = rec.img || rec.root;
+    popIn(art, { from: 0.72, over: 1.16, ms: 320 });
+    const c = centreOf(art);
+    if (c && c.w) burst(c.x, c.y, { count: 7, dist: 26, spread: 22, life: 420, sizeMin: 3, sizeMax: 6, color: '255, 212, 94' });
+  }
+
   function paintStack(rec) {
     const showStack = rec.needsArm && rec.armed > 0;
     if (rec.paintedStack === rec.armed) return;
@@ -494,8 +505,8 @@ export function mountArsenal({
   }
 
   /** The one path to the engine. Returns the engine's {ok,error,id}. */
-  function fire(rec) {
-    if (rec && rec.item.duel) return fireGameCard(rec);
+  function fire(rec, at = null) {
+    if (rec && rec.item.duel) return fireGameCard(rec, at);
     if (!rec || rec.item.kind === null) return { ok: false, error: 'not a payload', id: null };
     // A duel is running: throws pause until the board closes.
     if (duel && duel.busy()) { refuse(rec, DUEL_COPY.busy); return { ok: false, error: 'duel', id: null }; }
@@ -523,7 +534,7 @@ export function mountArsenal({
       // only another drop can open it again.
       if (rec.needsArm && rec.armed > 0) rec.armed--;
       if (rec.item.kind === GoonPayloadKind.BrainDrain) { heavyUsed = true; heavyId = res.id; }
-      spark(rec);
+      spark(rec, at);
       addReceipt(res.id, rec.item.label);
       if (typeof onFired === 'function') {
         try {
@@ -538,25 +549,55 @@ export function mountArsenal({
     return res;
   }
 
-  function fireGameCard(rec) {
+  function fireGameCard(rec, at = null) {
     if (rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return { ok: false, error: 'locked', id: null }; }
     if (!isLive() || !duel || duel.busy() || !duel.throwCard()) { refuse(rec, DUEL_COPY.busy); paint(); return { ok: false, error: 'duel', id: null }; }
     rec.armed--;
     sfx(audio, 'gg-fire');
-    spark(rec);
+    spark(rec, at);
     if (typeof onLog === 'function') { try { onLog({ t: 'gamecard-out' }); } catch (_e) { /* ignore */ } }
     paint();
     return { ok: true, error: null, id: null };
   }
 
-  /** A little pip of light thrown from the tile at the monitor. */
-  function spark(rec) {
+  /**
+   * THE THROW (juice pass 2026-09-23): the item's own sticker flies an arc from
+   * where you let go of it (or from its tile) onto their monitor, drops a
+   * fading trail, and lands with a burst, a knock of the monitor in real
+   * pixels and a squash. Reduced motion: a straight fade. Falls back to the old
+   * pip when there is no WAAPI (a stub DOM) or no sticker to throw.
+   */
+  function spark(rec, at = null) {
     const d = doc();
     const target = typeof getDropTarget === 'function' ? getDropTarget() : null;
     if (!d || !d.body || !target || !rec.root) return;
-    const from = rectOf(rec.root);
     const to = rectOf(target);
     if (!to.width) return;
+    const noArt = !!(rec.root.classList && rec.root.classList.contains && rec.root.classList.contains('is-noart'));
+    if (!noArt && rec.img && rec.img.src && typeof d.body.animate === 'function') {
+      const tile = rectOf(rec.img);
+      const from = (at && typeof at.x === 'number')
+        ? { x: at.x, y: at.y }
+        : { x: tile.left + tile.width / 2, y: tile.top + tile.height / 2 };
+      const land = { x: to.left + to.width / 2, y: to.top + to.height / 2 };
+      const run = () => {
+        const node = el('img', 'gg-juice-throw');
+        if (!node) return;
+        node.src = rec.img.src;
+        node.alt = '';
+        add(d.body, node);
+        const ms = Math.round(Math.min(620, Math.max(380, Math.hypot(land.x - from.x, land.y - from.y) * 0.7)));
+        flyArc(node, from, land, { ms, lift: 0.32, spin: land.x < from.x ? -24 : 24, scaleTo: 0.55 }).then(() => {
+          try { node.remove(); } catch (_e) { /* gone */ }
+          burst(land.x, land.y, { count: 12, dist: 60, spread: 70, life: 480 });
+          shake(target, 4);
+          squash(target, { amount: 0.05, ms: 240 });
+        });
+      };
+      if (fx && typeof fx.play === 'function') fx.play(700, run); else run();
+      return;
+    }
+    const from = rectOf(rec.root);
     const node = el('i', 'gg-spark');
     if (!node || !node.style) return;
     node.style.left = (from.left + from.width / 2) + 'px';
@@ -784,6 +825,7 @@ export function mountArsenal({
       // A LOCKED slot is not draggable and not armable: the gesture ends here
       // with a word, so no ghost is ever minted for an item you do not have.
       if (rec.needsArm && rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return; }
+      squash(rec.img || root, { amount: 0.14, ms: 200 });
       pid = e && e.pointerId;
       startX = (e && e.clientX) || 0;
       startY = (e && e.clientY) || 0;
@@ -822,7 +864,7 @@ export function mountArsenal({
       const target = typeof getDropTarget === 'function' ? getDropTarget() : null;
       const hit = target && inRect(rectOf(target), x, y, 12);
       if (typeof onTargeted === 'function') onTargeted(false);
-      if (hit) fire(rec);
+      if (hit) fire(rec, { x, y });
       else tipOn(rec, 'drop it on their monitor');
     }
 
@@ -840,7 +882,7 @@ export function mountArsenal({
     const target = typeof getDropTarget === 'function' ? getDropTarget() : null;
     const x = (e && e.clientX) || 0;
     const y = (e && e.clientY) || 0;
-    if (target && inRect(rectOf(target), x, y, 12)) { disarm(); fire(rec); }
+    if (target && inRect(rectOf(target), x, y, 12)) { disarm(); fire(rec, { x, y }); }
     else disarm();
   }, true);
 

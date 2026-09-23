@@ -29,6 +29,8 @@ import { settleOnce, formatRecord, outcomeOf } from '../rivalry.js';
 const countedMatches = new WeakSet();
 import { duelSummary } from '../duel/duelController.js';
 import { DUEL_COPY } from '../duel/copy.js';
+import { burst, centreOf, countUp, isCalm, play, popIn, staggerIn } from '../juiceDom.js';
+import { THUD_EASE, staggerDelays } from '../juice.js';
 
 const COLLAPSE_AT = 6;
 const GRACEFUL_MS = 8 * 60 * 1000;
@@ -760,6 +762,51 @@ export function mount(container, ctx) {
     }
   }
 
+  /**
+   * THE REVEAL (juice pass 2026-09-23), first paint only; a repaint (the
+   * countersignature landing) just swaps the numbers. The router cascades the
+   * cards in; on top of that the verdict THUDs, each score counts up from zero
+   * with a climbing pentatonic tick, the payload rows cascade inside their card
+   * and the title chips pop one by one. Reduced motion: numbers land at once,
+   * everything else is the router's fade.
+   */
+  function reveal() {
+    try {
+      const q = (sel) => Array.from(column.querySelectorAll ? column.querySelectorAll(sel) : []);
+      const calm = isCalm();
+      const verdict = q('.gg-recap-verdict')[0];
+      if (verdict && !calm) {
+        play(verdict, [
+          { opacity: 0, transform: 'scale(1.8) rotate(-4deg)' },
+          { opacity: 1, transform: 'scale(1) rotate(0deg)' },
+        ], { duration: 340, delay: 140, easing: THUD_EASE, fill: 'backwards' });
+      }
+      let rung = 0;
+      q('.gg-scorenum').forEach((node, i) => {
+        const final = parseInt(node.textContent, 10);
+        if (!Number.isFinite(final)) return;
+        const stop = countUp(node, 0, final, {
+          delay: 360 + i * 180,
+          onStep: () => { if (!calm) { try { audio?.tone?.(rung++ % 10, { ms: 90 }); } catch (_e) { /* stub bus */ } } },
+          onDone: () => {
+            if (calm) return;
+            popIn(node, { from: 0.8, over: 1.25, ms: 300 });
+            const c = centreOf(node);
+            if (c && c.w && node.classList.contains('is-you')) burst(c.x, c.y, { count: 10, dist: 50, spread: 40, color: '255, 212, 94' });
+          },
+        });
+        ledger.add(stop);
+      });
+      staggerIn(q('.gg-pllist > li').slice(0, 14), { start: 420, step: 55 });
+      const chips = q('.gg-title-chip');
+      const delays = staggerDelays(chips.length, { start: 700, step: 120, max: 600 });
+      chips.forEach((chip, i) => {
+        popIn(chip, { delay: delays[i], from: 0.5, over: 1.12, ms: 340 });
+        if (!calm) ledger.timer(() => { try { audio?.tone?.(4 + i, { ms: 160 }); } catch (_e) { /* stub bus */ } }, delays[i] + 80);
+      });
+    } catch (_e) { /* the reveal is decoration: the recap stands without it */ }
+  }
+
   if (match) {
     ledger.sub(match.onResultFinalized(() => { if (!ledger.isDisposed) paint(); }));
     ledger.sub(match.onMatchEnded(() => { if (!ledger.isDisposed) paint(); }));
@@ -787,6 +834,7 @@ export function mount(container, ctx) {
   if (match) ledger.sub(match.onResultFinalized(() => countFinished()));
 
   paint();
+  reveal();
   try { audio?.sfx?.('recap-reveal'); } catch (_e) { /* stub bus */ }
   try { audio?.music?.('recap'); } catch (_e) { /* stub bus */ }
   ledger.add(() => { try { audio?.stopMusic?.(); } catch (_e) { /* stub bus */ } });
