@@ -141,7 +141,9 @@ internal static class RemoteMediaCache
     /// list, so a burst of flashes elsewhere in the app cannot delete a picture a game is still
     /// showing. The startup sweep still catches it after a crash.
     /// </summary>
-    public static async Task<string?> MaterializeAsync(string url, CancellationToken ct, bool ownerReleases = false)
+    public static Task<string?> MaterializeAsync(string url, CancellationToken ct) => MaterializeAsync(url, ct, ownerReleases: false);
+
+    public static async Task<string?> MaterializeAsync(string url, CancellationToken ct, bool ownerReleases)
     {
         var bytes = await GetBytesAsync(url, ct).ConfigureAwait(false);
         if (bytes == null) return null;
