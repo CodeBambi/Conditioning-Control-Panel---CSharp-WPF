@@ -92,6 +92,7 @@ import * as hostScreen from './ui/screens/host.js';
 import * as joinScreen from './ui/screens/join.js';
 import * as mediaSetupScreen from './ui/screens/mediaSetup.js';
 import { needsMediaSetup } from './ui/screens/mediaSetup.js';
+import { readMediaInit, readOnlineFrame, mediaFlavourFrame, sameMediaState } from './ui/flavours.js';
 import * as lobbyScreen from './ui/screens/lobby.js';
 import * as draftScreen from './ui/screens/draft.js';
 import * as countdownScreen from './ui/screens/countdown.js';
@@ -322,6 +323,73 @@ async function loadSiblings() {
  * `net-post-result` is consumed INSIDE bridge.js; registering it here would
  * throw at wiring time. That is the intended alarm, not a bug.
  * -------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------------
+ * ONLINE PICTURES - the flavour card (2026-09-23, owner: "playable with no setup").
+ *
+ * The HOST owns the pick and fetches the pictures (Services/GoonGame/GoonOnlineMedia.cs):
+ * `init.media` brings { flavour, custom, online } in, a pick or a closed options sheet
+ * sends ONE `media-flavour` frame out, and `online-media` frames bring the whole current
+ * online list back, which exec/media.js keeps as its THIRD set (setOnlineLibrary). The
+ * pick is the player's opt-in to online pictures for this game. A host that predates the
+ * block, and every standalone page, leaves session.media null: no card, no frame.
+ *
+ * ONLINE PICTURES ARE NEVER SENT. The transfer queue lists what it offers off the assets
+ * store's items (createArtifactSource.listSendable), never off the deck, so nothing the
+ * online set holds can reach an opponent.
+ *
+ * Declared ABOVE the handlers on purpose: bridge.on replays a pre-buffered frame during
+ * registration, and a `const` below it would still be in its dead zone.
+ * -------------------------------------------------------------------------- */
+const mediaFlavour = (() => {
+  let online = null;
+  const listeners = new Set();
+  const copy = (m) => ({ flavour: m.flavour || '', custom: JSON.parse(JSON.stringify(m.custom || {})), online: m.online !== false });
+  const api = {
+    /** Is there a host that fetches online pictures at all? */
+    available: () => !!session.media,
+    /** Never picked yet (the first-run card's question). */
+    firstRun: () => !!session.media && !session.media.flavour,
+    get: () => (session.media ? copy(session.media) : null),
+    info: () => online,
+    subscribe(fn) {
+      if (typeof fn !== 'function') return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    /** Send the state if it moved. `force` sends even an unchanged one (a first pick). */
+    commit(next, force) {
+      if (!session.media || !next) return false;
+      if (!force && sameMediaState(session.media, next)) return false;
+      session.media = copy(next);
+      const frame = mediaFlavourFrame(session.media);
+      try { bridge.send(frame); } catch (_e) { /* a pick is never load-bearing */ }
+      bridge.log('media-flavour: ' + (frame.flavour || '-') + ' online=' + frame.online + ' subs=' + frame.subs.join(','));
+      return true;
+    },
+    /** The first-run tap: this flavour, online on. */
+    pick(id) {
+      const cur = api.get();
+      if (!cur) return false;
+      return api.commit(Object.assign(cur, { flavour: id, online: true }), true);
+    },
+    /** A host frame landed: replace the online set and repaint whoever listens. */
+    adopt(m) {
+      online = readOnlineFrame(m);
+      const c = media.setOnlineLibrary(online);
+      for (const fn of Array.from(listeners)) { try { fn(online); } catch (_e) { /* a painter never breaks a frame */ } }
+      return c;
+    },
+  };
+  return api;
+})();
+
+bridge.on('online-media', (m) => {
+  const c = mediaFlavour.adopt(m);
+  const o = mediaFlavour.info();
+  bridge.log('online-media: ' + o.state + ' ' + o.images.length + ' images, ' + o.videos.length + ' videos'
+    + ' (deck ' + c.images + '/' + c.videos + ')');
+});
+
 bridge.on('init', (m) => {
   gotInit = true;
   session.solo = !!m.solo;
@@ -339,6 +407,8 @@ bridge.on('init', (m) => {
     anonymous: idm.anonymous === true,
   };
   session.caps = m.caps || null;
+  /* The flavour pick and the player's niche edits, host-owned (null = no online pictures here). */
+  session.media = readMediaInit(m.media);
   /* OPEN TABLES (desk seam, 2026-09-23): the friends drawer's Join opens the game with a
    * TOP-LEVEL `joinCode`. Absent or "" = nothing to join. Tolerated missing on older hosts. */
   session.joinCode = typeof m.joinCode === 'string' && m.joinCode ? normalizeCode(m.joinCode) : (session.joinCode || '');
@@ -500,6 +570,12 @@ function openFirstScreen() {
     router.show('join', { autoCode: code });
     return;
   }
+  /* FIRST RUN: the flavour card before the title, once. It holds nothing - one tap picks
+   * and the title follows (actions.mediaPrepDone falls back to it outside a match). */
+  if (mediaFlavour.firstRun()) {
+    router.show('mediaSetup');
+    return;
+  }
   router.show('title');
 }
 
@@ -642,7 +718,11 @@ function localCaps() {
   if (!caps.camera) rounds = rounds.filter((r) => r !== GoonRoundKind.StaringContest);
   if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, transfer: true });
+  /* SENDING IS A PATRON PERK (2026-09-23): a seat without it never says `transfer` in its
+   * hello, so no peer ever opens the media lane with it. Advertising less is always safe. */
+  const transferCap = !!(session.caps && session.caps.mediaTransfer === true);
+
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, transfer: transferCap });
 }
 
 /* ============================================================================
@@ -1218,7 +1298,11 @@ function attachMatch(match, transport) {
    * still refuses it mid-match, and the peer still has to be opted in too
    * before a single byte moves. */
   try {
-    if (prefs.get('mediaTransferEnabled') !== false && !match.setMediaTransfer(true)) {
+    /* OPT-IN, PATRONS ONLY (2026-09-23 supersedes "defaults on"): the seed is taken only
+     * when this seat may send AND the player switched sending on in options or the lobby. */
+    const sendOn = prefs.get('mediaTransferEnabled') === true
+      && !!(session.caps && session.caps.mediaTransfer === true);
+    if (sendOn && !match.setMediaTransfer(true)) {
       logger.warn('media-transfer seed REFUSED by the engine (phase ' + match.phase + ') — attacks will fall back to the receiver\'s local pool');
     }
   } catch (e) { logger.warn('setMediaTransfer threw: ' + ((e && e.message) || e)); }
@@ -2091,7 +2175,9 @@ const actions = {
      * made moments ago may still be sitting in the store un-fed. */
     syncLocalDeck(true);
     mediaPrepTold = false;
-    mediaPrepPending = needsMediaSetup(media);
+    // With online pictures on offer the question is "has this player picked a flavour";
+    // without, it is still "is the deck empty". Either answer is one tap or one file away.
+    mediaPrepPending = mediaFlavour.available() ? mediaFlavour.firstRun() : needsMediaSetup(media);
     if (mediaPrepPending) {
       logger.info('joined with an empty deck — media setup first');
       /* THE RACE THIS CLOSES. GoonSession.join() attaches the match and fires
@@ -2113,12 +2199,33 @@ const actions = {
    * screen itself decides nothing about where it goes next.
    */
   mediaPrepDone() {
-    if (!clearMediaPrep(true)) return;
+    if (!clearMediaPrep(true)) {
+      // The first-run card outside a match (openFirstScreen): no hold to clear, on to the title.
+      if (router && router.current === 'mediaSetup' && !currentMatch) router.show('title');
+      return;
+    }
     syncLocalDeck(true);
     logDeck('media-setup');
     if (currentMatch) onPhase(currentMatch.phase);
     else router.show('title');
   },
+
+  /**
+   * The flavour card's "use my own files". HOSTED the player's own files are the desk's
+   * preset (the manifest), so this switches online pictures off and moves on. Without a
+   * host it opens the file picker, the old first-run step, now the secondary road.
+   */
+  mediaOwnFiles() {
+    if (session.hosted) {
+      const cur = mediaFlavour.get();
+      if (cur) mediaFlavour.commit(Object.assign(cur, { flavour: cur.flavour || 'mine', online: false }), true);
+      actions.mediaPrepDone();
+      return;
+    }
+    router.show('mediaSetup', { mediaFiles: true });
+  },
+  /** The picker's "back to flavours". */
+  mediaSetupFlavours() { router.show('mediaSetup', { mediaFiles: false }); },
 
   /**
    * Game Night rematch, the smallest honest version. The finished room is spent,
@@ -2434,6 +2541,17 @@ function buildApp() {
 
   options = createOptions({
     prefs, audio, session, logger,
+    pictures: mediaFlavour,
+    /* The patron-only send switch (off by default). A free seat never sees it. Changing
+     * it before the match starts also re-declares on the consent frame; mid-match it waits. */
+    sending: {
+      visible: () => !!(session.caps && session.caps.mediaTransfer === true),
+      get: () => prefs.get('mediaTransferEnabled') === true,
+      set: (v) => {
+        prefs.set('mediaTransferEnabled', !!v);
+        try { if (currentMatch && isPreLive(currentMatch.phase)) currentMatch.setMediaTransfer(!!v); } catch (_e) { /* the engine refuses mid-match; the pref still sticks */ }
+      },
+    },
     setFullscreen: (on) => bridge.send({ type: 'fullscreen-set', on: !!on }),
     isInMatch: () => !!currentMatch && currentMatch.phase !== GoonMatchPhase.Idle,
   });
@@ -2505,6 +2623,8 @@ function buildApp() {
 
   ctx = {
     session, prefs, audio, toasts, sheets, options, matchLog, actions, logger, assets,
+    /** ui/screens/mediaSetup.js + ui/options.js: the flavour pick and the online pictures. */
+    mediaFlavour,
     receivedStore, blocklist, mediaQueue, discord,
     /** ui/screens/voice.js: the pre-recorded note library (page-scoped). */
     notes: noteStore,

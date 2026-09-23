@@ -27,6 +27,7 @@
 
 import { createLedger, el, button } from './router.js';
 import { S } from './strings.js';
+import { buildPicturesSection } from './screens/flavour.js';
 
 /** Height reserved at the bottom of the drawer for the mercy button. */
 const MERCY_CLEARANCE_PX = 96;
@@ -39,16 +40,25 @@ const MERCY_CLEARANCE_PX = 96;
  * @param {(on:boolean)=>void} [o.setFullscreen] hosted only
  * @param {()=>boolean} [o.isInMatch]
  * @param {object} [o.logger]
+ * @param {object} [o.pictures] boot's mediaFlavour api (the Pictures section; absent = no section)
+ * @param {object} [o.sending]  {visible(), get(), set(v)} - the patron-only send switch
  */
-export function createOptions({ prefs, audio = null, session = null, setFullscreen = null, isInMatch = null, logger = null } = {}) {
+export function createOptions({ prefs, audio = null, session = null, setFullscreen = null, isInMatch = null, logger = null, pictures = null, sending = null } = {}) {
   const doc = (typeof document !== 'undefined') ? document : null;
   const host = doc ? doc.getElementById('gg-drawer') : null;
   let ledger = null;
   let open = false;
+  /** The Pictures section's live copy, committed ONCE when the drawer closes. */
+  let picturesSection = null;
 
   function close() {
     if (!open) return;
     open = false;
+    /* ONE refetch per close, never one per keystroke: the host re-fetches on every
+     * `media-flavour`, so the section edits a copy and it is sent here if it moved. */
+    try { if (picturesSection && pictures) pictures.commit(picturesSection.state()); }
+    catch (e) { logger?.warn?.('[GG options] pictures commit threw: ' + ((e && e.message) || e)); }
+    picturesSection = null;
     const panel = host ? host.querySelector('.gg-panel') : null;
     const done = () => {
       try { ledger?.dispose(); } catch (_e) { /* ignore */ }
@@ -134,6 +144,21 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
       volumeRow('voiceVolume', S.options.voice),
     ]);
     body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.mediaNote }));
+
+    /* PICTURES - the flavour and its niches (ui/screens/flavour.js). Offered in and out
+     * of a match: it is about what YOUR screen shows, like the knobs below. */
+    if (pictures && typeof pictures.available === 'function' && pictures.available()) {
+      picturesSection = buildPicturesSection({ ledger, api: pictures, audio });
+      body.appendChild(picturesSection.node);
+    }
+
+    /* SENDING MY FILES - patrons only, off by default, and never shown to a seat that
+     * cannot send (no upsell, no greyed switch). Online pictures never travel. */
+    if (sending && typeof sending.visible === 'function' && sending.visible()) {
+      const send = toggleRow(S.flavour.send, () => !!sending.get(), (v) => sending.set(!!v));
+      body.appendChild(send.node);
+      body.appendChild(el('p', { class: 'gg-panel-note', text: S.flavour.sendNote }));
+    }
 
     const motion = toggleRow(S.options.motion,
       () => prefs.get('reduceMotion'),

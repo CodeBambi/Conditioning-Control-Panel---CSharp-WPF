@@ -1,0 +1,133 @@
+/* ============================================================================
+ * ui/flavours.css - the flavour card (first run) and the options Pictures section.
+ *
+ * Motion: compositor-only (transform, opacity). Tiles rise in on a stagger, a
+ * picked tile THUDs (340 ms, the house overshoot curve) and the rest dim away.
+ * Reduced motion keeps the fades and drops the movement.
+ * ==========================================================================*/
+
+.gg-flv { max-width: 760px; text-align: center; }
+.gg-flv-head { margin: 0.2rem 0 0.4rem; font-size: clamp(1.6rem, 4.4vw, 2.3rem); }
+.gg-flv-sub { margin: 0 auto 1.1rem; max-width: 34rem; color: var(--gg-text-3, rgba(255, 255, 255, 0.7)); font-size: 0.9rem; line-height: 1.5; }
+
+.gg-flv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 0.7rem;
+}
+
+.gg-flv-tile {
+  --flv-tint: #ff87c7;
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem;
+  min-height: 132px;
+  padding: 0.9rem 0.85rem 0.8rem;
+  text-align: left;
+  color: var(--gg-text);
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid color-mix(in srgb, var(--flv-tint) 55%, transparent);
+  background:
+    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--flv-tint) 34%, transparent), transparent 70%),
+    var(--gg-plate-bg);
+  box-shadow: 0 0 0 0 transparent, inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  opacity: 0;
+  transform: translateY(14px) scale(0.96);
+  animation: gg-flv-in 320ms cubic-bezier(.2, 1.5, .4, 1) forwards;
+  animation-delay: calc(var(--flv-i, 0) * 60ms + 80ms);
+  transition: transform 160ms ease-out, box-shadow 200ms ease-out, opacity 220ms ease-out, filter 220ms ease-out;
+}
+.gg-flv-tile:hover, .gg-flv-tile:focus-visible {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 10px 30px -12px var(--flv-tint), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  outline: none;
+}
+.gg-flv-tile:active { transform: translateY(1px) scale(0.98); }
+.gg-flv-name { font-size: 1.15rem; font-weight: 700; color: var(--flv-tint); letter-spacing: 0.01em; }
+.gg-flv-line { font-size: 0.82rem; color: rgba(255, 255, 255, 0.82); }
+.gg-flv-niches { margin-top: auto; font-size: 0.68rem; color: rgba(255, 255, 255, 0.5); line-height: 1.45; word-break: break-word; }
+
+.gg-flv-tile.is-picked {
+  animation: gg-flv-thud 340ms cubic-bezier(.2, 1.5, .4, 1) forwards;
+  box-shadow: 0 0 0 2px var(--flv-tint), 0 14px 40px -10px var(--flv-tint);
+}
+.gg-flv-tile.is-dim { opacity: 0.28 !important; filter: saturate(0.4); transform: scale(0.96); pointer-events: none; }
+
+.gg-flv-live { margin: 1rem 0 0.2rem; min-height: 1.3em; font-size: 0.85rem; color: rgba(255, 255, 255, 0.72); }
+.gg-flv-foot { display: flex; justify-content: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.6rem; }
+.gg-flv-own, .gg-flv-none { font-size: 0.85rem; }
+
+@keyframes gg-flv-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes gg-flv-thud {
+  0% { opacity: 1; transform: scale(1); }
+  35% { transform: scale(0.94); }
+  100% { opacity: 1; transform: scale(1.05); }
+}
+
+/* ---------------------------------------------- the options Pictures section */
+.gg-flv-section { margin: 1.1rem 0 0.4rem; padding-top: 0.9rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.gg-panel-subhead { margin: 0 0 0.6rem; font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.6); }
+
+.gg-flv-tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.6rem; }
+.gg-flv-tab {
+  --flv-tint: #ff87c7;
+  font: inherit; font-size: 0.78rem; cursor: pointer;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid color-mix(in srgb, var(--flv-tint) 40%, transparent);
+  background: transparent; color: rgba(255, 255, 255, 0.7);
+  transition: background 160ms ease-out, color 160ms ease-out, transform 120ms ease-out;
+}
+.gg-flv-tab:active { transform: scale(0.95); }
+.gg-flv-tab.is-on { background: color-mix(in srgb, var(--flv-tint) 30%, transparent); color: #fff; border-color: var(--flv-tint); }
+
+.gg-flv-pills { --flv-tint: #ff87c7; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.gg-flv-pill {
+  font: inherit; font-size: 0.76rem; cursor: pointer;
+  padding: 0.28rem 0.65rem;
+  border-radius: var(--gg-radius-pill);
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  background: transparent; color: rgba(255, 255, 255, 0.42);
+  transition: background 160ms ease-out, color 160ms ease-out, transform 140ms cubic-bezier(.2, 1.5, .4, 1);
+}
+.gg-flv-pill.is-on {
+  border-style: solid; border-color: var(--flv-tint);
+  background: color-mix(in srgb, var(--flv-tint) 26%, transparent); color: #fff;
+}
+.gg-flv-pill:active { transform: scale(0.92); }
+.gg-flv-pillwrap { display: inline-flex; align-items: center; gap: 0.1rem; }
+.gg-flv-pill-x {
+  font: inherit; font-size: 0.9rem; line-height: 1; cursor: pointer;
+  width: 1.4rem; height: 1.4rem; border-radius: 50%;
+  border: 0; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.7);
+}
+.gg-flv-pill-x:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+
+.gg-flv-addrow { display: flex; gap: 0.4rem; margin-top: 0.7rem; }
+.gg-flv-input {
+  flex: 1 1 auto; min-width: 0;
+  font: inherit; font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.3); color: #fff;
+}
+.gg-flv-input:focus { outline: none; border-color: var(--gg-pink); }
+.gg-flv-addbtn { flex: 0 0 auto; padding: 0.4rem 0.9rem; font-size: 0.82rem; }
+.gg-flv-err { margin: 0.35rem 0 0; min-height: 1em; font-size: 0.74rem; color: var(--gg-gold); }
+.gg-mediasetup-back { display: inline-block; margin: 0.4rem 0; background: none; border: 0; cursor: pointer; font: inherit; }
+
+:root[data-gg-motion="reduced"] .gg-flv-tile { animation: gg-flv-fade 200ms ease-out forwards; transform: none; }
+:root[data-gg-motion="reduced"] .gg-flv-tile.is-picked { animation: none; opacity: 1; transform: none; }
+:root[data-gg-motion="reduced"] .gg-flv-tile:hover,
+:root[data-gg-motion="reduced"] .gg-flv-tile:active,
+:root[data-gg-motion="reduced"] .gg-flv-tile.is-dim { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .gg-flv-tile { animation: gg-flv-fade 200ms ease-out forwards; transform: none; }
+  .gg-flv-tile.is-picked { animation: none; opacity: 1; transform: none; }
+}
+@keyframes gg-flv-fade { from { opacity: 0; } to { opacity: 1; } }
