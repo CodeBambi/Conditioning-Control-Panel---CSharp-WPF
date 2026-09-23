@@ -190,8 +190,9 @@ cues to it without bpm, key and downbeat metadata.
 
 ## 6. Safety and access
 
-- **Reduced motion.** Web: `matchMedia('(prefers-reduced-motion: reduce)')` plus the game's own
-  setting; keep information-bearing rings and fades, drop bursts, kicks, flashes and wobble
+- **Reduced motion.** Web: decide it ONCE at mount and pass a `reduced` flag down, never re-ask in the
+  renderer. Breakout's `station.js` ORs the host's `ctx.reduced`, a `?still` query and
+  `matchMedia('(prefers-reduced-motion: reduce)')`, then hands `reduced` to `renderer.draw`; keep information-bearing rings and fades, drop bursts, kicks, flashes and wobble
   (`reactions/power.js` header says exactly this). WPF: `MotionFx.AllowTransitions` (off only at Off)
   and `MotionFx.AllowAmbientLoops` (Full level and an ambient-capable tier). Every `MotionFx` helper
   snaps to the end state when motion is off: do the same in your own code.
