@@ -47,7 +47,7 @@ import { GoonMatchService } from './core/match.js';
 import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
 import {
-  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION,
+  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION, NIGHT_CAP_VERSION,
 } from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
@@ -75,6 +75,7 @@ import { createWakeLock } from './ui/wakeLock.js';
 // bridge call at import time, and a duel where the voice service silently failed
 // to load would be a duel where a consent the player gave has no effect.
 import { createVoiceService } from './ui/voice/voiceService.js';
+import { createSongPlayer } from './ui/songPlayer.js';
 // ...and the library the service loads pre-recorded notes from. Same reasoning,
 // plus one more: it is the ONE writer of prefs.voiceEmoteMap, and two of those
 // would be two answers to "which note does this emote fire".
@@ -519,6 +520,7 @@ let goonSession = null;      // net/session.js GoonSession (host/join path only)
 let currentMatch = null;
 let currentTransport = null;
 let currentSd = null;        // {presenter, inputs, dispose} from ui/sd
+let songPlayer = null;       // ui/songPlayer.js - MATCH-SCOPED like voice (Game Night)
 let voice = null;            // ui/voice/voiceService.js — MATCH-SCOPED, see attachMatch
 let micGateSaid = false;     // the mic breadcrumb is once per match — see reportMicGate
 let hudHandle = null;
@@ -609,7 +611,7 @@ function localCaps() {
   if (!caps.camera) rounds = rounds.filter((r) => r !== GoonRoundKind.StaringContest);
   if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, transfer: true });
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, transfer: true });
 }
 
 /* ============================================================================
@@ -1136,6 +1138,9 @@ function attachMatch(match, transport) {
       logger,
     });
   } catch (e) { logger.error('createVoiceService threw: ' + ((e && e.stack) || e)); voice = null; }
+  // Game Night: the match's song, if the host picked one. Silent on any failure.
+  try { songPlayer = createSongPlayer({ match, audio, logger }); }
+  catch (e) { logger.warn('createSongPlayer threw: ' + ((e && e.message) || e)); songPlayer = null; }
   /* SEED THE DECLARATION FROM THE PREFERENCE, on every attach.
    *
    * `prefs.voiceNotesEnabled` is the player's standing answer; `voice_notes` on
@@ -1455,6 +1460,8 @@ function detachMatch() {
   // talking over the recap.
   try { voice?.dispose?.(); } catch (_e) { /* ignore */ }
   voice = null;
+  try { songPlayer?.dispose?.(); } catch (_e) { /* ignore */ }
+  songPlayer = null;
   try { wakeLock?.stop?.(); } catch (_e) { /* a screen convenience, never load-bearing */ }
   try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
   currentSd = null;
