@@ -510,6 +510,8 @@ namespace ConditioningControlPanel
         /// </summary>
         public static Services.EmiDesk.EmiDeskService? EmiDesk { get; private set; }
 
+        public static Services.Friends.IFriendsService? Friends { get; internal set; }
+
         /// <summary>The previous session died with the engine running (EngineCrashSentinel found a
         /// file at startup). Latched because the sentinel is consumed long before EMI exists.</summary>
         private static bool _engineCrashRecovered;
@@ -2433,6 +2435,11 @@ namespace ConditioningControlPanel
             // and Speech all have to exist first, and this is the first point at which they all do.
             try { EmiDesk?.WireAppEvents(); }
             catch (Exception exWire) { Logger?.Debug(exWire, "[EmiDesk] app event wiring failed"); }
+
+            // Friends: what a poke, an invite or a watch does when it lands. Attaches itself to
+            // App.Friends whenever that exists; harmless while it is null.
+            try { Services.Friends.FriendsLanding.Start(); }
+            catch (Exception exFl) { Logger?.Debug(exFl, "[Friends] landing start failed"); }
 
             // Initialize content packs service
             ContentPacks = new ContentPackService();
