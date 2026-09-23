@@ -2888,3 +2888,8 @@ html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
   .gg-ava-dm { min-width: 30px; height: 24px; font-size: 0.58rem; }
 }
 
+
+/* GAME NIGHT: the song bar. With a song picked the timer's track is the song,
+   start to game over: a touch thicker and warmer, still the only bar. */
+.gg-timer.is-song .gg-timer-track { height: 4px; }
+.gg-timer.is-song .gg-timer-fill { background: linear-gradient(90deg, #b388ff, var(--gg-pink)); box-shadow: 0 0 8px rgba(255, 105, 180, 0.55); }

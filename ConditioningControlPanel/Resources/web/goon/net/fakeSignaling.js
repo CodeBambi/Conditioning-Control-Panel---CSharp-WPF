@@ -69,6 +69,11 @@ function mintGuestUid() {
 
 function ok(body) { return Promise.resolve({ status: 200, body: JSON.stringify(body) }); }
 function fail(status, error) { return Promise.resolve({ status, body: JSON.stringify({ error }) }); }
+/** The open-tables routes answer `{ok:false, reason}` (brief wire contract). */
+function reason(status, why) { return Promise.resolve({ status, body: JSON.stringify({ ok: false, reason: why }) }); }
+
+/** An open-tables listing lives this long past its last renew. */
+const LISTING_TTL_MS = 150000;
 
 /** Accepts a bare path or a full URL (the C# fake is handed a URL). */
 function pathOf(p) {
@@ -96,7 +101,7 @@ export class GoonFakeSignalingServer {
    * @param {string[]} [o.labAccess] uids that clear that gate (see setLabAccess)
    */
   constructor({ ttlMs = DEFAULT_TTL_MS, now = () => Date.now(), codePrefix = 'LOOP', whitelist = [],
-    mediaSend = null, hostGate = false, labAccess = [] } = {}) {
+    mediaSend = null, hostGate = false, labAccess = [], joinGate = false } = {}) {
     this._rooms = new Map();
     this._ttlMs = ttlMs;
     this._now = now;
@@ -120,6 +125,22 @@ export class GoonFakeSignalingServer {
     this.hostGate = !!hostGate;
     /** @type {Set<string>} uids at tier 2, i.e. allowed to mint a room while `hostGate` is on. */
     this._labAccess = new Set(Array.isArray(labAccess) ? labAccess.map(String) : []);
+    /**
+     * OPEN TABLES (2026-09-23): enforce the JOIN gate too. Every 1v1 is Prime now, so the real
+     * /join answers 401 `signin` with no account and 403 `no_join_access` below tier 2, before
+     * the room is touched. OFF by default for the same reason as `hostGate`: the room-lifecycle
+     * suites are not about entitlement, and the anonymous-guest ones predate the gate.
+     */
+    this.joinGate = !!joinGate;
+    /** code -> {code, hostUid, visibility, song, cardSec, pictures, listedAt, expiresAt} */
+    this._listings = new Map();
+    /** uid -> {name, level, avatar}: stands in for the user record the real /open reads. */
+    this._profiles = new Map();
+    /** uid -> Set(uid): the friend set (proxy/friends.js), one-directional here, as stored. */
+    this._friends = new Map();
+    /** "a|b" pairs blocked either way. */
+    this._blocked = new Set();
+    this._lastListedAt = 0;
     /** Every request the server saw — handy in an assertion. */
     this.requests = [];
     /**
@@ -187,6 +208,38 @@ export class GoonFakeSignalingServer {
     if (!u) return this;
     if (on) this._labAccess.add(u); else this._labAccess.delete(u);
     return this;
+  }
+
+  /** Test hook: what /open shows for a host. */
+  setProfile(uid, { name = '', level = null, avatar = '' } = {}) {
+    this._profiles.set(String(uid || ''), { name, level, avatar });
+    return this;
+  }
+
+  /** Test hook: `uid` counts `friendUid` as a friend (call twice for a mutual pair). */
+  setFriend(uid, friendUid, on = true) {
+    const u = String(uid || '');
+    if (!this._friends.has(u)) this._friends.set(u, new Set());
+    if (on) this._friends.get(u).add(String(friendUid || '')); else this._friends.get(u).delete(String(friendUid || ''));
+    return this;
+  }
+
+  /** Test hook: block a pair (either direction hides both ways). */
+  setBlocked(a, b, on = true) {
+    const k = [String(a), String(b)].sort().join('|');
+    if (on) this._blocked.add(k); else this._blocked.delete(k);
+    return this;
+  }
+
+  /** Read-only peek for assertions. */
+  listing(code) { return this._listings.get(String(code || '').toUpperCase()) || null; }
+
+  _isBlocked(a, b) { return this._blocked.has([String(a), String(b)].sort().join('|')); }
+
+  _mayJoin(uid) {
+    if (!this.joinGate) return true;
+    const u = String(uid || '');
+    return this._labAccess.has(u) || this._whitelist.has(u);
   }
 
   /** Whitelist folds to permanent tier 2, exactly as computeEffectiveTier does it server-side. */
@@ -264,6 +317,12 @@ export class GoonFakeSignalingServer {
          * uid shape and needs no anonymous branch of its own. Joining is free; there is
          * deliberately no gate on this route to mirror. */
         const anonymous = !req.unified_id;
+        /* THE JOIN GATE (open tables, 2026-09-23), checked BEFORE the room is looked at, so a
+         * refused caller learns nothing about whether the code exists. */
+        if (this.joinGate) {
+          if (anonymous || isGuestUid(req.unified_id)) return reason(401, GoonSignalError.SignIn);
+          if (!this._mayJoin(req.unified_id)) return reason(403, GoonSignalError.NoJoinAccess);
+        }
         const uid = anonymous ? mintGuestUid() : (typeof req.unified_id === 'string' ? req.unified_id : '');
         // A returning guest re-presents the g_ id it was given, so "is this a guest" is a question
         // about the id's SHAPE, not about whether we just minted it.
@@ -286,6 +345,8 @@ export class GoonFakeSignalingServer {
         if (room.joined && !rejoin) return fail(409, GoonSignalError.AlreadyJoined);
         room.joined = true;
         room.guestUid = seatUid;
+        // A seated table is not an open table any more.
+        this._listings.delete(room.code);
         room.guestEpoch++;
         room.guestToken = newToken();     // every claim gets a fresh token
         // A reclaimed seat starts on a clean mailbox: the dead attempt's SDP would
@@ -329,8 +390,9 @@ export class GoonFakeSignalingServer {
           return fail(401, GoonSignalError.Unauthorized);
         }
         if (role === 'host') {
-          // The code dies with the person holding it.
+          // The code dies with the person holding it, and so does its listing.
           this._rooms.delete(room.code);
+          this._listings.delete(room.code);
           return ok({ ok: true, folded: true });
         }
         // The seat goes back on the market; the ROOM stays up, so the same player
@@ -406,6 +468,73 @@ export class GoonFakeSignalingServer {
         }
 
         return ok({ ok: true, cursor, msgs: mine, peer_online: room.joined });
+      }
+
+      case '/v2/goon/list': {
+        /* OPEN TABLES: list / renew / unlist. Host of a lobby room only. Renewing slides both
+         * the room TTL (to 300 s) and the listing (to now + 150 s). */
+        const room = this._live(req.code);
+        if (!room) return reason(404, GoonSignalError.NoRoom);
+        if (!req.unified_id || req.unified_id !== room.hostUid) return reason(403, GoonSignalError.NotHost);
+        if (room.joined) return reason(409, GoonSignalError.NotLobby);
+        const vis = ['friends', 'anyone', 'off'].includes(req.visibility) ? req.visibility : 'friends';
+        const now = this._now();
+        room.expiresAt = Math.max(room.expiresAt, now + DEFAULT_TTL_MS);
+        if (vis === 'off') {
+          this._listings.delete(room.code);
+          return ok({ ok: true, visibility: 'off', expiresInSec: 0 });
+        }
+        const prev = this._listings.get(room.code);
+        this._listings.set(room.code, {
+          code: room.code,
+          hostUid: room.hostUid,
+          visibility: vis,
+          song: req.song === true,
+          cardSec: Number.isFinite(req.cardSec) ? Math.max(0, Math.trunc(req.cardSec)) : 0,
+          pictures: req.pictures === true,
+          listedAt: prev ? prev.listedAt : now,
+          expiresAt: now + LISTING_TTL_MS,
+        });
+        if (!prev) this._lastListedAt = now;
+        return ok({ ok: true, visibility: vis, expiresInSec: Math.round(LISTING_TTL_MS / 1000) });
+      }
+
+      case '/v2/goon/open': {
+        /* OPEN TABLES: the rows this account may see. Signed in only; free accounts still get
+         * the rows (their buttons lock page-side). Friends first, newest first, max 20. */
+        const uid = typeof req.unified_id === 'string' ? req.unified_id : '';
+        if (!uid || isGuestUid(uid)) return reason(401, GoonSignalError.SignIn);
+        const now = this._now();
+        const mine = this._friends.get(uid) || new Set();
+        const rows = [];
+        for (const l of Array.from(this._listings.values())) {
+          const room = this._live(l.code);
+          if (l.expiresAt <= now || !room || room.joined) { this._listings.delete(l.code); continue; }
+          if (l.hostUid === uid || this._isBlocked(uid, l.hostUid)) continue;
+          const friend = mine.has(l.hostUid);
+          if (l.visibility === 'friends' && !friend) continue;
+          const p = this._profiles.get(l.hostUid) || {};
+          rows.push({
+            code: l.code,
+            name: p.name || 'player',
+            level: Number.isFinite(p.level) ? p.level : null,
+            avatar: p.avatar || null,
+            friend,
+            song: l.song,
+            cardSec: l.cardSec,
+            pictures: l.pictures,
+            waitingSec: Math.max(0, Math.round((now - l.listedAt) / 1000)),
+            _at: l.listedAt,
+          });
+        }
+        rows.sort((a, b) => (Number(b.friend) - Number(a.friend)) || (b._at - a._at));
+        for (const r of rows) delete r._at;
+        return ok({
+          ok: true,
+          you: { canHost: this._mayHost(uid), canJoin: this._mayJoin(uid) },
+          tables: rows.slice(0, 20),
+          lastOpenedAgoSec: this._lastListedAt ? Math.max(0, Math.round((now - this._lastListedAt) / 1000)) : null,
+        });
       }
 
       default:

@@ -1,0 +1,88 @@
+/* ============================================================================
+ * ui/stamps.css - Game Night rivalry: hit stamps and the rivalry record line.
+ *
+ * The stamp layer sits over the HUD (z40) and under the toasts (z50), Mercy
+ * and every sheet, and it never takes a pointer. Decorative motion only: under
+ * .is-calm or the OS reduced-motion query the stamp just appears and fades.
+ * ==========================================================================*/
+
+.gg-stamps {
+  position: fixed; inset: 0; z-index: 45; pointer-events: none;
+  display: grid; place-items: center; overflow: hidden;
+}
+
+.gg-stamp {
+  grid-area: 1 / 1; position: relative;
+  transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg));
+  animation: gg-stamp-slam 950ms cubic-bezier(.2, 1.5, .4, 1) both;
+}
+
+.gg-stamp-face {
+  display: inline-block;
+  font-family: 'Arial Black', 'Impact', system-ui, sans-serif;
+  font-weight: 900; letter-spacing: 0.06em; line-height: 1;
+  padding: 0.12em 0.36em 0.08em;
+  border: 0.09em solid currentColor; border-radius: 0.14em;
+  text-transform: uppercase; white-space: nowrap;
+  background: rgba(20, 4, 16, 0.18);
+  /* A worn rubber edge: the ink never quite fills the letters. */
+  mask-image: radial-gradient(circle at 30% 40%, #000 62%, rgba(0,0,0,.72) 63%, #000 70%);
+}
+
+.gg-stamp.is-big   .gg-stamp-face { font-size: clamp(3.4rem, 13vw, 8rem); }
+.gg-stamp.is-mid   .gg-stamp-face { font-size: clamp(2rem, 7vw, 4.2rem); }
+.gg-stamp.is-small .gg-stamp-face { font-size: clamp(1.4rem, 4.6vw, 2.6rem); }
+
+.gg-stamp.is-hit  { color: #ff2d8f; text-shadow: 0 0 22px rgba(255, 45, 143, 0.55); }
+.gg-stamp.is-in   { color: #b98cff; text-shadow: 0 0 14px rgba(185, 140, 255, 0.45); }
+.gg-stamp.is-dull { color: #8d8795; animation-name: gg-stamp-dud; }
+
+.gg-stamp-ink {
+  position: absolute; left: 50%; top: 50%;
+  width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+  background: currentColor;
+  transform: translate(0, 0) scale(var(--s, 1));
+  animation: gg-stamp-ink 620ms cubic-bezier(.15, .8, .3, 1) both;
+}
+
+@keyframes gg-stamp-slam {
+  0%   { opacity: 0; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(calc(var(--gg-stamp-rot, -6deg) * 2.2)) scale(2.4); }
+  18%  { opacity: 1; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(0.92); }
+  30%  { transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1.04); }
+  42%  { transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1); }
+  78%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1); }
+}
+
+@keyframes gg-stamp-dud {
+  0%   { opacity: 0; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1.3); }
+  22%  { opacity: 0.9; transform: translateY(var(--gg-stamp-y, -6vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1); }
+  70%  { opacity: 0.8; }
+  100% { opacity: 0; transform: translateY(calc(var(--gg-stamp-y, -6vh) + 2vh)) rotate(var(--gg-stamp-rot, -6deg)) scale(1); }
+}
+
+@keyframes gg-stamp-ink {
+  0%   { opacity: 0; transform: translate(0, 0) scale(var(--s, 1)); }
+  15%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx, 0), var(--dy, 0)) scale(calc(var(--s, 1) * 0.3)); }
+}
+
+@keyframes gg-stamp-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.gg-stamp.is-calm { animation: gg-stamp-fade 950ms linear both; }
+.gg-stamp.is-calm .gg-stamp-ink { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gg-stamp { animation: gg-stamp-fade 950ms linear both !important; }
+  .gg-stamp-ink { display: none; }
+}
+
+/* ---- the rivalry record: lobby line and recap line ---- */
+.gg-rival-line {
+  margin: 0.35rem 0 0; text-align: center;
+  font-weight: 700; letter-spacing: 0.04em; opacity: 0.85;
+}
+.gg-rival-line:empty { display: none; }

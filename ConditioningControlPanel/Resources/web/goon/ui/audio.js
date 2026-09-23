@@ -201,6 +201,10 @@ export const SFX_REGISTRY = Object.freeze({
   /** ONE landing cue for every family. Per-kind stings would be noise. */
   'payload-in':     gameCue({ files: [L('stamp_thud.mp3')],        gain: 0.38 }),
   'gg-endured':     gameCue({ files: [D('chime2.mp3')],            gain: 0.34 }),
+  /** Game Night: your throw landed (ui/hitStamps.js). The THUD under the HIT stamp. */
+  'gg-hit':         gameCue({ files: [L('stamp_thud.mp3')],        gain: 0.48 }),
+  /** ...and refused. Flat on purpose. */
+  'gg-hit-dull':    gameCue({ files: [L('captcha-reject-1.mp3')],  gain: 0.22, minGapMs: 200 }),
 
   /* ---- the two of you ----------------------------------------------- game - */
   'gg-emote':       gameCue({ files: [L('chime-1.mp3')],           gain: 0.24, minGapMs: 160 }),
@@ -371,6 +375,8 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
   let ctx = null;
   let dead = false;              // no AudioContext in this host: stop trying
   let masterBus = null, uiBus = null, gameBus = null, musicBus = null, droneBus = null, voiceBus = null;
+  /** Game night: the match's song is playing, so the drone bed is silent under it. */
+  let droneMuted = false;
   let unlockHook = null;
   let stateHook = null;
   // THE BED. `droneWanted` is the latch the phase router writes; `drone` is the
@@ -500,7 +506,7 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
       // THE BED IS THE ONE THAT REALLY NEEDS IT. It is playing while the slider
       // moves, so a stepped write would zipper on every pixel of the drag (the
       // Intake's pref buses use setTargetAtTime for exactly this reason).
-      if (droneBus) glide(droneBus.gain, clamp01(vol.drone), DRONE_GLIDE_SEC);
+      if (droneBus) glide(droneBus.gain, droneMuted ? 0 : clamp01(vol.drone), DRONE_GLIDE_SEC);
       // ...and the voice bus glides on the CUE constant, not the bed's: a note is
       // ten seconds long, so a drag can land in the middle of one, but there is
       // nothing sustaining that a longer ramp would help.
@@ -884,6 +890,17 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
     get droneWanted() { return droneWanted; },
     /** True only when real oscillators are running. False under node, always. */
     get droneIsPlaying() { return !!(drone && drone.isPlaying); },
+
+    /** Silence the drone bed while the match's song plays (ui/songPlayer.js). Idempotent. */
+    muteDrone(on) {
+      if (disposed) return;
+      const next = !!on;
+      if (next === droneMuted) return;
+      droneMuted = next;
+      applyBusGains();
+      note('drone:' + (droneMuted ? 'under-song' : 'back'));
+    },
+    get droneMuted() { return droneMuted; },
 
     /** Ride the music bus down under speech/lock cards. Idempotent. */
     duck(on) {

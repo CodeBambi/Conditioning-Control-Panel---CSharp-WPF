@@ -38,7 +38,7 @@ export const S = Object.freeze({
     // The dimmed-Host note, and since 2026-08-05 the ONLY "this costs money"
     // sentence in the duel — sending stopped being one. Lowercase, an explanation
     // rather than a pitch, and it names the thing that is still free instead of stopping at "no".
-    hostNoLab: 'hosting is a supporter perk — joining a room is always free.',
+    hostNoLab: 'hosting and joining are a prime perk. practice is free.',
     join: 'Join with a code',
     practice: 'Practice',
     practiceNote: 'solo · scripted opponent',
@@ -53,7 +53,7 @@ export const S = Object.freeze({
        clips are sent to your opponent, and a voice note is your recorded voice
        going to a stranger. Both are opt-in and both are off until you say so —
        which is the honest version of the same reassurance, so that is what it says. */
-    fineprint: 'Both players endure their own library. Nothing you own is sent anywhere until you switch sending on — then it goes to your opponent, and nowhere else.',
+    fineprint: 'Both players endure their own library. Nothing you own is sent anywhere until you switch sending on. Then it goes to your opponent, and nowhere else.',
   },
 
   /** The "how it works" modal — exactly six bullets, in reading order. */
@@ -209,6 +209,24 @@ export const S = Object.freeze({
     eyebrowPicking: 'they are getting set up',
     prepPicking: (name) => (name || 'they') + ' joined — picking their media…',
   },
+  /* --- GAME NIGHT: the song (ui/screens/songRow.js). The match lasts as long
+     as the song. One row, one paste box, skip is the default. --- */
+  song: {
+    label: 'Pick a song',
+    placeholder: 'paste a bambicloud track link',
+    pick: 'use it',
+    skip: 'skip',
+    sub: 'the match lasts as long as the song. skip it and you get the usual length.',
+    none: 'no song. usual length.',
+    loading: 'listening for how long it is',
+    failed: 'that track would not load. usual length it is.',
+    empty: 'paste a track link first.',
+    refusedPage: 'that is a page link, not a track link. open it over there and copy the track link.',
+    refusedHost: 'only bambicloud track links work here.',
+    picked: (title, clock) => (title || 'a song') + ' · ' + clock,
+    lengthHost: 'match length follows the song.',
+    lengthGuest: 'their pick. the match lasts as long as it does.',
+  },
 
   /* -------------------------------------------------------------- discord
    * The sharing panel, the VS splash, the HUD minis and the recap plates.
@@ -336,6 +354,10 @@ export const S = Object.freeze({
     titles: 'titles',
     rematch: 'Rematch',
     rematchSoon: 'soon',
+    /* Game Night rematch: the room is spent, so it is a fresh one. The note says which half you do. */
+    rematchHost: 'new link',
+    rematchGuest: 'paste their link',
+    rematchPractice: 'go again',
     back: 'Back to menu',
     chipLanded: 'landed',
     chipEndured: 'endured',
@@ -942,10 +964,18 @@ export const S = Object.freeze({
        leave the player somewhere to go rather than only closing a door. It also answers the
        retired 402 `no_pass` — an old server's "your free match is spent" is the same conversation
        with worse information, and this is the only copy left for either. */
+    /* OPEN TABLES (2026-09-23): joining is no longer free, so the old line would now lie. Every
+       1v1 is a Tier 2 (Prime) perk and the Prime sheet (S.prime) is what actually opens; this
+       copy stays as the plain-notice fallback and still names what is free. */
     noHostAccess: {
       icon: '✦',
-      headline: 'Hosting is a supporter perk',
-      line: "Opening a room is for Tier 2 supporters. Joining someone else's is always free — ask them for a code.",
+      headline: '1v1 is a supporter perk',
+      line: 'Hosting and joining are for Tier 2 supporters. Practice against the bot is free, any time.',
+    },
+    signIn: {
+      icon: '🔑',
+      headline: 'Sign in first',
+      line: 'A 1v1 needs an account. Practice against the bot works without one.',
     },
     notDeployed: {
       icon: '⏳',
@@ -1207,6 +1237,84 @@ export const S = Object.freeze({
 
     /** The lead line over the "how it works" bullets (ui/screens/title.js). */
     howGoal: 'the goal: outlast them. they tap out, or you are ahead when the clock runs out.',
+  },
+
+  /* --------------------------------------------------------- open tables
+     The lobby of open games and the host's waiting screen (2026-09-23, the
+     approved mockup). Dry, short, plain. No em-dashes, no exclamation marks. */
+  tables: {
+    eyebrow: 'GOON GAME',
+    title: 'Open tables',
+    waiting: (n) => n + ' waiting',
+    nobody: 'nobody waiting',
+    friends: 'Friends',
+    anyone: 'Anyone',
+    refresh: 'The list refreshes on its own. Tables close after 5 minutes with nobody.',
+    sitDown: 'Sit down',
+    join: 'Join',
+    sitting: 'Sitting',
+    taken: 'Taken',
+    takenToast: 'Someone sat down first. Pick another.',
+    newRival: 'new',
+    level: (n) => 'Lv ' + n,
+    record: (w, l) => 'you ' + w + ' - ' + l,
+    song: 'song',
+    songTip: 'Has a song',
+    cardTip: 'Game card length',
+    picsTip: 'Sends pictures',
+    waitingFor: (clock) => 'waiting ' + clock,
+    quiet: 'Quiet right now.',
+    lastOpened: (ago) => 'Last table opened ' + ago + '. Host one and it shows up here.',
+    neverOpened: 'Host one and it shows up here for your friends.',
+    recent: 'Recently played',
+    signIn: 'Sign in to see the open tables. Practice works without an account.',
+    offline: 'The table list is not answering. Host, practice or use a code.',
+    loading: 'Looking for tables',
+    host: 'Host a table',
+    hostLine: 'Pick a song, open the seat, wait for someone to sit down.',
+    practice: 'Practice',
+    practiceLine: 'A match against the bot. Every account, no invite.',
+    haveCode: 'Have a code?',
+    codeLabel: 'Invite code',
+    codeJoin: 'Join',
+    chipPrime: 'PRIME',
+    chipFree: 'FREE',
+    more: 'More',
+    seated: 'SEATED',
+  },
+
+  /* ------------------------------------------------ the host's waiting table */
+  table: {
+    eyebrow: 'YOUR TABLE',
+    title: 'Waiting for a player',
+    opening: 'Opening the table',
+    seatEmpty: 'The seat opposite is empty',
+    whoSees: 'Who can see it',
+    visFriends: 'Friends',
+    visAnyone: 'Anyone',
+    visOff: 'Off',
+    hintFriends: 'Your friends can see this table.',
+    hintAnyone: 'Every Prime player can see this table.',
+    hintOff: 'Hidden. Share the code to play.',
+    share: 'Or share the code',
+    shareNote: 'Works even with the table set to Off.',
+    preview: 'What they see',
+    previewOff: 'Nothing. The table is off the list. The code still works.',
+    previewFriends: 'Shown under Friends to your friends only.',
+    previewAnyone: 'Shown under Anyone to every Prime player, friends first.',
+    you: 'you',
+    close: 'Close the table',
+    closed: 'Table closed',
+    listFailed: 'The list did not take it. The code still works.',
+  },
+
+  /* ------------------------------------------------------- the Prime sheet */
+  prime: {
+    badge: 'PRIME SUBJECT',
+    headline: '1v1 is a Prime game',
+    line: 'Hosting and joining need Prime. Practice against the bot is free, any time.',
+    see: 'See Prime',
+    practice: 'Play practice instead',
   },
 
   /* --------------------------------------------------------------- toasts */

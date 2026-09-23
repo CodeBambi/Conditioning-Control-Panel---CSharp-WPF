@@ -50,6 +50,8 @@ import { mountEmotes } from './emotes.js';
 import { mountAnnouncer } from './announcer.js';
 import { mountMicHud } from './voice/micHud.js';
 import { createDropRoller } from './drops.js';
+import { createDuelController } from './duel/duelController.js';
+import { createDuelView } from './duel/duelView.js';
 import { COACH } from './coach.js';
 import { avatarNode, emitAva } from './avatar.js';
 import { setPreviewMedia } from './throwPreview.js';
@@ -352,7 +354,7 @@ function logTo(sink, entry) {
  * @returns {{unmount:Function}}
  */
 export function mountHud({ match, session = null, audio = null, prefs = null, media = null,
-  matchLog = null, discord = null, voice = null, coach = null } = {}) {
+  matchLog = null, discord = null, voice = null, coach = null, isPractice = null } = {}) {
   const led = createLedger();
   const fx = createFx();
   const d = doc();
@@ -846,7 +848,14 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // there: no store, no memory, everything else identical.
   const opponent = mountOpponent({ host: monHost, match, audio, fx, prefs });
   const emotes = mountEmotes({ host: root, match, audio, onLog });
+  // GAME NIGHT: the game card duel. Owns its own overlay (under Mercy) and pauses throws while it runs.
+  const duel = createDuelController({
+    match, view: createDuelView(), audio, onLog,
+    isPractice: () => (typeof isPractice === 'function' ? !!isPractice() : false),
+  });
+  led.add(() => { try { duel.dispose(); } catch (_e) { /* gone */ } });
   const arsenal = mountArsenal({
+    duel: duel.arsenalHook,
     leftHost: leftRail,
     rightHost: rightRail,
     receiptsHost,
@@ -884,6 +893,8 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // the only listener. A pop while a drawer is open still rolls — the roll is
   // silent bookkeeping, only its flourish rides the animation budget.
   const drops = createDropRoller({ match, arsenal, audio, onLog });
+  // A duel the receiver refused ('busy') hands the game card back to the slot.
+  duel.setReturnCard(() => arsenal.armDrop('gamecard', { silent: true }));
   led.listen(d, BUBBLE_POP_EVENT, (e) => {
     try {
       const res = drops.onPop(e && e.detail);
@@ -1132,6 +1143,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
     text(timerClock, sd ? 'sudden death' : mmss(remaining));
     cls(timerBox, 'is-sd', sd);
+    // GAME NIGHT: with a song picked, this bar IS the song (start -> game over). No new number.
+    let song = null;
+    try { song = match.song || null; } catch (_e) { song = null; }
+    cls(timerBox, 'is-song', !!song);
+    try { if (timerBox.title !== (song ? song.title : '')) timerBox.title = song ? song.title : ''; } catch (_e) { /* stub node */ }
     const pct = total > 0 ? Math.max(0, Math.min(100, ((total - remaining) / total) * 100)) : 0;
     if (timerFill && timerFill.style) timerFill.style.width = pct.toFixed(2) + '%';
 
