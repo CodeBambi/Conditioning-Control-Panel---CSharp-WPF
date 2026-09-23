@@ -22,6 +22,7 @@ import { el, button } from '../router.js';
 import { S } from '../strings.js';
 import { GoonMatchPhase } from '../../core/contracts.js';
 import { SONG_LOAD_TIMEOUT_MS, clampSongSec, parseSongLink, songClock } from '../../core/song.js';
+import { lookupSongMeta } from '../../core/songMeta.js';
 
 /**
  * The file's length in seconds, off its metadata only. `crossOrigin = anonymous`
@@ -52,7 +53,7 @@ export function probeSongDuration(url, { timeoutMs = SONG_LOAD_TIMEOUT_MS } = {}
   });
 }
 
-export function buildSongRow({ ledger, match, audio = null, origin = null, probe = probeSongDuration, prefs = null }) {
+export function buildSongRow({ ledger, match, audio = null, origin = null, probe = probeSongDuration, lookup = lookupSongMeta, prefs = null }) {
   const input = el('input', {
     type: 'url',
     class: 'gg-song-input',
@@ -93,14 +94,20 @@ export function buildSongRow({ ledger, match, audio = null, origin = null, probe
     busy = true;
     note = S.song.loading;
     paint();
+    // The track's real name off BambiCloud's API (4 s cap). A miss keeps the parsed title.
+    let meta = null;
+    try { meta = lookup ? await lookup(verdict.url) : null; } catch (_e) { meta = null; }
+    if (ledger.isDisposed) { busy = false; return; }
+    const url = (meta && meta.url) || verdict.url;
+    const title = (meta && meta.title) || verdict.title;
     let sec = 0;
-    try { sec = await probe(verdict.url); } catch (_e) { sec = 0; }
+    try { sec = await probe(url); } catch (_e) { sec = 0; }
     busy = false;
     if (ledger.isDisposed) return;
     const durSec = clampSongSec(sec);
     if (!durSec) { note = S.song.failed; paint(); return; }
     note = '';
-    if (match.setSong({ url: verdict.url, title: verdict.title, durSec })) {
+    if (match.setSong({ url, title, durSec })) {
       input.value = '';
       stamp();
     }
