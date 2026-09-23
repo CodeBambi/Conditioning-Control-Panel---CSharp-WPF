@@ -142,7 +142,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     try { _host.Post(new { type = "join-code", code }); }
                     catch (Exception ex) { App.Logger?.Debug("GoonHostService: join-code post: {E}", ex.Message); }
                 }
-                _host.FocusWeb();
+                _host.BringToFront();   // restore + raise + focus, not just Activate
                 return;
             }
             _pendingJoinCode = code;
