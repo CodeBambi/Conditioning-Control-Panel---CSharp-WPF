@@ -166,6 +166,7 @@ namespace ConditioningControlPanel.Views.Tabs
             FactRow.Visibility = linked ? Visibility.Collapsed : Visibility.Visible;
             LinkedPanel.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
             SwitchPill.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
+            AccountStrip.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
             PaperTag.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
             BtnLink.IsEnabled = chaster != null;
             ShowLinking(chaster?.IsLinking == true);
@@ -197,7 +198,7 @@ namespace ConditioningControlPanel.Views.Tabs
             RefreshTag(balance);
             RefreshDay(animate);
             RefreshRun();
-            if (ReceiptHost.Visibility == Visibility.Visible) BuildBill();
+            if (_billOpen) BuildBill();
         }
 
         private Brush FigureBrush(int seconds) =>
@@ -212,6 +213,7 @@ namespace ConditioningControlPanel.Views.Tabs
             var lookup = chaster?.LockLookup ?? LockLookup.Unlinked;
             var linked = chaster?.IsLinked == true;
             _clockLead = null;
+            TxtAccountLock.Text = AccountLockLine(chaster);
 
             if (!linked)
             {
@@ -688,12 +690,12 @@ namespace ConditioningControlPanel.Views.Tabs
 
         private void StatRun_Click(object sender, RoutedEventArgs e)
         {
-            var open = ReceiptHost.Visibility != Visibility.Visible;
+            var open = !_billOpen;
+            _billOpen = open;
             if (open) BuildBill();
-            ReceiptHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-            TxtRunChevron.RenderTransform = new RotateTransform(open ? 180 : 0);
             FxPop(StatRun, 1.04);
-            if (ReferenceEquals(sender, PaperTag)) FxPop(PaperTag, 1.05);
+            FxTagTug();
+            FxBill(open);
         }
 
         internal void BuildBill() => Receipt.Show(App.Chaster?.Bill());
@@ -735,10 +737,30 @@ namespace ConditioningControlPanel.Views.Tabs
 
         private void BtnCancelLink_Click(object sender, RoutedEventArgs e) => App.Chaster?.CancelLink();
 
-        private async void BtnUnlink_Click(object sender, RoutedEventArgs e)
+        private async void BtnUnlink_Click(object sender, RoutedEventArgs e) =>
+            await ConfirmAndUnlinkAsync(Window.GetWindow(this));
+
+        /// <summary>The account line in the strip and in Settings: the lock's name, or that there is none.</summary>
+        internal static string AccountLockLine(ChasterService? chaster)
         {
-            try { if (App.Chaster is { } chaster) await chaster.UnlinkAsync(); }
-            catch (Exception ex) { Diag.Swallowed(ex, "chaster unlink from the page"); }
+            var snapshot = chaster?.Lock;
+            if (snapshot == null) return Loc.Get("chaster_account_nolock");
+            return string.IsNullOrWhiteSpace(snapshot.Title) ? Loc.Get("chaster_lock_untitled") : snapshot.Title!;
+        }
+
+        /// <summary>One way out, asked once: the page strip and Settings both come here.</summary>
+        internal static async Task<bool> ConfirmAndUnlinkAsync(Window? owner)
+        {
+            var chaster = App.Chaster;
+            if (chaster == null || !chaster.IsLinked) return false;
+            var body = Loc.Get("chaster_unlink_confirm_body");
+            var title = Loc.Get("chaster_unlink_confirm_title");
+            var answer = owner != null
+                ? MessageBox.Show(owner, body, title, MessageBoxButton.YesNo, MessageBoxImage.Question)
+                : MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes) return false;
+            try { await chaster.UnlinkAsync(); return true; }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster unlink"); return false; }
         }
 
         // ============================== the switch, and the one consent ==============================

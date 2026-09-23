@@ -313,8 +313,31 @@
                 <Grid Grid.Row="0" Margin="4,0,4,14">
                     <TextBlock Text="{loc:Str chaster_title}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="28"
                                FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <!-- The account, in plain view: linked, which lock, and the way out. -->
+                    <Border x:Name="AccountStrip" VerticalAlignment="Center" Visibility="Collapsed" Margin="0,0,10,0"
+                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                            BorderThickness="1.5" CornerRadius="19" Height="38" Padding="14,0,6,0"
+                            ToolTip="{loc:Str chaster_account_strip_tip}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="8" Height="8" Fill="#5FFFD0" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Text="{loc:Str chaster_account_name}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="13" FontWeight="Bold"
+                                       Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str chaster_account_linked}" FontSize="12" Margin="6,0,0,0"
+                                       Foreground="#5FFFD0" VerticalAlignment="Center"/>
+                            <Rectangle Width="1" Height="16" Fill="{DynamicResource GlassBorderBrush}" Margin="10,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtAccountLock" FontSize="12" MaxWidth="220" TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            <Border BorderBrush="#99FF6B8A" BorderThickness="1" CornerRadius="13" Height="26" Margin="10,0,0,0"
+                                    VerticalAlignment="Center">
+                                <Button x:Name="BtnAccountUnlink" Style="{StaticResource CirceLink}" Content="{loc:Str chaster_unlink}"
+                                        Foreground="#FF8FA3" FontWeight="SemiBold" Padding="10,2" VerticalAlignment="Center"
+                                        Click="BtnUnlink_Click"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
                     <!-- The master switch as a glass pill. Its rim takes the tab's red while it runs. -->
-                    <Border x:Name="SwitchPill" HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed"
+                    <Border x:Name="SwitchPill" VerticalAlignment="Center" Visibility="Collapsed"
                             Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
                             BorderThickness="1.5" CornerRadius="19" Height="38" Padding="16,0,6,0" RenderTransformOrigin="0.5,0.5">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -326,6 +349,7 @@
                                       Checked="ChkTab_Changed" Unchecked="ChkTab_Changed"/>
                         </StackPanel>
                     </Border>
+                    </StackPanel>
                 </Grid>
 
                 <!-- ================= 1. THE LOCK ================= -->
@@ -564,8 +588,8 @@
                         </UniformGrid>
 
                         <!-- the receipt, unfolded under the numbers -->
-                        <Border x:Name="ReceiptHost" Visibility="Collapsed" Margin="0,0,0,14" HorizontalAlignment="Left">
-                            <ctrl:ChasterReceiptView x:Name="Receipt" HorizontalAlignment="Left"/>
+                        <Border x:Name="ReceiptHost" Visibility="Collapsed" Margin="0,0,0,14" HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True">
+                            <ctrl:ChasterReceiptView x:Name="Receipt" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                         </Border>
 
                         <!-- The first switch-on, and only the first: four facts, one button. -->
@@ -708,8 +732,6 @@
                         <Grid Margin="0,10,0,0">
                             <Button x:Name="BtnLimits" Style="{StaticResource CirceLink}" Content="{loc:Str chaster_limits}"
                                     HorizontalAlignment="Left" Click="BtnLimits_Click"/>
-                            <Button Style="{StaticResource CirceLink}" Content="{loc:Str chaster_unlink}"
-                                    HorizontalAlignment="Right" Click="BtnUnlink_Click"/>
                         </Grid>
                         <Border x:Name="LimitsCard" Visibility="Collapsed" Style="{StaticResource CirceCard}" Margin="0,10,0,0">
                             <Grid>

@@ -730,6 +730,124 @@ namespace ConditioningControlPanel.Views.Tabs
 
         // ------------------------------------------------------------------ the vocabulary
 
+        // ------------------------------------------------------------------ the bill
+
+        private const int BillOpenMs = 420;
+        private const int BillCloseMs = 260;
+        private bool _billOpen;
+        private int _billGeneration;
+
+        /// <summary>The tag gets a short tug on its string: down a few pixels, back with a little
+        /// overshoot. It rides the tag's own translate, so the ambient swing keeps going.</summary>
+        private void FxTagTug()
+        {
+            if (PaperTag.Visibility != Visibility.Visible) return;
+            FxPop(PaperTag, 1.05);
+            if (!MotionFx.AllowTransitions) return;
+            if (PaperTag.RenderTransform is not TransformGroup group) return;
+            var drop = group.Children.OfType<TranslateTransform>().FirstOrDefault();
+            if (drop == null) return;
+            var tug = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(340) };
+            tug.KeyFrames.Add(new EasingDoubleKeyFrame(8, KeyTime.FromPercent(0.3),
+                new QuadraticEase { EasingMode = EasingMode.EaseOut }));
+            tug.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(1),
+                new BackEase { Amplitude = 0.6, EasingMode = EasingMode.EaseOut }));
+            drop.BeginAnimation(TranslateTransform.YProperty, tug);
+        }
+
+        /// <summary>The bill prints down out of the card instead of appearing: the host grows from
+        /// nothing to the receipt's height (clipped, so the paper reveals top first), fades in and
+        /// settles from a few pixels up. Closing rolls it back up. Reduced motion and Off get the
+        /// end state at once.</summary>
+        private void FxBill(bool open)
+        {
+            var generation = ++_billGeneration;
+            var from = ReceiptHost.Visibility == Visibility.Visible ? ReceiptHost.ActualHeight : 0;
+            ReceiptHost.BeginAnimation(HeightProperty, null);
+            ReceiptHost.BeginAnimation(OpacityProperty, null);
+            if (ReceiptHost.RenderTransform is not TranslateTransform settle)
+                ReceiptHost.RenderTransform = settle = new TranslateTransform();
+            settle.BeginAnimation(TranslateTransform.YProperty, null);
+            settle.Y = 0;
+            FxChevron(open);
+
+            if (!MotionFx.AllowTransitions)
+            {
+                ReceiptHost.Height = double.NaN;
+                ReceiptHost.Opacity = 1;
+                ReceiptHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+                return;
+            }
+
+            if (open)
+            {
+                ReceiptHost.Height = double.NaN;
+                ReceiptHost.Visibility = Visibility.Visible;
+                var width = LinkedPanel.ActualWidth > 0 ? LinkedPanel.ActualWidth : double.PositiveInfinity;
+                ReceiptHost.Measure(new Size(width, double.PositiveInfinity));
+                var to = Math.Max(0, ReceiptHost.DesiredSize.Height - ReceiptHost.Margin.Top - ReceiptHost.Margin.Bottom);
+                ReceiptHost.Height = from;
+
+                var grow = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(BillOpenMs))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                };
+                grow.Completed += (_, _) =>
+                {
+                    if (generation != _billGeneration) return;
+                    ReceiptHost.BeginAnimation(HeightProperty, null);
+                    ReceiptHost.Height = double.NaN; // the bill can change length while it is open
+                };
+                ReceiptHost.BeginAnimation(HeightProperty, grow);
+                ReceiptHost.BeginAnimation(OpacityProperty,
+                    new DoubleAnimation(from > 0 ? ReceiptHost.Opacity : 0, 1, TimeSpan.FromMilliseconds(BillOpenMs * 0.55)));
+                settle.BeginAnimation(TranslateTransform.YProperty,
+                    new DoubleAnimation(-10, 0, TimeSpan.FromMilliseconds(BillOpenMs))
+                    {
+                        EasingFunction = new BackEase { Amplitude = 0.4, EasingMode = EasingMode.EaseOut },
+                    });
+                return;
+            }
+
+            if (from <= 0) { ReceiptHost.Visibility = Visibility.Collapsed; return; }
+            ReceiptHost.Height = from;
+            var shrink = new DoubleAnimation(from, 0, TimeSpan.FromMilliseconds(BillCloseMs))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
+            };
+            shrink.Completed += (_, _) =>
+            {
+                if (generation != _billGeneration) return;
+                ReceiptHost.Visibility = Visibility.Collapsed;
+                ReceiptHost.BeginAnimation(HeightProperty, null);
+                ReceiptHost.BeginAnimation(OpacityProperty, null);
+                ReceiptHost.Height = double.NaN;
+                ReceiptHost.Opacity = 1;
+            };
+            ReceiptHost.BeginAnimation(HeightProperty, shrink);
+            ReceiptHost.BeginAnimation(OpacityProperty,
+                new DoubleAnimation(ReceiptHost.Opacity, 0, TimeSpan.FromMilliseconds(BillCloseMs)));
+        }
+
+        /// <summary>The card's little arrow turns with the bill.</summary>
+        private void FxChevron(bool open)
+        {
+            if (TxtRunChevron.RenderTransform is not RotateTransform turn || turn.IsFrozen)
+                TxtRunChevron.RenderTransform = turn = new RotateTransform(open ? 0 : 180);
+            var target = open ? 180 : 0;
+            if (!MotionFx.AllowTransitions)
+            {
+                turn.BeginAnimation(RotateTransform.AngleProperty, null);
+                turn.Angle = target;
+                return;
+            }
+            turn.BeginAnimation(RotateTransform.AngleProperty,
+                new DoubleAnimation(target, TimeSpan.FromMilliseconds(open ? BillOpenMs : BillCloseMs))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                });
+        }
+
         private static void FxPop(FrameworkElement element, double peak)
         {
             if (!MotionFx.AllowTransitions) return;

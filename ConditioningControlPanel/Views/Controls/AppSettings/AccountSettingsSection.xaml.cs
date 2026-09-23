@@ -26,7 +26,11 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         /// Host seam: the Settings door repaints the tier card every time it opens, so a login that
         /// happened behind another door is never shown stale.
         /// </summary>
-        public void OnSectionShown() => RefreshTierBadge();
+        public void OnSectionShown()
+        {
+            RefreshTierBadge();
+            RefreshChaster();
+        }
 
         // Same fixed brand values as the header chip (MainWindow.UiUpdates.cs): gold is the Tier-1
         // lock everywhere in the app, violet is the Tier-2 "Lab" flask. Not mod-owned.
@@ -44,11 +48,11 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         public AccountSettingsSection()
         {
             InitializeComponent();
-            Loaded += (_, __) => RefreshTierBadge();
+            Loaded += (_, __) => { RefreshTierBadge(); RefreshChaster(); };
             // Settings is a page you arrive at, not one you sit on: repainting when it becomes
             // visible is enough to catch a login that happened on another door, and costs nothing
             // when it does not.
-            IsVisibleChanged += (_, __) => { if (IsVisible) RefreshTierBadge(); };
+            IsVisibleChanged += (_, __) => { if (IsVisible) { RefreshTierBadge(); RefreshChaster(); } };
         }
 
         /// <summary>
@@ -108,6 +112,52 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         }
 
         // ---- forwarding shims (identical bodies to the ones PatreonTabView carried) ----
+
+        // ------------------------------------------------------------------ Chaster
+
+        /// <summary>The Chaster row: Linked plus the lock, or Not linked. The page owns the rest.</summary>
+        internal void RefreshChaster()
+        {
+            try
+            {
+                var chaster = App.Chaster;
+                var linked = chaster?.IsLinked == true;
+                TxtChasterStatus.Text = linked
+                    ? Loc.Get("chaster_account_name") + " · " + Loc.Get("chaster_account_linked")
+                    : Loc.Get("chaster_account_name") + " · " + Loc.Get("label_not_connected");
+                TxtChasterInfo.Text = linked
+                    ? Views.Tabs.ChasterTabView.AccountLockLine(chaster)
+                    : Loc.Get("chaster_account_hint");
+                BtnChasterLink.Content = Loc.Get(linked ? "chaster_unlink" : "chaster_link");
+                BtnChasterLink.IsEnabled = chaster != null && !chaster.IsLinking;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster settings row"); }
+        }
+
+        private void BtnChasterOpen_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ShowTab("chaster");
+        }
+
+        private async void BtnChasterLink_Click(object sender, RoutedEventArgs e)
+        {
+            var chaster = App.Chaster;
+            if (chaster == null || chaster.IsLinking) return;
+            try
+            {
+                if (chaster.IsLinked)
+                {
+                    await Views.Tabs.ChasterTabView.ConfirmAndUnlinkAsync(Window.GetWindow(this));
+                }
+                else
+                {
+                    BtnChasterLink.IsEnabled = false;
+                    await chaster.LinkAsync(url => Helpers.BrowserLauncher.OpenUrlOrPrompt(url, "link Chaster"));
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster link from settings"); }
+            finally { RefreshChaster(); }
+        }
 
         private void BtnPatreonLogin_Click(object sender, RoutedEventArgs e)
         {
