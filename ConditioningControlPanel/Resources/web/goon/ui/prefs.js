@@ -215,6 +215,10 @@ export const PREF_DEFAULTS = Object.freeze({
    * -------------------------------------------------------------------------- */
   voiceNotesEnabled: false,
   voiceAckSeen: false,
+  /* SENDING MY FILES (2026-09-23). A patron perk, OFF until the player switches it on in
+   * options or the lobby. Before this key existed the lobby's write was dropped (set()
+   * refuses unknown keys) and every read came back undefined, which boot read as ON. */
+  mediaTransferEnabled: false,
   voiceVolume: 0.9,
   voiceEmoteMap: Object.freeze({}),
 });

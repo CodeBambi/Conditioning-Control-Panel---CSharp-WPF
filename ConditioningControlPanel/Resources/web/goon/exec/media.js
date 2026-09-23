@@ -15,6 +15,7 @@
  *
  *   setManifest({images,videos,skipped,truncated})
  *   setLocalLibrary([{kind,name,url}])                 (see below)
+ *   setOnlineLibrary({images,videos})                  the flavour's online set, a third source
  *   draw() / drawKind('image'|'video') -> {kind, name, url, acquire} | null
  *   acquire(entry) -> {url, release(), provenance}
  *   counts() -> {images, videos, skipped, truncated}   hasMedia() -> bool
@@ -138,7 +139,8 @@ const SHA_RE = /^[0-9a-f]{64}$/;
 export function createGoonMediaPool() {
   let hostEntries = [];   // the host's manifest — the user's active preset
   let localEntries = [];  // standalone: files the player picked in this browser
-  let entries = [];       // hostEntries + localEntries — what the deck indexes
+  let onlineEntries = []; // the in-game flavour's Scrolller pictures (host `online-media` frame)
+  let entries = [];       // hostEntries + localEntries + onlineEntries — what the deck indexes
   let skipped = 0;    // reported by the host (browser-undecodable formats etc.)
   let truncated = false;
   let deck = [];      // shuffled indices into entries, drawn from the end
@@ -175,7 +177,7 @@ export function createGoonMediaPool() {
    * is what makes them independent: whichever moved, the other survives.
    */
   function rebuildEntries() {
-    entries = localEntries.length ? hostEntries.concat(localEntries) : hostEntries.slice();
+    entries = hostEntries.concat(localEntries, onlineEntries);
     deck = [];          // re-deal with the new entries in the mix
     recent.length = 0;
   }
@@ -414,6 +416,25 @@ export function createGoonMediaPool() {
       rebuildEntries();
       return counts();
     },
+
+    /**
+     * Swap in the ONLINE set: the flavour's pictures the host fetched and materialised under
+     * https://ccp.assets/.temp/ (`online-media` frame, {images:[{name,url}], videos:[...]}). Same
+     * shape and same terms as setLocalLibrary: the whole current list every time, a third set
+     * beside the host's and the local one, re-deals, never touches `received`. An empty or
+     * missing list simply takes the online pictures back out.
+     */
+    setOnlineLibrary(m) {
+      const src = m || {};
+      onlineEntries = [];
+      for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) onlineEntries.push(v); }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url }); if (v) onlineEntries.push(v); }
+      rebuildEntries();
+      return counts();
+    },
+
+    /** How many of the deck's entries came from the online flavour. */
+    onlineCount: () => onlineEntries.length,
 
     /** How many of the deck's entries came from the player's own picks. */
     localCount: () => localEntries.length,

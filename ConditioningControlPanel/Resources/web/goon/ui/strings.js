@@ -903,6 +903,46 @@ export const S = Object.freeze({
     ribbon: (ready, size) => ready + ' ready · ' + size + ' cached',
   },
 
+  /* ------------------------------------------------------ the flavour card
+   * FIRST RUN, NO SETUP (ui/screens/flavour.js, 2026-09-23). One tap picks a
+   * flavour and the game fetches pictures for it; nothing waits on the fetch.
+   * The picked tile is also the player's opt-in to online pictures for this
+   * game, so the sub line says where they come from, in plain words. */
+  flavour: {
+    eyebrow: 'first things first',
+    headline: 'pick a flavour',
+    sub: 'pictures come from reddit, through scrolller. change it any time in options.',
+    own: 'use my own files',
+    noneForNow: 'no pictures for now',
+    /** The live line, fed by the host's online-media frames. */
+    live: {
+      idle: 'tap one. play starts either way.',
+      loading: 'fetching pictures…',
+      ready: (n) => n + (n === 1 ? ' picture ready' : ' pictures ready'),
+      loadingN: (n) => n + (n === 1 ? ' picture ready, more on the way' : ' pictures ready, more on the way'),
+      empty: 'nothing came back. try another flavour or add a niche.',
+      off: 'online pictures are off.',
+      error: 'scrolller is not answering. your own files still work.',
+    },
+    /** The options sheet's Pictures section. */
+    section: 'Pictures',
+    mine: 'Mine',
+    online: 'Online pictures',
+    onlineNote: 'off means only your own files and the house art.',
+    addPlaceholder: 'add a niche',
+    add: 'add',
+    removeNiche: (name) => 'remove r/' + name,
+    errors: {
+      bad: 'not a niche name. letters, numbers and _ only.',
+      dup: 'already in.',
+      full: 'that is plenty. remove one first.',
+    },
+    mineEmpty: 'nothing in here yet. add a niche.',
+    /** Patrons only: the send switch, moved out of first run into options. */
+    send: 'Send my files to opponents',
+    sendNote: 'off by default. when both of you switch it on, a few of your own files travel to them. online pictures never do.',
+  },
+
   /* ------------------------------------------------- the media-setup step
    * FIRST-RUN ONBOARDING FOR LINK JOINERS (ui/screens/mediaSetup.js). Somebody
    * tapped a duel link, has never opened this thing before, and is about to be
@@ -954,7 +994,11 @@ export const S = Object.freeze({
     lockBusy: 'still adding…',
     /** The opponent is watching a "picking their media" line while this is up. */
     waiting: 'they know you are still picking. take your time.',
-    note: 'your picks stay on this device unless you switch sending on in the lobby - then copies of a few of them are sent to your opponent, encrypted and never through our servers, and whatever reaches them is theirs to keep.',
+    note: 'your picks stay on this device and only ever play at you.',
+    /** Patrons have a send switch in options, so their note names it. */
+    notePatron: 'your picks stay on this device unless you switch sending on in options - then copies of a few of them are sent to your opponent, encrypted and never through our servers, and whatever reaches them is theirs to keep.',
+    /** Back to the flavour card from the file picker. */
+    backToFlavours: 'back to flavours',
     leave: 'Leave',
   },
 

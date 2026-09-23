@@ -46,6 +46,7 @@ import { createLedger, el, button } from '../router.js';
 import { S } from '../strings.js';
 import { DISCORD_INVITE_URL } from '../inviteLink.js';
 import { formatBytes, LOCAL_ARTIFACT_MAX_BYTES, LOCAL_MAX_BYTES, LOCAL_ZIP_MAX_ENTRIES } from '../assetsStore.js';
+import { mountFlavourCard } from './flavour.js';
 
 /** What a good first library looks like. Advisory — never a gate. See header. */
 export const SUGGESTED_ITEMS = 20;
@@ -90,6 +91,22 @@ export function mount(container, ctx) {
   const store = ctx?.assets || null;
   const L = S.mediaSetup;
   const AL = S.assets.local;
+
+  /* THE FLAVOUR CARD COMES FIRST (2026-09-23: playable with no setup). When the host
+   * can fetch online pictures (boot hands `mediaFlavour` in, and it says `available`),
+   * this screen opens on the five flavours: one tap picks and the step is done. The
+   * file picker below is the secondary road, "use my own files", reached with
+   * `mediaFiles: true` in the router args. No host, no card: the picker as before. */
+  const flavourApi = ctx?.mediaFlavour || null;
+  if (flavourApi && flavourApi.available && flavourApi.available() && !ctx?.mediaFiles) {
+    mountFlavourCard(container, {
+      ledger, api: flavourApi, audio,
+      onDone: () => { try { actions?.mediaPrepDone?.(); } catch (e) { ledger._err('flavour done', e); } },
+      onOwn: () => { try { actions?.mediaOwnFiles?.(); } catch (e) { ledger._err('own files', e); } },
+    });
+    return { unmount() { ledger.dispose(); } };
+  }
+  const patron = !!(ctx?.session && ctx.session.caps && ctx.session.caps.mediaTransfer === true);
 
   const maxText = formatBytes(LOCAL_MAX_BYTES);
   const artMaxText = formatBytes(LOCAL_ARTIFACT_MAX_BYTES);
@@ -155,10 +172,18 @@ export function mount(container, ctx) {
     tally,
     tallyNote,
     list,
-    el('p', { class: 'gg-assets-note', text: L.note }),
+    el('p', { class: 'gg-assets-note', text: patron ? L.notePatron : L.note }),
     el('p', { class: 'gg-assets-note gg-mediasetup-waiting', text: L.waiting }),
+    flavourApi && flavourApi.available && flavourApi.available() ? backToFlavours() : null,
     el('div', { class: 'gg-host-actions' }, [leaveBtn, lockBtn]),
   ]));
+
+  /** The road back from the picker to the card, when there is a card to go back to. */
+  function backToFlavours() {
+    const b = el('button', { type: 'button', class: 'gg-link gg-mediasetup-back', text: L.backToFlavours });
+    ledger.listen(b, 'click', (e) => { e?.preventDefault?.(); try { actions?.mediaSetupFlavours?.(); } catch (_e) { /* ignore */ } });
+    return b;
+  }
 
   /* --------------------------------------------------------------- state */
 
