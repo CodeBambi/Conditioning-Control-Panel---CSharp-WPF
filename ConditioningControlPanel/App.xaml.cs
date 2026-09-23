@@ -510,8 +510,6 @@ namespace ConditioningControlPanel
         /// </summary>
         public static Services.EmiDesk.EmiDeskService? EmiDesk { get; private set; }
 
-        public static Services.Friends.IFriendsService? Friends { get; internal set; }
-
         /// <summary>The previous session died with the engine running (EngineCrashSentinel found a
         /// file at startup). Latched because the sentinel is consumed long before EMI exists.</summary>
         private static bool _engineCrashRecovered;
@@ -639,7 +637,6 @@ namespace ConditioningControlPanel
         /// installed phrase - and answers what the user owns.</summary>
         public static Services.Program.ProgramRewardService ProgramRewards { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
-        public static Services.Friends.IFriendsService? Friends { get; internal set; }
         public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
         public static KeywordTriggerPresetService KeywordPresets { get; private set; } = null!;
         /// <summary>
