@@ -280,7 +280,9 @@ namespace ConditioningControlPanel.Services.GoonGame
             CancellationToken ct)
         {
             if (ct.IsCancellationRequested || Count(isImage) >= target) return;
-            var path = await RemoteMediaCache.MaterializeAsync(e.Url, ct).ConfigureAwait(false);
+            // ownerReleases: the pool holds these for the whole game and releases every one on a
+            // niche change or close, so the app-wide 50-file sweep must not take them mid-match.
+            var path = await RemoteMediaCache.MaterializeAsync(e.Url, ct, ownerReleases: true).ConfigureAwait(false);
             if (path == null) return;
             var url = GoonOnlineMediaRules.UrlFor(path, App.EffectiveAssetsPath);
             if (url == null)
