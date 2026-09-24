@@ -89,7 +89,6 @@ namespace ConditioningControlPanel
 
                 // Create media player
                 _mediaPlayer = new MediaPlayer(libVLC);
-                _mediaPlayer.Mute = true; // No audio for preview
                 _mediaPlayer.EnableHardwareDecoding = true;
 
                 // Handle events
@@ -127,6 +126,8 @@ namespace ConditioningControlPanel
                 // Attach to view and play
                 _videoView.MediaPlayer = _mediaPlayer;
                 _media = new Media(libVLC, filePath, FromType.FromPath);
+                // No audio for preview, silent through :no-audio (Services.LibVlcSilence).
+                _media.AddOption(Services.LibVlcSilence.NoAudioOption);
                 _mediaPlayer.Play(_media);
 
                 // Show video controls

@@ -108,7 +108,8 @@ namespace ConditioningControlPanel.Controls
                     _bufferValid = true;
                 }
 
-                _player = new VlcMediaPlayer(libVLC) { Mute = true, EnableHardwareDecoding = true };
+                // Silent through :no-audio only; Mute would silence every player (LibVlcSilence).
+                _player = new VlcMediaPlayer(libVLC) { EnableHardwareDecoding = true };
                 _player.SetVideoFormat("RV32", _w, _h, _w * 4);
                 _player.SetVideoCallbacks(LockCallback, null, DisplayCallback);
                 // EndReached re-play is a fallback in case :input-repeat isn't honoured.
