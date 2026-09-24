@@ -64,15 +64,19 @@ namespace ConditioningControlPanel.Services.Companion.Brain
     public sealed class CompanionBrain : IDisposable
     {
         private readonly IAiService _transport;
-        private readonly IPromptAssembler _assembler;
-        private readonly ICompanionSessionStore _store;
+        private IPromptAssembler _assembler;
+        private ICompanionSessionStore _store;
         private readonly Func<bool> _preview;
         private readonly Func<string?> _contextStamp;
         private readonly Action<IReadOnlyList<Models.AiCommandData>> _executeCommands;
         private readonly Action<Action> _scheduleEffects;
         private readonly object _conversationMutation = new();
         private int _conversationRevision;
-        private readonly CompanionMemoryMaintenance? _maintenance;
+        private CompanionMemoryMaintenance? _maintenance;
+        private readonly Func<string?> _accountIdentity;
+        private readonly string? _accountDirectory;
+        private readonly bool _accountScoped;
+        private string? _currentAccount;
 
         // The linkable media pool, exactly as the stable prefix lists it. Injected so the
         // recommendation scan is testable without standing up BambiSprite and the whole mod stack.
@@ -107,7 +111,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             Func<IReadOnlyList<string>>? mediaTitles = null, Func<bool>? preview = null,
             Func<string?>? contextStamp = null,
             Action<IReadOnlyList<Models.AiCommandData>>? executeCommands = null,
-            Action<Action>? scheduleEffects = null)
+            Action<Action>? scheduleEffects = null, Func<string?>? accountIdentity = null,
+            string? accountDirectory = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _preview = preview ?? (() => CompanionExperience.IsV2Enabled);
@@ -117,14 +122,18 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _executeCommands = executeCommands ?? ExecuteAcceptedCommands;
             _scheduleEffects = scheduleEffects ?? ScheduleEffects;
             _ownsMemory = memory == null;
-            Memory = memory ?? new MemoryStore();
+            _accountIdentity = accountIdentity ?? (() => App.UnifiedUserId);
+            _accountDirectory = accountDirectory;
+            _currentAccount = _accountIdentity();
+            _accountScoped = _preview() && memory == null && store == null && assembler == null;
+            Memory = memory ?? (_accountScoped ? MemoryStore.ForPreviewAccount(_currentAccount, _accountDirectory) : new MemoryStore());
             Recommendations = recommendations ?? new RecentRecommendations();
             if (Memory is MemoryStore maintenanceStore)
                 _maintenance = new CompanionMemoryMaintenance(maintenanceStore, _transport.SendAsync,
                     () => _preview() && maintenanceStore.IsChatMemoryEnabled, _contextStamp);
             _assembler = assembler ?? new PromptAssembler(Memory, Recommendations,
                 rollingContext: () => _maintenance?.GetContext());
-            _store = store ?? new CompanionSessionStore();
+            _store = store ?? (_accountScoped ? CreateAccountSessionStore() : new CompanionSessionStore());
             _mediaTitles = mediaTitles ?? DefaultMediaTitles;
 
             Session = new ChatSession();
@@ -184,9 +193,42 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public ChatSession Session { get; }
 
         /// <summary>The durable user model. A shell in Train 1 — see <see cref="MemoryStore"/>.</summary>
-        public IMemoryStore Memory { get; }
+        public IMemoryStore Memory { get; private set; }
         internal IReadOnlyList<string> SummaryQuotes => _maintenance?.SummaryQuotes ?? Array.Empty<string>();
-        internal void ClearSummary() => _maintenance?.Forget();
+        internal void ClearSummary() { EnsureCurrentAccount(); _maintenance?.Forget(); }
+
+        private CompanionSessionStore CreateAccountSessionStore()
+        {
+            var directory = MemoryStore.PreviewAccountDirectory(_currentAccount, _accountDirectory);
+            // Existing unscoped files are preserved. They have no reliable account owner.
+            return new CompanionSessionStore(System.IO.Path.Combine(directory, "session.json"),
+                System.IO.Path.Combine(directory, "no-legacy-import.json"));
+        }
+
+        internal void EnsureCurrentAccount()
+        {
+            if (!_accountScoped) return;
+            lock (_conversationMutation)
+            {
+                var account = _accountIdentity();
+                if (account == _currentAccount) return;
+                _conversationRevision++;
+                _maintenance?.Dispose();
+                (Memory as IDisposable)?.Dispose();
+                _currentAccount = account;
+                Memory = MemoryStore.ForPreviewAccount(account, _accountDirectory);
+                var memoryStore = (MemoryStore)Memory;
+                _maintenance = new CompanionMemoryMaintenance(memoryStore, _transport.SendAsync,
+                    () => _preview() && memoryStore.IsChatMemoryEnabled, _contextStamp);
+                _assembler = new PromptAssembler(Memory, Recommendations, rollingContext: () => _maintenance?.GetContext());
+                _store = CreateAccountSessionStore();
+                Recommendations.Clear();
+                Session.Clear();
+                var snapshot = _store.Load();
+                if (snapshot.Turns.Count > 0) Session.Restore(snapshot.Turns);
+                _memoryRecallSignaled = false;
+            }
+        }
 
         /// <summary>Titles she suggested recently, injected as an exclusion line.</summary>
         public RecentRecommendations Recommendations { get; }
@@ -209,6 +251,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public async Task<AiReplyResult> ChatAsync(string userText, CancellationToken cancellationToken = default)
         {
+            EnsureCurrentAccount();
             var input = (userText ?? string.Empty).Trim();
             if (input.Length == 0)
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
@@ -385,6 +428,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public async Task<AiReplyResult> ReactAsync(CompanionEvent evt, CancellationToken cancellationToken = default)
         {
+            EnsureCurrentAccount();
             var descriptor = evt?.Normalized() ?? string.Empty;
             if (descriptor.Length == 0)
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
@@ -679,17 +723,40 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public void ForgetThread()
         {
+            EnsureCurrentAccount();
             lock (_conversationMutation)
             {
-                _conversationRevision++;
-                _maintenance?.Forget();
-                Session.Clear();
-                Recommendations.Clear();
-                _store.Wipe();
-                _memoryRecallSignaled = false;
-                ClearLegacyLocalHistory();
+                ForgetThreadCore();
             }
             App.Logger?.Information("CompanionBrain: conversation thread dropped");
+        }
+
+        private void ForgetThreadCore()
+        {
+            _conversationRevision++;
+            _maintenance?.Forget();
+            Session.Clear();
+            Recommendations.Clear();
+            _store.Wipe();
+            _memoryRecallSignaled = false;
+            if (!_accountScoped) ClearLegacyLocalHistory();
+        }
+
+        internal Action CaptureForgetAction(IMemoryStore? expectedOwner = null)
+        {
+            EnsureCurrentAccount();
+            var owner = expectedOwner ?? Memory;
+            return () =>
+            {
+                lock (_conversationMutation)
+                {
+                    EnsureCurrentAccount();
+                    if (!ReferenceEquals(owner, Memory)) return;
+                    // Keep this captured store throughout. Re-resolving mid-action could wipe a new account.
+                    ForgetThreadCore();
+                    owner.Wipe();
+                }
+            };
         }
 
         /// <summary>

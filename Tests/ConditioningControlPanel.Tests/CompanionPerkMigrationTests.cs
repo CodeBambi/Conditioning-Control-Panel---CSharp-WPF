@@ -22,4 +22,15 @@ public class CompanionPerkMigrationTests
         var settings = new AppSettings { CompanionPerk = (CompanionBonusType)99 };
         Assert.Null(settings.CompanionPerk);
     }
+    [Theory]
+    [InlineData(CompanionBonusType.PinkFilterBonus, 50)]
+    [InlineData(CompanionBonusType.SessionCompletionBonus, 75)]
+    [InlineData(CompanionBonusType.AutonomyBonus, 100)]
+    [InlineData(CompanionBonusType.XPDrain, 125)]
+    [InlineData(CompanionBonusType.StrictModeBonus, 150)]
+    public void PerkRetainsItsOriginalUnlockLevel(CompanionBonusType perk, int level)
+    {
+        Assert.False(CompanionPerks.CanSelect(perk, level - 1));
+        Assert.True(CompanionPerks.CanSelect(perk, level));
+    }
 }

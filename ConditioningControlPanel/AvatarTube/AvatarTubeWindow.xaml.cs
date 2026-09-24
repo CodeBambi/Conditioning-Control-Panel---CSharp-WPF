@@ -134,8 +134,7 @@ namespace ConditioningControlPanel
             _selectedAvatarSet = App.Settings?.Current?.SelectedAvatarSet ?? _maxUnlockedSet;
             // Preserve a supported custom set; the preview maps only the house's original character.
             _selectedAvatarSet = Services.Companion.CompanionExperience.IsV2Enabled
-                ? Services.Companion.EmiTubePreview.InitialSet(_selectedAvatarSet,
-                    App.Settings?.Current?.ActiveCompanionId ?? 0, Services.Companion.EmiTubePreview.Available)
+                ? Services.Companion.EmiTubePreview.RestoreChoice(_selectedAvatarSet)
                 : Math.Clamp(_selectedAvatarSet, 1, _maxUnlockedSet);
             _currentAvatarSet = _selectedAvatarSet;
 

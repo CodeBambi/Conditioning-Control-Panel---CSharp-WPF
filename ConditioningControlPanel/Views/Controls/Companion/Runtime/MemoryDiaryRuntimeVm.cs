@@ -145,8 +145,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public MemoryDiaryRuntimeVm(CompanionRuntimeContext ctx)
         {
             _ctx = ctx;
+            App.Brain?.EnsureCurrentAccount();
             _store = App.Brain?.Memory;
-            _inner = new CompanionMemoryViewModel(_store, () => App.Brain?.Forget());
+            _inner = new CompanionMemoryViewModel(_store, App.Brain?.CaptureForgetAction(_store));
 
             foreach (var key in FactOrdering.FilterKeys)
             {
@@ -209,11 +210,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         {
             CompanionRuntimeContext.Guarded(() =>
             {
+                App.Brain?.EnsureCurrentAccount();
                 var live = App.Brain?.Memory;
                 if (!ReferenceEquals(live, _store))
                 {
                     _store = live;
-                    _inner = new CompanionMemoryViewModel(_store, () => App.Brain?.Forget());
+                    _inner = new CompanionMemoryViewModel(_store, App.Brain?.CaptureForgetAction(_store));
                 }
                 else
                 {

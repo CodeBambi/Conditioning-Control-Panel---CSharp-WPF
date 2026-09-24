@@ -412,6 +412,8 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.SelectedAvatarSet = setNumber;
+                if (Services.Companion.EmiTubePreview.Available)
+                    App.Settings.Current.CompanionEmiPreviewChoiceMade = true;
                 App.Settings.Save();
             }
 
@@ -636,9 +638,8 @@ namespace ConditioningControlPanel
                 ReloadVideoLinks();
 
                 if (Services.Companion.CompanionExperience.IsV2Enabled)
-                    _currentAvatarSet = _selectedAvatarSet = Services.Companion.EmiTubePreview.InitialSet(
-                    App.Settings?.Current?.SelectedAvatarSet ?? _selectedAvatarSet,
-                    App.Settings?.Current?.ActiveCompanionId ?? 0, Services.Companion.EmiTubePreview.Available);
+                    _currentAvatarSet = _selectedAvatarSet = Services.Companion.EmiTubePreview.RestoreChoice(
+                        App.Settings?.Current?.SelectedAvatarSet ?? _selectedAvatarSet);
                 // Validate current avatar set is supported by the new mod — if not, fall back.
                 int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
                 if (IsSingleEmoteAvatarMod(out int emoteOnlySet))

@@ -26,14 +26,17 @@ internal sealed class ConversationPageVm : CompanionObservable
     private bool _busy;
     private bool _canRetry;
     private bool _observing;
+    private IMemoryStore? _memoryOwner;
+    public event Action? AccountChanged;
     public ConversationPageVm(CompanionRoomRuntimeVm room) => _room = room;
     public CompanionRoomRuntimeVm Room => _room;
     public ObservableCollection<ConversationLine> Turns { get; } = new();
-    public string Draft { get => _draft; set => Set(ref _draft, value ?? string.Empty); }
+    public string Draft { get => _draft; set { Set(ref _draft, value ?? string.Empty); Raise(nameof(CanSend)); } }
     public string Notice { get => _notice; private set { Set(ref _notice, value); Raise(nameof(HasNotice)); Raise(nameof(Face)); Raise(nameof(StatusColor)); } }
     public bool HasNotice => Notice.Length > 0;
-    public bool Busy { get => _busy; private set { Set(ref _busy, value); Raise(nameof(CanCompose)); Raise(nameof(Status)); Raise(nameof(Face)); Raise(nameof(StatusColor)); } }
+    public bool Busy { get => _busy; private set { Set(ref _busy, value); Raise(nameof(CanCompose)); Raise(nameof(CanSend)); Raise(nameof(Status)); Raise(nameof(Face)); Raise(nameof(StatusColor)); } }
     public bool CanCompose => !Busy;
+    public bool CanSend => !Busy && !string.IsNullOrWhiteSpace(Draft);
     public bool CanRetry { get => _canRetry; private set => Set(ref _canRetry, value); }
     private bool HouseCharacter => string.IsNullOrWhiteSpace(App.Mods?.ActiveMod?.Id) ||
         string.Equals(App.Mods.ActiveMod.Id, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
@@ -41,7 +44,8 @@ internal sealed class ConversationPageVm : CompanionObservable
         ? (App.Settings?.Current?.ActiveCompanionId ?? 0) == 0 ? "EMI" : App.Companion?.ActiveCompanionDef.Name ?? _room.Hero.Name
         : App.Mods?.GetCompanionName() ?? _room.Hero.Name;
     public bool IsEmi => HouseCharacter && (App.Settings?.Current?.ActiveCompanionId ?? 0) == 0 &&
-        ((App.Settings?.Current?.SelectedAvatarSet ?? 1) <= 3 || App.Settings?.Current?.SelectedAvatarSet == 8);
+        Services.Companion.EmiTubePreview.InitialSet(App.Settings?.Current?.SelectedAvatarSet ?? 0, 0, true,
+            App.Settings?.Current?.CompanionEmiPreviewChoiceMade ?? false) == Services.Companion.EmiTubePreview.Set;
     public string PerkCost => App.Companion?.ActivePerk == CompanionBonusType.XPDrain ? "Leech: -3 XP/s" : string.Empty;
     public string Familiarity => App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false &&
         App.Brain?.Memory is MemoryStore memory
@@ -68,6 +72,19 @@ internal sealed class ConversationPageVm : CompanionObservable
 
     public void Refresh()
     {
+        App.Brain?.EnsureCurrentAccount();
+        var owner = App.Brain?.Memory;
+        if (!ReferenceEquals(owner, _memoryOwner))
+        {
+            var changed = _memoryOwner != null;
+            _memoryOwner = owner;
+            Stop();
+            Draft = string.Empty;
+            Notice = string.Empty;
+            CanRetry = false;
+            if (changed) AccountChanged?.Invoke();
+        }
+        _room.MemoryVm.Sync();
         _room.SyncBrain();
         if (_observing) Attach(App.Brain?.Session);
         Reconcile();
@@ -78,6 +95,7 @@ internal sealed class ConversationPageVm : CompanionObservable
         if (!_observing)
         {
             _observing = true;
+            App.UnifiedIdentityChanged += IdentityChanged;
             _room.EngineVm.PropertyChanged += RoomChanged;
             _room.HeroVm.PropertyChanged += RoomChanged;
         }
@@ -86,9 +104,17 @@ internal sealed class ConversationPageVm : CompanionObservable
     public void Detach()
     {
         _observing = false;
+        App.UnifiedIdentityChanged -= IdentityChanged;
         _room.EngineVm.PropertyChanged -= RoomChanged;
         _room.HeroVm.PropertyChanged -= RoomChanged;
         Attach(null);
+    }
+    private void IdentityChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+        if (dispatcher.CheckAccess()) Refresh();
+        else dispatcher.BeginInvoke(Refresh, DispatcherPriority.Normal);
     }
     private void RoomChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -135,9 +161,9 @@ internal sealed class ConversationPageVm : CompanionObservable
     public void Stop() => _send?.Cancel();
     public async Task SendAsync()
     {
+        Refresh();
         var text = Draft.Trim();
         if (Busy || text.Length == 0) return;
-        Refresh();
         if (ShowStart) { Start(); return; }
         var brain = App.Brain;
         if (!CompanionBrain.ShouldRoute(brain)) { Notice = Loc.Get("companion_v2_unavailable"); return; }
@@ -148,7 +174,10 @@ internal sealed class ConversationPageVm : CompanionObservable
         Notice = string.Empty;
         try
         {
-            var result = await brain!.ChatAsync(text, cancellation.Token);
+            var owner = brain!.Memory;
+            var result = await brain.ChatAsync(text, cancellation.Token);
+            brain.EnsureCurrentAccount();
+            if (!ReferenceEquals(owner, brain.Memory)) return;
             if (result.Refusal != null)
             {
                 // A policy refusal must not leave the prohibited draft available for resending.

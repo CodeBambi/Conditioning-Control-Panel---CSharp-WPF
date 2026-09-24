@@ -12,6 +12,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.V2;
 /// <summary>An explicit local preference, independent of automatic memory extraction.</summary>
 internal sealed class PreferredNameEditor : StackPanel
 {
+    private readonly IMemoryStore? _owner;
     private readonly TextBox _name;
     private readonly TextBlock _notice;
     public PreferredNameEditor()
@@ -24,8 +25,10 @@ internal sealed class PreferredNameEditor : StackPanel
         row.Children.Add(save);
         _name = new TextBox { Padding = new Thickness(10, 7, 10, 7), Background = new SolidColorBrush(Color.FromRgb(37, 26, 48)), Foreground = Brushes.White };
         System.Windows.Automation.AutomationProperties.SetName(_name, Loc.Get("companion_v2_calls_you"));
+        App.Brain?.EnsureCurrentAccount();
         var store = App.Brain?.Memory;
         if (store?.Profile.TryGetValue(MemoryStore.KeyPreferredName, out var value) == true) _name.Text = value?.ToString() ?? string.Empty;
+        _owner = store;
         save.IsEnabled = _name.IsEnabled = store != null;
         save.Click += (_, _) => Save();
         row.Children.Add(_name);
@@ -43,8 +46,9 @@ internal sealed class PreferredNameEditor : StackPanel
     }
     private void Save()
     {
+        App.Brain?.EnsureCurrentAccount();
         var store = App.Brain?.Memory;
-        if (store == null) return;
+        if (store == null || !ReferenceEquals(store, _owner)) { _name.Clear(); IsEnabled = false; return; }
         var name = Normalize(_name.Text);
         if (!MemoryStore.IsStorable(App.ModerationGuard, name, MemoryFact.SourceUserEdited))
         {

@@ -35,6 +35,7 @@ public partial class ConversationPage : UserControl
         _vm = new(room);
         DataContext = _vm;
         _vm.Turns.CollectionChanged += TurnsChanged;
+        _vm.AccountChanged += CloseSheet;
         IsVisibleChanged += (_, _) => { if (IsVisible) _vm.Resume(); else { CloseSheet(); _vm.Detach(); } };
         Unloaded += (_, _) => { _vm.Stop(); CloseSheet(); _vm.Detach(); };
         SizeChanged += (_, _) => { if (SheetOverlay.Children[0] is FrameworkElement sheet) sheet.Width = Math.Max(240, Math.Min(580, ActualWidth - 48)); };
@@ -85,6 +86,7 @@ public partial class ConversationPage : UserControl
     {
         CloseSheet();
         _returnFocus = Keyboard.FocusedElement;
+        App.Brain?.EnsureCurrentAccount();
         _vm.Room.Sync();
         string? source = kind switch { "memory" => "MemoryZone", "permissions" => "PermissionsZone", "connection" => "EngineZone", "personality" => "PersonalityZone", _ => null };
         SheetTitle.Text = Loc.Get(kind switch { "memory" => "companion_v2_memory", "permissions" => "companion_v2_allowed", "connection" => "companion_v2_connection", _ => "companion_v2_who" });
@@ -125,6 +127,7 @@ public partial class ConversationPage : UserControl
     }
     private void CloseSheet()
     {
+        if (_legacy.FindName("MemoryZone") is MemoryDiaryView diary) diary.ForgetConfirm.Disarm();
         SheetOverlay.Visibility = Visibility.Collapsed;
         if (_borrowed != null && _parent != null)
         {

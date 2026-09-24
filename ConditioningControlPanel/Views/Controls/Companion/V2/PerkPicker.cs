@@ -23,10 +23,13 @@ internal static class PerkPicker
         foreach (var type in Enum.GetValues<CompanionBonusType>())
         {
             var perk = CompanionPerks.For(type);
+            var unlocked = CompanionPerks.CanSelect(type, App.Settings?.Current?.PlayerLevel ?? 0);
             var text = new StackPanel();
             text.Children.Add(new TextBlock { Text = Loc.Get(CompanionPerks.NameKey(type)), FontWeight = FontWeights.SemiBold, FontSize = 16 });
             text.Children.Add(new TextBlock { Text = Loc.Get(perk.LocKey), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,5,0,0) });
+            if (!unlocked) text.Children.Add(new TextBlock { Text = Loc.GetF("companion_perk_unlock", CompanionPerks.RequiredLevel(type)), Margin = new Thickness(0,5,0,0) });
             var choice = new RadioButton { Content = text, IsChecked = App.Companion?.ActivePerk == type,
+                IsEnabled = unlocked,
                 Foreground = perk.Negative ? Brushes.Salmon : Brushes.White, Padding = new Thickness(10),
                 Margin = new Thickness(0,0,0,10), HorizontalContentAlignment = HorizontalAlignment.Stretch };
             choice.Checked += (_, _) => { if (App.Companion?.SetPerk(type) == true) window.Close(); };

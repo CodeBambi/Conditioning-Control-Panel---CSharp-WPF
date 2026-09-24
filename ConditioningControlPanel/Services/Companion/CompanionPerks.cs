@@ -1,4 +1,5 @@
 using ConditioningControlPanel.Models;
+using System.Linq;
 
 namespace ConditioningControlPanel.Services.Companion
 {
@@ -15,6 +16,11 @@ namespace ConditioningControlPanel.Services.Companion
     {
         public static CompanionBonusType Resolve(CompanionBonusType? saved, CompanionBonusType bundle, bool preview)
             => preview && saved.HasValue && System.Enum.IsDefined(saved.Value) ? saved.Value : bundle;
+
+        public static int RequiredLevel(CompanionBonusType type)
+            => CompanionDefinition.AllCompanions.FirstOrDefault(c => c.BonusType == type)?.RequiredLevel ?? int.MaxValue;
+
+        public static bool CanSelect(CompanionBonusType type, int level) => level >= RequiredLevel(type);
 
         public static string NameKey(CompanionBonusType type) => "companion_perk_name_" + (int)type;
 
