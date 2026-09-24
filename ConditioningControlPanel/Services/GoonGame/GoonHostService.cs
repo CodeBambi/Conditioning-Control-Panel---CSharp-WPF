@@ -93,6 +93,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         private static bool _disposing;          // reentrancy guard (Dispose closes the window -> Closed -> DisposeAll)
         private static bool _recoveryWindowed;   // this relaunch is a recovery: ignore the remembered fullscreen
         private static bool _duckPreference = true;
+        private static string? _pendingJoinCode;  // open tables: handed to the NEXT init, then spent
         private static bool _duckedMainWindow;   // WE minimized main at launch, so WE owe a restore
         /// <summary>The CoreWebView2 whose <c>PermissionRequested</c> we have already subscribed to.
         /// The page's "ready" handshake fires again on every reload (and a recovery relaunch builds a
@@ -125,9 +126,26 @@ namespace ConditioningControlPanel.Services.GoonGame
         }
 
         /// <summary>Launch the Goon Game window (idempotent). A running instance is re-focused.</summary>
-        public static void Launch(bool duckMainWindow = true)
+        public static void Launch(bool duckMainWindow = true) => Launch(duckMainWindow, joinCode: null);
+
+        /// <summary>Launch the Goon Game straight into joining <paramref name="joinCode"/> (open
+        /// tables, 2026-09-23). A fresh page reads it as the init field <c>joinCode</c>; a page
+        /// that is already up gets a <c>join-code</c> frame instead. A code that fails
+        /// <see cref="GoonJoinCode.Normalize"/> is dropped and the game opens as usual.</summary>
+        public static void Launch(bool duckMainWindow, string? joinCode)
         {
-            if (_host != null) { _host.FocusWeb(); return; }
+            var code = GoonJoinCode.Normalize(joinCode);
+            if (_host != null)
+            {
+                if (code != null)
+                {
+                    try { _host.Post(new { type = "join-code", code }); }
+                    catch (Exception ex) { App.Logger?.Debug("GoonHostService: join-code post: {E}", ex.Message); }
+                }
+                _host.BringToFront();   // restore + raise + focus, not just Activate
+                return;
+            }
+            _pendingJoinCode = code;
             try
             {
                 // EMI Desk: the ring learns from every open, not just its own cards.
@@ -162,6 +180,10 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // A mapping whose folder does not exist is silently DROPPED by WebView2, which
                 // reads later as "the page's art 404s for no reason". Add the optional roots only
                 // when they're really there, and say so in the log when they are not.
+                // Online pictures (GoonOnlineMedia) land under {assets}\.temp and are served through
+                // ccp.assets. A player with no local library may have no assets folder yet, and a
+                // missing folder drops the mapping, so make sure it exists before mapping it.
+                try { App.GetMediaTempPath(); } catch { }
                 AddIfPresent(mappings, "ccp.assets", App.EffectiveAssetsPath);
                 AddIfPresent(mappings, "ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"));
                 // ONE vhost for the whole transfer cache: art/ + prv/ (the user's own compressed
@@ -210,6 +232,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "GoonHostService.Launch failed");
+                _pendingJoinCode = null;
                 DisposeAll();
             }
         }
@@ -316,6 +339,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 {
                     type = "init",
                     protocol = Protocol,
+                    // The app's own language code ("en", "pt-BR", "zh-CN", ...). The page picks
+                    // its copy table from this; an unknown code falls back to English there.
+                    lang = App.Settings?.Current?.Language ?? "en",
                     identity = new
                     {
                         unifiedId = App.UnifiedUserId ?? "",
@@ -341,7 +367,13 @@ namespace ConditioningControlPanel.Services.GoonGame
                         video = true,
                         mediaTransfer = TransferAllowed(),
                         canHost = HostingAllowed(),
+                        // Patrons host, every signed-in account joins (2026-09-24). The
+                        // server's /v2/goon/join is the real gate.
+                        canJoin = JoiningAllowed(),
                     },
+                    // Open tables: a Join pressed in the friends drawer lands here. Spent on the
+                    // first init so a reload (heartbeat recovery) does not rejoin a finished room.
+                    joinCode = TakePendingJoinCode() ?? "",
                     consent = new
                     {
                         liveDurationSec = consent.LiveDurationSec,
@@ -355,6 +387,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                     // the page gets a `discord` echo when it lands; the page's box is reserved from
                     // first paint either way, so nothing shifts.
                     discord = BuildDiscordBlock(includeLastOpponent: true),
+                    // Online pictures for THIS game (the flavour pick is the opt-in). The page
+                    // owns the custom blob's shape; the host only stores and echoes it.
+                    media = BuildMediaBlock(),
                 });
                 // ...and top the own avatar up off-thread. No-op unless the user is linked AND
                 // sharing, so a player who shares nothing never touches the Discord CDN.
@@ -385,6 +420,10 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // pool before the first cache-state lands. (The inbox needs no prune here anymore -
                 // the ephemeral wipe above already emptied it.)
                 GoonCacheBridge.Attach(_host);
+
+                // Online pictures: only a pick made in THIS session fetches (a page reload inside
+                // one window keeps it); a fresh window waits for the flavour card.
+                StartOnlineMediaFromSettings();
 
                 // ...and tell the page which window it is actually painted in. Its affordances read
                 // the echoed state, never the requested one.
@@ -630,6 +669,26 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "last-opponent-clear":
                     OnLastOpponentClear();
                     break;
+                case "media-flavour":    // flavour card / options sheet: the pick, the edits, the niches
+                    OnMediaFlavour(o);
+                    break;
+                case "media-more":       // the page's online deck is mostly shown: fetch the next wave
+                    OnMediaMore();
+                    break;
+                case "open-prime":       // page's patron sheet "See the tiers": the app's own refusal and upgrade path
+                    TierGate.DemandPremium("Goon Game");
+                    break;
+                case "peer-niches":      // the opponent's hello named their niches; fill a pool from them
+                    OnPeerNiches(o);
+                    break;
+                case "share-card":       // recap's match card: copy (clipboard) or save (system dialog), PNG bytes only
+                {
+                    var disp = Application.Current?.Dispatcher;
+                    if (disp == null || disp.HasShutdownStarted) break;
+                    disp.BeginInvoke(() => GoonShareCard.Handle(o, _host?.Window,
+                        frame => { try { _host?.Post(frame); } catch { } }));
+                    break;
+                }
             }
         }
 
@@ -902,19 +961,29 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch { return false; }
         }
 
-        /// <summary>May the page MINT a room? TIER 2 ONLY.
-        ///
-        /// A rung above <see cref="TransferAllowed"/>, and a different question: sending media is
-        /// tier 1, hosting a duel is tier 2. The server enforces it at <c>/v2/goon/invite</c>
-        /// (403 <c>no_host_access</c> below <c>computeEffectiveTier &gt;= 2</c>) and this is the
-        /// same verdict computed locally, so the title screen can dim Host instead of routing the
-        /// player to a screen whose only content is a refusal. JOINING is free for everyone and is
-        /// never gated here. The page reads this with <c>=== true</c>, so a host that predates the
-        /// flag leaves Host enabled and falls back to the server's answer.</summary>
-        private static bool HostingAllowed()
+        /// <summary>May the page MINT a room? ANY PATRON (owner call 2026-09-24): a paying tier
+        /// or the whitelist, the same bar as sending (<see cref="TransferAllowed"/>). The server
+        /// enforces it at <c>/v2/goon/invite</c> (403 <c>no_host_access</c> below
+        /// <c>computeEffectiveTier &gt;= 1</c>) and this is the same verdict computed locally, so
+        /// the title screen can lock Host instead of routing the player to a refusal. The page
+        /// reads this with <c>=== true</c>, so a host that predates the flag leaves Host enabled
+        /// and falls back to the server's answer.</summary>
+        internal static bool HostingAllowed()
         {
-            try { return App.Patreon?.HasLabAccess == true; }
+            try { return App.Patreon?.HasPremiumAccess == true; }
             catch { return false; }
+        }
+
+        /// <summary>May the page JOIN a room? Every SIGNED-IN account (owner call 2026-09-24),
+        /// free included. The server's <c>/v2/goon/join</c> answers 401 <c>signin</c> without an
+        /// account; this is only the local read of "is there one". Practice never asks.</summary>
+        internal static bool JoiningAllowed() => !string.IsNullOrEmpty(App.UnifiedUserId);
+
+        private static string? TakePendingJoinCode()
+        {
+            var c = _pendingJoinCode;
+            _pendingJoinCode = null;
+            return c;
         }
 
         // ============================ Discord sharing (contract §4/§5) ============================
@@ -1614,6 +1683,189 @@ namespace ConditioningControlPanel.Services.GoonGame
             _exitWatchdog = null;
         }
 
+        // ============================ online pictures ============================
+        //
+        // The Goon Game is playable with no local library: the page's flavour card (the five
+        // Breakout flavours) picks a set of Scrolller niches and GoonOnlineMedia fills a small
+        // deck of stills and clips. The pick itself is the opt-in, for THIS game only, so the
+        // app-wide MediaSource / HasRemoteMediaConsent are deliberately not read here; the
+        // player's own switch is GoonMediaOnline. Every niche the page sends is re-validated
+        // (same grammar as its cleanNiche) and capped at 8 before it reaches the feed.
+        //
+        // THE PICK LASTS ONE SESSION (owner, 2026-09-24). A pick is the Scrolller opt-in for this
+        // window only: it is never written as app-wide consent and never read back as consent on
+        // the next open. The stored flavour, niches and edits are remembered as a preselection
+        // (`last`), but init tells the page "no pick yet" until the player picks again, and
+        // nothing is fetched before that. Declining leaves the deck to the asset manager rules
+        // (their own pictures, or the app-wide online set they already enabled).
+
+        private static GoonOnlineMedia? _onlineMedia;
+        private static bool _sessionOptIn;
+
+        private static object BuildMediaBlock()
+        {
+            var s = App.Settings?.Current;
+            var stored = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour);
+            return new
+            {
+                flavour = _sessionOptIn ? stored : "",
+                last = stored,
+                custom = GoonOnlineMediaRules.ParseCustom(s?.GoonMediaCustom),
+                online = s?.GoonMediaOnline ?? true,
+            };
+        }
+
+        /// <summary>page -> host <c>media-flavour { flavour, custom, subs, online }</c>: store the
+        /// pick and restart the fetch. Sent once per real change, never per keystroke.</summary>
+        private static void OnMediaFlavour(JObject o)
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+                var flavour = GoonOnlineMediaRules.CleanFlavour((string?)o["flavour"]);
+                var subs = GoonOnlineMediaRules.CleanSubs(
+                    (o["subs"] as JArray)?.Select(t => t.Type == JTokenType.String ? (string?)t : null));
+                s.GoonMediaFlavour = flavour;
+                if (o["custom"] is JObject)
+                    s.GoonMediaCustom = GoonOnlineMediaRules.CleanCustom(o["custom"]);
+                s.GoonMediaSubs = GoonOnlineMediaRules.JoinSubs(subs);
+                if (o["online"]?.Type == JTokenType.Boolean) s.GoonMediaOnline = (bool)o["online"]!;
+                _sessionOptIn = GoonOnlineMediaRules.IsSessionOptIn(s.GoonMediaOnline, flavour);
+                try { App.Settings?.Save(); } catch (Exception ex) { App.Logger?.Debug("GoonHostService: media save: {E}", ex.Message); }
+                App.Logger?.Information("GoonHostService: media-flavour {F} ({N} niches, online {O})",
+                    flavour == "" ? "(none)" : flavour, subs.Count, s.GoonMediaOnline);
+                StartOnlineMediaFromSettings();
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnMediaFlavour: {E}", ex.Message); }
+        }
+
+        /// <summary>Fetch (or stop) from what is stored. Off = post 'off' and hold nothing; no
+        /// pick yet = say nothing (the page's flavour card is up and owns that moment).</summary>
+        private static void StartOnlineMediaFromSettings()
+        {
+            try
+            {
+                if (_host == null) return;
+                var s = App.Settings?.Current;
+                bool online = s?.GoonMediaOnline ?? true;
+                var flavour = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour);
+                var subs = GoonOnlineMediaRules.SplitSubs(s?.GoonMediaSubs);
+                // No pick this session = no fetch and no word to the page: its flavour card is up.
+                if (!_sessionOptIn) return;
+                _onlineMedia ??= new GoonOnlineMedia(PostOnlineMedia);
+                if (!online) { _onlineMedia.Off(); return; }
+                if (!GoonOnlineMediaRules.ShouldFetch(online, flavour, subs))
+                {
+                    // A pick with no niches left (every pill switched off) is an honest 'empty'.
+                    if (flavour != "") _onlineMedia.Start(Array.Empty<string>());
+                    return;
+                }
+                _onlineMedia.Start(subs);
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.StartOnlineMedia: {E}", ex.Message); }
+        }
+
+        /// <summary>page -> host <c>media-more</c>: the next wave for the stored niches, under the
+        /// same gate as the first one (the switch on, a pick, niches). The pick stays the opt-in.</summary>
+        private static void OnMediaMore()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                bool online = s?.GoonMediaOnline ?? true;
+                var flavour = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour);
+                var subs = GoonOnlineMediaRules.SplitSubs(s?.GoonMediaSubs);
+                if (!_sessionOptIn || _onlineMedia == null || !GoonOnlineMediaRules.ShouldFetch(online, flavour, subs)) return;
+                if (_onlineMedia.More()) App.Logger?.Information("GoonHostService: media-more, next wave");
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnMediaMore: {E}", ex.Message); }
+        }
+
+        // ============================ the opponent's niches ============================
+        //
+        // THE HAPPY PATH (2026-09-24): an opponent who does not send their own files (free, or
+        // nothing local, or the switch off) still throws pictures. Their hello carries the niche
+        // NAMES they picked (caps.niches); the page hands those here and this host fills a second
+        // pool (GoonOnlineMedia.ForPeer) from Scrolller, which the page draws ONLY on the
+        // opponent's payloads. No URL, id or byte of theirs crosses: only names, re-validated
+        // with the same grammar and cap as the player's own. CONSENT: joining a Goon match is a
+        // Scrolller-based game, so the fetch runs unless THIS player switched online pictures off
+        // (GoonMediaOnline false); then the page is told 'declined' and keeps its own pictures.
+
+        private static GoonOnlineMedia? _peerMedia;
+
+        /// <summary>page -> host <c>peer-niches { subs }</c>. An empty list (match over) stops the
+        /// pool and hands back its files.</summary>
+        private static void OnPeerNiches(JObject o)
+        {
+            try
+            {
+                if (_host == null) return;
+                var subs = GoonOnlineMediaRules.CleanSubs(
+                    (o["subs"] as JArray)?.Select(t => t.Type == JTokenType.String ? (string?)t : null));
+                _peerMedia ??= GoonOnlineMedia.ForPeer(PostPeerMedia);
+                if (subs.Count == 0) { _peerMedia.Off(); return; }
+                if (!PeerFetchAllowed(App.Settings?.Current?.GoonMediaOnline))
+                {
+                    _peerMedia.Off();
+                    PostFrame(new { type = "peer-media", state = "declined", subs = Array.Empty<string>(),
+                        images = Array.Empty<object>(), videos = Array.Empty<object>() });
+                    return;
+                }
+                App.Logger?.Information("GoonHostService: peer niches ({N})", subs.Count);
+                _peerMedia.Start(subs);
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnPeerNiches: {E}", ex.Message); }
+        }
+
+        /// <summary>The consent rule for the peer pool: on unless the player switched online
+        /// pictures off for the Goon Game. Pure, for the tests.</summary>
+        internal static bool PeerFetchAllowed(bool? goonMediaOnline) => goonMediaOnline != false;
+
+        private static void PostPeerMedia(GoonOnlineMedia.Snapshot snap)
+        {
+            PostFrame(new
+            {
+                type = "peer-media",
+                state = snap.State,
+                subs = snap.Subs,
+                images = snap.Images.Select(i => new { name = i.Name, url = i.Url }).ToList(),
+                videos = snap.Videos.Select(i => new { name = i.Name, url = i.Url }).ToList(),
+                progress = new { have = snap.Have, want = snap.Want },
+            });
+        }
+
+        private static void PostFrame(object frame)
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null) return;
+            disp.BeginInvoke(new Action(() =>
+            {
+                try { _host?.Post(frame); } catch { }
+            }));
+        }
+
+        /// <summary>Worker thread -> UI thread -> page. The whole current list every time.</summary>
+        private static void PostOnlineMedia(GoonOnlineMedia.Snapshot snap)
+        {
+            var frame = new
+            {
+                type = "online-media",
+                state = snap.State,
+                subs = snap.Subs,
+                images = snap.Images.Select(i => new { name = i.Name, url = i.Url }).ToList(),
+                videos = snap.Videos.Select(i => new { name = i.Name, url = i.Url }).ToList(),
+                progress = new { have = snap.Have, want = snap.Want },
+            };
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null) return;
+            disp.BeginInvoke(new Action(() =>
+            {
+                try { _host?.Post(frame); } catch { }
+            }));
+        }
+
         private static void DisposeAll()
         {
             if (_disposing) return;   // _host.Dispose() closes the window, re-raising Closed -> here
@@ -1640,6 +1892,12 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // the connection, an RPC pipe open). No-op when GG never set it.
                 try { App.DiscordRpc?.SetGoonActivity("off"); } catch { }
                 try { ResetPeerCardState(); } catch { }
+                // Online pictures: stop fetching and hand back every temp file this window owned.
+                try { _onlineMedia?.Dispose(); } catch { }
+                _onlineMedia = null;
+                _sessionOptIn = false;
+                try { _peerMedia?.Dispose(); } catch { }
+                _peerMedia = null;
                 try { _host?.Dispose(); } catch { }
                 _host = null;
                 // The handler dies with the core it was attached to; forgetting the reference is

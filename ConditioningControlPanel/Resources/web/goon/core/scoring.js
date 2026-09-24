@@ -25,6 +25,7 @@
 
 import { GoonAttentionMode, GoonConsts, costOf } from './contracts.js';
 import { MAX_MATCH_RISK_TIER, riskMultiplier } from './draft.js';
+import { PointsLedger } from './points.js';
 
 /** The documented payload_receipt.status values. Keep receipts inside this set. */
 export const GoonReceiptStatus = Object.freeze({
@@ -82,6 +83,11 @@ export class GoonScoring {
     this._attentionPct = 100.0;
 
     this._chargeListeners = new Set();
+
+    // The points model (core/points.js). OFF until match.js sees a peer that speaks it
+    // (caps.night >= 2); off means the legacy 1 pt/s survival score, unchanged.
+    this._pointsOn = false;
+    this._points = new PointsLedger();
   }
 
   get mode() { return this._mode; }
@@ -97,6 +103,31 @@ export class GoonScoring {
   get attentionPct() { return this._attentionPct; }
 
   get riskMultiplier() { return riskMultiplier(this._riskTier); }
+
+  /** true = the send-weighted points model is scoring this match. */
+  get pointsModel() { return this._pointsOn; }
+  /** The ledger behind the points model (always present, empty in legacy). */
+  get points() { return this._points; }
+  /** The one chip the HUD shows: attention x risk. Applied to OWN points only. */
+  get ownMultiplier() { return this.riskMultiplier * this.attentionMultiplier; }
+
+  /** Turn the points model on or off (match start, before any point exists). */
+  setPointsModel(on) { this._pointsOn = !!on; }
+
+  /** Our throw came back completed/survived with this held share. Points model only. */
+  awardLanded(kind, held) { return this._pointsOn ? this._award(this._points.landed(kind, held)) : null; }
+  /** Their throw finished on us. Points model only. */
+  awardLockBounty(points) { return this._pointsOn ? this._award(this._points.lockBounty(points)) : null; }
+  awardHeld(kind, held) { return this._pointsOn ? this._award(this._points.held(kind, held, this.ownMultiplier)) : null; }
+  /** A bubble or flash pop at monotonic nowMs. Points model only. */
+  awardPop(nowMs) { return this._pointsOn ? this._award(this._points.pop(nowMs, this.ownMultiplier)) : null; }
+  /** A finished duel: 'win' | 'lose' | 'tie'. Points model only. */
+  awardDuel(outcome) { return this._pointsOn ? this._award(this._points.duel(outcome)) : null; }
+
+  _award(a) {
+    if (a && a.points > 0) this._scoreExact += a.points;
+    return a;
+  }
 
   /** Current attention/interaction multiplier applied to the per-second score. */
   get attentionMultiplier() {
@@ -147,7 +178,8 @@ export class GoonScoring {
     if (!(seconds > 0)) return;
     this._elapsedMs += seconds * 1000.0;
 
-    this._scoreExact += seconds * this.riskMultiplier * this.attentionMultiplier;
+    if (this._pointsOn) this._scoreExact += this._points.trickle(seconds, this.riskMultiplier * this.attentionMultiplier);
+    else this._scoreExact += seconds * this.riskMultiplier * this.attentionMultiplier;
 
     if (this._mode === GoonAttentionMode.NoCam) {
       this._attentionPct = this._elapsedMs < this._failedCheckUntilMs ? 60.0 : 100.0;
@@ -167,6 +199,15 @@ export class GoonScoring {
         this._addCharge('trickle');
       }
     }
+  }
+
+  /**
+   * A flat score bonus (game night: winning a duel). Added to THIS side's own score, which is
+   * authoritative for this side and rides the next state tick like every other point.
+   */
+  awardBonus(points) {
+    const p = Math.trunc(Number(points) || 0);
+    if (p > 0) this._scoreExact += p;
   }
 
   /** +1 charge for taking an incoming payload all the way to its end. */
@@ -218,6 +259,8 @@ export class GoonScoring {
       failedChecks: this._failedChecks,
       chargesEarned: this._chargesEarned,
       chargesSpent: this._chargesSpent,
+      pointsModel: this._pointsOn,
+      stats: this._points.stats(this.score),
     };
   }
 
@@ -232,6 +275,7 @@ export class GoonScoring {
     this._chargesSpent = 0;
     this._failedChecks = 0;
     this._attentionPct = 100.0;
+    this._points.reset();
     this._emitCharges();
   }
 

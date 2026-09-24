@@ -42,16 +42,19 @@ import { peerRenderLog, resetPeerRenderLog } from './exec/videos.js';
 // that obey it) and the PREF lives in ui/prefs.js (`perfMode`); this file is
 // where they meet, because boot imports both tiers by charter — see buildApp.
 import { applyPerfTier } from './exec/perfTier.js';
+import { mountBackground } from './exec/background.js';
 
 import { GoonMatchService } from './core/match.js';
 import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
 import {
-  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION,
+  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION, NIGHT_CAP_VERSION,
+  cleanNiches, peerNiches, SCORE_CAP_VERSION,
 } from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
 import { GoonSession } from './net/session.js';
+import { GoonSignalingClient, normalizeCode } from './net/signaling.js';
 import { createLoopbackPair, loopbackPresets } from './net/loopbackTransport.js';
 import { createMediaQueue } from './net/mediaQueue.js';
 import { probeDecodeCodecs } from './net/codecs.js';
@@ -62,6 +65,8 @@ import { createRouter } from './ui/router.js';
 import { createPrefs } from './ui/prefs.js';
 import { createAudio } from './ui/audio.js';
 import { createToasts } from './ui/toasts.js';
+import { createHitStamps } from './ui/hitStamps.js';
+import { createRivalry } from './ui/rivalry.js';
 import { createCoach, COACH } from './ui/coach.js';
 import { createSheets } from './ui/sheets.js';
 import { createOptions } from './ui/options.js';
@@ -75,6 +80,7 @@ import { createWakeLock } from './ui/wakeLock.js';
 // bridge call at import time, and a duel where the voice service silently failed
 // to load would be a duel where a consent the player gave has no effect.
 import { createVoiceService } from './ui/voice/voiceService.js';
+import { createSongPlayer } from './ui/songPlayer.js';
 // ...and the library the service loads pre-recorded notes from. Same reasoning,
 // plus one more: it is the ONE writer of prefs.voiceEmoteMap, and two of those
 // would be two answers to "which note does this emote fire".
@@ -82,12 +88,14 @@ import { createNoteStore } from './ui/voice/noteStore.js';
 import { setVoiceProvider } from './ui/emotes.js';
 import { consumeJoinCode } from './ui/inviteLink.js';
 import { S } from './ui/strings.js';
+import { loadLang, normalizeLang } from './core/i18n.js';
 
 import * as titleScreen from './ui/screens/title.js';
 import * as hostScreen from './ui/screens/host.js';
 import * as joinScreen from './ui/screens/join.js';
 import * as mediaSetupScreen from './ui/screens/mediaSetup.js';
 import { needsMediaSetup } from './ui/screens/mediaSetup.js';
+import { readMediaInit, readOnlineFrame, mediaFlavourFrame, sameMediaState } from './ui/flavours.js';
 import * as lobbyScreen from './ui/screens/lobby.js';
 import * as draftScreen from './ui/screens/draft.js';
 import * as countdownScreen from './ui/screens/countdown.js';
@@ -167,6 +175,8 @@ export const session = {
 };
 
 let gotInit = false;
+/** The copy table for session.lang, fetched as soon as init names it (core/i18n.js). */
+let langReady = null;
 let gotManifest = false;
 let bootSettled = false;
 let warmTimer = 0;
@@ -318,8 +328,141 @@ async function loadSiblings() {
  * `net-post-result` is consumed INSIDE bridge.js; registering it here would
  * throw at wiring time. That is the intended alarm, not a bug.
  * -------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------------
+ * ONLINE PICTURES - the flavour card (2026-09-23, owner: "playable with no setup").
+ *
+ * The HOST owns the pick and fetches the pictures (Services/GoonGame/GoonOnlineMedia.cs):
+ * `init.media` brings { flavour, custom, online } in, a pick or a closed options sheet
+ * sends ONE `media-flavour` frame out, and `online-media` frames bring the whole current
+ * online list back, which exec/media.js keeps as its THIRD set (setOnlineLibrary). The
+ * pick is the player's opt-in to online pictures for this game. A host that predates the
+ * block, and every standalone page, leaves session.media null: no card, no frame.
+ *
+ * ONLINE PICTURES ARE NEVER SENT. The transfer queue lists what it offers off the assets
+ * store's items (createArtifactSource.listSendable), never off the deck, so nothing the
+ * online set holds can reach an opponent.
+ *
+ * Declared ABOVE the handlers on purpose: bridge.on replays a pre-buffered frame during
+ * registration, and a `const` below it would still be in its dead zone.
+ * -------------------------------------------------------------------------- */
+const mediaFlavour = (() => {
+  let online = null;
+  const listeners = new Set();
+  const copy = (m) => ({ flavour: m.flavour || '', custom: JSON.parse(JSON.stringify(m.custom || {})), online: m.online !== false });
+  const api = {
+    /** Is there a host that fetches online pictures at all? */
+    available: () => !!session.media,
+    /** Never picked yet (the first-run card's question). */
+    firstRun: () => !!session.media && !session.media.flavour,
+    get: () => (session.media ? copy(session.media) : null),
+    info: () => online,
+    subscribe(fn) {
+      if (typeof fn !== 'function') return () => {};
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    /** Send the state if it moved. `force` sends even an unchanged one (a first pick). */
+    commit(next, force) {
+      if (!session.media || !next) return false;
+      if (!force && sameMediaState(session.media, next)) return false;
+      session.media = copy(next);
+      try { mountBackground()?.setFlavour(session.media.flavour); } catch (_e) { /* scenery only */ }
+      const frame = mediaFlavourFrame(session.media);
+      try { bridge.send(frame); } catch (_e) { /* a pick is never load-bearing */ }
+      bridge.log('media-flavour: ' + (frame.flavour || '-') + ' online=' + frame.online + ' subs=' + frame.subs.join(','));
+      return true;
+    },
+    /** The first-run tap: this flavour, online on. */
+    pick(id) {
+      const cur = api.get();
+      if (!cur) return false;
+      return api.commit(Object.assign(cur, { flavour: id, online: true }), true);
+    },
+    /** A host frame landed: replace the online set and repaint whoever listens. */
+    adopt(m) {
+      online = readOnlineFrame(m);
+      const c = media.setOnlineLibrary(online);
+      for (const fn of Array.from(listeners)) { try { fn(online); } catch (_e) { /* a painter never breaks a frame */ } }
+      return c;
+    },
+  };
+  return api;
+})();
+
+// The online deck is mostly shown: ask the host for the next wave (it re-checks the pick and
+// the switch, and fetches only posts this list has not had).
+media.setOnlineLowHandler(() => {
+  if (!mediaFlavour.available()) return;
+  try { bridge.send({ type: 'media-more' }); } catch (_e) { /* never load-bearing */ }
+  bridge.log('media-more: online deck mostly shown');
+});
+
+/* ----------------------------------------------------------------------------
+ * THE OPPONENT'S NICHES (2026-09-24). Their hello's `caps.niches` goes to the host as ONE
+ * `peer-niches` frame per match; the host fetches from those niches and answers with
+ * `peer-media` frames (the online-media shape), which exec/media.js keeps OUT of the deck and
+ * draws only on the opponent's payloads. `declined` = this player switched online pictures off,
+ * so their own pictures stand in and a toast says so once.
+ * -------------------------------------------------------------------------- */
+function ownNiches() {
+  try {
+    if (!session.media || session.media.online === false || !session.media.flavour) return [];
+    return cleanNiches(mediaFlavourFrame(session.media).subs);
+  } catch (_e) { return []; }
+}
+
+const peerNicheLink = (() => {
+  let sent = '';
+  let toldDeclined = false;
+  return {
+    /** The opponent's hello landed (or changed): hand their niches to the host once. */
+    fromCaps(caps) {
+      const subs = peerNiches(caps);
+      const key = subs.join(',');
+      if (!(session.hosted || bridge.hasLocalHost()) || !subs.length || key === sent) return;
+      sent = key;
+      try { bridge.send({ type: 'peer-niches', subs }); } catch (_e) { /* never load-bearing */ }
+      bridge.log('peer-niches: ' + subs.length);
+    },
+    /** Match over: stop the pool, drop its pictures. */
+    clear() {
+      try { media.setPeerNicheLibrary(null); } catch (_e) { /* ignore */ }
+      if (!sent) return;
+      sent = '';
+      try { bridge.send({ type: 'peer-niches', subs: [] }); } catch (_e) { /* ignore */ }
+    },
+    adopt(m) {
+      const o = readOnlineFrame(m);
+      const n = media.setPeerNicheLibrary(m && m.state === 'declined' ? null : o);
+      if (m && m.state === 'declined' && !toldDeclined) {
+        toldDeclined = true;
+        toasts?.show?.(S.peerMedia.declined);
+      }
+      return n;
+    },
+  };
+})();
+
+bridge.on('peer-media', (m) => {
+  const n = peerNicheLink.adopt(m);
+  bridge.log('peer-media: ' + ((m && m.state) || '?') + ' ' + n + ' pictures');
+});
+
+bridge.on('online-media', (m) => {
+  const c = mediaFlavour.adopt(m);
+  const o = mediaFlavour.info();
+  bridge.log('online-media: ' + o.state + ' ' + o.images.length + ' images, ' + o.videos.length + ' videos'
+    + ' (deck ' + c.images + '/' + c.videos + ')');
+});
+
 bridge.on('init', (m) => {
   gotInit = true;
+  /* THE PAGE'S LANGUAGE. Hosted it is the app's own setting (AppSettings.Language); standalone
+   * bridge.standaloneInit fills it from the browser. Anything unknown is English. The table is
+   * fetched in settle(), before the first screen is built, so no screen ever paints in the
+   * wrong language and then flips. */
+  session.lang = normalizeLang(m.lang);
+  langReady = loadLang(session.lang).catch(() => 'en');   // started now, awaited in settle()
   session.solo = !!m.solo;
   // Normalize identity ONCE, here: the host sends {unifiedId, displayName,
   // appVersion} (GoonHostService.OnPageReady) and a future mobile/web host may
@@ -335,6 +478,11 @@ bridge.on('init', (m) => {
     anonymous: idm.anonymous === true,
   };
   session.caps = m.caps || null;
+  /* The flavour pick and the player's niche edits, host-owned (null = no online pictures here). */
+  session.media = readMediaInit(m.media);
+  /* OPEN TABLES (desk seam, 2026-09-23): the friends drawer's Join opens the game with a
+   * TOP-LEVEL `joinCode`. Absent or "" = nothing to join. Tolerated missing on older hosts. */
+  session.joinCode = typeof m.joinCode === 'string' && m.joinCode ? normalizeCode(m.joinCode) : (session.joinCode || '');
   session.consent = m.consent || null;
   session.match = m.match || null;
   session.prefs = m.prefs || null;
@@ -376,6 +524,21 @@ bridge.on('fullscreen', (m) => {
 
 bridge.on('ping', (m) => bridge.send({ type: 'pong', t: m && m.t }));
 
+/* OPEN TABLES (desk seam): a Join pressed in the friends drawer while this window is
+ * already open. Only acted on between matches: a live match is never yanked out from
+ * under the player by a click somewhere else. The join screen owns every failure. */
+bridge.on('join-code', (m) => {
+  const code = normalizeCode(m && m.code);
+  if (!/^[A-Z0-9]{4,12}$/.test(code)) return;
+  // bridge.on REPLAYS a pre-buffered frame during module evaluation, before `router`
+  // and friends exist; reading them then throws. Park the code for openFirstScreen.
+  let state = 'early';
+  try { state = !router ? 'early' : ((currentMatch || soloPair) ? 'busy' : 'ready'); } catch (_e) { state = 'early'; }
+  if (state === 'early') { session.joinCode = code; return; }
+  if (state === 'busy') return;
+  router.show('join', { autoCode: code });
+});
+
 bridge.on('end-run', () => finishExit('end-run'));
 
 // Reserved: the host does not post this yet (caps.haptics is false until the
@@ -398,7 +561,7 @@ function armDeadline() {
   warmTimer = setTimeout(() => {
     if (bootSettled) return;
     const note = el('gg-loader-note');
-    if (note) note.textContent = 'warming up' + (gotInit ? '' : ' — waiting for the app') + '…';
+    if (note) note.textContent = gotInit ? S.boot.warming : S.boot.warmingNoApp;
     bridge.log('boot: 12s with no ' + (gotInit ? 'manifest' : 'init'));
   }, WARM_MS);
   deadlineTimer = setTimeout(() => {
@@ -417,12 +580,17 @@ function settle() {
   bootSettled = true;
   session.ready = true;
   try { clearTimeout(warmTimer); clearTimeout(deadlineTimer); } catch (_e) { /* ignore */ }
-  loadSiblings()
-    .catch(() => {})
+  Promise.all([
+    loadSiblings().catch(() => {}),
+    (langReady || loadLang(session.lang)).then((l) => {
+      try { if (hasDom()) document.documentElement.lang = l; } catch (_e) { /* cosmetic */ }
+      bridge.log('lang: ' + l);
+    }).catch(() => {}),
+  ])
     .then(() => {
       try { buildApp(); } catch (e) {
         logger.error('app build failed: ' + ((e && e.stack) || e));
-        showLoaderFailure('ui failed to start');
+        showLoaderFailure(S.boot.uiFailed);
         return;
       }
       const loader = el('gg-loader');
@@ -467,9 +635,21 @@ function openFirstScreen() {
     code = guestSeat.code;
     bridge.log('resuming guest seat in ' + code);
   }
+  // The desk's friends-drawer Join (init.joinCode) is an explicit ask too, one level below a link.
+  if (!code && session.joinCode && /^[A-Z0-9]{4,12}$/.test(session.joinCode)) {
+    code = session.joinCode;
+    session.joinCode = '';
+    bridge.log('desk join: joining ' + code);
+  }
   if (code) {
     bridge.log('invite link: joining ' + code);
     router.show('join', { autoCode: code });
+    return;
+  }
+  /* FIRST RUN: the flavour card before the title, once. It holds nothing - one tap picks
+   * and the title follows (actions.mediaPrepDone falls back to it outside a match). */
+  if (mediaFlavour.firstRun()) {
+    router.show('mediaSetup');
     return;
   }
   router.show('title');
@@ -477,7 +657,7 @@ function openFirstScreen() {
 
 function showLoaderFailure(msg) {
   const note = el('gg-loader-note');
-  if (note) note.textContent = 'could not start — ' + String(msg).slice(0, 120);
+  if (note) note.textContent = S.boot.failed(String(msg).slice(0, 120));
   const ring = hasDom() ? document.querySelector('.gg-loader-ring') : null;
   if (ring) ring.remove();
 }
@@ -489,6 +669,10 @@ function showLoaderFailure(msg) {
 let prefs = null;
 let audio = null;
 let toasts = null;
+/** Game Night: the HIT stamps (ui/hitStamps.js). Page-scoped, attached per match. */
+let hitStamps = null;
+/** Game Night: the local W-L-D record per opponent (ui/rivalry.js). */
+const rivalry = createRivalry();
 let sheets = null;
 let options = null;
 /* ui/coach.js — the one-time explainers. A boot singleton rather than a per-match
@@ -519,6 +703,7 @@ let goonSession = null;      // net/session.js GoonSession (host/join path only)
 let currentMatch = null;
 let currentTransport = null;
 let currentSd = null;        // {presenter, inputs, dispose} from ui/sd
+let songPlayer = null;       // ui/songPlayer.js - MATCH-SCOPED like voice (Game Night)
 let voice = null;            // ui/voice/voiceService.js — MATCH-SCOPED, see attachMatch
 let micGateSaid = false;     // the mic breadcrumb is once per match — see reportMicGate
 let hudHandle = null;
@@ -609,7 +794,16 @@ function localCaps() {
   if (!caps.camera) rounds = rounds.filter((r) => r !== GoonRoundKind.StaringContest);
   if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, transfer: true });
+  /* SENDING IS A PATRON PERK (2026-09-23): a seat without it never says `transfer` in its
+   * hello, so no peer ever opens the media lane with it. Advertising less is always safe. */
+  const transferCap = !!(session.caps && session.caps.mediaTransfer === true);
+
+  /* NICHES (2026-09-24): a seat whose Goon pictures come from Scrolller names its niches, so
+   * the opponent's host can fetch pictures for this seat's throws (core/contracts.js
+   * cleanNiches). Only while the player's own online pictures are on for this game. */
+  const niches = ownNiches();
+
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, score: SCORE_CAP_VERSION, transfer: transferCap, niches });
 }
 
 /* ============================================================================
@@ -919,10 +1113,10 @@ function createMatchLog() {
         return res;
       };
       origFinish = match.notifyInboundPayloadFinished.bind(match);
-      match.notifyInboundPayloadFinished = (id, endured) => {
+      match.notifyInboundPayloadFinished = (id, endured, held) => {
         const e = byId.get(id);
         if (e) e.status = endured ? 'endured' : 'landed';
-        return origFinish(id, endured);
+        return origFinish(id, endured, held);
       };
     },
 
@@ -974,13 +1168,15 @@ function createMatchLog() {
  * so the relay fallback can rebuild a match without this knowledge leaking into
  * the transport layer.
  * -------------------------------------------------------------------------- */
-function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName = null } = {}) {
+function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName = null, night = true } = {}) {
   const match = new GoonMatchService(transport, isHost, {
     rngFactory: (seed) => new GoonRng(seed),
     logger,
     displayName: displayName || (session.identity && session.identity.displayName) || 'Player',
     appVersion: (session.identity && session.identity.appVersion) || '',
-    caps: localCaps(),
+    // `night: false` advertises no Game Night. The practice bot DOES speak it since 2026-09-23
+    // (ui/duel/botDuel.js plays duels over the loopback), so nothing passes false today.
+    caps: night ? localCaps() : Object.assign({}, localCaps(), { night: 0 }),
     tag: isHost ? 'GG:host' : 'GG:guest',
   });
 
@@ -1076,6 +1272,13 @@ function attachMatch(match, transport) {
 
   currentMatch = match;
   currentTransport = transport || (goonSession ? goonSession.transport : null);
+  // The opponent's niches, once their hello is in. Practice has no real opponent: skip it.
+  if (!soloOpponent && typeof match.onOpponentStateChanged === 'function') {
+    try {
+      phaseUnsubs.push(match.onOpponentStateChanged(() => peerNicheLink.fromCaps(match.remoteCaps)));
+      peerNicheLink.fromCaps(match.remoteCaps);   // their hello may already be in
+    } catch (_e) { /* a hook, never load-bearing */ }
+  }
   escMercied = false;
   // A new match is a new answer to "is there a mic on the desk". See reportMicGate.
   micGateSaid = false;
@@ -1096,6 +1299,7 @@ function attachMatch(match, transport) {
 
   try { executor?.attach?.(match); } catch (e) { logger.error('executor.attach threw: ' + ((e && e.stack) || e)); }
   try { matchLog.attach(match); } catch (e) { logger.error('matchLog.attach threw: ' + ((e && e.stack) || e)); }
+  try { hitStamps?.attach?.(match); } catch (e) { logger.warn('hitStamps.attach threw: ' + ((e && e.message) || e)); }
   /* THE SECOND tryFirePayload INSTANCE WRAPPER, and the order is the point.
    * matchLog wrapped it a line ago; the queue wraps it now, so the queue's is the
    * OUTERMOST — a payload gets its `xfer:` tags before the log records it, and the
@@ -1136,6 +1340,9 @@ function attachMatch(match, transport) {
       logger,
     });
   } catch (e) { logger.error('createVoiceService threw: ' + ((e && e.stack) || e)); voice = null; }
+  // Game Night: the match's song, if the host picked one. Silent on any failure.
+  try { songPlayer = createSongPlayer({ match, audio, logger }); }
+  catch (e) { logger.warn('createSongPlayer threw: ' + ((e && e.message) || e)); songPlayer = null; }
   /* SEED THE DECLARATION FROM THE PREFERENCE, on every attach.
    *
    * `prefs.voiceNotesEnabled` is the player's standing answer; `voice_notes` on
@@ -1180,7 +1387,11 @@ function attachMatch(match, transport) {
    * still refuses it mid-match, and the peer still has to be opted in too
    * before a single byte moves. */
   try {
-    if (prefs.get('mediaTransferEnabled') !== false && !match.setMediaTransfer(true)) {
+    /* OPT-IN, PATRONS ONLY (2026-09-23 supersedes "defaults on"): the seed is taken only
+     * when this seat may send AND the player switched sending on in options or the lobby. */
+    const sendOn = prefs.get('mediaTransferEnabled') === true
+      && !!(session.caps && session.caps.mediaTransfer === true);
+    if (sendOn && !match.setMediaTransfer(true)) {
       logger.warn('media-transfer seed REFUSED by the engine (phase ' + match.phase + ') — attacks will fall back to the receiver\'s local pool');
     }
   } catch (e) { logger.warn('setMediaTransfer threw: ' + ((e && e.message) || e)); }
@@ -1447,6 +1658,7 @@ function detachMatch() {
   unmountMercy();
   try { executor?.detach?.(); } catch (e) { logger.warn('executor.detach threw: ' + ((e && e.message) || e)); }
   try { matchLog?.detach?.(); } catch (_e) { /* ignore */ }
+  try { hitStamps?.detach?.(); } catch (_e) { /* ignore */ }
   // Cancels every transfer and clears the queue; the STORE is untouched, because a
   // committed artifact is hash-keyed and stays valid across matches and sessions.
   try { mediaQueue?.detach?.(); } catch (_e) { /* ignore */ }
@@ -1455,6 +1667,9 @@ function detachMatch() {
   // talking over the recap.
   try { voice?.dispose?.(); } catch (_e) { /* ignore */ }
   voice = null;
+  try { songPlayer?.dispose?.(); } catch (_e) { /* ignore */ }
+  songPlayer = null;
+  peerNicheLink.clear();
   try { wakeLock?.stop?.(); } catch (_e) { /* a screen convenience, never load-bearing */ }
   try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
   currentSd = null;
@@ -1582,6 +1797,7 @@ function mountHudNow() {
       // extra key is inert — and handing it over here means the mic lands as one
       // line in ui/hud.js rather than as a second wiring pass through this file.
       match: currentMatch, session, audio, prefs, media, matchLog, discord, voice, coach,
+      isPractice: () => !!soloPair,
     }) || null;
   } catch (e) { logger.error('mountHud threw: ' + ((e && e.stack) || e)); hudHandle = null; }
 }
@@ -1904,10 +2120,82 @@ async function teardownEverything() {
   purgeReceived('teardown');
 }
 
+/* ----------------------------------------------------------------------------
+ * OPEN TABLES (2026-09-23) - the lobby's own signaling client.
+ *
+ * The match's GoonSession builds and disposes a client per attempt; the list
+ * poll lives OUTSIDE any match (it runs on the home screen), so it gets one
+ * long-lived client of its own. Same identity, same transport, same auth. It
+ * never joins or hosts anything: /open and /list only.
+ * -------------------------------------------------------------------------- */
+let lobbyClient = null;
+function lobbyNet() {
+  const id = session.identity || {};
+  if (!lobbyClient) lobbyClient = new GoonSignalingClient({ logger });
+  lobbyClient.setIdentity({ unifiedId: id.unifiedId || '', appVersion: id.appVersion || '', displayName: id.displayName || '' });
+  return lobbyClient;
+}
+
+/** Where "See Prime" goes outside the app. Hosted, the desk opens its own Prime page. */
+const PRIME_URL = 'https://app.cclabs.app/subscribe';
+
+/** The SEATED stamp: one thud over everything, gone in a second. CSS owns motion and its off switch. */
+function stampSeated() {
+  if (!hasDom() || !document.body) return;
+  try {
+    const s = document.createElement('div');
+    s.className = 'gg-ot-stamp';
+    s.setAttribute('aria-hidden', 'true');
+    const span = document.createElement('span');
+    span.textContent = S.tables.seated;
+    s.appendChild(span);
+    document.body.appendChild(s);
+    setTimeout(() => { try { s.remove(); } catch (_e) { /* gone */ } }, 1200);
+    try { audio?.sfx?.('lamp-confirm'); } catch (_e) { /* stub bus */ }
+  } catch (_e) { /* a stamp is never load-bearing */ }
+}
+
 const actions = {
   goTitle() { router.show('title'); },
   goHost() { router.show('host'); },
   goJoin() { router.show('join'); },
+  /** Open tables: a code typed on the home screen goes straight into the join flow. */
+  goJoinCode(code) { router.show('join', { autoCode: String(code || '') }); },
+
+  /**
+   * OPEN TABLES: the rows this account may see. No account = no list (the server
+   * would 401 anyway); the home screen says "sign in" and keeps Practice live.
+   * @returns {Promise<{ok:true, data:object}|{ok:false, error:object}>}
+   */
+  async openTables() {
+    const id = session.identity || {};
+    if (id.anonymous || !id.unifiedId) return { ok: false, error: { kind: 'signin' } };
+    const net = lobbyNet();
+    const data = await net.open();
+    if (data) return { ok: true, data };
+    return { ok: false, error: net.lastErrorInfo || { kind: 'network' } };
+  },
+
+  /**
+   * OPEN TABLES: list / renew / unlist the room this page is hosting. Only the
+   * code, a visibility and four flags travel; never anything the host typed.
+   * @returns {Promise<{ok:boolean, data?:object, error?:object}>}
+   */
+  async listTable(code, opts) {
+    const net = lobbyNet();
+    let token = '';
+    try { token = (goonSession && goonSession.transport && goonSession.transport.token) || ''; } catch (_e) { token = ''; }
+    const data = await net.list(code, Object.assign({}, opts || {}, { token }));
+    if (data) return { ok: true, data };
+    return { ok: false, error: net.lastErrorInfo || { kind: 'network' } };
+  },
+
+  /** The Prime sheet's "See Prime". Hosted, the desk owns the page; out here, a new tab. */
+  seePrime() {
+    if (session.hosted) { try { bridge.send({ type: 'open-prime' }); } catch (_e) { /* ignore */ } return; }
+    try { if (typeof window !== 'undefined' && window.open) window.open(PRIME_URL, '_blank', 'noopener'); }
+    catch (_e) { /* a blocked popup is not an error */ }
+  },
   /** @param {{filter?:string}} [args] e.g. {filter:'needs'} from a "N need compressing" prompt. */
   goAssets(args) { router.show('assets', args || null); },
   /** ui/screens/voice.js — the pre-recorded note library. Title menu only:
@@ -1963,6 +2251,9 @@ const actions = {
       return { ok: false, error: err };
     }
 
+    // OPEN TABLES: the seat is yours. One thud, then the lobby takes over.
+    stampSeated();
+
     /* THE FIRST-RUN MEDIA STEP, decided HERE and nowhere else — one join, one
      * answer. A duel plays the player's OWN library at them, so a joiner with an
      * empty deck would watch every effect fire against a blank screen and read
@@ -1974,7 +2265,9 @@ const actions = {
      * made moments ago may still be sitting in the store un-fed. */
     syncLocalDeck(true);
     mediaPrepTold = false;
-    mediaPrepPending = needsMediaSetup(media);
+    // With online pictures on offer the question is "has this player picked a flavour";
+    // without, it is still "is the deck empty". Either answer is one tap or one file away.
+    mediaPrepPending = mediaFlavour.available() ? mediaFlavour.firstRun() : needsMediaSetup(media);
     if (mediaPrepPending) {
       logger.info('joined with an empty deck — media setup first');
       /* THE RACE THIS CLOSES. GoonSession.join() attaches the match and fires
@@ -1996,11 +2289,47 @@ const actions = {
    * screen itself decides nothing about where it goes next.
    */
   mediaPrepDone() {
-    if (!clearMediaPrep(true)) return;
+    if (!clearMediaPrep(true)) {
+      // The first-run card outside a match (openFirstScreen): no hold to clear, on to the title.
+      if (router && router.current === 'mediaSetup' && !currentMatch) router.show('title');
+      return;
+    }
     syncLocalDeck(true);
     logDeck('media-setup');
     if (currentMatch) onPhase(currentMatch.phase);
     else router.show('title');
+  },
+
+  /**
+   * The flavour card's "use my own files". HOSTED the player's own files are the desk's
+   * preset (the manifest), so this switches online pictures off and moves on. Without a
+   * host it opens the file picker, the old first-run step, now the secondary road.
+   */
+  mediaOwnFiles() {
+    if (session.hosted) {
+      const cur = mediaFlavour.get();
+      if (cur) mediaFlavour.commit(Object.assign(cur, { flavour: cur.flavour || 'mine', online: false }), true);
+      actions.mediaPrepDone();
+      return;
+    }
+    router.show('mediaSetup', { mediaFiles: true });
+  },
+  /** The picker's "back to flavours". */
+  mediaSetupFlavours() { router.show('mediaSetup', { mediaFiles: false }); },
+
+  /**
+   * Game Night rematch, the smallest honest version. The finished room is spent,
+   * so this folds it exactly like Back to menu and then opens the next one: the
+   * host mints a fresh room (the host screen shows the new link to send), the
+   * guest lands on the join screen to paste it, practice just goes again. No wire
+   * frame: the two sides agree on a rematch the same way they agreed on the first.
+   */
+  async rematch() {
+    const practice = !!soloPair;
+    const wasHost = !!(currentMatch && currentMatch.isHost);
+    await actions.leave('rematch');
+    if (practice) { await startSolo(); return; }
+    router.show(wasHost ? 'host' : 'join');
   },
 
   /** The host/join screen's Cancel: fold the pending room, stay on the page. */
@@ -2089,6 +2418,10 @@ function seedPracticeArsenal() {
     // a reward. It would also fire before the HUD has finished its entrance.
     if (arsenal.armDrop(seed.id, { count: 1, silent: true })) armed++;
   }
+  /* GAME NIGHT: practice also starts holding a game card, so a duel against the bot is one press
+   * away (owner, 2026-09-23: "make in practice the minigame happen so i test"). Kept off
+   * PRACTICE_SEED on purpose: that table is the flash + video pair the coach line names. */
+  try { if (arsenal.armDrop('gamecard', { silent: true })) logger.info('practice: seeded the game card'); } catch (_e) { /* a nicety */ }
   if (!armed) return;
   logger.info('practice: seeded ' + armed + ' arsenal slot(s)');
   /* ...AND SAY SO. The seed is silent by design (`silent: true` above — a gift,
@@ -2153,7 +2486,7 @@ async function startSolo() {
     if (!ok) logger.warn('practice: clock sync did not converge');
   } catch (e) {
     logger.error('practice: connect failed: ' + ((e && e.stack) || e));
-    toasts?.bad?.('practice could not start');
+    toasts?.bad?.(S.boot.practiceFailed);
     await teardownEverything();
     router.show('title');
   }
@@ -2173,13 +2506,18 @@ function buildApp() {
    * 'auto' needs the detector, which lives in exec/ (see the pref's banner). */
   applyPerfTier(prefs.get('perfMode'));
   prefs.subscribe((key, value) => { if (key === 'perfMode') applyPerfTier(value); });
+  /* The living backdrop on #gg-bg: tinted by the flavour, alive with the player's heat. */
+  try { mountBackground()?.setFlavour(session.media && session.media.flavour); } catch (_e) { /* scenery only */ }
   audio = createAudio({ prefs, logger });
   toasts = createToasts({ prefs });
+  hitStamps = createHitStamps({ audio, prefs, logger });
   /* AFTER the toasts, because that is its whole output tier, and BEFORE the
    * options drawer, which offers its switch. Nothing coaches until a HUD is
    * mounted — this only builds the ledger. */
   coach = createCoach({ prefs, toasts, logger });
   sheets = createSheets({ audio, logger });
+  /* OPEN TABLES: the Prime sheet's two ways out. Practice is free, always. */
+  sheets.setPrimeActions({ see: () => actions.seePrime(), practice: () => { void actions.goPractice(); } });
   matchLog = createMatchLog();
   // ONE store, built once, and the only thing on the page allowed to register a
   // cache-* handler (bridge.on throws on a duplicate and the assets screen
@@ -2299,6 +2637,17 @@ function buildApp() {
 
   options = createOptions({
     prefs, audio, session, logger,
+    pictures: mediaFlavour,
+    /* The patron-only send switch (off by default). A free seat never sees it. Changing
+     * it before the match starts also re-declares on the consent frame; mid-match it waits. */
+    sending: {
+      visible: () => !!(session.caps && session.caps.mediaTransfer === true),
+      get: () => prefs.get('mediaTransferEnabled') === true,
+      set: (v) => {
+        prefs.set('mediaTransferEnabled', !!v);
+        try { if (currentMatch && isPreLive(currentMatch.phase)) currentMatch.setMediaTransfer(!!v); } catch (_e) { /* the engine refuses mid-match; the pref still sticks */ }
+      },
+    },
     setFullscreen: (on) => bridge.send({ type: 'fullscreen-set', on: !!on }),
     isInMatch: () => !!currentMatch && currentMatch.phase !== GoonMatchPhase.Idle,
   });
@@ -2370,6 +2719,8 @@ function buildApp() {
 
   ctx = {
     session, prefs, audio, toasts, sheets, options, matchLog, actions, logger, assets,
+    /** ui/screens/mediaSetup.js + ui/options.js: the flavour pick and the online pictures. */
+    mediaFlavour,
     receivedStore, blocklist, mediaQueue, discord,
     /** ui/screens/voice.js: the pre-recorded note library (page-scoped). */
     notes: noteStore,
@@ -2383,6 +2734,9 @@ function buildApp() {
     getTransport: () => currentTransport,
     getClock: () => { try { return currentTransport ? currentTransport.clock : null; } catch (_e) { return null; } },
     getSd: () => currentSd,
+    /** Game Night: the rivalry record, and whether this match is practice (never booked). */
+    rivalry,
+    isPractice: () => !!soloPair,
   };
 
   router = createRouter({
@@ -2647,6 +3001,7 @@ if (typeof window !== 'undefined') {
       get match() { return currentMatch; },
       get transport() { return currentTransport; },
       get router() { return router; },
+      get hud() { return hudHandle; },
       get prefs() { return prefs; },
       get matchLog() { return matchLog; },
       get assets() { return assets; },

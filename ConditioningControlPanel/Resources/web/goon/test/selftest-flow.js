@@ -335,7 +335,7 @@ function fakeResult(o) {
     localScore: 210, remoteScore: 188, survivedMs: 9 * 60 * 1000,
   }, o);
 }
-function mountRecap(result) {
+function mountRecap(result, extra = {}) {
   const container = dom.makeNode('section');
   const leaves = [];
   const handle = recap.mount(container, {
@@ -344,7 +344,9 @@ function mountRecap(result) {
     prefs: { get: () => 3, set() {} },
     matchLog: { stats: () => ({ landedOnYou: 2, enduredByYou: 1 }), payloads: () => [], sawPhase: () => false },
     getMatch: () => fakeMatch(result),
-    actions: { leave: (why) => leaves.push(why) },
+    actions: Object.assign({ leave: (why) => leaves.push(why) }, extra.actions || {}),
+    rivalry: extra.rivalry || null,
+    isPractice: extra.isPractice || null,
   });
   const buttons = container.findTag('button');
   const back = buttons.find((b) => b.textContent === S.recap.back) || null;
@@ -392,9 +394,37 @@ function mountRecap(result) {
 {
   const m = mountRecap(fakeResult({}));
   const rematch = m.buttons.find((b) => b.textContent.indexOf(S.recap.rematch) === 0);
-  ok(!!rematch && rematch.disabled === true, 'Rematch ships visible and disabled');
+  ok(!!rematch && rematch.disabled === true, 'Rematch is disabled when the page offers no rematch road');
   ok(m.buttons.length >= 2, 'the action row has both buttons', String(m.buttons.length));
   m.handle.unmount();
+}
+
+// --- Game Night: with a rematch road Rematch is live, and it takes that road
+{
+  const calls = [];
+  const m = mountRecap(fakeResult({}), { actions: { rematch: () => { calls.push('rematch'); return Promise.resolve(); } } });
+  const rematch = m.buttons.find((b) => b.textContent.indexOf(S.recap.rematch) === 0);
+  ok(!!rematch && rematch.disabled !== true, 'Rematch is enabled when actions.rematch exists');
+  rematch.dispatchEvent({ type: 'click', preventDefault() {} });
+  ok(calls.length === 1 && m.leaves.length === 0, 'clicking Rematch takes the rematch road, not Back', JSON.stringify(calls));
+  m.handle.unmount();
+}
+
+// --- Game Night: the rivalry line books once and shows the record, never in practice
+{
+  const { createRivalry } = await import('../ui/rivalry.js');
+  const mem = new Map();
+  const store = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)) };
+  const rivalry = createRivalry({ store });
+  const m = mountRecap(fakeResult({ endReason: GoonEndReason.Mercy, localWon: true, winnerIsHost: true }), { rivalry });
+  const line = m.container.findAll('gg-rival-line')[0] || null;
+  ok(!!line && line.textContent === 'you 1 - 0 Kit', 'the recap shows the record including this match', line && line.textContent);
+  m.handle.unmount();
+  const p = mountRecap(fakeResult({ endReason: GoonEndReason.Mercy, localWon: true, winnerIsHost: true }), { rivalry, isPractice: () => true });
+  const pl = p.container.findAll('gg-rival-line')[0] || null;
+  ok(!pl || pl.textContent === '', 'practice shows and books no rivalry line');
+  ok(rivalry.recordFor('Kit').w === 1, 'practice did not book a second win', JSON.stringify(rivalry.recordFor('Kit')));
+  p.handle.unmount();
 }
 
 // --- mounting under a dirty stage cleans it up rather than rendering a picture
@@ -2053,7 +2083,10 @@ function mountRecap(result) {
   me.proposeConsent(60, 0, 30000);
   await wait(60);
   me.confirmConsent();
-  await wait(400);
+  // The bot thinks 700-1600 ms before it signs (soloDriver CONSENT_THINK_MS): a fixed 400 ms
+  // wait left the terms unsigned most runs, and this check plus the three payload checks
+  // under it failed together (the "4 practice checks" flake). Wait for the signature instead.
+  for (let i = 0; i < 30 && me.phase === GoonMatchPhase.Consent; i++) await wait(100);
   for (let i = 0; i < 40 && me.phase === GoonMatchPhase.Draft; i++) { me.confirmDraft(); await wait(120); }
   ok(me.phase === GoonMatchPhase.Countdown || me.phase === GoonMatchPhase.Live,
     'practice reaches the countdown with the bot signed', String(me.phase));

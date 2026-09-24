@@ -21,6 +21,7 @@ import { createLedger } from './router.js';
 import { GoonRng } from '../core/rng.js';
 import { GoonStimulusKind, fakeRoundInputs } from '../core/rounds/model.js';
 import { GoonSuddenDeathRunner } from '../core/suddenDeath.js';
+import { createBotDuel } from './duel/botDuel.js';
 // (`costOf` left this import on 2026-08-05 with the bot's affordability filter.)
 import { GoonMatchPhase, GoonPayloadKind, GoonConsts } from '../core/contracts.js';
 
@@ -380,10 +381,17 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
     }, wait);
   }
 
+  /* GAME NIGHT DUELS (owner, 2026-09-23: "make in practice the minigame happen so i test").
+   * The bot answers and throws game cards over the loopback like a person would; see
+   * ui/duel/botDuel.js. Built at start(), disposed with the ledger. */
+  let duels = null;
+
   return {
     start() {
       if (started) return;
       started = true;
+      duels = createBotDuel({ match, rand: () => rng.nextDouble(), log: (m) => log(m) });
+      ledger.add(() => { try { duels.dispose(); } catch (_e) { /* gone */ } });
       ledger.sub(match.onPhaseChanged(onPhase));
       ledger.sub(match.onConsentChanged(onConsent));
       // Re-entry is guarded inside doDraft(); this exists so a pool that grows
@@ -398,6 +406,8 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
       ledger.dispose();
     },
     get inputs() { return inputs; },
+    /** Test seam: the bot's duel side (null before start). */
+    get duels() { return duels; },
   };
 }
 

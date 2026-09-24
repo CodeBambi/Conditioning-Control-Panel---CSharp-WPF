@@ -21,6 +21,7 @@
  * ==========================================================================*/
 
 import { GoonStimulusKind } from '../../core/rounds/model.js';
+import { S } from '../strings.js';
 
 const DECOY_MS = 180;
 
@@ -36,7 +37,7 @@ export function createReaction(ctx) {
     node = el('div', 'gg-sd-react');
     if (!node) return null;
     node._glyph = add(node, el('div', 'gg-sd-react-glyph', ''));
-    node._word = add(node, el('div', 'gg-sd-react-word', 'wait'));
+    node._word = add(node, el('div', 'gg-sd-react-word', S.sd.wait));
     ctx.mountStage(node);
 
     const onDown = (e) => { if (!armed) return; if (e && e.preventDefault) e.preventDefault(); press(); };
@@ -69,7 +70,7 @@ export function createReaction(ctx) {
     cls(n, 'is-in', true);
     cls(n, 'is-real', false);
     cls(n, 'is-decoy', false);
-    text(n._word, 'wait');
+    text(n._word, S.sd.wait);
     text(n._glyph, '');
     if (n.setAttribute) n.setAttribute('data-gg-level', String(Math.max(1, (spec && spec.difficulty) | 0)));
   }
@@ -85,7 +86,7 @@ export function createReaction(ctx) {
       decoyTimer = setTimeout(() => {
         cls(n, 'is-decoy', false);
         text(n._glyph, '');
-        text(n._word, 'wait');
+        text(n._word, S.sd.wait);
       }, DECOY_MS);
       return;
     }
@@ -93,7 +94,7 @@ export function createReaction(ctx) {
     cls(n, 'is-decoy', false);
     cls(n, 'is-real', true);
     text(n._glyph, '◆');
-    text(n._word, 'now');
+    text(n._word, S.sd.now);
     sfx('gg-go');
 
     // Two frames: the first is the one that carries the fill, the second runs

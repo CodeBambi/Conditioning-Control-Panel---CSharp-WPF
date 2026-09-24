@@ -68,7 +68,16 @@ import {
   GoonConsts, PAYLOAD_ELEMENT, clampWindowCount, costOf, enumName, isClockMessage,
   makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMediaPrep, makeMercy,
   makePayloadReceipt, makeResult, makeTick, makePayload, makeVoice, peerSpeaksVoice, VOICE_SUBS,
+  makeDuel, peerSpeaksNight, DUEL_SUBS, makeSong, peerScoresPoints,
 } from './contracts.js';
+import { heldShareOf, readWireStats } from './points.js';
+
+function sumKinds(byKind) {
+  let n = 0;
+  for (const k of Object.keys(byKind || {})) n += byKind[k] | 0;
+  return n;
+}
+import { SONG_TITLE_MAX, clampSongSec, wireSongUrl } from './song.js';
 import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
 import { localMonotonicMs } from './clock.js';
 import { ticker } from './scheduler.js';
@@ -92,6 +101,13 @@ const MAX_PAYLOAD_DURATION_MS = 180000;
    — the per-second rate tops out near 3 (risk x attention), so even a 24-hour sitting lands around
    265k — because this is a sanity clamp on an untrusted number, not a balance rule. */
 const MAX_REPORTED_SCORE = 1000000;
+/** Guest: the least gap between two song frames it will act on. */
+const SONG_FRAME_MIN_GAP_MS = 900;
+
+function sameSong(a, b) {
+  if (!a || !b) return !a && !b;
+  return a.url === b.url && a.title === b.title && a.durSec === b.durSec;
+}
 
 /** Freshness of the opponent's state ticks. */
 export const GoonConnectionHealth = Object.freeze({ Fresh: 0, Wobbly: 1, Dead: 2 });
@@ -106,6 +122,9 @@ export class GoonOpponentState {
     this.attentionMode = GoonAttentionMode.NoCam;
 
     this.score = 0;
+    /* The points model split off their tick (`sc`, core/points.js readWireStats): {s,o,d,p,b,c}
+       or null (older peer, legacy match). Display only; their score above stays the number. */
+    this.stats = null;
     this.attentionPct = 100;
     this.charges = 0;
     this.toyActive = false;
@@ -256,6 +275,8 @@ export class GoonMatchService {
     this._helloSent = false;
     this._localConsentConfirmed = false;
     this._remoteConsentConfirmed = false;
+    this._consentExchanged = false;   // a consent frame has crossed the wire (see proposeConsent)
+    this._remoteConsentSeen = false;  // their first consent frame has landed (see _handleConsent)
     this._localDraftConfirmed = false;
     this._remoteDraftConfirmed = false;
     this._startProposed = false;
@@ -275,6 +296,14 @@ export class GoonMatchService {
     // caps.voice — a revision integer, not an entitlement — and is what stops us sending into a
     // build that will drop the frames without a word (the family has no receipts to notice with).
     this._peerSupportsVoice = false;
+    // Game night: their build speaks `t:'duel'` (caps.night >= 1). Never send a duel frame otherwise.
+    this._peerSupportsNight = false;
+    // The points model (core/points.js): their build scores with it (caps.score >= 1). Both seats
+    // must, or the match keeps the legacy survival score so the two numbers stay comparable.
+    this._peerScoresPoints = false;
+    this._outboundKinds = new Map();   // our payload id -> kind, until its closing receipt
+    this._inboundKinds = new Map();    // their payload id -> kind, until we finish it
+    this._peerDuelLen = 0;
     this._localVoiceNotes = false;
     this._remoteVoiceNotes = false;
 
@@ -284,6 +313,16 @@ export class GoonMatchService {
     // client — simply stays `false` and the lobby behaves exactly as it did.
     this._localMediaPrep = false;
     this._remoteMediaPrep = false;
+
+    // GAME NIGHT, THE SONG. `_peerSupportsNight` (set above) gates it like the duel: never send
+    // into a build that would drop the frame. `_localSong` is what THIS side picked (host only),
+    // `_remoteSong` what the host told us. Each is null or {url, title, durSec}. Neither is a
+    // consent term: the length the match runs is the sheet's, proposed through proposeConsent.
+    this._localSong = null;
+    this._lastSongFrameMs = -Infinity;
+    this._pendingSongFrame = null;
+    this._songFrameTimer = 0;
+    this._remoteSong = null;
 
     this._localSeedContribution = null;
     this._remoteSeedContribution = null;
@@ -350,14 +389,17 @@ export class GoonMatchService {
       payloadAccepted: makeEvent(),
       payloadRejected: makeEvent(),
       payloadReceiptReceived: makeEvent(),
+      pointsAwarded: makeEvent(),
       consentChanged: makeEvent(),
       draftChanged: makeEvent(),
       opponentStateChanged: makeEvent(),
       connectionHealthChanged: makeEvent(),
       emoteReceived: makeEvent(),
       voiceFrameReceived: makeEvent(),
+      duelFrameReceived: makeEvent(),
       linkChanged: makeEvent(),
       mediaPrepChanged: makeEvent(),
+      songChanged: makeEvent(),
       interactionCheckDue: makeEvent(),
       lobbyFailed: makeEvent(),
       matchEnded: makeEvent(),
@@ -410,6 +452,10 @@ export class GoonMatchService {
   get remoteVoiceNotes() { return this._remoteVoiceNotes; }
   /** Their BUILD advertised `caps.voice >= 1` in the hello. Nothing to do with consent. */
   get peerSupportsVoice() { return this._peerSupportsVoice; }
+  /** Their BUILD advertised `caps.night >= 1`: game night duel frames may be sent. */
+  get peerSupportsNight() { return this._peerSupportsNight; }
+  /** Guest: the duel length the host announced (`t:'duel' sub:'cfg'`), or 0 before it arrives. */
+  get peerDuelLen() { return this._peerDuelLen | 0; }
   /**
    * All three, ANDed — the MATCH's half of "is voice live right now". The other half is the
    * PHASE (Countdown/Live/SuddenDeath) and it is applied at the send/receive door rather than
@@ -460,6 +506,10 @@ export class GoonMatchService {
   get localMediaPrep() { return this._localMediaPrep; }
   /** Are THEY? Absent frame -> false, so an older peer reads as "ready". */
   get remoteMediaPrep() { return this._remoteMediaPrep; }
+  get localSong() { return this._localSong; }
+  get remoteSong() { return this._remoteSong; }
+  /** The song this match plays: the host's pick, on both sides. null = today's default. */
+  get song() { return this._isHost ? this._localSong : this._remoteSong; }
 
   /** What WE allow (canonical, always-on element excluded). */
   get localAllowedElements() { return this._localAllowed; }
@@ -548,6 +598,60 @@ export class GoonMatchService {
   onPayloadAccepted(fn) { return this._ev.payloadAccepted.on(fn); }
   onPayloadRejected(fn) { return this._ev.payloadRejected.on(fn); }
   onPayloadReceiptReceived(fn) { return this._ev.payloadReceiptReceived.on(fn); }
+  /** Points model: every award as it lands, {type:'hit'|'held'|'pop'|'duel', points, kind?, combo?}. */
+  onPointsAwarded(fn) { return this._ev.pointsAwarded.on(fn); }
+
+  /** true when BOTH seats score with the points model this match. */
+  get pointsModel() { return this._scoring.pointsModel; }
+
+  /**
+   * Per-player stats for the recap card. `me` is the full ledger; `them` is what we can know:
+   * their split off their last tick, and the throws that crossed between us seen from our side.
+   */
+  matchStats() {
+    const me = this._scoring.points.stats(this._scoring.score);
+    const o = this._opponent.stats;
+    const them = {
+      score: this._opponent.score | 0,
+      sent: { landed: me.received ? sumKinds(me.received.byKind) : 0, held: me.received.held, byKind: Object.assign({}, me.received.byKind) },
+      received: { held: me.sent.held, byKind: Object.assign({}, me.sent.byKind) },
+      pops: o ? o.p : 0,
+      bestCombo: o ? o.b : 0,
+      duels: { won: me.duels.lost, lost: me.duels.won, points: o ? o.d : 0 },
+      split: o ? { sent: o.s, own: o.o, duel: o.d } : null,
+    };
+    return { pointsModel: this.pointsModel, me, them };
+  }
+
+  /**
+   * A bubble or flash we popped (ui/scoreHud.js hears the page events). Live only. Returns the
+   * award ({points, combo}; points 0 past the pop limiter) or null outside the points model.
+   */
+  noteLockBounty(points) {
+    if (this._ended || this._phase !== GoonMatchPhase.Live) return null;
+    const award = this._scoring.awardLockBounty(points);
+    if (award) this._emitPoints(award);
+    return award;
+  }
+
+  notePop(nowMs = localMonotonicMs()) {
+    if (this._ended || this._phase !== GoonMatchPhase.Live) return null;
+    const a = this._scoring.awardPop(nowMs);
+    if (a) this._emitPoints(a);
+    return a;
+  }
+
+  /** A finished duel, 'win' | 'lose' | 'tie'. null outside the points model (legacy bonus applies). */
+  noteDuel(outcome) {
+    if (this._ended) return null;
+    const a = this._scoring.awardDuel(outcome);
+    if (a) this._emitPoints(a);
+    return a;
+  }
+
+  _emitPoints(a) {
+    this._ev.pointsAwarded.emit(a, (e) => this._warn(`pointsAwarded handler threw: ${e && e.message}`));
+  }
   onConsentChanged(fn) { return this._ev.consentChanged.on(fn); }
   onDraftChanged(fn) { return this._ev.draftChanged.on(fn); }
   onOpponentStateChanged(fn) { return this._ev.opponentStateChanged.on(fn); }
@@ -563,6 +667,8 @@ export class GoonMatchService {
    * ran. What core owes the service is a frame that is the right shape, from the right phase.
    */
   onVoiceFrame(fn) { return this._ev.voiceFrameReceived.on(fn); }
+  /** Every inbound `t:'duel'` frame, Live/SuddenDeath only, shape-clamped by wire.js. */
+  onDuelFrame(fn) { return this._ev.duelFrameReceived.on(fn); }
   /**
    * fn(isP2P) on the EDGE of `linkIsP2P` — the transport settling on a direct channel, or
    * losing one. It exists for ui/voice/voiceService.js, whose availability bit (and therefore
@@ -574,6 +680,8 @@ export class GoonMatchService {
   onLinkChanged(fn) { return this._ev.linkChanged.on(fn); }
   /** fn(preparing) whenever the OPPONENT's `media_prep` declaration changes. */
   onMediaPrepChanged(fn) { return this._ev.mediaPrepChanged.on(fn); }
+  /** fn(song|null) whenever the song in effect for this match changes (either side). */
+  onSongChanged(fn) { return this._ev.songChanged.on(fn); }
   /** No-cam only: prompt an interaction check, then call reportInteractionCheck(). */
   onInteractionCheckDue(fn) { return this._ev.interactionCheckDue.on(fn); }
   onLobbyFailed(fn) { return this._ev.lobbyFailed.on(fn); }
@@ -640,6 +748,22 @@ export class GoonMatchService {
   /** Publishes a new sheet. ANY change clears BOTH confirmations. */
   proposeConsent(liveDurationSec, toyCap, payloadMinGapMs) {
     if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return;
+
+    /* NO CHANGE OF TERMS, NO CLEAR (2026-09-23, owner: practice never started). Once a sheet
+     * has crossed the wire, re-proposing the SAME terms (the lobby's remembered-length seed, a
+     * song whose length equals the sheet, a slider let go where it was) used to clear BOTH lamps
+     * here while the peer read the frame as a plain "not confirmed" and kept its OWN lamp lit.
+     * The practice bot then never re-signed (it only signs when its lamp is off) and the match
+     * sat on "Settings changed" forever. Same terms = nothing to sign again. The opening proposal
+     * still goes out: nothing has crossed the wire yet. */
+    const want = {
+      live_duration_sec: clamp(liveDurationSec, 60, 3600),
+      toy_cap: clamp(toyCap, 0.0, 1.0),
+      payload_min_gap_ms: Math.max(GoonConsts.PayloadMinGapMs, payloadMinGapMs),
+    };
+    if (this._consentExchanged && this._phase === GoonMatchPhase.Consent && sameSheet(want, this._consentSheet)) return;
+    // A proposal made in the Lobby has nobody to reach yet: only one made in Consent has crossed.
+    if (this._phase === GoonMatchPhase.Consent) this._consentExchanged = true;
 
     this._consentSheet = makeConsent({
       live_duration_sec: clamp(liveDurationSec, 60, 3600),
@@ -973,6 +1097,21 @@ export class GoonMatchService {
   }
 
   /**
+   * GAME NIGHT: one `t:'duel'` frame. The door checks the cap (an old peer would drop it without a
+   * word), the phase (Live/SuddenDeath only) and the sub. Fire and forget.
+   * @returns {boolean} true when the frame reached the transport
+   */
+  sendDuel(fields = {}) {
+    if (this._disposed || this._ended) return false;
+    if (!this._peerSupportsNight) return false;
+    if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) return false;
+    const msg = makeDuel(fields);
+    if (msg.sub === '') return false;
+    this._send(msg);
+    return true;
+  }
+
+  /**
    * Declare whether we are still assembling a library (`media_prep`, §6).
    *
    * Pre-live only, and NOT a term: it clears no confirmation, blocks no phase
@@ -1059,6 +1198,7 @@ export class GoonMatchService {
       this._localHeavyPayloadId = id;
     }
     this._outboundCosts.set(id, cost);
+    this._outboundKinds.set(id, request.kind);
     this._send(msg);
     this._info(`payload out ${id} ${request.kind}`);
     return { ok: true, error: '', id };
@@ -1103,13 +1243,26 @@ export class GoonMatchService {
    * that is now bookkeeping: since 2026-08-05 nothing anywhere spends a charge, so riding out a
    * payload buys the receiver no ammunition. The RECEIPT is the whole of what it earns.
    */
-  notifyInboundPayloadFinished(payloadId, endured) {
+  notifyInboundPayloadFinished(payloadId, endured, held) {
     if (!payloadId) return;
+    const status = endured ? GoonReceiptStatus.Survived : GoonReceiptStatus.Completed;
+    // `held` (0..1, from the executor's own clock) is how much of it we sat through. Endured is all.
+    const share = endured ? 1 : heldShareOf(status, held);
     this._send(makePayloadReceipt({
       id: payloadId,
-      status: endured ? GoonReceiptStatus.Survived : GoonReceiptStatus.Completed,
+      status,
+      // Only a peer that scores with it hears it; null is stripped for everybody else.
+      held: this._peerScoresPoints ? Math.round(share * 100) / 100 : null,
     }));
     if (endured) this._scoring.awardPayloadEndured();
+    // Points model: our half of the same throw, once per payload, Live/SuddenDeath only.
+    if (this._inboundKinds.has(payloadId)) {
+      const kind = this._inboundKinds.get(payloadId);
+      this._inboundKinds.delete(payloadId);
+      const live = this._phase === GoonMatchPhase.Live || this._phase === GoonMatchPhase.SuddenDeath;
+      const a = live && kind !== GoonPayloadKind.LockCard ? this._scoring.awardHeld(kind, share) : null;
+      if (a) this._emitPoints(a);
+    }
   }
 
   // ------------------------------------------------------------- mercy
@@ -1178,7 +1331,9 @@ export class GoonMatchService {
         case 'mercy': this._handleRemoteMercy(message); break;
         case 'emote': this._handleEmote(message); break;
         case 'voice': this._handleVoice(message); break;
+        case 'song': this._handleSong(message); break;
         case 'media_prep': this._handleMediaPrep(message); break;
+        case 'duel': this._handleDuel(message); break;
         case 'result': this._handleRemoteResult(message); break;
         case 'round':
         case 'round_result':
@@ -1245,6 +1400,10 @@ export class GoonMatchService {
     // see the helper in core/contracts.js. False for every peer that predates the family, which
     // is what keeps a fire-and-forget send from disappearing into a build that cannot hear it.
     this._peerSupportsVoice = peerSpeaksVoice(caps);
+    // Game Night, on the same terms. A host that picked before the guest arrived tells them now.
+    this._peerSupportsNight = peerSpeaksNight(caps);
+    this._peerScoresPoints = peerScoresPoints(caps);
+    if (this._isHost && this._localSong) this._sendSong();
 
     if (caps && caps.min_v > GoonConsts.ProtocolVersion) {
       this._failLobby(`opponent requires protocol v${caps.min_v}, this client speaks v${GoonConsts.ProtocolVersion} - update required`);
@@ -1291,10 +1450,18 @@ export class GoonMatchService {
     if (this._phase === GoonMatchPhase.Lobby) this._setPhase(GoonMatchPhase.Consent);
     if (this._phase !== GoonMatchPhase.Consent) return;
 
+    this._consentExchanged = true;
     // Their declaration rides EVERY consent frame, counter-proposal or not, so it is read on both
     // branches before anything else is decided. It is theirs alone: it never touches our own flag.
+    const declMoved = this._remoteConsentSeen && (this._remoteMediaTransfer !== !!sheet.media_transfer
+      || this._remoteVoiceNotes !== !!sheet.voice_notes);
+    this._remoteConsentSeen = true;
     this._remoteMediaTransfer = !!sheet.media_transfer;
     this._remoteVoiceNotes = !!sheet.voice_notes;
+    /* They flipped a declaration (media or voice), which cleared BOTH lamps on their side. Our
+     * signature was on the old declaration, so it goes here too, or the two sides disagree about
+     * our lamp and neither ever re-signs (the practice bot waits for its lamp to go dark). */
+    if (declMoved && this._localConsentConfirmed) this._localConsentConfirmed = false;
 
     if (!sameSheet(sheet, this._consentSheet)) {
       // A counter-proposal: adopt it and clear BOTH confirms so nobody can be advanced onto
@@ -1303,6 +1470,7 @@ export class GoonMatchService {
       this._consentSheet = cloneSheet(sheet, false, this._localMediaTransfer, this._localVoiceNotes);
       this._localConsentConfirmed = false;
       this._remoteConsentConfirmed = !!sheet.confirmed;
+      this._dropSongIfLengthMoved();
       this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
       return;
     }
@@ -1420,7 +1588,10 @@ export class GoonMatchService {
 
     this._scoring.reset();
     this._scoring.configure(this.localAttentionMode, matchRiskTier(pool));
-    this._ramp = buildRamp(pool, this._matchSeed, this._consentSheet.live_duration_sec, this._rngFactory);
+    this._scoring.setPointsModel(this._peerScoresPoints && peerScoresPoints(this._localCaps));
+    this._outboundKinds.clear();
+    this._inboundKinds.clear();
+    this._ramp =buildRamp(pool, this._matchSeed, this._consentSheet.live_duration_sec, this._rngFactory);
     this._rampIndex = 0;
     this._liveDurationMs = this._consentSheet.live_duration_sec * 1000;
     this._activeElements.clear();
@@ -1520,6 +1691,8 @@ export class GoonMatchService {
       // APPEND-ONLY optional field. A peer that predates it drops it on the floor; the C#
       // reference client sends 0 because it has no floating windows to report.
       vwin: this._localWindowCount,
+      // Points model split for their HUD and recap; null (stripped) in a legacy match.
+      sc: this._scoring.pointsModel ? this._scoring.points.wire(localMonotonicMs()) : null,
     }));
   }
 
@@ -1543,6 +1716,7 @@ export class GoonMatchService {
 
   _handleTick(tick) {
     this._opponent.score = tick.score;
+    this._opponent.stats = readWireStats(tick.sc);
     this._opponent.attentionPct = clamp(tick.attention_pct, 0, 100);
     this._opponent.attentionMode = tick.attention_mode;
     this._opponent.activeEffects = tick.active_effects || [];
@@ -1647,6 +1821,7 @@ export class GoonMatchService {
     if (payload.fire_at_match_ms < earliestMatchMs) payload.fire_at_match_ms = earliestMatchMs;
 
     this._send(makePayloadReceipt({ id: payload.id, status: GoonReceiptStatus.Accepted }));
+    this._inboundKinds.set(payload.id, payload.kind);
 
     let fireAtLocalMs;
     try { fireAtLocalMs = this._clock().matchMsToLocal(payload.fire_at_match_ms); }
@@ -1696,6 +1871,18 @@ export class GoonMatchService {
     } else if (receipt.id && (status === GoonReceiptStatus.Completed || status === GoonReceiptStatus.Survived)) {
       this._outboundCosts.delete(receipt.id);
     }
+    // Points model: a closing receipt for one of OUR throws scores once; a rejection never does.
+    if (receipt.id && this._outboundKinds.has(receipt.id)) {
+      if (status.toLowerCase().startsWith('rejected')) {
+        this._outboundKinds.delete(receipt.id);
+      } else if (status === GoonReceiptStatus.Completed || status === GoonReceiptStatus.Survived) {
+        const kind = this._outboundKinds.get(receipt.id);
+        this._outboundKinds.delete(receipt.id);
+        const live = this._phase === GoonMatchPhase.Live || this._phase === GoonMatchPhase.SuddenDeath;
+        const a = live ? this._scoring.awardLanded(kind, heldShareOf(status, receipt.held)) : null;
+        if (a) this._emitPoints(a);
+      }
+    }
 
     this._ev.payloadReceiptReceived.emit(receipt, (e) => this._warn(`payloadReceiptReceived handler threw: ${e && e.message}`));
   }
@@ -1733,6 +1920,20 @@ export class GoonMatchService {
     this._ev.voiceFrameReceived.emit(frame, (e) => this._warn(`voiceFrame handler threw: ${e && e.message}`));
   }
 
+  /** Their `t:'duel'` frame. Live/SuddenDeath only; ui/duel/duelController.js owns the rest. */
+  _handleDuel(frame) {
+    if (!frame.sub || !DUEL_SUBS.includes(frame.sub)) return;
+    // The host's duel length is kept here so a UI that mounts after the frame still sees it. It
+    // is also accepted in Countdown: the host sends it as its Live starts, and a guest whose
+    // clock is a hair behind must not drop it.
+    if (frame.sub === 'cfg') {
+      const p = this._phase;
+      if (p !== GoonMatchPhase.Countdown && p !== GoonMatchPhase.Live && p !== GoonMatchPhase.SuddenDeath) return;
+      if (!this._isHost) this._peerDuelLen = frame.len_s;
+    } else if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) return;
+    this._ev.duelFrameReceived.emit(frame, (e) => this._warn(`duelFrame handler threw: ${e && e.message}`));
+  }
+
   /**
    * Their `media_prep`. `=== true`, not truthy: the wire is untrusted, absent is
    * the common case (every client that predates this), and anything that is not
@@ -1744,6 +1945,102 @@ export class GoonMatchService {
     this._remoteMediaPrep = next;
     this._info(`opponent media_prep -> ${next ? 'picking' : 'ready'}`);
     this._ev.mediaPrepChanged.emit(next, (e) => this._warn(`mediaPrepChanged handler threw: ${e && e.message}`));
+  }
+
+  // ------------------------------------------------------ game night: the song
+
+  /**
+   * The host picks (or clears) the match's song. `song` = {url, title, durSec} or null.
+   *
+   * HOST ONLY and PRE-LIVE ONLY (Lobby/Consent). The length goes through proposeConsent, so it
+   * clears both lamps like any other change of terms and both players sign the length they saw.
+   * A null song (skip) re-proposes the usual length: `fallbackSec` (the player's remembered
+   * length) or LiveDurationSecDefault, so a skipped song never leaves its length behind.
+   *
+   * @returns {boolean} true when the pick was taken
+   */
+  setSong(song, { fallbackSec = null } = {}) {
+    if (!this._isHost) return false;
+    if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return false;
+    let next = null;
+    if (song) {
+      const url = String(song.url || '');
+      const durSec = clampSongSec(song.durSec);
+      if (!url || !durSec) return false;
+      next = { url, title: sanitizeText(song.title, SONG_TITLE_MAX), durSec };
+    }
+    this._localSong = next;
+    const s = this._consentSheet;
+    if (next) {
+      this.proposeConsent(next.durSec, s.toy_cap, s.payload_min_gap_ms);
+    } else {
+      const want = Math.trunc(Number(fallbackSec));
+      const dur = Number.isFinite(want) && want >= 60 && want <= 3600 ? want : GoonConsts.LiveDurationSecDefault;
+      if (s.live_duration_sec !== dur) this.proposeConsent(dur, s.toy_cap, s.payload_min_gap_ms);
+    }
+    this._sendSong();
+    this._ev.songChanged.emit(next, (e) => this._warn(`songChanged handler threw: ${e && e.message}`));
+    return true;
+  }
+
+  /**
+   * A counter-proposal moved the length away from the song (an older or C# guest that never
+   * heard of songs, say). The song no longer IS the match timer, so it goes: host clears it on
+   * both sides, guest forgets the host's. The sheet's length stands either way.
+   */
+  _dropSongIfLengthMoved() {
+    const song = this.song;
+    if (!song || this._consentSheet.live_duration_sec === song.durSec) return;
+    this._info(`length moved off the song (${this._consentSheet.live_duration_sec}s vs ${song.durSec}s): dropping it`);
+    if (this._isHost) { this._localSong = null; this._sendSong(); } else this._remoteSong = null;
+    this._ev.songChanged.emit(null, (e) => this._warn(`songChanged handler threw: ${e && e.message}`));
+  }
+
+  /** One `song` frame, and only to a peer that said caps.night >= 1. */
+  _sendSong() {
+    if (!this._peerSupportsNight) return;
+    const s = this._localSong;
+    this._send(s
+      ? makeSong({ sub: 'set', url: s.url, title: s.title, dur_sec: s.durSec })
+      : makeSong({ sub: 'clear' }));
+  }
+
+  /**
+   * Their song frame. The GUEST reads it, pre-live only, and the url must pass wireSongUrl
+   * (https, cdn.bambicloud.com, nothing else) or the frame is ignored. A song is a label and a
+   * soundtrack, never a term: the consent sheet still carries the length.
+   */
+  _handleSong(frame) {
+    if (this._isHost) return;
+    if (!this._isPreLive(this._phase)) return;
+    // About one song frame a second. Inside the gap only the LATEST frame is kept and applied
+    // when the gap ends (a clear-then-pick must still land the pick); a flood costs one timer.
+    const nowMs = localMonotonicMs();
+    const wait = SONG_FRAME_MIN_GAP_MS - (nowMs - this._lastSongFrameMs);
+    if (wait > 0) {
+      this._pendingSongFrame = frame;
+      if (!this._songFrameTimer) {
+        this._songFrameTimer = setTimeout(() => {
+          this._songFrameTimer = 0;
+          const f = this._pendingSongFrame;
+          this._pendingSongFrame = null;
+          if (f && !this._disposed) this._handleSong(f);
+        }, wait);
+      }
+      return;
+    }
+    let next;
+    if (frame.sub === 'clear') next = null;
+    else if (frame.sub === 'set') {
+      const url = wireSongUrl(frame.url);
+      if (!url) return;
+      next = { url, title: sanitizeText(frame.title, SONG_TITLE_MAX), durSec: clampSongSec(frame.dur_sec) };
+    } else return;
+    this._lastSongFrameMs = nowMs;
+    if (sameSong(next, this._remoteSong)) return;
+    this._remoteSong = next;
+    this._info(`opponent song -> ${next ? next.durSec + 's' : 'none'}`);
+    this._ev.songChanged.emit(next, (e) => this._warn(`songChanged handler threw: ${e && e.message}`));
   }
 
   _handleRemoteMercy(mercy) {
@@ -2143,6 +2440,7 @@ export class GoonMatchService {
   dispose() {
     if (this._disposed) return;
     this._disposed = true;
+    if (this._songFrameTimer) { try { clearTimeout(this._songFrameTimer); } catch (_e) { /* gone */ } this._songFrameTimer = 0; }
 
     for (const off of this._transportUnsubs) { try { off(); } catch { /* already gone */ } }
     this._transportUnsubs = [];

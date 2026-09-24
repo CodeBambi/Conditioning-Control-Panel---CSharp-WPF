@@ -20,6 +20,24 @@
  * ==========================================================================*/
 
 import { GoonEndReason } from '../core/contracts.js';
+import { deck, tpl } from '../core/i18n.js';
+
+/**
+ * The mercy copy. It stays in this file on purpose (see ui/strings.js): the
+ * wording is part of the safety contract. English here, the other languages
+ * are the gg_mercy_* keys in i18n/<code>.js.
+ */
+export const MERCY_COPY_RAW = Object.freeze({
+  button: 'MERCY',
+  fine: 'esc · ends the match',
+  aria: 'mercy - ends the match',
+  tappedTitle: 'you tapped out.',
+  tappedLine: "that's the whole point of the button.",
+  recapHint: 'tap to see the recap',
+  theyTapped: tpl({ named: '{name} tapped out.', anon: 'they tapped out.' }, (name) => ({ name }), (name) => (name ? 'named' : 'anon')),
+  youHeld: 'you held.',
+});
+export const MERCY_COPY = deck('gg_mercy', MERCY_COPY_RAW);
 
 const ARM_MS = 700;
 
@@ -96,13 +114,13 @@ export function mountMercy({ getMatch = null, audio = null, onLog = null } = {})
 
   host.hidden = false;
   const wrap = add(host, el('div', 'gg-mercy-wrap'));
-  const btn = add(wrap, el('button', 'gg-mercy-btn is-arming', 'MERCY'));
-  const fine = add(wrap, el('div', 'gg-mercy-fine', 'esc · ends the match'));
+  const btn = add(wrap, el('button', 'gg-mercy-btn is-arming', MERCY_COPY.button));
+  const fine = add(wrap, el('div', 'gg-mercy-fine', MERCY_COPY.fine));
   const ring = add(btn, el('i', 'gg-mercy-arm'));
   if (btn) {
     btn.type = 'button';
     btn.tabIndex = -1;
-    btn.setAttribute && btn.setAttribute('aria-label', 'mercy — ends the match');
+    btn.setAttribute && btn.setAttribute('aria-label', MERCY_COPY.aria);
   }
 
   let armed = false;
@@ -138,7 +156,7 @@ export function mountMercy({ getMatch = null, audio = null, onLog = null } = {})
     const m = typeof getMatch === 'function' ? safeMatch() : null;
     try { if (m && typeof m.declareMercy === 'function') m.declareMercy(); }
     catch (_e) { /* the concede is a local truth even if the wire is dead */ }
-    showTakeover('you tapped out.', "that's the whole point of the button.");
+    showTakeover(MERCY_COPY.tappedTitle, MERCY_COPY.tappedLine);
   }
 
   function safeMatch() {
@@ -162,7 +180,7 @@ export function mountMercy({ getMatch = null, audio = null, onLog = null } = {})
     add(node, el('p', 'gg-mercy-takeover-line', line));
     // The way out is on the node itself, so it works even after the recap has
     // replaced everything else on the page.
-    add(node, el('p', 'gg-mercy-takeover-hint', 'tap to see the recap'));
+    add(node, el('p', 'gg-mercy-takeover-hint', MERCY_COPY.recapHint));
     add((d && d.body) || host, node);
     if (wrap) wrap.hidden = true;
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => cls(node, 'is-in', true));
@@ -184,8 +202,8 @@ export function mountMercy({ getMatch = null, audio = null, onLog = null } = {})
   function showSting(name) {
     const node = el('div', 'gg-mercy-sting');
     if (!node) return;
-    add(node, el('span', 'gg-mercy-sting-them', (name || 'they') + ' tapped out.'));
-    add(node, el('span', 'gg-mercy-sting-you', 'you held.'));
+    add(node, el('span', 'gg-mercy-sting-them', MERCY_COPY.theyTapped(name)));
+    add(node, el('span', 'gg-mercy-sting-you', MERCY_COPY.youHeld));
     add((d && d.body) || host, node);   // same containing-block reason as the takeover
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => cls(node, 'is-in', true));
     else cls(node, 'is-in', true);

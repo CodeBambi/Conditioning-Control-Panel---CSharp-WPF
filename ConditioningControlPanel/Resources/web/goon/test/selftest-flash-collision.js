@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { sweptHit, registerBubble, sweepBubbles } from '../exec/flashCollision.js';
+const box = (left, top, width = 20, height = 20) => ({ left, top, width, height });
+assert.equal(sweptHit(box(0, 0), box(200, 0), box(100, 0)), true, 'fast fling crosses bubble');
+assert.equal(sweptHit(box(0, 0), box(200, 0), box(100, 90)), false, 'parallel miss');
+assert.equal(sweptHit(box(0, 0), box(200, 200), box(0, 150)), false, 'diagonal bounding box is not a hit');
+let pops = 0;
+const bubble = { isConnected: true, getBoundingClientRect: () => box(100, 0) };
+const flash = { isConnected: true, getBoundingClientRect: () => box(200, 0) };
+registerBubble(bubble, () => pops++);
+assert.equal(sweepBubbles(flash, box(0, 0)).hits, 1);
+sweepBubbles(flash, box(0, 0));
+assert.equal(pops, 1, 'a bubble pays once across repeat frames');
+registerBubble(bubble, () => pops++)();
+sweepBubbles(flash, box(0, 0));
+assert.equal(pops, 1, 'retired bubble cannot pay');
+console.log('flash collision: 6 checks passed');

@@ -50,11 +50,16 @@ import { mountEmotes } from './emotes.js';
 import { mountAnnouncer } from './announcer.js';
 import { mountMicHud } from './voice/micHud.js';
 import { createDropRoller } from './drops.js';
+import { createDuelController } from './duel/duelController.js';
+import { createDuelView } from './duel/duelView.js';
 import { COACH } from './coach.js';
 import { avatarNode, emitAva } from './avatar.js';
 import { setPreviewMedia } from './throwPreview.js';
 import { resolveArsenalOpen, ARSENAL_OPEN_ON, ARSENAL_OPEN_OFF } from './prefs.js';
 import { S } from './strings.js';
+import { mountScoreHud } from './scoreHud.js';
+import { ease, countUpMs } from './juice.js';
+import { popIn as jPopIn, burst as jBurst, centreOf as jCentre, play as jPlay, isCalm as jCalm } from './juiceDom.js';
 
 /** exec/bubbles.js's economy seam. Kept as a literal so ui/ never imports exec/. */
 export const BUBBLE_POP_EVENT = 'gg-bubble-pop';
@@ -115,7 +120,7 @@ const ARSENAL_KEY_COUNT = PAYLOAD_SLOTS.length;
  * others, which is exactly why the index is taken off the unfiltered list.
  */
 const SLOT_KEYS = Object.freeze(PAYLOAD_SLOTS.reduce((map, item, i) => {
-  map[item.id] = { key: i + 1, label: item.label };
+  map[item.id] = { key: i + 1, get label() { return item.label; } };
   return map;
 }, Object.create(null)));
 
@@ -150,27 +155,27 @@ function isNarrowViewport() {
 
 /** Own-draft element cues -> the chip that shows them on the bottom-left rail. */
 const ELEMENT_META = Object.freeze({
-  [GoonElement.Flashes]: { glyph: '✦', label: 'flashes' },
-  [GoonElement.Videos]: { glyph: '▶', label: 'video' },
-  [GoonElement.Subliminals]: { glyph: '≋', label: 'subliminals' },
-  [GoonElement.Bubbles]: { glyph: '○', label: 'bubbles' },
-  [GoonElement.LockCards]: { glyph: '▢', label: 'lock card' },
-  [GoonElement.ToyPatterns]: { glyph: '∿', label: 'toy' },
-  [GoonElement.BrainDrain]: { glyph: '◍', label: 'brain drain' },
-  [GoonElement.BouncingText]: { glyph: '⇄', label: 'bouncing text' },
-  [GoonElement.Spiral]: { glyph: '◎', label: 'spiral' },
+  [GoonElement.Flashes]: { glyph: '✦', get label() { return S.fx[GoonElement.Flashes]; } },
+  [GoonElement.Videos]: { glyph: '▶', get label() { return S.fx[GoonElement.Videos]; } },
+  [GoonElement.Subliminals]: { glyph: '≋', get label() { return S.fx[GoonElement.Subliminals]; } },
+  [GoonElement.Bubbles]: { glyph: '○', get label() { return S.fx[GoonElement.Bubbles]; } },
+  [GoonElement.LockCards]: { glyph: '▢', get label() { return S.fx[GoonElement.LockCards]; } },
+  [GoonElement.ToyPatterns]: { glyph: '∿', get label() { return S.fx[GoonElement.ToyPatterns]; } },
+  [GoonElement.BrainDrain]: { glyph: '◍', get label() { return S.fx[GoonElement.BrainDrain]; } },
+  [GoonElement.BouncingText]: { glyph: '⇄', get label() { return S.fx[GoonElement.BouncingText]; } },
+  [GoonElement.Spiral]: { glyph: '◎', get label() { return S.fx[GoonElement.Spiral]; } },
 });
 
 /** Admitted inbound payloads -> the same chip, violet-edged: THEY did this. */
 const PAYLOAD_META = Object.freeze({
-  [GoonPayloadKind.FlashBurst]: { glyph: '✦', label: 'flash burst' },
-  [GoonPayloadKind.SubliminalStorm]: { glyph: '≋', label: 'subliminal storm' },
-  [GoonPayloadKind.BubbleSwarm]: { glyph: '○', label: 'bubble swarm' },
-  [GoonPayloadKind.Video]: { glyph: '▶', label: 'video' },
-  [GoonPayloadKind.LockCard]: { glyph: '▢', label: 'lock card' },
-  [GoonPayloadKind.ToyPattern]: { glyph: '∿', label: 'toy pattern' },
-  [GoonPayloadKind.BrainDrain]: { glyph: '◍', label: 'brain drain' },
-  [GoonPayloadKind.Spiral]: { glyph: '◎', label: 'spiral' },
+  [GoonPayloadKind.FlashBurst]: { glyph: '✦', get label() { return S.payloads[GoonPayloadKind.FlashBurst]; } },
+  [GoonPayloadKind.SubliminalStorm]: { glyph: '≋', get label() { return S.payloads[GoonPayloadKind.SubliminalStorm]; } },
+  [GoonPayloadKind.BubbleSwarm]: { glyph: '○', get label() { return S.payloads[GoonPayloadKind.BubbleSwarm]; } },
+  [GoonPayloadKind.Video]: { glyph: '▶', get label() { return S.payloads[GoonPayloadKind.Video]; } },
+  [GoonPayloadKind.LockCard]: { glyph: '▢', get label() { return S.payloads[GoonPayloadKind.LockCard]; } },
+  [GoonPayloadKind.ToyPattern]: { glyph: '∿', get label() { return S.payloads[GoonPayloadKind.ToyPattern]; } },
+  [GoonPayloadKind.BrainDrain]: { glyph: '◍', get label() { return S.payloads[GoonPayloadKind.BrainDrain]; } },
+  [GoonPayloadKind.Spiral]: { glyph: '◎', get label() { return S.payloads[GoonPayloadKind.Spiral]; } },
 });
 
 /**
@@ -207,8 +212,10 @@ const GOAL_DWELL_MS = 60000;
  */
 const NO_HEAT_REASONS = Object.freeze(['clutter', 'phase', 'no-arsenal']);
 
-/** Score count-up window. */
+/** Score count-up window: the floor (a bigger jump takes longer, see countUpMs). */
 const SCORE_LERP_MS = 250;
+/** A score bump smaller than this gets the count and the pop, not the burst. */
+const SCORE_BURST_MIN = 5;
 /** Concurrent chrome animations, and how long a queued one may wait. */
 const ANIM_BUDGET = 2;
 const ANIM_STALE_MS = 600;
@@ -351,8 +358,24 @@ function logTo(sink, entry) {
  *                              hint is the only thing that does not happen.
  * @returns {{unmount:Function}}
  */
+/**
+ * The mounted Arcademy class follows the Goon mix: master x the game cue slider (a duel is
+ * something the match does at you). {level, subscribe} or null without a prefs store.
+ */
+export function duelVolume(prefs) {
+  if (!prefs || typeof prefs.get !== 'function') return null;
+  const n = (k, d) => { const v = Number(prefs.get(k)); return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : d; };
+  return {
+    level: () => n('masterVolume', 0.8) * n('gameVolume', 0.85),
+    subscribe(fn) {
+      if (typeof prefs.subscribe !== 'function') return () => {};
+      return prefs.subscribe((key) => { if (key === 'masterVolume' || key === 'gameVolume') fn(); });
+    },
+  };
+}
+
 export function mountHud({ match, session = null, audio = null, prefs = null, media = null,
-  matchLog = null, discord = null, voice = null, coach = null } = {}) {
+  matchLog = null, discord = null, voice = null, coach = null, isPractice = null } = {}) {
   const led = createLedger();
   const fx = createFx();
   const d = doc();
@@ -388,6 +411,10 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   // ---------------------------------------------------------------- top bar
   const top = add(root, el('div', 'gg-hud-top'));
+  // The points model's face-off, tug bar, floats, combo and heat (ui/scoreHud.js). A legacy
+  // match never switches it on.
+  const scoreHud = mountScoreHud({ match, host: root, audio });
+  led.add(() => scoreHud.unmount());
 
   const scoreBox = add(top, el('div', 'gg-scorebox'));
   const scoreEl = add(scoreBox, el('div', 'gg-score', '0'));
@@ -555,7 +582,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const gear = add(rightTop, el('button', 'gg-gear', '⚙'));
   if (gear) {
     gear.type = 'button';
-    gear.setAttribute && gear.setAttribute('aria-label', 'options');
+    gear.setAttribute && gear.setAttribute('aria-label', S.options.headline);
     led.listen(gear, 'click', () => {
       try {
         if (d && typeof d.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
@@ -691,6 +718,8 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const rightCol = add(body, el('div', 'gg-rightcol'));
   const oppAvaBox = add(rightCol, el('div', 'gg-ava-minibox gg-ava-minibox--opp'));
   const monHost = add(rightCol, el('div', 'gg-mon-host'));
+  // Keep the compact effect rack with the opponent screen it targets.
+  if (rightCol && sideBox) rightCol.appendChild(sideBox);
   /* THEIR VOICE, IN THEIR COLUMN (ui/voice/micHud.js) — the CHIP half.
    *
    * A FLOW child of the monitor column, and that is the whole of the placement
@@ -846,7 +875,14 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // there: no store, no memory, everything else identical.
   const opponent = mountOpponent({ host: monHost, match, audio, fx, prefs });
   const emotes = mountEmotes({ host: root, match, audio, onLog });
+  // GAME NIGHT: the game card duel. Owns its own overlay (under Mercy) and pauses throws while it runs.
+  const duel = createDuelController({
+    match, view: createDuelView({ onLog, volume: duelVolume(prefs) }), audio, onLog,
+    isPractice: () => (typeof isPractice === 'function' ? !!isPractice() : false),
+  });
+  led.add(() => { try { duel.dispose(); } catch (_e) { /* gone */ } });
   const arsenal = mountArsenal({
+    duel: duel.arsenalHook,
     leftHost: leftRail,
     rightHost: rightRail,
     receiptsHost,
@@ -884,6 +920,8 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // the only listener. A pop while a drawer is open still rolls — the roll is
   // silent bookkeeping, only its flourish rides the animation budget.
   const drops = createDropRoller({ match, arsenal, audio, onLog });
+  // A duel the receiver refused ('busy') hands the game card back to the slot.
+  duel.setReturnCard(() => arsenal.armDrop('gamecard', { silent: true }));
   led.listen(d, BUBBLE_POP_EVENT, (e) => {
     try {
       const res = drops.onPop(e && e.detail);
@@ -1094,6 +1132,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   let targetScore = 0;
   let lerpFrom = 0;
   let lerpAt = 0;
+  let lerpMs = SCORE_LERP_MS;
   let lastTickSecond = -1;
 
   function durationMs() {
@@ -1107,13 +1146,49 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     const s = match.scoring;
     const next = s ? (s.score | 0) : 0;
     if (next !== targetScore) {
+      const gain = next - targetScore;
       lerpFrom = shownScore;
       targetScore = next;
       lerpAt = nowMs();
+      lerpMs = countUpMs(lerpFrom, next, { min: SCORE_LERP_MS, max: 900, perUnit: 6 });
+      if (gain > 0) scoreBump(gain);
     }
-    const t = Math.min(1, (nowMs() - lerpAt) / SCORE_LERP_MS);
-    shownScore = Math.round(lerpFrom + (targetScore - lerpFrom) * t);
+    const t = Math.min(1, (nowMs() - lerpAt) / lerpMs);
+    // Ease out: the number rushes, then settles onto the total. Never overshoots.
+    shownScore = Math.round(lerpFrom + (targetScore - lerpFrom) * ease.outCubic(t));
     text(scoreEl, String(shownScore));
+  }
+
+  /**
+   * A score rise (juice pass 2026-09-23): the number pops, a gold "+N" lifts
+   * off it and fades, and a big enough gain throws a few sparks. All of it is
+   * transform/opacity and leaves no node behind.
+   */
+  function scoreBump(gain) {
+    try {
+      jPopIn(scoreEl, { from: 0.85, over: 1.22, ms: 300 });
+      const d = doc();
+      if (!d || !scoreBox) return;
+      const chip = el('span', 'gg-score-plus', '+' + gain);
+      if (!chip) return;
+      add(scoreBox, chip);
+      const calm = jCalm();
+      const a = jPlay(chip, calm
+        ? [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0 }]
+        : [
+          { opacity: 0, transform: 'translateY(6px) scale(.6)' },
+          { opacity: 1, transform: 'translateY(-4px) scale(1.15)', offset: 0.25 },
+          { opacity: 1, transform: 'translateY(-10px) scale(1)', offset: 0.6 },
+          { opacity: 0, transform: 'translateY(-22px) scale(.9)' },
+        ], { duration: 900, easing: 'ease-out', fill: 'forwards' });
+      const kill = () => { try { chip.remove(); } catch (_e) { /* gone */ } };
+      if (a) a.onfinish = kill;
+      setTimeout(kill, 1000);
+      if (gain >= SCORE_BURST_MIN) {
+        const c = jCentre(scoreEl);
+        if (c && c.w) jBurst(c.x, c.y, { count: 8, dist: 34, spread: 26, life: 460, sizeMin: 3, sizeMax: 6, color: '255, 212, 94' });
+      }
+    } catch (_e) { /* chrome only */ }
   }
 
   /* `paintCharges()` was here: it memoised `match.scoring.charges` on
@@ -1130,8 +1205,13 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     let remaining = 0;
     try { remaining = match.liveRemainingMs | 0; } catch (_e) { remaining = 0; }
 
-    text(timerClock, sd ? 'sudden death' : mmss(remaining));
+    text(timerClock, sd ? S.desk.suddenDeath : mmss(remaining));
     cls(timerBox, 'is-sd', sd);
+    // GAME NIGHT: with a song picked, this bar IS the song (start -> game over). No new number.
+    let song = null;
+    try { song = match.song || null; } catch (_e) { song = null; }
+    cls(timerBox, 'is-song', !!song);
+    try { if (timerBox.title !== (song ? song.title : '')) timerBox.title = song ? song.title : ''; } catch (_e) { /* stub node */ }
     const pct = total > 0 ? Math.max(0, Math.min(100, ((total - remaining) / total) * 100)) : 0;
     if (timerFill && timerFill.style) timerFill.style.width = pct.toFixed(2) + '%';
 
@@ -1359,6 +1439,8 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     /** Exposed so H (or a play-test driver) can poke the desk without re-deriving it. */
     parts: {
       root, arsenal, opponent, dial, attention, emotes, announcer, fx, drops, mic,
+      /** Game night: the duel controller (state, arsenalHook), for a driver and the selftests. */
+      duel,
       /** The heat gauge: the node the drop economy paints itself onto. */
       heat: { box: heatBox, fill: heatFill, get fraction() { return drops.heatFraction; } },
       /** The zen toggle, for a driver that wants the state without the click. */

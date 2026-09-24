@@ -345,11 +345,20 @@ public static partial class LauncherHost
             // The exit beat plays over the game's first frames, the fade being its tail. A host
             // that died in the meantime has already cleared the wait (and shown the launcher), so
             // the late hide stands down.
-            After(FadeLeadMs(delay), () => { if (StillWaiting()) FadeThenHide(stillWanted: StillWaiting); });
+            After(FadeLeadMs(delay), () => { if (StillWaiting()) FadeThenHide(RaiseGame, StillWaiting); });
         }
-        else FadeThenHide(stillWanted: StillWaiting);
+        else FadeThenHide(RaiseGame, StillWaiting);
         StartReturnPoll();
         return true;
+    }
+
+    // The game came up while the launcher was still on screen; the hide that follows can pass
+    // activation to whatever is next in the z-order (often nothing of ours, the panel sits in the
+    // tray). Hand the foreground back to the game once the launcher is gone.
+    private static void RaiseGame()
+    {
+        try { ChaosWebViewHost.BringActiveGameToFront(); }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] raising the game failed"); }
     }
 
     /// <summary>
