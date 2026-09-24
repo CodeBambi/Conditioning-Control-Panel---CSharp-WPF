@@ -28,6 +28,7 @@
  * ==========================================================================*/
 
 import { createWebMediaHost, mediaInitBlock } from './net/webMedia.js';
+import { browserLang, normalizeLang } from './core/i18n.js';
 
 export const PROTOCOL = 1;
 
@@ -412,6 +413,8 @@ export function standaloneInit() {
     type: 'init',
     protocol: PROTOCOL,
     hosted: false,
+    // No app to ask, so the browser's own preference picks the copy; `?lang=` overrides it.
+    lang: q.get('lang') ? normalizeLang(q.get('lang')) : browserLang(),
     solo: q.get('solo') !== '0',
     // Field-for-field the host's shape (GoonHostService.OnPageReady) so the page
     // never branches on where the frame came from.

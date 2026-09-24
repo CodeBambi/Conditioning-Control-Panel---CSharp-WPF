@@ -88,6 +88,7 @@ import { createNoteStore } from './ui/voice/noteStore.js';
 import { setVoiceProvider } from './ui/emotes.js';
 import { consumeJoinCode } from './ui/inviteLink.js';
 import { S } from './ui/strings.js';
+import { loadLang, normalizeLang } from './core/i18n.js';
 
 import * as titleScreen from './ui/screens/title.js';
 import * as hostScreen from './ui/screens/host.js';
@@ -174,6 +175,8 @@ export const session = {
 };
 
 let gotInit = false;
+/** The copy table for session.lang, fetched as soon as init names it (core/i18n.js). */
+let langReady = null;
 let gotManifest = false;
 let bootSettled = false;
 let warmTimer = 0;
@@ -454,6 +457,12 @@ bridge.on('online-media', (m) => {
 
 bridge.on('init', (m) => {
   gotInit = true;
+  /* THE PAGE'S LANGUAGE. Hosted it is the app's own setting (AppSettings.Language); standalone
+   * bridge.standaloneInit fills it from the browser. Anything unknown is English. The table is
+   * fetched in settle(), before the first screen is built, so no screen ever paints in the
+   * wrong language and then flips. */
+  session.lang = normalizeLang(m.lang);
+  langReady = loadLang(session.lang).catch(() => 'en');   // started now, awaited in settle()
   session.solo = !!m.solo;
   // Normalize identity ONCE, here: the host sends {unifiedId, displayName,
   // appVersion} (GoonHostService.OnPageReady) and a future mobile/web host may
@@ -571,8 +580,13 @@ function settle() {
   bootSettled = true;
   session.ready = true;
   try { clearTimeout(warmTimer); clearTimeout(deadlineTimer); } catch (_e) { /* ignore */ }
-  loadSiblings()
-    .catch(() => {})
+  Promise.all([
+    loadSiblings().catch(() => {}),
+    (langReady || loadLang(session.lang)).then((l) => {
+      try { if (hasDom()) document.documentElement.lang = l; } catch (_e) { /* cosmetic */ }
+      bridge.log('lang: ' + l);
+    }).catch(() => {}),
+  ])
     .then(() => {
       try { buildApp(); } catch (e) {
         logger.error('app build failed: ' + ((e && e.stack) || e));
