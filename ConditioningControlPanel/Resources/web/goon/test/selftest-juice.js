@@ -163,6 +163,21 @@ ok(true, 'popOut on nothing resolves');
   delete globalThis.document;
 }
 
+// ---- the social corner: emotes, the opponent's bubble and gauge, the avatar picture
+{
+  const fs = await import('node:fs');
+  const src = (f) => fs.readFileSync(new URL('../ui/' + f, import.meta.url), 'utf8');
+  const em = src('emotes.js'), op = src('opponent.js'), av = src('avatar.js');
+  ok(/from '\.\/juiceDom\.js'/.test(em) && /from '\.\/juiceDom\.js'/.test(op) && /from '\.\/juiceDom\.js'/.test(av),
+    'emotes, opponent and avatar juice through juiceDom (reduced motion is decided there)');
+  ok(/popIn\(root/.test(em) && /popOut\(root[^)]*\)\.then\(/.test(em), 'the emote sheet has an IN and waits for its OUT before hiding');
+  ok(/shake\(root, 3\)/.test(em), 'a press in the cooldown shivers instead of doing nothing');
+  ok(/popIn\(bubble/.test(op) && /popOut\(bubble[^)]*\)\.then\(/.test(op), 'the incoming emote bubble has an IN and an OUT');
+  ok(/getAnimations\(\)\) a\.cancel\(\)/.test(em) && /getAnimations\(\)\) a\.cancel\(\)/.test(op),
+    'a held pop-out frame is dropped, so a reopen is never stuck invisible');
+  ok(/\{ opacity: 0 \}, \{ opacity: 1 \}/.test(av), 'a landing picture fades in, opacity only');
+}
+
 if (failures) {
   console.error('selftest-juice: ' + (n - failures) + '/' + n + ' checks passed ' + failures + ' FAILURE(S)');
   process.exitCode = 1;
