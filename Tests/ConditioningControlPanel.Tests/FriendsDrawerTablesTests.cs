@@ -6,7 +6,7 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>Open tables in the drawer: the hosting friend floats up with a pink row, Join for
-/// Prime, a lock for free, and the lock never launches the game.</summary>
+/// anyone signed in, a lock when signed out, and the lock never launches the game.</summary>
 public partial class FriendsDrawerTests
 {
     private static OpenTablesReply KitHosting() => GoonOpenTablesApi.Parse(
@@ -40,7 +40,7 @@ public partial class FriendsDrawerTests
     }
 
     [Fact]
-    public void A_free_account_sees_a_lock_that_never_launches()
+    public void A_signed_out_drawer_sees_a_lock_that_never_launches()
     {
         WpfRenderHarness.OnStaThread(() =>
         {

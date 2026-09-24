@@ -141,13 +141,34 @@ namespace ConditioningControlPanel.Services.GoonGame
         public sealed record Snapshot(string State, IReadOnlyList<string> Subs,
             IReadOnlyList<Item> Images, IReadOnlyList<Item> Videos, int Have, int Want);
 
-        private const string StillTenant = "goon-stills";
-        private const string ClipTenant = "goon-clips";
+        private const string OwnStillTenant = "goon-stills";
+        private const string OwnClipTenant = "goon-clips";
+        // THE PEER POOL (2026-09-24, ForPeer): the opponent's niches, fetched by THIS host for
+        // an opponent who throws without sending bytes. Own tenants, so its channel list never
+        // steers the player's own deck and a reset of one never resets the other.
+        private const string PeerStillTenant = "goon-peer-stills";
+        private const string PeerClipTenant = "goon-peer-clips";
 
         // The coordinator registry keeps the FIRST channel provider forever, so the provider
         // reads a static, not an instance: a second window (relaunch) must steer the same tenant.
-        private static volatile IReadOnlyList<string> _channels = Array.Empty<string>();
-        private static IReadOnlyList<string> Channels() => _channels;
+        private static volatile IReadOnlyList<string> _ownChannels = Array.Empty<string>();
+        private static volatile IReadOnlyList<string> _peerChannels = Array.Empty<string>();
+        private readonly bool _peer;
+        private string StillTenant => _peer ? PeerStillTenant : OwnStillTenant;
+        private string ClipTenant => _peer ? PeerClipTenant : OwnClipTenant;
+        private IReadOnlyList<string> _channels
+        {
+            get => _peer ? _peerChannels : _ownChannels;
+            set { if (_peer) _peerChannels = value; else _ownChannels = value; }
+        }
+        private IReadOnlyList<string> Channels() => _channels;
+
+        /// <summary>A pool for the OPPONENT'S niches (their hello's <c>caps.niches</c>): the same
+        /// fetch, validation and temp-file ownership as the player's own pool, on its own
+        /// tenants. Nothing from the opponent but the niche names ever reaches it.</summary>
+        public static GoonOnlineMedia ForPeer(Action<Snapshot> onSnapshot) => new(onSnapshot, peer: true);
+
+        private GoonOnlineMedia(Action<Snapshot> onSnapshot, bool peer) : this(onSnapshot) => _peer = peer;
 
         private readonly object _gate = new();
         private readonly Action<Snapshot> _onSnapshot;

@@ -364,8 +364,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                         video = true,
                         mediaTransfer = TransferAllowed(),
                         canHost = HostingAllowed(),
-                        // Every 1v1 is Prime since open tables (2026-09-23): joining asks the
-                        // same bar as hosting. The server's /v2/goon/join is the real gate.
+                        // Patrons host, every signed-in account joins (2026-09-24). The
+                        // server's /v2/goon/join is the real gate.
                         canJoin = JoiningAllowed(),
                     },
                     // Open tables: a Join pressed in the friends drawer lands here. Spent on the
@@ -669,8 +669,11 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "media-flavour":    // flavour card / options sheet: the pick, the edits, the niches
                     OnMediaFlavour(o);
                     break;
-                case "open-prime":       // page's Prime sheet "See Prime": the app's own refusal and upgrade path
-                    TierGate.DemandLab("Goon Game");
+                case "open-prime":       // page's patron sheet "See the tiers": the app's own refusal and upgrade path
+                    TierGate.DemandPremium("Goon Game");
+                    break;
+                case "peer-niches":      // the opponent's hello named their niches; fill a pool from them
+                    OnPeerNiches(o);
                     break;
             }
         }
@@ -944,24 +947,23 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch { return false; }
         }
 
-        /// <summary>May the page MINT a room? TIER 2 ONLY.
-        ///
-        /// A rung above <see cref="TransferAllowed"/>, and a different question: sending media is
-        /// tier 1, hosting a duel is tier 2. The server enforces it at <c>/v2/goon/invite</c>
-        /// (403 <c>no_host_access</c> below <c>computeEffectiveTier &gt;= 2</c>) and this is the
-        /// same verdict computed locally, so the title screen can dim Host instead of routing the
-        /// player to a screen whose only content is a refusal. JOINING asks the same bar since open
-        /// tables (see JoiningAllowed). The page reads this with <c>=== true</c>, so a host that predates the
-        /// flag leaves Host enabled and falls back to the server's answer.</summary>
-        private static bool HostingAllowed()
+        /// <summary>May the page MINT a room? ANY PATRON (owner call 2026-09-24): a paying tier
+        /// or the whitelist, the same bar as sending (<see cref="TransferAllowed"/>). The server
+        /// enforces it at <c>/v2/goon/invite</c> (403 <c>no_host_access</c> below
+        /// <c>computeEffectiveTier &gt;= 1</c>) and this is the same verdict computed locally, so
+        /// the title screen can lock Host instead of routing the player to a refusal. The page
+        /// reads this with <c>=== true</c>, so a host that predates the flag leaves Host enabled
+        /// and falls back to the server's answer.</summary>
+        internal static bool HostingAllowed()
         {
-            try { return App.Patreon?.HasLabAccess == true; }
+            try { return App.Patreon?.HasPremiumAccess == true; }
             catch { return false; }
         }
 
-        /// <summary>May the page JOIN a room? TIER 2 since open tables (2026-09-23): every 1v1
-        /// is a Prime perk, host or guest. Practice against the bot never asks.</summary>
-        private static bool JoiningAllowed() => HostingAllowed();
+        /// <summary>May the page JOIN a room? Every SIGNED-IN account (owner call 2026-09-24),
+        /// free included. The server's <c>/v2/goon/join</c> answers 401 <c>signin</c> without an
+        /// account; this is only the local read of "is there one". Practice never asks.</summary>
+        internal static bool JoiningAllowed() => !string.IsNullOrEmpty(App.UnifiedUserId);
 
         private static string? TakePendingJoinCode()
         {
@@ -1737,6 +1739,70 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.StartOnlineMedia: {E}", ex.Message); }
         }
 
+        // ============================ the opponent's niches ============================
+        //
+        // THE HAPPY PATH (2026-09-24): an opponent who does not send their own files (free, or
+        // nothing local, or the switch off) still throws pictures. Their hello carries the niche
+        // NAMES they picked (caps.niches); the page hands those here and this host fills a second
+        // pool (GoonOnlineMedia.ForPeer) from Scrolller, which the page draws ONLY on the
+        // opponent's payloads. No URL, id or byte of theirs crosses: only names, re-validated
+        // with the same grammar and cap as the player's own. CONSENT: joining a Goon match is a
+        // Scrolller-based game, so the fetch runs unless THIS player switched online pictures off
+        // (GoonMediaOnline false); then the page is told 'declined' and keeps its own pictures.
+
+        private static GoonOnlineMedia? _peerMedia;
+
+        /// <summary>page -> host <c>peer-niches { subs }</c>. An empty list (match over) stops the
+        /// pool and hands back its files.</summary>
+        private static void OnPeerNiches(JObject o)
+        {
+            try
+            {
+                if (_host == null) return;
+                var subs = GoonOnlineMediaRules.CleanSubs(
+                    (o["subs"] as JArray)?.Select(t => t.Type == JTokenType.String ? (string?)t : null));
+                _peerMedia ??= GoonOnlineMedia.ForPeer(PostPeerMedia);
+                if (subs.Count == 0) { _peerMedia.Off(); return; }
+                if (!PeerFetchAllowed(App.Settings?.Current?.GoonMediaOnline))
+                {
+                    _peerMedia.Off();
+                    PostFrame(new { type = "peer-media", state = "declined", subs = Array.Empty<string>(),
+                        images = Array.Empty<object>(), videos = Array.Empty<object>() });
+                    return;
+                }
+                App.Logger?.Information("GoonHostService: peer niches ({N})", subs.Count);
+                _peerMedia.Start(subs);
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnPeerNiches: {E}", ex.Message); }
+        }
+
+        /// <summary>The consent rule for the peer pool: on unless the player switched online
+        /// pictures off for the Goon Game. Pure, for the tests.</summary>
+        internal static bool PeerFetchAllowed(bool? goonMediaOnline) => goonMediaOnline != false;
+
+        private static void PostPeerMedia(GoonOnlineMedia.Snapshot snap)
+        {
+            PostFrame(new
+            {
+                type = "peer-media",
+                state = snap.State,
+                subs = snap.Subs,
+                images = snap.Images.Select(i => new { name = i.Name, url = i.Url }).ToList(),
+                videos = snap.Videos.Select(i => new { name = i.Name, url = i.Url }).ToList(),
+                progress = new { have = snap.Have, want = snap.Want },
+            });
+        }
+
+        private static void PostFrame(object frame)
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null) return;
+            disp.BeginInvoke(new Action(() =>
+            {
+                try { _host?.Post(frame); } catch { }
+            }));
+        }
+
         /// <summary>Worker thread -> UI thread -> page. The whole current list every time.</summary>
         private static void PostOnlineMedia(GoonOnlineMedia.Snapshot snap)
         {
@@ -1786,6 +1852,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // Online pictures: stop fetching and hand back every temp file this window owned.
                 try { _onlineMedia?.Dispose(); } catch { }
                 _onlineMedia = null;
+                try { _peerMedia?.Dispose(); } catch { }
+                _peerMedia = null;
                 try { _host?.Dispose(); } catch { }
                 _host = null;
                 // The handler dies with the core it was attached to; forgetting the reference is
