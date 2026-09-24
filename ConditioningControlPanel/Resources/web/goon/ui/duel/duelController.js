@@ -227,7 +227,7 @@ export function createDuelController({
     if (!pot && bonus > 0 && match && match.scoring && typeof match.scoring.awardBonus === 'function') match.scoring.awardBonus(bonus);
     if (outcome === 'win') ms.summary.won++; else if (outcome === 'lose') ms.summary.lost++; else ms.summary.tied++;
     sfx(outcome === 'win' ? 'gg-endured' : 'gg-drop-dud');
-    v('result', { outcome, bonus, game: cur.game, mine: cur.mine, theirs: theirs || { game: cur.game, tile: 0, score: 0 } });
+    v('result', { outcome, bonus, pot: !!pot, game: cur.game, mine: cur.mine, theirs: theirs || { game: cur.game, tile: 0, score: 0 } });
     log({ t: 'duel-end', idx: cur.idx, outcome, bonus, reported: !!theirs });
     at(RESULT_HOLD_MS, close);
   }

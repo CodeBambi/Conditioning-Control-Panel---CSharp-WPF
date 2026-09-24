@@ -19,6 +19,9 @@ export const DUEL_COPY = Object.freeze({
   waiting: 'waiting for their board',
   won: (bonus) => 'won +' + bonus,
   lost: 'lost',
+  /** Points model only: the stamp says the outcome and the pot line says what it paid. */
+  wonPlain: 'won',
+  potLine: (points) => '+' + Math.max(0, Math.round(Number(points) || 0)),
   tied: 'dead even',
   youLine: (tile, score) => 'you ' + tile + ' / ' + score,
   themLine: (tile, score) => 'them ' + tile + ' / ' + score,

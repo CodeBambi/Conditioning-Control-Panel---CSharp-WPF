@@ -68,6 +68,9 @@ const CSS = `
   animation: ggDuelStamp 380ms cubic-bezier(.2, 1.6, .4, 1) both; }
 .gg-nduel-stamp.is-win { color: #6effc8; }
 .gg-nduel-stamp.is-lose { color: #9a8fb0; }
+.gg-nduel-pot { font-weight: 900; font-size: 1.6rem; margin: 0 0 0.3rem; color: #c9b8e6;
+  font-variant-numeric: tabular-nums; }
+.gg-nduel-pot.is-win { color: #ffd36e; text-shadow: 0 0 14px rgba(255, 211, 110, 0.55); }
 .gg-nduel-name { font-weight: 800; font-size: 1.1rem; margin: 0.2rem 0; }
 .gg-nduel-fine { opacity: 0.75; font-size: 0.85rem; margin: 0.25rem 0; }
 .gg-nduel-hint { margin: 0.5rem 0 0; font-size: 0.9rem; color: #ffd36e; }
@@ -258,12 +261,16 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
       showCard();
       card.appendChild(mk('p', 'gg-nduel-fine', DUEL_COPY.waiting));
     },
-    result({ outcome, bonus, mine, theirs }) {
+    result({ outcome, bonus, pot = false, mine, theirs }) {
       gen++;
       killStage();
       showCard();
-      const word = outcome === 'win' ? DUEL_COPY.won(bonus) : outcome === 'lose' ? DUEL_COPY.lost : DUEL_COPY.tied;
+      // Points model: the pot line shows what each side took, the winner's in gold and the
+      // loser's (and a tie's) half in a softer colour. A legacy match keeps "won +N".
+      const word = outcome === 'win' ? (pot ? DUEL_COPY.wonPlain : DUEL_COPY.won(bonus))
+        : outcome === 'lose' ? DUEL_COPY.lost : DUEL_COPY.tied;
       card.appendChild(mk('div', 'gg-nduel-stamp is-' + outcome, word));
+      if (pot && bonus > 0) card.appendChild(mk('div', 'gg-nduel-pot' + (outcome === 'win' ? ' is-win' : ''), DUEL_COPY.potLine(bonus)));
       card.appendChild(mk('p', 'gg-nduel-fine', resultLine('you', mine)));
       card.appendChild(mk('p', 'gg-nduel-fine', resultLine('them', theirs)));
     },
