@@ -6084,5 +6084,16 @@
   "friends_settings": "Настройки",
   "friends_my_code": "ВАШ КОД",
   "friends_copy": "Скопировать код",
-  "friends_copied": "скопировано"
+  "friends_copied": "скопировано",
+  "companion_studio_title": "Редактор личности",
+  "companion_studio_intro": "Создайте копию со своим стилем. Оригинал останется доступен. Примеры не являются ответами ИИ.",
+  "companion_studio_name": "Имя",
+  "companion_studio_voice": "Голос и характер",
+  "companion_studio_style": "Стиль ответов",
+  "companion_studio_samples": "Две строки примеров",
+  "companion_studio_advanced": "Подробнее",
+  "companion_studio_background": "Контекст",
+  "companion_studio_boundaries": "Границы тем",
+  "companion_studio_cancel": "Отмена",
+  "companion_studio_save": "Сохранить и использовать копию"
 }

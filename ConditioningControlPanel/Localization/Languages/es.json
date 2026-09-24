@@ -6084,5 +6084,16 @@
   "friends_settings": "Ajustes",
   "friends_my_code": "TU CÓDIGO",
   "friends_copy": "Copiar tu código",
-  "friends_copied": "copiado"
+  "friends_copied": "copiado",
+  "companion_studio_title": "Estudio de personalidad",
+  "companion_studio_intro": "Crea una copia con tu estilo. El original sigue disponible. Los ejemplos no son respuestas generadas.",
+  "companion_studio_name": "Nombre",
+  "companion_studio_voice": "Voz y personalidad",
+  "companion_studio_style": "Estilo de respuesta",
+  "companion_studio_samples": "Dos frases de ejemplo",
+  "companion_studio_advanced": "Más detalles",
+  "companion_studio_background": "Contexto",
+  "companion_studio_boundaries": "Límites de temas",
+  "companion_studio_cancel": "Cancelar",
+  "companion_studio_save": "Guardar copia y usar"
 }

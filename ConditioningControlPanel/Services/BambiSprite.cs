@@ -670,6 +670,25 @@ Example responses with REAL video names:
         /// set, the purpose instruction — lives in <see cref="Companion.Brain.PromptAssembler"/>'s
         /// dynamic tail instead, appended after this string.</para>
         /// </summary>
+        internal static string GetConversationPrompt()
+        {
+            var app = App.Settings?.Current;
+            var custom = UsesCustomPrompt(app);
+            var preset = App.Personality?.GetActivePreset() ?? Models.PersonalityPresets.GetNeutralDefault();
+            var persona = custom ? app!.CompanionPrompt : preset.PromptSettings;
+            persona ??= Models.PersonalityPresets.GetNeutralDefault().PromptSettings!;
+            var modId = App.Mods?.ActiveMod?.Id;
+            var house = string.IsNullOrWhiteSpace(modId) ||
+                string.Equals(modId, Models.BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
+            var name = house ? "EMI" : App.Mods?.GetCompanionName() ?? preset.Name;
+            var prompt = Companion.ConversationPrompt.Build(persona, name,
+                app?.SlutModeEnabled == true,
+                app?.CompanionPrompt?.AiProvider == Models.AiProviderType.Local &&
+                    app.CompanionPrompt.AllowAiToControlEffects,
+                StableMediaTitles(),
+                preserveOutputRules: custom || !Models.PersonalityPresets.BuiltInIds.Contains(preset.Id));
+            return prompt;
+        }
         internal static string GetStablePrompt()
         {
             var fingerprint = ComputeFingerprint(CaptureFingerprintInputs());

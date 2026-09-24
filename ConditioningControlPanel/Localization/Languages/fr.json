@@ -6084,5 +6084,16 @@
   "friends_settings": "Paramètres",
   "friends_my_code": "TON CODE",
   "friends_copy": "Copier ton code",
-  "friends_copied": "copié"
+  "friends_copied": "copié",
+  "companion_studio_title": "Atelier de personnalité",
+  "companion_studio_intro": "Crée une copie à ton image. La version originale reste disponible. Les exemples ne sont pas des réponses générées.",
+  "companion_studio_name": "Nom",
+  "companion_studio_voice": "Voix et personnalité",
+  "companion_studio_style": "Style des réponses",
+  "companion_studio_samples": "Deux exemples",
+  "companion_studio_advanced": "Plus de détails",
+  "companion_studio_background": "Contexte",
+  "companion_studio_boundaries": "Limites des sujets",
+  "companion_studio_cancel": "Annuler",
+  "companion_studio_save": "Enregistrer la copie et utiliser"
 }

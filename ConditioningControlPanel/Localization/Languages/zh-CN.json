@@ -6596,5 +6596,16 @@
   "friends_settings": "设置",
   "friends_my_code": "你的代码",
   "friends_copy": "复制你的代码",
-  "friends_copied": "已复制"
+  "friends_copied": "已复制",
+  "companion_studio_title": "个性工作室",
+  "companion_studio_intro": "创建符合你风格的副本。原版仍然可用。示例不是生成的回复。",
+  "companion_studio_name": "名称",
+  "companion_studio_voice": "语气与个性",
+  "companion_studio_style": "回复风格",
+  "companion_studio_samples": "两行示例",
+  "companion_studio_advanced": "更多详情",
+  "companion_studio_background": "背景",
+  "companion_studio_boundaries": "话题边界",
+  "companion_studio_cancel": "取消",
+  "companion_studio_save": "保存并使用副本"
 }

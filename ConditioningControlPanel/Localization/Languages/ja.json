@@ -6084,5 +6084,16 @@
   "friends_settings": "設定",
   "friends_my_code": "あなたのコード",
   "friends_copy": "コードをコピー",
-  "friends_copied": "コピーしました"
+  "friends_copied": "コピーしました",
+  "companion_studio_title": "パーソナリティ工房",
+  "companion_studio_intro": "自分好みのコピーを作成します。元の設定は残ります。例文はAIが生成した回答ではありません。",
+  "companion_studio_name": "名前",
+  "companion_studio_voice": "話し方と性格",
+  "companion_studio_style": "回答スタイル",
+  "companion_studio_samples": "例文を2行",
+  "companion_studio_advanced": "詳細",
+  "companion_studio_background": "背景",
+  "companion_studio_boundaries": "話題の制限",
+  "companion_studio_cancel": "キャンセル",
+  "companion_studio_save": "コピーを保存して使用"
 }
