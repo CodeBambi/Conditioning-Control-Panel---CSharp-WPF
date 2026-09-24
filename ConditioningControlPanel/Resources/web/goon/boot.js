@@ -416,7 +416,7 @@ const peerNicheLink = (() => {
     fromCaps(caps) {
       const subs = peerNiches(caps);
       const key = subs.join(',');
-      if (!session.hosted || !subs.length || key === sent) return;
+      if (!(session.hosted || bridge.hasLocalHost()) || !subs.length || key === sent) return;
       sent = key;
       try { bridge.send({ type: 'peer-niches', subs }); } catch (_e) { /* never load-bearing */ }
       bridge.log('peer-niches: ' + subs.length);
