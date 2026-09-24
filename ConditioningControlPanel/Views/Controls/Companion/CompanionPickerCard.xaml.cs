@@ -29,6 +29,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     {
         private const int PreviewDecodeWidth = 240;
         private bool _syncing;
+        private bool _previewing;
 
         public CompanionPickerCard()
         {
@@ -36,7 +37,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             Loaded += (_, _) =>
             {
                 if (App.Personality != null) App.Personality.PersonalityChanged += OnPersonalityChanged;
-                Refresh();
+                if (!_previewing) Refresh();
             };
             Unloaded += (_, _) =>
             {
@@ -50,6 +51,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             _syncing = true;
             try
             {
+                _previewing = false;
+                LivePanel.Visibility = Visibility.Visible;
+                PreviewPanel.Visibility = Visibility.Collapsed;
+                TxtPreviewGlyph.ClearValue(TextBlock.ForegroundProperty);
+                TxtLiveName.Text = LiveName();
                 FillAvatars();
                 FillPersonalities();
             }
@@ -61,6 +67,77 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             {
                 _syncing = false;
             }
+        }
+
+        /// <summary>The live companion's name, the way the Companion tab's hero card shows it.</summary>
+        private static string LiveName()
+        {
+            var def = CompanionDefinition.GetById(App.Companion?.ActiveCompanion ?? CompanionId.OGBambiSprite);
+            var display = def.GetDisplayName(App.Settings?.Current?.SlutModeEnabled == true);
+            return App.Mods?.MakeModAware(display) ?? display;
+        }
+
+        // ------------------------------------------------------------------ preview
+
+        /// <summary>
+        /// Read-only face for a mod the user is looking at but not using: the companion's name,
+        /// how many looks and personalities it brings and one line in its voice. Reads the
+        /// manifest and the mod's personality list off disk; activates nothing.
+        /// </summary>
+        public void ShowPreview(ModPackage mod, Color accent)
+        {
+            LivePanel.Visibility = Visibility.Collapsed;
+            PreviewPanel.Visibility = Visibility.Visible;
+            _previewing = true;
+            try
+            {
+                var personalities = ModCompanionContent.GetPersonalities(
+                    mod.Id, mod.InstalledPath, mod.Manifest.Personalities, out _);
+                var singleEmote = (mod.Id == BuiltInMods.BambiSleepId || mod.Id == BuiltInMods.SissyHypnoId)
+                                  && (mod.Manifest.SupportedAvatarSets?.Count ?? 0) == 0
+                                  && (mod.Manifest.CustomAvatarSets?.Count ?? 0) == 0;
+                var info = CompanionPreview.Build(mod.Manifest, personalities, singleEmote,
+                    neutral: mod.Id == BuiltInMods.CCPDefaultId);
+
+                TxtPreviewName.Text = info.Name;
+                TxtPreviewCounts.Text = Loc.GetF("modmgr_preview_counts",
+                    Loc.GetF(info.Looks == 1 ? "modmgr_looks_one" : "modmgr_looks_n", info.Looks),
+                    Loc.GetF(info.Personalities == 1 ? "modmgr_personalities_one" : "modmgr_personalities_n", info.Personalities));
+                PreviewSampleBorder.Visibility = string.IsNullOrWhiteSpace(info.SampleLine) ? Visibility.Collapsed : Visibility.Visible;
+                TxtPreviewSample.Text = "\u201C" + info.SampleLine + "\u201D";
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[CompanionPicker] preview failed for {Mod}", mod.Id);
+            }
+
+            TxtPreviewGlyph.Foreground = new SolidColorBrush(accent);
+            ShowPreview(PortraitInFolder(mod.InstalledPath));
+        }
+
+        /// <summary>Pose 1 from a mod's own folder, never through the resolver (which answers
+        /// for the ACTIVE mod). Null when the mod ships no pose art on disk.</summary>
+        private static ImageSource? PortraitInFolder(string? installedPath)
+        {
+            if (string.IsNullOrEmpty(installedPath)) return null;
+            foreach (var name in new[] { "avatar3_pose1.png", "avatar_pose1.png" })
+            {
+                try
+                {
+                    var full = System.IO.Path.Combine(installedPath, "resources", name);
+                    if (!System.IO.File.Exists(full)) continue;
+                    var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(full, UriKind.Absolute);
+                    bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bmp.DecodePixelWidth = PreviewDecodeWidth;
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    return bmp;
+                }
+                catch { }
+            }
+            return null;
         }
 
         // ------------------------------------------------------------------ look
@@ -171,7 +248,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         private void OnPersonalityChanged(object? sender, PersonalityPreset preset)
         {
             // Another door (chip row, tube menu) switched her. Follow it.
-            Dispatcher.BeginInvoke(new Action(Refresh), System.Windows.Threading.DispatcherPriority.Normal);
+            Dispatcher.BeginInvoke(new Action(() => { if (!_previewing) Refresh(); }), System.Windows.Threading.DispatcherPriority.Normal);
         }
 
         private void ShowSamples(PersonalityPreset? preset)

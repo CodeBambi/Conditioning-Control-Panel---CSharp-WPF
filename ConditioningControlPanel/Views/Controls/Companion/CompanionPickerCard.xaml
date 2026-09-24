@@ -7,19 +7,24 @@
          Customise window today and meant for the Companion tab next, so it knows nothing about
          either host: it reads the live state from App.AvatarWindow / App.Personality and writes
          through the existing doors (AvatarTubeWindow.SelectAvatarSet, the tube arrows' path, and
-         MainWindow.ActivatePersonalityPreset, the gated chip-row path). -->
-    <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="14">
+         MainWindow.ActivatePersonalityPreset, the gated chip-row path).
+
+         Two faces: LIVE (Refresh) edits the companion of the mod in use; PREVIEW (ShowPreview)
+         describes another mod's companion, read-only, without activating that mod. -->
+    <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}"
+            BorderThickness="1" CornerRadius="12" Padding="16">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- live preview -->
-            <Border Grid.Column="0" Width="116" Height="150" CornerRadius="8" Margin="0,0,14,0"
-                    Background="{DynamicResource DarkerBgBrush}" ClipToBounds="True">
+            <!-- portrait -->
+            <Border Grid.Column="0" Width="120" Height="150" CornerRadius="10" Margin="0,0,18,0" VerticalAlignment="Top"
+                    Background="{DynamicResource DarkerBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}"
+                    BorderThickness="1" ClipToBounds="True">
                 <Grid>
-                    <TextBlock x:Name="TxtPreviewGlyph" Text="&#x2727;" FontSize="34"
+                    <TextBlock x:Name="TxtPreviewGlyph" Text="&#x2727;" FontSize="38"
                                Foreground="{DynamicResource TextMutedBrush}"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <Image x:Name="ImgPreview" Stretch="Uniform" Margin="4"
@@ -27,36 +32,46 @@
                 </Grid>
             </Border>
 
-            <StackPanel Grid.Column="1">
-                <TextBlock Text="{loc:Str modmgr_companion_heading}" FontSize="11" FontWeight="Bold"
-                           Foreground="{DynamicResource PinkBrush}" Margin="0,0,0,2"/>
-                <TextBlock Text="{loc:Str modmgr_companion_sub}" FontSize="11" TextWrapping="Wrap"
-                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,10"/>
+            <!-- LIVE: pick look and personality -->
+            <StackPanel x:Name="LivePanel" Grid.Column="1">
+                <TextBlock x:Name="TxtLiveName" FontSize="20" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"
+                           TextTrimming="CharacterEllipsis"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{loc:Str modmgr_label_look}" FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
+                        <ComboBox x:Name="CmbAvatar" Style="{DynamicResource DarkComboBoxStyle}"
+                                  Foreground="{DynamicResource TextLightBrush}" MinHeight="30"
+                                  SelectionChanged="CmbAvatar_SelectionChanged"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="{loc:Str modmgr_label_personality}" FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
+                        <ComboBox x:Name="CmbPersonality" Style="{DynamicResource DarkComboBoxStyle}"
+                                  Foreground="{DynamicResource TextLightBrush}" MinHeight="30"
+                                  SelectionChanged="CmbPersonality_SelectionChanged"/>
+                    </StackPanel>
+                </Grid>
+                <TextBlock x:Name="TxtAvatarHint" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,0"/>
 
-                <TextBlock Text="{loc:Str modmgr_label_look}" FontSize="11"
-                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
-                <ComboBox x:Name="CmbAvatar" Style="{DynamicResource DarkComboBoxStyle}"
-                          Foreground="{DynamicResource TextLightBrush}" MinHeight="28"
-                          SelectionChanged="CmbAvatar_SelectionChanged" Margin="0,0,0,2"/>
-                <TextBlock x:Name="TxtAvatarHint" FontSize="10" TextWrapping="Wrap" Visibility="Collapsed"
-                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,0"/>
-
-                <TextBlock Text="{loc:Str modmgr_label_personality}" FontSize="11"
-                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,10,0,3"/>
-                <ComboBox x:Name="CmbPersonality" Style="{DynamicResource DarkComboBoxStyle}"
-                          Foreground="{DynamicResource TextLightBrush}" MinHeight="28"
-                          SelectionChanged="CmbPersonality_SelectionChanged"/>
-
-                <!-- how she talks: one or two lines in the personality's own voice -->
-                <StackPanel x:Name="SamplePanel" Margin="0,8,0,0"/>
+                <!-- how the personality talks: one or two lines in its own voice -->
+                <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="14,10" Margin="0,10,0,0">
+                    <StackPanel x:Name="SamplePanel"/>
+                </Border>
 
                 <Button x:Name="BtnTubeFit" Content="{loc:Str btn_tube_fit}" ToolTip="{loc:Str tooltip_tube_fit}"
-                        Click="BtnTubeFit_Click" HorizontalAlignment="Left" Margin="0,10,0,0"
-                        Background="Transparent" Foreground="#B084DC" BorderThickness="0"
-                        FontSize="11" Cursor="Hand" Padding="0">
+                        Click="BtnTubeFit_Click" HorizontalAlignment="Left" Margin="0,8,0,0"
+                        Foreground="#B084DC" FontSize="11" Cursor="Hand">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <TextBlock x:Name="t" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"/>
+                            <TextBlock x:Name="t" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                                       Background="Transparent"/>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="t" Property="TextDecorations" Value="Underline"/>
@@ -65,6 +80,27 @@
                         </ControlTemplate>
                     </Button.Template>
                 </Button>
+            </StackPanel>
+
+            <!-- PREVIEW: another mod's companion, read-only -->
+            <StackPanel x:Name="PreviewPanel" Grid.Column="1" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock x:Name="TxtPreviewName" FontSize="20" FontWeight="SemiBold" Foreground="White"
+                               VerticalAlignment="Center"/>
+                    <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="8,3"
+                            Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str modmgr_preview_tag}" FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                    </Border>
+                </StackPanel>
+                <TextBlock x:Name="TxtPreviewCounts" FontSize="13" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,8"/>
+                <Border x:Name="PreviewSampleBorder" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10"
+                        Padding="14,10" Margin="0,0,0,8">
+                    <TextBlock x:Name="TxtPreviewSample" FontSize="13" FontStyle="Italic" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextLightBrush}"/>
+                </Border>
+                <TextBlock Text="{loc:Str modmgr_preview_hint}" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}"/>
             </StackPanel>
         </Grid>
     </Border>

@@ -4,7 +4,7 @@
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         xmlns:cmp="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
         Title="{loc:Str dialog_customise}"
-        Height="660" Width="820"
+        Width="860" SizeToContent="Height" MinHeight="580"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -12,8 +12,9 @@
         Background="Transparent">
 
     <!-- CUSTOMISE. One mental model, left to right: pick a MOD (the skin: look, words, voice),
-         and the mod carries a COMPANION (look + personality), edited in its own card. Presets a
-         mod recommends are suggestions behind the "Defaults" expander, never silent writes. -->
+         and the mod carries a COMPANION (look + personality), edited in its own card (or previewed,
+         read-only, for a mod not in use). Presets a mod recommends are one line of suggestion,
+         asked once on switching, never silent writes. -->
     <Window.Resources>
         <Style x:Key="CcpBtn" TargetType="Button">
             <Setter Property="Foreground" Value="White"/>
@@ -25,7 +26,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="10"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
@@ -70,10 +72,10 @@
             </Grid.RowDefinitions>
 
             <!-- Title Bar -->
-            <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="12,12,0,0" Padding="20,12"
+            <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="12,12,0,0" Padding="22,14"
                     MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid>
-                    <TextBlock Text="{loc:Str dialog_customise}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
+                    <TextBlock Text="{loc:Str dialog_customise}" Foreground="{DynamicResource PinkBrush}" FontSize="20" FontWeight="Bold"
                                VerticalAlignment="Center"/>
                     <Button x:Name="BtnClose" Content="X" Click="BtnClose_Click"
                             HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -84,37 +86,38 @@
             </Border>
 
             <!-- Main Content -->
-            <Grid Grid.Row="1" Margin="15">
+            <Grid Grid.Row="1" Margin="18,16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Mod List -->
-                <Border Grid.Column="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Margin="0,0,10,0" Padding="5">
+                <!-- Mod list: a dot in each mod's accent, IN USE on the active one -->
+                <Border Grid.Column="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="12" Margin="0,0,16,0" Padding="6">
                     <ListBox x:Name="ModList" Background="Transparent" BorderThickness="0"
                              SelectionChanged="ModList_SelectionChanged"
-                             Foreground="White" FontSize="13">
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             Foreground="White" FontSize="14">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="Foreground" Value="White"/>
-                                <Setter Property="Padding" Value="10,8"/>
+                                <Setter Property="Padding" Value="10,9"/>
                                 <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
-                                            <Border x:Name="Bd" Background="Transparent" CornerRadius="6"
-                                                    Padding="{TemplateBinding Padding}" Margin="2">
-                                                <ContentPresenter/>
+                                            <Border x:Name="Bd" Background="Transparent" CornerRadius="9" BorderThickness="1"
+                                                    BorderBrush="Transparent" Padding="{TemplateBinding Padding}" Margin="0,2">
+                                                <ContentPresenter HorizontalAlignment="Stretch"/>
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter TargetName="Bd" Property="Background" Value="#2A2A4A"/>
                                                 </Trigger>
                                                 <Trigger Property="IsSelected" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#353560"/>
+                                                    <Setter TargetName="Bd" Property="Background" Value="#2E2944"/>
                                                     <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                                    <Setter TargetName="Bd" Property="BorderThickness" Value="1"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -125,139 +128,118 @@
                     </ListBox>
                 </Border>
 
-                <!-- Details Panel -->
-                <Border Grid.Column="1" Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="18">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel x:Name="DetailsPanel" Visibility="Collapsed">
+                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" MaxHeight="620">
+                    <StackPanel x:Name="DetailsPanel" Visibility="Collapsed">
 
-                            <!-- 1. Who: name, author and version, one line of what it is, banner beside it -->
-                            <Grid Margin="0,0,0,14">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Border x:Name="ThemeColorPreview" Width="12" Height="12" CornerRadius="6"
-                                                VerticalAlignment="Center" Margin="0,2,8,0" ToolTip="{loc:Str label_theme}"/>
-                                        <TextBlock x:Name="TxtModName" FontSize="22" FontWeight="Bold" Foreground="White"
+                        <!-- 1. Banner across the top, name and one line over it, the one primary action on its right -->
+                        <Border x:Name="BannerPanel" Height="120" CornerRadius="12" ClipToBounds="True"
+                                Background="{DynamicResource PanelAccentBrush}" Margin="0,0,0,14">
+                            <Grid>
+                                <Image x:Name="ImgModPreview" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <!-- scrim so the name reads over any art -->
+                                <Rectangle>
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#30120F1C" Offset="0"/>
+                                            <GradientStop Color="#E6120F1C" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+                                <Grid Margin="18,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Bottom" Margin="0,0,12,0">
+                                        <TextBlock x:Name="TxtModName" FontSize="28" FontWeight="Bold" Foreground="White"
                                                    TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="TxtModDescription" FontSize="13" Foreground="#D9D2EA" Margin="0,4,0,0"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="TxtModAuthor" FontSize="11" Foreground="#A9A1C0" Margin="0,2,0,0"/>
                                     </StackPanel>
-                                    <TextBlock x:Name="TxtModAuthor" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,6"/>
-                                    <TextBlock x:Name="TxtModDescription" FontSize="12" Foreground="#C0C0C0" TextWrapping="Wrap"
-                                               MaxHeight="34" TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
-                                <Border x:Name="PreviewImagePanel" Grid.Column="1" Width="190" Height="96" CornerRadius="8"
-                                        Background="{DynamicResource PanelAccentBrush}" ClipToBounds="True" Visibility="Collapsed">
-                                    <Image x:Name="ImgModPreview" Stretch="UniformToFill"
-                                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
+                                    <Button x:Name="BtnActivate" Grid.Column="1" Content="{loc:Str modmgr_use_this_mod}" Click="BtnActivate_Click"
+                                            Style="{StaticResource CcpBtn}" Background="{DynamicResource PinkBrush}"
+                                            FontSize="15" FontWeight="Bold" Padding="22,11" VerticalAlignment="Bottom"/>
+                                    <Border x:Name="TxtActiveIndicator" Grid.Column="1" CornerRadius="16" Padding="14,7" Background="#CC1E3A2A"
+                                            BorderBrush="#4CAF50" BorderThickness="1" VerticalAlignment="Bottom" Visibility="Collapsed">
+                                        <TextBlock Text="{loc:Str modmgr_in_use}" Foreground="#7FF0CB" FontSize="12" FontWeight="Bold"/>
+                                    </Border>
+                                </Grid>
                             </Grid>
+                        </Border>
 
-                            <!-- 2. The one primary action: use it, or it is already in use -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                                <Button x:Name="BtnActivate" Content="{loc:Str modmgr_use_this_mod}" Click="BtnActivate_Click"
-                                        Style="{StaticResource CcpBtn}" Background="{DynamicResource PinkBrush}"
-                                        FontSize="14" FontWeight="SemiBold" Padding="26,10"/>
-                                <Border x:Name="TxtActiveIndicator" CornerRadius="16" Padding="14,7" Background="#1E3A2A"
-                                        BorderBrush="#4CAF50" BorderThickness="1" Visibility="Collapsed">
-                                    <TextBlock Text="{loc:Str modmgr_active_pill}" Foreground="#7CD992" FontSize="13" FontWeight="SemiBold"/>
-                                </Border>
-                                <Button x:Name="BtnShare" Content="{loc:Str btn_share_mod}" Click="BtnShare_Click"
-                                        Style="{StaticResource LinkBtn}" VerticalAlignment="Center" Margin="16,0,0,0"
-                                        Visibility="Collapsed"/>
-                                <Button x:Name="BtnUninstall" Content="{loc:Str btn_uninstall}" Click="BtnUninstall_Click"
-                                        Style="{StaticResource LinkBtn}" Foreground="#FF6B6B" VerticalAlignment="Center"
-                                        Margin="16,0,0,0"/>
+                        <!-- Content pack row: built-in mods whose media (voice lines, portraits,
+                             DTRH barks) lives in a release-hosted pack that is not downloaded yet.
+                             Hidden entirely on full/dev installs and for user mods. -->
+                        <Border x:Name="PackPanel" Background="{DynamicResource PanelBgBrush}" CornerRadius="12"
+                                Padding="14" Margin="0,0,0,14" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtPackState" Text="{loc:Str modmgr_pack_not_downloaded}"
+                                           Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                <TextBlock Text="{loc:Str modmgr_pack_hint}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                           TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                <ProgressBar x:Name="PackProgress" Height="6" Minimum="0" Maximum="100" Value="0"
+                                             Background="#252542" Foreground="{DynamicResource PinkBrush}"
+                                             BorderThickness="0" Margin="0,10,0,0" Visibility="Collapsed"/>
+                                <Button x:Name="BtnDownloadPack" Click="BtnDownloadPack_Click" Style="{StaticResource CcpBtn}"
+                                        Background="{DynamicResource PinkBrush}" FontWeight="SemiBold"
+                                        HorizontalAlignment="Left" Margin="0,10,0,0"/>
                             </StackPanel>
+                        </Border>
 
-                            <!-- Content pack row: built-in mods whose media (voice lines, portraits,
-                                 DTRH barks) lives in a release-hosted pack that is not downloaded yet.
-                                 Hidden entirely on full/dev installs and for user mods. -->
-                            <Border x:Name="PackPanel" Background="{DynamicResource PanelAccentBrush}" CornerRadius="8"
-                                    Padding="12" Margin="0,0,0,14" Visibility="Collapsed">
-                                <StackPanel>
-                                    <TextBlock x:Name="TxtPackState" Text="{loc:Str modmgr_pack_not_downloaded}"
-                                               Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{loc:Str modmgr_pack_hint}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                                               TextWrapping="Wrap" Margin="0,5,0,0"/>
-                                    <ProgressBar x:Name="PackProgress" Height="6" Minimum="0" Maximum="100" Value="0"
-                                                 Background="#252542" Foreground="{DynamicResource PinkBrush}"
-                                                 BorderThickness="0" Margin="0,10,0,0" Visibility="Collapsed"/>
-                                    <Button x:Name="BtnDownloadPack" Click="BtnDownloadPack_Click" Style="{StaticResource CcpBtn}"
-                                            Background="{DynamicResource PinkBrush}" FontWeight="SemiBold"
-                                            HorizontalAlignment="Left" Margin="0,10,0,0"/>
-                                </StackPanel>
+                        <!-- 2. The companion this mod carries: live for the mod in use, a read-only preview otherwise -->
+                        <cmp:CompanionPickerCard x:Name="CompanionCard" Margin="0,0,0,14"/>
+
+                        <!-- 3. One line of recommended setup, and the dashboard layout door (not built yet) -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="RowSuggestions" Background="{DynamicResource PanelBgBrush}" CornerRadius="12"
+                                    BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1" Padding="14,0"
+                                    MinHeight="44" Margin="0,0,10,0" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="TxtSuggestions" FontSize="13" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <TextBlock x:Name="TxtAskedOnce" Grid.Column="1" Text="{loc:Str modmgr_asked_once}" FontSize="12"
+                                               VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <Button x:Name="BtnApplySuggestions" Grid.Column="1" Content="{loc:Str modmgr_apply}"
+                                            Click="BtnApplySuggestions_Click" Style="{StaticResource CcpBtn}"
+                                            Padding="14,6" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                </Grid>
                             </Border>
-
-                            <!-- 3. The companion this mod carries: look + personality, one card -->
-                            <cmp:CompanionPickerCard x:Name="CompanionCard" Margin="0,0,0,12"/>
-                            <Border x:Name="CompanionInactiveHint" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10"
-                                    Padding="14" Margin="0,0,0,12" Visibility="Collapsed">
-                                <TextBlock Text="{loc:Str modmgr_companion_inactive}" Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="12" TextWrapping="Wrap"/>
-                            </Border>
-
-                            <!-- 4. Power-user knobs, folded away -->
-                            <Expander x:Name="DefaultsExpander" Header="{loc:Str modmgr_defaults_header}" IsExpanded="False"
-                                      Foreground="{DynamicResource TextMutedBrush}" FontSize="12">
-                                <StackPanel Margin="4,8,0,0">
-                                    <Grid x:Name="RowSuggestedSettings" Margin="0,0,0,6" Visibility="Collapsed">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock x:Name="TxtSuggestedSettings" Foreground="{DynamicResource TextLightBrush}"
-                                                   VerticalAlignment="Center" TextWrapping="Wrap"/>
-                                        <Button Grid.Column="1" Content="{loc:Str modmgr_apply}" Click="BtnApplySuggestedSettings_Click"
-                                                Style="{StaticResource CcpBtn}" Padding="12,5" FontSize="11"/>
-                                    </Grid>
-                                    <Grid x:Name="RowSuggestedAssets" Margin="0,0,0,6" Visibility="Collapsed">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock x:Name="TxtSuggestedAssets" Foreground="{DynamicResource TextLightBrush}"
-                                                   VerticalAlignment="Center" TextWrapping="Wrap"/>
-                                        <Button Grid.Column="1" Content="{loc:Str modmgr_apply}" Click="BtnApplySuggestedAssets_Click"
-                                                Style="{StaticResource CcpBtn}" Padding="12,5" FontSize="11"/>
-                                    </Grid>
-                                    <TextBlock x:Name="TxtNoSuggestions" Text="{loc:Str modmgr_no_suggestions}"
-                                               Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
-
-                                    <!-- Placeholder: the dashboard layout editor is an unmerged draft stack. -->
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                        <Button x:Name="BtnQuickLinkLayout" Content="{loc:Str modmgr_quick_link_layout}"
-                                                Style="{StaticResource CcpBtn}" IsEnabled="False" Padding="12,5" FontSize="11"/>
-                                        <TextBlock Text="{loc:Str modmgr_soon}" Foreground="{DynamicResource TextMutedBrush}"
-                                                   FontSize="10" FontStyle="Italic" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    </StackPanel>
-
-                                    <TextBlock x:Name="TxtArtOverrides" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
-                                               TextWrapping="Wrap" Margin="0,10,0,0" Visibility="Collapsed"/>
-                                </StackPanel>
-                            </Expander>
-                        </StackPanel>
-                    </ScrollViewer>
-                </Border>
+                            <Button x:Name="BtnQuickLinkLayout" Grid.Column="1" Content="{loc:Str modmgr_dashboard_soon}"
+                                    Style="{StaticResource CcpBtn}" IsEnabled="False" Padding="16,0" MinHeight="44"/>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
 
-            <!-- Bottom Bar: get, make, and the two file verbs in an overflow -->
-            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="15,10">
+            <!-- Bottom Bar: get, make, and everything else behind the overflow -->
+            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="18,12">
                 <Grid>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                         <Button x:Name="BtnBrowseCatalogue" Content="{loc:Str btn_browse_mod_catalogue}" Click="BtnBrowseCatalogue_Click"
                                 ToolTip="{loc:Str tooltip_browse_mod_catalogue}" Style="{StaticResource CcpBtn}"
-                                Foreground="#B084DC" Margin="0,0,10,0"/>
+                                Padding="16,9" FontSize="13" Margin="0,0,10,0"/>
                         <Button x:Name="BtnCreate" Content="{loc:Str btn_create_new_2}" Click="BtnCreate_Click"
-                                Style="{StaticResource CcpBtn}" Background="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
+                                Style="{StaticResource CcpBtn}" Background="Transparent" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Padding="16,9" FontSize="13"/>
                     </StackPanel>
-                    <Button x:Name="BtnMore" Content="&#x22EF;" Click="BtnMore_Click" ToolTip="{loc:Str modmgr_more}"
-                            HorizontalAlignment="Right" Style="{StaticResource CcpBtn}" FontSize="14" Padding="12,4">
+                    <Button x:Name="BtnMore" Content="..." Click="BtnMore_Click" ToolTip="{loc:Str modmgr_more}"
+                            HorizontalAlignment="Right" Style="{StaticResource CcpBtn}" FontSize="14" Padding="14,6">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem x:Name="BtnInstall" Header="{loc:Str btn_install_from_file}" Click="BtnInstall_Click"/>
                                 <MenuItem x:Name="BtnExport" Header="{loc:Str btn_export_current}" Click="BtnExport_Click"/>
+                                <Separator x:Name="SepModActions"/>
+                                <MenuItem x:Name="BtnShare" Header="{loc:Str btn_share_mod}" Click="BtnShare_Click"/>
+                                <MenuItem x:Name="BtnUninstall" Header="{loc:Str btn_uninstall}" Click="BtnUninstall_Click"/>
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
