@@ -5425,7 +5425,8 @@ async function main() {
     ok(documentElement.getAttribute('data-gg-lock-active') === '1', 'timed card blocks the field');
     input.value = 'x'; input.fire('input');
     ok(input.value === '', 'wrong letter is removed');
-    ok(host.findAll('gg-lock-prize')[0].childNodes[0].textContent === '92', 'typo visibly lowers the bounty');
+    // The tag holds the two chains first, then the amount.
+    ok(host.findAll('gg-lock-tag')[0].childNodes[2].textContent === '92', 'typo visibly lowers the bounty');
     input.value = 'steady'; input.fire('input'); input.fire('input');
     ok(awards.length === 1 && awards[0].prize === 92, 'correct typing awards remaining bounty once');
     ok(cues.includes('lock-slip') && cues.includes('lock-solved'), 'typo and completion have sound');

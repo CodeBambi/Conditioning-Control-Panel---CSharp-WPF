@@ -2629,11 +2629,12 @@ const audioMod = await import('../ui/audio.js');
   ok(!urls.some((u) => u.startsWith('/intake/')),
     'nothing points at /intake/ — the harnesses only mount /dtrh/, so those had to be copied');
 
-  // The three pops really are three different sounds, or the distinction is a lie.
+  // Every bubble pops with the three classic CCP pops, DtRH's set (owner, 2026-09-25);
+  // the kinds differ by level only.
   const pops = ['bubble-pop', 'bubble-pop-fx', 'bubble-pop-video'];
   ok(pops.every((p) => SFX_REGISTRY[p]), 'plain / effect / video bubbles each have their own cue');
-  ok(new Set(pops.map((p) => SFX_REGISTRY[p].files.join(','))).size === 3,
-    'and all three resolve to different files');
+  ok(pops.every((p) => ['Pop.mp3', 'Pop2.mp3', 'Pop3.mp3'].every((f) => SFX_REGISTRY[p].files.some((u) => u.endsWith('/' + f)))),
+    'and every one draws from the three classic pops');
   ok(SFX_REGISTRY['bubble-pop-fx'].gain > SFX_REGISTRY['bubble-pop'].gain,
     'the effect pop is the juicier of the two');
   // Taste pins: the caption is under the pops, and the safety valve is not a sting.

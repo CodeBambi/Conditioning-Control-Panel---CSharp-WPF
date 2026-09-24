@@ -521,9 +521,9 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     // 9 shards is DtRH's number; the lite tier throws 5 — each shard is a
     // box-shadowed node minted mid-pop, exactly when the phone is busiest.
     const n = perfLite() ? 5 : 9;
-    // Tinted to the kind's halo (juice pass): a glitch pop sprays acid green, a
-    // spiral cyan. Never white.
-    const tint = kind ? tintFor(kind) : '';
+    // DtRH's pop exactly (owner, 2026-09-25): soft pink shards for every bubble,
+    // gold for a lucky one. The kind's own colour lives in its sustained pane.
+    const tint = kind === 'lucky' ? '#ffe27a' : '';
     for (let i = 0; i < n; i++) {
       const p = document.createElement('div');
       p.className = 'gg-spark';
@@ -925,16 +925,8 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     // ring every pop, and for an EFFECT bubble a second tinted burst plus a
     // small real-pixel shake of the fx tier sized by the bubble (2..7 px). A
     // swarm's clutter and a plain pop stay light: juice is earned.
-    const host = layer();
-    const effect = rec.kind && rec.kind !== 'normal' && !rec.fromPayload;
-    try {
-      ring(host, x, y, { color: tintFor(rec.kind), size: Math.round(rec.size * 0.9) });
-      if (effect) {
-        burst(host, x, y, { n: 12, color: tintFor(rec.kind), minR: 50, maxR: 150, size: 8 });
-        const fx = layers && typeof layers.get === 'function' ? layers.get('fx') : null;
-        shake(fx, shakeForStrength(strength));
-      }
-    } catch (e) { warn(`pop juice threw: ${e && e.message}`); }
+    // The pop itself is DtRH's (owner, 2026-09-25): swell to 2x and fade, nine
+    // shards. No ring, no second burst, no shake: the bubble is the whole event.
     // `fromPayload` rides along: a bubble the opponent's swarm minted bursts into
     // THEIR media when they have landed some (drawImage), a field bubble into ours.
     // The pop point rides too: every wash grows out of it.

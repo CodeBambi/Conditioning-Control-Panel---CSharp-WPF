@@ -733,6 +733,7 @@ export default Object.freeze({
   gg_lockCard_exact: "そのとおりに打ち込む",
   gg_lockCard_unlock: "打ち込んで解除",
   gg_lockCard_dismiss: "閉じる",
+  gg_lockCard_forfeit: "賞品をあきらめる",
   gg_video_close: "この動画を閉じる",
   gg_video_flag: "隠して報告用にフラグを付ける",
   gg_flavourLines_trance: "スパイラルとやさしい声。",

@@ -733,6 +733,7 @@ export default Object.freeze({
   gg_lockCard_exact: "набери в точности",
   gg_lockCard_unlock: "набери, чтобы разблокировать",
   gg_lockCard_dismiss: "закрыть",
+  gg_lockCard_forfeit: "отказаться от приза",
   gg_video_close: "закрыть это видео",
   gg_video_flag: "скрыть и отметить для жалобы",
   gg_flavourLines_trance: "Спирали и мягкие голоса.",

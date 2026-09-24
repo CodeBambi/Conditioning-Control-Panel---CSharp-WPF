@@ -733,6 +733,7 @@ export default Object.freeze({
   gg_lockCard_exact: "escríbela exacta",
   gg_lockCard_unlock: "escríbela para desbloquear",
   gg_lockCard_dismiss: "descartar",
+  gg_lockCard_forfeit: "renunciar al premio",
   gg_video_close: "cerrar este vídeo",
   gg_video_flag: "ocultar esto y marcarlo para denunciar",
   gg_flavourLines_trance: "Espirales y voces suaves.",

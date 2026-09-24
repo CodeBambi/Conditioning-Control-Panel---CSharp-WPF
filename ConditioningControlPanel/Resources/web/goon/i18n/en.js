@@ -734,6 +734,7 @@ export default Object.freeze({
   gg_lockCard_exact: "type it exactly",
   gg_lockCard_unlock: "type it to unlock",
   gg_lockCard_dismiss: "dismiss",
+  gg_lockCard_forfeit: "forfeit the prize",
   gg_video_close: "close this video",
   gg_video_flag: "hide this and flag it for reporting",
   gg_flavourLines_trance: "Spirals and soft voices.",

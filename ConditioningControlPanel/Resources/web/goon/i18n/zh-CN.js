@@ -733,6 +733,7 @@ export default Object.freeze({
   gg_lockCard_exact: "一字不差地输入",
   gg_lockCard_unlock: "输入以解锁",
   gg_lockCard_dismiss: "关闭",
+  gg_lockCard_forfeit: "放弃奖励",
   gg_video_close: "关闭这个视频",
   gg_video_flag: "隐藏并标记以便举报",
   gg_flavourLines_trance: "螺旋和轻柔的声音。",
