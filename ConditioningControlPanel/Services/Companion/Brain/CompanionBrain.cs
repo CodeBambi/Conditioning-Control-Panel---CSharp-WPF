@@ -328,6 +328,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     }
                     cancellationToken.ThrowIfCancellationRequested();
                     Session.Append(TurnKind.AssistantChat, result.Text);
+                    if (_preview() && Memory is MemoryStore relationshipStore)
+                        relationshipStore.NoteChatTurn(App.Mods?.ActiveModId);
                     _conversationRevision++;
                     ApplyPreviewCommands(result, cancellationToken);
                     NoteRecommendedTitles(result.Text);

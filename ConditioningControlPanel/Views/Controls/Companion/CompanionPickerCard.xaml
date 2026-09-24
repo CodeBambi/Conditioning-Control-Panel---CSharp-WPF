@@ -106,6 +106,8 @@
 
             <!-- PERK: what this companion does to XP, read-only. Separate from the personality
                  (how she talks) on purpose; a cost reads as plainly as a bonus. -->
+            <Button x:Name="BtnPerkChange" Content="{loc:Str companion_perk_picker}" Click="Perk_Click"
+                    Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,10,0,0"/>
             <StackPanel x:Name="PerkRow" Orientation="Horizontal" Margin="0,10,0,0" ToolTip="{loc:Str modmgr_perk_tooltip}">
                 <Border x:Name="PerkBadge" Width="22" Height="22" CornerRadius="11" VerticalAlignment="Top"
                         Background="{DynamicResource PanelAccentBrush}">

@@ -865,7 +865,8 @@ namespace ConditioningControlPanel.Services
 
             var raw = post.Content!;
             var sanitized = options.CompanionV2
-                ? CompanionProxyContract.CleanReply(raw, post.FinishReason)
+                ? options.IsStructuredUtility ? CompanionProxyContract.CleanUtilityReply(raw, post.FinishReason)
+                    : CompanionProxyContract.CleanReply(raw, post.FinishReason)
                 : SanitizeResponse(raw, maxTokens);
             if (options.CompanionV2 && string.IsNullOrWhiteSpace(sanitized))
                 return Canned(AiFailureKind.InvalidResponse, true);

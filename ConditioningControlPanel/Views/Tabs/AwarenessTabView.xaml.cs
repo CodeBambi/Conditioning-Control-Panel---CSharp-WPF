@@ -10,6 +10,8 @@ namespace ConditioningControlPanel.Views.Tabs
         public AwarenessTabView()
         {
             InitializeComponent();
+            Loaded += (_, _) => HostCompanionPrivacy();
+            IsVisibleChanged += (_, _) => { if (IsVisible) HostCompanionPrivacy(); };
         }
 
         private void AwarenessHighlightSwatch_Click(object sender, MouseButtonEventArgs e)

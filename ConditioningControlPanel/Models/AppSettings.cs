@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -5709,6 +5709,14 @@ namespace ConditioningControlPanel.Models
         #endregion
 
         #region Companion Leveling System (v5.3)
+
+        private CompanionBonusType? _companionPerk;
+        /// <summary>Independent preview perk. Null inherits the current bundle until first use.</summary>
+        public CompanionBonusType? CompanionPerk
+        {
+            get => _companionPerk;
+            set { _companionPerk = value.HasValue && Enum.IsDefined(value.Value) ? value : null; OnPropertyChanged(); }
+        }
 
         private int _activeCompanionId = 0;
         /// <summary>

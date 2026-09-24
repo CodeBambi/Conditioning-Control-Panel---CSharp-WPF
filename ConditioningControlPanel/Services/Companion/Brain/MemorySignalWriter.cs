@@ -227,7 +227,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 h => App.Companion.UserMessageSent -= h,
                 (_, _) =>
                 {
-                    try { _store.NoteChatTurn(App.Mods?.ActiveModId); }
+                    try { if (!CompanionExperience.IsV2Enabled) _store.NoteChatTurn(App.Mods?.ActiveModId); }
                     catch (Exception ex) { App.Logger?.Debug("MemorySignalWriter: chat-turn signal failed: {Error}", ex.Message); }
                 });
         }

@@ -42,6 +42,7 @@ internal sealed class ConversationPageVm : CompanionObservable
         : App.Mods?.GetCompanionName() ?? _room.Hero.Name;
     public bool IsEmi => HouseCharacter && (App.Settings?.Current?.ActiveCompanionId ?? 0) == 0 &&
         (App.Settings?.Current?.SelectedAvatarSet ?? 1) <= 3;
+    public string PerkCost => App.Companion?.ActivePerk == CompanionBonusType.XPDrain ? "Leech: -3 XP/s" : string.Empty;
     public string Familiarity => App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false &&
         App.Brain?.Memory is MemoryStore memory
         ? Loc.Get("companion_v2_familiarity_" + Services.Companion.ConversationRelationship.Stage(
@@ -49,16 +50,18 @@ internal sealed class ConversationPageVm : CompanionObservable
         : string.Empty;
     public string Flavor => App.Personality?.GetActivePreset()?.Description ?? _room.Hero.Flavor;
     public string Face => Busy ? "..." : HasNotice ? "o_o" : NeedsStart ? "-_-" : "^_^";
-    public string StatusColor => HasNotice || NeedsSignIn ? "#FFCD83" : NeedsStart ? "#BFAEC9" : "#80E4C5";
+    public string StatusColor => HasNotice || NeedsSignIn || DailyExhausted ? "#FFCD83" : NeedsStart ? "#BFAEC9" : "#80E4C5";
     public string Allowance => _room.Engine.Provider == CompanionProviderMode.Cloud && App.Ai?.DailyRequestsRemaining is int count && count >= 0
         ? Loc.GetF("companion_engine_status_ready_fmt", count) : string.Empty;
+    public bool DailyExhausted => _room.Engine.Provider == CompanionProviderMode.Cloud && App.Ai?.DailyRequestsRemaining == 0;
     public bool NeedsStart => _room.Engine.Provider == CompanionProviderMode.Off;
     public bool NeedsSignIn => _room.Engine.Provider == CompanionProviderMode.Cloud && !_room.Engine.IsLoggedIn;
     public bool HasNoTurns => Turns.Count == 0;
     public string VoiceLabel => Loc.Get(_room.Hero.IsMuted ? "companion_v2_unmute" : "companion_v2_mute");
     public string StartLabel => Loc.Get(NeedsSignIn ? "companion_v2_signin" : "companion_v2_start");
     public string Status => Busy ? Loc.Get("companion_v2_replying") : NeedsStart ? Loc.Get("companion_v2_off")
-        : NeedsSignIn ? Loc.Get("companion_v2_signin_status") : Loc.Get("companion_v2_ready");
+        : NeedsSignIn ? Loc.Get("companion_v2_signin_status") : DailyExhausted ? Loc.Get("companion_v2_error_limit")
+        : !_room.Engine.IsHealthy && !string.IsNullOrEmpty(_room.Engine.StatusLine) ? _room.Engine.StatusLine : Loc.Get("companion_v2_ready");
     public bool ShowStart => NeedsStart || NeedsSignIn;
     public string Privacy => Loc.Get(App.Settings?.Current?.CompanionPrompt?.AiProvider is AiProviderType.Local or AiProviderType.OpenAiCompatible
         ? "companion_v2_privacy_endpoint" : "companion_v2_privacy_cloud");
@@ -68,7 +71,7 @@ internal sealed class ConversationPageVm : CompanionObservable
         _room.SyncBrain();
         if (_observing) Attach(App.Brain?.Session);
         Reconcile();
-        foreach (var name in new[] { nameof(NeedsStart), nameof(NeedsSignIn), nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(IsEmi), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity) }) Raise(name);
+        foreach (var name in new[] { nameof(NeedsStart), nameof(NeedsSignIn), nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(IsEmi), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost) }) Raise(name);
     }
     public void Resume()
     {
@@ -89,7 +92,7 @@ internal sealed class ConversationPageVm : CompanionObservable
     }
     private void RoomChanged(object? sender, PropertyChangedEventArgs e)
     {
-        foreach (var name in new[] { nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(IsEmi), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(VoiceLabel) }) Raise(name);
+        foreach (var name in new[] { nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(IsEmi), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost), nameof(VoiceLabel) }) Raise(name);
     }
     private void Attach(ChatSession? session)
     {

@@ -37,7 +37,7 @@ namespace ConditioningControlPanel.Services
             fromMod = modPresets != null && modPresets.Count > 0;
             var presets = fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
             return presets.Select(p => Companion.EmiPersonality.ForPreview(p,
-                App.Mods?.ActiveMod?.Id, Companion.CompanionExperience.IsV2Enabled)).ToList();
+                App.Mods?.ActiveMod?.Id, Companion.CompanionExperience.IsV2Enabled, App.Settings?.Current?.ActiveCompanionId ?? 0)).ToList();
         }
 
         /// <summary>
@@ -152,7 +152,7 @@ namespace ConditioningControlPanel.Services
             //
             // Unmodded, that means the neutral CCP Default persona: a fresh install must never
             // land on a themed one it was not asked for.
-            if (IsNeutralContext()) return Companion.EmiPersonality.ForPreview(PersonalityPresets.GetNeutralDefault(), null, Companion.CompanionExperience.IsV2Enabled);
+            if (IsNeutralContext()) return Companion.EmiPersonality.ForPreview(PersonalityPresets.GetNeutralDefault(), null, Companion.CompanionExperience.IsV2Enabled, App.Settings?.Current?.ActiveCompanionId ?? 0);
 
             // A themed mod that ships its own set leads with its intended default personality,
             // so the AI speaks in the mod's voice.
@@ -201,7 +201,7 @@ namespace ConditioningControlPanel.Services
 
                 if (cleared)
                     App.Logger?.Information("PersonalityService: Preset {Id} took over from the active custom prompt", presetId);
-                App.Logger?.Information("PersonalityService: Switched to preset: {Name} ({Id})", preset.Name, presetId);
+                App.Logger?.Information("PersonalityService: Changed active preset");
                 PersonalityChanged?.Invoke(this, preset);
                 return true;
             }

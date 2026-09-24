@@ -13,6 +13,11 @@ namespace ConditioningControlPanel.Services.Companion
     /// </summary>
     public static class CompanionPerks
     {
+        public static CompanionBonusType Resolve(CompanionBonusType? saved, CompanionBonusType bundle, bool preview)
+            => preview && saved.HasValue && System.Enum.IsDefined(saved.Value) ? saved.Value : bundle;
+
+        public static string NameKey(CompanionBonusType type) => "companion_perk_name_" + (int)type;
+
         public static CompanionPerk For(CompanionBonusType type) => type switch
         {
             CompanionBonusType.PinkFilterBonus => new("perk_pink_filter", "❀", false),

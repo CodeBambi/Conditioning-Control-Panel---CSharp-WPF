@@ -105,6 +105,26 @@ public class CompanionBrainTests
         lock (store.Writes) return store.Saved;
     }
 
+    [Theory]
+    [InlineData(true, true, 1)]
+    [InlineData(false, true, 0)]
+    [InlineData(true, false, 0)]
+    public async Task Preview_RelationshipCountsOnlyAcceptedMemoryEnabledExchanges(bool accepted, bool memoryOn, int count)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ccp-accepted-count-" + Guid.NewGuid());
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var memory = new MemoryStore(Path.Combine(directory, "memory.json"), chatMemoryEnabled: () => memoryOn);
+            var transport = new FakeTransport { Respond = (_, _) => accepted
+                ? new AiReplyResult("hello", true, null) : AiReplyResult.Failed(AiFailureKind.Offline) };
+            using var brain = new CompanionBrain(transport, new StubAssembler(), memory, new FakeStore(), preview: () => true);
+            await brain.ChatAsync("hello");
+            Assert.Equal(count, memory.Relationships.Values.Sum(r => r.ChatTurnsTotal));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
     [Fact]
     public async Task Preview_TransportException_RollsBackAndReturnsStatus()
     {

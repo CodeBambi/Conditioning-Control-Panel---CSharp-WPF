@@ -2,6 +2,7 @@
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+ xmlns:controls="clr-namespace:ConditioningControlPanel.Controls"
  xmlns:v2="clr-namespace:ConditioningControlPanel.Views.Controls.Companion.V2"
  MinHeight="560" PreviewKeyDown="Page_KeyDown">
  <UserControl.Resources>
@@ -21,6 +22,7 @@
     <Border CornerRadius="24" Margin="0,0,18,0">
      <Border.Background><RadialGradientBrush><GradientStop Color="#53365F" Offset="0"/><GradientStop Color="#100B18" Offset="1"/></RadialGradientBrush></Border.Background>
      <Grid>
+      <controls:AmbientFxCanvas x:Name="StageDust" IsHitTestVisible="False"/>
       <Image Source="{Binding Room.Hero.Portrait}" Height="132" Stretch="Uniform" IsHitTestVisible="False">
        <Image.Style><Style TargetType="Image"><Style.Triggers><DataTrigger Binding="{Binding IsEmi}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Image.Style>
       </Image>
@@ -31,6 +33,7 @@
      <TextBlock Text="{Binding Name}" FontSize="29" FontWeight="SemiBold"/>
      <TextBlock Text="{Binding Flavor}" Foreground="#C6B4D0" TextTrimming="CharacterEllipsis"/>
      <TextBlock Text="{Binding Status}" Foreground="{Binding StatusColor}" Margin="0,5,0,10" AutomationProperties.LiveSetting="Polite"/>
+     <TextBlock Text="{Binding PerkCost}" Foreground="#FF7777" FontSize="12" FontWeight="SemiBold"/>
      <TextBlock Text="{Binding Familiarity}" Foreground="#BFAEC9" FontSize="11" ToolTip="{loc:Str companion_v2_familiarity_hint}"/>
      <TextBlock Text="{Binding Allowance}" Foreground="#BFAEC9" FontSize="11"/>
      <WrapPanel>

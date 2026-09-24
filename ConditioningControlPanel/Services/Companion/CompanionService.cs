@@ -1,3 +1,4 @@
+using ConditioningControlPanel.Services.Companion;
 using System;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
@@ -122,8 +123,25 @@ namespace ConditioningControlPanel.Services
         public CompanionProgress ActiveProgress =>
             GetProgress(ActiveCompanion);
 
+        public CompanionBonusType ActivePerk => CompanionPerks.Resolve(
+            App.Settings?.Current?.CompanionPerk, ActiveCompanionDef.BonusType, CompanionExperience.IsV2Enabled);
+
+        public bool SetPerk(CompanionBonusType perk)
+        {
+            if (!CompanionExperience.IsV2Enabled || !Enum.IsDefined(perk) || App.Settings?.Current == null) return false;
+            App.Settings.Current.CompanionPerk = perk;
+            App.Settings.Save();
+            UpdateDrainTimer();
+            return true;
+        }
+
         public CompanionService()
         {
+            if (CompanionExperience.IsV2Enabled && App.Settings?.Current is { CompanionPerk: null } settings)
+            {
+                settings.CompanionPerk = ActiveCompanionDef.BonusType;
+                App.Settings.Save();
+            }
             // Start active time tracking
             _activeTimeTimer = new DispatcherTimer
             {
@@ -205,10 +223,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public double CalculateXPModifier(XPSource source, XPContext context)
         {
-            var companion = ActiveCompanionDef;
             double modifier = 1.0;
 
-            switch (companion.BonusType)
+            switch (ActivePerk)
             {
                 case CompanionBonusType.PinkFilterBonus:
                     // OG: Bonus based on pink filter opacity (0-50%)
@@ -309,7 +326,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void OnAttentionCheckFailed()
         {
-            if (ActiveCompanionDef.BonusType != CompanionBonusType.StrictModeBonus)
+            if (ActivePerk != CompanionBonusType.StrictModeBonus)
                 return;
 
             var progress = ActiveProgress;
@@ -360,7 +377,7 @@ namespace ConditioningControlPanel.Services
             _drainTimer?.Stop();
             _drainTimer = null;
 
-            if (ActiveCompanionDef.BonusType == CompanionBonusType.XPDrain)
+            if (ActivePerk == CompanionBonusType.XPDrain)
             {
                 _drainTimer = new DispatcherTimer
                 {
@@ -376,6 +393,7 @@ namespace ConditioningControlPanel.Services
 
         private void OnDrainTick(object? sender, EventArgs e)
         {
+            if (ActivePerk != CompanionBonusType.XPDrain) return;
             var settings = App.Settings?.Current;
             if (settings == null) return;
 

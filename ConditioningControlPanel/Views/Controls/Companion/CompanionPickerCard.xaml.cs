@@ -85,12 +85,22 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         private void ShowPerk()
         {
             var def = CompanionDefinition.GetById(App.Companion?.ActiveCompanion ?? CompanionId.OGBambiSprite);
-            var perk = CompanionPerks.For(def.BonusType);
+            var type = App.Companion?.ActivePerk ?? def.BonusType;
+            var perk = CompanionPerks.For(type);
+            BtnPerkChange.Visibility = CompanionExperience.IsV2Enabled && !_previewing ? Visibility.Visible : Visibility.Collapsed;
             TxtPerkGlyph.Text = perk.Glyph;
-            TxtPerk.Text = Loc.Get(perk.LocKey);
+            TxtPerk.Text = (CompanionExperience.IsV2Enabled ? Loc.Get(CompanionPerks.NameKey(type)) + ": " : string.Empty) + Loc.Get(perk.LocKey);
+            TxtPerk.Foreground = perk.Negative ? Brushes.Salmon : Brushes.White;
             var tone = perk.Negative ? Color.FromRgb(0xFF, 0x6B, 0x6B) : (Color?)null;
             if (tone is { } c) TxtPerkGlyph.Foreground = new SolidColorBrush(c);
             else TxtPerkGlyph.SetResourceReference(TextBlock.ForegroundProperty, "PinkBrush");
+        }
+
+        private void Perk_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is not Window owner) return;
+            V2.PerkPicker.Show(owner);
+            Refresh();
         }
 
         // ------------------------------------------------------------------ preview

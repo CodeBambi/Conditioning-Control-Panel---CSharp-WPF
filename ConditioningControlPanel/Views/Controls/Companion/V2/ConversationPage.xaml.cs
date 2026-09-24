@@ -25,6 +25,12 @@ public partial class ConversationPage : UserControl
     internal ConversationPage(CompanionRoomRuntimeVm room, CompanionRoomView legacy)
     {
         InitializeComponent();
+        StageDust.StartLayers(new ConditioningControlPanel.Controls.AmbientFxConfig
+        {
+            Layers = ConditioningControlPanel.Controls.AmbientFxLayers.DustField,
+            Intensity = 0.8, DustDensity = 0.65,
+            Tint = System.Windows.Media.Color.FromRgb(128, 228, 197)
+        });
         _legacy = legacy;
         _vm = new(room);
         DataContext = _vm;
@@ -136,5 +142,6 @@ public partial class ConversationPage : UserControl
         _parent = null;
         if (_returnFocus != null) Keyboard.Focus(_returnFocus);
         _returnFocus = null;
+        _vm.Refresh();
     }
 }
