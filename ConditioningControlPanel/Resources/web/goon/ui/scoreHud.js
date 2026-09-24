@@ -294,7 +294,7 @@ export function mountScoreHud({ match, host = null, audio = null } = {}) {
     let a = null;
     try { a = match.notePop(localMonotonicMs()); } catch (_e) { a = null; }
     if (!a) return;
-    if (a.combo >= 2) blip(a.combo);
+    if (ev && ev.type === FLASH_POP_EVENT) blip(a.combo);
     // A pop past the limiter still climbs the combo, it just floats nothing.
   }
 
