@@ -115,19 +115,21 @@ export function createLockCardView(container, o = {}) {
   eyebrow.appendChild(dot);
   eyebrow.appendChild(document.createTextNode(t('gg_lockCard_eyebrow')));
   inner.appendChild(eyebrow);
+  // The prize is a gold tag with two chains latched BEHIND it: nothing ever
+  // crosses the number, and the footer hint already says how to unlock it.
   const prize = document.createElement('div');
   prize.className = 'gg-lock-prize';
-  const amount = document.createElement('strong');
-  amount.textContent = String(initialPrize);
-  prize.appendChild(amount);
+  const tag = document.createElement('div');
+  tag.className = 'gg-lock-tag';
   for (let i = 0; i < 2; i++) {
     const chain = document.createElement('i');
     chain.className = 'gg-lock-chain gg-lock-chain--' + i;
-    prize.appendChild(chain);
+    tag.appendChild(chain);
   }
-  const instruction = document.createElement('small');
-  instruction.textContent = t('gg_lockCard_unlock');
-  prize.appendChild(instruction);
+  const amount = document.createElement('strong');
+  amount.textContent = String(initialPrize);
+  tag.appendChild(amount);
+  prize.appendChild(tag);
   if (timed) inner.appendChild(prize);
 
   const phraseEl = document.createElement('p');
@@ -172,10 +174,12 @@ export function createLockCardView(container, o = {}) {
   const give = document.createElement('button');
   give.type = 'button';
   give.className = 'gg-btn gg-btn--ghost';
-  give.textContent = t('gg_lockCard_dismiss');
+  // A bounty card can be walked away from too: the prize is forfeit, the card
+  // closes, exactly as if the clock had run out (owner, 2026-09-25).
+  give.textContent = timed ? t('gg_lockCard_forfeit') : t('gg_lockCard_dismiss');
   foot.appendChild(hint);
   foot.appendChild(mistakeEl);
-  if (!timed) foot.appendChild(give);
+  foot.appendChild(give);
   const clock = document.createElement('span');
   clock.className = 'gg-lock-clock';
   if (timed) foot.prepend(clock);

@@ -1571,6 +1571,7 @@ export const RAW = {
     exact: 'type it exactly',
     unlock: 'type it to unlock',
     dismiss: 'dismiss',
+    forfeit: 'forfeit the prize',
   },
 
   /* exec/videos.js - the floating window's buttons. */
