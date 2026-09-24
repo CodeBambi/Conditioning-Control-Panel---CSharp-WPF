@@ -49,7 +49,7 @@
   "companion_v2_mute": "Couper la voix",
   "companion_v2_history_note": "Nouveau chat efface cette conversation. Les préférences enregistrées restent.",
   "companion_v2_personality": "Plus d'options de personnalité",
-  "companion_v2_memory_note": "Enregistré sur ce PC. Les souvenirs pertinents sont envoyés avec tes messages.",
+  "companion_v2_memory_note": "Avec la mémoire activée, l’IA choisie peut résumer les échanges récents. Les souvenirs pertinents accompagnent vos messages. Les détails enregistrés restent sur ce PC ; consultez-les ou oubliez-les ici.",
   "companion_v2_busy": "Une réponse est en cours.",
   "br_counter_sold": "VENDU",
   "friends_land_invite_line": "t'invite : {0}",
@@ -6158,5 +6158,7 @@
   "companion_perk_name_1": "Hands Off",
   "companion_perk_name_2": "Leech",
   "companion_perk_name_3": "Drill",
-  "companion_perk_name_4": "Finisher"
+  "companion_perk_name_4": "Finisher",
+  "companion_v2_recap": "Contexte des échanges récents",
+  "companion_v2_recap_clear": "Oublier ce contexte"
 }

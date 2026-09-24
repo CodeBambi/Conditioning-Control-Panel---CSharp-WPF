@@ -101,7 +101,7 @@ public partial class ConversationPage : UserControl
             if (kind == "connection") _vm.Room.Engine.IsExpanded = true;
             var contents = new StackPanel();
             if (kind == "memory") contents.Children.Add(new TextBlock { Text = Loc.Get("companion_v2_memory_note"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
-            if (kind == "memory") contents.Children.Add(new PreferredNameEditor());
+            if (kind == "memory") { contents.Children.Add(new PreferredNameEditor()); contents.Children.Add(new ConversationRecap()); }
             contents.Children.Add(existing);
             SheetContent.Content = contents;
         }

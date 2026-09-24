@@ -49,7 +49,7 @@
   "companion_v2_mute": "音声をミュート",
   "companion_v2_history_note": "新しいチャットを始めると、この会話は消去されます。保存した好みは残ります。",
   "companion_v2_personality": "性格の詳細設定",
-  "companion_v2_memory_note": "このPCに保存されます。関連する記憶はメッセージと一緒に送信されます。",
+  "companion_v2_memory_note": "メモリーがオンの場合、選択したAIが最近の会話を要約できます。関連する記憶はメッセージと一緒に送信されます。保存した情報はこのPCに残り、ここで確認・削除できます。",
   "companion_v2_busy": "返信を準備しています。",
   "br_counter_sold": "売約済み",
   "friends_land_invite_line": "{0}に招待されました",
@@ -6158,5 +6158,7 @@
   "companion_perk_name_1": "Hands Off",
   "companion_perk_name_2": "Leech",
   "companion_perk_name_3": "Drill",
-  "companion_perk_name_4": "Finisher"
+  "companion_perk_name_4": "Finisher",
+  "companion_v2_recap": "最近の会話の文脈",
+  "companion_v2_recap_clear": "この文脈を忘れる"
 }

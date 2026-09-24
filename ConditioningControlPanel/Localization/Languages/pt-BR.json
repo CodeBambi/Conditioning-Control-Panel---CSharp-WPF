@@ -49,7 +49,7 @@
   "companion_v2_mute": "Silenciar voz",
   "companion_v2_history_note": "Nova conversa apaga este chat. As preferências salvas são mantidas.",
   "companion_v2_personality": "Mais opções de personalidade",
-  "companion_v2_memory_note": "Salvo neste PC. Memórias relevantes são enviadas com suas mensagens.",
+  "companion_v2_memory_note": "Com a memória ativa, a IA escolhida pode resumir conversas recentes. As memórias relevantes acompanham suas mensagens. Os dados salvos ficam neste PC; revise ou esqueça aqui.",
   "companion_v2_busy": "Uma resposta está sendo preparada.",
   "br_counter_sold": "VENDIDO",
   "friends_land_invite_line": "te convida para {0}",
@@ -6158,5 +6158,7 @@
   "companion_perk_name_1": "Hands Off",
   "companion_perk_name_2": "Leech",
   "companion_perk_name_3": "Drill",
-  "companion_perk_name_4": "Finisher"
+  "companion_perk_name_4": "Finisher",
+  "companion_v2_recap": "Contexto da conversa recente",
+  "companion_v2_recap_clear": "Esquecer este contexto"
 }

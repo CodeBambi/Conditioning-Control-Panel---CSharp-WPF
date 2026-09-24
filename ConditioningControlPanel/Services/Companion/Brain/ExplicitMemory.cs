@@ -50,7 +50,7 @@ internal static class ExplicitMemoryRules
         return match.Success ? "favorite:" + match.Groups["topic"].Value.ToLowerInvariant().Trim() : null;
     }
 
-    internal static bool IsCorrection(string text) => Regex.IsMatch(text ?? "", @"^(actually|forget|do not remember|don't remember|stop remembering)\b", RegexOptions.IgnoreCase);
+    internal static bool IsCorrection(string text) => Regex.IsMatch(text ?? "", @"^(actually|(?:small|quick|one) correction|correction|I meant|to clarify|(?:please )?forget|do not remember|don't remember|stop remembering|(?:that is|that's) (?:wrong|incorrect)|I (?:no longer|don't|do not) (?:like|prefer|enjoy))\b", RegexOptions.IgnoreCase);
 
     internal static IReadOnlyList<MemoryExcerpt>? ParseSummary(string? json, IReadOnlyDictionary<string, string> sources)
     {

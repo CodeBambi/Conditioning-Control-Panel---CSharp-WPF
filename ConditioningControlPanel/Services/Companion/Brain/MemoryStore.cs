@@ -411,6 +411,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             RequestSave();
         }
 
+        internal void ForgetUncertainAutomaticFacts()
+        {
+            lock (_lock) _facts.RemoveAll(f => f.Source == MemoryFact.SourceChat
+                && !f.Pinned && f.Kind != MemoryFactKind.Boundary);
+            RequestSave();
+        }
+
         internal void ForgetAutomaticFact(string id)
         {
             lock (_lock) _facts.RemoveAll(f => f.Id == id && f.Source == MemoryFact.SourceChat);

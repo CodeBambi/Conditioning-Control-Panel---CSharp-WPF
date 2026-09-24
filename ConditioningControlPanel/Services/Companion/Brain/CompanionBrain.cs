@@ -185,6 +185,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         /// <summary>The durable user model. A shell in Train 1 — see <see cref="MemoryStore"/>.</summary>
         public IMemoryStore Memory { get; }
+        internal IReadOnlyList<string> SummaryQuotes => _maintenance?.SummaryQuotes ?? Array.Empty<string>();
+        internal void ClearSummary() => _maintenance?.Forget();
 
         /// <summary>Titles she suggested recently, injected as an exclusion line.</summary>
         public RecentRecommendations Recommendations { get; }
@@ -220,16 +222,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     : new AiReplyResult(GetThinkingPhrase(), IsAiGenerated: false, Refusal: null);
             }
 
-            if (_preview() && _maintenance != null)
-            {
-                try
-                {
-                    await _maintenance.InterruptAsync().WaitAsync(TimeSpan.FromSeconds(2), cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (TimeoutException) { return AiReplyResult.Failed(AiFailureKind.Busy, true); }
-                catch (OperationCanceledException) { return AiReplyResult.Failed(AiFailureKind.Cancelled, true); }
-            }
+            // Foreground chat never waits for a utility provider that ignores cancellation.
+            if (_preview() && _maintenance != null) _ = _maintenance.InterruptAsync();
 
             _isUserQueued = true;
             try

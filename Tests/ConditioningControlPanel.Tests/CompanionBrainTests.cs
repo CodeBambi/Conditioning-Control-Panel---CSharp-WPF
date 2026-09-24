@@ -105,6 +105,41 @@ public class CompanionBrainTests
         lock (store.Writes) return store.Saved;
     }
 
+    [Fact]
+    public async Task Preview_ForegroundDoesNotWaitForUncooperativeSummaryTransport()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ccp-summary-preemption-" + Guid.NewGuid());
+        Directory.CreateDirectory(directory);
+        var summaryEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSummary = new TaskCompletionSource<AiReplyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            using var memory = new MemoryStore(Path.Combine(directory, "memory.json"));
+            var transport = new FakeTransport();
+            transport.AsyncReply = _ =>
+            {
+                if (transport.Sends.Last().Options.Purpose == AiPurpose.Summary)
+                {
+                    summaryEntered.TrySetResult();
+                    return releaseSummary.Task;
+                }
+                return Task.FromResult(new AiReplyResult("A completed answer", true, null));
+            };
+            using var brain = new CompanionBrain(transport, new StubAssembler(), memory, new FakeStore(), preview: () => true);
+            for (int i = 0; i < 8; i++) await brain.ChatAsync("I am growing a small garden");
+            await summaryEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var foreground = brain.ChatAsync("Can we keep talking?");
+            Assert.True(foreground.IsCompleted);
+            Assert.True((await foreground).IsAiGenerated);
+            releaseSummary.TrySetResult(new AiReplyResult("{\"context\":[]}", true, null));
+        }
+        finally
+        {
+            releaseSummary.TrySetResult(AiReplyResult.Failed(AiFailureKind.Cancelled));
+            Directory.Delete(directory, true);
+        }
+    }
+
     [Theory]
     [InlineData(true, true, 1)]
     [InlineData(false, true, 0)]

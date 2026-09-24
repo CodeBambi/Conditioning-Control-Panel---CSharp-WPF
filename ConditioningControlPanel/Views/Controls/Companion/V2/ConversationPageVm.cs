@@ -41,7 +41,7 @@ internal sealed class ConversationPageVm : CompanionObservable
         ? (App.Settings?.Current?.ActiveCompanionId ?? 0) == 0 ? "EMI" : App.Companion?.ActiveCompanionDef.Name ?? _room.Hero.Name
         : App.Mods?.GetCompanionName() ?? _room.Hero.Name;
     public bool IsEmi => HouseCharacter && (App.Settings?.Current?.ActiveCompanionId ?? 0) == 0 &&
-        (App.Settings?.Current?.SelectedAvatarSet ?? 1) <= 3;
+        ((App.Settings?.Current?.SelectedAvatarSet ?? 1) <= 3 || App.Settings?.Current?.SelectedAvatarSet == 8);
     public string PerkCost => App.Companion?.ActivePerk == CompanionBonusType.XPDrain ? "Leech: -3 XP/s" : string.Empty;
     public string Familiarity => App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false &&
         App.Brain?.Memory is MemoryStore memory

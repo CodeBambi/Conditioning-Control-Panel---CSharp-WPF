@@ -49,7 +49,7 @@
   "companion_v2_mute": "Stimme stummschalten",
   "companion_v2_history_note": "Neuer Chat löscht dieses Gespräch. Gespeicherte Vorlieben bleiben.",
   "companion_v2_personality": "Weitere Persönlichkeitsoptionen",
-  "companion_v2_memory_note": "Auf diesem PC gespeichert. Relevante Erinnerungen werden mit deinen Nachrichten gesendet.",
+  "companion_v2_memory_note": "Wenn Erinnerungen aktiv sind, kann die gewählte KI den letzten Chat zusammenfassen. Relevante Erinnerungen werden mitgesendet. Gespeicherte Details bleiben auf diesem PC; hier prüfen oder vergessen.",
   "companion_v2_busy": "Eine Antwort wird erstellt.",
   "br_counter_sold": "VERKAUFT",
   "friends_land_invite_line": "lädt dich ein: {0}",
@@ -6158,5 +6158,7 @@
   "companion_perk_name_1": "Hands Off",
   "companion_perk_name_2": "Leech",
   "companion_perk_name_3": "Drill",
-  "companion_perk_name_4": "Finisher"
+  "companion_perk_name_4": "Finisher",
+  "companion_v2_recap": "Kontext aus letzten Gesprächen",
+  "companion_v2_recap_clear": "Diesen Kontext vergessen"
 }
