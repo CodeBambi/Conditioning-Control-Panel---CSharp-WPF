@@ -36,6 +36,16 @@ namespace ConditioningControlPanel.Views.Tabs
             Unloaded += (_, _) => Services.Prizes.PrizeGrants.GrantsChanged -= RefreshV2Badges;
         }
 
+        private void FeatureSection_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (sender is FrameworkElement section && section.ActualWidth > 0 && section.ActualHeight > 0)
+            {
+                var clip = new RectangleGeometry(new Rect(0, 0, section.ActualWidth, section.ActualHeight), 20, 20);
+                clip.Freeze();
+                section.Clip = clip;
+            }
+        }
+
         private void BillboardArtwork_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             if (sender is FrameworkElement art && art.ActualWidth > 0 && art.ActualHeight > 0)

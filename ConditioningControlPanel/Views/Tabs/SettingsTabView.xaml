@@ -388,7 +388,11 @@
         <!-- feature (PlayTabView.xaml:1165 rule); FX toggles mirror the    -->
         <!-- popup side effects and respect the session dose lock.          -->
         <!-- ============================================================ -->
-        <Grid Grid.Column="1" Grid.Row="1" x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="10,5,16,5">
+        <!-- Clip the entire section, including ambient artwork and card glows. -->
+        <Grid Grid.Column="1" Grid.Row="1" Margin="10,5,16,5"
+              SizeChanged="FeatureSection_SizeChanged">
+            <fx:AmbientFxCanvas x:Name="MosaicFx" x:FieldModifier="internal"/>
+        <Grid x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
@@ -401,26 +405,6 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-
-            <!-- ============================================================ -->
-            <!-- AMBIENT LAYER - the one looping FX on the whole Dashboard.    -->
-            <!-- Declared FIRST so it is the bottom of the grid's z-order: the -->
-            <!-- tiles paint their own opaque surfaces on top, so the fog and  -->
-            <!-- dust read through the gutters and through the near-           -->
-            <!-- transparent centre logo tile, never over a card face.         -->
-            <!--                                                                -->
-            <!-- It is inside the root 1489x901 Viewbox and therefore bitmap-   -->
-            <!-- scaled. That is fine and deliberate: soft fog and out-of-focus -->
-            <!-- dust have no edges for the scale to soften. Crisp particles    -->
-            <!-- would need to live outside the Viewbox - see the FX plan S2.   -->
-            <!--                                                                -->
-            <!-- AmbientFxCanvas is hit-test invisible by construction, runs a  -->
-            <!-- self-stopping clock, and MainWindow.DashboardFx registers it   -->
-            <!-- with RegisterTabFx so it parks on every tab switch.            -->
-            <!-- ============================================================ -->
-            <fx:AmbientFxCanvas x:Name="MosaicFx" x:FieldModifier="internal"
-                                Grid.Row="0" Grid.RowSpan="4"
-                                Grid.Column="0" Grid.ColumnSpan="4"/>
 
             <!-- The Title="" literals below are English design-time fallbacks only.
                  At runtime MainWindow.ApplyModFeatureNames() overwrites every FX title
@@ -974,6 +958,7 @@
                                VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
+        </Grid>
         </Grid>
     
         <!-- ============================================================ -->
