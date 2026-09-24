@@ -1260,7 +1260,7 @@ async function main() {
     ok(!target._cls.has('gg-flash--grabbed'), 'a wobble inside the slop is not a grab', target.className);
     ptr(target, 'pointerup', 104, 103);
     ok(target._cls.has('is-popped'), 'a clicked flash pops out');
-    ok(heard.includes('flash-pop'), 'the click hits the flash-pop sfx hook', heard.join(','));
+    ok(!heard.includes('flash-pop'), 'GIF clicks leave the rising note to the score HUD', heard.join(','));
     await sleep(320);                              // both children hatch by 210ms
     ok(shotsOf().length === before + 1,
       'one click dismisses one and hatches two', `${before} -> ${shotsOf().length}`);

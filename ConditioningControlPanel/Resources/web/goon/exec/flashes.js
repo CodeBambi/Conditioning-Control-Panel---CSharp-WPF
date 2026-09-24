@@ -1,3 +1,4 @@
+import { sweepBubbles } from './flashCollision.js';
 /* ============================================================================
  * exec/flashes.js — GoonElement.Flashes (0) + GoonPayloadKind.FlashBurst (0).
  *
@@ -300,6 +301,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       rec.node.style.setProperty('transform',
         `translate(-50%, -50%) translate(${rec.dx.toFixed(1)}px, ${rec.dy.toFixed(1)}px)`
         + ` rotate(${rec.rot}deg) scale(${s})`);
+      if (rec.grabbed) rec.hitRect = sweepBubbles(rec.node, rec.hitRect).rect;
     } catch (_e) { /* ignore */ }
   }
 
@@ -492,6 +494,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     const rec = d.rec;
     d.grabbed = true;
     rec.held = true;
+    rec.hitRect = rec.node.getBoundingClientRect?.() || null;
     try { clearTimeout(rec.safety); } catch (_e) { /* ignore */ }
     try { clearTimeout(rec.expTimer); } catch (_e) { /* ignore */ }
     rec.expTimer = 0;
