@@ -20,9 +20,12 @@
   const TICK_MS = 100;          // time posts (~10 Hz) + watchdog sampling
   const STALL_MS = 10000;       // live but no forward progress this long => error
   const NO_PLAYING_MS = 10000;  // never reached 'playing' this long => error
-  const BG_DRIFT_S = 2;         // blur backdrop resync threshold
-  const BG_RESYNC_GAP_MS = 4000;
-  const BG_PLAY_RETRIES = 3;    // then give up on the backdrop (never on the clip)
+  // Blurred backdrop (#1257): painted from the clip itself into a tiny canvas.
+  // One decoder instead of two and no full-screen filter, same idea as the
+  // LibVLC path (1/8 scale, about 5 refreshes a second).
+  const BG_PAINT_MS = 160;      // ~6 refreshes a second; invisible behind the blur
+  const BG_PAD = 6;             // canvas px drawn past each edge so the blur pulls in picture
+  const BG_FILTER = 'blur(2px) brightness(0.7)';
 
   // Unrequested-pause rule. One stray pause is an OS media key or a browser
   // hiccup and is simply resumed; only a BURST of them means we are fighting the
@@ -67,8 +70,9 @@
   // silent, and the host's volume only lands once a load says so.
   fg.muted = true;
   fg.volume = 0;
-  bg.muted = true;
-  bg.volume = 0;
+  const bgCtx = bg.getContext('2d', { alpha: false });
+  let bgTimer = null;
+  let bgLastT = -1;
 
   // ---------- state ----------
 
@@ -91,8 +95,47 @@
       fg.volume = clamp01(volume);
       fg.muted = !!muted;
     } catch (e) { /* out-of-range guard already applied */ }
-    bg.muted = true; // the backdrop is NEVER audible, whatever the session says
-    bg.volume = 0;
+  }
+
+  // ---------- blurred backdrop ----------
+
+  function startBackdrop() {
+    stopBackdrop();
+    bgLastT = -1;
+    bgTimer = setInterval(paintBackdrop, BG_PAINT_MS);
+  }
+
+  function stopBackdrop() {
+    if (bgTimer != null) { clearInterval(bgTimer); bgTimer = null; }
+    if (bgCtx) {
+      bgCtx.filter = 'none';
+      bgCtx.fillStyle = '#000';
+      bgCtx.fillRect(0, 0, bg.width, bg.height);
+    }
+  }
+
+  /** Cover-fit the current frame into the canvas, blurred and dimmed. */
+  function paintBackdrop() {
+    if (!cur || !cur.blur || !bgCtx) return;
+    if (fg.readyState < 2 || !fg.videoWidth || !fg.videoHeight) return;
+    const t = fg.currentTime || 0;
+    if (fg.paused && t === bgLastT) return; // nothing new to show
+    bgLastT = t;
+    const w = bg.width + BG_PAD * 2;
+    const h = bg.height + BG_PAD * 2;
+    const s = Math.max(w / fg.videoWidth, h / fg.videoHeight);
+    const dw = fg.videoWidth * s;
+    const dh = fg.videoHeight * s;
+    try {
+      bgCtx.filter = BG_FILTER;
+      bgCtx.drawImage(fg, (bg.width - dw) / 2, (bg.height - dh) / 2, dw, dh);
+    } catch (e) {
+      // A backdrop that will not paint is a cosmetic loss; the clip plays on black.
+      cur.blur = false;
+      document.body.classList.remove('has-bg');
+      stopBackdrop();
+      log('blur backdrop failed to paint - falling back to black: ' + e);
+    }
   }
 
   function playEl(el, tag) {
@@ -161,11 +204,10 @@
     lastTimeMs = -1;
     lastTimePostAt = 0;
     document.body.classList.remove('has-bg');
-    [fg, bg].forEach((el) => {
-      try { el.pause(); } catch (e) { /* ignore */ }
-      el.removeAttribute('src');
-      try { el.load(); } catch (e) { /* ignore */ }
-    });
+    stopBackdrop();
+    try { fg.pause(); } catch (e) { /* ignore */ }
+    fg.removeAttribute('src');
+    try { fg.load(); } catch (e) { /* ignore */ }
   }
 
   // ---------- error reporting ----------
@@ -176,7 +218,7 @@
     cur.errored = true;
     stopTicker();
     try { fg.pause(); } catch (e) { /* ignore */ }
-    try { bg.pause(); } catch (e) { /* ignore */ }
+    stopBackdrop();
     post({ type: 'error', code: code, message: String(message) });
   }
 
@@ -303,8 +345,6 @@
       unrequestedPauses: 0,
       pauseStamps: [],
       startApplied: false,
-      bgPlayFails: 0,
-      bgResyncAt: 0,
       lastDurationMs: -1,
     };
 
@@ -313,12 +353,8 @@
     applyVolume();
     applySink(d.sinkLabel);
 
-    // Backdrop first so it is never the thing that delays the real clip.
-    if (cur.blur) {
-      bg.src = url;
-      playEl(bg, 'bg');
-    }
     fg.src = url;
+    if (cur.blur) startBackdrop();
     playEl(fg, 'fg');
 
     startTicker();
@@ -332,7 +368,6 @@
     if (Number.isFinite(d) && d > 0 && sec >= d) { cur.startApplied = true; return; }
     try {
       fg.currentTime = sec;
-      if (cur.blur) { try { bg.currentTime = sec; } catch (e) { /* backdrop only */ } }
       cur.startApplied = true;
     } catch (e) {
       // Not seekable yet — 'canplay' retries.
@@ -374,7 +409,7 @@
     post({ type: 'time', ms: ms, paused: !!(cur.hostPaused || fg.paused) });
   }
 
-  // ---------- ticker: 10 Hz time + stall watchdogs + backdrop resync ----------
+  // ---------- ticker: 10 Hz time + stall watchdogs ----------
 
   function startTicker() {
     stopTicker();
@@ -413,15 +448,6 @@
       return;
     }
 
-    // Two elements decoding the same file drift apart; the backdrop is blurred
-    // so small drift is invisible, but a couple of seconds means it is showing a
-    // different scene. Nudge it, rarely.
-    if (cur.blur && !bg.error && Number.isFinite(bg.duration)
-        && now - cur.bgResyncAt > BG_RESYNC_GAP_MS
-        && Math.abs((bg.currentTime || 0) - pos) > BG_DRIFT_S) {
-      cur.bgResyncAt = now;
-      try { bg.currentTime = pos; } catch (e) { /* backdrop only */ }
-    }
   }
 
   // ---------- foreground media events ----------
@@ -475,7 +501,6 @@
     // for as long as the user takes) — so stop the 10 Hz ticker rather than let it
     // spin for the whole of it.
     stopTicker();
-    try { bg.pause(); } catch (e) { /* ignore */ }
     post({ type: 'ended' });
   });
 
@@ -524,31 +549,10 @@
     if (!pauseLoopDetected(cur.pauseStamps, performance.now())) {
       log('unrequested pause #' + cur.unrequestedPauses + ' - resuming');
       playEl(fg, 'fg');
-      if (cur.blur) playEl(bg, 'bg');
       return;
     }
     fail(ERR_PAUSE_LOOP, 'playback paused ' + cur.pauseStamps.length + ' times in '
       + PAUSE_WINDOW_MS + 'ms without a request');
-  });
-
-  // ---------- backdrop media events (never fatal) ----------
-
-  bg.addEventListener('pause', () => {
-    if (!cur || !cur.blur || cur.errored || cur.ended || cur.hostPaused) return;
-    if (bg.ended || bg.error) return;
-    if (cur.bgPlayFails >= BG_PLAY_RETRIES) return;
-    cur.bgPlayFails++;
-    playEl(bg, 'bg');
-  });
-
-  bg.addEventListener('error', () => {
-    // A backdrop that will not decode is a cosmetic loss; the clip plays on black.
-    if (!cur || !cur.blur) return;
-    cur.blur = false;
-    document.body.classList.remove('has-bg');
-    bg.removeAttribute('src');
-    try { bg.load(); } catch (e) { /* ignore */ }
-    log('blur backdrop failed to decode - falling back to black');
   });
 
   // ---------- attention-check targets ----------
@@ -750,7 +754,6 @@
     if (!cur) return;
     cur.hostPaused = true;
     try { fg.pause(); } catch (e) { /* ignore */ }
-    try { bg.pause(); } catch (e) { /* ignore */ }
     postTime(true);
   }
 
@@ -763,7 +766,6 @@
     cur.lastProgressAt = performance.now();
     if (!cur.playingSent) cur.startedAt = performance.now();
     playEl(fg, 'fg');
-    if (cur.blur) playEl(bg, 'bg');
   }
 
   function doSeek(ms) {
@@ -774,7 +776,6 @@
     const d = fg.duration;
     if (Number.isFinite(d) && d > 0) sec = Math.min(sec, Math.max(0, d - 0.05));
     try { fg.currentTime = sec; } catch (e) { log('seek rejected: ' + e); return; }
-    if (cur.blur) { try { bg.currentTime = sec; } catch (e) { /* backdrop only */ } }
     cur.ended = false; // seeking back out of the end re-arms normal reporting
     if (ticker == null) startTicker(); // ...including the ticker the end stopped
     cur.lastProgressAt = performance.now();
@@ -782,7 +783,6 @@
     // stall watchdog would then "catch" a video nobody asked to stop.
     if (!cur.hostPaused && fg.paused) {
       playEl(fg, 'fg');
-      if (cur.blur) playEl(bg, 'bg');
     }
     postTime(true);
   }
