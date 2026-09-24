@@ -873,6 +873,8 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     const w = windows.get(id);
     if (!w) return;
     for (const t of w.timers) { try { clearTimeout(t); } catch (_e) { /* gone */ } }
+    w.preview?.destroy();
+    try { w.preview?.node.remove(); } catch (_e) { /* already removed */ }
     windows.delete(id);
     paint();
   }
@@ -896,6 +898,16 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
       const cur = windows.get(id);
       if (!cur) return;
       cur.open = true;
+      if (kind === GoonPayloadKind.FlashBurst) {
+        // One decoder per media kind. A newer throw replaces the older preview.
+        for (const other of windows.values()) {
+          if (other !== cur && other.key === key && other.preview) {
+            other.preview.destroy(); other.preview.node.remove(); other.preview = null;
+          }
+        }
+        cur.preview = createPreview({ kind, gifClip: true, cls: 'gg-mon-media' });
+        if (cur.preview) add(parts.get(key), cur.preview.node);
+      }
       paint();
     }));
     w.timers.push(laterOnce(Math.max(0, leadMs | 0) + run, () => closeWindow(id)));
