@@ -4008,6 +4008,22 @@ namespace ConditioningControlPanel.Services
                     // Sync endpoint handles proper reconciliation with backfill.
                     App.Logger?.Warning("Skill purchase rejected: {Error}, server says {Points} points",
                         result.Error, result.SkillPoints);
+
+                    // Except a refusal for balance: the server has just judged this purchase on its
+                    // own number, so every surface shows that number (#1268 #1269). An account the
+                    // server reconciles up from our value never lands here with a lower one.
+                    var refusedSkill = Models.SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
+                    if (refusedSkill != null && settings != null)
+                    {
+                        var adopted = SparklePoints.AdoptAfterRefusal(settings.SkillPoints, result.SkillPoints, refusedSkill.Cost);
+                        if (adopted.HasValue)
+                        {
+                            App.Logger?.Information("Skill purchase: adopting server balance {Server} over local {Local} after a balance refusal",
+                                adopted.Value, settings.SkillPoints);
+                            settings.SkillPoints = adopted.Value;
+                            App.Settings?.Save();
+                        }
+                    }
                     return (false, result.Error ?? "Purchase failed");
                 }
 
