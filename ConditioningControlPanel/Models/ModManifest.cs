@@ -35,6 +35,20 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("previewImage")]
         public string? PreviewImage { get; set; }
 
+        /// <summary>Optional wide banner for the Customise window, mod-relative like previewImage.
+        /// Falls back to previewImage when unset.</summary>
+        [JsonProperty("bannerImage")]
+        public string? BannerImage { get; set; }
+
+        /// <summary>Optional settings preset (id or name) the mod recommends. Offered once on
+        /// activation, never applied without a yes.</summary>
+        [JsonProperty("suggestedSettingsPreset")]
+        public string? SuggestedSettingsPreset { get; set; }
+
+        /// <summary>Optional asset preset (id or name) the mod recommends. Same ask-once rule.</summary>
+        [JsonProperty("suggestedAssetPreset")]
+        public string? SuggestedAssetPreset { get; set; }
+
         // OPTIONAL sections
         [JsonProperty("theme")]
         public ModTheme? Theme { get; set; }
@@ -435,5 +449,9 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("promptSettings")]
         public Dictionary<string, string>? PromptSettings { get; set; }
+
+        /// <summary>Optional: one or two lines in this personality's voice, shown by the picker.</summary>
+        [JsonProperty("sampleLines")]
+        public List<string>? SampleLines { get; set; }
     }
 }

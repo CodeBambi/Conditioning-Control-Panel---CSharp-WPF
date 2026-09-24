@@ -892,6 +892,53 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ---- the avatar picker's door ----
+        // The tube's arrows and the Customise window's Companion card pick through the SAME
+        // members (plus the public CurrentAvatarSet), so there is one switching path and one list of what can be picked.
+
+        /// <summary>The sets (or portrait skins) the user can pick right now, in picker order.</summary>
+        internal int[] PickableAvatarSets() => EffectiveAvatarSets();
+
+        /// <summary>
+        /// A user picked <paramref name="setNumber"/>: switch to it (with the fade) and tell the
+        /// bark engine. Returns false when it is not pickable or is already showing.
+        /// </summary>
+        internal bool SelectAvatarSet(int setNumber)
+        {
+            if (!EffectiveAvatarSets().Contains(setNumber) || setNumber == _currentAvatarSet) return false;
+            SwitchToAvatarSet(setNumber);
+            // User-initiated appearance/skin change (the arrows also repoint the portrait skin).
+            try { App.Bark?.NotifyAvatarChanged(); } catch { }
+            return true;
+        }
+
+        /// <summary>The picker's label for a set: the portrait skin title, a custom set's label,
+        /// the companion the set belongs to, or the legacy title. Mod-aware, not upper-cased.</summary>
+        internal string AvatarSetTitle(int setNumber)
+        {
+            string title;
+            if (_portraitMode && _portraitSet != null && _portraitSet.SkinCount > 0)
+            {
+                var skin = _portraitSet.Skins[_portraitSet.ClampSkin(setNumber - 1)];
+                title = string.IsNullOrWhiteSpace(skin.Title) ? skin.Id : skin.Title;
+            }
+            else if (App.Mods?.GetCustomAvatarSets()?.FirstOrDefault(c => c.SetNumber == setNumber) is { } custom
+                     && !string.IsNullOrWhiteSpace(custom.Label))
+            {
+                title = custom.Label;
+            }
+            else if (GetCompanionForAvatarSet(setNumber) is { } companionId)
+            {
+                title = Models.CompanionDefinition.GetById(companionId)
+                    .GetDisplayName(App.Settings?.Current?.SlutModeEnabled ?? false);
+            }
+            else
+            {
+                title = Loc.Get(AvatarTitleKeys[Math.Clamp(setNumber - 1, 0, AvatarTitleKeys.Length - 1)]);
+            }
+            return App.Mods?.MakeModAware(title ?? "") ?? title ?? "";
+        }
+
         /// <summary>
         /// Navigate to previous avatar set
         /// </summary>
@@ -900,11 +947,7 @@ namespace ConditioningControlPanel
             var unlockedSets = EffectiveAvatarSets();
             int currentIndex = System.Array.IndexOf(unlockedSets, _currentAvatarSet);
             if (currentIndex > 0)
-            {
-                SwitchToAvatarSet(unlockedSets[currentIndex - 1]);
-                // User-initiated appearance/skin change (the arrows also repoint the portrait skin).
-                try { App.Bark?.NotifyAvatarChanged(); } catch { }
-            }
+                SelectAvatarSet(unlockedSets[currentIndex - 1]);
         }
 
         /// <summary>
@@ -915,11 +958,7 @@ namespace ConditioningControlPanel
             var unlockedSets = EffectiveAvatarSets();
             int currentIndex = System.Array.IndexOf(unlockedSets, _currentAvatarSet);
             if (currentIndex >= 0 && currentIndex < unlockedSets.Length - 1)
-            {
-                SwitchToAvatarSet(unlockedSets[currentIndex + 1]);
-                // User-initiated appearance/skin change (the arrows also repoint the portrait skin).
-                try { App.Bark?.NotifyAvatarChanged(); } catch { }
-            }
+                SelectAvatarSet(unlockedSets[currentIndex + 1]);
         }
 
         // ════════════════════════════════════════════════════════════════════════════════

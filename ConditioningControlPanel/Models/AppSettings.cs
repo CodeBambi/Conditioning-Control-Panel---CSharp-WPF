@@ -2246,6 +2246,18 @@ namespace ConditioningControlPanel.Models
             set { _assetPresets = value ?? new(); OnPropertyChanged(); }
         }
 
+        private HashSet<string> _modSuggestionsAsked = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Mod ids whose recommended setup the Customise window has already offered (yes or no).
+        /// Local only: the ask is once per mod per machine, never on later switches.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> ModSuggestionsAsked
+        {
+            get => _modSuggestionsAsked;
+            set { _modSuggestionsAsked = new HashSet<string>(value ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
         private string? _currentAssetPresetId = null;
         /// <summary>
         /// ID of the currently selected asset preset, or null if none selected.

@@ -67,6 +67,13 @@ namespace ConditioningControlPanel.Models
         public bool RequiresPremium { get; set; }
 
         /// <summary>
+        /// Optional lines in this personality's own voice, shown by the Companion picker so a
+        /// user hears how she talks before choosing. Null or empty falls back to the stock table.
+        /// </summary>
+        [JsonProperty("sampleLines")]
+        public System.Collections.Generic.List<string>? SampleLines { get; set; }
+
+        /// <summary>
         /// Whether activating this preset (or, for SlutMode-aware presets, flipping
         /// SlutMode on while it's active) requires the user to first clear the
         /// explicit-content acknowledgement gate. Set on the preset for unconditional

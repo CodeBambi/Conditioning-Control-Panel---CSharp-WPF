@@ -98,6 +98,7 @@ namespace ConditioningControlPanel.Services
                     Id = d.Id,
                     Name = d.Name,
                     Description = d.Description ?? "",
+                    SampleLines = d.SampleLines,
                     IsBuiltIn = true,
                     RequiresPremium = false,
                     PromptSettings = cps
