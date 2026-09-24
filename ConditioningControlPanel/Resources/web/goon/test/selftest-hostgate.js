@@ -311,11 +311,10 @@ function recorder(server) {
   ok(typeof S.voice.lobbyNoPerk === 'string' && /supporter perk/i.test(S.voice.lobbyNoPerk),
     'the voice row names the same perk — one send policy, said in two places');
   ok(/hear theirs/i.test(S.voice.lobbyNoPerk), 'and its own free half: hearing them was never gated');
-  /* THE BARS ARE NOT THE SAME BAR, and the copy must not merge them: a tier-1
-   * supporter who may send is still refused a room, and this is the sentence that
-   * has to keep making sense to them. */
-  ok(/tier 2/i.test(S.sheets.noHostAccess.line) || /Tier 2/.test(S.sheets.noHostAccess.line),
-    'the host refusal still names TIER 2 — sending at tier 1 does not buy a room');
+  /* ONE BAR SINCE 2026-09-24: any paid tier hosts (and sends); joining is free. The
+   * refusal names the paid tier and the free half. */
+  ok(/paid tier/i.test(S.sheets.noHostAccess.line) && /joining/i.test(S.sheets.noHostAccess.line),
+    'the host refusal names any paid tier, and that joining is free');
 
   const sheets = read('ui/sheets.js');
   ok(/case 'no_host_access':\s*\n\s*case 'no_pass':/.test(sheets),
@@ -491,8 +490,8 @@ function mountTitle(sessionShape) {
   ok(/canHost = HostingAllowed\(\),/.test(hostSvc), 'the init frame carries caps.canHost');
   ok(/mediaTransfer = TransferAllowed\(\),\s*\n\s*canHost = HostingAllowed\(\),/.test(hostSvc),
     'right beside the transfer verdict it is a rung above');
-  ok(/HostingAllowed\(\)\s*\n?\s*\{[\s\S]{0,160}App\.Patreon\?\.HasLabAccess == true;[\s\S]{0,80}catch \{ return false; \}/.test(hostSvc),
-    'computed from HasLabAccess, defaulting false in the same try/catch style as TransferAllowed');
+  ok(/HostingAllowed\(\)\s*\n?\s*\{[\s\S]{0,160}App\.Patreon\?\.HasPremiumAccess == true;[\s\S]{0,80}catch \{ return false; \}/.test(hostSvc),
+    'computed from HasPremiumAccess (any patron, 2026-09-24), defaulting false in the same try/catch style as TransferAllowed');
   /* THE OTHER BAR, AND THE PIN IT NEVER HAD (re-gate 2026-08-06). TransferAllowed()
    * was a bare `return true` for one day and nothing in this suite noticed, because
    * "free" is the one state a gate does not need asserting. It is tier 1+ again —

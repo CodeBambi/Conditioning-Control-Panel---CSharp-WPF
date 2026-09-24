@@ -48,6 +48,7 @@ import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
 import {
   GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION, NIGHT_CAP_VERSION,
+  cleanNiches, peerNiches,
 } from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
@@ -382,6 +383,57 @@ const mediaFlavour = (() => {
   };
   return api;
 })();
+
+/* ----------------------------------------------------------------------------
+ * THE OPPONENT'S NICHES (2026-09-24). Their hello's `caps.niches` goes to the host as ONE
+ * `peer-niches` frame per match; the host fetches from those niches and answers with
+ * `peer-media` frames (the online-media shape), which exec/media.js keeps OUT of the deck and
+ * draws only on the opponent's payloads. `declined` = this player switched online pictures off,
+ * so their own pictures stand in and a toast says so once.
+ * -------------------------------------------------------------------------- */
+function ownNiches() {
+  try {
+    if (!session.media || session.media.online === false || !session.media.flavour) return [];
+    return cleanNiches(mediaFlavourFrame(session.media).subs);
+  } catch (_e) { return []; }
+}
+
+const peerNicheLink = (() => {
+  let sent = '';
+  let toldDeclined = false;
+  return {
+    /** The opponent's hello landed (or changed): hand their niches to the host once. */
+    fromCaps(caps) {
+      const subs = peerNiches(caps);
+      const key = subs.join(',');
+      if (!session.hosted || !subs.length || key === sent) return;
+      sent = key;
+      try { bridge.send({ type: 'peer-niches', subs }); } catch (_e) { /* never load-bearing */ }
+      bridge.log('peer-niches: ' + subs.length);
+    },
+    /** Match over: stop the pool, drop its pictures. */
+    clear() {
+      try { media.setPeerNicheLibrary(null); } catch (_e) { /* ignore */ }
+      if (!sent) return;
+      sent = '';
+      try { bridge.send({ type: 'peer-niches', subs: [] }); } catch (_e) { /* ignore */ }
+    },
+    adopt(m) {
+      const o = readOnlineFrame(m);
+      const n = media.setPeerNicheLibrary(m && m.state === 'declined' ? null : o);
+      if (m && m.state === 'declined' && !toldDeclined) {
+        toldDeclined = true;
+        toasts?.show?.(S.peerMedia.declined);
+      }
+      return n;
+    },
+  };
+})();
+
+bridge.on('peer-media', (m) => {
+  const n = peerNicheLink.adopt(m);
+  bridge.log('peer-media: ' + ((m && m.state) || '?') + ' ' + n + ' pictures');
+});
 
 bridge.on('online-media', (m) => {
   const c = mediaFlavour.adopt(m);
@@ -722,7 +774,12 @@ function localCaps() {
    * hello, so no peer ever opens the media lane with it. Advertising less is always safe. */
   const transferCap = !!(session.caps && session.caps.mediaTransfer === true);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, transfer: transferCap });
+  /* NICHES (2026-09-24): a seat whose Goon pictures come from Scrolller names its niches, so
+   * the opponent's host can fetch pictures for this seat's throws (core/contracts.js
+   * cleanNiches). Only while the player's own online pictures are on for this game. */
+  const niches = ownNiches();
+
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, transfer: transferCap, niches });
 }
 
 /* ============================================================================
@@ -1191,6 +1248,13 @@ function attachMatch(match, transport) {
 
   currentMatch = match;
   currentTransport = transport || (goonSession ? goonSession.transport : null);
+  // The opponent's niches, once their hello is in. Practice has no real opponent: skip it.
+  if (!soloOpponent && typeof match.onOpponentStateChanged === 'function') {
+    try {
+      phaseUnsubs.push(match.onOpponentStateChanged(() => peerNicheLink.fromCaps(match.remoteCaps)));
+      peerNicheLink.fromCaps(match.remoteCaps);   // their hello may already be in
+    } catch (_e) { /* a hook, never load-bearing */ }
+  }
   escMercied = false;
   // A new match is a new answer to "is there a mic on the desk". See reportMicGate.
   micGateSaid = false;
@@ -1581,6 +1645,7 @@ function detachMatch() {
   voice = null;
   try { songPlayer?.dispose?.(); } catch (_e) { /* ignore */ }
   songPlayer = null;
+  peerNicheLink.clear();
   try { wakeLock?.stop?.(); } catch (_e) { /* a screen convenience, never load-bearing */ }
   try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
   currentSd = null;

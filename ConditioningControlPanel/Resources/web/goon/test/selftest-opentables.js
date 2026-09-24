@@ -196,7 +196,7 @@ const quiet = { info() {}, warn() {}, error() {}, debug() {} };
   ok(o && o.tables.length === 1 && o.tables[0].friend === false, 'Anyone shows it to a stranger, unmarked');
   o = await free.open();
   ok(o && o.tables.length === 1, 'a FREE account still sees the rows');
-  ok(o.you.canJoin === false && o.you.canHost === false, 'but may not join or host');
+  ok(o.you.canJoin === true && o.you.canHost === false, 'and may join, but not host (2026-09-24)');
 
   server.setBlocked('u_stranger', 'u_host');
   o = await stranger.open();
@@ -213,9 +213,10 @@ const quiet = { info() {}, warn() {}, error() {}, debug() {} };
   const notHost = await stranger.list(inv.code, { visibility: 'anyone' });
   ok(notHost === null && stranger.lastError === GoonSignalError.NotHost, 'only the host may list a room', stranger.lastError);
 
-  const noJoin = await free.join(inv.code, 'freeloader');
-  ok(noJoin === null && free.lastError === GoonSignalError.NoJoinAccess, 'a free account is refused no_join_access', free.lastError);
-  ok(!server.room(inv.code).joined, 'before the room is touched');
+  const invF = await friend.createInvite('friendhost');
+  ok(!!(await free.join(invF.code, 'free')), 'a FREE account sits down at a table (joining is free since 2026-09-24)');
+  const hostFree = await free.createInvite('free');
+  ok(hostFree === null && free.lastError === GoonSignalError.NoHostAccess, 'but may not host one', free.lastError);
   const anon = new GoonSignalingClient({ post: server.post, anonymous: true, logger: quiet });
   ok((await anon.join(inv.code)) === null && anon.lastError === GoonSignalError.SignIn, 'no account is refused signin', anon.lastError);
   const anonOpen = await anon.open();
@@ -266,7 +267,7 @@ const quiet = { info() {}, warn() {}, error() {}, debug() {} };
     ok(!/!/.test(flat(S[k])), 'S.' + k + ' has no exclamation marks');
   }
   ok(/free/i.test(S.prime.line) && /practice/i.test(S.prime.line), 'the Prime sheet says practice is free');
-  ok(S.prime.headline === '1v1 is a Prime game' && S.prime.badge === 'PRIME SUBJECT', 'the approved headline and badge');
+  ok(S.prime.headline === 'Hosting is for supporters' && S.prime.badge === 'BASIC SUBJECT', 'the hosting headline and the tier-1 badge (2026-09-24)');
   ok(!dash.test(S.sheets.noHostAccess.line) && /practice/i.test(S.sheets.noHostAccess.line),
     'the old host refusal no longer promises a free join');
   ok(!/joining a room is always free/.test(S.title.hostNoLab), 'nor does the menu note');

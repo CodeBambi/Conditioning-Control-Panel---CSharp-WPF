@@ -236,10 +236,9 @@ export class GoonFakeSignalingServer {
 
   _isBlocked(a, b) { return this._blocked.has([String(a), String(b)].sort().join('|')); }
 
+  /** Every signed-in account joins since 2026-09-24; `joinGate` now only asks for an account. */
   _mayJoin(uid) {
-    if (!this.joinGate) return true;
-    const u = String(uid || '');
-    return this._labAccess.has(u) || this._whitelist.has(u);
+    return !this.joinGate || !!String(uid || '');
   }
 
   /** Whitelist folds to permanent tier 2, exactly as computeEffectiveTier does it server-side. */
@@ -321,7 +320,6 @@ export class GoonFakeSignalingServer {
          * refused caller learns nothing about whether the code exists. */
         if (this.joinGate) {
           if (anonymous || isGuestUid(req.unified_id)) return reason(401, GoonSignalError.SignIn);
-          if (!this._mayJoin(req.unified_id)) return reason(403, GoonSignalError.NoJoinAccess);
         }
         const uid = anonymous ? mintGuestUid() : (typeof req.unified_id === 'string' ? req.unified_id : '');
         // A returning guest re-presents the g_ id it was given, so "is this a guest" is a question
