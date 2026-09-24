@@ -36,6 +36,30 @@ public partial class MainWindow
     {
         if (e.PropertyName == nameof(AppSettings.SkillPoints) || string.IsNullOrEmpty(e.PropertyName))
             RefreshSparkleWalletBalance();
+        if (e.PropertyName == nameof(AppSettings.SkillPoints))
+            QueueSkillTreeBalanceRefresh();
+    }
+
+    private bool _skillTreeBalanceQueued;
+
+    /// <summary>
+    /// The skill tree drew its balance (and which nodes read affordable) only when the tab was
+    /// shown, so a point earned while it was open left it one behind the wallet (#1269). Coalesced
+    /// at Background priority because the tree is the most expensive redraw in the app. Skipped
+    /// when the tree already shows the balance: a purchase redraws it itself, and a second rebuild
+    /// would cut the purchase FX short.
+    /// </summary>
+    private void QueueSkillTreeBalanceRefresh()
+    {
+        if (_skillTreeBalanceQueued) return;
+        _skillTreeBalanceQueued = true;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _skillTreeBalanceQueued = false;
+            if (!_sparkleWalletActive || EnhancementsTab?.IsVisible != true) return;
+            var shown = App.Settings.Current.SkillPoints.ToString("N0");
+            if (EnhancementsTab.TxtSkillPoints.Text != shown) RefreshEnhancementsUI();
+        }), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void RefreshSparkleWalletBalance()
