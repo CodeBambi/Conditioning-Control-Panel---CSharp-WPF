@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -344,13 +344,23 @@ namespace ConditioningControlPanel.Models
 
         private int _selectedAvatarSet = 0; // 0 = auto (use max unlocked)
         /// <summary>
-        /// User's selected avatar set (1-6). 0 means auto-select highest unlocked.
+        /// User's selected avatar set. 0 means auto-select highest unlocked.
         /// </summary>
         public int SelectedAvatarSet
         {
             get => _selectedAvatarSet;
-            set { _selectedAvatarSet = Math.Clamp(value, 0, 7); OnPropertyChanged(); }
+            set
+            {
+                _selectedAvatarSet = Math.Clamp(value, 0,
+                    Services.Companion.CompanionExperience.IsV2Enabled ? int.MaxValue : 7);
+                OnPropertyChanged();
+            }
         }
+
+        /// <summary>Local preview migration latch. Ignored outside the companion preview.</summary>
+        public bool CompanionEmiPreviewChoiceMade { get; set; }
+        public bool CompanionEmiFixedVoiceApplied { get; set; }
+        public int CompanionEmiVoiceRevision { get; set; }
 
         private bool _welcomed = false;
         public bool Welcomed
@@ -2263,6 +2273,28 @@ namespace ConditioningControlPanel.Models
         {
             get => _assetPresets;
             set { _assetPresets = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modDefaultSettingsPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Per mod id, the settings preset (Preset.Id) to load each time that mod is switched to,
+        /// picked in the Customise window. "" = the user chose "Keep current" on purpose; a missing
+        /// key = never chosen. Local only. See Services/ModPresetDefaults.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModDefaultSettingsPreset
+        {
+            get => _modDefaultSettingsPreset;
+            set { _modDefaultSettingsPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modDefaultAssetPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Per mod id, the asset preset (AssetPreset.Id) to apply on switching to it. Same rules.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModDefaultAssetPreset
+        {
+            get => _modDefaultAssetPreset;
+            set { _modDefaultAssetPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
         }
 
         private string? _currentAssetPresetId = null;
@@ -5781,6 +5813,14 @@ namespace ConditioningControlPanel.Models
         #endregion
 
         #region Companion Leveling System (v5.3)
+
+        private CompanionBonusType? _companionPerk;
+        /// <summary>Independent preview perk. Null inherits the current bundle until first use.</summary>
+        public CompanionBonusType? CompanionPerk
+        {
+            get => _companionPerk;
+            set { _companionPerk = value.HasValue && Enum.IsDefined(value.Value) ? value : null; OnPropertyChanged(); }
+        }
 
         private int _activeCompanionId = 0;
         /// <summary>

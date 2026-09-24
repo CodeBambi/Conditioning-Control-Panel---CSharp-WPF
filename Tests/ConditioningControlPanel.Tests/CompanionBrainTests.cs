@@ -21,6 +21,44 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class CompanionBrainTests
 {
+    [Fact]
+    public async Task PreviewActivityButtonsAreAcceptedMetadataAndNeverSpokenOrExecuted()
+    {
+        var access = true;
+        var opened = 0;
+        var offered = new ConditioningControlPanel.Services.Companion.CompanionActivity(
+            "game.test", "Test game", "A game", () => access, () => { opened++; return true; });
+        var transport = new FakeTransport { Respond = (_, _) => new AiReplyResult(
+            "try this. <ccp-action>game.test</ccp-action> <ccp-action>game.locked</ccp-action>", true, null) };
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        brain.Activities = () => new[] { offered };
+        var reply = await brain.ChatAsync("suggest a game");
+        Assert.Equal("try this.", reply.Text);
+        Assert.Equal(new[] { "game.test" }, brain.Session.Turns.Last().ActivityIds);
+        Assert.DoesNotContain("<ccp-action>", brain.Session.Turns.Last().Text);
+        Assert.Equal(0, opened);
+        Assert.Contains(transport.Sends[0].Messages, m => m.Content.Contains("game.test | Test game"));
+        access = false;
+        await brain.ChatAsync("another idea");
+        Assert.Empty(brain.Session.Turns.Last().ActivityIds);
+        Assert.DoesNotContain(transport.Sends[1].Messages, m => m.Content.Contains("game.test | Test game"));
+        Assert.Equal(0, opened);
+    }
+
+    [Fact]
+    public async Task MediaWithoutRetrievalIsAnAppReplyWithAButtonAndNoProviderCall()
+    {
+        var transport = new FakeTransport { Respond = (_, _) => throw new Exception("no video lookup exists") };
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        brain.Activities = () => new[] { new ConditioningControlPanel.Services.Companion.CompanionActivity(
+            "page.assets", "Media library", "Library", () => true, () => throw new Exception("click required")) };
+        var reply = await brain.ChatAsync("any video for me?");
+        Assert.True(reply.IsApplicationReply);
+        Assert.False(reply.IsAiGenerated);
+        Assert.NotEmpty(reply.Text);
+        Assert.Empty(transport.Sends);
+        Assert.Equal(new[] { "page.assets" }, brain.Session.Turns.Last().ActivityIds);
+    }
     // ---------- fakes ----------
 
     /// <summary>Scriptable transport. Records what was actually put on the wire.</summary>
@@ -30,6 +68,7 @@ public class CompanionBrainTests
             (_, _) => new AiReplyResult("ok~", IsAiGenerated: true, Refusal: null);
 
         public List<(IReadOnlyList<ChatMessage> Messages, AiCallOptions Options)> Sends { get; } = new();
+        public Func<CancellationToken, Task<AiReplyResult>>? AsyncReply { get; set; }
 
         public bool IsAvailable => true;
         public int DailyRequestsRemaining => -1;
@@ -38,7 +77,7 @@ public class CompanionBrainTests
             CancellationToken cancellationToken = default)
         {
             Sends.Add((messages, options));
-            return Task.FromResult(Respond(messages, options));
+            return AsyncReply?.Invoke(cancellationToken) ?? Task.FromResult(Respond(messages, options));
         }
 
         // Legacy one-shot surface — unused by the brain, present so the fake is a real IAiService.
@@ -85,8 +124,8 @@ public class CompanionBrainTests
         }
     }
 
-    private static CompanionBrain Build(FakeTransport transport, FakeStore store) =>
-        new(transport, new StubAssembler(), new InertMemoryStore(), store);
+    private static CompanionBrain Build(FakeTransport transport, FakeStore store, bool preview = false) =>
+        new(transport, new StubAssembler(), new InertMemoryStore(), store, preview: () => preview);
 
     private static CompanionBrain Build(FakeTransport transport, FakeStore store,
         RecentRecommendations recommendations, params string[] mediaTitles) =>
@@ -102,6 +141,280 @@ public class CompanionBrainTests
             await Task.Delay(10);
         }
         lock (store.Writes) return store.Saved;
+    }
+
+    [Fact]
+    public async Task Preview_AccountSwitchSeparatesHistoryFactsAndVisibleMemoryWithoutDeletingEitherOwner()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ccp-account-memory-" + Guid.NewGuid());
+        Directory.CreateDirectory(directory);
+        string account = "account-A";
+        var legacyPath = Path.Combine(directory, "memory.json");
+        File.WriteAllText(legacyPath, "legacy explicit facts preserved");
+        try
+        {
+            using (var owned = MemoryStore.ForPreviewAccount(account, directory))
+                owned.AddFact("A_ONLY_PREFERENCE_733 violet tea", MemoryFactKind.Preference, source: MemoryFact.SourceUserEdited);
+            var aPath = MemoryStore.PreviewAccountDirectory(account, directory);
+            new CompanionSessionStore(Path.Combine(aPath, "session.json"), Path.Combine(aPath, "no-import.json")).Save(new[]
+            {
+                CompanionTurn.Create(TurnKind.UserChat, "A_ONLY_HISTORY_733 from yesterday"),
+                CompanionTurn.Create(TurnKind.AssistantChat, "I remember that detail")
+            });
+            var transport = new FakeTransport();
+            using (var brain = new CompanionBrain(transport, preview: () => true,
+                contextStamp: () => account, accountIdentity: () => account, accountDirectory: directory))
+            {
+                Assert.Single(brain.Memory.GetFacts());
+                Assert.Equal(2, brain.Session.Turns.Count);
+                account = "account-B";
+                brain.EnsureCurrentAccount(); // Same seam used before opening the memory UI.
+                Assert.Empty(brain.Memory.GetFacts());
+                Assert.Empty(brain.Session.Turns);
+                var result = await brain.ChatAsync("Hello from B");
+                Assert.True(result.IsAiGenerated);
+                Assert.DoesNotContain("A_ONLY_", string.Join("\n", transport.Sends.Last().Messages.Select(m => m.Content)));
+                brain.Flush();
+                account = "account-A";
+                brain.EnsureCurrentAccount();
+                Assert.Contains("A_ONLY_PREFERENCE_733", Assert.Single(brain.Memory.GetFacts()).Text);
+                Assert.Contains(brain.Session.Turns, t => t.Text.Contains("A_ONLY_HISTORY_733"));
+                Assert.DoesNotContain(brain.Session.Turns, t => t.Text.Contains("Hello from B"));
+            }
+            Assert.Equal("legacy explicit facts preserved", File.ReadAllText(legacyPath));
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public void StaleMemorySheetCannotWipeAnotherAccount()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ccp-stale-memory-sheet-" + Guid.NewGuid());
+        string account = "A";
+        try
+        {
+            using var brain = new CompanionBrain(new FakeTransport(), preview: () => true,
+                accountIdentity: () => account, contextStamp: () => account, accountDirectory: directory);
+            brain.Memory.AddFact("A fact", MemoryFactKind.Preference);
+            var oldMemory = brain.Memory;
+            var oldSheetAction = brain.CaptureForgetAction(oldMemory);
+            account = "B";
+            brain.EnsureCurrentAccount();
+            brain.Memory.AddFact("B fact", MemoryFactKind.Preference);
+            oldSheetAction();
+            brain.CaptureForgetAction(oldMemory)();
+            Assert.Equal("B fact", Assert.Single(brain.Memory.GetFacts()).Text);
+            account = "A";
+            brain.EnsureCurrentAccount();
+            Assert.Equal("A fact", Assert.Single(brain.Memory.GetFacts()).Text);
+            brain.CaptureForgetAction()();
+            Assert.Empty(brain.Memory.GetFacts());
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public async Task Preview_ForegroundDoesNotWaitForUncooperativeSummaryTransport()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ccp-summary-preemption-" + Guid.NewGuid());
+        Directory.CreateDirectory(directory);
+        var summaryEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSummary = new TaskCompletionSource<AiReplyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            using var memory = new MemoryStore(Path.Combine(directory, "memory.json"));
+            var transport = new FakeTransport();
+            transport.AsyncReply = _ =>
+            {
+                if (transport.Sends.Last().Options.Purpose == AiPurpose.Summary)
+                {
+                    summaryEntered.TrySetResult();
+                    return releaseSummary.Task;
+                }
+                return Task.FromResult(new AiReplyResult("A completed answer", true, null));
+            };
+            using var brain = new CompanionBrain(transport, new StubAssembler(), memory, new FakeStore(), preview: () => true);
+            for (int i = 0; i < 8; i++) await brain.ChatAsync("I am growing a small garden");
+            await summaryEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var foreground = brain.ChatAsync("Can we keep talking?");
+            Assert.True(foreground.IsCompleted);
+            Assert.True((await foreground).IsAiGenerated);
+            releaseSummary.TrySetResult(new AiReplyResult("{\"context\":[]}", true, null));
+        }
+        finally
+        {
+            releaseSummary.TrySetResult(AiReplyResult.Failed(AiFailureKind.Cancelled));
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Theory]
+    [InlineData(true, true, 1)]
+    [InlineData(false, true, 0)]
+    [InlineData(true, false, 0)]
+    public async Task Preview_RelationshipCountsOnlyAcceptedMemoryEnabledExchanges(bool accepted, bool memoryOn, int count)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ccp-accepted-count-" + Guid.NewGuid());
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var memory = new MemoryStore(Path.Combine(directory, "memory.json"), chatMemoryEnabled: () => memoryOn);
+            var transport = new FakeTransport { Respond = (_, _) => accepted
+                ? new AiReplyResult("hello", true, null) : AiReplyResult.Failed(AiFailureKind.Offline) };
+            using var brain = new CompanionBrain(transport, new StubAssembler(), memory, new FakeStore(), preview: () => true);
+            await brain.ChatAsync("hello");
+            Assert.Equal(count, memory.Relationships.Values.Sum(r => r.ChatTurnsTotal));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Fact]
+    public async Task Preview_TransportException_RollsBackAndReturnsStatus()
+    {
+        var transport = new FakeTransport { Respond = (_, _) => throw new InvalidOperationException("fake") };
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        var reply = await brain.ChatAsync("hello");
+        Assert.Equal(AiFailureKind.Unavailable, reply.Failure);
+        Assert.Empty(reply.Text);
+        Assert.Empty(brain.Session.Turns);
+    }
+
+    [Fact]
+    public async Task Preview_CancelledAfterTransport_DoesNotCommitReply()
+    {
+        using var cancel = new CancellationTokenSource();
+        var transport = new FakeTransport { Respond = (_, _) =>
+        {
+            cancel.Cancel();
+            return new AiReplyResult("too late", true, null);
+        }};
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        var reply = await brain.ChatAsync("hello", cancel.Token);
+        Assert.Equal(AiFailureKind.Cancelled, reply.Failure);
+        Assert.Empty(brain.Session.Turns);
+    }
+
+    [Fact]
+    public async Task Preview_CannedFailure_IsNotCharacterSpeech()
+    {
+        var transport = new FakeTransport { Respond = (_, _) => new AiReplyResult("generic praise", false, null) };
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        var reply = await brain.ChatAsync("hello");
+        Assert.Equal(AiFailureKind.Unavailable, reply.Failure);
+        Assert.Empty(reply.Text);
+        Assert.Empty(brain.Session.Turns);
+        Assert.Equal(120, Assert.Single(transport.Sends).Options.MaxTokens);
+        Assert.True(Guid.TryParse(transport.Sends[0].Options.RequestId, out _));
+    }
+
+    [Fact]
+    public async Task Preview_ConcurrentSend_IsRejectedWithoutSecondGeneration()
+    {
+        var transport = new FakeTransport();
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        transport.Respond = (_, _) =>
+        {
+            var second = brain.ChatAsync("duplicate").GetAwaiter().GetResult();
+            Assert.Equal(AiFailureKind.Busy, second.Failure);
+            return new AiReplyResult("hello", true, null);
+        };
+        await brain.ChatAsync("first");
+        Assert.Single(transport.Sends);
+        Assert.Equal(2, brain.Session.Turns.Count);
+    }
+
+    [Fact]
+    public async Task Preview_ForgetWhileReplyPending_DoesNotRestoreConversation()
+    {
+        var pending = new TaskCompletionSource<AiReplyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transport = new FakeTransport { AsyncReply = _ => pending.Task };
+        var store = new FakeStore();
+        using var brain = Build(transport, store, preview: true);
+        var turn = brain.ChatAsync("remember this");
+        brain.ForgetThread();
+        pending.SetResult(new AiReplyResult("an old-context answer", true, null));
+        var reply = await turn;
+        brain.Flush();
+        Assert.Equal(AiFailureKind.Cancelled, reply.Failure);
+        Assert.Empty(brain.Session.Turns);
+        Assert.Empty(store.Saved);
+    }
+
+    [Fact]
+    public async Task Preview_CharacterChangesWhileReplyPending_DiscardsOldVoice()
+    {
+        var pending = new TaskCompletionSource<AiReplyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transport = new FakeTransport { AsyncReply = _ => pending.Task };
+        var identity = "old";
+        using var brain = new CompanionBrain(transport, new StubAssembler(), new InertMemoryStore(), new FakeStore(),
+            preview: () => true, contextStamp: () => identity);
+        var turn = brain.ChatAsync("hello");
+        identity = "new";
+        pending.SetResult(new AiReplyResult("old voice", true, null));
+        Assert.Equal(AiFailureKind.Cancelled, (await turn).Failure);
+        Assert.Empty(brain.Session.Turns);
+    }
+
+    [Theory]
+    [InlineData("accepted", false)]
+    [InlineData("forget", false)]
+    [InlineData("changed", false)]
+    [InlineData("cancelled", false)]
+    [InlineData("refused", false)]
+    [InlineData("accepted", true)]
+    [InlineData("forget", true)]
+    [InlineData("changed", true)]
+    [InlineData("cancelled", true)]
+    [InlineData("refused", true)]
+    public async Task Preview_OnlyAcceptedModeratedTurnExecutesProposedEffects(string outcome, bool ambient)
+    {
+        var pending = new TaskCompletionSource<AiReplyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transport = new FakeTransport { AsyncReply = _ => pending.Task };
+        var context = "original";
+        var executed = 0;
+        using var cancellation = new CancellationTokenSource();
+        using var brain = new CompanionBrain(transport, new StubAssembler(), new InertMemoryStore(), new FakeStore(),
+            preview: () => true, contextStamp: () => context, executeCommands: commands => executed += commands.Count,
+            // Run effects inline: the default posts to Application.Current's dispatcher, which an
+            // earlier WPF test in the same run can create and nothing here pumps.
+            scheduleEffects: action => action());
+        var turn = ambient ? brain.ReactAsync("a game finished", cancellation.Token) : brain.ChatAsync("hello", cancellation.Token);
+        Assert.Equal(0, executed);
+        if (outcome == "forget") brain.ForgetThread();
+        if (outcome == "changed") context = "new character or account";
+        if (outcome == "cancelled") cancellation.Cancel();
+        var refusal = outcome == "refused" ? new ModerationRefusalInfo(null, ModerationSource.Output) : null;
+        pending.SetResult(new AiReplyResult("a complete reply", refusal == null, refusal,
+            ProposedCommands: new[] { new ConditioningControlPanel.Models.AiCommandData() }));
+        var result = await turn;
+        Assert.Equal(outcome == "accepted" ? 1 : 0, executed);
+        Assert.Equal(outcome == "accepted", result.IsAiGenerated);
+    }
+
+    [Theory]
+    [InlineData("accepted")]
+    [InlineData("forget")]
+    [InlineData("changed")]
+    [InlineData("cancelled")]
+    public async Task Preview_QueuedEffects_RecheckContextWhenUiRunsThem(string outcome)
+    {
+        Action? queued = null;
+        var executed = 0;
+        var context = "original";
+        using var cancellation = new CancellationTokenSource();
+        var transport = new FakeTransport { Respond = (_, _) => new AiReplyResult("complete reply", true, null,
+            ProposedCommands: new[] { new ConditioningControlPanel.Models.AiCommandData() }) };
+        using var brain = new CompanionBrain(transport, new StubAssembler(), new InertMemoryStore(), new FakeStore(),
+            preview: () => true, contextStamp: () => context, executeCommands: commands => executed += commands.Count,
+            scheduleEffects: action => queued = action);
+        Assert.True((await brain.ChatAsync("hello", cancellation.Token)).IsAiGenerated);
+        Assert.Equal(0, executed);
+        Assert.NotNull(queued);
+        if (outcome == "forget") brain.ForgetThread();
+        if (outcome == "changed") context = "new";
+        if (outcome == "cancelled") cancellation.Cancel();
+        queued();
+        Assert.Equal(outcome == "accepted" ? 1 : 0, executed);
     }
 
     // ---------- happy path ----------

@@ -3043,6 +3043,9 @@ namespace ConditioningControlPanel
             RefreshHypnotubeLinksUI();
             _avatarTubeWindow?.UpdateQuickMenuState();
 
+            // Last: the user's per-mod default presets (Customise window), if they picked any.
+            ApplyModDefaultPresets(App.Mods.ActiveModId);
+
             App.Logger?.Information("Mod changed to {ModId}", App.Mods.ActiveModId);
         }
 

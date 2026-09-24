@@ -95,12 +95,12 @@
                            Source="{Binding Source='🧠', Converter={StaticResource CmpEmojiToImage}}"/>
                 </Border>
                 <TextBlock Text="{loc:Str lab_ai_effects_memory_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
-                <Border Style="{StaticResource CmpTrainTagStyle}" Margin="9,0,0,0">
+                <Border x:Name="PreviewBetaTag" Style="{StaticResource CmpTrainTagStyle}" Margin="9,0,0,0">
                     <TextBlock Text="{loc:Str label_beta_2}" Style="{StaticResource CmpTrainTagTextStyle}"/>
                 </Border>
                 <!-- The T2 plate: this used to be implied by the card sitting inside the Lab.
                      On a Free/T1 door it has to be said out loud, entitled or not. -->
-                <Border Style="{StaticResource CmpTierPlateStyle}">
+                <Border x:Name="HeaderTierTag" Style="{StaticResource CmpTierPlateStyle}">
                     <TextBlock Text="{loc:Str hm3_rail_lock_t2}" FontSize="10" FontWeight="Bold"
                                Foreground="{StaticResource CmpTextBrush}"/>
                 </Border>
@@ -140,7 +140,7 @@
                  Effects (Tier 2, gated) beside memory (Tier 1, not gated). Star columns with a
                  real gutter column, the same shape the page's shelf uses - no ActualWidth maths,
                  nothing that can thrash layout while the page scrolls. -->
-            <Grid>
+            <Grid x:Name="PermissionColumns">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="3*"/>
                     <ColumnDefinition Width="16"/>
@@ -148,7 +148,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- ===== left: effect control + permissions ===== -->
-                <Grid Grid.Column="0">
+                <Grid x:Name="EffectsPane" Grid.Column="0">
                     <StackPanel x:Name="EffectsGateHost">
                         <!-- master toggle -->
                         <Grid Margin="0,0,0,8">
@@ -227,11 +227,15 @@
                 </Grid>
 
                 <!-- ===== right: chat memory (Tier 1, NOT gated) ===== -->
-                <Border Grid.Column="2" Style="{StaticResource CmpInsetPanelStyle}"
+                <Border x:Name="MemoryPane" Grid.Column="2" Style="{StaticResource CmpInsetPanelStyle}"
                         BorderBrush="{StaticResource CmpVioletBrush}" VerticalAlignment="Top">
                     <StackPanel>
                         <Grid>
-                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Left">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                     <TextBlock Text="{loc:Str label_chat_memory_title}"
                                                Foreground="{StaticResource CmpVioletBrush}" FontSize="13" FontWeight="SemiBold"/>
@@ -240,7 +244,7 @@
                                 <TextBlock Text="{loc:Str label_chat_memory_hint}"
                                            Style="{StaticResource CmpDimTextStyle}" TextWrapping="Wrap"/>
                             </StackPanel>
-                            <CheckBox x:Name="ChkChatMemoryEnabled" x:FieldModifier="internal" Style="{DynamicResource ToggleStyle}"
+                            <CheckBox Grid.Column="1" x:Name="ChkChatMemoryEnabled" x:FieldModifier="internal" Style="{DynamicResource ToggleStyle}"
                                       HorizontalAlignment="Right" VerticalAlignment="Center"
                                       IsChecked="True"
                                       Checked="ChkChatMemoryEnabled_Changed" Unchecked="ChkChatMemoryEnabled_Changed"/>

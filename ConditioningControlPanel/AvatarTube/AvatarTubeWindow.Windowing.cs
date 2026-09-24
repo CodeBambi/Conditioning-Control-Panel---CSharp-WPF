@@ -1875,6 +1875,7 @@ namespace ConditioningControlPanel
             if (!_isAttached) return;
 
             _isAttached = false;
+            RefreshEmiDeskVisibility();
 
             // Switch to alternative tube image
             SetTubeStyle(true);
@@ -1934,6 +1935,7 @@ namespace ConditioningControlPanel
             if (_isAttached) return;
 
             _isAttached = true;
+            RefreshEmiDeskVisibility();
 
             // Switch back to original tube image
             SetTubeStyle(false);

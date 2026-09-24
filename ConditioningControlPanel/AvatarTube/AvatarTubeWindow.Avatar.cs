@@ -233,6 +233,11 @@ namespace ConditioningControlPanel
                 }
             }
 
+            if (Services.Companion.EmiTubePreview.Available)
+            {
+                unlocked.Remove(Services.Companion.EmiTubePreview.Set);
+                unlocked.Insert(0, Services.Companion.EmiTubePreview.Set);
+            }
             return unlocked.ToArray();
         }
 
@@ -273,6 +278,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private bool HasAnimatedAvatar(int setNumber)
         {
+            if (Services.Companion.EmiTubePreview.IsEmi(setNumber)) return false;
             try
             {
                 // Check mod override first, then embedded resource
@@ -398,6 +404,7 @@ namespace ConditioningControlPanel
             if (!IsAvatarSetUnlocked(setNumber, playerLevel)) return;
 
             int gen = ++_avatarSwitchGen;
+            var wasEmi = Services.Companion.EmiTubePreview.IsEmi(_currentAvatarSet);
             _currentAvatarSet = setNumber;
             _selectedAvatarSet = setNumber;
             _useAnimatedAvatar = HasAnimatedAvatar(setNumber);
@@ -406,6 +413,12 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.SelectedAvatarSet = setNumber;
+                if (Services.Companion.EmiTubePreview.Available)
+                {
+                    App.Settings.Current.CompanionEmiPreviewChoiceMade = true;
+                    Services.Companion.EmiPersonality.FenceOldVoice(App.Settings.Current,
+                        setNumber == Services.Companion.EmiTubePreview.Set, wasEmi);
+                }
                 App.Settings.Save();
             }
 
@@ -469,6 +482,7 @@ namespace ConditioningControlPanel
 
                 // Circe's Lock: engage emotes only on the base set (pose 1), leave otherwise.
                 TryUpdateCirceEmoteMode();
+                RefreshEmiDeskVisibility();
             };
 
             if (animate)
@@ -505,6 +519,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private static Models.CompanionId? GetCompanionForAvatarSet(int setNumber)
         {
+            if (Services.Companion.EmiTubePreview.IsEmi(setNumber)) return Models.CompanionId.OGBambiSprite;
             return setNumber switch
             {
                 3 => Models.CompanionId.OGBambiSprite,      // Level 50: Synthetic Blowdoll
@@ -522,6 +537,7 @@ namespace ConditioningControlPanel
         /// </summary>
         public static int GetAvatarSetForCompanion(Models.CompanionId companionId)
         {
+            if (companionId == Models.CompanionId.OGBambiSprite && Services.Companion.EmiTubePreview.Available) return 8;
             return companionId switch
             {
                 Models.CompanionId.OGBambiSprite => 3,   // Synthetic Blowdoll
@@ -539,6 +555,12 @@ namespace ConditioningControlPanel
         /// </summary>
         private void UpdateTitleDisplay(int level)
         {
+            if (Services.Companion.EmiTubePreview.IsEmi(_currentAvatarSet))
+            {
+                TxtAvatarTitle.Text = "EMI";
+                TxtAvatarLevel.Visibility = Visibility.Collapsed;
+                return;
+            }
             // Portrait mode: the avatar-set selector picks a skin (outfit) — title from the manifest skin.
             if (_portraitMode && _portraitSet != null && _portraitSet.SkinCount > 0)
             {
@@ -620,6 +642,9 @@ namespace ConditioningControlPanel
                 // Reload video links for companion speech bubbles
                 ReloadVideoLinks();
 
+                if (Services.Companion.CompanionExperience.IsV2Enabled)
+                    _currentAvatarSet = _selectedAvatarSet = Services.Companion.EmiTubePreview.RestoreChoice(
+                        App.Settings?.Current?.SelectedAvatarSet ?? _selectedAvatarSet);
                 // Validate current avatar set is supported by the new mod — if not, fall back.
                 int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
                 if (IsSingleEmoteAvatarMod(out int emoteOnlySet))
@@ -701,6 +726,7 @@ namespace ConditioningControlPanel
                 // menu belongs on ModChanged with the rest of the tube. Idempotent: it writes
                 // headers, foregrounds and enablement, and rebuilds the personality submenu.
                 UpdateQuickMenuState();
+                RefreshEmiDeskVisibility();
             }
             catch (Exception ex)
             {
@@ -782,6 +808,8 @@ namespace ConditioningControlPanel
                 TakeoverCountdownBar.Margin = new Thickness(0, 0, 416 - dx, 264);
             }
 
+            ApplyEmiTubeFit();
+
             // The bubble is placed from one method for both modes now: attached it is anchored on
             // the hit-test seam rather than centred, so its margin is not simply "the attached
             // constant minus dx" any more. See ApplySpeechBubblePlacement.
@@ -860,6 +888,9 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ApplyAvatarTransform(int setNumber)
         {
+            ApplyEmiTubeFit();
+            if (Services.Companion.EmiTubePreview.IsEmi(setNumber)) return;
+
             // Portrait mode: all skins render at the same (already-reduced) size — skip the per-set
             // +12% border zoom so base/lingerie/beach/fishnet stay consistent, and raise the avatar.
             if (_portraitMode)
@@ -892,6 +923,54 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ---- the avatar picker's door ----
+        // The tube's arrows and the Customise window's Companion card pick through the SAME
+        // members (plus the public CurrentAvatarSet), so there is one switching path and one list of what can be picked.
+
+        /// <summary>The sets (or portrait skins) the user can pick right now, in picker order.</summary>
+        internal int[] PickableAvatarSets() => EffectiveAvatarSets();
+
+        /// <summary>
+        /// A user picked <paramref name="setNumber"/>: switch to it (with the fade) and tell the
+        /// bark engine. Returns false when it is not pickable or is already showing.
+        /// </summary>
+        internal bool SelectAvatarSet(int setNumber)
+        {
+            if (!EffectiveAvatarSets().Contains(setNumber) || setNumber == _currentAvatarSet) return false;
+            SwitchToAvatarSet(setNumber);
+            // User-initiated appearance/skin change (the arrows also repoint the portrait skin).
+            try { App.Bark?.NotifyAvatarChanged(); } catch { }
+            return true;
+        }
+
+        /// <summary>The picker's label for a set: the portrait skin title, a custom set's label,
+        /// the companion the set belongs to, or the legacy title. Mod-aware, not upper-cased.</summary>
+        internal string AvatarSetTitle(int setNumber)
+        {
+            if (Services.Companion.EmiTubePreview.IsEmi(setNumber)) return "EMI";
+            string title;
+            if (_portraitMode && _portraitSet != null && _portraitSet.SkinCount > 0)
+            {
+                var skin = _portraitSet.Skins[_portraitSet.ClampSkin(setNumber - 1)];
+                title = string.IsNullOrWhiteSpace(skin.Title) ? skin.Id : skin.Title;
+            }
+            else if (App.Mods?.GetCustomAvatarSets()?.FirstOrDefault(c => c.SetNumber == setNumber) is { } custom
+                     && !string.IsNullOrWhiteSpace(custom.Label))
+            {
+                title = custom.Label;
+            }
+            else if (GetCompanionForAvatarSet(setNumber) is { } companionId)
+            {
+                title = Models.CompanionDefinition.GetById(companionId)
+                    .GetDisplayName(App.Settings?.Current?.SlutModeEnabled ?? false);
+            }
+            else
+            {
+                title = Loc.Get(AvatarTitleKeys[Math.Clamp(setNumber - 1, 0, AvatarTitleKeys.Length - 1)]);
+            }
+            return App.Mods?.MakeModAware(title ?? "") ?? title ?? "";
+        }
+
         /// <summary>
         /// Navigate to previous avatar set
         /// </summary>
@@ -900,11 +979,7 @@ namespace ConditioningControlPanel
             var unlockedSets = EffectiveAvatarSets();
             int currentIndex = System.Array.IndexOf(unlockedSets, _currentAvatarSet);
             if (currentIndex > 0)
-            {
-                SwitchToAvatarSet(unlockedSets[currentIndex - 1]);
-                // User-initiated appearance/skin change (the arrows also repoint the portrait skin).
-                try { App.Bark?.NotifyAvatarChanged(); } catch { }
-            }
+                SelectAvatarSet(unlockedSets[currentIndex - 1]);
         }
 
         /// <summary>
@@ -915,11 +990,7 @@ namespace ConditioningControlPanel
             var unlockedSets = EffectiveAvatarSets();
             int currentIndex = System.Array.IndexOf(unlockedSets, _currentAvatarSet);
             if (currentIndex >= 0 && currentIndex < unlockedSets.Length - 1)
-            {
-                SwitchToAvatarSet(unlockedSets[currentIndex + 1]);
-                // User-initiated appearance/skin change (the arrows also repoint the portrait skin).
-                try { App.Bark?.NotifyAvatarChanged(); } catch { }
-            }
+                SelectAvatarSet(unlockedSets[currentIndex + 1]);
         }
 
         // ════════════════════════════════════════════════════════════════════════════════
@@ -1145,6 +1216,13 @@ namespace ConditioningControlPanel
         /// </summary>
         private void PlayEmotionForLine(string? emotionLineId, string? audioPath, string? text, string? mood = null)
         {
+            if (Services.Companion.EmiTubePreview.IsEmi(_currentAvatarSet))
+            {
+                SetPose(Services.Companion.EmiTubePreview.PoseForMood(mood));
+                _poseTimer.Stop();
+                _poseTimer.Start();
+                return;
+            }
             // Circe pose-1 animated emotes take over the spoken-line reaction (own WebP path).
             if (_circeEmoteMode) { CircePlayEmote(emotionLineId, audioPath, text, mood); return; }
             if (!_portraitMode || _portraitSet == null) return;
@@ -1309,6 +1387,7 @@ namespace ConditioningControlPanel
         /// <param name="setNumber">1 = default, 2 = level 20, 3 = level 35, 4 = level 50, 5 = level 125, 6 = level 150</param>
         private BitmapImage[] LoadAvatarPoses(int setNumber = 1)
         {
+            if (Services.Companion.EmiTubePreview.IsEmi(setNumber)) return LoadEmiTubePoses();
             var poses = new BitmapImage[4];
 
             // Determine the resource path based on set number
@@ -1389,6 +1468,11 @@ namespace ConditioningControlPanel
 
         private void PoseTimer_Tick(object? sender, EventArgs e)
         {
+            if (Services.Companion.EmiTubePreview.IsEmi(_currentAvatarSet))
+            {
+                if (_currentPoseIndex != 0) SetPose(1);
+                return;
+            }
             if (_portraitMode) return; // portrait mode never rotates on idle (poses change only while speaking)
 
             if (_avatarPoses.Length == 0) return;

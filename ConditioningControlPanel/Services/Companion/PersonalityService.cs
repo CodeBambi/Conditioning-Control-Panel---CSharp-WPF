@@ -35,7 +35,8 @@ namespace ConditioningControlPanel.Services
         {
             var modPresets = GetActiveModPersonalities();
             fromMod = modPresets != null && modPresets.Count > 0;
-            return fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
+            var presets = fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
+            return Companion.EmiPersonality.IsActive ? new() { Companion.EmiPersonality.Create() } : presets;
         }
 
         /// <summary>
@@ -98,6 +99,7 @@ namespace ConditioningControlPanel.Services
                     Id = d.Id,
                     Name = d.Name,
                     Description = d.Description ?? "",
+                    SampleLines = d.SampleLines,
                     IsBuiltIn = true,
                     RequiresPremium = false,
                     PromptSettings = cps
@@ -111,6 +113,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public List<PersonalityPreset> GetAllPresets()
         {
+            if (Companion.EmiPersonality.IsActive) return new() { Companion.EmiPersonality.Create() };
             var presets = new List<PersonalityPreset>();
 
             // Built-in presets first (mod-supplied if the active mod defines personalities)
@@ -131,6 +134,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public PersonalityPreset GetActivePreset()
         {
+            if (Companion.EmiPersonality.IsActive) return Companion.EmiPersonality.Create();
             var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.NeutralDefaultId;
 
             // Try the active context's built-in set (mod personalities if the active mod
@@ -167,6 +171,8 @@ namespace ConditioningControlPanel.Services
         /// <returns>True if successful, false if preset not found or access denied.</returns>
         public bool SetActivePreset(string presetId)
         {
+            // EMI never overwrites the user's saved choice for the other avatars.
+            if (Companion.EmiPersonality.IsActive) return presetId == Companion.EmiPersonality.Id;
             // Check if preset exists
             var preset = GetPresetById(presetId);
             if (preset == null)
@@ -198,7 +204,7 @@ namespace ConditioningControlPanel.Services
 
                 if (cleared)
                     App.Logger?.Information("PersonalityService: Preset {Id} took over from the active custom prompt", presetId);
-                App.Logger?.Information("PersonalityService: Switched to preset: {Name} ({Id})", preset.Name, presetId);
+                App.Logger?.Information("PersonalityService: Changed active preset");
                 PersonalityChanged?.Invoke(this, preset);
                 return true;
             }

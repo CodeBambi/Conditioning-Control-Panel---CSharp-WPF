@@ -1237,6 +1237,11 @@ namespace ConditioningControlPanel
 
         internal void BtnCustomizeCompanion_Click(object sender, RoutedEventArgs e)
         {
+            if (Services.Companion.EmiPersonality.IsActive)
+            {
+                MessageBox.Show(this, Loc.Get("companion_v2_emi_fixed"), "EMI", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
             try { App.Bark?.NotifyUiAction("customize_companion"); } catch { }
             var dialog = new CompanionPromptEditorDialog
             {

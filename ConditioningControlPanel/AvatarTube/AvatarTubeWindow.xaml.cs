@@ -132,8 +132,10 @@ namespace ConditioningControlPanel
 
             // Load user's saved avatar selection, or use max unlocked
             _selectedAvatarSet = App.Settings?.Current?.SelectedAvatarSet ?? _maxUnlockedSet;
-            // Clamp to valid range (1 to max unlocked)
-            _selectedAvatarSet = Math.Clamp(_selectedAvatarSet, 1, _maxUnlockedSet);
+            // Preserve a supported custom set; the preview maps only the house's original character.
+            _selectedAvatarSet = Services.Companion.CompanionExperience.IsV2Enabled
+                ? Services.Companion.EmiTubePreview.RestoreChoice(_selectedAvatarSet)
+                : Math.Clamp(_selectedAvatarSet, 1, _maxUnlockedSet);
             _currentAvatarSet = _selectedAvatarSet;
 
             // Fall back if the saved set isn't supported by the active mod (e.g. a level was retired,
@@ -199,6 +201,8 @@ namespace ConditioningControlPanel
             
             // Get handles when loaded
             Loaded += OnLoaded;
+            IsVisibleChanged += (_, _) => RefreshEmiDeskVisibility();
+            Closed += (_, _) => App.EmiDesk?.SetTubeEmiVisible(false);
 
             // AllowsTransparency=True + SizeToContent=WidthAndHeight + Viewbox
             // creates a layered window whose surface is sized at Show() before
@@ -625,7 +629,7 @@ namespace ConditioningControlPanel
         public void SetPose(int poseNumber)
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => SetPose(poseNumber))); return; }
-            if (poseNumber < 1 || poseNumber > 4) return;
+            if (poseNumber < 1 || poseNumber > _avatarPoses.Length) return;
             if (_avatarPoses.Length == 0) return;
             _currentPoseIndex = poseNumber - 1;
             ImgAvatar.Source = _avatarPoses[_currentPoseIndex];
