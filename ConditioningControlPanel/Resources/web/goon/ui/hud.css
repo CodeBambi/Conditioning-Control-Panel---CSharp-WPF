@@ -2918,3 +2918,7 @@ html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
 .gg-mon-media { position: absolute; inset: 8% 12%; width: 76%; height: 84%; object-fit: cover; border-radius: 3px; opacity: 0; pointer-events: none; }
 .gg-mon-media.is-ready { opacity: 1; }
 .gg-mini-flash:has(.gg-mon-media.is-ready) .gg-mini-shard { visibility: hidden; }
+
+.gg-mini-video:has(.gg-mon-media.is-ready) .gg-mini-bar,
+.gg-mini-video:has(.gg-mon-media.is-ready) .gg-mini-scan { visibility: hidden; }
+.gg-mini-record { position: absolute; right: 7%; top: 7%; width: 7px; height: 7px; border-radius: 50%; background: #ff304b; box-shadow: 0 0 7px #ff304b; z-index: 2; }
