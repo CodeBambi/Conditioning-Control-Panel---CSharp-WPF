@@ -138,6 +138,33 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   ok(/e\.key !== 'Escape'\) e\.stopPropagation/.test(card), 'the niche field keeps its keys to itself');
 }
 
+// ================================================== 4. the online deck asks for more
+{
+  const pool = createGoonMediaPool();
+  let asks = 0;
+  pool.setOnlineLowHandler(() => { asks++; });
+  const set = (n) => ({
+    images: Array.from({ length: n }, (_, i) => ({ name: 'online:s/' + i, url: 'https://ccp.assets/.temp/' + i + '.jpg' })),
+    videos: [],
+  });
+  pool.setOnlineLibrary(set(10));
+  for (let i = 0; i < 20 && asks === 0; i++) pool.drawKind('image');
+  ok(asks === 1, 'a mostly shown online set asks once', 'asks=' + asks);
+  for (let i = 0; i < 40; i++) pool.drawKind('image');
+  ok(asks === 1, 'and never twice for the same list', 'asks=' + asks);
+  pool.setOnlineLibrary(set(20));
+  for (let i = 0; i < 60 && asks === 1; i++) pool.drawKind('image');
+  ok(asks === 2, 'a list that grew re-arms the ask', 'asks=' + asks);
+  const local = createGoonMediaPool();
+  let localAsks = 0;
+  local.setOnlineLowHandler(() => { localAsks++; });
+  local.setLocalLibrary([{ kind: 'image', name: 'a', url: 'https://ccp.assets/a.jpg' }]);
+  for (let i = 0; i < 10; i++) local.drawKind('image');
+  ok(localAsks === 0, 'the player\'s own pictures never ask the feed for more');
+  const boot = read('../boot.js');
+  ok(/media\.setOnlineLowHandler\(/.test(boot) && /type: 'media-more'/.test(boot), 'boot sends media-more');
+}
+
 if (failures) {
   console.error(`\n  selftest-flavours: ${n - failures}/${n} checks passed ${failures} FAILURE(S)`);
   process.exit(1);

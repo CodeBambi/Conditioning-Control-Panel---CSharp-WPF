@@ -137,4 +137,19 @@ public class GoonOnlineMediaTests
         // The shared temp tracker sweeps above 50 files; the deck must fit well under it.
         Assert.True(GoonOnlineMediaRules.StillTarget + GoonOnlineMediaRules.ClipTarget < 50);
     }
+
+    [Fact]
+    public void RefillsStayBoundedAtThreeWaves()
+    {
+        Assert.Equal(3, GoonOnlineMediaRules.MaxWaves);
+        Assert.Equal(72, GoonOnlineMediaRules.Cap(GoonOnlineMediaRules.StillTarget));
+        Assert.Equal(36, GoonOnlineMediaRules.Cap(GoonOnlineMediaRules.ClipTarget));
+    }
+
+    [Fact]
+    public void MoreIsANoOpWithNoWaveToExtend()
+    {
+        using var m = new GoonOnlineMedia(_ => { });
+        Assert.False(m.More());
+    }
 }
