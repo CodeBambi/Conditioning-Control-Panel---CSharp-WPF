@@ -2365,7 +2365,8 @@ namespace ConditioningControlPanel
                 {
                     try
                     {
-                        KeywordPresets.InstallPreset(presetId);
+                        // A re-install keeps the player's earlier answer on Chaster time.
+                        KeywordPresets.InstallPreset(presetId, KeywordPresets.ChasterTimeWasAllowed(presetId));
                     }
                     catch (Exception ex)
                     {

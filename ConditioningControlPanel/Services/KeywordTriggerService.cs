@@ -1573,11 +1573,43 @@ namespace ConditioningControlPanel.Services
                 case ChasterAddTimeAction chas:
                     // Goes on Circe's tab, not straight to the lock: same daily cap, same safety hold,
                     // and it books nothing unless the tab is on and a Chaster account is linked.
-                    App.Chaster?.NoteSeconds("watcher", Math.Clamp(chas.Minutes, 0, 60) * 60);
+                    // On top of that, each trigger has its own day allowance (3 bookings, 15 min).
+                    DispatchChasterAddTime(chas, trigger);
                     return 0;
 
                 default:
                     return 0;
+            }
+        }
+
+        private readonly object _chasterCapGate = new();
+        private KeywordTriggerChasterCap? _chasterCap;
+
+        private static string ChasterCapPath => Path.Combine(App.UserDataPath, "chaster_trigger_caps.json");
+
+        /// <summary>Books a trigger's Chaster minutes within its per-trigger day allowance
+        /// (<see cref="KeywordTriggerChasterCap"/>). Past the allowance it books nothing and says so
+        /// in the log; the trigger's other actions are unaffected.</summary>
+        private void DispatchChasterAddTime(ChasterAddTimeAction chas, KeywordTrigger trigger)
+        {
+            var chaster = App.Chaster;
+            if (chaster == null) return;
+            var id = string.IsNullOrEmpty(trigger.Id) ? "keyword:" + (trigger.Keyword ?? "") : trigger.Id;
+            var requested = Math.Clamp(chas.Minutes, 0, 60) * 60;
+            var now = DateTime.Now;
+            lock (_chasterCapGate)
+            {
+                _chasterCap ??= KeywordTriggerChasterCap.Load(ChasterCapPath);
+                var allowed = _chasterCap.Allowance(id, requested, now);
+                if (allowed <= 0)
+                {
+                    App.Logger?.Information("KeywordTriggerService: Chaster time for '{Keyword}' is at its day cap, nothing booked", trigger.Keyword);
+                    return;
+                }
+                var booking = chaster.NoteSeconds("watcher", allowed);
+                if (booking.AppliedSeconds <= 0) return;
+                _chasterCap.Record(id, booking.AppliedSeconds, now);
+                _chasterCap.Save(ChasterCapPath);
             }
         }
 
