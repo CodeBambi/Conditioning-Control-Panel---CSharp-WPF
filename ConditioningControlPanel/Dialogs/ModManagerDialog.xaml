@@ -195,6 +195,7 @@
                         <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="12" Padding="14,10"
                                 BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
                                 ToolTip="{loc:Str modmgr_defaults_tooltip}">
+                            <StackPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -221,6 +222,10 @@
                                         Style="{StaticResource CcpBtn}" IsEnabled="False" Padding="14,0" MinHeight="30"
                                         VerticalAlignment="Bottom"/>
                             </Grid>
+                            <!-- Owner, 2026-09-24: a stored preset reloads on EVERY switch, so say so out loud. -->
+                            <TextBlock Text="{loc:Str modmgr_defaults_tooltip}" FontSize="11" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"/>
+                            </StackPanel>
                         </Border>
                     </StackPanel>
                 </ScrollViewer>

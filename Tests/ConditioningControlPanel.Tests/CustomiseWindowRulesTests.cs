@@ -48,10 +48,10 @@ public class CustomiseWindowRulesTests
     }
 
     [Fact]
-    public void TheSuggestionOnlyPreselectsUntilAChoiceIsStored()
+    public void TheSuggestionIsNeverPreselected()
     {
         var map = Map();
-        Assert.Equal("default-gentle", ModPresetDefaults.Initial(map, "drone-mode", "default-gentle"));
+        Assert.Equal(ModPresetDefaults.KeepCurrent, ModPresetDefaults.Initial(map, "drone-mode", "default-gentle"));
         Assert.Null(ModPresetDefaults.ForActivation(map, "drone-mode"));
         Assert.Equal(ModPresetDefaults.KeepCurrent, ModPresetDefaults.Initial(map, "drone-mode", null));
 

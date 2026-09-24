@@ -8,9 +8,9 @@ namespace ConditioningControlPanel.Services
     /// <summary>
     /// Per-mod default presets, picked in the Customise window: a settings preset and an asset
     /// preset to apply each time that mod is switched to. Stored in AppSettings keyed by mod id,
-    /// never in the manifest. A mod's suggestedSettingsPreset / suggestedAssetPreset only
-    /// PRE-SELECTS the dropdown; nothing applies until the user's choice is stored, and an
-    /// explicit dropdown choice (or pressing "Use this mod" with it showing) is the consent.
+    /// never in the manifest. A mod's suggestedSettingsPreset / suggestedAssetPreset is only
+    /// LABELLED in the dropdown; the dropdown shows Keep current until the user picks, and only an
+    /// explicit dropdown choice is stored (owner, 2026-09-24).
     /// PURE: callers pass the maps and presets in.
     /// </summary>
     public static class ModPresetDefaults
@@ -45,12 +45,13 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// What the dropdown shows: the stored choice when there is one ("" = Keep current),
-        /// otherwise the mod's resolved suggestion, otherwise Keep current.
+        /// otherwise Keep current. The suggestion is never pre-selected: a dropdown showing an item
+        /// it never stored reads as chosen, and re-picking the shown item raises no SelectionChanged.
         /// </summary>
         public static string Initial(IReadOnlyDictionary<string, string>? map, string? modId, string? suggestedId)
         {
             if (HasChoice(map, modId)) return map![modId!] ?? KeepCurrent;
-            return suggestedId ?? KeepCurrent;
+            return KeepCurrent;
         }
 
         /// <summary>Records the user's choice. Null or blank stores "Keep current".</summary>

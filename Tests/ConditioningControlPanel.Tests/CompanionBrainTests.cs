@@ -336,7 +336,10 @@ public class CompanionBrainTests
         var executed = 0;
         using var cancellation = new CancellationTokenSource();
         using var brain = new CompanionBrain(transport, new StubAssembler(), new InertMemoryStore(), new FakeStore(),
-            preview: () => true, contextStamp: () => context, executeCommands: commands => executed += commands.Count);
+            preview: () => true, contextStamp: () => context, executeCommands: commands => executed += commands.Count,
+            // Run effects inline: the default posts to Application.Current's dispatcher, which an
+            // earlier WPF test in the same run can create and nothing here pumps.
+            scheduleEffects: action => action());
         var turn = ambient ? brain.ReactAsync("a game finished", cancellation.Token) : brain.ChatAsync("hello", cancellation.Token);
         Assert.Equal(0, executed);
         if (outcome == "forget") brain.ForgetThread();

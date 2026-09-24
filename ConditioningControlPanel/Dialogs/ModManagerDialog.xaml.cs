@@ -474,9 +474,9 @@ namespace ConditioningControlPanel
         //
         // Two dropdowns: the settings preset and the asset preset to load each time this mod is
         // switched to. Stored per mod id in AppSettings (ModPresetDefaults), applied by
-        // MainWindow.ApplyModDefaultPresets on every activation. A mod's suggestion pre-selects
-        // its item and reads "(recommended)"; the user's choice, or pressing "Use this mod" with it
-        // showing, is what stores it. Nothing is applied behind the user's back.
+        // MainWindow.ApplyModDefaultPresets on every activation. A mod's suggestion is only
+        // LABELLED "(recommended)"; the dropdown shows Keep current until the user picks, and only
+        // that explicit pick is stored (owner, 2026-09-24). Nothing is applied behind the user's back.
 
         private bool _fillingDefaults;
 
