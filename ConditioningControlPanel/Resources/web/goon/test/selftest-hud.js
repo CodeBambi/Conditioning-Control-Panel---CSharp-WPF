@@ -2765,8 +2765,8 @@ const audioMod = await import('../ui/audio.js');
   ok((annSrc.match(/cue\(\);/g) || []).length === 1,
     'fired once, on the way IN — the slide-out is deliberately silent');
 
-  ok(/onMistake: \(\) =>[\s\S]{0,160}'lock-slip'/.test(lockSrc),
-    'exec/lockCards.js buzzes a wrong keystroke through the view onMistake seam');
+  ok(/cue\('lock-slip'\)/.test(lockSrc),
+    'the lock view plays the error cue for ambient and thrown cards');
   ok(/'lock-solved'/.test(lockSrc), 'and still chimes a solved card');
 
   ok(/const STING = \{ won: 'recap-won', lost: 'recap-lost', draw: 'recap-draw' \}/.test(recapSrc),
