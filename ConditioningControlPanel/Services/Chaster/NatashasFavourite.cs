@@ -52,6 +52,11 @@ public static class NatashasFavourite
         return Math.Max(a, b);
     }
 
+    /// <summary>A persistent bubble tint survives disabled glow and other variant halos.</summary>
+    public const double BubbleWashBase = 0.18;
+    public static double BubbleWashAt(double aliveSec, bool animate) =>
+        BubbleWashBase + (animate ? WashAlphaAt(aliveSec) : 0);
+
     public static double WashAlphaAt(double aliveSec) => WashPeak * BlinkAt(aliveSec);
 
     private static double Pulse(double t)
