@@ -521,6 +521,27 @@ namespace ConditioningControlPanel.Services
             return (level, Math.Max(0, remaining));
         }
 
+        /// <summary>XP needed to reach <paramref name="level"/> from level 1 on a named curve. Pure.</summary>
+        public static double CumulativeXpBeforeLevel(int level, int epoch)
+        {
+            double sum = 0;
+            for (int l = 1; l < level && l < MaxDerivableLevel; l++)
+                sum += GetXPForLevel(l, epoch);
+            return sum;
+        }
+
+        /// <summary>
+        /// Moves a (level, xp into level) ledger from one curve to another by its CUMULATIVE total.
+        /// Never keeps (level, remainder): re-pricing the same rungs on the other curve invents or
+        /// loses XP (ccp-bugs #1270 / #1274, the phone's twin of this bug). Pure.
+        /// </summary>
+        public static (int Level, double XpIntoLevel) RepriceLedger(int level, double xpIntoLevel, int fromEpoch, int toEpoch)
+        {
+            if (double.IsNaN(xpIntoLevel) || xpIntoLevel < 0) xpIntoLevel = 0;
+            var total = CumulativeXpBeforeLevel(Math.Max(1, level), fromEpoch) + xpIntoLevel;
+            return DeriveLevelFromLifetimeXp(total, toEpoch);
+        }
+
         /// <summary>
         /// Gets the XP multiplier for session rewards based on player level.
         /// Higher level players earn more XP from sessions to compensate for increased requirements.

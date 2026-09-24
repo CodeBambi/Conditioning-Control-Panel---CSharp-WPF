@@ -2174,6 +2174,25 @@ namespace ConditioningControlPanel.Models
             }
         }
 
+        private HashSet<string> _disabledAssetFolders = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Folders unticked as a whole, relative to EffectiveAssetsPath and forward-slashed. Files
+        /// added to them later inherit the exclusion (AssetFolderExclusion, ccp-bugs #1231).
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> DisabledAssetFolders
+        {
+            get => _disabledAssetFolders;
+            set
+            {
+                _disabledAssetFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (value != null)
+                    foreach (var p in value)
+                        if (!string.IsNullOrEmpty(p)) _disabledAssetFolders.Add(Services.AssetFolderExclusion.Norm(p));
+                OnPropertyChanged();
+            }
+        }
+
         private bool _useAssetWhitelist = false;
         /// <summary>
         /// When true, files in DisabledAssetPaths are excluded from use.
