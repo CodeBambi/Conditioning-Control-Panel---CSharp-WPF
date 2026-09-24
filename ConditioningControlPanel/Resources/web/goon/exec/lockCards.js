@@ -86,7 +86,9 @@ export function createLockCardView(container, o = {}) {
   let solved = false;
   const timed = Number(o.durationMs) > 0;
   const started = Date.now();
-  const deadline = started + (Number(o.durationMs) || 30000);
+  let pausedAt = null;
+  let unobservePause = null;
+  let deadline = started + (Number(o.durationMs) || 30000);
   const initialPrize = Number(o.bounty) || 0;
   let clockTimer = 0, lastTick = -1;
   const cue = (id) => { try { o.audio?.sfx?.(id); } catch (_e) { /* optional audio */ } };
@@ -182,7 +184,7 @@ export function createLockCardView(container, o = {}) {
   container.appendChild(card);
   if (timed) cue('lock-in');
   function tick() {
-    if (disposed || solved) return;
+    if (disposed || solved || pausedAt !== null) return;
     const left = Math.max(0, deadline - Date.now());
     clock.textContent = Math.ceil(left / 1000) + 's';
     const urgent = left <= 8000;
@@ -193,7 +195,6 @@ export function createLockCardView(container, o = {}) {
     if (!left) { if (onAbandoned) onAbandoned(); return; }
     clockTimer = soon(tick, 100);
   }
-  if (timed) tick();
 
   /* ---- matching ----------------------------------------------------- */
   const same = (a, b) => {
@@ -245,7 +246,7 @@ export function createLockCardView(container, o = {}) {
   }
 
   function evaluate() {
-    if (disposed || solved || composing) return;
+    if (disposed || solved || composing || pausedAt !== null) return;
     if (timed && Date.now() >= deadline) { if (onAbandoned) onAbandoned(); return; }
     cue('lock-type');
     const val = String(input.value || '');
@@ -286,10 +287,32 @@ export function createLockCardView(container, o = {}) {
 
   paint();
 
+  // A duel temporarily owns the field. Keep the typed prefix and freeze the deadline.
+  function pause(on) {
+    if (disposed || (pausedAt !== null) === on) return;
+    if (on) {
+      pausedAt = Date.now();
+      clearTimeout(clockTimer);
+      card.style.display = 'none';
+      input.disabled = true;
+      document.documentElement.removeAttribute('data-gg-lock-active');
+    } else {
+      deadline += Date.now() - pausedAt;
+      pausedAt = null;
+      card.style.display = '';
+      input.disabled = solved;
+      document.documentElement.setAttribute('data-gg-lock-active', '1');
+      if (!solved) { tick(); input.focus({ preventScroll: true }); }
+    }
+  }
+  if (timed && typeof o.observePause === 'function') unobservePause = o.observePause(pause);
+  if (timed) tick();
+
   return {
     dispose() {
       if (disposed) return;
       disposed = true;
+      unobservePause?.();
       clearTimeout(clockTimer);
       if (timed) document.documentElement.removeAttribute('data-gg-lock-active');
       try {
@@ -310,6 +333,7 @@ export function createLockCardView(container, o = {}) {
       } else gone();
     },
     focus() {
+      if (pausedAt !== null) return;
       try { input.focus({ preventScroll: true }); } catch (_e) { try { input.focus(); } catch (_e2) { /* ignore */ } }
     },
   };
@@ -328,7 +352,7 @@ export function lockTuning(intensity) {
   };
 }
 
-export function createLockCards({ layers, media, audio, logger, phrases, getLead = () => 0, onBounty = null } = {}) {
+export function createLockCards({ layers, media, audio, logger, phrases, getLead = () => 0, onBounty = null, observePause = null } = {}) {
   const log = logger || null;
   const warn = (m) => { if (log && log.warn) log.warn(`[gg:lockcards] ${m}`); };
 
@@ -342,6 +366,15 @@ export function createLockCards({ layers, media, audio, logger, phrases, getLead
 
   const stage = () => (layers && typeof layers.get === 'function' ? layers.get('stage') : null);
 
+  const views = new Set();
+  function mountView(host, options) {
+    const view = createLockCardView(host, { ...options, observePause });
+    views.add(view);
+    const dispose = view.dispose;
+    view.dispose = () => { views.delete(view); dispose(); };
+    return view;
+  }
+
   let sustained = null;      // {alive, intensity, view, timer}
 
   function mountElementCard(run) {
@@ -353,8 +386,8 @@ export function createLockCards({ layers, media, audio, logger, phrases, getLead
       if (!run.alive) return;
       run.timer = soon(() => mountElementCard(run), lockTuning(run.intensity).gapMs);
     };
-    if (document.documentElement.getAttribute('data-gg-lock-active')) { run.timer = soon(() => mountElementCard(run), 2000); return; }
-    run.view = createLockCardView(host, {
+    if (views.size || document.documentElement.getAttribute('data-gg-lock-active')) { run.timer = soon(() => mountElementCard(run), 2000); return; }
+    run.view = mountView(host, {
       durationMs: 30000, bounty: rollLockBounty(getLead()), audio,
       phrase: draw(),
       repeats: tune.repeats,
@@ -411,11 +444,9 @@ export function createLockCards({ layers, media, audio, logger, phrases, getLead
 
       let finished = false;
       let view = null;
-      let endTimer = 0;
       const settle = (endured) => {
         if (finished) return;
         finished = true;
-        try { clearTimeout(endTimer); } catch (_e) { /* ignore */ }
         if (view) { const v = view; view = null; try { v.dispose(); } catch (_e) { /* ignore */ } }
         if (typeof done === 'function') { try { done(endured); } catch (e) { warn(`done() threw: ${e && e.message}`); } }
       };
@@ -423,8 +454,8 @@ export function createLockCards({ layers, media, audio, logger, phrases, getLead
       const host = stage();
       if (!host) { settle(false); return () => settle(false); }   // nowhere to mount: receipt completed
 
-      if (document.documentElement.getAttribute('data-gg-lock-active')) { settle(false); return () => {}; }
-      view = createLockCardView(host, {
+      if (views.size || document.documentElement.getAttribute('data-gg-lock-active')) { settle(false); return () => {}; }
+      view = mountView(host, {
         durationMs: runMs, bounty: rollLockBounty(getLead()), audio,
         phrase: theirs || draw(),
         repeats: tune.repeats,
@@ -432,7 +463,7 @@ export function createLockCards({ layers, media, audio, logger, phrases, getLead
         onAbandoned: () => settle(false),
       });
       view.focus();
-      endTimer = soon(() => settle(false), runMs);
+      // The view owns the deadline, including time suspended behind a duel.
       return () => settle(false);
     },
   };

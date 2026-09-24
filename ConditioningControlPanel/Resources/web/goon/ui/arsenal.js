@@ -510,7 +510,7 @@ export function mountArsenal({
     if (rec && rec.item.duel) return fireGameCard(rec, at);
     if (!rec || rec.item.kind === null) return { ok: false, error: 'not a payload', id: null };
     // A duel is running: throws pause until the board closes.
-    if (duel && duel.busy()) { refuse(rec, DUEL_COPY.busy); return { ok: false, error: 'duel', id: null }; }
+    if (duel && (duel.blocksThrows?.() ?? duel.busy())) { refuse(rec, DUEL_COPY.busy); return { ok: false, error: 'duel', id: null }; }
     if (!match || typeof match.tryFirePayload !== 'function') return { ok: false, error: 'no match', id: null };
 
     // LOCKED outranks every other refusal: nothing else about the tile matters
@@ -592,9 +592,10 @@ export function mountArsenal({
         flyArc(node, from, land, { ms, lift: 0.32, spin: land.x < from.x ? -24 : 24, scaleTo: 0.55 }).then(() => {
           try { node.remove(); } catch (_e) { /* gone */ }
           impactMark(land.x, land.y, markFor(rec.item.kind));
+          squash(target, { amount: 0.05, ms: 240 });
+          // Add the shake after the replacing squash so both transforms survive.
           shakeNode(target, 4);
           sfx(audio, 'throw-impact');
-          squash(target, { amount: 0.05, ms: 240 });
         });
       };
       if (fx && typeof fx.play === 'function') fx.play(700, run); else run();

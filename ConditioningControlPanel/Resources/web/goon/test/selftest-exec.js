@@ -5360,6 +5360,60 @@ async function main() {
     }
   }
 
+  // Exercise lock pause through the executor's per-match duel subscription.
+  {
+    const { setDuelFieldActive } = await import('../core/duelActivity.js');
+    const host = byId.get('gg-stage');
+    host.replaceChildren();
+    const m = fakeMatch(), awards = [], ended = [];
+    m.noteLockBounty = (points) => awards.push(points);
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet });
+    ex.attach(m);
+    const locks = ex.rendererFor(GoonElement.LockCards);
+    const realNow = Date.now;
+    let now = 0;
+    Date.now = () => now;
+    try {
+      locks.renderPayload({ text: 'steady', intensity: 0, duration_ms: 1000 }, (won) => ended.push(won));
+      const card = host.findAll('gg-lock')[0], input = host.findAll('gg-lock-input')[0];
+      input.value = 'ste'; input.fire('input');
+      now = 400; setDuelFieldActive(m, true);
+      ok(card.style.display === 'none' && input.disabled && !documentElement.getAttribute('data-gg-lock-active'),
+        'duel hides an existing lock and releases field input');
+      now = 5400;
+      await sleep(1100);
+      ok(ended.length === 0, 'payload timer cannot expire while its lock is suspended');
+      input.value = 'steady'; input.fire('input');
+      ok(awards.length === 0, 'suspended lock cannot award points');
+      input.value = 'ste';
+      setDuelFieldActive({}, false);
+      ok(card.style.display === 'none', 'another match cannot release our lock');
+      setDuelFieldActive(m, false);
+      ok(input.value === 'ste' && !input.disabled && documentElement.getAttribute('data-gg-lock-active') === '1',
+        'resuming keeps the typed prefix and restores field ownership');
+      now = 5999; input.value = 'steady'; input.fire('input'); input.fire('input');
+      ok(ended.length === 1 && ended[0] && awards.length === 1,
+        'remaining typing time excludes the duel and pays exactly once');
+
+      host.replaceChildren();
+      setDuelFieldActive(m, true);
+      const cancel = locks.renderPayload({ text: 'steady', intensity: 0, duration_ms: 1000 }, (won) => ended.push(won));
+      ok(host.findAll('gg-lock')[0].style.display === 'none' && !documentElement.getAttribute('data-gg-lock-active'),
+        'a lock arriving mid-duel starts suspended');
+      locks.renderPayload({ text: 'another phrase' }, () => {});
+      ok(host.findAll('gg-lock').length === 1, 'a suspended card still occupies the single lock slot');
+      cancel(); setDuelFieldActive(m, false);
+      ok(ended.length === 2 && !ended[1] && !documentElement.getAttribute('data-gg-lock-active'),
+        'cancelling while paused removes the subscription and cannot resurrect the lock');
+
+      host.replaceChildren();
+      setDuelFieldActive(m, true); locks.start({ intensity: 0 });
+      ok(host.findAll('gg-lock')[0].style.display === 'none', 'ambient locks also defer to the duel');
+      locks.stop(); setDuelFieldActive(m, false);
+      ok(!documentElement.getAttribute('data-gg-lock-active'), 'stopping an ambient lock while paused releases it permanently');
+    } finally { Date.now = realNow; ex.detach(); setDuelFieldActive(m, false); }
+  }
+
   // Timed bounty behavior through real view input handlers, not source matching.
   {
     const host = byId.get('gg-stage');

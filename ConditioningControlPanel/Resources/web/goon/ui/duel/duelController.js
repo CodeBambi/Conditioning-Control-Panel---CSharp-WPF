@@ -20,7 +20,7 @@
  *
  * WHAT A DUEL NEVER TOUCHES: Mercy (z60, above this overlay, and a phase change
  * out of Live closes the duel with no bonus), panic, lockdown, session state.
- * The ramp keeps running underneath; only throws pause (arsenal asks busy()).
+ * The ramp keeps running underneath; locks and throws pause while the board is open.
  *
  * THE LENGTH: the host's pick wins. The host sends `sub:'cfg'` at Live (the
  * engine keeps it as match.peerDuelLen) and every start carries len_s.
@@ -36,6 +36,7 @@
  * ==========================================================================*/
 
 import { GoonMatchPhase } from '../../core/contracts.js';
+import { setDuelFieldActive } from '../../core/duelActivity.js';
 import {
   DUEL_INTRO_MS, DUEL_MIN_FINISHED, DUEL_REPORT_GRACE_MS, bonusFor, cardEligible, duelOutcome, duelSeed, pickLength,
 } from './rules.js';
@@ -113,6 +114,7 @@ export function createDuelController({
 
   function isLive() { return !!match && match.phase === GoonMatchPhase.Live; }
   function busy() { return !!cur; }
+  function blocksThrows() { return !!cur && (cur.stage === 'intro' || cur.stage === 'play'); }
   function myLen() {
     if (match && match.isHost) return pickLength(duelLength());
     return pickLength(match && match.peerDuelLen);
@@ -157,6 +159,7 @@ export function createDuelController({
   function begin(idx, len, by, game) {
     const id = normalizeGameId(game);
     cur = { idx, len: pickLength(len), game: id, seed: '', run: null, by, mine: null, stage: 'intro', cancels: [], endsAt: 0 };
+    setDuelFieldActive(match, true);
     ms.nextIdx = Math.max(ms.nextIdx, idx + 1);
     ms.started++;
     cur.seed = 'goon-duel|' + seedToString(duelSeed(match && match.matchSeed, idx));
@@ -210,6 +213,7 @@ export function createDuelController({
     duck(false);
     if (match) match.sendDuel({ sub: 'score', idx: cur.idx, game: cur.game, score: cur.mine.score, tile: cur.mine.tile | 0 });
     v('waiting');
+    setDuelFieldActive(match, false);
     if (peerScores.has(cur.idx)) { resolve(); return; }
     at(DUEL_REPORT_GRACE_MS, resolve);
   }
@@ -243,6 +247,7 @@ export function createDuelController({
     if (played) ms.notBefore = now() + cur.len * 1000 + DUEL_GAP_EXTRA_MS;
     cur = null;
     v('close');
+    setDuelFieldActive(match, false);
   }
 
   function refuse(idx, why) {
@@ -323,6 +328,7 @@ export function createDuelController({
       /** Show the slot at all: the peer speaks night, the player's second match (any practice match). */
       visible() { return !!(match && match.peerSupportsNight) && seen() >= DUEL_MIN_FINISHED; },
       busy,
+      blocksThrows,
       /** @param {{game?:string}} [o] a card that already names its game (a known id) keeps it. */
       throwCard(o) {
         if (busy() || !isLive() || !roomForDuel()) return false;
