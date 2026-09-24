@@ -259,6 +259,16 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("purpose")]
         [System.Text.Json.Serialization.JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Purpose { get; set; }
+
+        [JsonProperty("companion_protocol", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonPropertyName("companion_protocol")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? CompanionProtocol { get; set; }
+
+        [JsonProperty("request_id", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonPropertyName("request_id")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? RequestId { get; set; }
     }
 
     /// <summary>
@@ -280,6 +290,22 @@ namespace ConditioningControlPanel.Models
     /// </summary>
     public class ProxyChatResponse
     {
+        [JsonProperty("finish_reason")]
+        [JsonPropertyName("finish_reason")]
+        public string? FinishReason { get; set; }
+
+        [JsonProperty("resets_at")]
+        [JsonPropertyName("resets_at")]
+        public string? ResetsAt { get; set; }
+
+        [JsonProperty("request_id")]
+        [JsonPropertyName("request_id")]
+        public string? RequestId { get; set; }
+
+        [JsonProperty("retryable")]
+        [JsonPropertyName("retryable")]
+        public bool Retryable { get; set; }
+
         [JsonProperty("content")]
         [JsonPropertyName("content")]
         public string? Content { get; set; }
@@ -401,6 +427,10 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("finish_reason")]
         [JsonPropertyName("finish_reason")]
         public string? FinishReason { get; set; }
+
+        [JsonProperty("resets_at")]
+        [JsonPropertyName("resets_at")]
+        public string? ResetsAt { get; set; }
     }
 
     /// <summary>

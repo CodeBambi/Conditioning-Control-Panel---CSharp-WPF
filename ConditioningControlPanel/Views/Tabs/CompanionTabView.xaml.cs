@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Views.Tabs
             _vm = new CompanionRoomRuntimeVm(() => Window.GetWindow(this) as MainWindow);
             Room.ViewModel = _vm;
 #if DEBUG
-            if (System.Environment.GetEnvironmentVariable("CCP_COMPANION_V2") == "1")
+            if (Services.Companion.CompanionExperience.IsV2Enabled)
             {
                 Room.Visibility = Visibility.Collapsed;
                 PageHost.Children.Add(new Views.Controls.Companion.V2.ConversationPage(_vm, Room) { PersonalityEditor = Services.Companion.PersonalityStudio.Show });
