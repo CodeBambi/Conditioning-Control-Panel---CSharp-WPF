@@ -3999,7 +3999,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>Ready-pool size, for the draw's "is there anything at all" checks.</summary>
         private int RemoteReadyCount()
         {
-            lock (_remoteLock) return _remoteReady.Count;
+            lock (_remoteLock) return _remoteReady.Available;
         }
 
         /// <summary>
@@ -4012,8 +4012,9 @@ namespace ConditioningControlPanel.Services
             RefreshRemoteSelection();
             lock (_remoteLock)
             {
-                return _remoteReady.Take(_random, url =>
-                    RemoteClips.TryGetValue(url, out var clip) && File.Exists(clip.Path));
+                Func<string, bool> usable = url =>
+                    RemoteClips.TryGetValue(url, out var clip) && File.Exists(clip.Path);
+                return _remoteReady.Take(_random, usable) ?? _remoteReady.TakeShown(usable);
             }
         }
 
