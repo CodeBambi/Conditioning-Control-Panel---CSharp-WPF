@@ -50,6 +50,7 @@ import { GoonConsts, GoonElement, GoonMatchPhase, GoonPayloadKind, enumName } fr
 import { GoonReceiptStatus } from '../core/scoring.js';
 import { S } from './strings.js';
 import { createPreview, stickerUrl, markFor, throwWord, warmSticker } from './throwPreview.js';
+import { popIn, popOut, squash } from './juiceDom.js';
 
 /** Closeness 0-3 -> the word that always rides with the colour. */
 export const CLOSENESS_WORDS = Object.freeze(['steady', 'warm', 'close', 'edge']);
@@ -606,6 +607,9 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
   let lastCloseness = null;
   let lastHealth = GoonConnectionHealth.Fresh;
   let emoteTimer = 0;
+  let emoteSeq = 0;
+  // A finished pop-out holds its end frame (fill forwards); drop it once hidden or re-shown.
+  const stopBubbleAnims = () => { try { for (const a of bubble.getAnimations()) a.cancel(); } catch (_e) { /* no WAAPI */ } };
   let passTimer = 0;
   let lastEmoteMarkAt = -Infinity;
   let lastEmoteMarkKey = null;
@@ -711,6 +715,8 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     text(gaugeWord, known ? CLOSENESS_WORDS[v] : 'no word yet');
 
     if (known && v !== lastCloseness) {
+      // The segment that just lit gives a small press; a step down gives nothing.
+      if (lastCloseness !== null && v > lastCloseness && segs[v]) squash(segs[v], { amount: 0.18, ms: 240 });
       const runIt = () => {
         cls(gauge, 'is-sweep', true);
         setTimeout(() => cls(gauge, 'is-sweep', false), 320);
@@ -831,13 +837,18 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     if (!bubble) return;
     text(bubbleIcon, icon || '');
     text(bubbleText, msg || '');
+    const wasUp = !bubble.hidden;
     bubble.hidden = false;
     cls(bubble, 'is-in', true);
+    // IN: a THUD pop from the speaker's corner; a second emote on top of the first squashes
+    // instead, so a spam never restarts the entrance. OUT: shrink back down, then hide.
+    if (wasUp) squash(bubble, { amount: 0.08 }); else { stopBubbleAnims(); popIn(bubble, { from: 0.7 }); }
     sfx(audio, 'gg-emote');
     try { clearTimeout(emoteTimer); } catch (_e) { /* gone */ }
+    const shownAt = ++emoteSeq;
     emoteTimer = setTimeout(() => {
       cls(bubble, 'is-in', false);
-      bubble.hidden = true;
+      popOut(bubble, { dy: 6, to: 0.85 }).then(() => { if (shownAt === emoteSeq) { bubble.hidden = true; stopBubbleAnims(); } });
     }, EMOTE_MS);
     led.add(() => { try { clearTimeout(emoteTimer); } catch (_e) { /* gone */ } });
   }

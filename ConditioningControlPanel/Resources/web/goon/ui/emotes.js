@@ -11,6 +11,8 @@
  * Node-import-safe: no DOM at import, only inside mountEmotes().
  * ==========================================================================*/
 
+import { popIn, popOut, squash, shake, staggerIn, burst, centreOf } from './juiceDom.js';
+
 export const EMOTE_PRESETS = Object.freeze([
   'gg',
   'still here',
@@ -164,6 +166,11 @@ function nowMs() {
  *                   instance override for the module-level provider boot sets.
  * @returns {{unmount:Function, open:Function, close:Function, toggle:Function, isOpen:Function}}
  */
+/* JUICE (2026-09-24, docs/JUICE-PLAYBOOK.md): the sheet pops in and its lines stagger up,
+ * it pops out before it hides, a pressed line squashes and throws a small burst, and a press
+ * during the cooldown gives a short shiver instead of nothing. Every one of these is a plain
+ * fade (or nothing) under reduced motion; juiceDom decides. */
+
 export function mountEmotes({ host, match, audio = null, onLog = null, voiceProvider = null } = {}) {
   const led = createLedger();
   const root = el('div', 'gg-emotes gg-plate');
@@ -177,7 +184,7 @@ export function mountEmotes({ host, match, audio = null, onLog = null, voiceProv
     const b = add(lines, el('button', 'gg-emote-line', line));
     if (!b) continue;
     b.type = 'button';
-    led.listen(b, 'click', () => send(line, ''));
+    led.listen(b, 'click', () => send(line, '', b));
     buttons.push(b);
   }
   const icons = add(root, el('div', 'gg-emotes-icons'));
@@ -185,7 +192,7 @@ export function mountEmotes({ host, match, audio = null, onLog = null, voiceProv
     const b = add(icons, el('button', 'gg-emote-icon', icon));
     if (!b) continue;
     b.type = 'button';
-    led.listen(b, 'click', () => send('', icon));
+    led.listen(b, 'click', () => send('', icon, b));
     buttons.push(b);
   }
   const cool = add(root, el('div', 'gg-emotes-cool', ''));
@@ -202,9 +209,14 @@ export function mountEmotes({ host, match, audio = null, onLog = null, voiceProv
     if (cool) cool.textContent = cooling ? 'one more in ' + Math.ceil(left / 1000) + 's' : '';
   }
 
-  function send(text, icon) {
-    if (nowMs() - last < RATE_MS) { paint(); return false; }
+  function send(text, icon, btn) {
+    if (nowMs() - last < RATE_MS) { paint(); shake(root, 3); return false; }
     last = nowMs();
+    if (btn) {
+      squash(btn, { amount: 0.1 });
+      const c = centreOf(btn);
+      if (c) burst(c.x, c.y, { count: 8, dist: 42, spread: 26, life: 420, sizeMin: 3, sizeMax: 6 });
+    }
     try { if (match && typeof match.sendEmote === 'function') match.sendEmote(text || '', icon || ''); }
     catch (_e) { /* the engine is allowed to be gone */ }
     /* THE VOICE NOTE RIDES ALONG — AFTER the emote is on the wire, never before,
@@ -220,11 +232,25 @@ export function mountEmotes({ host, match, audio = null, onLog = null, voiceProv
     return true;
   }
 
+  // A finished pop-out holds its end frame (fill forwards); drop it once hidden or reopened.
+  const stopAnims = (n) => { try { for (const a of n.getAnimations()) a.cancel(); } catch (_e) { /* no WAAPI */ } };
+  let closing = 0;   // bumps on every open, so a pop-out that lands late never hides a reopen
   function setOpen(v) {
-    open = !!v;
-    root.hidden = !open;
+    const next = !!v;
+    if (next === open) { paint(); return; }
+    open = next;
     cls(root, 'is-open', open);
     paint();
+    if (open) {
+      closing++;
+      root.hidden = false;
+      stopAnims(root);
+      popIn(root, { from: 0.9, over: 1.03 });
+      staggerIn(buttons, { rise: 8 });
+      return;
+    }
+    const my = ++closing;
+    popOut(root, { dy: 8, to: 0.94 }).then(() => { if (my === closing && !open) { root.hidden = true; stopAnims(root); } });
   }
 
   // A click anywhere else closes the sheet (no hover-only affordance anywhere).
