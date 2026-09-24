@@ -44,6 +44,15 @@ namespace ConditioningControlPanel.Services.Fyp.Online;
 internal sealed class ScrolllerSource : IFeedSource
 {
     public string Id => "scrolller";
+    private readonly bool _nonExplicitOnly;
+    private readonly int _pageLimit;
+    private readonly bool _preferTop;
+    public ScrolllerSource(bool nonExplicitOnly = false, int pageLimit = PageLimit, bool preferTop = false)
+    {
+        _nonExplicitOnly = nonExplicitOnly;
+        _preferTop = preferTop;
+        _pageLimit = Math.Clamp(pageLimit, 1, PageLimit);
+    }
 
     private const string Endpoint = "https://api.scrolller.com/admin";
     private const int PageLimit = 30;
@@ -61,7 +70,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         id url title isNsfw videoCount
         children {
             iterator
-            items { id title subredditTitle hasAudio mediaSources { url width height isOptimized } }
+            items { id title subredditTitle isNsfw hasAudio mediaSources { url width height isOptimized } }
         }
     }
 }";
@@ -89,9 +98,9 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         {
             ["url"] = "/r/" + channel.Name,
             ["iterator"] = channel.Iterator != null ? channel.Iterator : JValue.CreateNull(),
-            ["sortBy"] = "RANDOM",
+            ["sortBy"] = _nonExplicitOnly || _preferTop ? "TOP" : "RANDOM",
             ["filter"] = filter,
-            ["limit"] = PageLimit,
+            ["limit"] = _pageLimit,
         };
 
         var data = await RequestGraphQlAsync(SubredditQuery, variables, ct).ConfigureAwait(false);
@@ -130,6 +139,8 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             return new FeedPage();
         }
 
+        if (_nonExplicitOnly && (bool?)sub["isNsfw"] != false) return new FeedPage();
+
         var items = sub["children"]?["items"] as JArray;
         var iterator = (string?)sub["children"]?["iterator"];
         var entries = new List<FypAssetManifest.Entry>();
@@ -141,6 +152,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         {
             foreach (var item in items)
             {
+                if (_nonExplicitOnly && (bool?)item["isNsfw"] != false) continue;
                 var e = MapItem(item, channel.Name, stills);
                 if (e != null) entries.Add(e);
             }
@@ -172,7 +184,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         {
             ["url"] = "/r/" + sub,
             ["iterator"] = JValue.CreateNull(),
-            ["sortBy"] = "RANDOM",
+            ["sortBy"] = _nonExplicitOnly || _preferTop ? "TOP" : "RANDOM",
             ["filter"] = "VIDEO",
             ["limit"] = 1,
         };

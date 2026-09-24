@@ -784,6 +784,7 @@ public partial class EmiDeskWindow : Window
     /// <summary>Persist where she is and how big, in physical pixels plus the monitor's device name.</summary>
     public void SavePlacement()
     {
+        if (PresentationActive) return;
         try
         {
             var body = BodyScreenRect;
@@ -1044,7 +1045,7 @@ public partial class EmiDeskWindow : Window
     /// <summary>Play a chain. Cancels whatever was running; stops the idle beats for its duration.</summary>
     public void PlayChain(EmiChain? chain, Action? done = null, string? bodyFrameOverride = null)
     {
-        if (chain == null) return;
+        if (chain == null || (PresentationActive && !(PresentationArriving && chain.Id == "wake"))) return;
         try
         {
             // A chain with a pose of its own is also a chain with a MOOD of its own; one without
@@ -1164,7 +1165,7 @@ public partial class EmiDeskWindow : Window
     /// <summary>True when something is on screen that an idle beat must not interrupt.</summary>
     private bool Busy()
     {
-        if (_transiting || _player.IsLive || InputLocked) return true;
+        if (PresentationActive || _transiting || _player.IsLive || InputLocked) return true;
         bool glass = false;
         try { OnGlassLiveQuery(ref glass); }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] glass-live seam threw"); }
@@ -1175,7 +1176,7 @@ public partial class EmiDeskWindow : Window
     public void RestartIdleBeats()
     {
         StopIdleBeats();
-        if (_closingForGood || Visibility != Visibility.Visible) return;
+        if (PresentationActive || _closingForGood || Visibility != Visibility.Visible) return;
         try
         {
             _idleTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
@@ -1484,6 +1485,7 @@ public partial class EmiDeskWindow : Window
 
     private void OnBodyMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (PresentationActive) { e.Handled = true; return; }
         if (InputLocked || _transiting) { e.Handled = true; return; }
         try
         {
@@ -1512,6 +1514,7 @@ public partial class EmiDeskWindow : Window
 
     private void OnBodyMouseMove(object sender, MouseEventArgs e)
     {
+        if (PresentationActive) { e.Handled = true; return; }
         try
         {
             if (!_dragging)
@@ -1610,6 +1613,7 @@ public partial class EmiDeskWindow : Window
     /// </summary>
     private void OnBodyRightClick(object sender, MouseButtonEventArgs e)
     {
+        if (PresentationActive) { e.Handled = true; return; }
         try
         {
             e.Handled = true;
@@ -1643,6 +1647,7 @@ public partial class EmiDeskWindow : Window
     /// </summary>
     private void OnGearClick(object sender, RoutedEventArgs e)
     {
+        if (PresentationActive) { e.Handled = true; return; }
         try
         {
             if (InputLocked || _transiting) return;
@@ -1673,6 +1678,7 @@ public partial class EmiDeskWindow : Window
     /// </summary>
     private void OnHelpClick(object sender, RoutedEventArgs e)
     {
+        if (PresentationActive) { e.Handled = true; return; }
         try
         {
             if (InputLocked || _transiting) return;
@@ -1908,6 +1914,7 @@ public partial class EmiDeskWindow : Window
 
     private void OnCloseClick(object sender, RoutedEventArgs e)
     {
+        if (PresentationActive) { e.Handled = true; _stopPresentation?.Invoke(); App.EmiDesk?.Dismiss(); return; }
         try
         {
             e.Handled = true;

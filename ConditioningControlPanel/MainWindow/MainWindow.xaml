@@ -3064,6 +3064,10 @@
                         <!-- Header -->
                         <Border Grid.Row="0" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10,10,0,0" Padding="20,15">
                             <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Button Grid.Row="1" Content="{loc:Str first_show_replay}" Click="BtnFirstShowReplay_Click"
+                                        Style="{StaticResource PinkButton}" FontSize="20" FontWeight="Bold"
+                                        HorizontalAlignment="Stretch" Padding="22,16" Margin="0,18,0,0"/>
                                 <TextBlock Text="{loc:Str label_how_to_use_the_app}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                            HorizontalAlignment="Center"/>
                                 <Button Content="✕" Click="MainTutorial_Close" HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -3340,25 +3344,6 @@
                         <!-- Footer -->
                         <Border Grid.Row="2" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="0,0,10,10" Padding="20,15">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <Button Content="{loc:Str btn_start_interactive_tutorial}" Click="BtnStartTutorial_Click" Margin="0,0,15,0"
-                                        Background="Transparent" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                        Padding="20,10" FontWeight="SemiBold" Cursor="Hand">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="border" Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
                                 <Button Content="{loc:Str btn_got_it}" Style="{StaticResource PinkButton}"
                                         Click="MainTutorial_Close" Padding="40,10"/>
                             </StackPanel>

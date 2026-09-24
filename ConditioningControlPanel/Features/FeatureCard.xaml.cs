@@ -528,11 +528,22 @@ namespace ConditioningControlPanel.Features
             ApplyActiveState();
         }
 
+        private bool _tutorialPreviewActive;
+        private bool PaintActive => IsActive || _tutorialPreviewActive;
+
+        // Appearance only: tutorial emphasis must never toggle a feature or overwrite its binding.
+        internal void SetTutorialPreview(bool active)
+        {
+            if (_tutorialPreviewActive == active) return;
+            _tutorialPreviewActive = active;
+            ApplyActiveState();
+        }
+
         private void ApplyActiveState()
         {
             // Active state is suppressed while the card is locked — a locked feature
             // can't really be "on" even if the underlying setting is true.
-            var showActive = IsActive && !IsLocked;
+            var showActive = PaintActive && !IsLocked;
             ActiveBorder.Visibility = showActive ? Visibility.Visible : Visibility.Collapsed;
             ApplyRestOpacity();
             ApplyMute(CardMuteRule.TransitionMs(MotionFx.AllowTransitions, IsLoaded));
@@ -555,7 +566,7 @@ namespace ConditioningControlPanel.Features
             if (ContentRoot == null) return;
             double target =
                 IsLocked ? LockedContentOpacity
-                : DimWhenInactive && !IsActive && (DashboardDepth || !_hovered) ? InactiveContentOpacity
+                : DimWhenInactive && !PaintActive && (DashboardDepth || !_hovered) ? InactiveContentOpacity
                 : 1.0;
             ContentRoot.Opacity = target;
         }
@@ -575,7 +586,7 @@ namespace ConditioningControlPanel.Features
             try
             {
                 if (ImgIconMute == null || TxtTitle == null) return;
-                bool mute = CardMuteRule.ShouldMute(DimWhenInactive, IsActive, IsLocked, _hovered && !DashboardDepth, TeaseTier > 0);
+                bool mute = CardMuteRule.ShouldMute(DimWhenInactive, PaintActive, IsLocked, _hovered && !DashboardDepth, TeaseTier > 0);
                 double to = mute ? 1.0 : 0.0;
                 TxtTitle.Opacity = mute ? MutedTitleOpacity : 1.0;
                 if (ms <= 0)
@@ -601,7 +612,7 @@ namespace ConditioningControlPanel.Features
         /// </summary>
         internal void RefreshFx()
         {
-            try { _depth?.Refresh(); ApplyActiveBreath(IsActive && !IsLocked); }
+            try { _depth?.Refresh(); ApplyActiveBreath(PaintActive && !IsLocked); }
             catch (Exception ex) { App.Logger?.Debug("FeatureCard.RefreshFx: {E}", ex.Message); }
         }
 

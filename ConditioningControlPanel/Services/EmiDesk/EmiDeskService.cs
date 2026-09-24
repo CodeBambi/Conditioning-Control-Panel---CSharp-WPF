@@ -211,7 +211,7 @@ public sealed partial class EmiDeskService : IDisposable
             if (!IsOut) return false;
             var win = _window;
             if (win == null || win.Visibility != Visibility.Visible) return false;
-            if (win.InputLocked || win.Transiting) return false;
+            if (win.PresentationActive || win.InputLocked || win.Transiting) return false;
             if (win.AskLive) return false;
 
             if (App.Video?.IsPlaying == true) return false;
@@ -419,6 +419,7 @@ public sealed partial class EmiDeskService : IDisposable
     /// <summary>Send her away. Safe to call when she is not out.</summary>
     public void Dismiss()
     {
+        if (_window?.PresentationActive == true) _window.StopPresentation();
         try
         {
             if (_disposed) return;
@@ -527,7 +528,7 @@ public sealed partial class EmiDeskService : IDisposable
             if (DateTime.UtcNow < _farewellUntilUtc) return;
 
             var win = _window;
-            if (win == null || win.Visibility != Visibility.Visible) return;
+            if (win == null || win.PresentationActive || win.Visibility != Visibility.Visible) return;
 
             // Claim the silence BEFORE the line, so `arcademyOpened` cannot slip in between.
             _farewellUntilUtc = DateTime.UtcNow.AddMilliseconds(ArcademyByeSuppressMs);
@@ -591,6 +592,16 @@ public sealed partial class EmiDeskService : IDisposable
             _farewellTimer = null;
         }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] CancelFarewell failed"); }
+    }
+
+    // Explicit demo activation bypasses idle preferences without changing them.
+    internal EmiDeskWindow? BeginPresentation()
+    {
+        var window = EnsureWindow();
+        if (window == null) return null;
+        if (!IsOut) window.RestorePlacement();
+        IsOut = true; RaiseOutChanged();
+        return window;
     }
 
     private EmiDeskWindow? EnsureWindow()
@@ -687,7 +698,7 @@ public sealed partial class EmiDeskService : IDisposable
                 disp.BeginInvoke(new Action(() => Speak(momentId, ctx)));
                 return;
             }
-            Speak(momentId, ctx);
+            if (_window?.PresentationActive != true) Speak(momentId, ctx);
         }
         catch (Exception ex)
         {
@@ -719,7 +730,7 @@ public sealed partial class EmiDeskService : IDisposable
         {
             if (!IsOut) return;
             var win = _window;
-            if (win == null || win.Visibility != Visibility.Visible) return;
+            if (win == null || win.PresentationActive || win.Visibility != Visibility.Visible) return;
 
             // THE GOODBYE WINS. She has said her arcademy farewell and the outro is already
             // scheduled; anything landing inside that window would talk over her last line and
@@ -1274,7 +1285,7 @@ public sealed partial class EmiDeskService : IDisposable
         {
             if (!IsOut) return;
             var win = _window;
-            if (win == null || win.Visibility != Visibility.Visible) return;
+            if (win == null || win.PresentationActive || win.Visibility != Visibility.Visible) return;
 
             // The goodbye still wins: she is on her way to the Arcademy and must not be teaching
             // anybody anything on the way out.
