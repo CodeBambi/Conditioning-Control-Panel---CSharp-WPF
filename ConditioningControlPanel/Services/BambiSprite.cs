@@ -686,7 +686,7 @@ Example responses with REAL video names:
                 app?.SlutModeEnabled == true,
                 app?.CompanionPrompt?.AiProvider == Models.AiProviderType.Local &&
                     app.CompanionPrompt.AllowAiToControlEffects,
-                StableMediaTitles(),
+                Companion.EmiPersonality.IsActive ? Array.Empty<string>() : StableMediaTitles(),
                 preserveOutputRules: custom || !Models.PersonalityPresets.BuiltInIds.Contains(preset.Id));
             return prompt;
         }

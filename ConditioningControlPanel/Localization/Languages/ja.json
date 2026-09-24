@@ -1,4 +1,5 @@
 {
+  "companion_v2_media_library_only": "メディアライブラリは開けるけど、ここから特定の動画を取ってくることはできないよ。",
   "companion_v2_open_activity": "{0}を開く",
   "companion_v2_activity_unavailable": "このアクティビティは現在利用できません。別の案を聞いてみてください。",
   "companion_v2_calls_you": "呼び名",

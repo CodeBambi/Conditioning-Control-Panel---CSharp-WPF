@@ -1,4 +1,5 @@
 {
+  "companion_v2_media_library_only": "Je peux ouvrir ta médiathèque, mais pas récupérer une vidéo précise depuis ici.",
   "companion_v2_open_activity": "Ouvrir {0}",
   "companion_v2_activity_unavailable": "Cette activité n’est plus disponible. Demande une autre idée.",
   "companion_v2_calls_you": "T'appelle",

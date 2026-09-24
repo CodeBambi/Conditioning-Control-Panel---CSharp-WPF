@@ -317,16 +317,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // what we asked the model to produce. See AiCallOptions.ChatWithEffects.
                 var effectsOn = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
                 var options = effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat;
-                var offered = _preview() ? Activities().Where(a => a.Allowed).ToArray() : Array.Empty<CompanionActivity>();
+                var offered = _preview() ? ConversationDelivery.Select(Activities(), input, Session.Turns) : Array.Empty<CompanionActivity>();
                 if (_preview())
                 {
                     options = ConversationDelivery.Options(options, input, effectsOn);
-                    var messages = request.Messages.ToList();
-                    messages.Insert(1, ChatMessage.System(ConversationDelivery.Instructions(offered)
-                        + (EmiPersonality.IsActive ? "\n" + EmiVoiceExamples.For(input) : string.Empty)));
-                    request = new PromptRequest(request.SystemPrompt, messages);
+                    request = ConversationDelivery.Apply(request, input, offered, EmiPersonality.IsActive);
                 }
-                var result = await _transport
+                var result = (_preview() ? ConversationDelivery.LibraryReply(input, offered) : null) ?? await _transport
                     .SendAsync(request.Messages, options, cancellationToken)
                     .ConfigureAwait(false);
 
@@ -337,7 +334,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     return result;
                 }
 
-                if (!result.IsAiGenerated)
+                if (!result.IsAiGenerated && !result.IsApplicationReply)
                 {
                     // Canned fallback / login hint / transport failure. Roll the user turn back the
                     // way the legacy path always did ("don't poison history with an unanswered
@@ -393,10 +390,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     }
                     cancellationToken.ThrowIfCancellationRequested();
                     Session.Append(CompanionTurn.Create(TurnKind.AssistantChat, result.Text) with
-                    { ActivityIds = delivery.Ids });
-                    if (_preview() && Memory is MemoryStore relationshipStore)
+                    { ActivityIds = delivery.Ids, IsApplicationReply = result.IsApplicationReply });
+                    if (_preview() && !result.IsApplicationReply && Memory is MemoryStore relationshipStore)
                         relationshipStore.NoteChatTurn(App.Mods?.ActiveModId);
-                    if (_preview()) _maintenance?.Accept(userTurn);
+                    if (_preview() && !result.IsApplicationReply) _maintenance?.Accept(userTurn);
                     _conversationRevision++;
                     ApplyPreviewCommands(result, cancellationToken);
                     NoteRecommendedTitles(result.Text);

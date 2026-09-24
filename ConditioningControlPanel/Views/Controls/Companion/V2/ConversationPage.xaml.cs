@@ -29,7 +29,7 @@ public partial class ConversationPage : UserControl
         {
             Layers = ConditioningControlPanel.Controls.AmbientFxLayers.DustField,
             Intensity = 0.8, DustDensity = 0.65,
-            Tint = System.Windows.Media.Color.FromRgb(128, 228, 197)
+            Tint = System.Windows.Media.Color.FromRgb(244, 134, 211)
         });
         _legacy = legacy;
         _vm = new(room);

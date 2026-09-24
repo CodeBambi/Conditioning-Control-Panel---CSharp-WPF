@@ -1,4 +1,5 @@
 {
+  "companion_v2_media_library_only": "我可以打开你的媒体库，但无法在这里查找某个具体视频。",
   "companion_v2_open_activity": "打开{0}",
   "companion_v2_activity_unavailable": "此活动已不可用。请询问其他建议。",
   "companion_v2_calls_you": "怎么称呼你",

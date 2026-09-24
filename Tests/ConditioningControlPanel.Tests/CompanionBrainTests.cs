@@ -29,13 +29,13 @@ public class CompanionBrainTests
         var offered = new ConditioningControlPanel.Services.Companion.CompanionActivity(
             "game.test", "Test game", "A game", () => access, () => { opened++; return true; });
         var transport = new FakeTransport { Respond = (_, _) => new AiReplyResult(
-            "try this. [[ccp:game.test]] [[ccp:game.locked]]", true, null) };
+            "try this. <ccp-action>game.test</ccp-action> <ccp-action>game.locked</ccp-action>", true, null) };
         using var brain = Build(transport, new FakeStore(), preview: true);
         brain.Activities = () => new[] { offered };
         var reply = await brain.ChatAsync("suggest a game");
         Assert.Equal("try this.", reply.Text);
         Assert.Equal(new[] { "game.test" }, brain.Session.Turns.Last().ActivityIds);
-        Assert.DoesNotContain("[[ccp:", brain.Session.Turns.Last().Text);
+        Assert.DoesNotContain("<ccp-action>", brain.Session.Turns.Last().Text);
         Assert.Equal(0, opened);
         Assert.Contains(transport.Sends[0].Messages, m => m.Content.Contains("game.test | Test game"));
         access = false;
@@ -45,6 +45,20 @@ public class CompanionBrainTests
         Assert.Equal(0, opened);
     }
 
+    [Fact]
+    public async Task MediaWithoutRetrievalIsAnAppReplyWithAButtonAndNoProviderCall()
+    {
+        var transport = new FakeTransport { Respond = (_, _) => throw new Exception("no video lookup exists") };
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        brain.Activities = () => new[] { new ConditioningControlPanel.Services.Companion.CompanionActivity(
+            "page.assets", "Media library", "Library", () => true, () => throw new Exception("click required")) };
+        var reply = await brain.ChatAsync("any video for me?");
+        Assert.True(reply.IsApplicationReply);
+        Assert.False(reply.IsAiGenerated);
+        Assert.NotEmpty(reply.Text);
+        Assert.Empty(transport.Sends);
+        Assert.Equal(new[] { "page.assets" }, brain.Session.Turns.Last().ActivityIds);
+    }
     // ---------- fakes ----------
 
     /// <summary>Scriptable transport. Records what was actually put on the wire.</summary>
@@ -289,7 +303,7 @@ public class CompanionBrainTests
         Assert.Equal(AiFailureKind.Unavailable, reply.Failure);
         Assert.Empty(reply.Text);
         Assert.Empty(brain.Session.Turns);
-        Assert.Equal(160, Assert.Single(transport.Sends).Options.MaxTokens);
+        Assert.Equal(120, Assert.Single(transport.Sends).Options.MaxTokens);
         Assert.True(Guid.TryParse(transport.Sends[0].Options.RequestId, out _));
     }
 
