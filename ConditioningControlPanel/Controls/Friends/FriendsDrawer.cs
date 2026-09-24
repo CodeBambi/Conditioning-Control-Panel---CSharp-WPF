@@ -306,10 +306,17 @@ public sealed partial class FriendsDrawer : Border
         var g = new Grid();
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var q = FriendsLook.Label(Loc.Get("friends_presence_ask"), 12, FriendsLook.TextBrush);
+        var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var q = FriendsLook.Label(Loc.Get("friends_presence_ask"), 12.5, FriendsLook.TextBrush, null, FontWeights.SemiBold);
         q.TextWrapping = TextWrapping.Wrap;
         q.TextTrimming = TextTrimming.None;
-        g.Children.Add(q);
+        words.Children.Add(q);
+        var sub = FriendsLook.Label(Loc.Get("friends_presence_ask_sub"), 11, FriendsLook.MutedBrush);
+        sub.TextWrapping = TextWrapping.Wrap;
+        sub.TextTrimming = TextTrimming.None;
+        sub.Margin = new Thickness(0, 2, 0, 0);
+        words.Children.Add(sub);
+        g.Children.Add(words);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 0, 0, 0) };
         var yes = FriendsLook.Pill(Loc.Get("friends_presence_yes"), FriendsLook.MintBrush, FriendsLook.MintInkBrush,
@@ -348,7 +355,7 @@ public sealed partial class FriendsDrawer : Border
 
         if (_svc?.Available != true)
         {
-            _list.Children.Add(EmptyLine(Loc.Get("friends_signed_out")));
+            _list.Children.Add(SignInBlock());
             return;
         }
 
@@ -395,6 +402,28 @@ public sealed partial class FriendsDrawer : Border
         _rows[id] = row;
         _rowOrder.Add(id);
         _list.Children.Add(row);
+    }
+
+    /// <summary>Signed out: one short line and a real button into the app's sign-in dialog.</summary>
+    private FrameworkElement SignInBlock()
+    {
+        var box = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(18, 28, 18, 28) };
+        var line = EmptyLine(Loc.Get("friends_signed_out"));
+        line.Margin = new Thickness(0, 0, 0, 12);
+        box.Children.Add(line);
+        var btn = FriendsLook.Pill(Loc.Get("friends_sign_in"), FriendsLook.MintBrush, FriendsLook.MintInkBrush,
+            FriendsLook.MintBrush, 10, new Thickness(16, 6, 16, 6), FriendsLook.MintBrush);
+        btn.FontSize = 13;
+        btn.HorizontalAlignment = HorizontalAlignment.Center;
+        btn.Tag = "friends-sign-in";
+        btn.Click += (_, _) =>
+        {
+            // MainWindowRef, not Application.Current.MainWindow: that can be the launcher or null in the tray.
+            (App.MainWindowRef ?? Application.Current?.MainWindow as MainWindow)
+                ?.OpenUnifiedLoginDialog(Window.GetWindow(this));
+        };
+        box.Children.Add(btn);
+        return box;
     }
 
     private static TextBlock EmptyLine(string text)

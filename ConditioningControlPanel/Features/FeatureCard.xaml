@@ -98,7 +98,7 @@
                            TextAlignment="Center"
                            TextWrapping="Wrap"
                            Foreground="White"
-                           FontSize="12"
+                           FontSize="13.5"
                            FontWeight="SemiBold"/>
             </Border>
 
@@ -138,7 +138,7 @@
                                Margin="0,4,0,0"
                                HorizontalAlignment="Center"
                                Foreground="White"
-                               FontSize="11"
+                               FontSize="12"
                                FontWeight="SemiBold"/>
                 </StackPanel>
             </Border>
