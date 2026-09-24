@@ -148,6 +148,11 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("xp")]
             public int Xp { get; set; }
 
+            // Which curve `level` is priced on (0 = v1, 1 = v2). /v2/user/profile only; null on
+            // servers before CCP-Server #210 and on the auth projections.
+            [JsonProperty("curve_epoch")]
+            public int? CurveEpoch { get; set; }
+
             [JsonProperty("current_season")]
             public string? CurrentSeason { get; set; }
 

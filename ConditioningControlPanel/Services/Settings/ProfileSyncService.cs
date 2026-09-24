@@ -441,6 +441,72 @@ namespace ConditioningControlPanel.Services
             return (level, xpToken.Value<double>(), season);
         }
 
+        /// <summary>
+        /// <c>user.curve_epoch</c> off a profile or sync response: 0 (curve v1) or 1 (curve v2).
+        /// Anything else, including absent (an older server), is null and means "no signal". Pure.
+        /// </summary>
+        internal static int? ParseCurveEpoch(JToken? token)
+        {
+            if (token is null || token.Type != JTokenType.Integer) return null;
+            var v = token.Value<long>();
+            return v == ProgressionService.CurveEpochLegacy || v == ProgressionService.CurveEpochDescent ? (int)v : null;
+        }
+
+        /// <summary>
+        /// The ledger this install should hold once it follows the server's curve, or null when
+        /// nothing moves: no signal, same curve, or a Descent ceremony submit still unacked (the
+        /// server is quoting the pre-ceremony curve until it acks). Re-priced by CUMULATIVE XP,
+        /// so the total the watermark and every take-higher compare is unchanged. Pure.
+        /// </summary>
+        internal static (int Level, double XpIntoLevel)? CurveEpochReprice(
+            int localEpoch, int? serverEpoch, bool ceremonyPending, int level, double xpIntoLevel)
+        {
+            if (serverEpoch is null || ceremonyPending) return null;
+            if (serverEpoch.Value != ProgressionService.CurveEpochLegacy && serverEpoch.Value != ProgressionService.CurveEpochDescent) return null;
+            if (serverEpoch.Value == localEpoch) return null;
+            return ProgressionService.RepriceLedger(level, xpIntoLevel, localEpoch, serverEpoch.Value);
+        }
+
+        /// <summary>
+        /// Follow the server's curve epoch (CCP-Server #210, ccp-bugs #1270 / #1274). A desktop on
+        /// the other curve than its account showed a different level for the same XP, and adopted
+        /// the server's level while pricing its remainder on its own curve. Both directions move.
+        /// The visible level may drop, but the total does not, so no watermark, clamp or anti-cheat
+        /// check sees a loss. HighestLevelEver is never lowered. Must run BEFORE any adopt that
+        /// uses the server's level.
+        /// </summary>
+        internal void ApplyServerCurveEpoch(int? serverEpoch, string source)
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null || serverEpoch is null) return;
+
+                var localEpoch = ProgressionService.ActiveCurveEpoch;
+                var repriced = CurveEpochReprice(localEpoch, serverEpoch,
+                    DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice),
+                    settings.PlayerLevel, settings.PlayerXP);
+                if (repriced is null) return;
+
+                var preLevel = settings.PlayerLevel;
+                var preLevelXp = settings.PlayerXP;
+                settings.DescentEpoch = serverEpoch.Value;
+                settings.PlayerLevel = repriced.Value.Level;
+                settings.PlayerXP = repriced.Value.XpIntoLevel;
+                if (settings.PlayerLevel > settings.HighestLevelEver)
+                    settings.HighestLevelEver = settings.PlayerLevel;
+                App.Settings?.Save();
+
+                App.Logger?.Information("{Source}: server prices this account on curve epoch {Server} (local was {Local}) - re-priced by total XP, Level {OldLevel} ({OldXp} into level) -> Level {NewLevel} ({NewXp} into level)",
+                    source, serverEpoch.Value, localEpoch, preLevel, (int)preLevelXp, settings.PlayerLevel, (int)settings.PlayerXP);
+                RaiseProfileLoadedIfProgressionChanged(settings, preLevel, preLevelXp, source);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "{Source}: curve epoch follow failed", source);
+            }
+        }
+
         private void TryAdoptFromServerProgression(int serverLevel, double serverTotalXp, string? serverSeason, string source)
         {
             try
@@ -1116,6 +1182,8 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
 
+                ApplyServerCurveEpoch(user.CurveEpoch, "read-before-write");
+
                 var preLevel = settings.PlayerLevel;
                 var preLevelXp = settings.PlayerXP;
                 var localTotalXp = App.Progression?.GetTotalXP(preLevel, preLevelXp) ?? preLevelXp;
@@ -1202,6 +1270,8 @@ namespace ConditioningControlPanel.Services
                 var v2Auth = new V2AuthService();
                 var user = await v2Auth.GetUserProfileAsync(unifiedId);
                 if (user == null) return false;
+
+                ApplyServerCurveEpoch(user.CurveEpoch, "defaults heal");
 
                 // Adopt the season key here, ahead of every early return below. This fetch already
                 // carries current_season (the profile projection always included it), but the
@@ -1295,6 +1365,8 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("Restore reconcile: read-only profile fetch returned nothing for {Id}", unifiedId);
                     return false;
                 }
+
+                ApplyServerCurveEpoch(user.CurveEpoch, "restore reconcile");
 
                 var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
                 var serverTotalXp = (double)user.Xp;
@@ -2202,6 +2274,10 @@ namespace ConditioningControlPanel.Services
                         // comparison against this key. Getting these the wrong way round is the actual
                         // August 1 bug: the rollover arrived, the recap ran, and it compared the old
                         // key with itself and concluded the season had not changed.
+                        // The curve first: every branch below reads the server's level, and a
+                        // level priced on the other curve is not comparable to ours (#1270).
+                        ApplyServerCurveEpoch(v2Result?.User?.CurveEpoch, "V2 Sync");
+
                         var serverSeason = v2Result?.User?.CurrentSeason;
                         if (Services.SeasonRecapService.ShouldAdoptServerSeason(serverSeason, settings.CurrentSeason))
                         {
@@ -5331,6 +5407,10 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("xp")]
             public int Xp { get; set; }
+
+            // Which curve `level` is priced on (0 = v1, 1 = v2). Null on servers before #210.
+            [JsonProperty("curve_epoch")]
+            public int? CurveEpoch { get; set; }
 
             [JsonProperty("highest_level_ever")]
             public int? HighestLevelEver { get; set; }

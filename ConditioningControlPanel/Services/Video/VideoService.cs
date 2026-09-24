@@ -8354,7 +8354,7 @@ namespace ConditioningControlPanel.Services
             // Filter out disabled assets (blacklist approach).
             // Normalize for case-insensitive, separator-agnostic comparison so saved
             // entries don't slip past on Windows (case) or path-style mismatch.
-            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
+            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0 || App.Settings?.Current?.DisabledAssetFolders.Count > 0)
             {
                 var beforeCount = files.Count;
                 var basePath = App.EffectiveAssetsPath;
@@ -8362,10 +8362,11 @@ namespace ConditioningControlPanel.Services
                 var disabled = new HashSet<string>(
                     App.Settings.Current.DisabledAssetPaths.Select(Norm),
                     StringComparer.OrdinalIgnoreCase);
+                var folders = App.Settings.Current.DisabledAssetFolders.ToArray();
                 files = files.Where(f =>
                 {
                     var relativePath = Norm(Path.GetRelativePath(basePath, f));
-                    var isDisabled = disabled.Contains(relativePath);
+                    var isDisabled = disabled.Contains(relativePath) || AssetFolderExclusion.IsUnderAny(relativePath, folders);
                     if (isDisabled)
                     {
                         App.Logger?.Debug("VideoService: Video disabled by user: {Path}", relativePath);
