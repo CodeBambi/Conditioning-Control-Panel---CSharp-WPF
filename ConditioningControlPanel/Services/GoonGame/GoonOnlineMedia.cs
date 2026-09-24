@@ -137,6 +137,43 @@ namespace ConditioningControlPanel.Services.GoonGame
     }
 
     /// <summary>
+    /// The Sort duel's NOISE boards (2026-09-25): seven safe-for-work Scrolller boards a player
+    /// sorts AGAINST. Mirrors the page's <c>goon/core/noiseSets.js</c> row for row (the page's
+    /// selftest-noise reads both files and fails on drift). Only the set id ever crosses from the
+    /// page; the board name is looked up here, so a page can never steer this fetch to a niche.
+    /// </summary>
+    internal static class GoonNoiseSets
+    {
+        /// <summary>Stills one board fetches: plenty for the left pile of a short Sort.</summary>
+        public const int Stills = 20;
+
+        public static readonly IReadOnlyDictionary<string, string> Boards = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["architecture"] = "ArchitecturePorn",
+            ["landscapes"] = "EarthPorn",
+            ["space"] = "spaceporn",
+            ["food"] = "FoodPorn",
+            ["cars"] = "carporn",
+            ["rooms"] = "RoomPorn",
+            ["cats"] = "cats",
+        };
+
+        /// <summary>The Scrolller board for a set id, or null for anything off the list.</summary>
+        public static string? SubFor(string? id)
+            => id != null && Boards.TryGetValue(id, out var sub) ? sub : null;
+
+        /// <summary>May this player's host fetch a noise board: online pictures not switched off,
+        /// and either this session's Goon flavour pick (the game's own opt-in) or the app-wide
+        /// remote consent with a non-local media source.</summary>
+        public static bool FetchAllowed(bool? goonMediaOnline, bool sessionOptIn, string? mediaSource, bool remoteConsent)
+        {
+            if (goonMediaOnline == false) return false;
+            if (sessionOptIn) return true;
+            return !string.Equals(mediaSource ?? "local", "local", StringComparison.OrdinalIgnoreCase) && remoteConsent;
+        }
+    }
+
+    /// <summary>
     /// Scrolller pictures for the Goon Game, fetched through the shared online stack
     /// (<see cref="FypOnlineCoordinator"/> tenants <c>goon-stills</c> / <c>goon-clips</c>) and
     /// materialised by <see cref="RemoteMediaCache"/> under <c>App.GetMediaTempPath()</c>, which
@@ -166,12 +203,18 @@ namespace ConditioningControlPanel.Services.GoonGame
         private static volatile IReadOnlyList<string> _ownChannels = Array.Empty<string>();
         private static volatile IReadOnlyList<string> _peerChannels = Array.Empty<string>();
         private readonly bool _peer;
-        private string StillTenant => _peer ? PeerStillTenant : OwnStillTenant;
-        private string ClipTenant => _peer ? PeerClipTenant : OwnClipTenant;
+        // A NOISE board (ForNoise): its own tenant per set id and ONE fixed channel, so the
+        // registry's first-provider-wins rule is exactly right for it. Stills only.
+        private readonly string? _noiseSet;
+        private readonly IReadOnlyList<string>? _fixedChannels;
+        private readonly int _stillTarget = GoonOnlineMediaRules.StillTarget;
+        private readonly int _clipTarget = GoonOnlineMediaRules.ClipTarget;
+        private string StillTenant => _noiseSet != null ? "goon-noise-" + _noiseSet : _peer ? PeerStillTenant : OwnStillTenant;
+        private string ClipTenant => _noiseSet != null ? "goon-noise-clips-" + _noiseSet : _peer ? PeerClipTenant : OwnClipTenant;
         private IReadOnlyList<string> _channels
         {
-            get => _peer ? _peerChannels : _ownChannels;
-            set { if (_peer) _peerChannels = value; else _ownChannels = value; }
+            get => _fixedChannels ?? (_peer ? _peerChannels : _ownChannels);
+            set { if (_fixedChannels != null) return; if (_peer) _peerChannels = value; else _ownChannels = value; }
         }
         private IReadOnlyList<string> Channels() => _channels;
 
@@ -181,6 +224,23 @@ namespace ConditioningControlPanel.Services.GoonGame
         public static GoonOnlineMedia ForPeer(Action<Snapshot> onSnapshot) => new(onSnapshot, peer: true);
 
         private GoonOnlineMedia(Action<Snapshot> onSnapshot, bool peer) : this(onSnapshot) => _peer = peer;
+
+        /// <summary>A Sort duel's NOISE board: one known board (<see cref="GoonNoiseSets"/>),
+        /// <see cref="GoonNoiseSets.Stills"/> stills and no clips, on its own tenant. The same
+        /// validation, materialisation and temp-file ownership as every other pool.</summary>
+        public static GoonOnlineMedia? ForNoise(string setId, Action<Snapshot> onSnapshot)
+        {
+            var sub = GoonNoiseSets.SubFor(setId);
+            return sub == null ? null : new GoonOnlineMedia(onSnapshot, setId, sub);
+        }
+
+        private GoonOnlineMedia(Action<Snapshot> onSnapshot, string setId, string sub) : this(onSnapshot)
+        {
+            _noiseSet = setId;
+            _fixedChannels = new[] { sub };
+            _stillTarget = GoonNoiseSets.Stills;
+            _clipTarget = 0;
+        }
 
         private readonly object _gate = new();
         private readonly Action<Snapshot> _onSnapshot;
@@ -297,9 +357,11 @@ namespace ConditioningControlPanel.Services.GoonGame
                 try
                 {
                     var stills = FillAsync(gen, StillTenant, FeedMediaKind.GifStill, FeedMediaKind.Image,
-                        GoonOnlineMediaRules.StillTarget, isImage: true, ct);
-                    var clips = FillAsync(gen, ClipTenant, FeedMediaKind.GifClip, FeedMediaKind.GifClip,
-                        GoonOnlineMediaRules.ClipTarget, isImage: false, ct);
+                        _stillTarget, isImage: true, ct);
+                    var clips = _clipTarget > 0
+                        ? FillAsync(gen, ClipTenant, FeedMediaKind.GifClip, FeedMediaKind.GifClip,
+                            _clipTarget, isImage: false, ct)
+                        : Task.CompletedTask;
                     await Task.WhenAll(stills, clips).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) { }
@@ -434,9 +496,9 @@ namespace ConditioningControlPanel.Services.GoonGame
         {
             int have = _images.Count + _videos.Count;
             int want = _subs.Count == 0 ? 0
-                : _running ? have + Math.Max(0, GoonOnlineMediaRules.StillTarget - _stillAdded)
-                                 + Math.Max(0, GoonOnlineMediaRules.ClipTarget - _clipAdded)
-                           : Math.Max(have, GoonOnlineMediaRules.StillTarget + GoonOnlineMediaRules.ClipTarget);
+                : _running ? have + Math.Max(0, _stillTarget - _stillAdded)
+                                 + Math.Max(0, _clipTarget - _clipAdded)
+                           : Math.Max(have, _stillTarget + _clipTarget);
             var state = GoonOnlineMediaRules.StateFor(true, _subs.Count, have, _running, _failed);
             return new Snapshot(state, _subs.ToList(), _images.ToList(), _videos.ToList(), have, want);
         }

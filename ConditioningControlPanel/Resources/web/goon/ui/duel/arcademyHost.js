@@ -43,6 +43,7 @@
 
 import { duelGame } from './games.js';
 import { scopeArcCss } from './arcCss.js';
+import { createPilePool } from './piles.js';
 
 const ARC = '../../../arcademy/';
 const STYLE_ID = 'gg-arc-shell-style';
@@ -134,6 +135,9 @@ async function load(p, say) {
  * @param {boolean} [o.reduced]
  * @param {object} [o.volume]        {level(): 0..1, subscribe(fn): unsubscribe} the Goon mix the
  *                                   class synth follows (master x game). Absent = the old fixed mix.
+ * @param {object} [o.noise]         Sort duel only: {rows(): Goon rows} the player's NOISE board. Present =
+ *                                   Sort deals two tagged piles (niche right, noise left) through its
+ *                                   claimTagged seam instead of the QUICK SORT floor (moving vs still).
  * @param {Function} [o.onEnd]       (report) the class rang its own bell / ended early
  * @param {Function} [o.log]
  * @returns {Promise<{game, result(): object, destroy(): void, instance, ctx}|null>}
@@ -151,9 +155,16 @@ export function duelRows(media) {
   } catch (_e) { return []; }
 }
 
+/** How long a Sort duel's claim waits for a noise board that is still landing. */
+export const NOISE_WAIT_MS = 1500;
+
+function safeRows(noise) {
+  try { const r = noise.rows(); return Array.isArray(r) ? r : []; } catch (_e) { return []; }
+}
+
 export async function mountArcademyGame({
   root, fxLayer = null, ceremonyLayer = null, game, seed, lenSec = 60, media = null,
-  reduced = false, onEnd = null, log = null, volume = null,
+  reduced = false, onEnd = null, log = null, volume = null, noise = null,
 } = {}) {
   const lines = [];         // the last few log lines, for a driver or a bug report
   const say = (m) => {
@@ -202,6 +213,27 @@ export async function mountArcademyGame({
     });
   } catch (e) { say('assets refused: ' + ((e && e.message) || e)); assets = null; }
   if (assets && typeof assets.dispose === 'function') cleanups.push(() => assets.dispose());
+
+  /* --- the Sort duel's two piles (2026-09-25): the niche is YOURS, the noise board is the rest.
+   * The class asks `claimTagged` exactly as its setup door would; the provider underneath is
+   * untouched and still serves every other claim. */
+  const piled = !!(noise && typeof noise.rows === 'function' && row.id === 'sort');
+  if (piled) {
+    const base = assets;
+    const nicheRows = rows;
+    const rand = makeRng(seed + '|piles');
+    const tagged = {
+      async claimTagged() {
+        // A board that is still landing gets a short grace, never the whole bell.
+        const until = Date.now() + NOISE_WAIT_MS;
+        while (!(safeRows(noise).length) && Date.now() < until) await new Promise((r) => setTimeout(r, 150));
+        const pool = createPilePool({ target: nicheRows, noise: () => safeRows(noise), rand });
+        say('piles: ' + pool.counts().target.rows + ' niche / ' + pool.counts().noise.rows + ' noise');
+        return pool;
+      },
+    };
+    assets = base ? Object.assign(Object.create(base), tagged) : tagged;
+  }
 
   /* --- the real effects engine --- */
   let engine = null;
@@ -312,7 +344,9 @@ export async function mountArcademyGame({
     instance = mod.create(ctx);
     // The setup door (Sort's pile picker) is skipped on purpose: a duel is played on the deck the
     // player already has, and a class with no door claims its own floor (Sort: QUICK SORT).
-    instance.start({ gradeTier: 1, seed: String(seed), timeBudgetSec: Math.max(20, lenSec | 0), retake: false });
+    const spec = { gradeTier: 1, seed: String(seed), timeBudgetSec: Math.max(20, lenSec | 0), retake: false };
+    if (piled) spec.sources = ['niche', 'noise'];
+    instance.start(spec);
   } catch (e) {
     say(key + ' failed to start: ' + ((e && e.message) || e));
     guard(() => { if (instance) instance.destroy(); });
