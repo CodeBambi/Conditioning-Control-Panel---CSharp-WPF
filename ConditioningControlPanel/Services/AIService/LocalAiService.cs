@@ -533,6 +533,16 @@ namespace ConditioningControlPanel.Services.AIService
                     return Fail(AiFailureKind.InvalidResponse, GetFallbackResponse());
                 }
 
+                if (options.IsStructuredUtility)
+                {
+                    var utility = CompanionProxyContract.CleanUtilityReply(content, "stop");
+                    var blocked = _moderation.CheckOutput(utility);
+                    if (blocked.HasValue) return new AiReplyResult(string.Empty, false,
+                        new ModerationRefusalInfo(blocked, ModerationSource.Output));
+                    if (utility.Length == 0) return Fail(AiFailureKind.InvalidResponse, retryable: false);
+                    Meter(AiMeter.OutcomeOk, content.Length);
+                    return new AiReplyResult(utility, true, null);
+                }
                 var parsed = _parser.Parse(content);
 
                 // OUTPUT MODERATION (Layer 1) on the user-visible text — the JSON effects wrapper is

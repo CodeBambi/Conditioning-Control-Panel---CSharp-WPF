@@ -10,6 +10,17 @@ namespace ConditioningControlPanel.Tests;
 public class CompanionProxyContractTests
 {
     [Theory]
+    [InlineData("{\"context\":[]}", "stop", true)]
+    [InlineData("{\"context\":[]}", "length", false)]
+    [InlineData("{unfinished", "stop", false)]
+    [InlineData("a conversational reply", "stop", false)]
+    public void UtilityOutputAcceptsCompleteObjectsOnly(string text, string finish, bool accepted)
+    {
+        Assert.Equal(accepted, CompanionProxyContract.CleanUtilityReply(text, finish).Length > 0);
+        Assert.Empty(CompanionProxyContract.CleanReply("{\"context\":[]}", "stop"));
+    }
+
+    [Theory]
     [InlineData(401, "{}", AiFailureKind.SignInRequired, false)]
     [InlineData(503, "<html>gateway</html>", AiFailureKind.Unavailable, true)]
     [InlineData(429, "{\"error\":\"weekly_budget_exhausted\",\"retryable\":false}", AiFailureKind.BudgetLimit, false)]

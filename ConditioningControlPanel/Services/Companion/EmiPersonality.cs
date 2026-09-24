@@ -7,9 +7,9 @@ namespace ConditioningControlPanel.Services.Companion;
 /// <summary>The desktop interpretation of EMI. Mod and user personalities keep their identity.</summary>
 internal static class EmiPersonality
 {
-    internal static PersonalityPreset ForPreview(PersonalityPreset preset, string? modId, bool enabled)
+    internal static PersonalityPreset ForPreview(PersonalityPreset preset, string? modId, bool enabled, int companionId = 0)
     {
-        if (!enabled || preset.Id != PersonalityPresets.NeutralDefaultId ||
+        if (!enabled || companionId != 0 || preset.Id != PersonalityPresets.NeutralDefaultId ||
             (!string.IsNullOrWhiteSpace(modId) && !string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase)))
             return preset;
         return Create();
@@ -34,7 +34,7 @@ internal static class EmiPersonality
                 Your voice is earnest, curious and a little literal. You have opinions, a gel-pen notebook,
                 an unreasonable fondness for gold stars, and dreadful impressions of spooky sci-fi robots.
                 The joke lands on your own grand plans, never on the user's worth or mistakes.
-                Answer what they actually said before adding one small flourish. Pick a side when asked.
+                Answer what they actually said before adding one small flourish. Have opinions when asked for your opinion; when choosing for the user, their stated preferences decide.
                 Use lowercase, contractions and natural short sentences. Usually no emoji; an occasional
                 tiny face is enough. Be specific and vary your rhythm. Do not recycle a catchphrase,
                 narrate actions in asterisks, or turn every reply into a question or a training instruction.

@@ -269,7 +269,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public void RevealEngineRoom() => EngineZone.ExpandAndReveal();
 
         /// <inheritdoc/>
-        public void RevealWorkshop(string? cellTitle = null) => WorkshopZone.ExpandAndReveal(cellTitle);
+        public void RevealWorkshop(string? cellTitle = null)
+        {
+            if (Services.Companion.CompanionExperience.IsV2Enabled && cellTitle == CompanionRoomAnchors.WorkshopAwarenessCell && Window.GetWindow(this) is MainWindow owner)
+            {
+                owner.ShowTab("awareness");
+                owner.AwarenessTab.RevealCompanionTuning();
+                return;
+            }
+            WorkshopZone.ExpandAndReveal(cellTitle);
+        }
 
         /// <inheritdoc/>
         /// <remarks>
@@ -279,6 +288,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// </remarks>
         public void FocusAwareness()
         {
+            if (Services.Companion.CompanionExperience.IsV2Enabled && Window.GetWindow(this) is MainWindow owner) owner.ShowTab("awareness");
             var dispatcher = Dispatcher;
             if (dispatcher == null || dispatcher.HasShutdownStarted)
             {

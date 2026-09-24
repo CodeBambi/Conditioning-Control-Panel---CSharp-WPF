@@ -30,6 +30,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public AwarenessPrivacyView()
         {
             InitializeComponent();
+            if (Services.Companion.CompanionExperience.IsV2Enabled)
+            {
+                PreviewTrainTag.Visibility = Visibility.Collapsed;
+                IsVisibleChanged += (_, _) =>
+                {
+                    if (IsVisible) { StartRefresh(); SyncCursorBlink(); }
+                    else { StopRefresh(); StopCursorBlink(); }
+                };
+            }
             WipeConfirm = new MemoryForgetConfirm();
             Loaded += OnLoaded;
             DataContextChanged += (_, e) =>
@@ -62,7 +71,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            if (!IsLoaded) return;
+            if (!IsLoaded || (Services.Companion.CompanionExperience.IsV2Enabled && !IsVisible)) return;
             Observe(ViewModel);
             WipeConfirm.Bind(ViewModel?.WipeCommand);
             StartRefresh();
@@ -182,7 +191,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             try
             {
-                if (!IsLoaded) return;
+                if (!IsLoaded || (Services.Companion.CompanionExperience.IsV2Enabled && !IsVisible)) return;
                 if (!(ViewModel?.IsDormant ?? false)) return;
                 if (TryFindResource("CmpShimmerSweepStoryboard") is not Storyboard proto) return;
 

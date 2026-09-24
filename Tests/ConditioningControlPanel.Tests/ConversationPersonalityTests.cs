@@ -14,6 +14,7 @@ public class ConversationPersonalityTests
         var neutral = PersonalityPresets.GetNeutralDefault();
         Assert.Same(neutral, EmiPersonality.ForPreview(neutral, "circe", true));
         Assert.Same(neutral, EmiPersonality.ForPreview(neutral, null, false));
+        Assert.Same(neutral, EmiPersonality.ForPreview(neutral, BuiltInMods.CCPDefaultId, true, 1));
         var gentle = PersonalityPresets.GetGentleTrainer();
         Assert.Same(gentle, EmiPersonality.ForPreview(gentle, null, true));
         Assert.Equal("EMI", EmiPersonality.ForPreview(neutral, BuiltInMods.CCPDefaultId, true).Name);

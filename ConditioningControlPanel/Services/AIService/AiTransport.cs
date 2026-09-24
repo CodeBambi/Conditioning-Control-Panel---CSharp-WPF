@@ -73,6 +73,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// <summary>One logical generation. Transport retries retain this identifier.</summary>
         public string? RequestId { get; init; }
         public bool CompanionV2 { get; init; }
+        public bool IsStructuredUtility => CompanionV2 && Purpose is AiPurpose.Memory or AiPurpose.Summary;
 
         public static AiCallOptions ForPreview(AiCallOptions options) => options with
         {

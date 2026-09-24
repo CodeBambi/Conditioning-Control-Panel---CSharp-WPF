@@ -48,6 +48,17 @@ internal static class CompanionProxyContract
         && string.Equals(reply.RequestId, requestId, StringComparison.Ordinal)
         && string.Equals(reply.FinishReason, "stop", StringComparison.Ordinal);
 
+    internal static string CleanUtilityReply(string? text, string? finishReason)
+    {
+        if (string.IsNullOrWhiteSpace(text) || text.Length > 2400 || finishReason == "length") return string.Empty;
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            return document.RootElement.ValueKind == JsonValueKind.Object ? text.Trim() : string.Empty;
+        }
+        catch (JsonException) { return string.Empty; }
+    }
+
     internal static string CleanReply(string? text, string? finishReason)
     {
         // A cut-off generation must not be passed off as a complete answer or execute effects.

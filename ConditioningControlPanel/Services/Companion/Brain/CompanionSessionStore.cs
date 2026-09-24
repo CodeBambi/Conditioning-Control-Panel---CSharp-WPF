@@ -88,6 +88,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         private sealed class PersistedTurn
         {
+            public string? Id { get; set; }
             public string Kind { get; set; } = nameof(TurnKind.UserChat);
             public string Text { get; set; } = "";
             public string? Mood { get; set; }
@@ -186,8 +187,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
                 if (text.Length == 0) continue;
 
-                result.Add(CompanionTurn.Create(kind, text, t.Mood,
-                    utc: t.Utc == default ? DateTime.UtcNow : t.Utc));
+                var turn = CompanionTurn.Create(kind, text, t.Mood,
+                    utc: t.Utc == default ? DateTime.UtcNow : t.Utc);
+                result.Add(Guid.TryParse(t.Id, out _) ? turn with { Id = t.Id! } : turn);
             }
 
             return Trim(result);
@@ -257,6 +259,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     Version = SchemaVersion,
                     Turns = dialogue.Select(t => new PersistedTurn
                     {
+                        Id = t.Id,
                         Kind = t.Kind.ToString(),
                         Text = t.Text,
                         Mood = t.Mood,

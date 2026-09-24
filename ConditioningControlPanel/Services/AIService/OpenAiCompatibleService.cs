@@ -534,6 +534,14 @@ namespace ConditioningControlPanel.Services.AIService
 
                     var content = CleanTokenizerArtifacts(contentElement.GetString());
                     cancellationToken.ThrowIfCancellationRequested();
+                    if (options?.IsStructuredUtility == true)
+                    {
+                        var utility = CompanionProxyContract.CleanUtilityReply(content, "stop");
+                        if (!PassesOutputModeration(utility, returnRefusalSentinel, out var utilityRefusal))
+                            return utilityRefusal;
+                        Meter(utility.Length == 0 ? AiMeter.OutcomeEmpty : AiMeter.OutcomeOk, content?.Length ?? 0);
+                        return utility;
+                    }
                     var processed = ProcessResponse(content, returnRefusalSentinel, out var outputBlocked,
                         preview: options?.CompanionV2 == true, proposedCommands: proposedCommands);
                     Meter(outputBlocked ? AiMeter.OutcomeRefusedOutput
@@ -774,7 +782,8 @@ namespace ConditioningControlPanel.Services.AIService
                     ? AiFailureKind.Cancelled : AiFailureKind.Unavailable, true)
                     : new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
-            if (options.CompanionV2 && string.IsNullOrWhiteSpace(CompanionProxyContract.CleanReply(reply, "stop")))
+            if (options.CompanionV2 && string.IsNullOrWhiteSpace(options.IsStructuredUtility
+                ? CompanionProxyContract.CleanUtilityReply(reply, "stop") : CompanionProxyContract.CleanReply(reply, "stop")))
                 return AiReplyResult.Failed(AiFailureKind.InvalidResponse, true);
             return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null,
                 ProposedCommands: options.CompanionV2 ? proposedCommands : null);

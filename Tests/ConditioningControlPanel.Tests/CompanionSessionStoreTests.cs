@@ -22,6 +22,15 @@ public class CompanionSessionStoreTests
     // ---------- legacy import ----------
 
     [Fact]
+    public void ParseSession_PreservesValidSourceIdAndRepairsInvalidId()
+    {
+        var id = Guid.NewGuid().ToString("N");
+        var json = "{\"Turns\":[{\"Id\":\"" + id + "\",\"Text\":\"hello\",\"Kind\":\"UserChat\"}]}";
+        Assert.Equal(id, Assert.Single(CompanionSessionStore.ParseSession(json)).Id);
+        Assert.True(Guid.TryParse(Assert.Single(CompanionSessionStore.ParseSession(json.Replace(id, "invalid"))).Id, out _));
+    }
+
+    [Fact]
     public void ImportLegacyHistory_MapsRolesOntoTurnKinds_InOrder()
     {
         const string json = """
