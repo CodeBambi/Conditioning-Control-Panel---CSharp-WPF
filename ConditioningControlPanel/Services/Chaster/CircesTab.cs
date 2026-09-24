@@ -54,6 +54,11 @@ public sealed class TabState
     /// <summary>Adds booked on <see cref="RemoteDay"/> while a Remote controller was connected.</summary>
     [JsonProperty("remote_day")] public string? RemoteDay { get; set; }
     [JsonProperty("remote_day_s")] public int RemoteDaySeconds { get; set; }
+
+    /// <summary>How many times each capped row booked on <see cref="UsesDay"/>. See
+    /// <see cref="TabPrices.DailyMaxUses"/>.</summary>
+    [JsonProperty("uses_day")] public string? UsesDay { get; set; }
+    [JsonProperty("uses")] public Dictionary<string, int>? Uses { get; set; }
 }
 
 public enum TabRefusal
@@ -71,6 +76,10 @@ public enum TabRefusal
     /// <summary>A Remote session is open and either its day's share is spent or the controller
     /// switched the panic key off. See <see cref="ChasterService.RemoteDailySeconds"/>.</summary>
     Remote,
+    /// <summary>This row already booked as many times today as it may (the escape row: three).</summary>
+    RowCap,
+    /// <summary>The player paused the tab. Nothing books and nothing is pushed until they resume.</summary>
+    Paused,
     Nothing,
 }
 
@@ -240,6 +249,23 @@ public static class CircesTab
         if (state.PendingDay != null) NotePushed(state, state.PendingDay, seconds);
         ClearPending(state);
         return seconds;
+    }
+
+    /// <summary>How many times <paramref name="eventId"/> booked on this local day.</summary>
+    public static int UsesToday(TabState state, string eventId, DateTime localNow) =>
+        state.UsesDay == DayKey(localNow) && state.Uses != null && state.Uses.TryGetValue(eventId, out var n) ? Math.Max(0, n) : 0;
+
+    /// <summary>Whether a row with a daily use cap may book once more today. Rows with no cap always may.</summary>
+    public static bool UseLeft(TabState state, string eventId, DateTime localNow) =>
+        TabPrices.DailyMaxUses(eventId) is not { } max || UsesToday(state, eventId, localNow) < max;
+
+    /// <summary>Count one booking of a capped row. Call only after it actually booked.</summary>
+    public static void NoteUse(TabState state, string eventId, DateTime localNow)
+    {
+        if (TabPrices.DailyMaxUses(eventId) == null) return;
+        var today = DayKey(localNow);
+        if (state.UsesDay != today || state.Uses == null) { state.UsesDay = today; state.Uses = new Dictionary<string, int>(StringComparer.Ordinal); }
+        state.Uses[eventId] = UsesToday(state, eventId, localNow) + 1;
     }
 
     /// <summary>What went to the lock on this local day, landed or in doubt.</summary>

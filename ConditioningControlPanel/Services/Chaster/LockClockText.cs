@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ConditioningControlPanel.Services.Chaster;
 
@@ -28,6 +30,10 @@ public enum LockClockState
     /// <summary>Panic or the emergency exit opened a hold. Nothing books, and the chip counts the
     /// hold down instead of the lock, because that is the number that matters in that minute.</summary>
     Held,
+
+    /// <summary>The player paused the tab. The lock still runs on Chaster, so the digits stay;
+    /// the chip greys out and wears a pause mark, because nothing CCP does lands right now.</summary>
+    Paused,
 }
 
 /// <summary>The chip's readout, with no WPF in sight: the state to paint and the string under the
@@ -94,10 +100,15 @@ public static class LockClockText
     /// on the chip and must be able to sit over any of these states.</para>
     /// </summary>
     public static LockClock State(LockLookup lookup, LockSnapshot? snapshot, bool linked,
-        TimeSpan safetyHold, DateTime utcNow)
+        TimeSpan safetyHold, DateTime utcNow, bool paused = false)
     {
         if (safetyHold > TimeSpan.Zero) return new LockClock(LockClockState.Held, HoldClock(safetyHold));
         if (!linked || lookup == LockLookup.Unlinked) return new LockClock(LockClockState.Unlinked, "");
+        // Paused after the hold (the hold is the louder promise) and before the lookup: whatever
+        // the lock says, the chip's first job is to say the tab is not running.
+        if (paused)
+            return new LockClock(LockClockState.Paused,
+                snapshot == null || lookup is LockLookup.None or LockLookup.Ambiguous ? "" : snapshot.TimerHidden ? HiddenMark : Digits(snapshot, utcNow));
 
         // Away keeps the last snapshot, so it still shows a number; it is the ring that says the
         // number is old. Away with nothing ever fetched has nothing to show.
@@ -112,4 +123,101 @@ public static class LockClockText
 
     private static string Digits(LockSnapshot snapshot, DateTime utcNow) =>
         snapshot.Remaining(utcNow) is { } left ? Countdown(left) : HiddenMark;
+}
+
+/// <summary>
+/// The lock's clock as CCP shows it LIVE, ticking every second (owner, 2026-09-23: eyes are on
+/// CCP, so CCP's clock is the first to move; the phone catches up at the next sync).
+///
+/// <para><b>No extra calls.</b> Everything here is arithmetic over the last <see cref="LockSnapshot"/>
+/// plus the tab. The snapshot keeps its own refresh cadence; a second tick costs nothing.</para>
+///
+/// <para><b>The tab is folded in.</b> A positive balance is time the wearer WILL get: CCP booked
+/// it and pushes it on its own schedule. Showing it now is the point of CCP's clock being first.
+/// A negative balance (credits) is not taken off: a wearer link can only ADD, so credits wait on
+/// the tab to cancel later slip-ups and never shorten the lock.</para>
+/// </summary>
+public static class LiveLockClock
+{
+    /// <summary>Seconds on the tab that will land on the lock. Credits never shorten it.</summary>
+    public static int PendingAdd(int balanceSeconds) => Math.Max(0, balanceSeconds);
+
+    /// <summary>Time left counting what the tab will add. Null when there is no number to show
+    /// (no lock, hidden timer, no end date). An ended lock stays at zero: the key is ready and a
+    /// push cannot reopen it.</summary>
+    public static TimeSpan? Remaining(LockSnapshot? snapshot, int balanceSeconds, DateTime utcNow)
+    {
+        if (snapshot?.Remaining(utcNow) is not { } left) return null;
+        if (left <= TimeSpan.Zero) return TimeSpan.Zero;
+        return left + TimeSpan.FromSeconds(PendingAdd(balanceSeconds));
+    }
+
+    /// <summary>
+    /// When the lock ends as the live clock counts it: Chaster's own end plus what the tab will
+    /// add, so the "Ends" line and the ticking clock never disagree. Null when there is no clock.
+    /// A lock already at its end stays at its own end: a push cannot reopen a finished clock.
+    /// </summary>
+    public static DateTime? EndsAt(LockSnapshot? snapshot, int balanceSeconds, DateTime utcNow)
+    {
+        if (snapshot is not { TimerHidden: false, EndsAtUtc: { } end }) return null;
+        if (Remaining(snapshot, balanceSeconds, utcNow) is not { } left || left <= TimeSpan.Zero) return end;
+        return end.AddSeconds(PendingAdd(balanceSeconds));
+    }
+
+    /// <summary>Whether the clock runs down on its own: a lock with an end date, not frozen, not hidden.</summary>
+    public static bool Ticks(LockSnapshot? snapshot) =>
+        snapshot is { TimerHidden: false, IsFrozen: false, EndsAtUtc: not null };
+
+    /// <summary>
+    /// The rail's live readout, written for a 56px column: "128d" past 99 days, "2d 4h" over a day,
+    /// "3:12:45" under one, "12:05" under an hour. Seconds show whenever a day is not in the way,
+    /// because the tick is the thing the rail is for.
+    /// </summary>
+    public static string Compact(TimeSpan left)
+    {
+        if (left <= TimeSpan.Zero) return "0:00";
+        var days = (int)left.TotalDays;
+        if (days >= 100) return days + "d";
+        if (days >= 1) return $"{days}d {left.Hours}h";
+        var total = (int)Math.Floor(left.TotalSeconds);
+        var h = total / 3600;
+        var m = total / 60 % 60;
+        var s = total % 60;
+        return h > 0 ? $"{h}:{m:00}:{s:00}" : $"{m}:{s:00}";
+    }
+
+    /// <summary>The big clock's fields, largest first, units as "d" "h" "m" "s". Days only when
+    /// there are some; hours only when there are some or days lead; minutes and seconds always.
+    /// Fields after the first are two digits so the number does not jump width every second.</summary>
+    public static IReadOnlyList<(string Value, string Unit)> Parts(TimeSpan left)
+    {
+        if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+        var total = (long)Math.Floor(left.TotalSeconds);
+        var d = total / 86400;
+        var h = total / 3600 % 24;
+        var m = total / 60 % 60;
+        var s = total % 60;
+        var parts = new List<(string, string)>();
+        if (d > 0) parts.Add((d.ToString(), "d"));
+        if (d > 0 || h > 0) parts.Add((parts.Count == 0 ? h.ToString() : h.ToString("00"), "h"));
+        parts.Add((parts.Count == 0 ? m.ToString() : m.ToString("00"), "m"));
+        parts.Add((s.ToString("00"), "s"));
+        return parts;
+    }
+
+    /// <summary>The fields as one line, "2d 04h 12m 05s".</summary>
+    public static string Big(TimeSpan left) =>
+        string.Join(" ", Parts(left).Select(p => p.Value + p.Unit));
+
+    /// <summary>The pending badge, short enough for the shut rail: "+3m", "+2h", "+45s".
+    /// Empty when nothing is owed.</summary>
+    public static string Badge(int balanceSeconds)
+    {
+        if (balanceSeconds == 0) return string.Empty;
+        var sign = balanceSeconds > 0 ? "+" : "-";
+        var a = Math.Abs((long)balanceSeconds);
+        if (a >= 3600) return $"{sign}{a / 3600}h";
+        if (a >= 60) return $"{sign}{a / 60}m";
+        return $"{sign}{a}s";
+    }
 }

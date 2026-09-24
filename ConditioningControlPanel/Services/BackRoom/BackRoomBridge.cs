@@ -67,6 +67,11 @@ public sealed class BackRoomBridge
         public Action<BackRoomHaptic>? Haptic { get; init; }
         public Func<int>? NextSeed { get; init; }
         public Action<string>? Log { get; init; }
+        /// <summary>A slot outcome the server really dealt just landed on the page (10.24): its line,
+        /// read from the host's own copy of the tape, never from the page. Null = nothing listens.</summary>
+        public Action<string>? SlotLanded { get; init; }
+        /// <summary>The clock the landing rate limit reads. Null = <see cref="DateTime.UtcNow"/>.</summary>
+        public Func<DateTime>? UtcNow { get; init; }
     }
 
     private readonly Deps _d;
@@ -80,6 +85,7 @@ public sealed class BackRoomBridge
     private readonly Dictionary<string, (string TapeId, int Played)> _cursor = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string TapeId, int Played)> _flushed = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _life = new();
+    private readonly BackRoomTabLedger _ledger = new();
     private Action? _cancelForce;
     private bool _initPosted, _closing, _closed, _suspended;
     private bool _adopting;   // only touched inside OnUi, so on one thread
@@ -220,6 +226,9 @@ public sealed class BackRoomBridge
             case "fx-release":
                 if ((string?)m["token"] is { Length: > 0 and <= 64 } releaseToken)
                     Guard(() => _d.Fx.Release(releaseToken, Station(m) ?? string.Empty));
+                break;
+            case "landed":
+                OnLanded(m);
                 break;
             case "melt":
                 _d.Log?.Invoke("melt " + (string?)m["station"] + " left=" + (string?)m["left"]);
@@ -373,12 +382,25 @@ public sealed class BackRoomBridge
             result = BackRoomStationResult.Refuse("offline");
         }
         cancelGuard();
+        try { _ledger.Relayed(station, result.Body); } catch (Exception ex) { _d.Log?.Invoke("ledger threw: " + ex.Message); }
         if (result.Body?["tape"] is JObject tape && (string?)tape["id"] is { } tapeId)
         {
             var at = (tape["played"]?.Type == JTokenType.Integer) ? (int)tape["played"]! : 0;
             lock (_gate) { _cursor[station] = (tapeId, at); _flushed[station] = (tapeId, at); }
         }
         Reply(reqId, result);
+    }
+
+    /// <summary>10.24 <c>landed {station, tapeId?, side?, i}</c>, no reply: a slot outcome the server dealt
+    /// has just played. Only the index is the page's; the line is looked up in what the host relayed.</summary>
+    private void OnLanded(JObject m)
+    {
+        if (IsClosed || _d.SlotLanded == null || Station(m) is not { } station) return;
+        if (m["i"] is not JValue { Type: JTokenType.Integer } iv || iv.Value<long>() is < 0 or > BackRoomTabLedger.MaxOutcomes) return;
+        bool side = m["side"] is JValue { Type: JTokenType.Boolean } sv && sv.Value<bool>();
+        var tapeId = m["tapeId"] is JValue { Type: JTokenType.String } tv ? (string?)tv : null;
+        var line = _ledger.Land(station, tapeId, side, (int)iv.Value<long>(), _d.UtcNow?.Invoke() ?? DateTime.UtcNow);
+        if (line != null) Guard(() => _d.SlotLanded(line));
     }
 
     private void Reply(string reqId, BackRoomStationResult r)

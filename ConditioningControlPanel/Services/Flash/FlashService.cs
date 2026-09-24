@@ -2056,7 +2056,14 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Natasha's favourite: the red one showed. +3:00 on the tab (inert unless the row is on).
-                if (natasha) App.Chaster?.Note("natasha");
+                // The pop lands on the flash itself (physical px: this rect is in the monitor's DIPs,
+                // the same convention the shared host's Place uses).
+                if (natasha)
+                {
+                    var popDpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
+                    App.Chaster?.NoteAt("natasha", new System.Windows.Point(
+                        (window.Left + window.Width / 2) * popDpi, (window.Top + window.Height / 2) * popDpi));
+                }
             }
             catch (Exception ex)
             {

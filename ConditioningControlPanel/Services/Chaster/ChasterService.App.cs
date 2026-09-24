@@ -26,9 +26,13 @@ public sealed partial class ChasterService
             return s == null
                 ? ChasterOptions.Off
                 : new ChasterOptions(s.ChasterTabEnabled, s.ChasterLockId, new HashSet<string>(s.ChasterPrices ?? new List<string>(), StringComparer.Ordinal),
-                    TabLimits.FromMinutes(s.ChasterDailyLimitMinutes, s.ChasterBacklogLimitMinutes),
+                    // A raise only counts once its day is up (LimitChange); a lowering was applied at once.
+                    TabLimits.FromMinutes(LimitChange.Effective(s.ChasterDayLimit, DateTime.UtcNow),
+                        LimitChange.Effective(s.ChasterBacklogLimit, DateTime.UtcNow)),
                     RemoteOpen: App.RemoteControl?.IsActive == true,
-                    PanicArmed: s.PanicKeyEnabled);
+                    PanicArmed: s.PanicKeyEnabled,
+                    RelockPastEnd: s.ChasterRelockPastEnd,
+                    Paused: s.ChasterPaused);
         };
 #if DEBUG
         if (DemoService(options) is { } demo) return demo;

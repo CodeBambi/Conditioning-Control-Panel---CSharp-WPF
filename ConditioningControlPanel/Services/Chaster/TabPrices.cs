@@ -64,6 +64,11 @@ public static class TabPrices
     public static readonly IReadOnlySet<string> NeverPriced =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "panic", "emergency_exit", "safeword", "unlink" };
 
+    /// <summary>Rows that may book only so many times in one local day (security pass 2,
+    /// 2026-09-24). A Lockdown escape attempt is 3:00, and the player trying to get out is the
+    /// one moment a price must not run away: three a day, so 9:00 at most, then it books nothing.</summary>
+    public static int? DailyMaxUses(string id) => id == "escape" ? 3 : null;
+
     private static readonly Dictionary<string, TabPrice> ById =
         All.ToDictionary(p => p.Id, StringComparer.Ordinal);
 

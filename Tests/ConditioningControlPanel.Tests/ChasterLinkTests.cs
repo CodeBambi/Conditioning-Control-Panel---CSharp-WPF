@@ -88,7 +88,8 @@ public class ChasterLinkTests : IDisposable
         Assert.True(_service.IsLinked);
         Assert.Equal(1, changed);
         // The code goes back with the verifier that matches the challenge the flow opened with.
-        var sent = JObject.Parse(Assert.Single(_broker.Bodies));
+        // (A new link then asks for the profile, a GET with no body, which may land here too.)
+        var sent = JObject.Parse(Assert.Single(_broker.Bodies, b => b.Length > 0));
         Assert.Equal("the-code", sent["code"]!.Value<string>());
         Assert.Equal(challenge, ChasterClient.Challenge(sent["code_verifier"]!.Value<string>()!));
         Assert.Null(sent["state"]);
