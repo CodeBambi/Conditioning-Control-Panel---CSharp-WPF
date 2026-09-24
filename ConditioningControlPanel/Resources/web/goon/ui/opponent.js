@@ -529,6 +529,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     if (m.key === 'Videos') {
       for (let i = 0; i < 3; i++) add(node, el('i', 'gg-mini-bar'));
       add(node, el('i', 'gg-mini-scan'));
+      add(node, el('i', 'gg-mini-record'));
     }
     if (m.key === 'Spiral') add(node, el('i', 'gg-mini-spiral-disc'));
     if (m.key === 'Subliminals') add(node, el('span', 'gg-mini-line', 'deeper'));
@@ -898,14 +899,14 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
       const cur = windows.get(id);
       if (!cur) return;
       cur.open = true;
-      if (kind === GoonPayloadKind.FlashBurst) {
+      if (kind === GoonPayloadKind.FlashBurst || kind === GoonPayloadKind.Video) {
         // One decoder per media kind. A newer throw replaces the older preview.
         for (const other of windows.values()) {
           if (other !== cur && other.key === key && other.preview) {
             other.preview.destroy(); other.preview.node.remove(); other.preview = null;
           }
         }
-        cur.preview = createPreview({ kind, gifClip: true, cls: 'gg-mon-media' });
+        cur.preview = createPreview({ kind, gifClip: kind === GoonPayloadKind.FlashBurst, sampleMs: kind === GoonPayloadKind.Video ? 2000 : 0, cls: 'gg-mon-media' });
         if (cur.preview) add(parts.get(key), cur.preview.node);
       }
       paint();
