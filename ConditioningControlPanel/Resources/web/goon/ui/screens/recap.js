@@ -22,6 +22,13 @@ import { S, mmss } from '../strings.js';
 import { avatarSlot, emitAva } from '../avatar.js';
 import { GoonEndReason, GoonMatchPhase } from '../../core/contracts.js';
 import { evidenceFor, submitReport, NOTE_MAX, REPORT_REASONS } from '../report.js';
+import { noteMatchFinished } from '../nightProgress.js';
+import { settleOnce, formatRecord, outcomeOf } from '../rivalry.js';
+
+/** Matches already counted by noteMatchFinished (ui/nightProgress.js). */
+const countedMatches = new WeakSet();
+import { duelSummary } from '../duel/duelController.js';
+import { DUEL_COPY } from '../duel/copy.js';
 
 const COLLAPSE_AT = 6;
 const GRACEFUL_MS = 8 * 60 * 1000;
@@ -598,6 +605,21 @@ export function mount(container, ctx) {
     ]);
   }
 
+  /* ------------------------------------------------------------- rivalry
+   * Booked ONCE per match (settleOnce latches on the match object), on the
+   * first paint that has a result. Practice never books. The line reads the
+   * stored record back, so it already includes this match. */
+  const rivalry = ctx.rivalry || null;
+  const practice = typeof ctx.isPractice === 'function' ? !!ctx.isPractice() : false;
+  function rivalLine() {
+    if (!rivalry || practice || !match) return '';
+    try {
+      settleOnce(match, rivalry, { practice });
+      const name = match.opponent ? match.opponent.displayName : '';
+      return formatRecord(rivalry.recordFor(name), name);
+    } catch (_e) { return ''; }
+  }
+
   /* --------------------------------------------------------------- paint */
 
   function paint() {
@@ -655,6 +677,8 @@ export function mount(container, ctx) {
         ]),
         el('p', { class: 'gg-recap-fine', text: S.recap.scoreFineprint }),
         el('p', { class: 'gg-recap-fine', text: S.recap.survived(result.survivedMs) }),
+        el('p', { class: 'gg-rival-line', text: rivalLine() }),
+        duelSummary(match).won > 0 && el('p', { class: 'gg-recap-fine', text: DUEL_COPY.recapLine(duelSummary(match).won) }),
       ]));
     }
 
@@ -701,17 +725,27 @@ export function mount(container, ctx) {
       catch (_e2) { /* logger is optional */ }
     }
 
-    /* --- actions --- */
-    // Rematch needs a fresh room (the old one is spent) — that is v2. It ships
-    // visible and disabled rather than absent, so the shape of the screen does
-    // not move when it arrives.
-    const rematch = button(ledger, S.recap.rematch, () => {}, { variant: 'ghost', audio });
-    rematch.disabled = true;
-    // gg-menu-item carries `position: relative` — without it the absolutely
+    /* --- actions ---
+     * REMATCH IS THE SMALLEST HONEST VERSION. The room is spent the moment the
+     * match ends, so a rematch is a fresh room: the host's button opens one (a
+     * new link to send), the guest's lands on the join screen ready for it, and
+     * practice simply goes again. No new wire frame, so an old peer cannot be
+     * confused by it. Disabled only when the page gave us no road to take. */
+    const canRematch = !!(actions && typeof actions.rematch === 'function');
+    const rematch = button(ledger, S.recap.rematch, () => {
+      if (canRematch) void actions.rematch();
+    }, { variant: 'ghost', audio });
+    rematch.disabled = !canRematch;
+    // gg-menu-item carries `position: relative` - without it the absolutely
     // positioned note escapes to the nearest positioned ancestor and lands at
     // the bottom of the page. (It did.)
     rematch.classList.add('gg-menu-item', 'has-note');
-    rematch.appendChild(el('span', { class: 'gg-menu-note', text: S.recap.rematchSoon }));
+    rematch.appendChild(el('span', {
+      class: 'gg-menu-note',
+      text: !canRematch ? S.recap.rematchSoon
+        : practice ? S.recap.rematchPractice
+          : (match && match.isHost) ? S.recap.rematchHost : S.recap.rematchGuest,
+    }));
     const back = button(ledger, S.recap.back, () => actions.leave('recap'), { variant: 'primary', audio, sfx: 'ui-back' });
     column.appendChild(el('div', { class: 'gg-recap-actions' }, [rematch, back]));
 
@@ -737,6 +771,20 @@ export function mount(container, ctx) {
     ledger.add(discord.subscribe(() => { if (!ledger.isDisposed) paint(); }));
   }
   if (prefs) prefs.set('matchesPlayed', (prefs.get('matchesPlayed') | 0) + 1);
+  // Game Night's own count (ui/nightProgress.js): game cards unlock from the second one.
+  // Once per match object (the recap can be shown again for the same match), and only for a
+  // REAL result: an early abandon or a result that never finalized counts for nothing. The
+  // result can land after this screen mounts, so the check rides the same repaint hooks.
+  function countFinished() {
+    if (practice || !match || countedMatches.has(match)) return;
+    let real = false;
+    try { real = outcomeOf(match.result) != null; } catch (_e) { real = false; }
+    if (!real) return;
+    countedMatches.add(match);
+    try { noteMatchFinished(); } catch (_e) { /* never breaks the recap */ }
+  }
+  countFinished();
+  if (match) ledger.sub(match.onResultFinalized(() => countFinished()));
 
   paint();
   try { audio?.sfx?.('recap-reveal'); } catch (_e) { /* stub bus */ }

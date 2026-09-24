@@ -328,11 +328,13 @@ export function makeCaps(o = {}) {
     min_v: o.min_v ?? PROTOCOL_VERSION,
     transfer: o.transfer ?? false,
     voice: clampVoiceCount(o.voice),
+    night: clampVoiceCount(o.night),
   };
 }
 
 /** The voice-note protocol revision THIS build speaks. Advertised as `caps.voice`. */
 export const VOICE_CAP_VERSION = 1;
+export const NIGHT_CAP_VERSION = 1;
 
 /**
  * A peer's `caps.voice`, from an UNTRUSTED hello, as a plain boolean "can we send to them".
@@ -345,6 +347,7 @@ export const VOICE_CAP_VERSION = 1;
 export function peerSpeaksVoice(caps) {
   return clampVoiceCount(caps && caps.voice) >= 1;
 }
+export function peerSpeaksNight(caps) { return clampVoiceCount(caps && caps.night) >= 1; }
 
 export function makeHello(o = {}) {
   return {
@@ -570,6 +573,33 @@ export function makeVoice(o = {}) {
 }
 
 /**
+ * GAME NIGHT: THE SONG (2026-09-23). One frame, host -> guest, before Live:
+ *
+ *   {t:'song', sub:'set',   url, title, dur_sec}   the host picked a track
+ *   {t:'song', sub:'clear'}                        the host went back to the default length
+ *
+ * GATED BY `caps.night`, never by version: an older peer drops an unknown `t` without a word,
+ * so core/match.js only ever sends this to a peer whose hello said night >= 1 (peerSpeaksNight).
+ * It enters no intersection and can never fail a lobby.
+ *
+ * IT IS NOT A TERM. The length the match actually runs is the consent sheet's
+ * live_duration_sec, proposed by the host through the ordinary proposeConsent road, so both
+ * lamps clear and both players sign the length they saw. `dur_sec` here is only the label.
+ * The url is re-checked on arrival (core/song.js wireSongUrl: https, cdn.bambicloud.com, nothing
+ * else) and the title sanitized, in core/match.js. The numbers are pinned in wire.js.
+ */
+export function makeSong(o = {}) {
+  return {
+    t: 'song',
+    v: o.v ?? PROTOCOL_VERSION,
+    sub: o.sub ?? '',
+    url: o.url ?? null,
+    title: o.title ?? null,
+    dur_sec: o.dur_sec ?? 0,
+  };
+}
+
+/**
  * "I am still getting my library together" (protocol §6, v1.4).
  *
  * A PRESENCE HINT, not a term and not a phase. A first-time guest who arrived on
@@ -594,6 +624,47 @@ export function makeMediaPrep(o = {}) {
     t: 'media_prep',
     v: o.v ?? PROTOCOL_VERSION,
     preparing: o.preparing ?? false,
+  };
+}
+
+/**
+ * GAME NIGHT DUEL (2026-09-23). A `t:'duel'` frame, gated on the peer's `caps.night >= 1`
+ * exactly the way `t:'voice'` is gated on `caps.voice`: an older peer drops the unknown `t`
+ * silently, so the sender checks the cap before anything leaves. Fire and forget, no receipt.
+ *
+ *   {t:'duel', sub:'cfg',   len_s}               host only, once at Live: the duel length it picked
+ *   {t:'duel', sub:'start', idx, len_s}          a game card was thrown: duel number idx begins
+ *   {t:'duel', sub:'score', idx, score, tile}    this side's final board for duel idx
+ *   {t:'duel', sub:'busy',  idx}                 the receiver could not run that start: the thrower cancels
+ *
+ * Every number is pinned in core/wire.js CLAMPED_FIELDS, both directions.
+ */
+export const DUEL_SUBS = Object.freeze(['cfg', 'start', 'score', 'busy']);
+/** The duel lengths Customize offers. Anything else collapses to the first. */
+export const DUEL_LENGTHS_SEC = Object.freeze([60, 90, 120]);
+export function clampDuelSub(v) { return DUEL_SUBS.includes(v) ? v : ''; }
+export function clampDuelLen(v) {
+  const n = clampVoiceCount(v);
+  return DUEL_LENGTHS_SEC.includes(n) ? n : DUEL_LENGTHS_SEC[0];
+}
+/** Duel index: small non-negative integer. A match never sees more than a handful. */
+export function clampDuelIdx(v) { return Math.min(clampVoiceCount(v), 999); }
+/** A 2048 score: 0..1,000,000, far above anything a timed 4x4 board can reach. */
+export const DUEL_SCORE_MAX = 1000000;
+/** A tile TIER (1 = 2, 11 = 2048). 17 is the 4x4 board's theoretical ceiling. */
+export const DUEL_TILE_MAX = 17;
+export function clampDuelNum(v) { return Math.min(clampVoiceCount(v), DUEL_SCORE_MAX); }
+export function clampDuelTile(v) { return Math.min(clampVoiceCount(v), DUEL_TILE_MAX); }
+
+export function makeDuel(o = {}) {
+  return {
+    t: 'duel',
+    v: o.v ?? PROTOCOL_VERSION,
+    sub: clampDuelSub(o.sub),
+    idx: clampDuelIdx(o.idx),
+    len_s: clampDuelLen(o.len_s),
+    score: clampDuelNum(o.score),
+    tile: clampDuelTile(o.tile),
   };
 }
 
@@ -643,7 +714,9 @@ export const MessageFactories = Object.freeze({
   mercy: makeMercy,
   emote: makeEmote,
   voice: makeVoice,
+  song: makeSong,
   media_prep: makeMediaPrep,
+  duel: makeDuel,
   result: makeResult,
   clock_ping: makeClockPing,
   clock_pong: makeClockPong,

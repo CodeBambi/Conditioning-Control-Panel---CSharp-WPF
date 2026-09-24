@@ -47,7 +47,7 @@ import { GoonMatchService } from './core/match.js';
 import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
 import {
-  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION,
+  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION, NIGHT_CAP_VERSION,
 } from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
@@ -62,6 +62,8 @@ import { createRouter } from './ui/router.js';
 import { createPrefs } from './ui/prefs.js';
 import { createAudio } from './ui/audio.js';
 import { createToasts } from './ui/toasts.js';
+import { createHitStamps } from './ui/hitStamps.js';
+import { createRivalry } from './ui/rivalry.js';
 import { createCoach, COACH } from './ui/coach.js';
 import { createSheets } from './ui/sheets.js';
 import { createOptions } from './ui/options.js';
@@ -75,6 +77,7 @@ import { createWakeLock } from './ui/wakeLock.js';
 // bridge call at import time, and a duel where the voice service silently failed
 // to load would be a duel where a consent the player gave has no effect.
 import { createVoiceService } from './ui/voice/voiceService.js';
+import { createSongPlayer } from './ui/songPlayer.js';
 // ...and the library the service loads pre-recorded notes from. Same reasoning,
 // plus one more: it is the ONE writer of prefs.voiceEmoteMap, and two of those
 // would be two answers to "which note does this emote fire".
@@ -489,6 +492,10 @@ function showLoaderFailure(msg) {
 let prefs = null;
 let audio = null;
 let toasts = null;
+/** Game Night: the HIT stamps (ui/hitStamps.js). Page-scoped, attached per match. */
+let hitStamps = null;
+/** Game Night: the local W-L-D record per opponent (ui/rivalry.js). */
+const rivalry = createRivalry();
 let sheets = null;
 let options = null;
 /* ui/coach.js — the one-time explainers. A boot singleton rather than a per-match
@@ -519,6 +526,7 @@ let goonSession = null;      // net/session.js GoonSession (host/join path only)
 let currentMatch = null;
 let currentTransport = null;
 let currentSd = null;        // {presenter, inputs, dispose} from ui/sd
+let songPlayer = null;       // ui/songPlayer.js - MATCH-SCOPED like voice (Game Night)
 let voice = null;            // ui/voice/voiceService.js — MATCH-SCOPED, see attachMatch
 let micGateSaid = false;     // the mic breadcrumb is once per match — see reportMicGate
 let hudHandle = null;
@@ -609,7 +617,7 @@ function localCaps() {
   if (!caps.camera) rounds = rounds.filter((r) => r !== GoonRoundKind.StaringContest);
   if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, transfer: true });
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, transfer: true });
 }
 
 /* ============================================================================
@@ -974,13 +982,14 @@ function createMatchLog() {
  * so the relay fallback can rebuild a match without this knowledge leaking into
  * the transport layer.
  * -------------------------------------------------------------------------- */
-function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName = null } = {}) {
+function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName = null, night = true } = {}) {
   const match = new GoonMatchService(transport, isHost, {
     rngFactory: (seed) => new GoonRng(seed),
     logger,
     displayName: displayName || (session.identity && session.identity.displayName) || 'Player',
     appVersion: (session.identity && session.identity.appVersion) || '',
-    caps: localCaps(),
+    // The practice bot never speaks Game Night (no duels against a bot that cannot play one).
+    caps: night ? localCaps() : Object.assign({}, localCaps(), { night: 0 }),
     tag: isHost ? 'GG:host' : 'GG:guest',
   });
 
@@ -1096,6 +1105,7 @@ function attachMatch(match, transport) {
 
   try { executor?.attach?.(match); } catch (e) { logger.error('executor.attach threw: ' + ((e && e.stack) || e)); }
   try { matchLog.attach(match); } catch (e) { logger.error('matchLog.attach threw: ' + ((e && e.stack) || e)); }
+  try { hitStamps?.attach?.(match); } catch (e) { logger.warn('hitStamps.attach threw: ' + ((e && e.message) || e)); }
   /* THE SECOND tryFirePayload INSTANCE WRAPPER, and the order is the point.
    * matchLog wrapped it a line ago; the queue wraps it now, so the queue's is the
    * OUTERMOST — a payload gets its `xfer:` tags before the log records it, and the
@@ -1136,6 +1146,9 @@ function attachMatch(match, transport) {
       logger,
     });
   } catch (e) { logger.error('createVoiceService threw: ' + ((e && e.stack) || e)); voice = null; }
+  // Game Night: the match's song, if the host picked one. Silent on any failure.
+  try { songPlayer = createSongPlayer({ match, audio, logger }); }
+  catch (e) { logger.warn('createSongPlayer threw: ' + ((e && e.message) || e)); songPlayer = null; }
   /* SEED THE DECLARATION FROM THE PREFERENCE, on every attach.
    *
    * `prefs.voiceNotesEnabled` is the player's standing answer; `voice_notes` on
@@ -1447,6 +1460,7 @@ function detachMatch() {
   unmountMercy();
   try { executor?.detach?.(); } catch (e) { logger.warn('executor.detach threw: ' + ((e && e.message) || e)); }
   try { matchLog?.detach?.(); } catch (_e) { /* ignore */ }
+  try { hitStamps?.detach?.(); } catch (_e) { /* ignore */ }
   // Cancels every transfer and clears the queue; the STORE is untouched, because a
   // committed artifact is hash-keyed and stays valid across matches and sessions.
   try { mediaQueue?.detach?.(); } catch (_e) { /* ignore */ }
@@ -1455,6 +1469,8 @@ function detachMatch() {
   // talking over the recap.
   try { voice?.dispose?.(); } catch (_e) { /* ignore */ }
   voice = null;
+  try { songPlayer?.dispose?.(); } catch (_e) { /* ignore */ }
+  songPlayer = null;
   try { wakeLock?.stop?.(); } catch (_e) { /* a screen convenience, never load-bearing */ }
   try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
   currentSd = null;
@@ -1582,6 +1598,7 @@ function mountHudNow() {
       // extra key is inert — and handing it over here means the mic lands as one
       // line in ui/hud.js rather than as a second wiring pass through this file.
       match: currentMatch, session, audio, prefs, media, matchLog, discord, voice, coach,
+      isPractice: () => !!soloPair,
     }) || null;
   } catch (e) { logger.error('mountHud threw: ' + ((e && e.stack) || e)); hudHandle = null; }
 }
@@ -2003,6 +2020,21 @@ const actions = {
     else router.show('title');
   },
 
+  /**
+   * Game Night rematch, the smallest honest version. The finished room is spent,
+   * so this folds it exactly like Back to menu and then opens the next one: the
+   * host mints a fresh room (the host screen shows the new link to send), the
+   * guest lands on the join screen to paste it, practice just goes again. No wire
+   * frame: the two sides agree on a rematch the same way they agreed on the first.
+   */
+  async rematch() {
+    const practice = !!soloPair;
+    const wasHost = !!(currentMatch && currentMatch.isHost);
+    await actions.leave('rematch');
+    if (practice) { await startSolo(); return; }
+    router.show(wasHost ? 'host' : 'join');
+  },
+
   /** The host/join screen's Cancel: fold the pending room, stay on the page. */
   async cancelPending() {
     await teardownEverything();
@@ -2127,7 +2159,7 @@ async function startSolo() {
   soloPair = createLoopbackPair(opts);
 
   const local = buildMatch(soloPair.host, true);
-  soloOpponent = buildMatch(soloPair.guest, false, { withSuddenDeathUi: false, displayName: 'Practice' });
+  soloOpponent = buildMatch(soloPair.guest, false, { withSuddenDeathUi: false, displayName: 'Practice', night: false });
   soloDriver = createSoloDriver({ match: soloOpponent, logger });
 
   attachMatch(local, soloPair.host);
@@ -2175,6 +2207,7 @@ function buildApp() {
   prefs.subscribe((key, value) => { if (key === 'perfMode') applyPerfTier(value); });
   audio = createAudio({ prefs, logger });
   toasts = createToasts({ prefs });
+  hitStamps = createHitStamps({ audio, prefs, logger });
   /* AFTER the toasts, because that is its whole output tier, and BEFORE the
    * options drawer, which offers its switch. Nothing coaches until a HUD is
    * mounted — this only builds the ledger. */
@@ -2383,6 +2416,9 @@ function buildApp() {
     getTransport: () => currentTransport,
     getClock: () => { try { return currentTransport ? currentTransport.clock : null; } catch (_e) { return null; } },
     getSd: () => currentSd,
+    /** Game Night: the rivalry record, and whether this match is practice (never booked). */
+    rivalry,
+    isPractice: () => !!soloPair,
   };
 
   router = createRouter({
