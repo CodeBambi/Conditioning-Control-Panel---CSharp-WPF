@@ -321,9 +321,9 @@ namespace ConditioningControlPanel
                 {
                     Text = text,
                     Foreground = Brushes.White,
-                    FontSize = 13.5,
+                    FontSize = 15,
                     TextWrapping = TextWrapping.Wrap,
-                    LineHeight = 20
+                    LineHeight = 23
                 };
                 Grid.SetColumn(body, 1);
                 row.Children.Add(body);

@@ -413,27 +413,27 @@
                  RefreshMysteryTile() writes today's feature name over it on every repaint. -->
 
             <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
-            <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
                                   Title="Flash Images"
                                   Icon="pack://application:,,,/Resources/features/flash.png"
                                   HelpSectionId="FlashImages"
                                   Click="CardFlash_Click"
                                   DimWhenInactive="True"
                                   ToggleRequested="CardFlash_Toggle"/>
-            <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" x:FieldModifier="internal"
+            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" x:FieldModifier="internal"
                                        TitleA="Mandatory Video" TitleB="Bubble Count"
                                        IconA="pack://application:,,,/Resources/features/mandatory_videos.png"
                                        IconB="pack://application:,,,/Resources/features/Bubble_count.png"
                                        ClickA="ComboVideoBubble_ClickA" ClickB="ComboVideoBubble_ClickB"
                                        ToggleA="ComboVideoBubble_ToggleA" ToggleB="ComboVideoBubble_ToggleB"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" x:FieldModifier="internal"
                                   Title="Subliminals"
                                   Icon="pack://application:,,,/Resources/features/subliminal.png"
                                   HelpSectionId="Subliminals"
                                   Click="CardSubliminal_Click"
                                   DimWhenInactive="True"
                                   ToggleRequested="CardSubliminal_Toggle"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" x:FieldModifier="internal"
                                   Title="Bouncing Text"
                                   Icon="pack://application:,,,/Resources/features/bouncing_text.png"
                                   HelpSectionId="BouncingText"
@@ -465,7 +465,7 @@
                  enhancement and the owner corrected it on the desk run, 2026-09-12: "the deeper
                  editor should link and open the deeper page, not the editor". The wall's
                  "navigate, never launch" rule, which this tile is now back inside. -->
-            <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardDeeperEditor" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="1" Grid.Column="0" x:Name="CardDeeperEditor" x:FieldModifier="internal"
                                   Title="{loc:Str dash_deeper_editor_title}"
                                   Icon="pack://application:,,,/Resources/features/deeper_editor.png"
                                   Click="CardDeeperEditor_Click">
@@ -728,7 +728,7 @@
                 </Grid>
             </Border>
     
-            <features:SplitFeatureCard Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" x:FieldModifier="internal"
+            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" x:FieldModifier="internal"
                                        TitleA="Spiral Overlay" TitleB="Pink Filter"
                                        IconA="pack://application:,,,/Resources/features/spiral_overlay.png"
                                        IconB="pack://application:,,,/Resources/features/Pink_filter.png"
@@ -760,7 +760,7 @@
                     </TransformGroup>
                 </Grid.RenderTransform>
 
-                <features:FeatureCard x:Name="CardMystery" x:FieldModifier="internal"
+                <features:FeatureCard DashboardDepth="True" x:Name="CardMystery" x:FieldModifier="internal"
                                       Title="FREE TODAY"
                                       Icon="pack://application:,,,/Resources/features/mysterybox.png"
                                       Click="CardMystery_Click"/>
@@ -857,7 +857,7 @@
                 <TextBlock Text="{loc:Str mosaic_new_today}"
                            Foreground="#3A2A00" FontSize="10" FontWeight="Black"/>
             </Border>
-            <features:SplitFeatureCard Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" x:FieldModifier="internal"
+            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" x:FieldModifier="internal"
                                        TitleA="Mind Wipe" TitleB="Brain Drain"
                                        IconA="pack://application:,,,/Resources/features/Mind_Wipers.png"
                                        IconB="pack://application:,,,/Resources/features/brain_drain.png"
@@ -868,7 +868,7 @@
             <!-- THE VAULT: the Exclusives storefront (Velvet Vault + the premium T2 shelf).
                  Double-wide because it is a billboard as much as a door. Navigates to the
                  Exclusives tab through the SAME handler the rail's Patreon row uses. -->
-            <features:FeatureCard Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault" x:FieldModifier="internal"
                                   Title="The Vault"
                                   Icon="pack://application:,,,/Resources/features/vault.png"
                                   Click="CardVault_Click"/>
@@ -898,14 +898,14 @@
                                       BlurRadius="14" ShadowDepth="0" Opacity="0.95"/>
                 </TextBlock.Effect>
             </TextBlock>
-            <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" x:FieldModifier="internal"
                                   Title="Bubble Pop"
                                   Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
                                   HelpSectionId="BubblePop"
                                   Click="CardBubblePop_Click"
                                   DimWhenInactive="True"
                                   ToggleRequested="CardBubblePop_Toggle"/>
-            <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" x:FieldModifier="internal"
                                   Title="Lock Card"
                                   Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
                                   HelpSectionId="LockCard"

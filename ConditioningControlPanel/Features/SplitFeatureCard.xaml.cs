@@ -148,9 +148,18 @@ namespace ConditioningControlPanel.Features
         public event RoutedEventHandler ToggleA { add => AddHandler(ToggleAEvent, value); remove => RemoveHandler(ToggleAEvent, value); }
         public event RoutedEventHandler ToggleB { add => AddHandler(ToggleBEvent, value); remove => RemoveHandler(ToggleBEvent, value); }
 
+        private DashboardCardDepth? _depthA, _depthB;
+        public bool DashboardDepth { get; set; }
+
         public SplitFeatureCard()
         {
             InitializeComponent();
+            _depthA = new DashboardCardDepth(this, HalfFaceA, DepthBevelA,
+                () => DashboardDepth, () => IsActiveA, e => ResolveHalfA(e.GetPosition(ContentRoot)));
+            _depthB = new DashboardCardDepth(this, HalfFaceB, DepthBevelB,
+                () => DashboardDepth, () => IsActiveB, e => !ResolveHalfA(e.GetPosition(ContentRoot)));
+            Loaded += (_, _) => HalfSocketA.Visibility = HalfSocketB.Visibility =
+                DashboardDepth ? Visibility.Visible : Visibility.Collapsed;
             // Both halves start OFF and their DP callbacks only fire on a CHANGE, so a card whose
             // features are off at startup would never be handed its resting dim without this.
             ApplyHalfRestOpacity();
@@ -271,8 +280,10 @@ namespace ConditioningControlPanel.Features
             var regionA = RegionGeometry(true, k, w, h, 0);
             var regionB = RegionGeometry(false, k, w, h, 0);
 
-            HalfHostA.Clip = regionA;
-            HalfHostB.Clip = regionB;
+            HalfRegionA.Clip = regionA;
+            DepthBevelA.Data = RegionGeometry(true, k, w, h, 1);
+            HalfRegionB.Clip = regionB;
+            DepthBevelB.Data = RegionGeometry(false, k, w, h, 1);
             HoverWashA.Data = regionA;
             HoverWashB.Data = regionB;
 
@@ -575,6 +586,8 @@ namespace ConditioningControlPanel.Features
 
         private void ApplyActiveState()
         {
+            _depthA?.Refresh();
+            _depthB?.Refresh();
             ActiveRingA.Visibility = IsActiveA ? Visibility.Visible : Visibility.Collapsed;
             ActiveRingB.Visibility = IsActiveB ? Visibility.Visible : Visibility.Collapsed;
             ApplyHalfRestOpacity();
@@ -636,8 +649,8 @@ namespace ConditioningControlPanel.Features
         private void ApplyHalfRestOpacity()
         {
             if (HalfHostA == null || HalfHostB == null) return;
-            HalfHostA.Opacity = IsActiveA || _halfHover == true ? 1.0 : InactiveHalfOpacity;
-            HalfHostB.Opacity = IsActiveB || _halfHover == false ? 1.0 : InactiveHalfOpacity;
+            HalfHostA.Opacity = IsActiveA || (!DashboardDepth && _halfHover == true) ? 1.0 : InactiveHalfOpacity;
+            HalfHostB.Opacity = IsActiveB || (!DashboardDepth && _halfHover == false) ? 1.0 : InactiveHalfOpacity;
         }
 
         /// <summary>
@@ -652,8 +665,8 @@ namespace ConditioningControlPanel.Features
             try
             {
                 if (HalfMuteA == null || HalfMuteB == null) return;
-                FadeMute(HalfMuteA, CardMuteRule.ShouldMuteHalf(IsActiveA, _halfHover == true), ms);
-                FadeMute(HalfMuteB, CardMuteRule.ShouldMuteHalf(IsActiveB, _halfHover == false), ms);
+                FadeMute(HalfMuteA, CardMuteRule.ShouldMuteHalf(IsActiveA, !DashboardDepth && _halfHover == true), ms);
+                FadeMute(HalfMuteB, CardMuteRule.ShouldMuteHalf(IsActiveB, !DashboardDepth && _halfHover == false), ms);
             }
             catch (Exception ex) { App.Logger?.Debug("SplitFeatureCard.ApplyHalfMute: {E}", ex.Message); }
         }
@@ -754,7 +767,7 @@ namespace ConditioningControlPanel.Features
             _hovered = on;
             try
             {
-                MotionFx.HoverLift(RootBorder, on);
+                if (!DashboardDepth) MotionFx.HoverLift(RootBorder, on);
                 if (RimLight == null) return;
                 double to = on ? RimLightOpacity : 0;
                 if (!MotionFx.AllowTransitions)
