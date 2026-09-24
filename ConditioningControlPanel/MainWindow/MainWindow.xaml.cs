@@ -2181,8 +2181,9 @@ namespace ConditioningControlPanel
                                      || App.Settings?.Current?.IsSissyMode == true;
                 var logoFile = useNeutralLogo ? "logo2.png" : "logo.png";
                 var image = Services.ModResourceResolver.ResolveImage(logoFile);
-                if (image != null)
-                    SettingsTab.ImgLogo.Source = image;
+                SettingsTab.ImgLogo.SetArtwork(image);
+                ApplyLogoDrift();
+                ApplyLogoSheenTimer();
                 App.Logger?.Debug("Logo loaded: {Logo}", logoFile);
             }
             catch (Exception ex)

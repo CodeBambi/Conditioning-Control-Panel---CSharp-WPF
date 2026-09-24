@@ -309,12 +309,12 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="4,6,4,6" Width="69" HorizontalAlignment="Center">
+                    <StackPanel Margin="4,10,4,10" Width="69" HorizontalAlignment="Center">
                         <TextBlock Text="{loc:Str rail_favorites_caption}" Style="{StaticResource RailSectionCaption}"/>
                         <StackPanel x:Name="FavoritesList" x:FieldModifier="internal"/>
                         <TextBlock x:Name="FavoritesEmpty" x:FieldModifier="internal"
                                    Text="{loc:Str rail_favorites_empty}" Style="{StaticResource RailEmptyText}"/>
-                        <TextBlock Text="{loc:Str rail_recent_caption}" Style="{StaticResource RailSectionCaption}" Margin="0,4,0,3"/>
+                        <TextBlock Text="{loc:Str rail_recent_caption}" Style="{StaticResource RailSectionCaption}" Margin="0,8,0,6"/>
                         <StackPanel x:Name="RecentList" x:FieldModifier="internal"/>
                         <TextBlock x:Name="RecentEmpty" x:FieldModifier="internal"
                                    Text="{loc:Str rail_recent_empty}" Style="{StaticResource RailEmptyText}"/>
@@ -348,7 +348,35 @@
                      stack's are 4. -->
                 <Border Grid.Row="1" Margin="8,0,8,0" Padding="0,5,0,7"
                         BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="0,1,0,0">
-                    <TextBlock Text="{loc:Str rail_gesture_hint}" Style="{StaticResource RailGestureHint}"/>
+                    <Grid>
+                        <Button x:Name="ClickChoiceAnchor"
+                                FontSize="11" FontWeight="SemiBold" Padding="2,8" Cursor="Hand"
+                                Background="Transparent" Foreground="{DynamicResource TextLightBrush}"
+                                BorderThickness="0" Click="OpenClickChoice" MouseEnter="HoverClickChoice"
+                                MouseLeave="ScheduleClickChoiceClose">
+                            <TextBlock Text="{loc:Str dash_click_choice}" TextWrapping="Wrap" TextAlignment="Center"/>
+                        </Button>
+                        <Popup x:Name="ClickChoicePopup" PlacementTarget="{Binding ElementName=ClickChoiceAnchor}"
+                               Placement="Right" HorizontalOffset="6" StaysOpen="True" Closed="ClickChoiceClosed"
+                               AllowsTransparency="True" PopupAnimation="None">
+                            <Border x:Name="ClickChoiceBody" Width="290" Padding="18" CornerRadius="12"
+                                    Background="#FF1B1B30" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
+                                    MouseEnter="KeepClickChoiceOpen" MouseLeave="ScheduleClickChoiceClose"
+                                    PreviewKeyDown="ClickChoiceKeyDown">
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str dash_click_choice}" FontSize="17" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}" Margin="0,0,0,10"/>
+                                    <TextBlock x:Name="ClickChoiceDescription" FontSize="13" LineHeight="20"
+                                               Foreground="White" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                                    <CheckBox x:Name="InvertDashboardClicks" Content="{loc:Str dash_click_invert}"
+                                              Foreground="White" FontSize="13" Cursor="Hand"
+                                              Checked="ClickChoiceChanged" Unchecked="ClickChoiceChanged"/>
+                                    <TextBlock Text="{loc:Str dash_click_pages_pin}" FontSize="12" LineHeight="18"
+                                               Foreground="#CCCCDF" TextWrapping="Wrap" Margin="0,14,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
                 </Border>
             </Grid>
         </Border>
@@ -388,7 +416,11 @@
         <!-- feature (PlayTabView.xaml:1165 rule); FX toggles mirror the    -->
         <!-- popup side effects and respect the session dose lock.          -->
         <!-- ============================================================ -->
-        <Grid Grid.Column="1" Grid.Row="1" x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="5">
+        <!-- Clip the entire section, including ambient artwork and card glows. -->
+        <Grid Grid.Column="1" Grid.Row="1" Margin="10,5,16,5"
+              SizeChanged="FeatureSection_SizeChanged">
+            <fx:AmbientFxCanvas x:Name="MosaicFx" x:FieldModifier="internal"/>
+        <Grid x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
@@ -402,26 +434,6 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- ============================================================ -->
-            <!-- AMBIENT LAYER - the one looping FX on the whole Dashboard.    -->
-            <!-- Declared FIRST so it is the bottom of the grid's z-order: the -->
-            <!-- tiles paint their own opaque surfaces on top, so the fog and  -->
-            <!-- dust read through the gutters and through the near-           -->
-            <!-- transparent centre logo tile, never over a card face.         -->
-            <!--                                                                -->
-            <!-- It is inside the root 1489x901 Viewbox and therefore bitmap-   -->
-            <!-- scaled. That is fine and deliberate: soft fog and out-of-focus -->
-            <!-- dust have no edges for the scale to soften. Crisp particles    -->
-            <!-- would need to live outside the Viewbox - see the FX plan S2.   -->
-            <!--                                                                -->
-            <!-- AmbientFxCanvas is hit-test invisible by construction, runs a  -->
-            <!-- self-stopping clock, and MainWindow.DashboardFx registers it   -->
-            <!-- with RegisterTabFx so it parks on every tab switch.            -->
-            <!-- ============================================================ -->
-            <fx:AmbientFxCanvas x:Name="MosaicFx" x:FieldModifier="internal"
-                                Grid.Row="0" Grid.RowSpan="4"
-                                Grid.Column="0" Grid.ColumnSpan="4"/>
-
             <!-- The Title="" literals below are English design-time fallbacks only.
                  At runtime MainWindow.ApplyModFeatureNames() overwrites every FX title
                  with the mod-aware localized name (same keys as the Studio rack rows).
@@ -429,27 +441,27 @@
                  RefreshMysteryTile() writes today's feature name over it on every repaint. -->
 
             <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
-            <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
                                   Title="Flash Images"
                                   Icon="pack://application:,,,/Resources/features/flash.png"
                                   HelpSectionId="FlashImages"
                                   Click="CardFlash_Click"
                                   DimWhenInactive="True"
                                   ToggleRequested="CardFlash_Toggle"/>
-            <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" x:FieldModifier="internal"
+            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" x:FieldModifier="internal"
                                        TitleA="Mandatory Video" TitleB="Bubble Count"
                                        IconA="pack://application:,,,/Resources/features/mandatory_videos.png"
                                        IconB="pack://application:,,,/Resources/features/Bubble_count.png"
                                        ClickA="ComboVideoBubble_ClickA" ClickB="ComboVideoBubble_ClickB"
                                        ToggleA="ComboVideoBubble_ToggleA" ToggleB="ComboVideoBubble_ToggleB"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" x:FieldModifier="internal"
                                   Title="Subliminals"
                                   Icon="pack://application:,,,/Resources/features/subliminal.png"
                                   HelpSectionId="Subliminals"
                                   Click="CardSubliminal_Click"
                                   DimWhenInactive="True"
                                   ToggleRequested="CardSubliminal_Toggle"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" x:FieldModifier="internal"
                                   Title="Bouncing Text"
                                   Icon="pack://application:,,,/Resources/features/bouncing_text.png"
                                   HelpSectionId="BouncingText"
@@ -481,7 +493,7 @@
                  enhancement and the owner corrected it on the desk run, 2026-09-12: "the deeper
                  editor should link and open the deeper page, not the editor". The wall's
                  "navigate, never launch" rule, which this tile is now back inside. -->
-            <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardDeeperEditor" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="1" Grid.Column="0" x:Name="CardDeeperEditor" x:FieldModifier="internal"
                                   Title="{loc:Str dash_deeper_editor_title}"
                                   Icon="pack://application:,,,/Resources/features/deeper_editor.png"
                                   Click="CardDeeperEditor_Click">
@@ -526,7 +538,7 @@
                     </Grid.RenderTransform>
 
                     <!-- FACE A: the wordmark. Default face; the only face premium users and
-                         spent-week users ever see, byte-for-byte what shipped before. -->
+                         spent-week users see, inset to leave space around the mark. -->
                     <!-- The Ken Burns drift (scale 1.00 -> 1.04 over 40s, MainWindow.DashboardFx)
                          lives on THIS border and not on ImgLogo or on LogoFlipHost, and that is
                          a correctness rule, not a preference: LogoFlipHost's TransformGroup is
@@ -534,13 +546,13 @@
                          by the rapid-click easter-egg pulse. Both would snap the drift back to
                          1.0 mid-animation. This border sits between them and is otherwise
                          untouched, so the three transforms compose instead of fighting. -->
-                    <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True"
+                    <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True" Margin="24"
                             RenderTransformOrigin="0.5,0.5">
                         <Border.RenderTransform>
                             <ScaleTransform x:Name="LogoDriftScale" ScaleX="1" ScaleY="1"/>
                         </Border.RenderTransform>
                         <Grid>
-                            <Image x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
+                            <fx:AnimatedLogoImage x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
                                    RenderOptions.BitmapScalingMode="HighQuality"/>
                             <!-- Occasional light pass over the wordmark (one shot every 25-40s,
@@ -744,7 +756,7 @@
                 </Grid>
             </Border>
     
-            <features:SplitFeatureCard Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" x:FieldModifier="internal"
+            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" x:FieldModifier="internal"
                                        TitleA="Spiral Overlay" TitleB="Pink Filter"
                                        IconA="pack://application:,,,/Resources/features/spiral_overlay.png"
                                        IconB="pack://application:,,,/Resources/features/Pink_filter.png"
@@ -776,7 +788,7 @@
                     </TransformGroup>
                 </Grid.RenderTransform>
 
-                <features:FeatureCard x:Name="CardMystery" x:FieldModifier="internal"
+                <features:FeatureCard DashboardDepth="True" x:Name="CardMystery" x:FieldModifier="internal"
                                       Title="FREE TODAY"
                                       Icon="pack://application:,,,/Resources/features/mysterybox.png"
                                       Click="CardMystery_Click"/>
@@ -873,7 +885,7 @@
                 <TextBlock Text="{loc:Str mosaic_new_today}"
                            Foreground="#3A2A00" FontSize="10" FontWeight="Black"/>
             </Border>
-            <features:SplitFeatureCard Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" x:FieldModifier="internal"
+            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" x:FieldModifier="internal"
                                        TitleA="Mind Wipe" TitleB="Brain Drain"
                                        IconA="pack://application:,,,/Resources/features/Mind_Wipers.png"
                                        IconB="pack://application:,,,/Resources/features/brain_drain.png"
@@ -884,7 +896,7 @@
             <!-- THE VAULT: the Exclusives storefront (Velvet Vault + the premium T2 shelf).
                  Double-wide because it is a billboard as much as a door. Navigates to the
                  Exclusives tab through the SAME handler the rail's Patreon row uses. -->
-            <features:FeatureCard Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault" x:FieldModifier="internal"
                                   Title="The Vault"
                                   Icon="pack://application:,,,/Resources/features/vault.png"
                                   Click="CardVault_Click"/>
@@ -914,14 +926,14 @@
                                       BlurRadius="14" ShadowDepth="0" Opacity="0.95"/>
                 </TextBlock.Effect>
             </TextBlock>
-            <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" x:FieldModifier="internal"
                                   Title="Bubble Pop"
                                   Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
                                   HelpSectionId="BubblePop"
                                   Click="CardBubblePop_Click"
                                   DimWhenInactive="True"
                                   ToggleRequested="CardBubblePop_Toggle"/>
-            <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" x:FieldModifier="internal"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" x:FieldModifier="internal"
                                   Title="Lock Card"
                                   Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
                                   HelpSectionId="LockCard"
@@ -974,6 +986,7 @@
                                VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
+        </Grid>
         </Grid>
     
         <!-- ============================================================ -->
@@ -1030,7 +1043,7 @@
                  from MainWindow.DashboardFx) plus a pulse on the status text while it is still
                  loading. Nothing here paints over the web surface, and nothing here moves it. -->
             <Border x:Name="BrowserCardFrame" x:FieldModifier="internal"
-                    Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5" ClipToBounds="True"
+                    Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,10" ClipToBounds="True"
                     Background="{DynamicResource ElevatedSurfaceBrush}" BorderThickness="1">
                 <Border.BorderBrush>
                     <!-- The resting offsets park the bright core entirely BEFORE the brush's 0
@@ -1392,7 +1405,7 @@
                                  uses with the Haptics panel. -->
 
                             <Border Grid.Row="1" x:Name="HomeAudioCard" x:FieldModifier="internal"
-                                    CornerRadius="10" Padding="10,7" Margin="0,0,0,5"
+                                    CornerRadius="10" Padding="10,9" Margin="0,0,0,12"
                                     Background="{DynamicResource ElevatedSurfaceBrush}"
                                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                                 <StackPanel>
@@ -1573,33 +1586,82 @@
             <!-- art with a dark shade at the bottom, a small mono eyebrow,  -->
             <!-- a title, one line and a chevron.                            -->
             <!--                                                             -->
-            <!-- A RACK, not a poster. The first cut was one card filling the -->
-            <!-- whole freed space (874x504 at the desk), which blew the      -->
-            <!-- square marks - discord.png, logo.png - up into a blurry      -->
-            <!-- giant. So: four small 16:9 cards in a 2x2 grid, and every    -->
-            <!-- 12s ONE slot swaps to the card that has been off screen      -->
-            <!-- longest. No dots: the grid is its own index.                 -->
-            <!--                                                             -->
-            <!-- Two art treatments, decided per card by BillboardArt.        -->
-            <!-- Cover: wide feature art, cover-fitted. Plate: a square mark, -->
-            <!-- which is NOT cover-fitted - the same image goes behind it    -->
-            <!-- blurred and darkened and the mark itself sits at 72px in the -->
-            <!-- middle, so a logo reads as a logo.                           -->
-            <!--                                                             -->
-            <!-- Visible ONLY while the browser is folded, so an unfolded     -->
-            <!-- dashboard is byte-for-byte the one that shipped. The roster  -->
-            <!-- and the walk are Services/DashboardBillboard.cs; the paint,  -->
-            <!-- the clock and the click are MainWindow.DashboardBillboard.cs.-->
-            <!-- ============================================================ -->
+            <!-- One full-size poster, with navigation over the artwork. The clock pauses
+                 during hover or keyboard focus and follows the shared motion setting.
+                 Wide posters use cover fit; square marks keep the bounded plate treatment. -->
             <Border x:Name="DashBillboard" x:FieldModifier="internal" Grid.Row="1"
-                    Visibility="Collapsed" Margin="0,0,0,5"
+                    Visibility="Collapsed" Margin="0,0,0,12"
                     CornerRadius="12" ClipToBounds="True"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                <Grid>
+                    <Grid.Resources>
+                        <Style x:Key="SlideControl" TargetType="Button">
+                            <Setter Property="Width" Value="40"/>
+                            <Setter Property="Height" Value="40"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Background" Value="#D918182B"/>
+                            <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Opacity" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="20"
+                                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=DashBillboard}" Value="True">
+                                    <Setter Property="Opacity" Value="1"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=DashBillboard}" Value="True">
+                                    <Setter Property="Opacity" Value="1"/>
+                                </DataTrigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                        <Style x:Key="SlideDot" TargetType="RadioButton">
+                            <Setter Property="Width" Value="24"/>
+                            <Setter Property="Height" Value="28"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="RadioButton">
+                                        <Grid Background="Transparent">
+                                            <Ellipse x:Name="dot" Width="7" Height="7" Fill="#99FFFFFF"/>
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="dot" Property="Fill" Value="{DynamicResource PinkBrush}"/>
+                                                <Setter TargetName="dot" Property="Width" Value="10"/>
+                                                <Setter TargetName="dot" Property="Height" Value="10"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="dot" Property="Fill" Value="White"/>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="dot" Property="Stroke" Value="White"/>
+                                                <Setter TargetName="dot" Property="StrokeThickness" Value="2"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Grid.Resources>
                 <ItemsControl x:Name="BillboardRackHost" x:FieldModifier="internal" Margin="5">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <UniformGrid Rows="2" Columns="2"/>
+                            <UniformGrid Rows="1" Columns="1"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -1609,6 +1671,7 @@
                                  none of the default chrome shows through. -->
                             <Button Click="BillboardCard_Click" Cursor="Hand" Margin="3"
                                     Padding="0" MinHeight="74" ToolTip="{Binding Tip}"
+                                    AutomationProperties.Name="{Binding Tip}"
                                     HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
@@ -1628,7 +1691,7 @@
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Button.Template>
-                                <Grid>
+                                <Grid SizeChanged="BillboardArtwork_SizeChanged">
                                     <!-- Cover: wide feature art, UniformToFill inside the clipping
                                          border above. -->
                                     <Image Source="{Binding Art}" Stretch="UniformToFill"
@@ -1664,23 +1727,23 @@
                                         </Border.Background>
                                     </Border>
                                     <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Left"
-                                                Margin="10,0,34,7" IsHitTestVisible="False">
+                                                Margin="24,0,54,58" IsHitTestVisible="False">
                                         <TextBlock Text="{Binding Eyebrow}"
-                                                   FontFamily="{DynamicResource Font.Mono}" FontSize="9"
+                                                   FontFamily="{DynamicResource Font.Mono}" FontSize="11"
                                                    Foreground="{DynamicResource PinkBrush}"
                                                    TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding Title}"
-                                                   FontSize="13" FontWeight="Bold" Margin="0,1,0,0"
+                                                   FontSize="24" FontWeight="Bold" Margin="0,1,0,0"
                                                    Foreground="{DynamicResource TextLightBrush}"
                                                    TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding Line}"
-                                                   FontSize="10" Margin="0,1,0,0"
+                                                   FontSize="13" Margin="0,5,0,0"
                                                    Foreground="{DynamicResource TextMutedBrush}"
                                                    TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Border Width="20" Height="20" CornerRadius="10" IsHitTestVisible="False"
                                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                            Margin="0,0,8,8" BorderThickness="1"
+                                            Margin="0,0,22,24" BorderThickness="1"
                                             Background="#8C14142B" BorderBrush="{DynamicResource PinkBrush}">
                                         <TextBlock Text="›" FontSize="13" Margin="0,-3,0,0"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -1691,6 +1754,27 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                    <Button x:Name="BillboardPrevious" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
+                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="20,0,0,0"
+                            ToolTip="{loc:Str btn_previous}" AutomationProperties.Name="{loc:Str btn_previous}">
+                        <Path Data="M 8,0 L 0,8 L 8,16" Stroke="White" StrokeThickness="2"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    </Button>
+                    <Button x:Name="BillboardNext" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
+                            HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0"
+                            ToolTip="{loc:Str btn_next}" AutomationProperties.Name="{loc:Str btn_next}">
+                        <Path Data="M 0,0 L 8,8 L 0,16" Stroke="White" StrokeThickness="2"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    </Button>
+                    <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18"
+                            CornerRadius="16" Background="#D918182B" Padding="8,0">
+                        <StackPanel x:Name="BillboardDots" x:FieldModifier="internal" Orientation="Horizontal"/>
+                    </Border>
+                    <Button x:Name="BillboardPause" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,20,20,0"
+                            Content="Ⅱ" FontSize="17" ToolTip="{loc:Str btn_program_pause}"
+                            AutomationProperties.Name="{loc:Str btn_program_pause}"/>
+                </Grid>
             </Border>
 
             <!-- ============================================================ -->
@@ -1707,7 +1791,7 @@
             <!-- have to reach. Give it a portrait later, with the loop.       -->
             <!-- ============================================================ -->
             <Border x:Name="CompanionStrip" x:FieldModifier="internal" Grid.Row="2"
-                    CornerRadius="12" Padding="10,7" Margin="0,0,0,5"
+                    CornerRadius="12" Padding="10,9" Margin="0,0,0,12"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
                     Cursor="Hand" MouseLeftButtonDown="CompanionStrip_Click"
@@ -1948,7 +2032,7 @@
         <!-- the mosaic's star row (WPF clips silently - #860).            -->
         <!-- ============================================================ -->
         <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
-              Height="30" Margin="5,4,5,0">
+              Height="30" Margin="5,10,5,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="10"/>
@@ -2121,7 +2205,7 @@
         <!-- Scrolling Marquee Banner - row 3, spans all columns -->
         <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
                 Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
-                CornerRadius="8" Height="48" Margin="5,5,5,0" ClipToBounds="True">
+                CornerRadius="8" Height="48" Margin="5,10,5,0" ClipToBounds="True">
             <Border.Effect>
                 <DropShadowEffect Color="{DynamicResource DarkPink}" BlurRadius="15" ShadowDepth="0" Opacity="0.5"/>
             </Border.Effect>

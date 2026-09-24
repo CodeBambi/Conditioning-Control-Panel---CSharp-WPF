@@ -69,6 +69,8 @@ namespace ConditioningControlPanel.Features
 
         private Window? _hostWindow;
         private bool _hovered;
+        private DashboardCardDepth? _depth;
+        public bool DashboardDepth { get; set; }
 
         public static readonly DependencyProperty TitleProperty =
             DependencyProperty.Register(nameof(Title), typeof(string), typeof(FeatureCard),
@@ -308,6 +310,10 @@ namespace ConditioningControlPanel.Features
         public FeatureCard()
         {
             InitializeComponent();
+            _depth = new DashboardCardDepth(this, PressFace, DepthBevel,
+                () => DashboardDepth, () => DimWhenInactive && IsActive && !IsLocked,
+                e => !IsLocked && !(e.OriginalSource is DependencyObject source && IsDescendantOf(source, BtnHelp)));
+            Loaded += (_, _) => DepthSocket.Visibility = DashboardDepth ? Visibility.Visible : Visibility.Collapsed;
             ApplyLockState();
             // Build the help tooltip once the card is in the visual tree so that
             // FindResource can walk up into the owning Window's resources where
@@ -545,10 +551,11 @@ namespace ConditioningControlPanel.Features
         /// </summary>
         private void ApplyRestOpacity()
         {
+            _depth?.Refresh();
             if (ContentRoot == null) return;
             double target =
                 IsLocked ? LockedContentOpacity
-                : DimWhenInactive && !IsActive && !_hovered ? InactiveContentOpacity
+                : DimWhenInactive && !IsActive && (DashboardDepth || !_hovered) ? InactiveContentOpacity
                 : 1.0;
             ContentRoot.Opacity = target;
         }
@@ -568,7 +575,7 @@ namespace ConditioningControlPanel.Features
             try
             {
                 if (ImgIconMute == null || TxtTitle == null) return;
-                bool mute = CardMuteRule.ShouldMute(DimWhenInactive, IsActive, IsLocked, _hovered, TeaseTier > 0);
+                bool mute = CardMuteRule.ShouldMute(DimWhenInactive, IsActive, IsLocked, _hovered && !DashboardDepth, TeaseTier > 0);
                 double to = mute ? 1.0 : 0.0;
                 TxtTitle.Opacity = mute ? MutedTitleOpacity : 1.0;
                 if (ms <= 0)
@@ -594,7 +601,7 @@ namespace ConditioningControlPanel.Features
         /// </summary>
         internal void RefreshFx()
         {
-            try { ApplyActiveBreath(IsActive && !IsLocked); }
+            try { _depth?.Refresh(); ApplyActiveBreath(IsActive && !IsLocked); }
             catch (Exception ex) { App.Logger?.Debug("FeatureCard.RefreshFx: {E}", ex.Message); }
         }
 
@@ -766,8 +773,8 @@ namespace ConditioningControlPanel.Features
                 ApplyRestOpacity();
                 ApplyMute(CardMuteRule.TransitionMs(MotionFx.AllowTransitions, IsLoaded));
 
-                MotionFx.HoverLift(RootBorder, on);
-                if (on) HoverPop.Enter(ImgIconHost); else HoverPop.Leave(ImgIconHost);
+                if (!DashboardDepth) MotionFx.HoverLift(RootBorder, on);
+                if (on && !DashboardDepth) HoverPop.Enter(ImgIconHost); else HoverPop.Leave(ImgIconHost);
 
                 if (RimLight == null) return;
                 double to = on ? RimLightOpacity : 0;
@@ -786,25 +793,18 @@ namespace ConditioningControlPanel.Features
             catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyHover: {E}", ex.Message); }
         }
 
-        private void OnClick(object sender, MouseButtonEventArgs e)
-        {
-            // Swallow clicks that originate inside the help button so the user
-            // can hover/click the "?" without also opening the feature popup.
-            if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, BtnHelp))
-                return;
-            RaiseEvent(new RoutedEventArgs(ClickEvent, this));
-        }
+        private void OnClick(object sender, MouseButtonEventArgs e) => RouteClick(e, right: false);
 
-        private void OnRightClick(object sender, MouseButtonEventArgs e)
+        private void OnRightClick(object sender, MouseButtonEventArgs e) => RouteClick(e, right: true);
+
+        private void RouteClick(MouseButtonEventArgs e, bool right)
         {
-            // Swallow right-clicks inside the help button so they don't toggle.
-            if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, BtnHelp))
-                return;
-            // QoL: right-click is a quick on/off shortcut. A locked feature can't be
-            // toggled on, so right-clicking it does nothing.
-            if (IsLocked) return;
-            e.Handled = true;
-            RaiseEvent(new RoutedEventArgs(ToggleRequestedEvent, this));
+            if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, BtnHelp)) return;
+            bool invert = DashboardDepth && DimWhenInactive && App.Settings?.Current?.DashboardInvertClicks == true;
+            bool toggle = right != invert;
+            if (toggle && IsLocked) return;
+            if (right || toggle) e.Handled = true;
+            RaiseEvent(new RoutedEventArgs(toggle ? ToggleRequestedEvent : ClickEvent, this));
         }
 
         private static bool IsDescendantOf(DependencyObject node, DependencyObject ancestor)

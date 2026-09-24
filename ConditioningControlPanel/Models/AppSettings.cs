@@ -8818,6 +8818,9 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
 
+        /// <summary>Swap open and toggle gestures on Home feature tiles only.</summary>
+        public bool DashboardInvertClicks { get; set; }
+
         /// <summary>
         /// The Home dashboard's browser card is folded shut: the header strip stays, everything
         /// below it (the Deeper toolbar, the audio row and the WebView2) is collapsed and the card

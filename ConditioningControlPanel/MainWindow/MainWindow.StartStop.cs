@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -234,13 +234,13 @@ namespace ConditioningControlPanel
                 if (FolderHasAnyMedia(imagesDir, FlashImageExtensions)) return;
 
                 App.Notifications?.Show(
-                    LocOr("msg_no_flash_images",
-                        "No images yet. People share content packs daily on our Discord (Assets tab > Get Packs), "
-                        + "or turn on Reddit media under 'Where your media comes from'."),
+                    string.Format(Loc.Get("msg_no_flash_images"), Loc.Get("nav_door_library"), Loc.Get("tab_assets")),
                     Services.NotificationType.Warning,
-                    TimeSpan.FromSeconds(12),
-                    actionLabel: LocOr("btn_get_packs", "🎁 Get Packs"),
-                    action: OpenPackCatalogue);
+                    TimeSpan.FromSeconds(18),
+                    actionLabel: Loc.Get("btn_open_media_manager"),
+                    action: () => ShowTab("assets"),
+                    secondaryActionLabel: Loc.Get("btn_get_packs"),
+                    secondaryAction: OpenPackCatalogue);
                 App.Logger?.Information("[empty-state] Flashes started with an empty local image library");
             }
             catch (Exception ex) { App.Logger?.Debug(ex, "[empty-state] flash library check failed"); }
@@ -265,14 +265,13 @@ namespace ConditioningControlPanel
                 if (FolderHasAnyMedia(dir, WallpaperImageExtensions)) return;
 
                 App.Notifications?.Show(
-                    LocOr("msg_no_wallpaper_images",
-                        "No wallpapers yet. Drop images into your assets/wallpapers folder, grab a content pack "
-                        + "from our Discord (Assets tab > Get Packs), or turn on Reddit media under "
-                        + "'Where your media comes from'."),
+                    string.Format(Loc.Get("msg_no_wallpaper_images"), Loc.Get("nav_door_library"), Loc.Get("tab_assets")),
                     Services.NotificationType.Warning,
-                    TimeSpan.FromSeconds(12),
-                    actionLabel: LocOr("btn_get_packs", "🎁 Get Packs"),
-                    action: OpenPackCatalogue);
+                    TimeSpan.FromSeconds(18),
+                    actionLabel: Loc.Get("btn_open_media_manager"),
+                    action: () => ShowTab("assets"),
+                    secondaryActionLabel: Loc.Get("btn_get_packs"),
+                    secondaryAction: OpenPackCatalogue);
                 App.Logger?.Information("[empty-state] Wallpaper armed with an empty local wallpapers folder");
             }
             catch (Exception ex) { App.Logger?.Debug(ex, "[empty-state] wallpaper library check failed"); }
