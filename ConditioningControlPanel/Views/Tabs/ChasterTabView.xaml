@@ -418,7 +418,7 @@
                         <!-- the words and the digits, over the art's fade -->
                         <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Margin="26,14,26,14" VerticalAlignment="Center">
                             <!-- the lock's name, big and candy, every o a padlock -->
-                            <ctrl:LockTitle x:Name="HeroTitle" FontSize="88" HorizontalAlignment="Center" Margin="0,0,0,8"
+                            <ctrl:LockTitle x:Name="HeroTitle" FontSize="112" HorizontalAlignment="Center" Margin="0,-26,0,4"
                                             Visibility="Collapsed"/>
                             <!-- under it: the calendar, one square a day, and the countdown beside it -->
                             <Grid x:Name="HeroLower">
