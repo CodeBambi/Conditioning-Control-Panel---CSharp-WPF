@@ -285,7 +285,7 @@ export function mountArsenal({
 
     const img = add(root, el('img', 'gg-item-img'));
     if (img) {
-      img.src = './assets/items/' + item.img + '.png';
+      img.src = './assets/items/' + item.img + (item.id === 'gamecard' ? '.svg' : '.png');
       img.alt = '';
       img.draggable = false;
       img.decoding = 'async';
