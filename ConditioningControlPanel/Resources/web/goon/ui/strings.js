@@ -1374,6 +1374,20 @@ export const S = Object.freeze({
        means anything. */
     left: 'left the match',
   },
+
+  /* ----------------------------------------------------------- share card */
+  share: {
+    title: 'The card',
+    lead: 'Two faces, two scores, one word. No pictures from the match.',
+    preparing: 'drawing it',
+    copy: 'Share',
+    save: 'Save image',
+    copied: 'Copied. Paste it anywhere.',
+    saved: 'Saved.',
+    copyFailed: 'could not copy - try Save image',
+    saveFailed: 'could not save that one',
+    alt: (word) => 'match card: ' + word,
+  },
 });
 
 /**
