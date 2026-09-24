@@ -5360,6 +5360,38 @@ async function main() {
     }
   }
 
+  // Timed bounty behavior through real view input handlers, not source matching.
+  {
+    const host = byId.get('gg-stage');
+    host.replaceChildren();
+    const awards = [], cues = [];
+    const view = createLockCardView(host, { phrase: 'steady', durationMs: 30000, bounty: 100,
+      audio: { sfx: (id) => cues.push(id) }, onSolved: (r) => awards.push(r) });
+    const input = host.findAll('gg-lock-input')[0];
+    ok(documentElement.getAttribute('data-gg-lock-active') === '1', 'timed card blocks the field');
+    input.value = 'x'; input.fire('input');
+    ok(input.value === '', 'wrong letter is removed');
+    ok(host.findAll('gg-lock-prize')[0].childNodes[0].textContent === '92', 'typo visibly lowers the bounty');
+    input.value = 'steady'; input.fire('input'); input.fire('input');
+    ok(awards.length === 1 && awards[0].prize === 92, 'correct typing awards remaining bounty once');
+    ok(cues.includes('lock-slip') && cues.includes('lock-solved'), 'typo and completion have sound');
+    view.dispose();
+    ok(!documentElement.getAttribute('data-gg-lock-active'), 'dispose releases the field');
+    const realNow = Date.now;
+    let expired = 0, paid = 0;
+    const start = realNow();
+    Date.now = () => start;
+    let timeoutView;
+    try {
+      timeoutView = createLockCardView(host, { phrase: 'steady', durationMs: 1000, bounty: 100,
+        onSolved: () => paid++, onAbandoned: () => expired++ });
+      const late = host.findAll('gg-lock-input').at(-1);
+      Date.now = () => start + 1001;
+      late.value = 'steady'; late.fire('input');
+      ok(paid === 0 && expired === 1, 'typing after the deadline cannot claim a prize');
+    } finally { Date.now = realNow; timeoutView?.dispose(); }
+  }
+
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);
 }
