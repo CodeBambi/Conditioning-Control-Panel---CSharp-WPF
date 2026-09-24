@@ -60,8 +60,7 @@ namespace ConditioningControlPanel.Services.Commands
                 return;
             }
 
-            App.Logger?.Information("AiCommandService: dispatching {Cmd} with data {@Data}",
-                commandData.Command, commandData.Data);
+            App.Logger?.Information("AiCommandService: dispatching {Cmd}", commandData.Command);
 
             // Surface a human-readable line in the AI Brain "Live actions" feed. This is the
             // request; a second line follows after execution if the effect did not fire.

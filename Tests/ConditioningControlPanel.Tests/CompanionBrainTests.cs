@@ -192,6 +192,65 @@ public class CompanionBrainTests
         Assert.Empty(brain.Session.Turns);
     }
 
+    [Theory]
+    [InlineData("accepted", false)]
+    [InlineData("forget", false)]
+    [InlineData("changed", false)]
+    [InlineData("cancelled", false)]
+    [InlineData("refused", false)]
+    [InlineData("accepted", true)]
+    [InlineData("forget", true)]
+    [InlineData("changed", true)]
+    [InlineData("cancelled", true)]
+    [InlineData("refused", true)]
+    public async Task Preview_OnlyAcceptedModeratedTurnExecutesProposedEffects(string outcome, bool ambient)
+    {
+        var pending = new TaskCompletionSource<AiReplyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transport = new FakeTransport { AsyncReply = _ => pending.Task };
+        var context = "original";
+        var executed = 0;
+        using var cancellation = new CancellationTokenSource();
+        using var brain = new CompanionBrain(transport, new StubAssembler(), new InertMemoryStore(), new FakeStore(),
+            preview: () => true, contextStamp: () => context, executeCommands: commands => executed += commands.Count);
+        var turn = ambient ? brain.ReactAsync("a game finished", cancellation.Token) : brain.ChatAsync("hello", cancellation.Token);
+        Assert.Equal(0, executed);
+        if (outcome == "forget") brain.ForgetThread();
+        if (outcome == "changed") context = "new character or account";
+        if (outcome == "cancelled") cancellation.Cancel();
+        var refusal = outcome == "refused" ? new ModerationRefusalInfo(null, ModerationSource.Output) : null;
+        pending.SetResult(new AiReplyResult("a complete reply", refusal == null, refusal,
+            ProposedCommands: new[] { new ConditioningControlPanel.Models.AiCommandData() }));
+        var result = await turn;
+        Assert.Equal(outcome == "accepted" ? 1 : 0, executed);
+        Assert.Equal(outcome == "accepted", result.IsAiGenerated);
+    }
+
+    [Theory]
+    [InlineData("accepted")]
+    [InlineData("forget")]
+    [InlineData("changed")]
+    [InlineData("cancelled")]
+    public async Task Preview_QueuedEffects_RecheckContextWhenUiRunsThem(string outcome)
+    {
+        Action? queued = null;
+        var executed = 0;
+        var context = "original";
+        using var cancellation = new CancellationTokenSource();
+        var transport = new FakeTransport { Respond = (_, _) => new AiReplyResult("complete reply", true, null,
+            ProposedCommands: new[] { new ConditioningControlPanel.Models.AiCommandData() }) };
+        using var brain = new CompanionBrain(transport, new StubAssembler(), new InertMemoryStore(), new FakeStore(),
+            preview: () => true, contextStamp: () => context, executeCommands: commands => executed += commands.Count,
+            scheduleEffects: action => queued = action);
+        Assert.True((await brain.ChatAsync("hello", cancellation.Token)).IsAiGenerated);
+        Assert.Equal(0, executed);
+        Assert.NotNull(queued);
+        if (outcome == "forget") brain.ForgetThread();
+        if (outcome == "changed") context = "new";
+        if (outcome == "cancelled") cancellation.Cancel();
+        queued();
+        Assert.Equal(outcome == "accepted" ? 1 : 0, executed);
+    }
+
     // ---------- happy path ----------
 
     [Fact]

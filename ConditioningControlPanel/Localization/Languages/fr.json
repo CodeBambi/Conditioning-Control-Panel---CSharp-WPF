@@ -6,7 +6,7 @@
   "companion_v2_cancel": "Annuler",
   "companion_v2_error_signin": "Connecte-toi pour continuer. Ton message est toujours là.",
   "companion_v2_error_limit": "La limite quotidienne du chat est atteinte. Ton message est toujours là.",
-  "companion_v2_error_budget": "Le chat dans le cloud fait une pause. Ton message est toujours là.",
+  "companion_v2_error_budget": "Le chat dans le cloud a atteint sa limite hebdomadaire. Ton message est toujours là.",
   "companion_v2_error_offline": "Le modèle est injoignable. Vérifie la connexion, puis réessaie.",
   "companion_v2_error_invalid": "La réponse était incomplète ou illisible. Tu peux réessayer.",
   "companion_v2_memory_empty": "Aucun fait enregistré. Tes préférences enregistrées apparaîtront ici.",

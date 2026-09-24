@@ -429,6 +429,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         internal IReadOnlyList<CompanionTurn> SanitizeAssistantHistory(IReadOnlyList<CompanionTurn> window)
         {
             if (window == null || window.Count == 0) return window ?? Array.Empty<CompanionTurn>();
+            if (_preview()) return window;
 
             try
             {

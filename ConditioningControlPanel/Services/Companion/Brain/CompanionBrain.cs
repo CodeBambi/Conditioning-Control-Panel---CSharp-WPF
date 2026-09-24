@@ -68,6 +68,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly ICompanionSessionStore _store;
         private readonly Func<bool> _preview;
         private readonly Func<string?> _contextStamp;
+        private readonly Action<IReadOnlyList<Models.AiCommandData>> _executeCommands;
+        private readonly Action<Action> _scheduleEffects;
         private readonly object _conversationMutation = new();
         private int _conversationRevision;
 
@@ -102,13 +104,17 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             ICompanionSessionStore? store = null,
             RecentRecommendations? recommendations = null,
             Func<IReadOnlyList<string>>? mediaTitles = null, Func<bool>? preview = null,
-            Func<string?>? contextStamp = null)
+            Func<string?>? contextStamp = null,
+            Action<IReadOnlyList<Models.AiCommandData>>? executeCommands = null,
+            Action<Action>? scheduleEffects = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _preview = preview ?? (() => CompanionExperience.IsV2Enabled);
             _contextStamp = contextStamp ?? (() => string.Join("|", App.UnifiedUserId,
                 App.Settings?.Current?.PersonaIdentityFenceUtc?.Ticks,
                 App.Settings?.Current?.PersonaVoiceFenceUtc?.Ticks));
+            _executeCommands = executeCommands ?? ExecuteAcceptedCommands;
+            _scheduleEffects = scheduleEffects ?? ScheduleEffects;
             _ownsMemory = memory == null;
             Memory = memory ?? new MemoryStore();
             Recommendations = recommendations ?? new RecentRecommendations();
@@ -300,7 +306,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // stored: the persisted history is the model's few-shot bait, so leaving her
                 // inventions in it is how one made-up title became a fixation (0807). Rewriting
                 // here heals bubble, chip, history and future prompts in one place.
-                chatText = AiTextHygiene.RewriteOffPoolTitles(chatText);
+                if (!_preview()) chatText = AiTextHygiene.RewriteOffPoolTitles(chatText);
 
                 if (chatText.Length == 0)
                 {
@@ -320,8 +326,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                         Session.Remove(userTurn);
                         return AiReplyResult.Failed(AiFailureKind.Cancelled, true);
                     }
+                    cancellationToken.ThrowIfCancellationRequested();
                     Session.Append(TurnKind.AssistantChat, result.Text);
                     _conversationRevision++;
+                    ApplyPreviewCommands(result, cancellationToken);
                     NoteRecommendedTitles(result.Text);
                     PersistAsync();
                     SignalMemoryRecallIfDue();
@@ -381,6 +389,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
 
             _isProcessing = true;
+            var revision = System.Threading.Volatile.Read(ref _conversationRevision);
+            var contextStamp = _contextStamp();
             var eventTurn = Session.Append(TurnKind.AmbientEvent, descriptor);
             try
             {
@@ -414,10 +424,20 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // See TurnKind.AmbientReply for why persisting the reply without its event is worse
                 // than persisting neither. Nothing dialogue-shaped changed, so there is nothing to
                 // persist here at all.
-                Session.Append(TurnKind.AmbientReply, result.Text);
-                NoteRecommendedTitles(result.Text);
-                SignalMemoryRecallIfDue();
-                return result;
+                lock (_conversationMutation)
+                {
+                    if (_preview() && (revision != _conversationRevision || contextStamp != _contextStamp()))
+                    {
+                        Session.Remove(eventTurn);
+                        return AiReplyResult.Failed(AiFailureKind.Cancelled, true);
+                    }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Session.Append(TurnKind.AmbientReply, result.Text);
+                    ApplyPreviewCommands(result, cancellationToken);
+                    NoteRecommendedTitles(result.Text);
+                    SignalMemoryRecallIfDue();
+                    return result;
+                }
             }
             catch (Exception ex)
             {
@@ -435,6 +455,46 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// <summary>Convenience overload for call sites that only have a descriptor string.</summary>
         public Task<AiReplyResult> ReactAsync(string descriptor, CancellationToken cancellationToken = default)
             => ReactAsync(new CompanionEvent(descriptor), cancellationToken);
+
+        private void ApplyPreviewCommands(AiReplyResult result, CancellationToken cancellationToken)
+        {
+            if (!_preview() || result.ProposedCommands is not { Count: > 0 }) return;
+            var revision = _conversationRevision;
+            var context = _contextStamp();
+            void Execute()
+            {
+                lock (_conversationMutation)
+                {
+                    if (cancellationToken.IsCancellationRequested || revision != _conversationRevision || context != _contextStamp()) return;
+                    try { _executeCommands(result.ProposedCommands); }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("CompanionBrain: accepted effects failed ({ErrorType})", ex.GetType().Name);
+                    }
+                }
+            }
+            try { _scheduleEffects(Execute); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("CompanionBrain: effect scheduling failed ({ErrorType})", ex.GetType().Name);
+            }
+        }
+
+        private static void ScheduleEffects(Action execute)
+        {
+            // Effect implementations synchronously dispatch to WPF. Queue onto that thread before
+            // taking the lock, so a simultaneous UI forget action cannot deadlock the reply worker.
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess()) execute();
+            else dispatcher.BeginInvoke(execute, System.Windows.Threading.DispatcherPriority.Normal);
+        }
+
+        private static void ExecuteAcceptedCommands(IReadOnlyList<Models.AiCommandData> commands)
+        {
+            if (App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects != true || App.Commands == null) return;
+            App.Commands.BeginBatch();
+            foreach (var command in commands) App.Commands.ExecuteCommand(command);
+        }
 
         // ===================== barks =====================
 
@@ -562,7 +622,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // are model-authored and flow into future prompts via the exclusion line, so they
                 // are bounded hard: quoted spans only, length-capped, newlines stripped, two per
                 // reply.
-                if (noted.Count == 0)
+                if (!_preview() && noted.Count == 0)
                 {
                     int banned = 0;
                     foreach (var (start, length, quoted) in Services.Companion.CompanionTitleMatcher.CandidateSpans(text))

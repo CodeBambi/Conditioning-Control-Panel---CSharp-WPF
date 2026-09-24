@@ -6,7 +6,7 @@
   "companion_v2_cancel": "Cancel",
   "companion_v2_error_signin": "Sign in to continue. Your message is still here.",
   "companion_v2_error_limit": "The daily chat allowance has been reached. Your message is still here.",
-  "companion_v2_error_budget": "Cloud chat is taking a break. Your message is still here.",
+  "companion_v2_error_budget": "Cloud chat has reached its weekly limit. Your message is still here.",
   "companion_v2_error_offline": "The model could not be reached. Check your connection, then retry.",
   "companion_v2_error_invalid": "The reply was incomplete or unreadable. You can retry.",
   "companion_v2_memory_empty": "No saved facts yet. Saved preferences will appear here.",

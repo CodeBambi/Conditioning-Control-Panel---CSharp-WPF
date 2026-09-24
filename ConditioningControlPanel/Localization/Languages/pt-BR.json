@@ -6,7 +6,7 @@
   "companion_v2_cancel": "Cancelar",
   "companion_v2_error_signin": "Entre na sua conta para continuar. Sua mensagem continua aqui.",
   "companion_v2_error_limit": "O limite diário de conversa foi atingido. Sua mensagem continua aqui.",
-  "companion_v2_error_budget": "O chat na nuvem está em pausa. Sua mensagem continua aqui.",
+  "companion_v2_error_budget": "O chat na nuvem atingiu o limite semanal. Sua mensagem continua aqui.",
   "companion_v2_error_offline": "Não foi possível acessar o modelo. Verifique a conexão e tente novamente.",
   "companion_v2_error_invalid": "A resposta estava incompleta ou ilegível. Você pode tentar novamente.",
   "companion_v2_memory_empty": "Nenhum fato salvo ainda. As preferências salvas aparecerão aqui.",
