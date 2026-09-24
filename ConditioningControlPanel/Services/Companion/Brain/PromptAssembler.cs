@@ -190,6 +190,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         private readonly IMemoryStore _memory;
         private readonly Func<bool> _preview;
+        private readonly Func<string?> _rollingContext;
         private readonly Func<bool> _chatMemoryEnabled;
         private readonly RecentRecommendations _recommendations;
         private readonly Func<string> _systemPromptProvider;
@@ -219,7 +220,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             Func<DateTime?>? personaFence = null,
             Func<string?>? lockdownContext = null,
             Func<DateTime?>? identityFence = null, Func<bool>? preview = null,
-            Func<bool>? chatMemoryEnabled = null)
+            Func<bool>? chatMemoryEnabled = null, Func<string?>? rollingContext = null)
         {
             // Deliberately NOT `?? new MemoryStore()`. The production MemoryStore constructor is not
             // inert — it loads memory.json, starts a MemorySignalWriter and registers a shutdown
@@ -227,6 +228,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             // brain's on the same file. Every real caller passes CompanionBrain.Memory; null is a
             // wiring bug and should say so.
             _memory = memory ?? throw new ArgumentNullException(nameof(memory));
+            _rollingContext = rollingContext ?? (() => null);
             _preview = preview ?? (() => CompanionExperience.IsV2Enabled);
             _chatMemoryEnabled = chatMemoryEnabled ?? (() => App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false);
             _recommendations = recommendations ?? new RecentRecommendations();
@@ -624,6 +626,16 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             var instruction = Instruction(purpose);
             var lines = new List<string>();
+            if (_preview() && _chatMemoryEnabled())
+            {
+                var summary = _rollingContext();
+                if (!string.IsNullOrWhiteSpace(summary)) lines.Add(summary!);
+                if (_memory is MemoryStore relationshipStore)
+                {
+                    var context = ConversationRelationship.PromptContext(relationshipStore.Relationships, App.Mods?.ActiveModId);
+                    if (context != null) lines.Add(context);
+                }
+            }
             if (!string.IsNullOrWhiteSpace(recall)) lines.Add(recall!);
 
             // Anti-fixation lines FIRST: Compose sheds tail lines from the end, and the budget
