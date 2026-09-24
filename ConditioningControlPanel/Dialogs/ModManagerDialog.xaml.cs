@@ -12,7 +12,7 @@ using ConditioningControlPanel.Localization;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// Mod browser/manager dialog — list, details, install/uninstall/activate.
+    /// The Customise window: pick a mod, then its companion (look + personality) in one card.
     /// </summary>
     public partial class ModManagerDialog : Window
     {
@@ -407,36 +407,34 @@ namespace ConditioningControlPanel
             DetailsPanel.Visibility = Visibility.Visible;
 
             TxtModName.Text = mod.Name;
-            TxtModAuthor.Text = Loc.GetF("label_by_author", mod.Manifest.Author);
-            TxtModVersion.Text = Loc.GetF("label_version_prefix", mod.Manifest.Version);
+            TxtModAuthor.Text = Loc.GetF("modmgr_by_version", mod.Manifest.Author, mod.Manifest.Version);
             TxtModDescription.Text = mod.Manifest.Description ?? "";
+            TxtModDescription.ToolTip = string.IsNullOrWhiteSpace(mod.Manifest.Description) ? null : mod.Manifest.Description;
 
-            // Preview image + what the mod actually overrides on disk.
+            // Banner beside the name + what the mod overrides on disk (the latter in Defaults).
             ShowArtSummary(mod);
 
-            // Theme color
-            var colorHex = mod.Manifest.Theme?.AccentColor ?? "#FF69B4";
-            TxtThemeColor.Text = colorHex;
+            // Theme: a swatch, no hex. The hex is developer detail.
             try
             {
-                ThemeColorPreview.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colorHex));
+                ThemeColorPreview.Background = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString(mod.Manifest.Theme?.AccentColor ?? "#FF69B4"));
             }
             catch
             {
                 ThemeColorPreview.Background = new SolidColorBrush(Colors.HotPink);
             }
 
-            // Companion
-            TxtCompanion.Text = mod.Manifest.Identity?.CompanionName ?? "BambiSprite";
-
-            // Active state
+            // One primary action: "Use this mod", or the Active pill.
             var isActive = mod.Id == App.Mods?.ActiveModId;
             TxtActiveIndicator.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
             BtnActivate.Visibility = isActive ? Visibility.Collapsed : Visibility.Visible;
 
-            // Tube Fit edits the avatar's fit inside the tube for the mod that's actually rendering,
-            // so it only makes sense (and only previews correctly) for the active mod.
-            BtnTubeFit.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
+            // The companion card edits the LIVE companion, which is the active mod's. For any
+            // other mod it would preview choices that do not apply, so it waits for "Use this mod".
+            CompanionCard.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
+            CompanionInactiveHint.Visibility = isActive ? Visibility.Collapsed : Visibility.Visible;
+            if (isActive) CompanionCard.Refresh();
 
             // Can't uninstall built-in mods or active mod
             BtnUninstall.Visibility = (!mod.IsBuiltIn && !isActive) ? Visibility.Visible : Visibility.Collapsed;
@@ -445,8 +443,89 @@ namespace ConditioningControlPanel
             BtnShare.Visibility = (!mod.IsBuiltIn && !string.IsNullOrEmpty(mod.InstalledPath))
                 ? Visibility.Visible : Visibility.Collapsed;
 
+            ShowSuggestions(mod);
+
             // Built-in mods whose media still has to come down off the release.
             UpdatePackPanel(mod);
+        }
+
+        // ------------------------------------------------------------------ recommended setup
+        //
+        // A mod may name a settings preset and an asset preset it recommends. They are shown in the
+        // folded Defaults section with an Apply button each, and offered ONCE on first activation
+        // (ModSuggestions.ShouldAsk). Never applied without a yes.
+
+        private static System.Collections.Generic.List<Preset> AllSettingsPresets()
+        {
+            var list = Preset.GetDefaultPresets();
+            var user = App.Settings?.Current?.UserPresets;
+            if (user != null) list.AddRange(user);
+            return list;
+        }
+
+        private static Preset? SuggestedSettings(ModPackage mod) =>
+            ModSuggestions.ResolveSettings(AllSettingsPresets(), mod.Manifest.SuggestedSettingsPreset);
+
+        private static AssetPreset? SuggestedAssets(ModPackage mod) =>
+            ModSuggestions.ResolveAssets(App.Settings?.Current?.AssetPresets, mod.Manifest.SuggestedAssetPreset);
+
+        private void ShowSuggestions(ModPackage mod)
+        {
+            var settings = SuggestedSettings(mod);
+            var assets = SuggestedAssets(mod);
+
+            RowSuggestedSettings.Visibility = settings != null ? Visibility.Visible : Visibility.Collapsed;
+            if (settings != null) TxtSuggestedSettings.Text = Loc.GetF("modmgr_suggested_settings", settings.Name);
+
+            RowSuggestedAssets.Visibility = assets != null ? Visibility.Visible : Visibility.Collapsed;
+            if (assets != null) TxtSuggestedAssets.Text = Loc.GetF("modmgr_suggested_assets", assets.Name);
+
+            TxtNoSuggestions.Visibility = settings == null && assets == null ? Visibility.Visible : Visibility.Collapsed;
+
+            // Applying only makes sense to the mod that is running.
+            var isActive = mod.Id == App.Mods?.ActiveModId;
+            RowSuggestedSettings.IsEnabled = isActive;
+            RowSuggestedAssets.IsEnabled = isActive;
+        }
+
+        /// <summary>First activation of a mod with a recommended setup: ask once, remember the
+        /// answer either way, apply only on a yes.</summary>
+        private void OfferSuggestionsOnce(ModPackage mod)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var settings = SuggestedSettings(mod);
+            var assets = SuggestedAssets(mod);
+            if (!ModSuggestions.ShouldAsk(mod.Id, settings != null || assets != null, s.ModSuggestionsAsked)) return;
+
+            ModSuggestions.MarkAsked(mod.Id, s.ModSuggestionsAsked);
+            App.Settings!.Save();
+
+            var parts = new System.Collections.Generic.List<string>();
+            if (settings != null) parts.Add(Loc.GetF("modmgr_suggested_settings", settings.Name));
+            if (assets != null) parts.Add(Loc.GetF("modmgr_suggested_assets", assets.Name));
+
+            var mw = Owner as MainWindow ?? App.MainWindowRef;
+            if (mw == null) return;
+            var yes = mw.ShowStyledDialog(Loc.Get("modmgr_ask_title"),
+                Loc.GetF("modmgr_ask_body", mod.Name, string.Join("\n", parts)),
+                Loc.Get("modmgr_ask_yes"), Loc.Get("modmgr_ask_no"));
+            if (!yes) return;
+
+            if (assets != null) mw.ApplyAssetPresetFromLauncher(assets.Id);
+            if (settings != null) mw.ApplySettingsPresetFromCustomise(settings);
+        }
+
+        private void BtnApplySuggestedSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMod == null || SuggestedSettings(_selectedMod) is not { } preset) return;
+            (Owner as MainWindow ?? App.MainWindowRef)?.ApplySettingsPresetFromCustomise(preset);
+        }
+
+        private void BtnApplySuggestedAssets_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMod == null || SuggestedAssets(_selectedMod) is not { } preset) return;
+            (Owner as MainWindow ?? App.MainWindowRef)?.ApplyAssetPresetFromLauncher(preset.Id);
         }
 
         // ------------------------------------------------------------------ art summary
@@ -465,20 +544,57 @@ namespace ConditioningControlPanel
             TxtArtOverrides.Visibility = Visibility.Collapsed;
 
             var installed = mod.InstalledPath;
-            if (string.IsNullOrEmpty(installed) || !Directory.Exists(installed)) return;
+            var hasFolder = !string.IsNullOrEmpty(installed) && Directory.Exists(installed);
 
-            var preview = LoadPreviewImage(installed, mod.Manifest.PreviewImage);
-            if (preview != null)
+            // Banner: the mod's own bannerImage, else its previewImage, else the built-in art.
+            var banner = hasFolder
+                ? LoadPreviewImage(installed!, mod.Manifest.BannerImage) ?? LoadPreviewImage(installed!, mod.Manifest.PreviewImage)
+                : null;
+            banner ??= LoadBuiltInBanner(BuiltInBannerFor(mod.Id));
+            if (banner != null)
             {
-                ImgModPreview.Source = preview;
+                ImgModPreview.Source = banner;
                 PreviewImagePanel.Visibility = Visibility.Visible;
             }
 
-            var summary = SummarizeOverrides(Path.Combine(installed, "resources"));
+            if (!hasFolder) return;
+
+            var summary = SummarizeOverrides(Path.Combine(installed!, "resources"));
             if (summary != null)
             {
                 TxtArtOverrides.Text = summary;
                 TxtArtOverrides.Visibility = Visibility.Visible;
+            }
+        }
+
+        /// <summary>Stock banner art for the built-in mods (Resources/features), or null.</summary>
+        internal static string? BuiltInBannerFor(string? modId) => modId switch
+        {
+            BuiltInMods.CCPDefaultId => "ccp_banner.png",
+            BuiltInMods.BambiSleepId => "vault_bambi.png",
+            BuiltInMods.SissyHypnoId => "vault_sissy.png",
+            BuiltInMods.DronificationId => "vault_drone.png",
+            BuiltInMods.LockedId => "vault_locked.png",
+            _ => null
+        };
+
+        private static ImageSource? LoadBuiltInBanner(string? file)
+        {
+            if (file == null) return null;
+            try
+            {
+                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new System.Uri($"pack://application:,,,/Resources/features/{file}", System.UriKind.Absolute);
+                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = 400;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -501,7 +617,7 @@ namespace ConditioningControlPanel
                 bitmap.BeginInit();
                 bitmap.UriSource = new System.Uri(full, System.UriKind.Absolute);
                 bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bitmap.DecodePixelWidth = 320;   // the row is 260px wide; a full-size decode here costs MBs
+                bitmap.DecodePixelWidth = 400;   // the banner is 190px wide; a full-size decode here costs MBs
                 bitmap.EndInit();
                 bitmap.Freeze();
                 return bitmap;
@@ -577,16 +693,32 @@ namespace ConditioningControlPanel
         private void BtnActivate_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedMod == null || App.Mods == null) return;
+            var mod = _selectedMod;
 
-            App.Mods.ActivateMod(_selectedMod.Id);
-            App.Settings.Current.ActiveModId = _selectedMod.Id;
-            App.Settings.Save();
+            // The one switching path the top-bar combo and the launcher use (ActivateMod +
+            // ApplyActiveModChange), run NOW so the companion card below reads the new mod.
+            if ((Owner as MainWindow ?? App.MainWindowRef) is { } mw)
+            {
+                mw.SwitchActiveModFromLauncher(mod.Id);
+            }
+            else
+            {
+                App.Mods.ActivateMod(mod.Id);
+                App.Settings.Current.ActiveModId = mod.Id;
+                App.Settings.Save();
+                ModWasChanged = true;
+            }
 
-            ModWasChanged = true;
-            RefreshModList();
+            RefreshListKeepingSelection();
+            if (mod.Id == App.Mods.ActiveModId) OfferSuggestionsOnce(mod);
+        }
 
-            // Re-show details for the newly active mod
-            ShowModDetails(_selectedMod);
+        private void BtnMore_Click(object sender, RoutedEventArgs e)
+        {
+            if (BtnMore.ContextMenu == null) return;
+            BtnMore.ContextMenu.PlacementTarget = BtnMore;
+            BtnMore.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+            BtnMore.ContextMenu.IsOpen = true;
         }
 
         private void BtnUninstall_Click(object sender, RoutedEventArgs e)
@@ -686,14 +818,6 @@ namespace ConditioningControlPanel
                     BtnExport.IsEnabled = true;
                 }
             }
-        }
-
-        // Live WYSIWYG editor for the avatar's scale/offsets inside the tube. Saves a per-mod user
-        // override in settings (never into the mod), so no ModWasChanged refresh is needed.
-        private void BtnTubeFit_Click(object sender, RoutedEventArgs e)
-        {
-            var dialog = new TubeFitDialog { Owner = this };
-            dialog.ShowDialog();
         }
 
         private void BtnCreate_Click(object sender, RoutedEventArgs e)

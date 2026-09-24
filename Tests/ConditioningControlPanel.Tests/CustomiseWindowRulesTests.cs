@@ -146,4 +146,11 @@ public class CustomiseWindowRulesTests
         });
         Assert.Equal(new[] { "hi", "there" }, clean[0].SampleLines);
     }
+
+    [Fact]
+    public void BuiltInModsHaveBannerArtAndUserModsDoNot()
+    {
+        Assert.Equal("ccp_banner.png", ModManagerDialog.BuiltInBannerFor(BuiltInMods.CCPDefaultId));
+        Assert.Null(ModManagerDialog.BuiltInBannerFor("someone-elses-mod"));
+    }
 }
