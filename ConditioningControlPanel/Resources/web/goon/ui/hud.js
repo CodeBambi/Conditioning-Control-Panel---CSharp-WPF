@@ -357,6 +357,22 @@ function logTo(sink, entry) {
  *                              hint is the only thing that does not happen.
  * @returns {{unmount:Function}}
  */
+/**
+ * The mounted Arcademy class follows the Goon mix: master x the game cue slider (a duel is
+ * something the match does at you). {level, subscribe} or null without a prefs store.
+ */
+export function duelVolume(prefs) {
+  if (!prefs || typeof prefs.get !== 'function') return null;
+  const n = (k, d) => { const v = Number(prefs.get(k)); return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : d; };
+  return {
+    level: () => n('masterVolume', 0.8) * n('gameVolume', 0.85),
+    subscribe(fn) {
+      if (typeof prefs.subscribe !== 'function') return () => {};
+      return prefs.subscribe((key) => { if (key === 'masterVolume' || key === 'gameVolume') fn(); });
+    },
+  };
+}
+
 export function mountHud({ match, session = null, audio = null, prefs = null, media = null,
   matchLog = null, discord = null, voice = null, coach = null, isPractice = null } = {}) {
   const led = createLedger();
@@ -854,7 +870,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const emotes = mountEmotes({ host: root, match, audio, onLog });
   // GAME NIGHT: the game card duel. Owns its own overlay (under Mercy) and pauses throws while it runs.
   const duel = createDuelController({
-    match, view: createDuelView({ onLog }), audio, onLog,
+    match, view: createDuelView({ onLog, volume: duelVolume(prefs) }), audio, onLog,
     isPractice: () => (typeof isPractice === 'function' ? !!isPractice() : false),
   });
   led.add(() => { try { duel.dispose(); } catch (_e) { /* gone */ } });

@@ -673,5 +673,50 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   delete globalThis.document;
 }
 
+// ---- the mounted class follows the Goon mix (master x game), and the host wires it
+{
+  const { duelVolume } = await import('../ui/hud.js');
+  ok(duelVolume(null) === null, 'no prefs store, no volume (the class keeps its old mix)');
+  const subs = [];
+  const prefs = { v: { masterVolume: 0.5, gameVolume: 0.5 }, get(k) { return this.v[k]; }, subscribe(fn) { subs.push(fn); return () => {}; } };
+  const vol = duelVolume(prefs);
+  ok(Math.abs(vol.level() - 0.25) < 1e-9, 'level = master x game');
+  let calls = 0;
+  vol.subscribe(() => { calls++; });
+  subs[0]('masterVolume'); subs[0]('perfMode');
+  ok(calls === 1, 'only the two volume keys move it');
+  prefs.v.masterVolume = 0;
+  ok(vol.level() === 0, 'a zero master is silence');
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../ui/duel/arcademyHost.js', import.meta.url), 'utf8');
+  ok(/masterVolume: v0, audioMute: v0 <= 0/.test(src) && /key: 'masterVolume', value: v/.test(src),
+    'arcademyHost starts the synth at the Goon level and follows it through onSetting');
+}
+
+// ---- a duel plays on the online pool first, and ducks the match under it
+{
+  const { duelRows } = await import('../ui/duel/arcademyHost.js');
+  const pool = {
+    online: [{ kind: 'image', url: 'https://ccp.assets/.temp/a.jpg' }],
+    all: [{ kind: 'image', url: 'https://ccp.assets/mine.jpg' }, { kind: 'image', url: 'https://ccp.assets/.temp/a.jpg' }],
+    listOnline() { return this.online; }, list() { return this.all; },
+  };
+  ok(duelRows(pool).length === 1 && duelRows(pool)[0].url.includes('.temp'), 'the online pool is the duel\'s deck when there is one');
+  pool.online = [];
+  ok(duelRows(pool).length === 2, 'no online pool: the whole deck');
+  ok(duelRows(null).length === 0, 'no pool at all: nothing, never a throw');
+  const { createAudio, DUEL_DUCK, DUEL_DUCK_SEC } = await import('../ui/audio.js');
+  ok(DUEL_DUCK > 0 && DUEL_DUCK < 1 && DUEL_DUCK_SEC >= 0.2 && DUEL_DUCK_SEC <= 0.5, 'the duck is partial and glides');
+  const a = createAudio({});
+  a.duelDuck(true);
+  ok(a.isDuelDucked === true, 'duelDuck(true) ducks');
+  a.duelDuck(false);
+  ok(a.isDuelDucked === false, 'and duelDuck(false) brings it back');
+  const fs = await import('node:fs');
+  const ctl = fs.readFileSync(new URL('../ui/duel/duelController.js', import.meta.url), 'utf8');
+  ok(/function startRun\(spec\) \{\n?\r?\n?\s*duck\(true\)/.test(ctl) && /dropRun\(cur\);\r?\n\s*duck\(false\);/.test(ctl),
+    'the controller ducks when the class starts and lets go when the duel closes');
+}
+
 console.log(failures === 0 ? `PASS - ${n} checks` : `FAILED - ${failures}/${n} checks`);
 process.exit(failures === 0 ? 0 : 1);
