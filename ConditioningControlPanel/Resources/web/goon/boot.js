@@ -62,6 +62,8 @@ import { createRouter } from './ui/router.js';
 import { createPrefs } from './ui/prefs.js';
 import { createAudio } from './ui/audio.js';
 import { createToasts } from './ui/toasts.js';
+import { createHitStamps } from './ui/hitStamps.js';
+import { createRivalry } from './ui/rivalry.js';
 import { createCoach, COACH } from './ui/coach.js';
 import { createSheets } from './ui/sheets.js';
 import { createOptions } from './ui/options.js';
@@ -489,6 +491,10 @@ function showLoaderFailure(msg) {
 let prefs = null;
 let audio = null;
 let toasts = null;
+/** Game Night: the HIT stamps (ui/hitStamps.js). Page-scoped, attached per match. */
+let hitStamps = null;
+/** Game Night: the local W-L-D record per opponent (ui/rivalry.js). */
+const rivalry = createRivalry();
 let sheets = null;
 let options = null;
 /* ui/coach.js — the one-time explainers. A boot singleton rather than a per-match
@@ -1096,6 +1102,7 @@ function attachMatch(match, transport) {
 
   try { executor?.attach?.(match); } catch (e) { logger.error('executor.attach threw: ' + ((e && e.stack) || e)); }
   try { matchLog.attach(match); } catch (e) { logger.error('matchLog.attach threw: ' + ((e && e.stack) || e)); }
+  try { hitStamps?.attach?.(match); } catch (e) { logger.warn('hitStamps.attach threw: ' + ((e && e.message) || e)); }
   /* THE SECOND tryFirePayload INSTANCE WRAPPER, and the order is the point.
    * matchLog wrapped it a line ago; the queue wraps it now, so the queue's is the
    * OUTERMOST — a payload gets its `xfer:` tags before the log records it, and the
@@ -1447,6 +1454,7 @@ function detachMatch() {
   unmountMercy();
   try { executor?.detach?.(); } catch (e) { logger.warn('executor.detach threw: ' + ((e && e.message) || e)); }
   try { matchLog?.detach?.(); } catch (_e) { /* ignore */ }
+  try { hitStamps?.detach?.(); } catch (_e) { /* ignore */ }
   // Cancels every transfer and clears the queue; the STORE is untouched, because a
   // committed artifact is hash-keyed and stays valid across matches and sessions.
   try { mediaQueue?.detach?.(); } catch (_e) { /* ignore */ }
@@ -2003,6 +2011,21 @@ const actions = {
     else router.show('title');
   },
 
+  /**
+   * Game Night rematch, the smallest honest version. The finished room is spent,
+   * so this folds it exactly like Back to menu and then opens the next one: the
+   * host mints a fresh room (the host screen shows the new link to send), the
+   * guest lands on the join screen to paste it, practice just goes again. No wire
+   * frame: the two sides agree on a rematch the same way they agreed on the first.
+   */
+  async rematch() {
+    const practice = !!soloPair;
+    const wasHost = !!(currentMatch && currentMatch.isHost);
+    await actions.leave('rematch');
+    if (practice) { await startSolo(); return; }
+    router.show(wasHost ? 'host' : 'join');
+  },
+
   /** The host/join screen's Cancel: fold the pending room, stay on the page. */
   async cancelPending() {
     await teardownEverything();
@@ -2175,6 +2198,7 @@ function buildApp() {
   prefs.subscribe((key, value) => { if (key === 'perfMode') applyPerfTier(value); });
   audio = createAudio({ prefs, logger });
   toasts = createToasts({ prefs });
+  hitStamps = createHitStamps({ audio, prefs, logger });
   /* AFTER the toasts, because that is its whole output tier, and BEFORE the
    * options drawer, which offers its switch. Nothing coaches until a HUD is
    * mounted — this only builds the ledger. */
@@ -2383,6 +2407,9 @@ function buildApp() {
     getTransport: () => currentTransport,
     getClock: () => { try { return currentTransport ? currentTransport.clock : null; } catch (_e) { return null; } },
     getSd: () => currentSd,
+    /** Game Night: the rivalry record, and whether this match is practice (never booked). */
+    rivalry,
+    isPractice: () => !!soloPair,
   };
 
   router = createRouter({

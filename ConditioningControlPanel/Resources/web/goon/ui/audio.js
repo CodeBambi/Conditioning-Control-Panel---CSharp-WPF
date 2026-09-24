@@ -201,6 +201,10 @@ export const SFX_REGISTRY = Object.freeze({
   /** ONE landing cue for every family. Per-kind stings would be noise. */
   'payload-in':     gameCue({ files: [L('stamp_thud.mp3')],        gain: 0.38 }),
   'gg-endured':     gameCue({ files: [D('chime2.mp3')],            gain: 0.34 }),
+  /** Game Night: your throw landed (ui/hitStamps.js). The THUD under the HIT stamp. */
+  'gg-hit':         gameCue({ files: [L('stamp_thud.mp3')],        gain: 0.48 }),
+  /** ...and refused. Flat on purpose. */
+  'gg-hit-dull':    gameCue({ files: [L('captcha-reject-1.mp3')],  gain: 0.22, minGapMs: 200 }),
 
   /* ---- the two of you ----------------------------------------------- game - */
   'gg-emote':       gameCue({ files: [L('chime-1.mp3')],           gain: 0.24, minGapMs: 160 }),
