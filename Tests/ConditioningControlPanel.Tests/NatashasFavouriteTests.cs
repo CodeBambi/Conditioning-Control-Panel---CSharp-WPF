@@ -72,6 +72,30 @@ public class NatashasFavouriteTests
         Assert.True(NatashasFavourite.HaloOpacity < 0.55);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Bubble_tint_stays_visible_between_blinks_and_with_motion_off(bool animate)
+    {
+        for (var i = 0; i < 270; i++)
+            Assert.InRange(NatashasFavourite.BubbleWashAt(i / 100.0, animate),
+                NatashasFavourite.BubbleWashBase, NatashasFavourite.BubbleWashBase + NatashasFavourite.WashPeak);
+        Assert.Equal(NatashasFavourite.BubbleWashBase, NatashasFavourite.BubbleWashAt(1.5, animate));
+    }
+
+    [Theory]
+    [InlineData(false, LockLookup.Unlinked, false, false, null)]
+    [InlineData(true, LockLookup.Ambiguous, false, false, "chaster_setup_pick")]
+    [InlineData(true, LockLookup.None, false, false, "chaster_setup_none")]
+    [InlineData(true, LockLookup.Away, false, false, "chaster_state_away")]
+    [InlineData(true, LockLookup.Chosen, true, false, "chaster_setup_run")]
+    [InlineData(true, LockLookup.Chosen, true, true, null)]
+    public void Setup_always_explains_the_next_required_step(bool linked, LockLookup lookup,
+        bool hasLock, bool enabled, string? expected)
+    {
+        Assert.Equal(expected, TabPageText.SetupHint(linked, lookup, hasLock, enabled));
+    }
+
     [Fact]
     public void The_blink_never_lines_up_with_the_other_pulses()
     {

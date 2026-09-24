@@ -102,6 +102,7 @@ namespace ConditioningControlPanel.Views.Tabs
             HeroCard.SizeChanged += (_, _) => HeroTitle.FitWidth = Math.Max(0, HeroCard.ActualWidth - 52);
             // No runtime, dead process, bad page: the still picture under the browser is the trailer.
             TrailerWeb.Failed += (_, _) => TrailerWeb.Visibility = Visibility.Collapsed;
+            TrailerWeb.Ready += (_, _) => TrailerWeb.Visibility = _trailerShown ? Visibility.Visible : Visibility.Hidden;
             FxInit();
         }
 
@@ -117,6 +118,7 @@ namespace ConditioningControlPanel.Views.Tabs
         public void OnTabShown()
         {
             Refresh();
+            if (ChasterTrailerView.BrowserEnabled) TrailerWeb.Start();
             _ = LoadLocksAsync();
             _ = App.Chaster?.RefreshLockAsync();
             _leadHeldUntilUtc = DateTime.UtcNow.AddSeconds(1.2); // the count-up owns the lead number
@@ -229,6 +231,7 @@ namespace ConditioningControlPanel.Views.Tabs
             {
                 // The hero is the ask: nothing about a lock it cannot know.
                 HeroTitle.Visibility = Visibility.Collapsed;
+                SetupHint.Visibility = Visibility.Collapsed;
                 HeroClockRow.Visibility = Visibility.Collapsed;
                 TxtHeroEnds.Visibility = Visibility.Collapsed;
                 HeroPills.Children.Clear();
@@ -241,8 +244,9 @@ namespace ConditioningControlPanel.Views.Tabs
             // The hero's big title is the season, not the lock's own name (owner, 2026-09-23):
             // a default self lock is called "Self-lock", which is a poor thing to set in 88px
             // candy. The real name rides a pill under the clock.
-            HeroTitle.Text = snapshot == null ? "" : Loc.Get("chaster_hero_title");
-            HeroTitle.Visibility = snapshot == null ? Visibility.Collapsed : Visibility.Visible;
+            HeroTitle.Text = Loc.Get("chaster_hero_title");
+            HeroTitle.Visibility = Visibility.Visible;
+            RefreshSetupHint();
 
             PaintHeroClock();
 
@@ -250,6 +254,16 @@ namespace ConditioningControlPanel.Views.Tabs
 
             RefreshPills(lookup, snapshot, chaster!.SafetyHoldRemaining);
             BuildCalendar(snapshot);
+        }
+
+        private void RefreshSetupHint()
+        {
+            var chaster = App.Chaster;
+            var key = TabPageText.SetupHint(chaster?.IsLinked == true,
+                chaster?.LockLookup ?? LockLookup.Unlinked, chaster?.Lock != null,
+                App.Settings?.Current?.ChasterTabEnabled == true);
+            SetupHint.Text = key == null ? "" : Loc.Get(key);
+            SetupHint.Visibility = key == null ? Visibility.Collapsed : Visibility.Visible;
         }
 
         /// <summary>The "Ends" line counts to the same end the live clock does: Chaster's own end
@@ -899,6 +913,7 @@ namespace ConditioningControlPanel.Views.Tabs
             ConsentCard.Visibility = Visibility.Collapsed;
             settings.ChasterTabEnabled = wanted;
             App.Settings?.Save();
+            RefreshSetupHint();
             FxSwitch(wanted);
         }
 
@@ -912,6 +927,7 @@ namespace ConditioningControlPanel.Views.Tabs
             try { ChkTab.IsChecked = true; }
             finally { _loading = false; }
             PaintSwitch(true);
+            RefreshSetupHint();
             FxConsentOk();
             ConsentCard.Visibility = Visibility.Collapsed;
         }
@@ -925,6 +941,7 @@ namespace ConditioningControlPanel.Views.Tabs
             try
             {
                 var locks = await chaster.GetLocksAsync();
+                if (App.Chaster != chaster || !chaster.IsLinked) return;
                 // Chaster is away, or the link just died (LinkChanged repaints for that). None: the
                 // pill says so. Otherwise the pick shows whenever it is not made: nothing is ever
                 // pushed to a lock the player did not pick, not even the only one.
@@ -966,9 +983,9 @@ namespace ConditioningControlPanel.Views.Tabs
                 CmbLock.Items.Clear();
                 // With two locks and none chosen nothing is ever pushed, so say what to do.
                 if (locks.All(l => l.Id != chosen))
-                    CmbLock.Items.Add(new ComboBoxItem { Content = Loc.Get("chaster_lock_pick"), Tag = null, IsSelected = true });
+                    CmbLock.Items.Add(new ComboBoxItem { Foreground = Brushes.Black, Content = Loc.Get("chaster_lock_pick"), Tag = null, IsSelected = true });
                 foreach (var l in locks)
-                    CmbLock.Items.Add(new ComboBoxItem { Content = TitleOf(l), Tag = l.Id, IsSelected = l.Id == chosen });
+                    CmbLock.Items.Add(new ComboBoxItem { Foreground = Brushes.Black, Content = TitleOf(l), Tag = l.Id, IsSelected = l.Id == chosen });
             }
             finally { _loading = false; }
         }
@@ -1258,6 +1275,11 @@ namespace ConditioningControlPanel.Views.Tabs
             _trailerRow = row;
             try
             {
+                if (TrailerWeb.Parent == TrailerWarmHost)
+                {
+                    TrailerWarmHost.Children.Remove(TrailerWeb);
+                    TrailerPlate.Children.Add(TrailerWeb);
+                }
                 var art = TabMenuCopy.ArtFor(id);
                 TrailerArt.Source = art == null ? null : new BitmapImage(new Uri("pack://application:,,,/Resources/" + art));
                 TxtTrailerFlavour.Text = Loc.Get(TabMenuCopy.FlavourKey(id));
@@ -1268,7 +1290,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 // loading frame and takes over if the browser cannot.
                 if (ChasterTrailerView.BrowserEnabled && !TrailerWeb.HasFailed)
                 {
-                    TrailerWeb.Visibility = Visibility.Visible;
+                    TrailerWeb.Visibility = TrailerWeb.IsReady ? Visibility.Visible : Visibility.Hidden;
                     TrailerWeb.Show(TabMenuCopy.VignetteFor(id));
                 }
                 else TrailerWeb.Visibility = Visibility.Collapsed;

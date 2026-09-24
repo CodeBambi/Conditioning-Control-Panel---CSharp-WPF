@@ -1,4 +1,8 @@
 {
+  "rail_gesture_short": "Dicas de clique",
+  "chaster_setup_pick": "1. Escolha seu cadeado abaixo. 2. Escolha uma predefinição. 3. Ative a conta acima.",
+  "chaster_setup_none": "Nenhum cadeado ativo. Crie um ou entre em um no Chaster, depois volte aqui para escolhê-lo.",
+  "chaster_setup_run": "Escolha uma predefinição abaixo e ative a conta acima. Os efeitos destacados só funcionam com a conta ativada.",
   "br_counter_sold": "VENDIDO",
   "friends_land_invite_line": "te convida para {0}",
   "friends_land_watch_line": "te manda algo pra assistir",
