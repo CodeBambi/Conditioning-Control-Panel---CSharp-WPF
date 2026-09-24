@@ -136,7 +136,10 @@ export function createDuelController({
   }
 
   /** The class runner: an injected one (tests), else the view's (the real Arcademy class). */
+  const duck = (on) => { try { if (audio && typeof audio.duelDuck === 'function') audio.duelDuck(on); } catch (_e) { /* stub */ } };
+
   function startRun(spec) {
+    duck(true);
     try {
       if (typeof runGame === 'function') return runGame(spec);
       if (view && typeof view.startGame === 'function') return view.startGame(spec);
@@ -231,6 +234,7 @@ export function createDuelController({
     if (!cur) return;
     for (const c of cur.cancels) { try { c(); } catch (_e) { /* gone */ } }
     dropRun(cur);
+    duck(false);
     peerScores.delete(cur.idx);
     if (played) ms.notBefore = now() + cur.len * 1000 + DUEL_GAP_EXTRA_MS;
     cur = null;

@@ -138,6 +138,19 @@ async function load(p, say) {
  * @param {Function} [o.log]
  * @returns {Promise<{game, result(): object, destroy(): void, instance, ctx}|null>}
  */
+/**
+ * The pictures a duel's class plays with: the online flavour's Scrolller pool when there is
+ * one (owner, 2026-09-24: the Sort duel never runs on a player's own files, it runs on the
+ * zero-setup pool), and the whole deck only when no online pool exists. Pure over the pool.
+ */
+export function duelRows(media) {
+  try {
+    const online = media && typeof media.listOnline === 'function' ? media.listOnline() : [];
+    if (online && online.length) return online;
+    return media && typeof media.list === 'function' ? media.list() : [];
+  } catch (_e) { return []; }
+}
+
 export async function mountArcademyGame({
   root, fxLayer = null, ceremonyLayer = null, game, seed, lenSec = 60, media = null,
   reduced = false, onEnd = null, log = null, volume = null,
@@ -179,8 +192,9 @@ export async function mountArcademyGame({
 
   /* --- media: the Goon deck, as the provider's local inventory --- */
   let assets = null;
+  let rows = [];
   try {
-    const rows = media && typeof media.list === 'function' ? media.list() : [];
+    rows = duelRows(media);
     assets = provNs && provNs.createAssets({
       bridge: null, remoteMediaEnabled: false, remoteMediaRatio: 0, offlineMode: true,
       platform, localManifest: manifestFromDeck(rows),
