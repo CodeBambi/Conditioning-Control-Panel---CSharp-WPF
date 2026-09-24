@@ -1,4 +1,6 @@
 {
+  "companion_v2_open_activity": "Abrir {0}",
+  "companion_v2_activity_unavailable": "Esta atividade não está mais disponível. Peça outra ideia.",
   "companion_v2_calls_you": "Chama você de",
   "companion_v2_name_hint": "Um apelido serve. Apague o campo para deixar de usá-lo.",
   "companion_v2_name_refused": "Escolha outro nome.",

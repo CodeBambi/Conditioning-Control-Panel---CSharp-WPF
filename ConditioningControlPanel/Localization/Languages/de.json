@@ -1,4 +1,6 @@
 {
+  "companion_v2_open_activity": "{0} öffnen",
+  "companion_v2_activity_unavailable": "Diese Aktivität ist nicht mehr verfügbar. Frag nach einer anderen Idee.",
   "companion_v2_calls_you": "Nennt dich",
   "companion_v2_name_hint": "Ein Spitzname reicht. Leere das Feld, um ihn nicht mehr zu verwenden.",
   "companion_v2_name_refused": "Wähle einen anderen Namen.",

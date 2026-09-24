@@ -13,7 +13,11 @@ using ConditioningControlPanel.Views.Controls.Companion.Runtime;
 
 namespace ConditioningControlPanel.Views.Controls.Companion.V2;
 
-internal sealed record ConversationLine(string Id, string Speaker, string Text, string Time, bool IsUser);
+internal sealed record ConversationAction(string TurnId, string Id, string Label);
+internal sealed record ConversationLine(string Id, string Speaker, string Text, string Time, bool IsUser)
+{
+    public ConversationAction[] Actions { get; init; } = Array.Empty<ConversationAction>();
+}
 
 /// <summary>One projection of the brain's shared conversation. No transcript of its own is persisted.</summary>
 internal sealed class ConversationPageVm : CompanionObservable
@@ -141,8 +145,24 @@ internal sealed class ConversationPageVm : CompanionObservable
         while (Turns.Count > common) Turns.RemoveAt(Turns.Count - 1);
         foreach (var t in next.Skip(common))
             Turns.Add(new(t.Id, t.Kind == TurnKind.UserChat ? Loc.Get("companion_v2_you") : Name,
-                t.Text, t.Utc.ToLocalTime().ToString("t"), t.Kind == TurnKind.UserChat));
+                t.Text, t.Utc.ToLocalTime().ToString("t"), t.Kind == TurnKind.UserChat)
+                { Actions = t.ActivityIds.Select(Services.Companion.CompanionActivities.Find)
+                    .Where(a => a?.Allowed == true).Select(a => new ConversationAction(t.Id, a!.Id,
+                        Services.Companion.CompanionActivities.ButtonLabel(a.Label))).ToArray() });
         Raise(nameof(HasNoTurns));
+    }
+    public void OpenActivity(ConversationAction action)
+    {
+        App.Brain?.EnsureCurrentAccount();
+        if (!ReferenceEquals(_memoryOwner, App.Brain?.Memory)
+            || _session?.Turns.Any(t => t.Id == action.TurnId && t.ActivityIds.Contains(action.Id)) != true) return;
+        try
+        {
+            if (Services.Companion.CompanionActivities.Find(action.Id)?.TryOpen() == true) return;
+        }
+        catch (Exception ex) { App.Logger?.Warning("Companion activity failed: {Type}", ex.GetType().Name); }
+        Notice = Loc.Get("companion_v2_activity_unavailable");
+        CanRetry = false;
     }
     public void Start()
     {

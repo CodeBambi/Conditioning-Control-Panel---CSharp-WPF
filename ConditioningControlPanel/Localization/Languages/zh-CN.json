@@ -1,4 +1,6 @@
 {
+  "companion_v2_open_activity": "打开{0}",
+  "companion_v2_activity_unavailable": "此活动已不可用。请询问其他建议。",
   "companion_v2_calls_you": "怎么称呼你",
   "companion_v2_name_hint": "昵称也可以。清空此栏即可停止使用。",
   "companion_v2_name_refused": "请选择其他称呼。",

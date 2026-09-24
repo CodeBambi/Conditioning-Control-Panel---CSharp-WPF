@@ -21,6 +21,30 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class CompanionBrainTests
 {
+    [Fact]
+    public async Task PreviewActivityButtonsAreAcceptedMetadataAndNeverSpokenOrExecuted()
+    {
+        var access = true;
+        var opened = 0;
+        var offered = new ConditioningControlPanel.Services.Companion.CompanionActivity(
+            "game.test", "Test game", "A game", () => access, () => { opened++; return true; });
+        var transport = new FakeTransport { Respond = (_, _) => new AiReplyResult(
+            "try this. [[ccp:game.test]] [[ccp:game.locked]]", true, null) };
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        brain.Activities = () => new[] { offered };
+        var reply = await brain.ChatAsync("suggest a game");
+        Assert.Equal("try this.", reply.Text);
+        Assert.Equal(new[] { "game.test" }, brain.Session.Turns.Last().ActivityIds);
+        Assert.DoesNotContain("[[ccp:", brain.Session.Turns.Last().Text);
+        Assert.Equal(0, opened);
+        Assert.Contains(transport.Sends[0].Messages, m => m.Content.Contains("game.test | Test game"));
+        access = false;
+        await brain.ChatAsync("another idea");
+        Assert.Empty(brain.Session.Turns.Last().ActivityIds);
+        Assert.DoesNotContain(transport.Sends[1].Messages, m => m.Content.Contains("game.test | Test game"));
+        Assert.Equal(0, opened);
+    }
+
     // ---------- fakes ----------
 
     /// <summary>Scriptable transport. Records what was actually put on the wire.</summary>
@@ -265,7 +289,7 @@ public class CompanionBrainTests
         Assert.Equal(AiFailureKind.Unavailable, reply.Failure);
         Assert.Empty(reply.Text);
         Assert.Empty(brain.Session.Turns);
-        Assert.Equal(240, Assert.Single(transport.Sends).Options.MaxTokens);
+        Assert.Equal(160, Assert.Single(transport.Sends).Options.MaxTokens);
         Assert.True(Guid.TryParse(transport.Sends[0].Options.RequestId, out _));
     }
 

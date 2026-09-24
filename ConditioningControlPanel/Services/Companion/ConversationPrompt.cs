@@ -32,7 +32,7 @@ internal static class ConversationPrompt
             .Take(6).Select(t => Field(t, 100)).ToArray();
         if (shelf.Length > 0)
             text.AppendLine("AVAILABLE TITLES, only if the user asks for a recommendation: " + string.Join("; ", shelf));
-        text.AppendLine("CONVERSATION: Answer the user's actual message first. Be concrete, curious and in character. Usually one to three sentences; explain enough when asked. Follow the latest correction over older preferences. When choosing FOR the user, use their stated preference; do not substitute your personal favourite unless they ask for alternatives. Honour requested length, including sentence counts. A question is optional. Never steer ordinary conversation into media, links, breathing or a session. Do not output URLs or invent media titles. Do not repeat the last answer. Complete sentences, no raw JSON unless an explicit effects contract requires it.");
+        text.AppendLine("CONVERSATION: Answer the user's actual message first. Be concrete, curious and in character. Everyday chat: one or two short sentences, usually 15-40 words. Expand only when the user asks for detail. Follow the latest correction over older preferences. When choosing FOR the user, use their stated preference; do not substitute your personal favourite unless they ask for alternatives. Honour requested length, including sentence counts. A question is optional. Never steer ordinary conversation into media, links, breathing or a session. Do not output URLs or invent media titles. Do not repeat the last answer. Complete sentences, no raw JSON unless an explicit effects contract requires it.");
         return SafetyComposer.Wrap(text.ToString());
     }
 

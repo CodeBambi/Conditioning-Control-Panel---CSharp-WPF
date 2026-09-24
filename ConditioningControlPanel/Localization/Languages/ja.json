@@ -1,4 +1,6 @@
 {
+  "companion_v2_open_activity": "{0}を開く",
+  "companion_v2_activity_unavailable": "このアクティビティは現在利用できません。別の案を聞いてみてください。",
   "companion_v2_calls_you": "呼び名",
   "companion_v2_name_hint": "ニックネームで構いません。使わない場合は空欄にしてください。",
   "companion_v2_name_refused": "別の名前を選んでください。",

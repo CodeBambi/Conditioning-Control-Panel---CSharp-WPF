@@ -1,4 +1,6 @@
 {
+  "companion_v2_open_activity": "{0} 열기",
+  "companion_v2_activity_unavailable": "이 활동은 더 이상 이용할 수 없습니다. 다른 아이디어를 요청해 보세요.",
   "companion_v2_calls_you": "호칭",
   "companion_v2_name_hint": "별명도 좋습니다. 사용하지 않으려면 입력란을 비우세요.",
   "companion_v2_name_refused": "다른 이름을 선택하세요.",
