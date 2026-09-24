@@ -1083,7 +1083,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     const room = Math.max(0, liveCap() - live.size);
     const popX = curX(rec), popY = curY(rec);
     dismiss(rec);
-    sfx('flash-pop');
+    // The score HUD plays the rising GIF note through the game audio bus.
     // The points model's pop seam (ui/scoreHud.js): an event, not an import.
     try {
       if (typeof document !== 'undefined' && document && typeof CustomEvent === 'function') {
