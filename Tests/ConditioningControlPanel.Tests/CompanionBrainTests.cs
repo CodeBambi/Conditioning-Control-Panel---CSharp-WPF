@@ -30,6 +30,7 @@ public class CompanionBrainTests
             (_, _) => new AiReplyResult("ok~", IsAiGenerated: true, Refusal: null);
 
         public List<(IReadOnlyList<ChatMessage> Messages, AiCallOptions Options)> Sends { get; } = new();
+        public Func<CancellationToken, Task<AiReplyResult>>? AsyncReply { get; set; }
 
         public bool IsAvailable => true;
         public int DailyRequestsRemaining => -1;
@@ -38,7 +39,7 @@ public class CompanionBrainTests
             CancellationToken cancellationToken = default)
         {
             Sends.Add((messages, options));
-            return Task.FromResult(Respond(messages, options));
+            return AsyncReply?.Invoke(cancellationToken) ?? Task.FromResult(Respond(messages, options));
         }
 
         // Legacy one-shot surface — unused by the brain, present so the fake is a real IAiService.
@@ -157,6 +158,38 @@ public class CompanionBrainTests
         await brain.ChatAsync("first");
         Assert.Single(transport.Sends);
         Assert.Equal(2, brain.Session.Turns.Count);
+    }
+
+    [Fact]
+    public async Task Preview_ForgetWhileReplyPending_DoesNotRestoreConversation()
+    {
+        var pending = new TaskCompletionSource<AiReplyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transport = new FakeTransport { AsyncReply = _ => pending.Task };
+        var store = new FakeStore();
+        using var brain = Build(transport, store, preview: true);
+        var turn = brain.ChatAsync("remember this");
+        brain.ForgetThread();
+        pending.SetResult(new AiReplyResult("an old-context answer", true, null));
+        var reply = await turn;
+        brain.Flush();
+        Assert.Equal(AiFailureKind.Cancelled, reply.Failure);
+        Assert.Empty(brain.Session.Turns);
+        Assert.Empty(store.Saved);
+    }
+
+    [Fact]
+    public async Task Preview_CharacterChangesWhileReplyPending_DiscardsOldVoice()
+    {
+        var pending = new TaskCompletionSource<AiReplyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transport = new FakeTransport { AsyncReply = _ => pending.Task };
+        var identity = "old";
+        using var brain = new CompanionBrain(transport, new StubAssembler(), new InertMemoryStore(), new FakeStore(),
+            preview: () => true, contextStamp: () => identity);
+        var turn = brain.ChatAsync("hello");
+        identity = "new";
+        pending.SetResult(new AiReplyResult("old voice", true, null));
+        Assert.Equal(AiFailureKind.Cancelled, (await turn).Failure);
+        Assert.Empty(brain.Session.Turns);
     }
 
     // ---------- happy path ----------

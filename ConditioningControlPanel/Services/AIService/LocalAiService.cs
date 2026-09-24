@@ -451,6 +451,9 @@ namespace ConditioningControlPanel.Services.AIService
             CancellationToken cancellationToken = default)
         {
             options ??= AiCallOptions.Chat;
+            AiReplyResult Fail(AiFailureKind kind, string? legacy = null, bool retryable = true) => options.CompanionV2
+                ? AiReplyResult.Failed(kind, retryable)
+                : new AiReplyResult(legacy ?? string.Empty, false, null);
             var incoming = messages ?? (IReadOnlyList<TransportMessage>)Array.Empty<TransportMessage>();
 
             // [AI-METER] — log-only sizing, stamped with the caller's purpose. Refined to the real
@@ -476,7 +479,7 @@ namespace ConditioningControlPanel.Services.AIService
             if (!options.Interactive && _isProcessing)
             {
                 App.Logger?.Debug("LocalAiService.SendAsync: ambient request dropped (busy)");
-                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+                return Fail(cancellationToken.IsCancellationRequested ? AiFailureKind.Cancelled : AiFailureKind.Unavailable);
             }
 
             try
@@ -485,11 +488,11 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (OperationCanceledException)
             {
-                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+                return Fail(cancellationToken.IsCancellationRequested ? AiFailureKind.Cancelled : AiFailureKind.Unavailable);
             }
             catch (ObjectDisposedException)
             {
-                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+                return Fail(cancellationToken.IsCancellationRequested ? AiFailureKind.Cancelled : AiFailureKind.Unavailable);
             }
 
             _isProcessing = true;
@@ -519,15 +522,15 @@ namespace ConditioningControlPanel.Services.AIService
                     Meter(AiMeter.OutcomeError);
                     // Diagnostics are not model output and must never wear the AI badge, but they are
                     // the single most useful thing we can show ("Ollama isn't running — start it").
-                    return new AiReplyResult(DescribeOllamaError(status, body, model), IsAiGenerated: false, Refusal: null);
+                    return Fail(AiFailureKind.Unavailable, DescribeOllamaError(status, body, model));
                 }
 
-                var content = ExtractContent(body);
+                var content = ExtractContent(body, rejectTruncated: options.CompanionV2);
                 if (string.IsNullOrEmpty(content))
                 {
                     App.Logger?.Warning("LocalAiService.SendAsync: empty content in 200 response (body {Bytes} bytes)", body?.Length ?? 0);
                     Meter(AiMeter.OutcomeEmpty);
-                    return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+                    return Fail(AiFailureKind.InvalidResponse, GetFallbackResponse());
                 }
 
                 var parsed = _parser.Parse(content);
@@ -544,6 +547,9 @@ namespace ConditioningControlPanel.Services.AIService
                         Refusal: new ModerationRefusalInfo(blockedOutput, ModerationSource.Output));
                 }
 
+                if (options.CompanionV2 && string.IsNullOrWhiteSpace(CompanionProxyContract.CleanReply(parsed.CleanText, "stop")))
+                    return Fail(AiFailureKind.InvalidResponse);
+                cancellationToken.ThrowIfCancellationRequested();
                 _currentCommands = parsed.Commands;
                 if (_currentCommands.Count > 0 && App.Commands != null)
                 {
@@ -556,7 +562,7 @@ namespace ConditioningControlPanel.Services.AIService
                 if (string.IsNullOrWhiteSpace(parsed.CleanText))
                 {
                     Meter(AiMeter.OutcomeEmpty, content.Length);
-                    return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+                    return Fail(AiFailureKind.InvalidResponse, GetFallbackResponse());
                 }
 
                 Meter(AiMeter.OutcomeOk, content.Length);
@@ -565,14 +571,14 @@ namespace ConditioningControlPanel.Services.AIService
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 Meter(AiMeter.OutcomeError);
-                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+                return Fail(cancellationToken.IsCancellationRequested ? AiFailureKind.Cancelled : AiFailureKind.Unavailable);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "LocalAiService.SendAsync: chat call threw (host={Host}, model={Model})",
                     _activeHost, model);
                 Meter(AiMeter.OutcomeError);
-                return new AiReplyResult(DescribeChatException(ex, model), IsAiGenerated: false, Refusal: null);
+                return Fail(AiFailureKind.Unavailable, DescribeChatException(ex, model));
             }
             finally
             {
@@ -1046,7 +1052,7 @@ namespace ConditioningControlPanel.Services.AIService
             catch { }
         }
 
-        private static string ExtractContent(string body)
+        private static string ExtractContent(string body, bool rejectTruncated = false)
         {
             try
             {
@@ -1058,7 +1064,8 @@ namespace ConditioningControlPanel.Services.AIService
                     && dr.ValueKind == JsonValueKind.String
                     && string.Equals(dr.GetString(), "length", StringComparison.OrdinalIgnoreCase))
                 {
-                    App.Logger?.Warning("[AI] Ollama reply truncated at the token cap (done_reason=length) - parser salvage will run");
+                    App.Logger?.Warning("[AI] Ollama reply truncated at the token cap (done_reason=length)");
+                    if (rejectTruncated) return string.Empty;
                 }
                 if (doc.RootElement.TryGetProperty("message", out var msg) &&
                     msg.TryGetProperty("content", out var c))

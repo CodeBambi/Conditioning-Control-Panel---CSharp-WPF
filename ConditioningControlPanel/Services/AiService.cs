@@ -49,9 +49,7 @@ namespace ConditioningControlPanel.Services
 
         // Circuit breaker tracking (client-side)
         private int _dailyRequestCount;
-        private int? _previewRemaining;
-        private DateTimeOffset? _previewReset;
-        private string? _previewUserId;
+        private readonly CompanionQuota _previewQuota = new();
         private DateTime _lastResetDate;
         private const int FreeDailyLimit = 100;     // Free users (logged in, no Patreon)
         private const int Tier1DailyLimit = 1000;   // Tier 1 supporters
@@ -117,7 +115,7 @@ namespace ConditioningControlPanel.Services
         /// Daily requests remaining (client-side tracking)
         /// </summary>
         public int DailyRequestsRemaining => Companion.CompanionExperience.IsV2Enabled
-            ? (_previewUserId == App.UnifiedUserId && _previewReset > DateTimeOffset.UtcNow ? _previewRemaining ?? -1 : -1)
+            ? _previewQuota.Remaining(App.UnifiedUserId, DateTimeOffset.UtcNow)
             : Math.Max(0, DailyLimit - _dailyRequestCount);
 
         public AiService()
@@ -475,7 +473,8 @@ namespace ConditioningControlPanel.Services
                         RequestId = options?.CompanionV2 == true ? options.RequestId : null
                     };
 
-                    using var v2Msg = new HttpRequestMessage(HttpMethod.Post, "/v2/ai/chat");
+                    using var v2Msg = new HttpRequestMessage(HttpMethod.Post,
+                        options?.CompanionV2 == true ? "/v2/companion/chat" : "/v2/ai/chat");
                     if (!string.IsNullOrEmpty(authToken))
                         v2Msg.Headers.TryAddWithoutValidation("X-Auth-Token", authToken);
                     v2Msg.Content = JsonContent.Create(v2Request);
@@ -508,6 +507,8 @@ namespace ConditioningControlPanel.Services
                     if (options?.CompanionV2 == true)
                     {
                         var failure = CompanionProxyContract.ReadFailure((int)response.StatusCode, errorText);
+                        var quota = CompanionProxyContract.ReadQuota(errorText, options.RequestId);
+                        if (quota != null) _previewQuota.Update(unifiedId, App.UnifiedUserId, quota.RequestsRemaining, quota.ResetsAt);
                         response.Dispose();
                         return new ProxyPostResult(ProxyOutcome.Error, null, Failure: failure.Failure,
                             Retryable: failure.Retryable, RequestId: options.RequestId, Refusal: failure.Refusal);
@@ -531,6 +532,9 @@ namespace ConditioningControlPanel.Services
                     return new ProxyPostResult(ProxyOutcome.Error, null);
                 }
 
+                if (options?.CompanionV2 == true && !CompanionProxyContract.IsExpectedResponse(result, options.RequestId))
+                    return new ProxyPostResult(ProxyOutcome.Error, null, Failure: AiFailureKind.InvalidResponse, Retryable: false);
+
                 if (string.IsNullOrEmpty(result.Content))
                 {
                     App.Logger?.Warning("AiService: Empty response from proxy");
@@ -539,9 +543,7 @@ namespace ConditioningControlPanel.Services
 
                 if (options?.CompanionV2 == true)
                 {
-                    _previewUserId = App.UnifiedUserId;
-                    _previewRemaining = result.RequestsRemaining;
-                    _previewReset = DateTimeOffset.TryParse(result.ResetsAt, out var reset) ? reset : null;
+                    _previewQuota.Update(unifiedId, App.UnifiedUserId, result.RequestsRemaining, result.ResetsAt);
                 }
 
                 // Update remaining count if provided by server (server is authoritative)

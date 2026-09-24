@@ -50,6 +50,21 @@ public class CompanionProxyContractTests
         Assert.Equal(request.RequestId, document.RootElement.GetProperty("request_id").GetString());
     }
 
+    [Fact]
+    public void LegacyOrMismatchedSuccess_IsRejected()
+    {
+        var reply = new ProxyChatResponse { Content = "legacy" };
+        Assert.False(CompanionProxyContract.IsExpectedResponse(reply, "logical-request"));
+        reply.CompanionProtocol = 2;
+        reply.FinishReason = "stop";
+        reply.RequestId = "another-request";
+        Assert.False(CompanionProxyContract.IsExpectedResponse(reply, "logical-request"));
+        reply.RequestId = "logical-request";
+        Assert.True(CompanionProxyContract.IsExpectedResponse(reply, "logical-request"));
+        reply.FinishReason = "length";
+        Assert.False(CompanionProxyContract.IsExpectedResponse(reply, "logical-request"));
+    }
+
     [Theory]
     [InlineData(AiPurpose.Chat, 240)]
     [InlineData(AiPurpose.Reaction, 80)]

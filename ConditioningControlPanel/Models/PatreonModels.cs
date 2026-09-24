@@ -290,6 +290,10 @@ namespace ConditioningControlPanel.Models
     /// </summary>
     public class ProxyChatResponse
     {
+        [JsonProperty("companion_protocol")]
+        [JsonPropertyName("companion_protocol")]
+        public int? CompanionProtocol { get; set; }
+
         [JsonProperty("finish_reason")]
         [JsonPropertyName("finish_reason")]
         public string? FinishReason { get; set; }

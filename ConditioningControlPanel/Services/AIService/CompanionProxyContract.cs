@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json;
 using ConditioningControlPanel.Services.Moderation;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.AIService;
 
@@ -31,6 +32,21 @@ internal static class CompanionProxyContract
         };
         return AiReplyResult.Failed(failure, retryable);
     }
+
+    internal static ProxyChatResponse? ReadQuota(string? body, string? requestId)
+    {
+        try
+        {
+            var response = JsonSerializer.Deserialize<ProxyChatResponse>(body ?? "{}");
+            return response?.CompanionProtocol == 2 && response.RequestId == requestId ? response : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
+    internal static bool IsExpectedResponse(ProxyChatResponse reply, string? requestId) =>
+        reply.CompanionProtocol == 2 && !string.IsNullOrWhiteSpace(requestId)
+        && string.Equals(reply.RequestId, requestId, StringComparison.Ordinal)
+        && string.Equals(reply.FinishReason, "stop", StringComparison.Ordinal);
 
     internal static string CleanReply(string? text, string? finishReason)
     {
