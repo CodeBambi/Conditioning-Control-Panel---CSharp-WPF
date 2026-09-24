@@ -1,5 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>score hud shot</title>
+<link rel="stylesheet" href="../goon.css">
+<link rel="stylesheet" href="../ui/screens.css">
 <style>
   :root { --gg-font: 'Fredoka', 'Segoe UI', system-ui, sans-serif; }
   html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50% 30%, #3a1a55, #120818 70%); overflow: hidden; }
@@ -26,7 +28,8 @@ const listeners = new Set();
 const match = {
   pointsModel: true,
   scoring,
-  opponent: { score: 0 },
+  localDisplayName: 'Kitty',
+  opponent: { score: 0, displayName: 'Zed' },
   onPointsAwarded(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   notePop(now) { const a = scoring.awardPop(now); if (a) listeners.forEach((f) => f(a)); return a; },
 };

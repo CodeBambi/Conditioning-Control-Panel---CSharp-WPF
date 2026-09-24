@@ -1,7 +1,11 @@
 // The live score HUD for the points model (owner, 2026-09-24).
 //
-//   [ YOU 412 ]  ====pink====|====violet====  [ 388 THEM ]
-//            x1.30            COMBO x6 ▮▮▮▯
+//   (o) 412 ===pink===|==violet== 388 (o)      a slim pill, top centre, each face beside its number
+//            x1.30   COMBO x6 ▮▮▮▯
+//
+// Juice (owner, 2026-09-24): every award sparks at its source, big ones punch the number and
+// run a sheen down the bar, their tick steps echo on their side, and a change of lead throws
+// gold sparks off the knot. All through juiceDom (burst counts shrink on lite, calm = none).
 //
 // Both scores face each other top centre with a tug-of-war bar between them, a floating +N at the
 // source of every award (a tiny glyph says what paid: pop, hit landed, held, duel), a combo meter
@@ -19,7 +23,11 @@ import { heatTarget, smoothHeat } from '../core/points.js';
 import { POP_EVENT } from '../exec/bubbles.js';
 import { FLASH_POP_EVENT } from '../exec/flashes.js';
 import { localMonotonicMs } from '../core/clock.js';
-import { isCalm } from './juiceDom.js';
+import { isCalm, burst, squash } from './juiceDom.js';
+import { avatarNode } from './avatar.js';
+
+/** Particle tints per award (rgb triplets, the juiceDom burst shape; never white). */
+const TINT = Object.freeze({ pop: '127, 255, 212', hit: '255, 140, 200', held: '201, 181, 255', duel: '255, 212, 94', them: '170, 140, 255' });
 
 export const HEAT_EVENT = 'gg-heat';
 export const HEAT_EMIT_MS = 100;
@@ -54,36 +62,42 @@ export function comboSemis(combo) {
 }
 
 const CSS = `
-.gg-sh{position:fixed;left:50%;top:58px;transform:translateX(-50%);z-index:40;pointer-events:none;
-  display:flex;flex-direction:column;align-items:center;gap:4px;font-family:var(--gg-font,system-ui);
+.gg-sh{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:40;pointer-events:none;
+  display:flex;flex-direction:column;align-items:center;gap:2px;font-family:var(--gg-font,system-ui);
   transition:opacity .34s cubic-bezier(.2,1.5,.4,1),transform .34s cubic-bezier(.2,1.5,.4,1)}
 .gg-sh.is-off{opacity:0;transform:translateX(-50%) translateY(-14px) scale(.92)}
-.gg-sh-row{display:flex;align-items:center;gap:10px}
-.gg-sh-num{min-width:64px;font-size:26px;font-weight:800;color:#fff;letter-spacing:.5px;
-  text-shadow:0 2px 0 rgba(0,0,0,.35),0 0 14px rgba(255,105,180,.35);font-variant-numeric:tabular-nums}
+.gg-sh-row{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:16px;
+  background:rgba(20,8,32,.42);box-shadow:0 0 0 1px rgba(255,255,255,.07)}
+.gg-sh-ava{flex:none;display:flex}
+.gg-sh .gg-ava{--gg-ava-size:22px}
+.gg-sh-num{min-width:36px;font-size:15px;font-weight:800;color:#fff;letter-spacing:.3px;line-height:1;
+  text-shadow:0 1px 0 rgba(0,0,0,.4),0 0 10px rgba(255,105,180,.35);font-variant-numeric:tabular-nums}
 .gg-sh-num--you{text-align:right;color:#ffd1ea}
-.gg-sh-num--them{text-align:left;color:#d9c8ff;text-shadow:0 2px 0 rgba(0,0,0,.35),0 0 14px rgba(160,120,255,.35)}
-.gg-sh-tag{font-size:10px;font-weight:700;letter-spacing:1.5px;opacity:.7;color:#fff;text-transform:uppercase}
-.gg-sh-bar{position:relative;width:min(260px,34vw);height:12px;border-radius:8px;overflow:hidden;
-  background:#8a6bff;box-shadow:inset 0 2px 3px rgba(0,0,0,.35),0 0 0 2px rgba(255,255,255,.12)}
-.gg-sh-fill{position:absolute;left:0;top:0;bottom:0;width:50%;background:linear-gradient(90deg,#ff4fa8,#ff8cc8)}
-.gg-sh-knot{position:absolute;top:-3px;width:6px;height:18px;margin-left:-3px;border-radius:3px;left:50%;
-  background:#fff;box-shadow:0 0 10px rgba(255,255,255,.8)}
-.gg-sh-sub{display:flex;align-items:center;gap:8px;min-height:20px}
-.gg-sh-mult{font-size:12px;font-weight:800;color:#ffd45e;padding:1px 8px;border-radius:10px;
+.gg-sh-num--them{text-align:left;color:#d9c8ff;text-shadow:0 1px 0 rgba(0,0,0,.4),0 0 10px rgba(160,120,255,.35)}
+.gg-sh-bar{position:relative;width:min(150px,22vw);height:6px;border-radius:4px;
+  background:#8a6bff;box-shadow:inset 0 1px 2px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.12)}
+.gg-sh-fill{position:absolute;left:0;top:0;bottom:0;width:50%;border-radius:4px 0 0 4px;
+  background:linear-gradient(90deg,#ff4fa8,#ff8cc8)}
+.gg-sh-sheen{position:absolute;inset:0;border-radius:4px;overflow:hidden;pointer-events:none}
+.gg-sh-sheen>i{position:absolute;top:0;bottom:0;width:30%;left:-30%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent)}
+.gg-sh-knot{position:absolute;top:-3px;width:4px;height:12px;margin-left:-2px;border-radius:2px;left:50%;
+  background:#fff;box-shadow:0 0 8px rgba(255,255,255,.85)}
+.gg-sh-sub{display:flex;align-items:center;gap:6px;min-height:16px}
+.gg-sh-mult{font-size:10px;font-weight:800;color:#ffd45e;padding:0 6px;border-radius:8px;
   background:rgba(40,20,60,.6);box-shadow:0 0 0 1px rgba(255,212,94,.35)}
-.gg-sh-combo{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:#7fffd4;
+.gg-sh-combo{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;color:#7fffd4;
   opacity:0;transform:scale(.7);transition:opacity .2s ease-out,transform .25s cubic-bezier(.2,1.5,.4,1)}
 .gg-sh-combo.is-on{opacity:1;transform:scale(1)}
-.gg-sh-drain{width:54px;height:4px;border-radius:2px;background:rgba(127,255,212,.25);overflow:hidden}
+.gg-sh-drain{width:40px;height:3px;border-radius:2px;background:rgba(127,255,212,.25);overflow:hidden}
 .gg-sh-drain>i{display:block;height:100%;width:100%;background:#7fffd4;transform-origin:left}
 .gg-sh-float{position:fixed;z-index:41;pointer-events:none;font-family:var(--gg-font,system-ui);
-  font-weight:800;font-size:18px;color:#ffe08a;text-shadow:0 2px 0 rgba(0,0,0,.4);white-space:nowrap;
+  font-weight:800;font-size:15px;color:#ffe08a;text-shadow:0 2px 0 rgba(0,0,0,.4);white-space:nowrap;
   transform:translate(-50%,-50%)}
-.gg-sh-float small{font-size:11px;margin-right:3px;opacity:.85}
-.gg-sh-float--hit{color:#ff8cc8;font-size:22px}
+.gg-sh-float small{font-size:10px;margin-right:3px;opacity:.85}
+.gg-sh-float--hit{color:#ff8cc8;font-size:18px}
 .gg-sh-float--held{color:#c9b5ff}
-.gg-sh-float--duel{color:#ffd45e;font-size:26px}
+.gg-sh-float--duel{color:#ffd45e;font-size:22px}
 .${SCORE_HUD_CLASS} .gg-score{visibility:hidden}
 `;
 
@@ -116,15 +130,43 @@ export function mountScoreHud({ match, host = null } = {}) {
 
   const root = mk(d, 'div', 'gg-sh is-off');
   const row = root.appendChild(mk(d, 'div', 'gg-sh-row'));
-  const youCol = row.appendChild(mk(d, 'div'));
-  youCol.appendChild(mk(d, 'div', 'gg-sh-tag', 'you'));
-  const youNum = youCol.appendChild(mk(d, 'div', 'gg-sh-num gg-sh-num--you', '0'));
+  const youAvaBox = row.appendChild(mk(d, 'div', 'gg-sh-ava'));
+  const youNum = row.appendChild(mk(d, 'div', 'gg-sh-num gg-sh-num--you', '0'));
   const bar = row.appendChild(mk(d, 'div', 'gg-sh-bar'));
   const fill = bar.appendChild(mk(d, 'div', 'gg-sh-fill'));
+  const sheen = bar.appendChild(mk(d, 'div', 'gg-sh-sheen')).appendChild(mk(d, 'i'));
   const knot = bar.appendChild(mk(d, 'div', 'gg-sh-knot'));
-  const themCol = row.appendChild(mk(d, 'div'));
-  themCol.appendChild(mk(d, 'div', 'gg-sh-tag', 'them'));
-  const themNum = themCol.appendChild(mk(d, 'div', 'gg-sh-num gg-sh-num--them', '0'));
+  const themNum = row.appendChild(mk(d, 'div', 'gg-sh-num gg-sh-num--them', '0'));
+  const themAvaBox = row.appendChild(mk(d, 'div', 'gg-sh-ava'));
+
+  /* The two faces. A picture when the HUD's own minis have one (Discord share), else the
+   * initial bubble. Re-read once a second: names and pictures land after the hello. */
+  const faces = { you: { name: null, uri: null, node: null }, opp: { name: null, uri: null, node: null } };
+  function syncFace(side, box, name) {
+    const f = faces[side];
+    let uri = null;
+    try {
+      const img = d.querySelector('.gg-ava--mini[data-side="' + side + '"] img');
+      uri = img && typeof img.src === 'string' && img.src.slice(0, 5) === 'data:' ? img.src : null;
+    } catch (_e) { uri = null; }
+    const n = String(name || '');
+    if (f.node && f.name === n && f.uri === uri) return;
+    const first = !f.node;
+    f.name = n; f.uri = uri;
+    const node = avatarNode({ side, name: n, dataUri: uri, size: 'score' });
+    if (!node) return;
+    try { box.replaceChildren(node); } catch (_e) { box.appendChild(node); }
+    f.node = node;
+    if (!first && !isCalm()) squash(node, { amount: 0.2, ms: 260 });
+  }
+  function syncFaces() {
+    let youName = '', themName = '';
+    try { youName = match.localDisplayName || ''; } catch (_e) { /* torn down */ }
+    try { themName = (match.opponent && match.opponent.displayName) || ''; } catch (_e) { /* torn down */ }
+    syncFace('you', youAvaBox, youName);
+    syncFace('opp', themAvaBox, themName);
+  }
+  syncFaces();
   const sub = root.appendChild(mk(d, 'div', 'gg-sh-sub'));
   const mult = sub.appendChild(mk(d, 'div', 'gg-sh-mult', 'x1.00'));
   const combo = sub.appendChild(mk(d, 'div', 'gg-sh-combo'));
@@ -135,6 +177,7 @@ export function mountScoreHud({ match, host = null } = {}) {
 
   let shownYou = 0, shownThem = 0, shownShare = 0.5, on = false, lastFrame = 0, lastEmit = 0, lastHeatSent = -1;
   let raf = 0, alive = true, ac = null;
+  let lastFaceSync = 0, seenThem = -1, leaderSeen = 0;
   const lastPop = { x: 0, y: 0 };
 
   function active() {
@@ -204,13 +247,51 @@ export function mountScoreHud({ match, host = null } = {}) {
         : a.type === 'held' ? centreOf(youNum)
           : centreOf(bar);
     // Beside a number, never over it: start under it and rise past it.
-    float(a, a.type === 'pop' ? at : { x: at.x, y: at.y + 34 });
-    if (!isCalm()) {
-      const target = a.type === 'hit' || a.type === 'duel' ? youNum : null;
-      if (target) {
-        try { target.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.18)' }, { transform: 'scale(1)' }], { duration: 300, easing: 'cubic-bezier(.2,1.5,.4,1)' }); } catch (_e) { /* chrome */ }
-      }
+    // Outboard of the pill (past the face), never on the sub row: your side left, theirs right.
+    const out = a.type === 'hit' ? 74 : a.type === 'held' ? -74 : 0;
+    float(a, a.type === 'pop' ? at : { x: at.x + out, y: at.y + (out ? 4 : 26) });
+    if (a.type === 'pop') {
+      // A pop sparks where it happened; a long combo sparks harder.
+      burst(at.x, at.y, { count: a.combo >= 5 ? 10 : 5, color: TINT.pop, dist: 34 + Math.min(10, a.combo | 0) * 3, life: 420, sizeMin: 3, sizeMax: 6 });
+      return;
     }
+    const big = a.type === 'hit' || a.type === 'duel';
+    const mine = centreOf(youNum);
+    burst(mine.x, mine.y, { count: big ? 12 : 6, color: TINT[a.type] || TINT.held, dist: big ? 44 : 28, life: big ? 560 : 420, sizeMin: 3, sizeMax: big ? 7 : 5 });
+    punch(youNum, big ? 1.28 : 1.12);
+    if (faces.you.node && big) squash(faces.you.node, { amount: 0.18, ms: 240 });
+    if (big) sweep();
+  }
+
+  /** A number (or face) kicks. The one scale punch every award shares. */
+  function punch(node, to) {
+    if (isCalm()) return;
+    try { node.animate([{ transform: 'scale(1)' }, { transform: `scale(${to})` }, { transform: 'scale(1)' }], { duration: 300, easing: 'cubic-bezier(.2,1.5,.4,1)' }); } catch (_e) { /* chrome */ }
+  }
+
+  /** A light sheen runs down the bar. */
+  function sweep() {
+    if (isCalm()) return;
+    try { sheen.animate([{ left: '-30%' }, { left: '100%' }], { duration: 520, easing: 'cubic-bezier(.4,0,.2,1)' }); } catch (_e) { /* chrome */ }
+  }
+
+  /** The lead changed hands: gold sparks off the knot, the bar flashes and shivers. */
+  function leadFlip(mineNow) {
+    const k = centreOf(knot);
+    burst(k.x, k.y, { count: 16, color: mineNow ? TINT.duel : TINT.them, dist: 46, life: 640, sizeMin: 3, sizeMax: 7, shape: 'dot' });
+    sweep();
+    if (!isCalm()) {
+      try { bar.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(3px)' }, { transform: 'translateX(0)' }], { duration: 250 }); } catch (_e) { /* chrome */ }
+    }
+    punch(mineNow ? youNum : themNum, 1.3);
+  }
+
+  /** The opponent scored (their tick moved): a smaller echo on their side. */
+  function theirGain(delta) {
+    const t = centreOf(themNum);
+    burst(t.x, t.y, { count: delta >= 10 ? 9 : 4, color: TINT.them, dist: delta >= 10 ? 36 : 22, life: 440, sizeMin: 3, sizeMax: 5 });
+    punch(themNum, delta >= 10 ? 1.2 : 1.08);
+    if (delta >= 10 && faces.opp.node) squash(faces.opp.node, { amount: 0.16, ms: 240 });
   }
 
   function onPop(ev) {
@@ -243,6 +324,14 @@ export function mountScoreHud({ match, host = null } = {}) {
       chip = match.scoring.ownMultiplier;
       liveCombo = match.scoring.points.comboAt(now);
     } catch (_e) { /* torn down */ }
+    if (now - lastFaceSync >= 1000) { lastFaceSync = now; syncFaces(); }
+    // Their score only moves on their tick: each step up is an echo on their side.
+    if (seenThem >= 0 && them - seenThem >= 1) theirGain(them - seenThem);
+    seenThem = them;
+    // Lead changes hands (ignore the dead-even opening and tiny early leads).
+    const leader = me - them >= 5 ? 1 : them - me >= 5 ? -1 : leaderSeen;
+    if (leader !== leaderSeen && leaderSeen !== 0 && leader !== 0) leadFlip(leader > 0);
+    leaderSeen = leader;
     const calm = isCalm();
     const k = calm ? 1 : 1 - Math.exp(-dt * 8);
     shownYou += (me - shownYou) * k;
