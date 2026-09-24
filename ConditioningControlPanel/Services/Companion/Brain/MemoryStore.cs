@@ -457,7 +457,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// give them the same exemption, or the clamp silently reintroduces the exact failure this
         /// exemption exists to prevent.</para>
         /// </summary>
-        public string? GetInjectionBlock(int tokenBudget)
+        public string? GetInjectionBlock(int tokenBudget) => GetInjectionBlock(tokenBudget, null);
+
+        public string? GetInjectionBlock(int tokenBudget, string? query)
         {
             int budget = Math.Min(Math.Max(tokenBudget, 0), MaxInjectionTokens);
             if (budget <= 0) return null;
@@ -502,7 +504,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (boundaries.Count > MaxBoundaryLines)
                 Append($"(+{boundaries.Count - MaxBoundaryLines}{BoundaryOverflowMarker} — stay careful.)");
 
-            foreach (var f in RankFacts(facts.Where(f => f.Kind != MemoryFactKind.Boundary)))
+            foreach (var f in RankFacts(facts.Where(f => f.Kind != MemoryFactKind.Boundary), query))
             {
                 if (!TryAppend($"- {f.Text}")) break;
             }
@@ -542,15 +544,23 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// app runs but a genuinely more salient fact never loses to a stale one. Pinned facts sort
         /// ahead of everything: the user pinned them precisely so she would use them.
         /// </summary>
-        internal IReadOnlyList<MemoryFact> RankFacts(IEnumerable<MemoryFact> facts)
+        internal IReadOnlyList<MemoryFact> RankFacts(IEnumerable<MemoryFact> facts, string? query = null)
         {
             var now = _clock();
+            var terms = QueryTerms(query);
             return facts
                 .OrderByDescending(f => f.Pinned)
+                .ThenByDescending(f => QueryTerms(f.Text).Count(terms.Contains))
                 .ThenByDescending(f => Score(f, now) * Jitter(f.Id))
                 .ThenBy(f => f.Id, StringComparer.Ordinal) // total order, so ties never wobble
                 .ToList();
         }
+
+        private static HashSet<string> QueryTerms(string? text) => new(
+            System.Text.RegularExpressions.Regex.Matches(text ?? string.Empty, @"[\p{L}\p{N}]{3,}")
+                .Select(m => m.Value.ToLowerInvariant())
+                .Where(t => t is not ("the" or "and" or "you" or "your" or "that" or "this" or "with" or "have")),
+            StringComparer.Ordinal);
 
         /// <summary>salience × e^(-days/30) against <paramref name="now"/>. Never negative.</summary>
         internal static double Score(MemoryFact fact, DateTime now)

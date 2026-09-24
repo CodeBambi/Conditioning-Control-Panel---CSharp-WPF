@@ -67,6 +67,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly IPromptAssembler _assembler;
         private readonly ICompanionSessionStore _store;
         private readonly Func<bool> _preview;
+        private readonly Func<string?> _contextStamp;
+        private readonly object _conversationMutation = new();
+        private int _conversationRevision;
 
         // The linkable media pool, exactly as the stable prefix lists it. Injected so the
         // recommendation scan is testable without standing up BambiSprite and the whole mod stack.
@@ -98,10 +101,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             IMemoryStore? memory = null,
             ICompanionSessionStore? store = null,
             RecentRecommendations? recommendations = null,
-            Func<IReadOnlyList<string>>? mediaTitles = null, Func<bool>? preview = null)
+            Func<IReadOnlyList<string>>? mediaTitles = null, Func<bool>? preview = null,
+            Func<string?>? contextStamp = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _preview = preview ?? (() => CompanionExperience.IsV2Enabled);
+            _contextStamp = contextStamp ?? (() => string.Join("|", App.UnifiedUserId,
+                App.Settings?.Current?.PersonaIdentityFenceUtc?.Ticks,
+                App.Settings?.Current?.PersonaVoiceFenceUtc?.Ticks));
             _ownsMemory = memory == null;
             Memory = memory ?? new MemoryStore();
             Recommendations = recommendations ?? new RecentRecommendations();
@@ -225,6 +232,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _isUserQueued = false;
             _isProcessing = true;
 
+            var revision = System.Threading.Volatile.Read(ref _conversationRevision);
+            var contextStamp = _contextStamp();
             var userTurn = Session.Append(TurnKind.UserChat, input);
 
             // EMIT hook for the app's "the user just talked to her" signal (#877). It belongs
@@ -304,11 +313,20 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (!string.Equals(chatText, result.Text, StringComparison.Ordinal))
                     result = result with { Text = chatText };
 
-                Session.Append(TurnKind.AssistantChat, result.Text);
-                NoteRecommendedTitles(result.Text);
-                PersistAsync();
-                SignalMemoryRecallIfDue();
-                return result;
+                lock (_conversationMutation)
+                {
+                    if (_preview() && (revision != _conversationRevision || contextStamp != _contextStamp()))
+                    {
+                        Session.Remove(userTurn);
+                        return AiReplyResult.Failed(AiFailureKind.Cancelled, true);
+                    }
+                    Session.Append(TurnKind.AssistantChat, result.Text);
+                    _conversationRevision++;
+                    NoteRecommendedTitles(result.Text);
+                    PersistAsync();
+                    SignalMemoryRecallIfDue();
+                    return result;
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -588,11 +606,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public void ForgetThread()
         {
-            Session.Clear();
-            Recommendations.Clear();
-            _store.Wipe();
-            _memoryRecallSignaled = false;
-            ClearLegacyLocalHistory();
+            lock (_conversationMutation)
+            {
+                _conversationRevision++;
+                Session.Clear();
+                Recommendations.Clear();
+                _store.Wipe();
+                _memoryRecallSignaled = false;
+                ClearLegacyLocalHistory();
+            }
             App.Logger?.Information("CompanionBrain: conversation thread dropped");
         }
 
@@ -650,7 +672,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         }
 
         /// <summary>Writes the current dialogue synchronously — used on shutdown.</summary>
-        public void Flush() => _store.Save(Session.DialogueTurns());
+        public void Flush()
+        {
+            lock (_conversationMutation) _store.Save(Session.DialogueTurns());
+        }
 
         /// <summary>
         /// Fire-and-forget persistence so chat latency never pays for disk I/O. Only reached AFTER
@@ -659,9 +684,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private void PersistAsync()
         {
             var dialogue = Session.DialogueTurns();
+            var revision = _conversationRevision;
             _ = Task.Run(() =>
             {
-                try { _store.Save(dialogue); }
+                try
+                {
+                    lock (_conversationMutation)
+                        if (revision == _conversationRevision) _store.Save(dialogue);
+                }
                 catch (Exception ex) { App.Logger?.Debug("CompanionBrain: persist failed: {Error}", ex.Message); }
             });
         }

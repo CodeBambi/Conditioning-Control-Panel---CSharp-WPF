@@ -409,7 +409,8 @@ namespace ConditioningControlPanel.Services.AIService
         /// turns in <paramref name="messages"/> already passed the guard when they were first sent.
         /// </summary>
         private async Task<string?> SendChatCoreAsync(List<MessageDto> messages, string? newestUserInput,
-            bool returnRefusalSentinel, string purpose, CancellationToken cancellationToken = default)
+            bool returnRefusalSentinel, string purpose, CancellationToken cancellationToken = default,
+            AiCallOptions? options = null)
         {
             if (App.Settings?.Current?.OfflineMode == true)
             {
@@ -458,13 +459,18 @@ namespace ConditioningControlPanel.Services.AIService
                 ["messages"] = messages
             };
             ApplySamplerSettings(payload);
+            if (options?.CompanionV2 == true)
+            {
+                payload["max_tokens"] = Math.Clamp(options.MaxTokens, 1, AiCallOptions.PreviewTokenLimit(options.Purpose));
+                payload["temperature"] = options.Temperature;
+            }
 
             var baseUri = GetConfiguredEndpointBaseUri();
             var endpointUri = new Uri(baseUri, "chat/completions");
 
             BumpDailyCounter();
 
-            for (var attempt = 0; attempt < 2; attempt++)
+            for (var attempt = 0; attempt < (options?.CompanionV2 == true ? 1 : 2); attempt++)
             {
                 try
                 {
@@ -484,7 +490,7 @@ namespace ConditioningControlPanel.Services.AIService
                         var status = (int)response.StatusCode;
                         var retryableStatus = status == 429 || status >= 500;
 
-                        if (attempt == 0 && retryableStatus)
+                        if (options?.CompanionV2 != true && attempt == 0 && retryableStatus)
                         {
                             await Task.Delay(1200, cancellationToken).ConfigureAwait(false);
                             continue;
@@ -515,7 +521,8 @@ namespace ConditioningControlPanel.Services.AIService
                     {
                         // Truncation was invisible in logs until the guillotined effects
                         // envelope leaked as raw JSON in the bubble - make it loud.
-                        App.Logger?.Warning("[AI] reply truncated at the token cap (finish_reason=length) - parser salvage will run");
+                        App.Logger?.Warning("[AI] reply truncated at the token cap (finish_reason=length)");
+                        if (options?.CompanionV2 == true) return null;
                     }
                     if (!first.TryGetProperty("message", out var message) ||
                         !message.TryGetProperty("content", out var contentElement))
@@ -526,7 +533,9 @@ namespace ConditioningControlPanel.Services.AIService
                     }
 
                     var content = CleanTokenizerArtifacts(contentElement.GetString());
-                    var processed = ProcessResponse(content, returnRefusalSentinel, out var outputBlocked);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var processed = ProcessResponse(content, returnRefusalSentinel, out var outputBlocked,
+                        preview: options?.CompanionV2 == true);
                     Meter(outputBlocked ? AiMeter.OutcomeRefusedOutput
                             : string.IsNullOrWhiteSpace(processed) ? AiMeter.OutcomeEmpty : AiMeter.OutcomeOk,
                         content?.Length ?? 0);
@@ -537,11 +546,11 @@ namespace ConditioningControlPanel.Services.AIService
                     // Caller-driven cancellation, not a transport failure: leave the meter alone.
                     return null;
                 }
-                catch (HttpRequestException) when (attempt == 0)
+                catch (HttpRequestException) when (options?.CompanionV2 != true && attempt == 0)
                 {
                     await Task.Delay(1200, cancellationToken).ConfigureAwait(false);
                 }
-                catch (TaskCanceledException) when (attempt == 0)
+                catch (TaskCanceledException) when (options?.CompanionV2 != true && attempt == 0)
                 {
                     await Task.Delay(1200, cancellationToken).ConfigureAwait(false);
                 }
@@ -614,7 +623,7 @@ namespace ConditioningControlPanel.Services.AIService
             return false;
         }
 
-        private string? ProcessResponse(string? content, bool returnRefusalSentinel, out bool outputBlocked)
+        private string? ProcessResponse(string? content, bool returnRefusalSentinel, out bool outputBlocked, bool preview = false)
         {
             outputBlocked = false;
 
@@ -647,6 +656,8 @@ namespace ConditioningControlPanel.Services.AIService
                 return blockedRefusal;
             }
 
+            if (preview && string.IsNullOrWhiteSpace(CompanionProxyContract.CleanReply(parsed.CleanText, "stop")))
+                return null;
             if (commands.Count > 0)
             {
                 App.Logger?.Information("OpenAiCompatibleService: parsed {Count} command(s) from response", commands.Count);
@@ -733,7 +744,9 @@ namespace ConditioningControlPanel.Services.AIService
             var list = messages ?? (IReadOnlyList<ChatMessage>)Array.Empty<ChatMessage>();
 
             if (App.Settings?.Current?.OfflineMode == true)
-                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+                return options.CompanionV2 ? AiReplyResult.Failed(cancellationToken.IsCancellationRequested
+                    ? AiFailureKind.Cancelled : AiFailureKind.Unavailable, true)
+                    : new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             var dtos = new List<MessageDto>(list.Count + 1);
             foreach (var m in list) dtos.Add(new MessageDto(m.Role, m.Content ?? string.Empty));
@@ -743,7 +756,7 @@ namespace ConditioningControlPanel.Services.AIService
 
             var reply = await SendChatCoreAsync(dtos, newestUser,
                 returnRefusalSentinel: options.Interactive, purpose: options.MeterPurpose,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken, options: options).ConfigureAwait(false);
 
             var refusalSource = ModerationRefusal.GetSource(reply);
             if (refusalSource.HasValue)
@@ -753,8 +766,12 @@ namespace ConditioningControlPanel.Services.AIService
             }
 
             if (string.IsNullOrWhiteSpace(reply))
-                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+                return options.CompanionV2 ? AiReplyResult.Failed(cancellationToken.IsCancellationRequested
+                    ? AiFailureKind.Cancelled : AiFailureKind.Unavailable, true)
+                    : new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
+            if (options.CompanionV2 && string.IsNullOrWhiteSpace(CompanionProxyContract.CleanReply(reply, "stop")))
+                return AiReplyResult.Failed(AiFailureKind.InvalidResponse, true);
             return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null);
         }
 
