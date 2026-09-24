@@ -680,7 +680,8 @@ Example responses with REAL video names:
             var modId = App.Mods?.ActiveMod?.Id;
             var house = string.IsNullOrWhiteSpace(modId) ||
                 string.Equals(modId, Models.BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
-            var name = house ? "EMI" : App.Mods?.GetCompanionName() ?? preset.Name;
+            var name = house ? (app?.ActiveCompanionId ?? 0) == 0 ? "EMI" : App.Companion?.ActiveCompanionDef.Name ?? preset.Name
+                : App.Mods?.GetCompanionName() ?? preset.Name;
             var prompt = Companion.ConversationPrompt.Build(persona, name,
                 app?.SlutModeEnabled == true,
                 app?.CompanionPrompt?.AiProvider == Models.AiProviderType.Local &&

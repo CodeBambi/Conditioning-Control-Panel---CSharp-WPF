@@ -14,7 +14,7 @@ internal static class ConversationPrompt
         bool localEffects, IEnumerable<string>? titles = null, bool preserveOutputRules = true)
     {
         var text = new StringBuilder();
-        text.AppendLine("CURRENT CHARACTER: " + Field(name, 120));
+        text.AppendLine("YOUR NAME: " + Field(name, 120) + ". This is your name, not the user's name. Address the user by name only when they supplied it.");
         var variant = spicy && !string.IsNullOrWhiteSpace(persona.SlutModePersonality);
         text.AppendLine(Field(variant ? persona.SlutModePersonality : persona.Personality, 3600));
         if (!variant) text.AppendLine(Field(persona.ExplicitReaction, 800));
@@ -32,7 +32,7 @@ internal static class ConversationPrompt
             .Take(6).Select(t => Field(t, 100)).ToArray();
         if (shelf.Length > 0)
             text.AppendLine("AVAILABLE TITLES, only if the user asks for a recommendation: " + string.Join("; ", shelf));
-        text.AppendLine("CONVERSATION: Answer the user's actual message first. Be concrete, curious and in character. Usually one to three sentences; explain enough when asked. A question is optional. Never steer ordinary conversation into media, links, breathing or a session. Do not output URLs or invent media titles. Do not repeat the last answer. Complete sentences, no raw JSON unless an explicit effects contract requires it.");
+        text.AppendLine("CONVERSATION: Answer the user's actual message first. Be concrete, curious and in character. Usually one to three sentences; explain enough when asked. Follow the latest correction over older preferences. Honour requested length, including sentence counts. A question is optional. Never steer ordinary conversation into media, links, breathing or a session. Do not output URLs or invent media titles. Do not repeat the last answer. Complete sentences, no raw JSON unless an explicit effects contract requires it.");
         return SafetyComposer.Wrap(text.ToString());
     }
 
