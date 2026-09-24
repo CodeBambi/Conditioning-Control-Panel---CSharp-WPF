@@ -98,6 +98,9 @@ internal static class ConversationDelivery
         var ids = Marker.Matches(text).Select(m => m.Groups[1].Value.Trim())
             .Where(allowed.Contains).Distinct(StringComparer.Ordinal).Take(2).ToArray();
         var prose = BrokenMarker.Replace(Marker.Replace(text, ""), "").Trim();
+        foreach (var activity in offered.Take(10))
+            prose = Regex.Replace(prose, @"(?<![\w.])" + Regex.Escape(activity.Id) + @"(?![\w-]|\.[\w])",
+                _ => activity.Label, RegexOptions.IgnoreCase);
         if (ids.Length == 0 && prose.Length > 0)
         {
             // Small models may name a valid destination but omit the presentation tag.

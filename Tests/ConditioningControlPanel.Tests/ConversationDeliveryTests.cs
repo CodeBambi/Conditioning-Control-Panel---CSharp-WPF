@@ -153,6 +153,10 @@ public class ConversationDeliveryTests
         var offered = new[] { Activity("game.test") with { Label = "The Back Room" } };
         Assert.Equal(new[] { "game.test" }, ConversationDelivery.Parse("try the back room.", offered).Ids);
         Assert.Empty(ConversationDelivery.Parse("try a made-up game.", offered).Ids);
+        var bareId = ConversationDelivery.Parse("try game.test.", offered);
+        Assert.Equal("try The Back Room.", bareId.Text);
+        Assert.Equal(new[] { "game.test" }, bareId.Ids);
+        Assert.Empty(ConversationDelivery.Parse("game.test.fake", offered).Ids);
         Assert.Equal(new[] { "page.assets" }, ConversationDelivery.Parse("i don't have a video link.", new[] { Activity("page.assets") }).Ids);
     }
 
