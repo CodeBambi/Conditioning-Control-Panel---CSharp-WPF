@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Views.Tabs
             _clickChoiceClose.Tick += (_, _) =>
             {
                 _clickChoiceClose.Stop();
-                if (!ClickChoiceAnchor.IsMouseOver && !ClickChoiceBody.IsMouseOver && !ClickChoiceBody.IsKeyboardFocusWithin)
+                if (!_clickChoicePinned && !ClickChoiceAnchor.IsMouseOver && !ClickChoiceBody.IsMouseOver && !ClickChoiceBody.IsKeyboardFocusWithin)
                     ClickChoicePopup.IsOpen = false;
             };
             Loaded += (_, _) => RefreshClickPreference();
@@ -47,9 +47,10 @@ namespace ConditioningControlPanel.Views.Tabs
 
         private readonly System.Windows.Threading.DispatcherTimer _clickChoiceClose = new()
         {
-            Interval = TimeSpan.FromMilliseconds(250),
+            Interval = TimeSpan.FromMilliseconds(450),
         };
         private bool _refreshingClickChoice;
+        private bool _clickChoicePinned;
 
         internal void RefreshClickPreference()
         {
@@ -61,11 +62,31 @@ namespace ConditioningControlPanel.Views.Tabs
             _refreshingClickChoice = false;
         }
 
+        private void HoverClickChoice(object sender, MouseEventArgs e)
+        {
+            _clickChoiceClose.Stop();
+            if (ClickChoicePopup.IsOpen) return;
+            RefreshClickPreference();
+            // Hover must not capture the mouse: capture makes the anchor lose IsMouseOver.
+            ClickChoicePopup.StaysOpen = true;
+            ClickChoicePopup.IsOpen = true;
+        }
+
         private void OpenClickChoice(object sender, RoutedEventArgs e)
         {
             _clickChoiceClose.Stop();
             RefreshClickPreference();
+            _clickChoicePinned = true;
+            ClickChoicePopup.StaysOpen = false;
             ClickChoicePopup.IsOpen = true;
+            InvertDashboardClicks.Focus();
+        }
+
+        private void ClickChoiceClosed(object sender, EventArgs e)
+        {
+            _clickChoiceClose.Stop();
+            _clickChoicePinned = false;
+            ClickChoicePopup.StaysOpen = true;
         }
 
         private void KeepClickChoiceOpen(object sender, MouseEventArgs e) => _clickChoiceClose.Stop();
@@ -73,7 +94,7 @@ namespace ConditioningControlPanel.Views.Tabs
         private void ScheduleClickChoiceClose(object sender, MouseEventArgs e)
         {
             _clickChoiceClose.Stop();
-            _clickChoiceClose.Start();
+            if (!_clickChoicePinned) _clickChoiceClose.Start();
         }
 
         private void ClickChoiceKeyDown(object sender, KeyEventArgs e)
@@ -87,6 +108,9 @@ namespace ConditioningControlPanel.Views.Tabs
         private void ClickChoiceChanged(object sender, RoutedEventArgs e)
         {
             if (_refreshingClickChoice || App.Settings?.Current is not { } settings) return;
+            _clickChoicePinned = true;
+            _clickChoiceClose.Stop();
+            ClickChoicePopup.StaysOpen = false;
             settings.DashboardInvertClicks = InvertDashboardClicks.IsChecked == true;
             App.Settings.Save();
             RefreshClickPreference();
