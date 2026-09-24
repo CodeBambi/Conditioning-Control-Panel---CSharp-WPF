@@ -687,7 +687,7 @@ namespace ConditioningControlPanel
             }
         }
         
-        private bool ShowStyledDialog(string title, string message, string yesText, string noText)
+        internal bool ShowStyledDialog(string title, string message, string yesText, string noText)
             => ShowStyledDialog(title, message, yesText, noText, null, out _);
 
         /// <summary>
@@ -2171,6 +2171,10 @@ namespace ConditioningControlPanel
                 App.Logger?.Error("Failed to open hyperlink on {Host} - {Error}", Services.Logging.UrlLog.Host(e.Uri), ex.Message);
             }
         }
+
+        /// <summary>The Customise window's "recommended setup" door: the same LoadPreset the
+        /// Presets card uses, session-lock guard and confirmation included.</summary>
+        internal void ApplySettingsPresetFromCustomise(Models.Preset preset) => LoadPreset(preset);
 
         private void LoadPreset(Models.Preset preset)
         {
