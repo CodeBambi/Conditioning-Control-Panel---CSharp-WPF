@@ -13,7 +13,7 @@ import { duelGame } from './games.js';
 /** Points added to the winner's match score. Tie = nothing. */
 export const DUEL_WIN_BONUS = 100;
 /** The "incoming game" card before the board. */
-export const DUEL_INTRO_MS = 2000;
+export const DUEL_INTRO_MS = 1000;
 /** How long we wait for their final score after ours. A silent peer counts as 0. */
 export const DUEL_REPORT_GRACE_MS = 6000;
 /** Game cards start dropping from this many finished matches (i.e. the second match). */
