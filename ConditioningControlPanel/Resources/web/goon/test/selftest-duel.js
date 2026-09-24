@@ -673,5 +673,25 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   delete globalThis.document;
 }
 
+// ---- the mounted class follows the Goon mix (master x game), and the host wires it
+{
+  const { duelVolume } = await import('../ui/hud.js');
+  ok(duelVolume(null) === null, 'no prefs store, no volume (the class keeps its old mix)');
+  const subs = [];
+  const prefs = { v: { masterVolume: 0.5, gameVolume: 0.5 }, get(k) { return this.v[k]; }, subscribe(fn) { subs.push(fn); return () => {}; } };
+  const vol = duelVolume(prefs);
+  ok(Math.abs(vol.level() - 0.25) < 1e-9, 'level = master x game');
+  let calls = 0;
+  vol.subscribe(() => { calls++; });
+  subs[0]('masterVolume'); subs[0]('perfMode');
+  ok(calls === 1, 'only the two volume keys move it');
+  prefs.v.masterVolume = 0;
+  ok(vol.level() === 0, 'a zero master is silence');
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../ui/duel/arcademyHost.js', import.meta.url), 'utf8');
+  ok(/masterVolume: v0, audioMute: v0 <= 0/.test(src) && /key: 'masterVolume', value: v/.test(src),
+    'arcademyHost starts the synth at the Goon level and follows it through onSetting');
+}
+
 console.log(failures === 0 ? `PASS - ${n} checks` : `FAILED - ${failures}/${n} checks`);
 process.exit(failures === 0 ? 0 : 1);
