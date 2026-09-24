@@ -100,6 +100,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         // out from under them would be the more surprising bug of the two.
         private readonly bool _ownsMemory;
 
+        internal Func<IReadOnlyList<CompanionActivity>> Activities { get; set; } = CompanionActivities.Current;
+
         private static readonly Random _random = new();
 
         public CompanionBrain(
@@ -315,7 +317,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // what we asked the model to produce. See AiCallOptions.ChatWithEffects.
                 var effectsOn = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
                 var options = effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat;
-                if (_preview()) options = AiCallOptions.ForPreview(options);
+                var offered = _preview() ? Activities().Where(a => a.Allowed).ToArray() : Array.Empty<CompanionActivity>();
+                if (_preview())
+                {
+                    options = ConversationDelivery.Options(options, input, effectsOn);
+                    var messages = request.Messages.ToList();
+                    messages.Insert(1, ChatMessage.System(ConversationDelivery.Instructions(offered)
+                        + (EmiPersonality.IsActive ? "\n" + EmiVoiceExamples.For(input) : string.Empty)));
+                    request = new PromptRequest(request.SystemPrompt, messages);
+                }
                 var result = await _transport
                     .SendAsync(request.Messages, options, cancellationToken)
                     .ConfigureAwait(false);
@@ -348,7 +358,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // «X said aloud: "…"». Unwrap before the text reaches the bubble, history, or disk.
                 // The speaker name lets the 0813 transcript shape drop lines the model attributed
                 // to a DIFFERENT companion (the previous mod's) instead of quoting them.
-                var chatText = AiTextHygiene.UnwrapSpokenSigil(result.Text, ActiveSpeakerName());
+                var delivery = _preview() ? ConversationDelivery.Parse(result.Text, offered)
+                    : (Text: result.Text, Ids: Array.Empty<string>());
+                var chatText = AiTextHygiene.UnwrapSpokenSigil(delivery.Text, ActiveSpeakerName());
 
                 // Live 0806: and they invent URLs when asked for a video they have no link for.
                 // Strip before the reply is appended — a fabricated link left in the window teaches
@@ -380,7 +392,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                         return AiReplyResult.Failed(AiFailureKind.Cancelled, true);
                     }
                     cancellationToken.ThrowIfCancellationRequested();
-                    Session.Append(TurnKind.AssistantChat, result.Text);
+                    Session.Append(CompanionTurn.Create(TurnKind.AssistantChat, result.Text) with
+                    { ActivityIds = delivery.Ids });
                     if (_preview() && Memory is MemoryStore relationshipStore)
                         relationshipStore.NoteChatTurn(App.Mods?.ActiveModId);
                     if (_preview()) _maintenance?.Accept(userTurn);

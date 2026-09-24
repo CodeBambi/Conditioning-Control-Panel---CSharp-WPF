@@ -1,4 +1,6 @@
 {
+  "companion_v2_open_activity": "Ouvrir {0}",
+  "companion_v2_activity_unavailable": "Cette activité n’est plus disponible. Demande une autre idée.",
   "companion_v2_calls_you": "T'appelle",
   "companion_v2_name_hint": "Un surnom suffit. Vide le champ pour ne plus l'utiliser.",
   "companion_v2_name_refused": "Choisis un autre nom.",

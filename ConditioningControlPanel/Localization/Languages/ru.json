@@ -1,4 +1,6 @@
 {
+  "companion_v2_open_activity": "Открыть {0}",
+  "companion_v2_activity_unavailable": "Это занятие больше недоступно. Попросите другую идею.",
   "companion_v2_calls_you": "Как вас называть",
   "companion_v2_name_hint": "Можно указать прозвище. Очистите поле, чтобы перестать его использовать.",
   "companion_v2_name_refused": "Выберите другое имя.",

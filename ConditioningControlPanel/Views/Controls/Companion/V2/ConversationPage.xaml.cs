@@ -78,6 +78,10 @@ public partial class ConversationPage : UserControl
         if (sender is Button { Tag: string text })
             try { Clipboard.SetText(text); } catch (System.Runtime.InteropServices.COMException) { App.Logger?.Debug("Companion copy deferred: clipboard is busy"); }
     }
+    private void Activity_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: ConversationAction action }) _vm.OpenActivity(action);
+    }
     private void Sheet_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string kind }) OpenSheet(kind);
