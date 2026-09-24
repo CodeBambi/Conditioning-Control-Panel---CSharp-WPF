@@ -896,12 +896,11 @@ function makeFakeMatch() {
   /* ---- the DOM ---------------------------------------------------------- */
   ok(side && side.root && side.panel && side.tab, 'mountHud builds the sidebar');
   ok(hasClass(side.root, 'gg-arsenal'), 'under the name ui/hud.css styles', side.root.className);
-  ok(hasClass(side.root.parentNode, 'gg-hud-body'), 'it is a cell of the desk body, not a layer of its own');
+  ok(hasClass(side.root.parentNode, 'gg-rightcol'), 'rack belongs to the opponent column');
   const bodyKids16 = side.root.parentNode.children.map((k) => k.className);
-  ok(bodyKids16[0].indexOf('gg-arsenal') === 0,
-    'and the FIRST one — the sidebar is on the left, where nothing structural lives', bodyKids16.join(' | '));
-  ok(bodyKids16.some((c) => /gg-rightcol/.test(c)),
-    'the right column (monitor · receipts · videos.js keep-out) is untouched by it');
+  ok(bodyKids16.findIndex((c) => c.startsWith('gg-arsenal')) === bodyKids16.indexOf('gg-mon-host') + 1,
+    'rack sits immediately below the opponent TV', bodyKids16.join(' | '));
+  ok(bodyKids16.includes('gg-receipts'), 'receipts remain in the same column');
 
   const panelKids = side.panel.children.map((k) => k.className);
   ok(panelKids.includes('gg-heat'), 'the panel carries the heat gauge', panelKids.join(' | '));
@@ -5206,8 +5205,8 @@ const audioMod = await import('../ui/audio.js');
     ok(chipHost20.parentNode === col20,
       'the CHIP stays in the opponent column — it is about THEIR voice, not a control');
     const kids = col20.children;
-    ok(kids.indexOf(chipHost20) === kids.indexOf(findOne(col20, 'gg-mon-host')) + 1,
-      'the chip sits directly under their bezel');
+    ok(kids.indexOf(chipHost20) === kids.indexOf(findOne(col20, 'gg-arsenal')) + 1,
+      'the chip follows the rack below their bezel');
     ok(kids.indexOf(micHost20) < 0,
       'and the mic is no longer in that column at all');
     ok(!!findOne(frame20, 'gg-voice-btn'), 'the button is built');
