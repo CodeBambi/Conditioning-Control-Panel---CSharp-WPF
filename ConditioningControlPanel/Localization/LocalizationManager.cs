@@ -161,6 +161,15 @@ namespace ConditioningControlPanel.Localization
         }
 
         /// <summary>
+        /// The ENGLISH string for a key, whatever language is active, or null when en.json has no
+        /// such key. Mod text replacements are written against English wording, so a surface that
+        /// wants the active mod's word for a localized label has to ask about the English one
+        /// (see <see cref="ModAwareLocText"/>).
+        /// </summary>
+        public string? GetEnglish(string key)
+            => !string.IsNullOrEmpty(key) && _fallbackStrings.TryGetValue(key, out var en) ? en : null;
+
+        /// <summary>
         /// Get a localized string with format arguments.
         /// Usage: Loc.GetF("msg_level_up", level) where value is "You reached level {0}!"
         /// </summary>
