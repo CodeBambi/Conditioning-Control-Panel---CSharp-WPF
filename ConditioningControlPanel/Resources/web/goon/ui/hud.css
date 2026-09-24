@@ -2893,3 +2893,23 @@ html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
    start to game over: a touch thicker and warmer, still the only bar. */
 .gg-timer.is-song .gg-timer-track { height: 4px; }
 .gg-timer.is-song .gg-timer-fill { background: linear-gradient(90deg, #b388ff, var(--gg-pink)); box-shadow: 0 0 8px rgba(255, 105, 180, 0.55); }
+
+/* Compact rack under the opponent TV. Keep every control a usable target. */
+.gg-hud-body { grid-template-columns: minmax(0, 1fr) auto; }
+.gg-rightcol > .gg-arsenal {
+  position: static; inset: auto; width: min(100%, 264px);
+  flex-direction: column; align-items: stretch; gap: .2rem;
+  --gg-item: 48px;
+}
+.gg-rightcol .gg-arsenal-panel { padding: .3rem; max-height: none; gap: .25rem; }
+.gg-rightcol .gg-arsenal-rails { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .15rem; }
+.gg-rightcol .gg-arsenal-rails > .gg-rail { display: contents; }
+.gg-rightcol .gg-item { width: 100%; min-height: 48px; padding: .1rem; }
+.gg-rightcol .gg-item-img, .gg-rightcol .gg-item-fallback { width: 36px; max-width: 100%; }
+.gg-rightcol .gg-arsenal-tab { width: 100%; min-height: 28px; flex-direction: row; }
+.gg-rightcol .gg-item-tip { right: 0; left: auto; }
+@media (max-width: 700px) {
+  .gg-hud-body { grid-template-columns: minmax(0, 1fr); }
+  .gg-rightcol > .gg-arsenal { width: min(100%, 208px); }
+  .gg-rightcol .gg-arsenal-tab { min-height: 44px; }
+}

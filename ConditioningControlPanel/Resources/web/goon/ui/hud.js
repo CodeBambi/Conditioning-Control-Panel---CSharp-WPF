@@ -718,6 +718,8 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const rightCol = add(body, el('div', 'gg-rightcol'));
   const oppAvaBox = add(rightCol, el('div', 'gg-ava-minibox gg-ava-minibox--opp'));
   const monHost = add(rightCol, el('div', 'gg-mon-host'));
+  // Keep the compact effect rack with the opponent screen it targets.
+  if (rightCol && sideBox) rightCol.appendChild(sideBox);
   /* THEIR VOICE, IN THEIR COLUMN (ui/voice/micHud.js) — the CHIP half.
    *
    * A FLOW child of the monitor column, and that is the whole of the placement
