@@ -32,6 +32,13 @@ namespace ConditioningControlPanel.Views.Tabs
             // parsed into MainWindow's tree, where Window.GetWindow(this) is null.
             _vm = new CompanionRoomRuntimeVm(() => Window.GetWindow(this) as MainWindow);
             Room.ViewModel = _vm;
+#if DEBUG
+            if (System.Environment.GetEnvironmentVariable("CCP_COMPANION_V2") == "1")
+            {
+                Room.Visibility = Visibility.Collapsed;
+                PageHost.Children.Add(new Views.Controls.Companion.V2.ConversationPage(_vm, Room) { PersonalityEditor = Services.Companion.PersonalityStudio.Show });
+            }
+#endif
 
             // FX lifecycle. Hooked here rather than in ShowTab so the tab owns its own decoration;
             // the room parks its own clocks off the same visibility change.

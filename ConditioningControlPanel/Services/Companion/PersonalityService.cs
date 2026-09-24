@@ -35,7 +35,9 @@ namespace ConditioningControlPanel.Services
         {
             var modPresets = GetActiveModPersonalities();
             fromMod = modPresets != null && modPresets.Count > 0;
-            return fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
+            var presets = fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
+            return presets.Select(p => Companion.EmiPersonality.ForPreview(p,
+                App.Mods?.ActiveMod?.Id, Companion.CompanionExperience.IsV2Enabled)).ToList();
         }
 
         /// <summary>
@@ -150,7 +152,7 @@ namespace ConditioningControlPanel.Services
             //
             // Unmodded, that means the neutral CCP Default persona: a fresh install must never
             // land on a themed one it was not asked for.
-            if (IsNeutralContext()) return PersonalityPresets.GetNeutralDefault();
+            if (IsNeutralContext()) return Companion.EmiPersonality.ForPreview(PersonalityPresets.GetNeutralDefault(), null, Companion.CompanionExperience.IsV2Enabled);
 
             // A themed mod that ships its own set leads with its intended default personality,
             // so the AI speaks in the mod's voice.

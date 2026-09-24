@@ -40,7 +40,7 @@ internal sealed class ConversationPageVm : CompanionObservable
     public string Status => Busy ? Loc.Get("companion_v2_replying") : NeedsStart ? Loc.Get("companion_v2_off")
         : NeedsSignIn ? Loc.Get("companion_v2_signin_status") : Loc.Get("companion_v2_ready");
     public bool ShowStart => NeedsStart || NeedsSignIn;
-    public string Privacy => Loc.Get(_room.Engine.Provider is CompanionProviderMode.LocalOllama or CompanionProviderMode.Custom
+    public string Privacy => Loc.Get(App.Settings?.Current?.CompanionPrompt?.AiProvider is AiProviderType.Local or AiProviderType.OpenAiCompatible
         ? "companion_v2_privacy_endpoint" : "companion_v2_privacy_cloud");
 
     public void Refresh()
@@ -79,7 +79,13 @@ internal sealed class ConversationPageVm : CompanionObservable
     }
     public void Start()
     {
-        if (NeedsStart) _room.EngineVm.Provider = CompanionProviderMode.Cloud;
+        if (NeedsStart)
+            _room.EngineVm.Provider = (App.Settings?.Current?.CompanionPrompt?.AiProvider ?? AiProviderType.Cloud) switch
+            {
+                AiProviderType.Local => CompanionProviderMode.LocalOllama,
+                AiProviderType.OpenAiCompatible => CompanionProviderMode.Custom,
+                _ => CompanionProviderMode.Cloud
+            };
         Refresh();
         if (NeedsSignIn) _room.Engine.LoginCommand.Execute(null);
     }
