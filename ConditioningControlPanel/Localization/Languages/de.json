@@ -1,5 +1,4 @@
 {
-  "companion_v2_media_library_only": "Ich kann deine Mediathek öffnen, aber von hier aus kein bestimmtes Video abrufen.",
   "companion_v2_open_activity": "{0} öffnen",
   "companion_v2_activity_unavailable": "Diese Aktivität ist nicht mehr verfügbar. Frag nach einer anderen Idee.",
   "companion_v2_calls_you": "Nennt dich",
@@ -52,7 +51,6 @@
   "companion_v2_popout": "Abkoppeln",
   "companion_v2_mute": "Stimme stummschalten",
   "companion_v2_history_note": "Neuer Chat löscht dieses Gespräch. Gespeicherte Vorlieben bleiben.",
-  "companion_v2_emi_fixed": "EMI hat eine feste Stimme. Wähle einen anderen Avatar, um eine Persönlichkeit anzupassen.",
   "companion_v2_personality": "Weitere Persönlichkeitsoptionen",
   "companion_v2_memory_note": "Wenn Erinnerungen aktiv sind, kann die gewählte KI den letzten Chat zusammenfassen. Relevante Erinnerungen werden mitgesendet. Gespeicherte Details bleiben auf diesem PC; hier prüfen oder vergessen.",
   "companion_v2_busy": "Eine Antwort wird erstellt.",

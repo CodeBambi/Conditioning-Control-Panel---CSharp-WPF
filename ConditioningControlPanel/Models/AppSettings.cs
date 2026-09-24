@@ -357,9 +357,13 @@ namespace ConditioningControlPanel.Models
             }
         }
 
-        /// <summary>Local preview migration latch. Ignored outside the companion preview.</summary>
+        // Retired with tube EMI (companion pivot, 2026-09-25). Kept only so settings files that
+        // carry these keys still load; nothing reads or writes them.
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
         public bool CompanionEmiPreviewChoiceMade { get; set; }
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
         public bool CompanionEmiFixedVoiceApplied { get; set; }
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
         public int CompanionEmiVoiceRevision { get; set; }
 
         private bool _welcomed = false;

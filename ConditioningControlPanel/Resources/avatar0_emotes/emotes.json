@@ -1,5 +1,5 @@
 {
-  "_comment": "Avatar-0 (blonde) animated emote mapping, shared by BambiSleep + Sissy. Clip = Resources/avatar0_emotes/<clip>.gif. Per spoken line the controller plays [talk clip(s) by length] then [one reaction emote by situation], each clip ONCE, crossfading to the next (never loops a clip). Resolution for the reaction: stemPrefix(emotionLineId) -> mood(first token) -> none. Idle = weighted rotation of the idleRotation pool. Edit + rebuild to embed.",
+  "_comment": "Avatar-0 (blonde) animated emote mapping, shared by BambiSleep, Sissy and CCP Default. Clip = Resources/avatar0_emotes/<clip>.gif. Per spoken line the controller plays [talk clip(s) by length] then [one reaction emote by situation], each clip ONCE, crossfading to the next (never loops a clip). Resolution for the reaction: stemPrefix(emotionLineId) -> mood(first token) -> none. Idle = weighted rotation of the idleRotation pool. Edit + rebuild to embed.",
   "fps": 15,
   "fadeMs": 1000,
   "idleRotation": [
@@ -35,7 +35,7 @@
     "talkB": 0.9
   },
   "layout": {
-    "_comment": "Delta on top of the mod's avatar layout. scale = multiplier (0.855 = ~14.5% smaller total); offsetX += right (negative = left); offsetY += DOWN. Applies to BambiSleep + Sissy (the avatar0 set).",
+    "_comment": "Delta on top of the mod's avatar layout. scale = multiplier (0.855 = ~14.5% smaller total); offsetX += right (negative = left); offsetY += DOWN. Applies to BambiSleep, Sissy and CCP Default (the avatar0 set).",
     "scale": 0.855,
     "offsetX": 10,
     "offsetY": -30,

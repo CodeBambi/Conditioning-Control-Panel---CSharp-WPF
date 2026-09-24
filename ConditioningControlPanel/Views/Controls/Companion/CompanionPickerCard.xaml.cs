@@ -73,7 +73,6 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// <summary>The companion's own name (the active mod's identity), not the look's name.</summary>
         private static string LiveName()
         {
-            if (EmiPersonality.IsActive) return "EMI";
             var name = App.Mods?.ActiveMod?.Manifest?.Identity?.CompanionName;
             if (string.IsNullOrWhiteSpace(name)) name = Loc.Get("modmgr_companion_fallback");
             return App.Mods?.MakeModAware(name!) ?? name!;
@@ -220,8 +219,6 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             try
             {
-                if (EmiTubePreview.IsEmi(setNumber))
-                    return new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/ConditioningControlPanel;component/Resources/emi/tube/pose1.png"));
                 if (setNumber < 1) setNumber = 1;
                 var name = (setNumber == 1 ? "avatar_pose" : $"avatar{setNumber}_pose") + "1.png";
                 return ModResourceResolver.ResolveImageDecoded(name, PreviewDecodeWidth)
