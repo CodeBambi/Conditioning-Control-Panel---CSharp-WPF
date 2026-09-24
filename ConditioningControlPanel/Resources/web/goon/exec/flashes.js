@@ -301,7 +301,24 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       rec.node.style.setProperty('transform',
         `translate(-50%, -50%) translate(${rec.dx.toFixed(1)}px, ${rec.dy.toFixed(1)}px)`
         + ` rotate(${rec.rot}deg) scale(${s})`);
-      if (rec.grabbed) rec.hitRect = sweepBubbles(rec.node, rec.hitRect).rect;
+      if (rec.grabbed) {
+        const impact = sweepBubbles(rec.node, rec.hitRect);
+        rec.hitRect = impact.rect;
+        if (impact.hits) {
+          rec.bubbleGrowth = Math.min(1.12, (rec.bubbleGrowth || 1) + impact.hits * 0.008);
+          rec.node.style.scale = String(rec.bubbleGrowth);
+          const quiet = calm || document.documentElement?.getAttribute('data-gg-motion') === 'off'
+            || document.querySelector?.('.gg-hud-frame.is-calm');
+          rec.bubblePulse?.cancel();
+          if (!quiet && typeof rec.node.animate === 'function') {
+            rec.bubblePulse = rec.node.animate([
+              { scale: String(rec.bubbleGrowth) },
+              { scale: String(rec.bubbleGrowth * 1.025), offset: 0.35 },
+              { scale: String(rec.bubbleGrowth) },
+            ], { duration: 230, easing: 'ease-out' });
+          }
+        }
+      }
     } catch (_e) { /* ignore */ }
   }
 
