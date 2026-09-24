@@ -152,4 +152,12 @@ public class GoonOnlineMediaTests
         using var m = new GoonOnlineMedia(_ => { });
         Assert.False(m.More());
     }
+
+    [Theory]
+    [InlineData(true, "pink", true)]
+    [InlineData(true, "mine", true)]
+    [InlineData(true, "", false)]
+    [InlineData(false, "pink", false)]
+    public void OnlyAPickWithTheSwitchOnOptsTheSessionIn(bool online, string flavour, bool expected)
+        => Assert.Equal(expected, GoonOnlineMediaRules.IsSessionOptIn(online, flavour));
 }
