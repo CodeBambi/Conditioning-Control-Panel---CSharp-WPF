@@ -197,6 +197,8 @@ export const SFX_REGISTRY = Object.freeze({
   'gg-drop-dud':    gameCue({ files: [L('captcha-reject-1.mp3'), L('captcha-reject-2.mp3')], gain: 0.20, minGapMs: 220 }),
 
   /* ---- payloads ----------------------------------------------------- game - */
+  'throw-flight': gameCue({ files: [L('sticker-drag-1.mp3')], gain: 0.28, minGapMs: 120 }),
+  'throw-impact': gameCue({ files: [L('stamp_thud.mp3')], gain: 0.24, minGapMs: 120 }),
   'gg-fire':        gameCue({ files: [L('custody-stamp-1.mp3')],   gain: 0.42 }),
   'payload-out':    gameCue({ files: [L('custody-stamp-1.mp3')],   gain: 0.42 }),
   /** ONE landing cue for every family. Per-kind stings would be noise. */

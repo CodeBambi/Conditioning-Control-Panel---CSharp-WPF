@@ -53,7 +53,7 @@ import { dressGhost } from './throwPreview.js';
 import { S } from './strings.js';
 import { GAME_CARD_COST } from './duel/rules.js';
 import { DUEL_COPY } from './duel/copy.js';
-import { burst, centreOf, flyArc, popIn, shake, squash, isCalm } from './juiceDom.js';
+import { burst, centreOf, flyArc, popIn, shake as shakeNode, squash, isCalm } from './juiceDom.js';
 
 /**
  * The rails, in owner order — which is also the KEYBOARD order (1..7), so new
@@ -531,6 +531,7 @@ export function mountArsenal({
     if (res.ok) {
       cool.onFired();
       sfx(audio, 'gg-fire');
+      sfx(audio, 'throw-flight');
       // One stack per shot. At zero the slot goes straight back to locked and
       // only another drop can open it again.
       if (rec.needsArm && rec.armed > 0) rec.armed--;
@@ -591,7 +592,8 @@ export function mountArsenal({
         flyArc(node, from, land, { ms, lift: 0.32, spin: land.x < from.x ? -24 : 24, scaleTo: 0.55 }).then(() => {
           try { node.remove(); } catch (_e) { /* gone */ }
           burst(land.x, land.y, { count: 12, dist: 60, spread: 70, life: 480 });
-          shake(target, 4);
+          shakeNode(target, 4);
+          sfx(audio, 'throw-impact');
           squash(target, { amount: 0.05, ms: 240 });
         });
       };
