@@ -1250,6 +1250,8 @@ namespace ConditioningControlPanel
                 }
             }
 
+            if (!MotionFx.AllowTransitions) return;
+
             // Visual feedback - quick pulse effect
             if (SettingsTab.ImgLogo != null)
             {

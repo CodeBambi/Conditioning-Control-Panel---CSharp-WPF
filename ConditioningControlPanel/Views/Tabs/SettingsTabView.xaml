@@ -552,7 +552,7 @@
                             <ScaleTransform x:Name="LogoDriftScale" ScaleX="1" ScaleY="1"/>
                         </Border.RenderTransform>
                         <Grid>
-                            <Image x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
+                            <fx:AnimatedLogoImage x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
                                    RenderOptions.BitmapScalingMode="HighQuality"/>
                             <!-- Occasional light pass over the wordmark (one shot every 25-40s,
