@@ -4006,7 +4006,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>Ready-pool size, for the draw's "is there anything at all" checks.</summary>
         private int RemoteReadyCount()
         {
-            lock (_remoteLock) return _remoteReady.Count;
+            lock (_remoteLock) return _remoteReady.Available;
         }
 
         /// <summary>
@@ -4019,8 +4019,9 @@ namespace ConditioningControlPanel.Services
             RefreshRemoteSelection();
             lock (_remoteLock)
             {
-                return _remoteReady.Take(_random, url =>
-                    RemoteClips.TryGetValue(url, out var clip) && File.Exists(clip.Path));
+                Func<string, bool> usable = url =>
+                    RemoteClips.TryGetValue(url, out var clip) && File.Exists(clip.Path);
+                return _remoteReady.Take(_random, usable) ?? _remoteReady.TakeShown(usable);
             }
         }
 
@@ -4587,17 +4588,18 @@ namespace ConditioningControlPanel.Services
             // saved string can differ from the runtime relative path by separator or case
             // (Windows is case-insensitive at the filesystem level), causing the unchecked
             // image to slip through the filter.
-            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
+            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0 || App.Settings?.Current?.DisabledAssetFolders.Count > 0)
             {
                 var basePath = App.EffectiveAssetsPath;
                 static string Norm(string p) => p.Replace('\\', '/');
                 var disabled = new HashSet<string>(
                     App.Settings.Current.DisabledAssetPaths.Select(Norm),
                     StringComparer.OrdinalIgnoreCase);
+                var folders = App.Settings.Current.DisabledAssetFolders.ToArray();
                 files = files.Where(f =>
                 {
                     var relativePath = Norm(Path.GetRelativePath(basePath, f));
-                    return !disabled.Contains(relativePath);
+                    return !disabled.Contains(relativePath) && !AssetFolderExclusion.IsUnderAny(relativePath, folders);
                 }).ToList();
             }
 

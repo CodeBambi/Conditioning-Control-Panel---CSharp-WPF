@@ -17,6 +17,7 @@ public class AssetPreset : INotifyPropertyChanged
     private DateTime _createdAt = DateTime.Now;
     private DateTime _lastUsed = DateTime.Now;
     private HashSet<string> _disabledAssetPaths = new();
+    private HashSet<string> _disabledAssetFolders = new(StringComparer.OrdinalIgnoreCase);
     private int _enabledImageCount;
     private int _enabledVideoCount;
 
@@ -69,6 +70,16 @@ public class AssetPreset : INotifyPropertyChanged
     {
         get => _disabledAssetPaths;
         set { _disabledAssetPaths = value ?? new(); OnPropertyChanged(); }
+    }
+
+    /// <summary>
+    /// Folders unticked as a whole. New files in them stay excluded (ccp-bugs #1231).
+    /// </summary>
+    [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+    public HashSet<string> DisabledAssetFolders
+    {
+        get => _disabledAssetFolders;
+        set { _disabledAssetFolders = new HashSet<string>(value ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
     }
 
     /// <summary>
@@ -127,6 +138,7 @@ public class AssetPreset : INotifyPropertyChanged
         {
             Name = name,
             DisabledAssetPaths = new HashSet<string>(App.Settings.Current.DisabledAssetPaths),
+            DisabledAssetFolders = new HashSet<string>(App.Settings.Current.DisabledAssetFolders),
             EnabledImageCount = imageCount,
             EnabledVideoCount = videoCount,
             CreatedAt = DateTime.Now,
@@ -140,6 +152,7 @@ public class AssetPreset : INotifyPropertyChanged
     public void ApplyToSettings()
     {
         App.Settings.Current.DisabledAssetPaths = new HashSet<string>(DisabledAssetPaths);
+        App.Settings.Current.DisabledAssetFolders = new HashSet<string>(DisabledAssetFolders);
         LastUsed = DateTime.Now;
     }
 
@@ -149,6 +162,7 @@ public class AssetPreset : INotifyPropertyChanged
     public void UpdateFromCurrentSettings(int imageCount, int videoCount)
     {
         DisabledAssetPaths = new HashSet<string>(App.Settings.Current.DisabledAssetPaths);
+        DisabledAssetFolders = new HashSet<string>(App.Settings.Current.DisabledAssetFolders);
         EnabledImageCount = imageCount;
         EnabledVideoCount = videoCount;
         LastUsed = DateTime.Now;

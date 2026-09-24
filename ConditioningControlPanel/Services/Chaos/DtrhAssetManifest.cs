@@ -255,14 +255,14 @@ internal static class DtrhAssetManifest
     private const string RemoteNamePrefix = "online";
     private const string RemoteConsumerId = "dtrh";
     private const int MaxRemoteEntries = 60;
-    private const int RemoteLowWater = 24;               // refill when the cache drops under this
+    private const int RemoteKindLowWater = 12;           // refill a kind when it drops under this
     private static readonly TimeSpan RemoteEntryTtl = TimeSpan.FromDays(3);
 
     private static readonly object RemoteLock = new();
     private static List<RemoteEntry>? _remoteCache;      // null = not loaded from disk yet
     private static int _remoteFetchInFlight;             // 0/1 via Interlocked
 
-    private sealed record RemoteEntry(string Id, string Url, bool IsImage, long AtUnix);
+    internal sealed record RemoteEntry(string Id, string Url, bool IsImage, long AtUnix);
 
     private static string RemoteCachePath => Path.Combine(App.UserDataPath, "dtrh_remote_media.json");
 
@@ -370,24 +370,46 @@ internal static class DtrhAssetManifest
         long cutoff = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - (long)RemoteEntryTtl.TotalSeconds;
         _remoteCache.RemoveAll(e => e.AtUnix < cutoff);
 
-        if (_remoteCache.Count > MaxRemoteEntries)
-            _remoteCache.RemoveRange(0, _remoteCache.Count - MaxRemoteEntries);
+        // Oldest first, per kind, so a run of clips can never push the last stills out.
+        foreach (bool image in new[] { true, false })
+        {
+            int over = _remoteCache.Count(e => e.IsImage == image) - MaxRemoteEntries / 2;
+            if (over > 0) _remoteCache.RemoveAll(e => e.IsImage == image && over-- > 0);
+        }
+    }
+
+    /// <summary>(stills, clips) in the cache. Caller holds <see cref="RemoteLock"/>.</summary>
+    internal static (int Stills, int Clips) CountKinds(IReadOnlyCollection<RemoteEntry>? cache)
+    {
+        if (cache == null) return (0, 0);
+        int stills = cache.Count(e => e.IsImage);
+        return (stills, cache.Count - stills);
     }
 
     /// <summary>Top the cache up off the UI thread, single-flight. Fire-and-forget by design:
     /// whatever lands is for the NEXT manifest, so nothing waits on it.</summary>
     private static void KickRemoteRefill()
     {
+        // Each kind has its own low-water mark. One Any batch off a video-only sub used to fill
+        // the cache with 30 clips and nothing else, and a full cache never refilled, so the
+        // Goon Game's flash bubbles and drain wash had no picture to draw (Sep 23 desk run).
+        bool wantStills;
         lock (RemoteLock)
         {
-            if (_remoteCache != null && _remoteCache.Count >= RemoteLowWater) return;
+            var (stills, clips) = CountKinds(_remoteCache);
+            if (stills >= RemoteKindLowWater && clips >= RemoteKindLowWater) return;
+            wantStills = stills < RemoteKindLowWater && stills <= clips;
         }
         if (Interlocked.CompareExchange(ref _remoteFetchInFlight, 1, 0) != 0) return;
         _ = Task.Run(async () =>
         {
             try
             {
-                var coord = FypOnlineCoordinator.For(RemoteConsumerId, RemoteChannels, FeedMediaKind.Any);
+                // Stills come from GIF posts' posters, the same kind the flashes draw; PICTURE
+                // pages are mostly memes and screenshots. Separate tenants keep the rotations apart.
+                var coord = wantStills
+                    ? FypOnlineCoordinator.For(RemoteConsumerId + "-stills", RemoteChannels, FeedMediaKind.GifStill)
+                    : FypOnlineCoordinator.For(RemoteConsumerId, RemoteChannels, FeedMediaKind.Video);
                 var (entries, error) = await coord.FetchBatchAsync(CancellationToken.None).ConfigureAwait(false);
                 if (error != null)
                 {

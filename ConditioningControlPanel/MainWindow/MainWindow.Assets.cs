@@ -491,6 +491,10 @@ namespace ConditioningControlPanel
             _assetTree.Clear();
             var assetsPath = App.EffectiveAssetsPath;
 
+            // Files added to an unticked folder since it was unticked stay unticked (#1231).
+            if (AssetFolderExclusion.ExpandFromDisk(App.Settings.Current, assetsPath) > 0)
+                InvalidateAssetPoolsAfterSelectionChange();
+
             // Build tree for images folder
             var imagesFolder = Path.Combine(assetsPath, "images");
             if (Directory.Exists(imagesFolder))
@@ -1030,6 +1034,7 @@ namespace ConditioningControlPanel
 
                     // SECOND: Update the source of truth (DisabledAssetPaths)
                     UpdateFolderFilesCheckState(folder, targetState);
+                    MarkFolderExclusion(folder, targetState);
 
                     // THIRD: Update parent folder states (they may become partially checked)
                     folder.Parent?.UpdateCheckStateFromChildren();
@@ -1054,6 +1059,17 @@ namespace ConditioningControlPanel
         /// Set IsChecked and CheckedFileCount for a folder and all its children recursively.
         /// This provides immediate visual feedback when user clicks a folder checkbox.
         /// </summary>
+        /// <summary>
+        /// Remember a whole-folder toggle so files added to it later inherit it (#1231).
+        /// Local folders only: pack folders are virtual and do not grow.
+        /// </summary>
+        private static void MarkFolderExclusion(AssetTreeItem folder, bool isChecked)
+        {
+            if (folder.IsPackFolder || string.IsNullOrEmpty(folder.FullPath)) return;
+            var rel = Path.GetRelativePath(App.EffectiveAssetsPath, folder.FullPath);
+            AssetFolderExclusion.MarkFolder(App.Settings.Current.DisabledAssetFolders, rel, isChecked);
+        }
+
         private void SetFolderAndChildrenChecked(AssetTreeItem folder, bool isChecked)
         {
             folder.IsChecked = isChecked;
@@ -1248,6 +1264,7 @@ namespace ConditioningControlPanel
             if (file.IsChecked)
             {
                 App.Settings.Current.DisabledAssetPaths.Remove(file.RelativePath);
+                AssetFolderExclusion.FileEnabled(App.Settings.Current.DisabledAssetFolders, file.RelativePath);
             }
             else
             {
@@ -1315,6 +1332,7 @@ namespace ConditioningControlPanel
             {
                 // Update DisabledAssetPaths only for selected folder and subfolders
                 UpdateFolderFilesCheckState(_selectedFolder, true);
+                MarkFolderExclusion(_selectedFolder, true);
 
                 // Update visual state for selected folder and children
                 SetFolderAndChildrenChecked(_selectedFolder, true);
@@ -1342,6 +1360,7 @@ namespace ConditioningControlPanel
             {
                 // Update DisabledAssetPaths only for selected folder and subfolders
                 UpdateFolderFilesCheckState(_selectedFolder, false);
+                MarkFolderExclusion(_selectedFolder, false);
 
                 // Update visual state for selected folder and children
                 SetFolderAndChildrenChecked(_selectedFolder, false);
@@ -1433,6 +1452,7 @@ namespace ConditioningControlPanel
             {
                 var enabledImages = 0;
                 var enabledVideos = 0;
+                AssetFolderExclusion.ExpandFromDisk(preset.DisabledAssetPaths, preset.DisabledAssetFolders, basePath);
 
                 // Count files in images folder that are NOT in this preset's disabled list
                 var imagesPath = Path.Combine(basePath, "images");

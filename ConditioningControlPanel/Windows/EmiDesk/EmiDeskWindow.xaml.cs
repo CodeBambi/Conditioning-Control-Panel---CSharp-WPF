@@ -372,6 +372,7 @@ public partial class EmiDeskWindow : Window
             int ex = GetWindowLong(hwnd, GWL_EXSTYLE);
             SetWindowLong(hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
             HwndSource.FromHwnd(hwnd)?.AddHook(WndProc);
+            StartTopmostWatch();
         }
         catch (Exception ex)
         {
