@@ -12,9 +12,9 @@ namespace ConditioningControlPanel.Controls.Friends;
 
 /// <summary>
 /// OPEN TABLES in the drawer (2026-09-23). A friend with a listed Goon Game table floats to the
-/// top with a pink "hosting a table" row and a Join button. Every 1v1 is Prime: a free account
-/// sees the same row with a lock, and the lock opens the app's own Prime refusal
-/// (<see cref="TierGate.DemandLab(string)"/>), so the invite still sells the game.
+/// top with a pink "hosting a table" row and a Join button. Every signed-in account joins
+/// (owner call 2026-09-24, only HOSTING is a patron perk); a signed-out drawer shows a lock whose
+/// press only says to sign in, and never launches the game.
 ///
 /// <para>The list comes from <see cref="GoonOpenTables"/>, asked on open and every
 /// <see cref="TablesPoll"/> while the drawer is open, never while it is folded. A server without
@@ -30,10 +30,10 @@ public sealed partial class FriendsDrawer
     /// <summary>Test seam: the open tables the drawer draws from.</summary>
     internal Func<OpenTablesReply> Tables { get; set; } = () => GoonOpenTables.Latest;
 
-    /// <summary>Test seam: "does this account clear the 1v1 bar" (tier 2). Fails closed.</summary>
+    /// <summary>Test seam: "may this account sit down" (signed in). Fails closed.</summary>
     internal Func<bool> CanJoinTables { get; set; } = () =>
     {
-        try { return App.Patreon?.HasLabAccess == true; } catch { return false; }
+        try { return GoonHostService.JoiningAllowed(); } catch { return false; }
     };
 
     /// <summary>Test seam: what a Join press does once the bar is cleared.</summary>
@@ -95,8 +95,8 @@ public sealed partial class FriendsDrawer
         return t;
     }
 
-    /// <summary>Join (Prime) or a lock (free). Both run through the same click: the bar is asked
-    /// at press time, so a pledge that lands mid-session works without a repaint.</summary>
+    /// <summary>Join (signed in) or a lock (signed out). Both run through the same click: the bar
+    /// is asked at press time, so a sign-in that lands mid-session works without a repaint.</summary>
     private Button TableJoinButton(Friend f, OpenTable table)
     {
         bool can = CanJoinTables();
@@ -128,8 +128,8 @@ public sealed partial class FriendsDrawer
         {
             if (!CanJoinTables())
             {
-                // The app's own Prime refusal. It says the product name and the bar, nothing new.
-                TierGate.DemandLab(GoonHostService.ProductName);
+                // Joining needs an account and nothing else; the lock's tooltip says so.
+                App.Logger?.Information("[Friends] table join pressed while signed out");
                 return;
             }
             App.Logger?.Information("[Friends] joining {Name}'s open table", f.Name);

@@ -16,6 +16,8 @@
  *   setManifest({images,videos,skipped,truncated})
  *   setLocalLibrary([{kind,name,url}])                 (see below)
  *   setOnlineLibrary({images,videos})                  the flavour's online set, a third source
+ *   setPeerNicheLibrary({images,videos})               the OPPONENT'S niches, fetched here;
+ *                                                      only drawReceived/peekReceived reach it
  *   draw() / drawKind('image'|'video') -> {kind, name, url, acquire} | null
  *   acquire(entry) -> {url, release(), provenance}
  *   counts() -> {images, videos, skipped, truncated}   hasMedia() -> bool
@@ -143,6 +145,13 @@ export function createGoonMediaPool() {
   let hostEntries = [];   // the host's manifest — the user's active preset
   let localEntries = [];  // standalone: files the player picked in this browser
   let onlineEntries = []; // the in-game flavour's Scrolller pictures (host `online-media` frame)
+  /* THE OPPONENT'S NICHES (host `peer-media` frame, 2026-09-24). Pictures this host fetched from
+   * the niches the opponent named in their hello. NOT in the deck: like `received`, they appear
+   * only where the opponent's payload asked for their media (drawReceived's fallback when no
+   * real artifact of theirs has landed), never in the player's own effects. */
+  let peerNicheEntries = [];
+  const peerNicheShownAt = new Map();
+  let peerNicheSeq = 0;
   let entries = [];       // hostEntries + localEntries + onlineEntries - what the deck indexes
   /* THE ONLINE DECK REFILLS (2026-09-24). The host fetches one wave per pick (about 24 stills,
    * 12 clips). Once most of that wave has been on screen the pool asks for the next one, ONCE per
@@ -265,6 +274,25 @@ export function createGoonMediaPool() {
   const view = (e) => ({
     kind: e.kind, name: e.name, url: e.url, provenance: 'local', acquire: () => acquire(e),
   });
+
+  /**
+   * One picture from the opponent's niches, least-recently-shown first (the peer pool's own
+   * rotation rule), or null when there are none. `provenance: 'niche'` so a caller can tell it
+   * from the player's own deck; it is NOT 'peer' (no sha, nothing to report or block by hash).
+   * `stamp` false is the preview's read: same pick, no rotation write.
+   */
+  function drawPeerNiche(kind, stamp) {
+    const pool = peerNicheEntries.filter((e) => e.kind === kind);
+    if (!pool.length) return null;
+    let best = pool[0];
+    for (const e of pool) if ((peerNicheShownAt.get(e.url) || 0) < (peerNicheShownAt.get(best.url) || 0)) best = e;
+    if (stamp) peerNicheShownAt.set(best.url, ++peerNicheSeq);
+    const e = best;
+    return {
+      kind: e.kind, name: e.name, url: e.url, clip: e.clip, provenance: 'niche',
+      acquire: () => ({ url: e.url, release() {}, provenance: 'niche' }),
+    };
+  }
 
   /* ------------------------------------------------------------ received map */
 
@@ -472,6 +500,21 @@ export function createGoonMediaPool() {
 
     /** fn() once the online set is mostly shown (boot sends `media-more`). One ask per list. */
     setOnlineLowHandler(fn) { onOnlineLow = typeof fn === 'function' ? fn : null; },
+    /**
+     * Swap in the OPPONENT'S niche set (host `peer-media` frame): the whole current list every
+     * time, an empty or missing list takes it back out. Never touches the deck or `received`.
+     */
+    setPeerNicheLibrary(m) {
+      const src = m || {};
+      peerNicheEntries = [];
+      for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) peerNicheEntries.push(v); }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url, clip: true }); if (v) peerNicheEntries.push(v); }
+      peerNicheShownAt.clear();
+      return peerNicheEntries.length;
+    },
+
+    /** How many pictures the opponent's niches have landed here. */
+    peerNicheCount: () => peerNicheEntries.length,
 
     /** How many of the deck's entries came from the online flavour. */
     onlineCount: () => onlineEntries.length,
@@ -682,7 +725,8 @@ export function createGoonMediaPool() {
       const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
       if (!want) return null;
       const all = receivedViews(want);
-      if (!all.length) return null;
+      // Nothing of theirs has landed as a file: their NICHES are the next best thing to it.
+      if (!all.length) return drawPeerNiche(want, true);
       // Real footage if they have sent any this match; their gif loops if that is all there is.
       let pool = footageFirst(all, want);
       // …and, when the caller is paying per frame for it, a still ahead of an animation.
@@ -707,7 +751,7 @@ export function createGoonMediaPool() {
       const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
       if (!want) return null;
       const all = receivedViews(want);
-      if (!all.length) return null;
+      if (!all.length) return drawPeerNiche(want, false);
       // The SAME candidate set drawReceived would choose from, or the preview would advertise a
       // gif loop the render then refuses to play.
       return rotate(footageFirst(all, want));

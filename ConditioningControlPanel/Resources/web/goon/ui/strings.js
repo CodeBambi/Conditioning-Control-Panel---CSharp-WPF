@@ -38,7 +38,7 @@ export const S = Object.freeze({
     // The dimmed-Host note, and since 2026-08-05 the ONLY "this costs money"
     // sentence in the duel - sending stopped being one. Lowercase, an explanation
     // rather than a pitch, and it names the thing that is still free instead of stopping at "no".
-    hostNoLab: 'hosting and joining are a prime perk. practice is free.',
+    hostNoLab: 'hosting is a supporter perk. joining and practice are free.',
     join: 'Join with a code',
     practice: 'Practice',
     practiceNote: 'solo · scripted opponent',
@@ -1013,8 +1013,8 @@ export const S = Object.freeze({
        copy stays as the plain-notice fallback and still names what is free. */
     noHostAccess: {
       icon: '✦',
-      headline: '1v1 is a supporter perk',
-      line: 'Hosting and joining are for Tier 2 supporters. Practice against the bot is free, any time.',
+      headline: 'Hosting is a supporter perk',
+      line: 'Any paid tier can host. Joining a table is free, and so is practice against the bot.',
     },
     signIn: {
       icon: '🔑',
@@ -1321,7 +1321,7 @@ export const S = Object.freeze({
     haveCode: 'Have a code?',
     codeLabel: 'Invite code',
     codeJoin: 'Join',
-    chipPrime: 'PRIME',
+    chipPrime: 'SUPPORTER',
     chipFree: 'FREE',
     more: 'More',
     seated: 'SEATED',
@@ -1338,27 +1338,34 @@ export const S = Object.freeze({
     visAnyone: 'Anyone',
     visOff: 'Off',
     hintFriends: 'Your friends can see this table.',
-    hintAnyone: 'Every Prime player can see this table.',
+    hintAnyone: 'Every signed-in player can see this table.',
     hintOff: 'Hidden. Share the code to play.',
     share: 'Or share the code',
     shareNote: 'Works even with the table set to Off.',
     preview: 'What they see',
     previewOff: 'Nothing. The table is off the list. The code still works.',
     previewFriends: 'Shown under Friends to your friends only.',
-    previewAnyone: 'Shown under Anyone to every Prime player, friends first.',
+    previewAnyone: 'Shown under Anyone to every signed-in player, friends first.',
     you: 'you',
     close: 'Close the table',
     closed: 'Table closed',
     listFailed: 'The list did not take it. The code still works.',
   },
 
-  /* ------------------------------------------------------- the Prime sheet */
+  /* ---------------------------------------------- the patron sheet (hosting) */
+  /* Owner call 2026-09-24: any patron hosts, everyone signed in joins. The key stays `prime`
+     so every caller keeps its name; the copy is about hosting only. */
   prime: {
-    badge: 'PRIME SUBJECT',
-    headline: '1v1 is a Prime game',
-    line: 'Hosting and joining need Prime. Practice against the bot is free, any time.',
-    see: 'See Prime',
+    badge: 'BASIC SUBJECT',
+    headline: 'Hosting is for supporters',
+    line: 'Any paid tier can open a table. Joining one is free, and so is practice.',
+    see: 'See the tiers',
     practice: 'Play practice instead',
+  },
+
+  /* ------------------------------------------- the opponent's niches (peer-media) */
+  peerMedia: {
+    declined: 'their pictures come from reddit, and online pictures are off here. you see your own.',
   },
 
   /* --------------------------------------------------------------- toasts */
