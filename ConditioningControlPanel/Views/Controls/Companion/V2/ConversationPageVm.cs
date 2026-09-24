@@ -32,7 +32,7 @@ internal sealed class ConversationPageVm : CompanionObservable
     public CompanionRoomRuntimeVm Room => _room;
     public ObservableCollection<ConversationLine> Turns { get; } = new();
     public string Draft { get => _draft; set { Set(ref _draft, value ?? string.Empty); Raise(nameof(CanSend)); } }
-    public string Notice { get => _notice; private set { Set(ref _notice, value); Raise(nameof(HasNotice)); Raise(nameof(Face)); Raise(nameof(StatusColor)); } }
+    public string Notice { get => _notice; private set { Set(ref _notice, value); Raise(nameof(HasNotice)); Raise(nameof(Status)); Raise(nameof(Face)); Raise(nameof(StatusColor)); } }
     public bool HasNotice => Notice.Length > 0;
     public bool Busy { get => _busy; private set { Set(ref _busy, value); Raise(nameof(CanCompose)); Raise(nameof(CanSend)); Raise(nameof(Status)); Raise(nameof(Face)); Raise(nameof(StatusColor)); } }
     public bool CanCompose => !Busy;
@@ -63,7 +63,7 @@ internal sealed class ConversationPageVm : CompanionObservable
     public bool HasNoTurns => Turns.Count == 0;
     public string VoiceLabel => Loc.Get(_room.Hero.IsMuted ? "companion_v2_unmute" : "companion_v2_mute");
     public string StartLabel => Loc.Get(NeedsSignIn ? "companion_v2_signin" : "companion_v2_start");
-    public string Status => Busy ? Loc.Get("companion_v2_replying") : NeedsStart ? Loc.Get("companion_v2_off")
+    public string Status => Busy ? Loc.Get("companion_v2_replying") : HasNotice ? Loc.Get("companion_v2_reply_failed") : NeedsStart ? Loc.Get("companion_v2_off")
         : NeedsSignIn ? Loc.Get("companion_v2_signin_status") : DailyExhausted ? Loc.Get("companion_v2_error_limit")
         : !_room.Engine.IsHealthy && !string.IsNullOrEmpty(_room.Engine.StatusLine) ? _room.Engine.StatusLine : Loc.Get("companion_v2_ready");
     public bool ShowStart => NeedsStart || NeedsSignIn;
