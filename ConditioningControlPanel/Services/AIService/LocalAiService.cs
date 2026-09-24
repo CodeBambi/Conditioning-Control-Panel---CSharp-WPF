@@ -525,7 +525,7 @@ namespace ConditioningControlPanel.Services.AIService
                 var content = ExtractContent(body);
                 if (string.IsNullOrEmpty(content))
                 {
-                    App.Logger?.Warning("LocalAiService.SendAsync: empty content in 200 response (body {Bytes} bytes)", body?.Length ?? 0);
+                    App.Logger?.Warning("LocalAiService.SendAsync: empty content in 200 response (model={Model}, {Shape})", model, DescribeReplyShape(body));
                     Meter(AiMeter.OutcomeEmpty);
                     return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
                 }
@@ -555,6 +555,8 @@ namespace ConditioningControlPanel.Services.AIService
 
                 if (string.IsNullOrWhiteSpace(parsed.CleanText))
                 {
+                    // #1210: this path showed the fallback line with no trace in the log at all.
+                    App.Logger?.Warning("LocalAiService.SendAsync: reply cleaned to nothing (model={Model}, {Shape})", model, DescribeReplyShape(body));
                     Meter(AiMeter.OutcomeEmpty, content.Length);
                     return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
                 }
@@ -827,7 +829,7 @@ namespace ConditioningControlPanel.Services.AIService
                 var content = ExtractContent(body);
                 if (string.IsNullOrEmpty(content))
                 {
-                    App.Logger?.Warning("LocalAiService: empty content in 200 response (body {Bytes} bytes)", body?.Length ?? 0);
+                    App.Logger?.Warning("LocalAiService: empty content in 200 response (model={Model}, {Shape})", model, DescribeReplyShape(body));
                     if (isUser && _messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
                     Meter(AiMeter.OutcomeEmpty);
                     return GetFallbackResponse();
@@ -1044,6 +1046,36 @@ namespace ConditioningControlPanel.Services.AIService
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// #1210: a one-line shape of an Ollama reply for the log, never its text. An empty
+        /// content next to a long thinking field is a reasoning model that ignored think:false
+        /// and spent the budget on its scratchpad; done_reason=length says the cap ran out.
+        /// </summary>
+        internal static string DescribeReplyShape(string? body)
+        {
+            if (string.IsNullOrEmpty(body)) return "body 0 bytes";
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                var done = root.TryGetProperty("done_reason", out var dr) && dr.ValueKind == JsonValueKind.String
+                    ? dr.GetString() : null;
+                int content = 0, thinking = 0;
+                if (root.TryGetProperty("message", out var msg) && msg.ValueKind == JsonValueKind.Object)
+                {
+                    if (msg.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
+                        content = c.GetString()?.Length ?? 0;
+                    if (msg.TryGetProperty("thinking", out var t) && t.ValueKind == JsonValueKind.String)
+                        thinking = t.GetString()?.Length ?? 0;
+                }
+                return $"body {body.Length} bytes, done_reason={done ?? "none"}, content={content} chars, thinking={thinking} chars";
+            }
+            catch
+            {
+                return $"body {body.Length} bytes, not JSON";
+            }
         }
 
         private static string ExtractContent(string body)

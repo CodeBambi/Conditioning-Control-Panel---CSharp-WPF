@@ -258,6 +258,8 @@ namespace ConditioningControlPanel.Services.Descent
                     ? userNode["current_season"]?.Value<string>()
                     : null;
 
+                // The curve before the level: an adopt prices the server's total on OUR curve.
+                App.ProfileSync?.ApplyServerCurveEpoch(ProfileSyncService.ParseCurveEpoch(userNode["curve_epoch"]), "profile poll");
                 App.ProfileSync?.TryAdoptFromProfilePoll(level, xp.Value, season);
             }
             catch (Exception ex)

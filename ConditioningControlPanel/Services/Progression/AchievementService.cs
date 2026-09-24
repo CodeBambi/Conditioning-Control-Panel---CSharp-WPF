@@ -1013,19 +1013,29 @@ public class AchievementService : IDisposable
         _isDirty = true;
     }
     
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _alreadyUnlockedNoted = new();
+
+    /// <summary>True the first time an already-held achievement is re-asked for in this run.</summary>
+    internal static bool FirstAlreadyUnlockedNote(string achievementId) =>
+        _alreadyUnlockedNoted.TryAdd(achievementId, 0);
+
     /// <summary>
     /// Try to unlock an achievement (only fires event if not already unlocked)
     /// </summary>
     public bool TryUnlock(string achievementId)
     {
-        App.Logger?.Debug("TryUnlock called for: {Id}", achievementId);
-        
         if (_progress.IsUnlocked(achievementId))
         {
-            App.Logger?.Debug("Achievement {Id} already unlocked", achievementId);
+            // Once per id per run. Minute trackers and every bubble pop re-ask for an achievement
+            // they already hold, which wrote a line a second and pushed the useful lines out of
+            // bug reports (#1268 #1269).
+            if (FirstAlreadyUnlockedNote(achievementId))
+                App.Logger?.Debug("Achievement {Id} already unlocked (further repeats not logged)", achievementId);
             return false; // Already unlocked
         }
-        
+
+        App.Logger?.Debug("TryUnlock called for: {Id}", achievementId);
+
         if (!Achievement.All.TryGetValue(achievementId, out var achievement))
         {
             App.Logger?.Warning("Unknown achievement ID: {Id}", achievementId);

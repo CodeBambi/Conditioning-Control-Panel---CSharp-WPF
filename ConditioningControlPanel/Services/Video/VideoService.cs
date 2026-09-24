@@ -315,6 +315,13 @@ namespace ConditioningControlPanel.Services
         // no longer matches. Without this, panic during the message window announced "we're stopping,
         // you're safe" and then started another mandatory video ~2s later.
         private int _retryGeneration;
+        // One id per PlayVideo call (#1254-#1256). The guard timers and the 1.3s pre-roll timer
+        // capture it when armed and stand down when it no longer matches. The attention-check
+        // "try again" / "watch again" path used to leave the first video's safety timer running:
+        // it fired a few seconds into the replay and closed it, or fired inside the replay's
+        // pre-roll, after which the pre-roll still put the video on screen with nothing left
+        // tracking it, so its last frame stayed up for good.
+        private int _videoRunId;
         // True while THIS video holds an audio-duck ref (App.Audio.Duck is ref-counted). Balanced
         // 1:1 with the Duck in PlayVideo by an Unduck in CloseAll — every teardown path (natural end,
         // attention retry / troll "watch again" loop, engine Stop, ForceCleanup) runs through CloseAll,
@@ -2788,6 +2795,7 @@ namespace ConditioningControlPanel.Services
                 VerticalAlignment = VerticalAlignment.Stretch,
                 Background = Brushes.Black
             };
+            VideoHostBlackFill.Attach(win);   // letterbox is a native static control (#1258)
 
             var mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
             lock (_mediaPlayersLock)
@@ -3061,6 +3069,16 @@ namespace ConditioningControlPanel.Services
             // instead of looping retire/retry forever.
             if (!isVoutRetry) _voutRetryUsed = false;
 
+            // A new run owns the guards from here on. Stop whatever the last run left armed: the
+            // attention-check message path closes the windows without passing through Cleanup, so
+            // its safety / fallback / length-cap timers were still counting (#1254-#1256).
+            var runId = ++_videoRunId;
+            _safetyTimer?.Stop();
+            _fallbackSafetyTimer?.Stop();
+            _fallbackSafetyTimer = null;
+            _maxLenCapTimer?.Stop();
+            _maxLenCapTimer = null;
+
             _videoPlaying = true;
             _playbackStarted = false; // nothing is on screen yet — we are entering pre-roll
             _strictActive = strict;
@@ -3130,6 +3148,15 @@ namespace ConditioningControlPanel.Services
             delayTimer.Tick += (s, e) =>
             {
                 delayTimer.Stop();
+                // The run may have ended while we waited (panic, a stop, a stale guard) or been
+                // replaced by another. Starting it anyway put a video on screen that nothing owned,
+                // so no end, timer or skip could ever close it (#1256).
+                if (!ShouldStartAfterPreroll(runId, _videoRunId, _videoPlaying))
+                {
+                    VideoDiag.Log("VIDEO", $"prologue: delay timer ticked +{prologueSw.ElapsedMilliseconds}ms - SKIP, this run already ended");
+                    App.Logger?.Information("VideoService: pre-roll finished for a run that already ended - not starting {File}", Path.GetFileName(path));
+                    return;
+                }
                 VideoDiag.Log("VIDEO", $"prologue: delay timer ticked +{prologueSw.ElapsedMilliseconds}ms - starting playback");
                 App.Logger?.Debug("VideoService: Delay complete, calling StartVideoPlayback");
                 StartVideoPlayback(path, strict);
@@ -3436,6 +3463,8 @@ namespace ConditioningControlPanel.Services
                         VerticalAlignment = VerticalAlignment.Stretch,
                         Background = Brushes.Black
                     };
+                    // The letterbox is the native static control, not WPF: paint it black (#1258).
+                    VideoHostBlackFill.Attach(win);
                 }
                 VideoDiag.Log("VIDEO", $"win[{tag}]: surface built +{winSw.ElapsedMilliseconds}ms");
 
@@ -6060,6 +6089,16 @@ namespace ConditioningControlPanel.Services
         /// the strict gap. Called from every path that ends or replaces a run - the teardowns (Stop,
         /// ForceCleanup, Cleanup) and the start of any new video (PlayVideo, PlayUrl).
         /// </summary>
+        /// <summary>The pre-roll may only start playback for the run that armed it, and only
+        /// while that run is still live (#1256).</summary>
+        internal static bool ShouldStartAfterPreroll(int armedRunId, int currentRunId, bool videoPlaying)
+            => armedRunId == currentRunId && videoPlaying;
+
+        /// <summary>A guard timer armed by an earlier run must never act on the current one
+        /// (#1254, #1255).</summary>
+        internal static bool IsStaleGuardTick(int armedRunId, int currentRunId)
+            => armedRunId != currentRunId;
+
         private void CancelPendingRetry()
         {
             _strictRetryPending = false;
@@ -6071,6 +6110,12 @@ namespace ConditioningControlPanel.Services
             // CRITICAL: Set _videoPlaying to false BEFORE CloseAll() so strict mode
             // handlers don't cancel window closing (they check _videoPlaying in Closing event)
             _videoPlaying = false;
+            // The run is over; its guards go with it, or they fire into the retry (#1254-#1256).
+            _safetyTimer?.Stop();
+            _fallbackSafetyTimer?.Stop();
+            _fallbackSafetyTimer = null;
+            _maxLenCapTimer?.Stop();
+            _maxLenCapTimer = null;
             CloseAll(reason: "attention-check message");
 
             var screens = App.GetGlobalScreens();
@@ -6619,9 +6664,12 @@ namespace ConditioningControlPanel.Services
             _lastSafetyTimeMs = -1;
             _lastSafetyProgressUtc = DateTime.UtcNow;
 
-            _safetyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
+            var safetyRun = _videoRunId;
+            var safetyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
+            _safetyTimer = safetyTimer;
             _safetyTimer.Tick += (s, e) =>
             {
+                if (IsStaleGuardTick(safetyRun, _videoRunId)) { safetyTimer.Stop(); return; }
                 if (!_videoPlaying) { _safetyTimer?.Stop(); return; }
 
                 // #536: while a Deeper enhancement drives the clip it can loop or hold well past the
@@ -6727,9 +6775,12 @@ namespace ConditioningControlPanel.Services
         {
             _fallbackSafetyTimer?.Stop();
 
-            _fallbackSafetyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(MaxVideoFallbackSeconds) };
+            var fallbackRun = _videoRunId;
+            var fallbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(MaxVideoFallbackSeconds) };
+            _fallbackSafetyTimer = fallbackTimer;
             _fallbackSafetyTimer.Tick += (s, e) =>
             {
+                if (IsStaleGuardTick(fallbackRun, _videoRunId)) { fallbackTimer.Stop(); return; }
                 _fallbackSafetyTimer?.Stop();
                 if (_videoPlaying)
                 {
@@ -6761,9 +6812,12 @@ namespace ConditioningControlPanel.Services
             var maxSec = App.Settings?.Current?.VideoMaxDurationSeconds ?? 0;
             if (maxSec <= 0) return;
 
-            _maxLenCapTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(maxSec) };
+            var capRun = _videoRunId;
+            var capTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(maxSec) };
+            _maxLenCapTimer = capTimer;
             _maxLenCapTimer.Tick += (s, e) =>
             {
+                if (IsStaleGuardTick(capRun, _videoRunId)) { capTimer.Stop(); return; }
                 _maxLenCapTimer?.Stop();
                 _maxLenCapTimer = null;
                 if (_videoPlaying)
@@ -8354,7 +8408,7 @@ namespace ConditioningControlPanel.Services
             // Filter out disabled assets (blacklist approach).
             // Normalize for case-insensitive, separator-agnostic comparison so saved
             // entries don't slip past on Windows (case) or path-style mismatch.
-            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
+            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0 || App.Settings?.Current?.DisabledAssetFolders.Count > 0)
             {
                 var beforeCount = files.Count;
                 var basePath = App.EffectiveAssetsPath;
@@ -8362,10 +8416,11 @@ namespace ConditioningControlPanel.Services
                 var disabled = new HashSet<string>(
                     App.Settings.Current.DisabledAssetPaths.Select(Norm),
                     StringComparer.OrdinalIgnoreCase);
+                var folders = App.Settings.Current.DisabledAssetFolders.ToArray();
                 files = files.Where(f =>
                 {
                     var relativePath = Norm(Path.GetRelativePath(basePath, f));
-                    var isDisabled = disabled.Contains(relativePath);
+                    var isDisabled = disabled.Contains(relativePath) || AssetFolderExclusion.IsUnderAny(relativePath, folders);
                     if (isDisabled)
                     {
                         App.Logger?.Debug("VideoService: Video disabled by user: {Path}", relativePath);

@@ -168,7 +168,6 @@ namespace ConditioningControlPanel
                 VideoContainer.Visibility = Visibility.Visible;
 
                 _mediaPlayer = new MediaPlayer(libVLC);
-                _mediaPlayer.Mute = true; // muted tutorial loop
                 _mediaPlayer.EnableHardwareDecoding = true;
 
                 _mediaPlayer.EndReached += (s, e) =>
@@ -186,6 +185,8 @@ namespace ConditioningControlPanel
 
                 _videoView.MediaPlayer = _mediaPlayer;
                 _media = new Media(libVLC, _clipPath, FromType.FromPath);
+                // Muted tutorial loop, silent through :no-audio (Services.LibVlcSilence).
+                _media.AddOption(Services.LibVlcSilence.NoAudioOption);
                 _mediaPlayer.Play(_media);
                 // ------------------------------------------------------------------
             }
