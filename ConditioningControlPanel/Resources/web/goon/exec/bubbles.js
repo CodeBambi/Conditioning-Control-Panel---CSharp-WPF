@@ -397,8 +397,8 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     return n;
   }
 
-  /** One bubble. `seed` scatters it mid-rise so a (re)fill does not march in. */
-  function spawn(seed) {
+  /** Every bubble enters from below the field, including the opening wave. */
+  function spawn() {
     prune();
     if (targetCount <= 0) return;
     const host = layer();
@@ -421,7 +421,6 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     wrap.className = 'gg-bubble-wrap';
     wrap.style.setProperty('left', `${spawnPct.toFixed(1)}%`);
     wrap.style.setProperty('--gg-rise', `${rise.toFixed(2)}s`);
-    if (seed) wrap.style.setProperty('animation-delay', `${(-rand(0, rise)).toFixed(2)}s`);
 
     const bubble = document.createElement('div');
     bubble.className = `gg-bubble gg-bubble--${kind}`;
@@ -482,9 +481,9 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     if (topupTimer && typeof topupTimer.unref === 'function') topupTimer.unref();
     if (!seeded) {
       seeded = true;
-      // Seed the first few mid-rise so the field does not fade in one at a time.
+      // Stagger the opening wave. Each bubble rises from below the viewport.
       const seedN = Math.min(3, targetCount);
-      for (let i = 0; i < seedN; i++) soon(() => { if (targetCount > 0) spawn(true); }, i * 180);
+      for (let i = 0; i < seedN; i++) soon(() => { if (targetCount > 0) spawn(); }, i * 300);
     }
   }
 
