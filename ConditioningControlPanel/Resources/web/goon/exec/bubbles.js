@@ -1,3 +1,4 @@
+import { registerBubble } from './flashCollision.js';
 /* ============================================================================
  * exec/bubbles.js — GoonElement.Bubbles (3) + GoonPayloadKind.BubbleSwarm (2).
  *
@@ -331,12 +332,13 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
 
   /** Drop bookkeeping for nodes the layer tore out from under us (layers.stopAll). */
   function prune() {
-    for (const rec of Array.from(live)) if (!rec.wrap || !rec.wrap.isConnected) live.delete(rec);
+    for (const rec of Array.from(live)) if (!rec.wrap || !rec.wrap.isConnected) { rec.unbindHit?.(); live.delete(rec); }
   }
 
   function recycle(rec) {
     if (!live.has(rec)) return;
     live.delete(rec);
+    rec.unbindHit?.();
     try { rec.wrap.remove(); } catch (_e) { /* ignore */ }
     if (targetCount > 0 && live.size < targetCount) spawn(false);
   }
@@ -433,6 +435,7 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
 
     const rec = { wrap, bubble, kind, popped: false, size, fromPayload };
     live.add(rec);
+    rec.unbindHit = registerBubble(bubble, (x, y) => { if (!rec.popped) pop(rec, x, y); });
 
     // e.target guard: the bubble's own pop animation bubbles up through the wrap.
     wrap.addEventListener('animationend', (e) => {
@@ -910,6 +913,7 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
   }
 
   function pop(rec, x, y) {
+    rec.unbindHit?.();
     rec.popped = true;
     rec.bubble.classList.add('is-pop');
     sparkleBurst(x, y, rec.kind);
