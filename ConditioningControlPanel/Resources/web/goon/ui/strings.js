@@ -76,8 +76,8 @@ export const RAW = {
          owner deleted the charge requirement. They now teach the loop that
          actually exists: pop bubbles, get items, throw when the cooldown lets
          you. STILL EXACTLY SIX BULLETS - do not let this become seven. */
-      'holding still earns points; popping bubbles drops the items you throw.',
-      'throw one whenever your cooldown is up. the receiver decides what it can run.',
+      'Pop bubbles for items. Drag or fling GIFs through bubbles to pop them too.',
+      'Rare lock cards block the field. Type before time runs out to claim the points. Each typo lowers the prize.',
       'mercy is always one key away. escape, any phase, no confirmation.',
       'if nobody breaks before the clock runs out, the higher score wins.',
     ],
@@ -1247,10 +1247,10 @@ export const RAW = {
        multipliers were removed from this desk on purpose, so "1 pt/s" would be
        a fourth readout of a number the owner deleted three of. "still here" is
        the honest version: points tick for as long as you have not tapped out. */
-    goal: 'outlast them. points tick up every second you are still here - they tap out, or you are ahead when the clock runs out.',
+    goal: 'Score by sending effects, popping bubbles and completing challenges. Lead when time runs out, or make them tap out.',
 
     /** The first bubble that banks heat. Says what popping is FOR. */
-    pop: 'popping bubbles fills your heat gauge. the fuller it is, the more likely the next pop drops you something to throw.',
+    pop: 'Pop bubbles to fill heat and earn items. Drag or fling GIFs through bubbles for more pops.',
     /**
      * The first slot a drop ever arms. BOTH gestures, because the drawer is shut
      * by default on a phone (there is no number row there) and open by default
@@ -1294,7 +1294,7 @@ export const RAW = {
     hintsNote: 'the one-line explainers that fire the first time each part of a duel happens to you. each one appears once, ever. off, none of them do.',
 
     /** The lead line over the "how it works" bullets (ui/screens/title.js). */
-    howGoal: 'the goal: outlast them. they tap out, or you are ahead when the clock runs out.',
+    howGoal: 'Score by sending effects, popping bubbles and completing challenges. Lead when time runs out, or make them tap out.',
   },
 
   /* --------------------------------------------------------- open tables
