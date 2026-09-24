@@ -732,7 +732,22 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Unified user ID that links Patreon and Discord accounts together
         /// </summary>
-        public static string? UnifiedUserId { get; set; }
+        private static string? _unifiedUserId;
+        public static event EventHandler? UnifiedIdentityChanged;
+        public static string? UnifiedUserId
+        {
+            get => _unifiedUserId;
+            set
+            {
+                if (string.Equals(_unifiedUserId, value, StringComparison.Ordinal)) return;
+                _unifiedUserId = value;
+                foreach (EventHandler handler in UnifiedIdentityChanged?.GetInvocationList() ?? Array.Empty<Delegate>())
+                {
+                    try { handler(null, EventArgs.Empty); }
+                    catch (Exception ex) { Logger?.Debug("Identity observer failed ({Kind})", ex.GetType().Name); }
+                }
+            }
+        }
 
         /// <summary>
         /// Snapshot of the UnifiedUserId as restored from settings at startup, captured

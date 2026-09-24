@@ -211,6 +211,19 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         }
 
         /// <summary><c>%LOCALAPPDATA%\ConditioningControlPanel\companion\memory.json</c>.</summary>
+        internal static string PreviewAccountDirectory(string? account, string? root = null)
+        {
+            var bytes = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(account ?? "local"));
+            return Path.Combine(root ?? CompanionDirectory, "preview-accounts", Convert.ToHexString(bytes).ToLowerInvariant());
+        }
+
+        internal static MemoryStore ForPreviewAccount(string? account, string? root = null)
+        {
+            var path = Path.Combine(PreviewAccountDirectory(account, root), "memory.json");
+            return root != null ? new MemoryStore(path)
+                : new MemoryStore(path, null, null, mirrorAppSignals: true);
+        }
+
         public static string DefaultMemoryPath => Path.Combine(CompanionDirectory, "memory.json");
 
         /// <summary>The companion's private data folder. Not the assets path, not a mod folder.</summary>

@@ -14,6 +14,7 @@ public sealed class EmiTubePreviewTests
         => Assert.Equal(expected, EmiTubePreview.PoseForMood(mood));
 
     [Theory]
+    [InlineData(0, 0, true, 8)]
     [InlineData(1, 0, true, 8)]
     [InlineData(3, 0, true, 8)]
     [InlineData(4, 1, true, 4)]
@@ -22,6 +23,16 @@ public sealed class EmiTubePreviewTests
     [InlineData(3, 0, false, 3)]
     public void DefaultMigrationDoesNotReplaceOtherCharacters(int saved, int companion, bool housePreview, int expected)
         => Assert.Equal(expected, EmiTubePreview.InitialSet(saved, companion, housePreview));
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void ExplicitOldLookSurvivesRelaunchAfterFirstDefault(int selected)
+    {
+        Assert.Equal(8, EmiTubePreview.InitialSet(0, 0, true, choiceMade: false));
+        Assert.Equal(selected, EmiTubePreview.InitialSet(selected, 0, true, choiceMade: true));
+    }
 
     [Theory]
     [InlineData(true, 8, true, true, true)]

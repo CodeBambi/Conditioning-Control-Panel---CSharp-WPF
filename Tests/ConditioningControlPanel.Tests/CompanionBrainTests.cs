@@ -106,6 +106,76 @@ public class CompanionBrainTests
     }
 
     [Fact]
+    public async Task Preview_AccountSwitchSeparatesHistoryFactsAndVisibleMemoryWithoutDeletingEitherOwner()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ccp-account-memory-" + Guid.NewGuid());
+        Directory.CreateDirectory(directory);
+        string account = "account-A";
+        var legacyPath = Path.Combine(directory, "memory.json");
+        File.WriteAllText(legacyPath, "legacy explicit facts preserved");
+        try
+        {
+            using (var owned = MemoryStore.ForPreviewAccount(account, directory))
+                owned.AddFact("A_ONLY_PREFERENCE_733 violet tea", MemoryFactKind.Preference, source: MemoryFact.SourceUserEdited);
+            var aPath = MemoryStore.PreviewAccountDirectory(account, directory);
+            new CompanionSessionStore(Path.Combine(aPath, "session.json"), Path.Combine(aPath, "no-import.json")).Save(new[]
+            {
+                CompanionTurn.Create(TurnKind.UserChat, "A_ONLY_HISTORY_733 from yesterday"),
+                CompanionTurn.Create(TurnKind.AssistantChat, "I remember that detail")
+            });
+            var transport = new FakeTransport();
+            using (var brain = new CompanionBrain(transport, preview: () => true,
+                contextStamp: () => account, accountIdentity: () => account, accountDirectory: directory))
+            {
+                Assert.Single(brain.Memory.GetFacts());
+                Assert.Equal(2, brain.Session.Turns.Count);
+                account = "account-B";
+                brain.EnsureCurrentAccount(); // Same seam used before opening the memory UI.
+                Assert.Empty(brain.Memory.GetFacts());
+                Assert.Empty(brain.Session.Turns);
+                var result = await brain.ChatAsync("Hello from B");
+                Assert.True(result.IsAiGenerated);
+                Assert.DoesNotContain("A_ONLY_", string.Join("\n", transport.Sends.Last().Messages.Select(m => m.Content)));
+                brain.Flush();
+                account = "account-A";
+                brain.EnsureCurrentAccount();
+                Assert.Contains("A_ONLY_PREFERENCE_733", Assert.Single(brain.Memory.GetFacts()).Text);
+                Assert.Contains(brain.Session.Turns, t => t.Text.Contains("A_ONLY_HISTORY_733"));
+                Assert.DoesNotContain(brain.Session.Turns, t => t.Text.Contains("Hello from B"));
+            }
+            Assert.Equal("legacy explicit facts preserved", File.ReadAllText(legacyPath));
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public void StaleMemorySheetCannotWipeAnotherAccount()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ccp-stale-memory-sheet-" + Guid.NewGuid());
+        string account = "A";
+        try
+        {
+            using var brain = new CompanionBrain(new FakeTransport(), preview: () => true,
+                accountIdentity: () => account, contextStamp: () => account, accountDirectory: directory);
+            brain.Memory.AddFact("A fact", MemoryFactKind.Preference);
+            var oldMemory = brain.Memory;
+            var oldSheetAction = brain.CaptureForgetAction(oldMemory);
+            account = "B";
+            brain.EnsureCurrentAccount();
+            brain.Memory.AddFact("B fact", MemoryFactKind.Preference);
+            oldSheetAction();
+            brain.CaptureForgetAction(oldMemory)();
+            Assert.Equal("B fact", Assert.Single(brain.Memory.GetFacts()).Text);
+            account = "A";
+            brain.EnsureCurrentAccount();
+            Assert.Equal("A fact", Assert.Single(brain.Memory.GetFacts()).Text);
+            brain.CaptureForgetAction()();
+            Assert.Empty(brain.Memory.GetFacts());
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Fact]
     public async Task Preview_ForegroundDoesNotWaitForUncooperativeSummaryTransport()
     {
         var directory = Path.Combine(Path.GetTempPath(), "ccp-summary-preemption-" + Guid.NewGuid());

@@ -11,6 +11,18 @@
    <Setter Property="Foreground" Value="#FAF4FF"/><Setter Property="Background" Value="#33243E"/>
    <Setter Property="Padding" Value="13,8"/><Setter Property="Margin" Value="0,0,8,6"/>
    <Setter Property="BorderBrush" Value="#66506E"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+     <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/>
+    </Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#A184B2"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#DABAE8"/></Trigger>
+     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="#61416F"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Chrome" Property="Opacity" Value="0.45"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
   </Style>
   <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#F4ECF8"/></Style>
  </UserControl.Resources>
@@ -56,7 +68,13 @@
       <ItemsControl x:Name="Messages" ItemsSource="{Binding Turns}">
        <ItemsControl.ItemTemplate>
         <DataTemplate>
-         <Border CornerRadius="14" Padding="16" Margin="0,0,6,12" Background="#251A30">
+         <Border CornerRadius="14" Padding="16">
+          <Border.Style><Style TargetType="Border">
+           <Setter Property="Background" Value="#251A30"/><Setter Property="Margin" Value="0,0,40,12"/>
+           <Style.Triggers><DataTrigger Binding="{Binding IsUser}" Value="True">
+            <Setter Property="Background" Value="#362740"/><Setter Property="Margin" Value="60,0,6,12"/>
+           </DataTrigger></Style.Triggers>
+          </Style></Border.Style>
           <StackPanel>
            <DockPanel Margin="0,0,0,6">
             <Button DockPanel.Dock="Right" Content="{loc:Str companion_v2_copy}" Tag="{Binding Text}" Click="Copy_Click" FontSize="11" Padding="7,3" Margin="0"/>
@@ -96,9 +114,14 @@
     </Border>
     <Grid>
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <Grid>
      <TextBox x:Name="Composer" Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding Busy}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="50" MaxHeight="130" VerticalScrollBarVisibility="Auto" Background="#251A30" Foreground="#FAF4FF" CaretBrush="#FAF4FF" BorderBrush="#786184" Padding="12" FontSize="15" PreviewKeyDown="Composer_KeyDown" AutomationProperties.Name="{loc:Str companion_v2_input}"/>
+      <TextBlock Text="{loc:Str companion_v2_input}" Foreground="#BFAEC9" Margin="13,11,13,0" VerticalAlignment="Top" IsHitTestVisible="False">
+       <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Draft.Length}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+      </TextBlock>
+     </Grid>
      <StackPanel Grid.Column="1" Margin="10,0,0,0">
-      <Button Content="{loc:Str companion_v2_send}" Click="Send_Click" IsEnabled="{Binding CanCompose}" Background="#61416F" Margin="0"/>
+      <Button Content="{loc:Str companion_v2_send}" Click="Send_Click" IsEnabled="{Binding CanSend}" Background="#61416F" Margin="0"/>
       <Button Content="{loc:Str companion_v2_stop}" Click="Stop_Click" Visibility="{Binding Busy, Converter={StaticResource Visible}}" Margin="0,4,0,0"/>
      </StackPanel>
     </Grid>

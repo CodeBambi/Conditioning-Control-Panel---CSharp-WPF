@@ -6,8 +6,22 @@ public static class EmiTubePreview
     public const int Set = 8;
     public static bool Available => CompanionExperience.IsV2Enabled && App.Mods?.IsCCPDefault == true;
     public static bool IsEmi(int set) => Available && set == Set;
-    public static int InitialSet(int savedSet, int companionId, bool available)
-        => available && companionId == 0 && savedSet is >= 1 and <= 3 ? Set : savedSet;
+    public static int InitialSet(int savedSet, int companionId, bool available, bool choiceMade = false)
+        => available && !choiceMade && companionId == 0 && savedSet is >= 0 and <= 3 ? Set : savedSet;
+
+    internal static int RestoreChoice(int savedSet)
+    {
+        var settings = App.Settings?.Current;
+        if (!Available || settings == null) return savedSet;
+        var selected = InitialSet(savedSet, settings.ActiveCompanionId, true, settings.CompanionEmiPreviewChoiceMade);
+        if (!settings.CompanionEmiPreviewChoiceMade)
+        {
+            settings.SelectedAvatarSet = selected;
+            settings.CompanionEmiPreviewChoiceMade = true;
+            App.Settings?.Save();
+        }
+        return selected;
+    }
     public static bool SuppressesDesk(bool available, int set, bool visible, bool attached)
         => available && set == Set && visible && attached;
     public static int PoseForMood(string? mood)

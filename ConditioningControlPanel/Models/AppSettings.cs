@@ -344,13 +344,21 @@ namespace ConditioningControlPanel.Models
 
         private int _selectedAvatarSet = 0; // 0 = auto (use max unlocked)
         /// <summary>
-        /// User's selected avatar set (1-6). 0 means auto-select highest unlocked.
+        /// User's selected avatar set. 0 means auto-select highest unlocked.
         /// </summary>
         public int SelectedAvatarSet
         {
             get => _selectedAvatarSet;
-            set { _selectedAvatarSet = Math.Clamp(value, 0, 7); OnPropertyChanged(); }
+            set
+            {
+                _selectedAvatarSet = Math.Clamp(value, 0,
+                    Services.Companion.CompanionExperience.IsV2Enabled ? int.MaxValue : 7);
+                OnPropertyChanged();
+            }
         }
+
+        /// <summary>Local preview migration latch. Ignored outside the companion preview.</summary>
+        public bool CompanionEmiPreviewChoiceMade { get; set; }
 
         private bool _welcomed = false;
         public bool Welcomed
