@@ -42,6 +42,7 @@ import { peerRenderLog, resetPeerRenderLog } from './exec/videos.js';
 // that obey it) and the PREF lives in ui/prefs.js (`perfMode`); this file is
 // where they meet, because boot imports both tiers by charter — see buildApp.
 import { applyPerfTier } from './exec/perfTier.js';
+import { mountBackground } from './exec/background.js';
 
 import { GoonMatchService } from './core/match.js';
 import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
@@ -361,6 +362,7 @@ const mediaFlavour = (() => {
       if (!session.media || !next) return false;
       if (!force && sameMediaState(session.media, next)) return false;
       session.media = copy(next);
+      try { mountBackground()?.setFlavour(session.media.flavour); } catch (_e) { /* scenery only */ }
       const frame = mediaFlavourFrame(session.media);
       try { bridge.send(frame); } catch (_e) { /* a pick is never load-bearing */ }
       bridge.log('media-flavour: ' + (frame.flavour || '-') + ' online=' + frame.online + ' subs=' + frame.subs.join(','));
@@ -2417,6 +2419,8 @@ function buildApp() {
    * 'auto' needs the detector, which lives in exec/ (see the pref's banner). */
   applyPerfTier(prefs.get('perfMode'));
   prefs.subscribe((key, value) => { if (key === 'perfMode') applyPerfTier(value); });
+  /* The living backdrop on #gg-bg: tinted by the flavour, alive with the player's heat. */
+  try { mountBackground()?.setFlavour(session.media && session.media.flavour); } catch (_e) { /* scenery only */ }
   audio = createAudio({ prefs, logger });
   toasts = createToasts({ prefs });
   hitStamps = createHitStamps({ audio, prefs, logger });
