@@ -19,6 +19,7 @@ import { createLedger, el } from '../router.js';
 import { S } from '../strings.js';
 import { burst, centreOf, isCalm, play, shake } from '../juiceDom.js';
 import { THUD_MS } from '../juice.js';
+import { mountStartGuide } from '../startGuide.js';
 
 const FALLBACK_MS = 5000;
 
@@ -49,6 +50,24 @@ export function mount(container, ctx) {
     numeral,
   ]);
   container.appendChild(stage);
+
+  /* HOW TO WIN (ui/startGuide.js): the three ways to score, over the count.
+   * Inside the stage on purpose: it lives and dies with this screen, so the
+   * router's leave at Live is its OUT and nothing here can outlast the clock.
+   * It reads the same names the countdown does and never touches the clock;
+   * `has-guide` only moves the numeral to the foot so both can be read. */
+  let guide = null;
+  try {
+    guide = mountStartGuide({
+      host: stage,
+      you: match?.localDisplayName || null,
+      them: match?.opponent?.displayName || null,
+    });
+    if (guide) stage.classList.add('has-guide');
+  } catch (e) {
+    guide = null;
+    try { ledger.logger?.warn?.('[GG countdown] start guide failed to mount: ' + ((e && e.message) || e)); } catch (_e) { /* ignore */ }
+  }
 
   const localDeadline = Date.now() + FALLBACK_MS;
   let lastShown = null;
@@ -111,7 +130,15 @@ export function mount(container, ctx) {
   // clock crosses the second, and the ledger cancels it mid-flight on unmount.
   ledger.frame(() => { paint(); return true; });
 
-  return { unmount() { ledger.dispose(); } };
+  return {
+    unmount() {
+      ledger.dispose();
+      // The router clears the section too; this is the belt for a caller that
+      // unmounts by hand and keeps the node (a test, a stub host).
+      try { guide?.remove(); } catch (_e) { /* gone */ }
+      guide = null;
+    },
+  };
 }
 
 export default { mount };
