@@ -339,6 +339,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 {
                     type = "init",
                     protocol = Protocol,
+                    // The app's own language code ("en", "pt-BR", "zh-CN", ...). The page picks
+                    // its copy table from this; an unknown code falls back to English there.
+                    lang = App.Settings?.Current?.Language ?? "en",
                     identity = new
                     {
                         unifiedId = App.UnifiedUserId ?? "",

@@ -15,6 +15,10 @@
  * ==========================================================================*/
 
 import { GoonElement } from '../core/contracts.js';
+import { deck, tpl, one } from '../core/i18n.js';
+
+/** The pick for a line whose wording changes when its name is missing. */
+const named = (v) => (v ? 'named' : 'anon');
 
 /** mm:ss for a millisecond duration. Negative and NaN clamp to 0:00. */
 export function mmss(ms) {
@@ -27,10 +31,15 @@ export function mmss(ms) {
 /** "1 min" / "12 min" - the consent slider's value chip. */
 export function minutes(sec) {
   const m = Math.max(1, Math.round((Number(sec) || 0) / 60));
-  return m + ' min';
+  return S.units.min(m);
 }
 
-export const S = Object.freeze({
+export const RAW = {
+  /* Units the helpers above format with. */
+  units: {
+    min: tpl('{n} min', (n) => ({ n })),
+  },
+
   /* ---------------------------------------------------------------- title */
   title: {
     kicker: '1v1 · endurance duel · first to break loses',
@@ -83,9 +92,9 @@ export const S = Object.freeze({
     copied: 'Copied',
     waiting: 'Waiting for your opponent…',
     cancel: 'Cancel',
-    expiresIn: (ms) => 'expires in ' + mmss(ms),
+    expiresIn: tpl('expires in {time}', (ms) => ({ time: mmss(ms) })),
     expired: 'this code expired. mint a new one.',
-    inviteLine: (code) => 'Goon Game duel - code ' + code + ' (expires in 5 min)',
+    inviteLine: tpl('Goon Game duel - code {code} (expires in 5 min)', (code) => ({ code })),
     /* --- the shareable link (ui/inviteLink.js). The PRIMARY copy button: a
        code is a fine thing to read aloud and a miserable thing to thumb into a
        phone, and the link opens straight into the room with nothing to type.
@@ -94,7 +103,7 @@ export const S = Object.freeze({
     copyLink: 'Copy invite link',
     copiedLink: 'Link copied',
     linkNote: 'the link opens the game and joins this room - no typing at their end.',
-    inviteLinkLine: (url) => 'Goon Game duel - tap to join: ' + url + ' (expires in 5 min)',
+    inviteLinkLine: tpl('Goon Game duel - tap to join: {url} (expires in 5 min)', (url) => ({ url })),
   },
 
   /* ----------------------------------------------------------------- join */
@@ -132,9 +141,9 @@ export const S = Object.freeze({
     toyCap: 'Toy cap',
     toyCapDisabled: 'No toy connected',
     gap: 'Payload spacing',
-    gapValue: (sec) => '1 payload / ' + sec + 's',
+    gapValue: tpl('1 payload / {sec}s', (sec) => ({ sec })),
     confirm: "I'm in",
-    confirmed: (name) => 'Ready - waiting for ' + (name || 'them'),
+    confirmed: tpl({ named: 'Ready - waiting for {name}', anon: 'Ready - waiting for them' }, (name) => ({ name }), named),
     changed: 'Settings changed - both of you confirm again.',
     leave: 'Leave',
     lampYou: 'you',
@@ -207,7 +216,7 @@ export const S = Object.freeze({
        whether anybody had arrived; this is the difference between a dead room
        and a room where somebody is busy. --- */
     eyebrowPicking: 'they are getting set up',
-    prepPicking: (name) => (name || 'they') + ' joined - picking their media…',
+    prepPicking: tpl({ named: '{name} joined - picking their media…', anon: 'they joined - picking their media…' }, (name) => ({ name }), named),
   },
   /* --- GAME NIGHT: the song (ui/screens/songRow.js). The match lasts as long
      as the song. One row, one paste box, skip is the default. --- */
@@ -223,7 +232,7 @@ export const S = Object.freeze({
     empty: 'paste a track link first.',
     refusedPage: 'that is a page link, not a track link. open it over there and copy the track link.',
     refusedHost: 'only bambicloud track links work here.',
-    picked: (title, clock) => (title || 'a song') + ' · ' + clock,
+    picked: tpl({ named: '{title} · {clock}', anon: 'a song · {clock}' }, (title, clock) => ({ title, clock }), named),
     lengthHost: 'match length follows the song.',
     lengthGuest: 'their pick. the match lasts as long as it does.',
   },
@@ -258,16 +267,16 @@ export const S = Object.freeze({
     lastTitle: 'last opponent',
     lastNone: 'nobody yet - whoever you duel next shows up here.',
     lastClear: 'forget them',
-    messageOn: (name) => 'Message ' + (name || 'them') + ' on Discord',
+    messageOn: tpl({ named: 'Message {name} on Discord', anon: 'Message them on Discord' }, (name) => ({ name }), named),
     /** The recap's warmer variant, offered in the moment it means something. */
-    ggMessage: (name) => 'GG! Message ' + (name || 'them'),
+    ggMessage: tpl({ named: 'GG! Message {name}', anon: 'GG! Message them' }, (name) => ({ name }), named),
     dmShort: 'DM',
 
     agoNow: 'just now',
     agoUnknown: 'earlier',
-    agoMinutes: (n) => n + ' min ago',
-    agoHours: (n) => n + (n === 1 ? ' hour ago' : ' hours ago'),
-    agoDays: (n) => n + (n === 1 ? ' day ago' : ' days ago'),
+    agoMinutes: tpl('{n} min ago', (n) => ({ n })),
+    agoHours: tpl({ one: '{n} hour ago', other: '{n} hours ago' }, (n) => ({ n }), one),
+    agoDays: tpl({ one: '{n} day ago', other: '{n} days ago' }, (n) => ({ n }), one),
 
     /** Practice mode's opponent. Tile avatar, no DM - it is not a person. */
     practiceBot: 'Practice Bot',
@@ -285,7 +294,7 @@ export const S = Object.freeze({
     dmConfirm: {
       icon: '💬',
       headline: 'Open Discord?',
-      line: (name) => 'This leaves the duel and opens ' + (name || 'their') + ' profile in your browser.',
+      line: tpl({ named: 'This leaves the duel and opens {name} profile in your browser.', anon: 'This leaves the duel and opens their profile in your browser.' }, (name) => ({ name }), named),
       go: 'Open Discord',
       cancel: 'Stay here',
     },
@@ -315,9 +324,9 @@ export const S = Object.freeze({
     theirsOff: 'they switched this off',
     alwaysOn: 'always on',
     alwaysOnWhy: 'bubbles run the whole match, for both of you. they build.',
-    pool: (n) => 'you both get ' + n + ' effect' + (n === 1 ? '' : 's') + ' + bubbles',
-    tooFewYours: (min) => 'keep at least ' + min + ' switched on.',
-    tooFewShared: (n) => 'you two only agree on ' + n + ' - one of you has to open something up.',
+    pool: tpl({ one: 'you both get {n} effect + bubbles', other: 'you both get {n} effects + bubbles' }, (n) => ({ n }), one),
+    tooFewYours: tpl('keep at least {min} switched on.', (min) => ({ min })),
+    tooFewShared: tpl('you two only agree on {n} - one of you has to open something up.', (n) => ({ n })),
     changed: 'something moved - both of you sign again.',
     rolled: 'the running order is rolled from the match seed. same for both of you.',
   },
@@ -335,8 +344,8 @@ export const S = Object.freeze({
     vanished: 'They vanished.',
     disputed: 'Results disagree - both were recorded.',
     unconfirmed: 'Unconfirmed - waiting on the other side.',
-    mercyLine: (name, ms) => (name || 'they') + ' pressed mercy at ' + mmss(ms) + '.',
-    sdLine: (a, b) => 'The clock ran out, ' + a + '-' + b + '.',
+    mercyLine: tpl({ named: '{name} pressed mercy at {time}.', anon: 'they pressed mercy at {time}.' }, (name, ms) => ({ name, time: mmss(ms) }), named),
+    sdLine: tpl('The clock ran out, {a}-{b}.', (a, b) => ({ a, b })),
     abandonLine: 'Connection lost for a minute.',
     drawLine: 'You both let go at the same moment.',
     scoreline: 'scoreline',
@@ -347,10 +356,10 @@ export const S = Object.freeze({
      * multiplier because attention is the only part of the formula that was
      * ever yours to move: the pool bonus was identical for both of you. */
     scoreFineprint: '1 pt/s, for as long as your attention holds',
-    survived: (ms) => 'survived ' + mmss(ms),
+    survived: tpl('survived {time}', (ms) => ({ time: mmss(ms) })),
     payloads: 'payload log',
     noPayloads: 'nothing crossed the wire.',
-    showAll: (n) => 'Show all (' + n + ')',
+    showAll: tpl('Show all ({n})', (n) => ({ n })),
     titles: 'titles',
     rematch: 'Rematch',
     rematchSoon: 'soon',
@@ -394,9 +403,10 @@ export const S = Object.freeze({
        Rendered BEFORE submitting, not as a receipt afterwards: somebody who is
        upset enough to need this must not have to file a file-report first to
        find out that email exists. --- */
-    reportEmail: (name) => (name
-      ? 'for anything serious, email support@cclabs.app - send screenshots of what happened and the name of the player you were with (' + name + ').'
-      : 'for anything serious, email support@cclabs.app - send screenshots of what happened and the name of the player you were with.'),
+    reportEmail: tpl({
+      named: 'for anything serious, email support@cclabs.app - send screenshots of what happened and the name of the player you were with ({name}).',
+      anon: 'for anything serious, email support@cclabs.app - send screenshots of what happened and the name of the player you were with.',
+    }, (name) => ({ name }), named),
 
     /* --- the "so what WAS that" card. STANDALONE ONLY: it is written for the
        phone joiner who arrived from an invite link, endured a match and has
@@ -409,13 +419,13 @@ export const S = Object.freeze({
   },
 
   /** Locally computed cosmetics. Nothing here reaches the server. */
-  titles: Object.freeze({
+  titles: {
     graceful: { name: 'Graceful', why: 'went eight minutes, then bowed out on your own terms.' },
     ironEdge: { name: 'Iron Edge', why: 'the clock broke before you did.' },
     stoneWall: { name: 'Stone Wall', why: 'four of theirs, straight through, no flinching.' },
     untouchable: { name: 'Untouchable', why: 'nothing they threw ever reached you.' },
     gg: { name: 'GG', why: 'broke, but never looked away.' },
-  }),
+  },
 
   /* ------------------------------------------------- the report card mechanics
    * The five REASON LABELS are written for a player who has just seen something
@@ -437,21 +447,21 @@ export const S = Object.freeze({
     ],
     /** `other` is the one reason a moderator cannot act on without words. */
     noteHead: 'tell us what it is',
-    noteHint: (max) => 'up to ' + max + ' characters.',
+    noteHint: tpl('up to {max} characters.', (max) => ({ max })),
     notePlaceholder: 'in your own words…',
     noteNeeded: 'a line or two, so a moderator knows what they are looking at.',
 
     submit: 'send report',
     submitting: 'sending…',
     /** The id is a handle for a follow-up, not a receipt to celebrate. */
-    done: (id) => 'report sent - id ' + (id || 'unknown'),
+    done: tpl({ named: 'report sent - id {id}', anon: 'report sent - id unknown' }, (id) => ({ id }), named),
     deduped: 'already reported',
     failed: "couldn't send - try again",
     retry: 'try again',
     givenUp: "couldn't send. it did not go through - nothing was recorded.",
     cancel: 'never mind',
 
-    thumbLabel: (kind, n) => (kind === 'video' ? 'clip ' : 'image ') + n,
+    thumbLabel: tpl({ video: 'clip {n}', image: 'image {n}' }, (kind, n) => ({ n }), (kind) => (kind === 'video' ? 'video' : 'image')),
     evidenceNote: 'a small thumbnail is made here and sent with the report, so a human can check without asking you for the file.',
   },
 
@@ -583,21 +593,21 @@ export const S = Object.freeze({
     recording: 'recording…',
     recordStop: 'Stop',
     /** The live counter while recording. Seconds, one decimal, with the ceiling. */
-    recordTimer: (ms, maxMs) => (Math.max(0, ms) / 1000).toFixed(1) + 's / ' + Math.round((maxMs || 10000) / 1000) + 's',
+    recordTimer: tpl('{sec}s / {max}s', (ms, maxMs) => ({ sec: (Math.max(0, ms) / 1000).toFixed(1), max: Math.round((maxMs || 10000) / 1000) })),
     recordCapped: 'ten seconds is the lot.',
 
     /* --- the note list --------------------------------------------------- */
     /** Auto-name. Numbered rather than timestamped: a player picks by position. */
-    noteName: (n) => 'Note ' + n,
+    noteName: tpl('Note {n}', (n) => ({ n })),
     /** The duration chip on a row. */
-    noteLength: (ms) => (Math.max(0, ms) / 1000).toFixed(1) + 's',
+    noteLength: tpl('{sec}s', (ms) => ({ sec: (Math.max(0, ms) / 1000).toFixed(1) })),
     play: 'play',
     stop: 'stop',
     delete: 'delete',
     /** The list before anything is in it. Says what to press, not just that it is empty. */
     empty: 'no notes yet - record one above.',
     /** Storage ceiling (8). Phrased as a fact, not a refusal. */
-    full: (max) => 'that is all ' + max + ' - delete one to record another.',
+    full: tpl('that is all {max} - delete one to record another.', (max) => ({ max })),
     /** Confirm before a note goes. Cheap to re-record, so no scary sheet. */
     deleteConfirm: 'delete this one?',
 
@@ -606,9 +616,9 @@ export const S = Object.freeze({
     linkLabel: 'send with an emote',
     /** The "no emote" option, and what the row says when one is chosen. */
     linkNone: 'on its own',
-    linkedTo: (emote) => 'goes out with ' + (emote || 'that emote'),
+    linkedTo: tpl({ named: 'goes out with {emote}', anon: 'goes out with that emote' }, (emote) => ({ emote }), named),
     /** One note per emote: picking an emote that is taken moves it. */
-    linkMoved: (emote) => (emote || 'that emote') + ' had another note - it has this one now.',
+    linkMoved: tpl({ named: '{emote} had another note - it has this one now.', anon: 'that emote had another note - it has this one now.' }, (emote) => ({ emote }), named),
     linkHelp: 'firing that emote in a match sends this note with it. the emote never waits for it.',
 
     /* --- the mic HUD (ui/voice/micHud.js) --------------------------------
@@ -630,7 +640,7 @@ export const S = Object.freeze({
     /** The last three seconds (micHud.MIC_COUNTDOWN_MS). The question stops being
        "how much have I said" and becomes "how long have I got", so the number
        does too - a countdown, not a fraction to subtract mid-sentence. */
-    recordCountdown: (sec) => Math.max(0, sec) + 's left',
+    recordCountdown: tpl('{n}s left', (sec) => ({ n: Math.max(0, sec) })),
     /** The three outcomes, in the order a player meets them. */
     sending: 'sending…',
     sent: 'sent',
@@ -647,7 +657,7 @@ export const S = Object.freeze({
      */
     micFailed: 'the mic did not open - try again',
     /** The 4 s floor between sends, phrased as a wait rather than a refusal. */
-    tooSoon: (sec) => 'one more in ' + sec + 's',
+    tooSoon: tpl('one more in {n}s', (sec) => ({ n: sec })),
 
     /* --- the incoming indicator ------------------------------------------ */
     /** The chip by their bezel while a note plays. Lowercase furniture. */
@@ -781,46 +791,45 @@ export const S = Object.freeze({
       headline: 'add media to send',
       line: 'pick files from this device and copies of them can be sent to your opponent mid-duel, encrypted, straight from you to them. nothing is uploaded to our servers - but what reaches them is theirs to keep.',
       add: 'add files',
-      limits: (max, vmax) => 'jpg, png, gif, webp, mp4, webm, mov · or a zip of them · up to ' + max
-        + ' travels as-is, bigger photos and gifs are compressed to fit, clips up to ' + vmax,
+      limits: tpl('jpg, png, gif, webp, mp4, webm, mov · or a zip of them · up to {max} travels as-is, bigger photos and gifs are compressed to fit, clips up to {vmax}', (max, vmax) => ({ max, vmax })),
       empty: 'nothing added yet.',
       note: 'your picks last until this page closes - add them again next visit.',
       remove: 'remove',
-      skipDupe: (n) => n + ' already added',
-      skipBig: (n, max) => n + ' over ' + max,
-      skipType: (n) => n + ' of a format we can\'t carry (jpg, png, gif, webp, mp4, webm and mov travel)',
+      skipDupe: tpl('{n} already added', (n) => ({ n })),
+      skipBig: tpl('{n} over {max}', (n, max) => ({ n, max })),
+      skipType: tpl("{n} of a format we can't carry (jpg, png, gif, webp, mp4, webm and mov travel)", (n) => ({ n })),
       /**
        * The container was welcome but THIS device has no decoder for what is
        * inside - iPhone HEVC on an older browser, mostly. Distinct from
        * skipType on purpose: "wrong format" tells the player to convert,
        * "can't decode" tells them nothing they did is wrong.
        */
-      skipCodec: (n) => n + (n === 1 ? ' clip' : ' clips') + ' this device can\'t decode - a re-save as mp4 usually fixes it',
-      skipFailed: (n) => n + ' unreadable',
-      added: (n) => n + ' added',
+      skipCodec: tpl({ one: "{n} clip this device can't decode - a re-save as mp4 usually fixes it", other: "{n} clips this device can't decode - a re-save as mp4 usually fixes it" }, (n) => ({ n }), one),
+      skipFailed: tpl('{n} unreadable', (n) => ({ n })),
+      added: tpl('{n} added', (n) => ({ n })),
       /**
        * Adding is no longer instant - a zip of two hundred photos is two hundred
        * decodes and two hundred encodes. This line is the whole difference
        * between "working" and "the button is broken"; it lives on a role=status.
        */
-      adding: (done, total) => 'adding ' + done + ' / ' + total + '…',
-      addingOne: (name) => 'adding ' + name + '…',
+      adding: tpl('adding {done} / {total}…', (done, total) => ({ done, total })),
+      addingOne: tpl('adding {name}…', (name) => ({ name })),
       /** Mid-compression, when the encoder is actually reporting a percentage. */
-      compressing: (name, pct) => 'compressing ' + name + '… ' + pct + '%',
+      compressing: tpl('compressing {name}… {pct}%', (name, pct) => ({ name, pct })),
       /** The good news in the summary: these were too big, and now they are not. */
-      compressed: (n) => n + ' compressed to fit',
+      compressed: tpl('{n} compressed to fit', (n) => ({ n })),
       /**
        * A clip past the wire's artifact cap. Its OWN sentence, carrying the
        * VIDEO number: a browser cannot transcode video, so this is the one
        * refusal the player can act on (trim it, or send a gif instead).
        */
-      skipBigVideo: (n, max) => n + (n === 1 ? ' video' : ' videos') + ' too big to send (' + max + ' max)',
+      skipBigVideo: tpl({ one: '{n} video too big to send ({max} max)', other: '{n} videos too big to send ({max} max)' }, (n, max) => ({ n, max }), one),
       /**
        * The ceilings trimmed a REAL library. Never "unreadable", never a
        * per-file size: what happened is that we took the first N of something
        * legitimate, and the player is owed exactly that sentence.
        */
-      trimmed: (n, max) => n + ' more left out - one zip adds its first ' + max + ' files',
+      trimmed: tpl('{n} more left out - one zip adds its first {max} files', (n, max) => ({ n, max })),
       /** A compressed row: what it weighed, and what actually travels. */
       sizeShrunk: (from, to) => from + ' → ' + to,
       /** A zip opened fine and held nothing we can send - say so, never stay silent. */
@@ -832,16 +841,16 @@ export const S = Object.freeze({
        * per-file cap text is what told a player with a 1 GB library that it was
        * "1 over 8 MB".
        */
-      zipBad: (n) => (n === 1 ? "couldn't open that zip" : n + " zips couldn't be opened"),
+      zipBad: tpl({ one: "couldn't open that zip", other: "{n} zips couldn't be opened" }, (n) => ({ n }), one),
     },
 
-    statReady: (n) => n + ' ready',
-    statNeeds: (n) => n + ' to compress',
-    statFailed: (n) => n + ' failed',
-    statExempt: (n) => n + ' small enough already',
-    statUsage: (text) => text + ' cached',
+    statReady: tpl('{n} ready', (n) => ({ n })),
+    statNeeds: tpl('{n} to compress', (n) => ({ n })),
+    statFailed: tpl('{n} failed', (n) => ({ n })),
+    statExempt: tpl('{n} small enough already', (n) => ({ n })),
+    statUsage: tpl('{size} cached', (size) => ({ size })),
 
-    compressAll: (n) => 'compress everything (' + n + ')',
+    compressAll: tpl('compress everything ({n})', (n) => ({ n })),
     compressAllIdle: 'everything is compressed',
     pause: 'pause',
     resume: 'resume',
@@ -854,8 +863,8 @@ export const S = Object.freeze({
     searchLabel: 'filter by name',
     searchPlaceholder: 'name contains…',
 
-    minutes: (n) => n + (n === 1 ? ' minute' : ' minutes'),
-    eta: (mins, encoder) => '~' + mins + ' left · ' + encoder,
+    minutes: tpl({ one: '{n} minute', other: '{n} minutes' }, (n) => ({ n }), one),
+    eta: tpl('~{mins} left · {encoder}', (mins, encoder) => ({ mins, encoder })),
     etaEstimating: 'estimating…',
     etaPausedMatch: 'paused for the match',
     etaPausedUser: 'paused - nothing is running',
@@ -866,7 +875,7 @@ export const S = Object.freeze({
     badgeQueued: 'queued',
     badgeWorking: (pct) => pct + '%',
     badgeReady: 'ready',
-    badgeFailed: (why) => (why ? 'failed · ' + why : 'failed'),
+    badgeFailed: tpl({ named: 'failed · {why}', anon: 'failed' }, (why) => ({ why }), named),
     badgeExempt: 'small - sends as-is',
 
     tileCompress: 'compress',
@@ -878,32 +887,32 @@ export const S = Object.freeze({
     loading: 'reading your library…',
     empty: 'no media in your active preset yet.',
     emptyFiltered: 'nothing matches that.',
-    more: (n) => 'show more (' + n + ')',
+    more: tpl('show more ({n})', (n) => ({ n })),
 
     capLabel: 'cache limit',
-    capValue: (gb) => gb + ' GB',
+    capValue: tpl('{gb} GB', (gb) => ({ gb })),
     overCap: 'over the limit - the least-used copies get dropped first.',
-    presetChanged: (n) => 'your preset changed · ' + n + ' need compressing',
+    presetChanged: tpl('your preset changed · {n} need compressing', (n) => ({ n })),
     protectedNote: 'copies live beside your library, never inside it. deleting them here frees space and costs nothing but the time to make them again - and anything an opponent sent you is stored separately and is never touched by this button.',
     back: 'back',
 
     confirmCompress: {
       icon: '⏳',
       headline: 'this will take a while',
-      line: (mins, size, encoder) => 'about ' + mins + ' on your ' + encoder + ', working through ' + size + '. it pauses itself the moment a match starts, and you can stop it whenever you like.',
+      line: tpl('about {mins} on your {encoder}, working through {size}. it pauses itself the moment a match starts, and you can stop it whenever you like.', (mins, size, encoder) => ({ mins, size, encoder })),
       go: 'start compressing',
       cancel: 'not now',
     },
     confirmDelete: {
       icon: '✖',
       headline: 'delete every compressed copy?',
-      line: (size) => 'frees ' + size + '. your originals are untouched. anything an opponent sent you is stored separately and stays.',
+      line: tpl('frees {size}. your originals are untouched. anything an opponent sent you is stored separately and stays.', (size) => ({ size })),
       go: 'delete them',
       cancel: 'keep them',
     },
 
     /** The title-screen ribbon: "412 ready · 3.1 GB cached". */
-    ribbon: (ready, size) => ready + ' ready · ' + size + ' cached',
+    ribbon: tpl('{ready} ready · {size} cached', (ready, size) => ({ ready, size })),
   },
 
   /* ------------------------------------------------------ the flavour card
@@ -921,8 +930,8 @@ export const S = Object.freeze({
     live: {
       idle: 'tap one. play starts either way.',
       loading: 'fetching pictures…',
-      ready: (n) => n + (n === 1 ? ' picture ready' : ' pictures ready'),
-      loadingN: (n) => n + (n === 1 ? ' picture ready, more on the way' : ' pictures ready, more on the way'),
+      ready: tpl({ one: '{n} picture ready', other: '{n} pictures ready' }, (n) => ({ n }), one),
+      loadingN: tpl({ one: '{n} picture ready, more on the way', other: '{n} pictures ready, more on the way' }, (n) => ({ n }), one),
       empty: 'nothing came back. try another flavour or add a niche.',
       off: 'online pictures are off.',
       error: 'scrolller is not answering. your own files still work.',
@@ -934,7 +943,7 @@ export const S = Object.freeze({
     onlineNote: 'off means only your own files and the house art.',
     addPlaceholder: 'add a niche',
     add: 'add',
-    removeNiche: (name) => 'remove r/' + name,
+    removeNiche: tpl('remove r/{name}', (name) => ({ name })),
     errors: {
       bad: 'not a niche name. letters, numbers and _ only.',
       dup: 'already in.',
@@ -983,16 +992,16 @@ export const S = Object.freeze({
      */
     addMore: 'add more · another album, a zip…',
     /** The running tally. Reassuring at 3, congratulatory at 20 - see `enough`. */
-    count: (n) => n + (n === 1 ? ' item added' : ' items added'),
+    count: tpl({ one: '{n} item added', other: '{n} items added' }, (n) => ({ n }), one),
     countNone: 'nothing added yet.',
     /** Under the tally while they are still short of the suggestion. */
-    suggest: (want) => 'aim for about ' + want + '. you can always add more later.',
+    suggest: tpl('aim for about {n}. you can always add more later.', (want) => ({ n: want })),
     /** …and once they clear it. Praise, not a permission slip. */
     enough: 'that will do nicely.',
     remove: 'remove',
     lock: "I'm set",
     /** The commitment, wearing its own number - nobody locks in "3 picks" thinking they added an album. */
-    lockN: (n) => "I'm set - lock in " + n + (n === 1 ? ' pick' : ' picks'),
+    lockN: tpl({ one: "I'm set - lock in {n} pick", other: "I'm set - lock in {n} picks" }, (n) => ({ n }), one),
     lockNeed: 'add at least one thing',
     lockBusy: 'still adding…',
     /** The opponent is watching a "picking their media" line while this is up. */
@@ -1032,7 +1041,7 @@ export const S = Object.freeze({
     rateLimited: {
       icon: '⏱',
       headline: 'Slow down a moment',
-      line: (sec) => (sec ? 'Try again in ' + sec + 's.' : 'Try again shortly.'),
+      line: tpl({ named: 'Try again in {sec}s.', anon: 'Try again shortly.' }, (sec) => ({ sec }), named),
     },
     network: {
       icon: '⚡',
@@ -1066,7 +1075,7 @@ export const S = Object.freeze({
     lobbyFailed: {
       icon: '⚙',
       headline: 'This pairing will not work',
-      line: (reason) => String(reason || 'the two clients could not agree on a shared ruleset.'),
+      line: tpl({ named: '{reason}', anon: 'the two clients could not agree on a shared ruleset.' }, (reason) => ({ reason }), named),
     },
     ok: 'OK',
     cancel: 'Cancel',
@@ -1114,7 +1123,7 @@ export const S = Object.freeze({
      * the sentence. `heatValue` is the aria-valuetext: colour never travels
      * alone here, and "78% hot" is what a screen reader gets instead of a fill. */
     heatLabel: 'heat',
-    heatValue: (pct) => Math.round(pct) + '% - pops fill it, drops spend it',
+    heatValue: tpl('{pct}% - pops fill it, drops spend it', (pct) => ({ pct: Math.round(pct) })),
   },
 
   /* ------------------------------------------------- the opponent monitor */
@@ -1186,15 +1195,15 @@ export const S = Object.freeze({
     sidebarHideGlyph: '◂',
     sidebarTitle: 'items - keys 1-7 still fire while this is shut',
     tabCount: (n) => String(n | 0),
-    tabCountLabel: (n) => (n | 0) + ((n | 0) === 1 ? ' item ready' : ' items ready'),
+    tabCountLabel: tpl({ one: '{n} item ready', other: '{n} items ready' }, (n) => ({ n: n | 0 }), one),
     locked: 'locked',
     lockedTip: 'pop bubbles to earn this',
     lockGlyph: '?',
     /** the ×N badge on an armed sticker */
     stack: (n) => '×' + (n | 0),
     /** the flourish when a drop lands */
-    drop: (label) => '+1 ' + (label || 'item'),
-    dropToast: (label) => (label || 'item') + ' dropped',
+    drop: tpl({ named: '+1 {label}', anon: '+1 item' }, (label) => ({ label }), named),
+    dropToast: tpl({ named: '{label} dropped', anon: 'item dropped' }, (label) => ({ label }), named),
   },
 
   /* ------------------------------------------------------------ the coaching
@@ -1248,15 +1257,17 @@ export const S = Object.freeze({
      * on a desk (where nobody finds a drag on their own). `key` is the tile's
      * position in ui/arsenal.js ARSENAL_ITEMS - 1..7, and it never renumbers.
      */
-    drop: (label, key) => 'you earned a ' + (label || 'item') + '. tap it, then tap their monitor - or press '
-      + key + ', then ' + key + ' again.',
+    drop: tpl({
+      named: 'you earned a {label}. tap it, then tap their monitor - or press {key}, then {key} again.',
+      anon: 'you earned a item. tap it, then tap their monitor - or press {key}, then {key} again.',
+    }, (label, key) => ({ label, key }), named),
     /** The first thing you actually throw. The cooldown, before it surprises you. */
     fired: 'two throws back to back, then one every thirty seconds. the tiles count the wait down for you.',
     /**
      * The first payload of theirs that lands. The half a new player gets wrong is
      * the middle clause: nothing on their side subtracts a point from you.
      */
-    incoming: (label) => 'that ' + (label || 'one') + ' is them. payloads take no points off you - they are there to make you look away, or tap out.',
+    incoming: tpl({ named: 'that {label} is them. payloads take no points off you - they are there to make you look away, or tap out.', anon: 'that one is them. payloads take no points off you - they are there to make you look away, or tap out.' }, (label) => ({ label }), named),
     /** The first attention token. The one hint with a deadline attached. */
     check: 'tap the circle within twelve seconds. miss it and you score at x0.6 for the next minute.',
     /**
@@ -1292,7 +1303,7 @@ export const S = Object.freeze({
   tables: {
     eyebrow: 'GOON GAME',
     title: 'Open tables',
-    waiting: (n) => n + ' waiting',
+    waiting: tpl('{n} waiting', (n) => ({ n })),
     nobody: 'nobody waiting',
     friends: 'Friends',
     anyone: 'Anyone',
@@ -1303,15 +1314,15 @@ export const S = Object.freeze({
     taken: 'Taken',
     takenToast: 'Someone sat down first. Pick another.',
     newRival: 'new',
-    level: (n) => 'Lv ' + n,
-    record: (w, l) => 'you ' + w + ' - ' + l,
+    level: tpl('Lv {n}', (n) => ({ n })),
+    record: tpl('you {w} - {l}', (w, l) => ({ w, l })),
     song: 'song',
     songTip: 'Has a song',
     cardTip: 'Game card length',
     picsTip: 'Sends pictures',
-    waitingFor: (clock) => 'waiting ' + clock,
+    waitingFor: tpl('waiting {clock}', (clock) => ({ clock })),
     quiet: 'Quiet right now.',
-    lastOpened: (ago) => 'Last table opened ' + ago + '. Host one and it shows up here.',
+    lastOpened: tpl('Last table opened {ago}. Host one and it shows up here.', (ago) => ({ ago })),
     neverOpened: 'Host one and it shows up here for your friends.',
     recent: 'Recently played',
     signIn: 'Sign in to see the open tables. Practice works without an account.',
@@ -1396,9 +1407,12 @@ export const S = Object.freeze({
     saved: 'Saved.',
     copyFailed: 'could not copy - try Save image',
     saveFailed: 'could not save that one',
-    alt: (word) => 'match card: ' + word,
+    alt: tpl('match card: {word}', (word) => ({ word })),
   },
-});
+};
+
+/** The copy deck, every word read in the page's current language on access. */
+export const S = deck('gg', RAW);
 
 /**
  * The draftable elements, in the order the draft grid renders them.
@@ -1412,7 +1426,7 @@ export const S = Object.freeze({
  * a second copy of an engine number is a drift bug waiting for a quiet week.
  * The BLURB is now the whole story a tile tells, so blurbs earn their keep.
  */
-export const ELEMENTS = Object.freeze([
+export const ELEMENTS_RAW = Object.freeze([
   { id: GoonElement.Flashes, name: 'flashes', blurb: 'constant. builds all match.' },
   { id: GoonElement.BouncingText, name: 'bouncing text', blurb: 'always on your screen. slow burn.' },
   { id: GoonElement.Subliminals, name: 'subliminals', blurb: 'quiet, and it climbs to the top.' },
@@ -1426,5 +1440,6 @@ export const ELEMENTS = Object.freeze([
   { id: GoonElement.BrainDrain, name: 'brain drain', blurb: "late, heavy, and it doesn't stop." },
 ]);
 
+export const ELEMENTS = deck('gg_element', ELEMENTS_RAW);
 
 export default S;
