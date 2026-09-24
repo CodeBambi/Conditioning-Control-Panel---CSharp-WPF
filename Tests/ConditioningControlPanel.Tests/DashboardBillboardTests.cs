@@ -291,6 +291,28 @@ public class DashboardBillboardTests
         Assert.InRange(DashboardBillboard.RotateSeconds, 8, 60);
     }
 
+    [Theory]
+    [InlineData(0, -1, 6, 5)]
+    [InlineData(5, 1, 6, 0)]
+    [InlineData(2, -1, 6, 1)]
+    [InlineData(2, 1, 6, 3)]
+    [InlineData(0, 1, 0, 0)]
+    [InlineData(0, -1, 1, 0)]
+    public void ManualNavigationWraps(int current, int direction, int count, int expected)
+        => Assert.Equal(expected, DashboardBillboard.SlideIndex(current, direction, count));
+
+    [Fact]
+    public void SingleSlideCyclesThroughTheWholeRoster()
+    {
+        int count = DashboardBillboard.Roster.Count;
+        var rack = DashboardBillboard.InitialRack(count, slots: 1);
+        for (int i = 0; i <= count; i++)
+        {
+            Assert.Equal(i % count, Assert.Single(rack.Slots));
+            rack = DashboardBillboard.NextRack(rack, count);
+        }
+    }
+
     // ---- the copy ----
 
     [Fact]

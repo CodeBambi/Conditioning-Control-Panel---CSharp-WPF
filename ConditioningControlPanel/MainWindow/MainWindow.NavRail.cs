@@ -121,7 +121,8 @@ namespace ConditioningControlPanel
         /// so its left edge meets the frame's inner edge instead of disappearing under it. It
         /// still reads as the "64px medallion zone", because the door name starts at 64 either
         /// way.</summary>
-        private const double NavDoorTileCollapsed = 44;
+        // Owner polish: keep the full-size medallion visible even with the rail collapsed.
+        private const double NavDoorTileCollapsed = 50;
         private const double NavDoorTileExpanded = 50;
 
         /// <summary>The art itself - a Viewbox over the native 64px medallion, so its rounded
@@ -139,7 +140,7 @@ namespace ConditioningControlPanel
         /// upscale. If the ring should read thicker (the "about half" reading: 36/45, ~4px of
         /// plate), these two constants are the whole knob - NavRailFlyoutTests pins the
         /// tile-relative inset, not the absolutes.</para></summary>
-        private const double NavDoorIconCollapsed = 40;
+        private const double NavDoorIconCollapsed = 46;
         private const double NavDoorIconExpanded = 46;
 
         /// <summary>Radial hue halo behind the tile. 64 shut is exactly the 56px strip plus the

@@ -309,12 +309,12 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="4,6,4,6" Width="69" HorizontalAlignment="Center">
+                    <StackPanel Margin="4,10,4,10" Width="69" HorizontalAlignment="Center">
                         <TextBlock Text="{loc:Str rail_favorites_caption}" Style="{StaticResource RailSectionCaption}"/>
                         <StackPanel x:Name="FavoritesList" x:FieldModifier="internal"/>
                         <TextBlock x:Name="FavoritesEmpty" x:FieldModifier="internal"
                                    Text="{loc:Str rail_favorites_empty}" Style="{StaticResource RailEmptyText}"/>
-                        <TextBlock Text="{loc:Str rail_recent_caption}" Style="{StaticResource RailSectionCaption}" Margin="0,4,0,3"/>
+                        <TextBlock Text="{loc:Str rail_recent_caption}" Style="{StaticResource RailSectionCaption}" Margin="0,8,0,6"/>
                         <StackPanel x:Name="RecentList" x:FieldModifier="internal"/>
                         <TextBlock x:Name="RecentEmpty" x:FieldModifier="internal"
                                    Text="{loc:Str rail_recent_empty}" Style="{StaticResource RailEmptyText}"/>
@@ -388,7 +388,11 @@
         <!-- feature (PlayTabView.xaml:1165 rule); FX toggles mirror the    -->
         <!-- popup side effects and respect the session dose lock.          -->
         <!-- ============================================================ -->
-        <Grid Grid.Column="1" Grid.Row="1" x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="5">
+        <!-- Clip the entire section, including ambient artwork and card glows. -->
+        <Grid Grid.Column="1" Grid.Row="1" Margin="10,5,16,5"
+              SizeChanged="FeatureSection_SizeChanged">
+            <fx:AmbientFxCanvas x:Name="MosaicFx" x:FieldModifier="internal"/>
+        <Grid x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
@@ -401,26 +405,6 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-
-            <!-- ============================================================ -->
-            <!-- AMBIENT LAYER - the one looping FX on the whole Dashboard.    -->
-            <!-- Declared FIRST so it is the bottom of the grid's z-order: the -->
-            <!-- tiles paint their own opaque surfaces on top, so the fog and  -->
-            <!-- dust read through the gutters and through the near-           -->
-            <!-- transparent centre logo tile, never over a card face.         -->
-            <!--                                                                -->
-            <!-- It is inside the root 1489x901 Viewbox and therefore bitmap-   -->
-            <!-- scaled. That is fine and deliberate: soft fog and out-of-focus -->
-            <!-- dust have no edges for the scale to soften. Crisp particles    -->
-            <!-- would need to live outside the Viewbox - see the FX plan S2.   -->
-            <!--                                                                -->
-            <!-- AmbientFxCanvas is hit-test invisible by construction, runs a  -->
-            <!-- self-stopping clock, and MainWindow.DashboardFx registers it   -->
-            <!-- with RegisterTabFx so it parks on every tab switch.            -->
-            <!-- ============================================================ -->
-            <fx:AmbientFxCanvas x:Name="MosaicFx" x:FieldModifier="internal"
-                                Grid.Row="0" Grid.RowSpan="4"
-                                Grid.Column="0" Grid.ColumnSpan="4"/>
 
             <!-- The Title="" literals below are English design-time fallbacks only.
                  At runtime MainWindow.ApplyModFeatureNames() overwrites every FX title
@@ -526,7 +510,7 @@
                     </Grid.RenderTransform>
 
                     <!-- FACE A: the wordmark. Default face; the only face premium users and
-                         spent-week users ever see, byte-for-byte what shipped before. -->
+                         spent-week users see, inset to leave space around the mark. -->
                     <!-- The Ken Burns drift (scale 1.00 -> 1.04 over 40s, MainWindow.DashboardFx)
                          lives on THIS border and not on ImgLogo or on LogoFlipHost, and that is
                          a correctness rule, not a preference: LogoFlipHost's TransformGroup is
@@ -534,7 +518,7 @@
                          by the rapid-click easter-egg pulse. Both would snap the drift back to
                          1.0 mid-animation. This border sits between them and is otherwise
                          untouched, so the three transforms compose instead of fighting. -->
-                    <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True"
+                    <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True" Margin="24"
                             RenderTransformOrigin="0.5,0.5">
                         <Border.RenderTransform>
                             <ScaleTransform x:Name="LogoDriftScale" ScaleX="1" ScaleY="1"/>
@@ -975,6 +959,7 @@
                 </StackPanel>
             </Border>
         </Grid>
+        </Grid>
     
         <!-- ============================================================ -->
         <!-- LEGACY DASHBOARD HOST - DEMOLISHED (UX restructure, Phase 8). -->
@@ -1030,7 +1015,7 @@
                  from MainWindow.DashboardFx) plus a pulse on the status text while it is still
                  loading. Nothing here paints over the web surface, and nothing here moves it. -->
             <Border x:Name="BrowserCardFrame" x:FieldModifier="internal"
-                    Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5" ClipToBounds="True"
+                    Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,10" ClipToBounds="True"
                     Background="{DynamicResource ElevatedSurfaceBrush}" BorderThickness="1">
                 <Border.BorderBrush>
                     <!-- The resting offsets park the bright core entirely BEFORE the brush's 0
@@ -1392,7 +1377,7 @@
                                  uses with the Haptics panel. -->
 
                             <Border Grid.Row="1" x:Name="HomeAudioCard" x:FieldModifier="internal"
-                                    CornerRadius="10" Padding="10,7" Margin="0,0,0,5"
+                                    CornerRadius="10" Padding="10,9" Margin="0,0,0,12"
                                     Background="{DynamicResource ElevatedSurfaceBrush}"
                                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                                 <StackPanel>
@@ -1573,33 +1558,82 @@
             <!-- art with a dark shade at the bottom, a small mono eyebrow,  -->
             <!-- a title, one line and a chevron.                            -->
             <!--                                                             -->
-            <!-- A RACK, not a poster. The first cut was one card filling the -->
-            <!-- whole freed space (874x504 at the desk), which blew the      -->
-            <!-- square marks - discord.png, logo.png - up into a blurry      -->
-            <!-- giant. So: four small 16:9 cards in a 2x2 grid, and every    -->
-            <!-- 12s ONE slot swaps to the card that has been off screen      -->
-            <!-- longest. No dots: the grid is its own index.                 -->
-            <!--                                                             -->
-            <!-- Two art treatments, decided per card by BillboardArt.        -->
-            <!-- Cover: wide feature art, cover-fitted. Plate: a square mark, -->
-            <!-- which is NOT cover-fitted - the same image goes behind it    -->
-            <!-- blurred and darkened and the mark itself sits at 72px in the -->
-            <!-- middle, so a logo reads as a logo.                           -->
-            <!--                                                             -->
-            <!-- Visible ONLY while the browser is folded, so an unfolded     -->
-            <!-- dashboard is byte-for-byte the one that shipped. The roster  -->
-            <!-- and the walk are Services/DashboardBillboard.cs; the paint,  -->
-            <!-- the clock and the click are MainWindow.DashboardBillboard.cs.-->
-            <!-- ============================================================ -->
+            <!-- One full-size poster, with navigation over the artwork. The clock pauses
+                 during hover or keyboard focus and follows the shared motion setting.
+                 Wide posters use cover fit; square marks keep the bounded plate treatment. -->
             <Border x:Name="DashBillboard" x:FieldModifier="internal" Grid.Row="1"
-                    Visibility="Collapsed" Margin="0,0,0,5"
+                    Visibility="Collapsed" Margin="0,0,0,12"
                     CornerRadius="12" ClipToBounds="True"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                <Grid>
+                    <Grid.Resources>
+                        <Style x:Key="SlideControl" TargetType="Button">
+                            <Setter Property="Width" Value="40"/>
+                            <Setter Property="Height" Value="40"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Background" Value="#D918182B"/>
+                            <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Opacity" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="20"
+                                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=DashBillboard}" Value="True">
+                                    <Setter Property="Opacity" Value="1"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=DashBillboard}" Value="True">
+                                    <Setter Property="Opacity" Value="1"/>
+                                </DataTrigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                        <Style x:Key="SlideDot" TargetType="RadioButton">
+                            <Setter Property="Width" Value="24"/>
+                            <Setter Property="Height" Value="28"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="RadioButton">
+                                        <Grid Background="Transparent">
+                                            <Ellipse x:Name="dot" Width="7" Height="7" Fill="#99FFFFFF"/>
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="dot" Property="Fill" Value="{DynamicResource PinkBrush}"/>
+                                                <Setter TargetName="dot" Property="Width" Value="10"/>
+                                                <Setter TargetName="dot" Property="Height" Value="10"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="dot" Property="Fill" Value="White"/>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="dot" Property="Stroke" Value="White"/>
+                                                <Setter TargetName="dot" Property="StrokeThickness" Value="2"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Grid.Resources>
                 <ItemsControl x:Name="BillboardRackHost" x:FieldModifier="internal" Margin="5">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <UniformGrid Rows="2" Columns="2"/>
+                            <UniformGrid Rows="1" Columns="1"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -1609,6 +1643,7 @@
                                  none of the default chrome shows through. -->
                             <Button Click="BillboardCard_Click" Cursor="Hand" Margin="3"
                                     Padding="0" MinHeight="74" ToolTip="{Binding Tip}"
+                                    AutomationProperties.Name="{Binding Tip}"
                                     HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
@@ -1628,7 +1663,7 @@
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Button.Template>
-                                <Grid>
+                                <Grid SizeChanged="BillboardArtwork_SizeChanged">
                                     <!-- Cover: wide feature art, UniformToFill inside the clipping
                                          border above. -->
                                     <Image Source="{Binding Art}" Stretch="UniformToFill"
@@ -1664,23 +1699,23 @@
                                         </Border.Background>
                                     </Border>
                                     <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Left"
-                                                Margin="10,0,34,7" IsHitTestVisible="False">
+                                                Margin="24,0,54,58" IsHitTestVisible="False">
                                         <TextBlock Text="{Binding Eyebrow}"
-                                                   FontFamily="{DynamicResource Font.Mono}" FontSize="9"
+                                                   FontFamily="{DynamicResource Font.Mono}" FontSize="11"
                                                    Foreground="{DynamicResource PinkBrush}"
                                                    TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding Title}"
-                                                   FontSize="13" FontWeight="Bold" Margin="0,1,0,0"
+                                                   FontSize="24" FontWeight="Bold" Margin="0,1,0,0"
                                                    Foreground="{DynamicResource TextLightBrush}"
                                                    TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding Line}"
-                                                   FontSize="10" Margin="0,1,0,0"
+                                                   FontSize="13" Margin="0,5,0,0"
                                                    Foreground="{DynamicResource TextMutedBrush}"
                                                    TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Border Width="20" Height="20" CornerRadius="10" IsHitTestVisible="False"
                                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                            Margin="0,0,8,8" BorderThickness="1"
+                                            Margin="0,0,22,24" BorderThickness="1"
                                             Background="#8C14142B" BorderBrush="{DynamicResource PinkBrush}">
                                         <TextBlock Text="›" FontSize="13" Margin="0,-3,0,0"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -1691,6 +1726,27 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                    <Button x:Name="BillboardPrevious" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
+                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="20,0,0,0"
+                            ToolTip="{loc:Str btn_previous}" AutomationProperties.Name="{loc:Str btn_previous}">
+                        <Path Data="M 8,0 L 0,8 L 8,16" Stroke="White" StrokeThickness="2"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    </Button>
+                    <Button x:Name="BillboardNext" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
+                            HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0"
+                            ToolTip="{loc:Str btn_next}" AutomationProperties.Name="{loc:Str btn_next}">
+                        <Path Data="M 0,0 L 8,8 L 0,16" Stroke="White" StrokeThickness="2"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    </Button>
+                    <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18"
+                            CornerRadius="16" Background="#D918182B" Padding="8,0">
+                        <StackPanel x:Name="BillboardDots" x:FieldModifier="internal" Orientation="Horizontal"/>
+                    </Border>
+                    <Button x:Name="BillboardPause" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,20,20,0"
+                            Content="Ⅱ" FontSize="17" ToolTip="{loc:Str btn_program_pause}"
+                            AutomationProperties.Name="{loc:Str btn_program_pause}"/>
+                </Grid>
             </Border>
 
             <!-- ============================================================ -->
@@ -1707,7 +1763,7 @@
             <!-- have to reach. Give it a portrait later, with the loop.       -->
             <!-- ============================================================ -->
             <Border x:Name="CompanionStrip" x:FieldModifier="internal" Grid.Row="2"
-                    CornerRadius="12" Padding="10,7" Margin="0,0,0,5"
+                    CornerRadius="12" Padding="10,9" Margin="0,0,0,12"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
                     Cursor="Hand" MouseLeftButtonDown="CompanionStrip_Click"
@@ -1948,7 +2004,7 @@
         <!-- the mosaic's star row (WPF clips silently - #860).            -->
         <!-- ============================================================ -->
         <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
-              Height="30" Margin="5,4,5,0">
+              Height="30" Margin="5,10,5,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="10"/>
@@ -2121,7 +2177,7 @@
         <!-- Scrolling Marquee Banner - row 3, spans all columns -->
         <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
                 Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
-                CornerRadius="8" Height="48" Margin="5,5,5,0" ClipToBounds="True">
+                CornerRadius="8" Height="48" Margin="5,10,5,0" ClipToBounds="True">
             <Border.Effect>
                 <DropShadowEffect Color="{DynamicResource DarkPink}" BlurRadius="15" ShadowDepth="0" Opacity="0.5"/>
             </Border.Effect>
