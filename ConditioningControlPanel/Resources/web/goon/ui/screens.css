@@ -1141,7 +1141,7 @@ html[data-gg-motion="reduced"] .gg-toast.is-leaving { animation: ggToastFade .2s
   padding: 0.6rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.gg-panel-row--slider { flex-direction: column; align-items: stretch; gap: 0.35rem; }
+.gg-panel-row--slider, .gg-panel-row--level { flex-direction: column; align-items: stretch; gap: 0.35rem; }
 .gg-panel-label { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--gg-text-2); }
 .gg-panel-value { color: var(--gg-pink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .gg-panel-row input[type="range"] { accent-color: var(--gg-pink); width: 100%; }

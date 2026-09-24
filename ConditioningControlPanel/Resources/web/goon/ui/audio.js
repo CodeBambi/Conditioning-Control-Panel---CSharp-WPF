@@ -841,6 +841,43 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
       } catch (_e) { stats.dropped++; return false; }
     },
 
+    /**
+     * A synthesised pluck at an exact frequency on the GAME bus (the score HUD's
+     * combo blip). Same rules as tone(): throttled, dropped not queued, and only
+     * on a running context, so the Game slider, master and mute all own it.
+     */
+    pluck(hz, { gain = 0.05, ms = 160 } = {}) {
+      if (disposed) return false;
+      const f = Number(hz);
+      if (!(f > 20 && f < 20000)) return false;
+      const c = ensureCtx();
+      if (!c || c.state !== 'running') { stats.dropped++; return false; }
+      const t = now();
+      const prev = lastAt.get('pluck');
+      if (prev != null && t - prev < 30) { stats.throttled++; return false; }
+      lastAt.set('pluck', t);
+      try {
+        const at = c.currentTime;
+        const osc = c.createOscillator();
+        const g = c.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = f;
+        const peak = Math.max(0.01, Math.min(0.13, Number(gain) || 0.05));
+        const dur = Math.max(0.06, Math.min(0.4, (Number(ms) || 160) / 1000));
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.linearRampToValueAtTime(peak, at + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+        osc.connect(g);
+        g.connect(gameBus || c.destination);
+        osc.start(at);
+        osc.stop(at + dur + 0.02);
+        osc.onended = () => { try { osc.disconnect(); g.disconnect(); } catch (_e) { /* gone */ } };
+        stats.played++;
+        note('pluck');
+        return true;
+      } catch (_e) { stats.dropped++; return false; }
+    },
+
     /* -------------------------------------------------------- voice notes
      * Play ten seconds of the other player, through the `voice` bus.
      *

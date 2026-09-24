@@ -111,7 +111,7 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
     paint();
     ledger.listen(input, 'input', () => { paint(); prefs.set(key, Number(input.value) / 100); });
     ledger.listen(input, 'change', () => { try { audio?.sfx?.('ui-move'); } catch (_e) { /* stub */ } });
-    return el('div', { class: 'gg-panel-row gg-panel-row--slider' }, [
+    return el('div', { class: 'gg-panel-row gg-panel-row--level' }, [
       el('span', { class: 'gg-panel-label' }, [el('span', { text: label }), value]),
       input,
     ]);

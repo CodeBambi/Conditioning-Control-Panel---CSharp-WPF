@@ -413,7 +413,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const top = add(root, el('div', 'gg-hud-top'));
   // The points model's face-off, tug bar, floats, combo and heat (ui/scoreHud.js). A legacy
   // match never switches it on.
-  const scoreHud = mountScoreHud({ match, host: root });
+  const scoreHud = mountScoreHud({ match, host: root, audio });
   led.add(() => scoreHud.unmount());
 
   const scoreBox = add(top, el('div', 'gg-scorebox'));

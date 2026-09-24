@@ -122,7 +122,7 @@ function mk(d, tag, cls, txt) {
  * @param {Element} [o.host] element to toggle SCORE_HUD_CLASS on (the HUD frame)
  * @returns {{unmount:Function}}
  */
-export function mountScoreHud({ match, host = null } = {}) {
+export function mountScoreHud({ match, host = null, audio = null } = {}) {
   const d = typeof document !== 'undefined' ? document : null;
   const w = typeof window !== 'undefined' ? window : null;
   if (!d || !match) return { unmount() {} };
@@ -176,7 +176,7 @@ export function mountScoreHud({ match, host = null } = {}) {
   (d.body || d.documentElement).appendChild(root);
 
   let shownYou = 0, shownThem = 0, shownShare = 0.5, on = false, lastFrame = 0, lastEmit = 0, lastHeatSent = -1;
-  let raf = 0, alive = true, ac = null;
+  let raf = 0, alive = true;
   let lastFaceSync = 0, seenThem = -1, leaderSeen = 0;
   const lastPop = { x: 0, y: 0 };
 
@@ -221,22 +221,14 @@ export function mountScoreHud({ match, host = null } = {}) {
     setTimeout(kill, 1300);
   }
 
+  /* THE COMBO BLIP rides the Goon audio's GAME bus (ui/audio.js pluck), so the Game
+   * sounds slider, the master and mute own it like every other cue. No audio handed
+   * in = no blip: this module never opens its own context to the speakers. */
   function blip(step) {
     try {
-      const Ctx = w && (w.AudioContext || w.webkitAudioContext);
-      if (!Ctx) return;
-      if (!ac) ac = new Ctx();
-      if (ac.state === 'suspended') ac.resume();
-      const t = ac.currentTime;
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.type = 'triangle';
-      o.frequency.value = ROOT_HZ * Math.pow(2, comboSemis(step) / 12);
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(COMBO_GAIN, t + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-      o.connect(g); g.connect(ac.destination);
-      o.start(t); o.stop(t + 0.18);
-      o.onended = () => { try { o.disconnect(); g.disconnect(); } catch (_e) { /* gone */ } };
+      if (audio && typeof audio.pluck === 'function') {
+        audio.pluck(ROOT_HZ * Math.pow(2, comboSemis(step) / 12), { gain: COMBO_GAIN, ms: 160 });
+      }
     } catch (_e) { /* sound is never load-bearing */ }
   }
 
