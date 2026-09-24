@@ -1808,3 +1808,15 @@ html[data-gg-motion="reduced"] .gg-ot *, html[data-gg-motion="reduced"] .gg-ot-s
   pointer-events: none; white-space: nowrap;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
+
+/* --- the share card (ui/shareCard.js draws it, the recap shows it) ------ */
+.gg-share-preview {
+  display: block; width: 100%; max-width: 640px; aspect-ratio: 1200 / 630;
+  margin: 0.8rem auto 0; border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 105, 180, 0.25);
+}
+.gg-share-preview.is-pending {
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.04); color: var(--gg-text-3); font-size: 0.9rem;
+}
+.gg-share-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.7rem; margin-top: 1rem; }

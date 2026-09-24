@@ -29,7 +29,9 @@ import { settleOnce, formatRecord, outcomeOf } from '../rivalry.js';
 const countedMatches = new WeakSet();
 import { duelSummary } from '../duel/duelController.js';
 import { DUEL_COPY } from '../duel/copy.js';
-import { burst, centreOf, countUp, isCalm, play, popIn, staggerIn } from '../juiceDom.js';
+import { burst, centreOf, countUp, isCalm, play, popIn, squash, staggerIn } from '../juiceDom.js';
+import { buildShareData, cardKey, FLAVOUR_TINTS } from '../shareWords.js';
+import { renderCard, copyCard, saveCard, canvasBlob, cardFileName } from '../shareCard.js';
 import { THUD_EASE, staggerDelays } from '../juice.js';
 
 const COLLAPSE_AT = 6;
@@ -622,6 +624,125 @@ export function mount(container, ctx) {
     } catch (_e) { return ''; }
   }
 
+  /* ---------------------------------------------------------- share card
+   * THE CARD PLAYERS POST (2026-09-24). One persistent node: paint() re-appends
+   * it rather than rebuilding it, so a countersignature landing mid-copy does not
+   * throw the picture away. It redraws only when what it shows changed (cardKey).
+   * No match picture ever goes on it (ui/shareCard.js): it is made for public
+   * channels. Copy and Save never open a sheet or a modal here; a hosted Save is
+   * the host's own file dialog. */
+  const shareNode = el('section', { class: 'gg-card gg-recap-share' });
+  let shareKey = '';
+  let shareCanvas = null;
+  let shareWord = '';
+  let shareUrl = '';
+  let shareBusy = false;
+  let shareShown = false;
+  ledger.add(() => { if (shareUrl) { try { URL.revokeObjectURL(shareUrl); } catch (_e) { /* gone */ } } });
+
+  function shareData(result) {
+    const st = discord ? discord.state : null;
+    const card = discord ? discord.peer : null;
+    const showOpp = !discord || discord.showOpponentAvatars;
+    let flavour = '';
+    try { const m = ctx.mediaFlavour && ctx.mediaFlavour.get ? ctx.mediaFlavour.get() : null; flavour = (m && m.flavour) || ''; } catch (_e) { flavour = ''; }
+    let highlights = [];
+    try { highlights = computeTitles(result).map((t) => t.name); } catch (_e) { highlights = []; }
+    let outcome = null;
+    try { outcome = outcomeOf(result); } catch (_e) { outcome = null; }
+    return buildShareData({
+      result,
+      outcome,
+      log: matchLog,
+      duels: duelSummary(match),
+      /* The scoring lane hands per-player stats here when it lands:
+       * match.scoreCard = { you, them } in shareWords.statsFromScoring's shape. */
+      scoring: (match && match.scoreCard) || null,
+      youName: (match && match.localDisplayName) || (session && session.identity && session.identity.displayName) || '',
+      themName: peerName(),
+      youAvatar: (discord && discord.sharingAvatar && st) ? st.avatarDataUri : '',
+      themAvatar: (showOpp && card) ? card.avatarDataUri : '',
+      flavour,
+      seed: match ? match.matchSeed : 0,
+      highlights,
+    });
+  }
+
+  function shareToast(ok, good, bad) {
+    try { if (ok) ctx.toasts?.good?.(good); else ctx.toasts?.warn?.(bad); } catch (_e) { /* toasts are optional */ }
+  }
+
+  function paintShare(tint) {
+    shareNode.replaceChildren(
+      el('h2', { class: 'gg-recap-h', text: S.share.title }),
+      el('p', { class: 'gg-recap-fine', text: S.share.lead }),
+    );
+    if (!shareUrl) {
+      shareNode.appendChild(el('div', { class: 'gg-share-preview is-pending', text: S.share.preparing }));
+      return;
+    }
+    const img = el('img', { class: 'gg-share-preview', src: shareUrl, alt: S.share.alt(shareWord) });
+    shareNode.appendChild(img);
+    const copy = button(ledger, S.share.copy, async () => {
+      if (shareBusy || !shareCanvas) return;
+      shareBusy = true;
+      squash(copy);
+      const r = await copyCard(shareCanvas);
+      shareBusy = false;
+      if (ledger.isDisposed) return;
+      shareToast(r.ok, S.share.copied, S.share.copyFailed);
+      if (r.ok) { const c = centreOf(copy); if (c && c.w) burst(c.x, c.y, { count: 14, dist: 60, color: '255, 212, 94' }); }
+    }, { variant: 'primary', audio });
+    const save = button(ledger, S.share.save, async () => {
+      if (shareBusy || !shareCanvas) return;
+      shareBusy = true;
+      squash(save);
+      const r = await saveCard(shareCanvas, cardFileName(Date.now()));
+      shareBusy = false;
+      if (ledger.isDisposed || r.error === 'cancelled') return;
+      shareToast(r.ok, S.share.saved, S.share.saveFailed);
+    }, { variant: 'ghost', audio });
+    shareNode.appendChild(el('div', { class: 'gg-share-actions' }, [copy, save]));
+    if (!shareShown) {
+      shareShown = true;
+      popIn(img, { from: 0.86, over: 1.03, ms: 420, delay: 120 });
+      if (!isCalm()) {
+        ledger.timer(() => {
+          const c = centreOf(img);
+          if (c && c.w) burst(c.x, c.y, { count: 18, dist: 110, spread: 70, color: hexRgb(tint) });
+        }, 260);
+      }
+    }
+  }
+
+  function hexRgb(hex) {
+    const n = parseInt(String(hex || '#ff69b4').slice(1), 16) || 0;
+    return ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255);
+  }
+
+  function refreshShare(result) {
+    let data = null;
+    try { data = shareData(result); } catch (_e) { data = null; }
+    if (!data) return;
+    const key = cardKey(data);
+    const tint = FLAVOUR_TINTS[data.flavour] || FLAVOUR_TINTS.plain;
+    if (key === shareKey) return;
+    shareKey = key;
+    if (!shareUrl) paintShare(tint);
+    void (async () => {
+      const r = await renderCard(data);
+      if (ledger.isDisposed || key !== shareKey || !r) return;
+      let blob = null;
+      try { blob = await canvasBlob(r.canvas); } catch (_e) { blob = null; }
+      if (ledger.isDisposed || key !== shareKey || !blob) return;
+      if (shareUrl) { try { URL.revokeObjectURL(shareUrl); } catch (_e) { /* gone */ } }
+      shareCanvas = r.canvas;
+      shareWord = r.word;
+      shareUrl = URL.createObjectURL(blob);
+      paintShare(tint);
+    })();
+  }
+
   /* --------------------------------------------------------------- paint */
 
   function paint() {
@@ -682,6 +803,17 @@ export function mount(container, ctx) {
         el('p', { class: 'gg-rival-line', text: rivalLine() }),
         duelSummary(match).won > 0 && el('p', { class: 'gg-recap-fine', text: DUEL_COPY.recapLine(duelSummary(match).won) }),
       ]));
+    }
+
+    /* --- the share card: right under the numbers it is made of --- */
+    if (result) {
+      try {
+        refreshShare(result);
+        column.appendChild(shareNode);
+      } catch (e) {
+        try { ctx?.logger?.warn?.('recap: share card failed to build: ' + ((e && e.message) || e)); }
+        catch (_e2) { /* logger is optional */ }
+      }
     }
 
     /* --- payload log --- */

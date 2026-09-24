@@ -675,6 +675,14 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "open-prime":       // page's Prime sheet "See Prime": the app's own refusal and upgrade path
                     TierGate.DemandLab("Goon Game");
                     break;
+                case "share-card":       // recap's match card: copy (clipboard) or save (system dialog), PNG bytes only
+                {
+                    var disp = Application.Current?.Dispatcher;
+                    if (disp == null || disp.HasShutdownStarted) break;
+                    disp.BeginInvoke(() => GoonShareCard.Handle(o, _host?.Window,
+                        frame => { try { _host?.Post(frame); } catch { } }));
+                    break;
+                }
             }
         }
 
