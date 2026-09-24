@@ -152,6 +152,8 @@ export function joinOutcome(kind) {
     case 'unknown_code':
     case 'expired':
       return 'taken';
+    // `no_join_access` is retired server-side (2026-09-24: joining is free). An OLD server in
+    // front of this page can still send it, and the patron sheet is still the honest answer.
     case 'no_join_access':
     case 'no_host_access':
       return 'prime';

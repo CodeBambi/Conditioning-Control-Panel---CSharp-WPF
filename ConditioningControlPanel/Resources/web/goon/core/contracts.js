@@ -320,7 +320,7 @@ export const PAYLOAD_ELEMENT = Object.freeze({
  * Like `transfer` it enters NO intersection and can never fail a lobby.
  */
 export function makeCaps(o = {}) {
-  return {
+  const caps = {
     platform: o.platform ?? 'web',
     payloads: o.payloads ?? [],
     elements: o.elements ?? [],
@@ -330,7 +330,41 @@ export function makeCaps(o = {}) {
     voice: clampVoiceCount(o.voice),
     night: clampVoiceCount(o.night),
   };
+  // NICHES (2026-09-24), APPEND-ONLY and OMITTED when empty, so every hello that has none is
+  // byte-identical to before. See cleanNiches below.
+  const niches = cleanNiches(o.niches);
+  if (niches.length) caps.niches = niches;
+  return caps;
 }
+
+/**
+ * THE HAPPY PATH FOR A SEAT THAT SENDS NO FILES (owner call 2026-09-24). A player whose pictures
+ * come from Scrolller (free, or no local library, or the send switch off) names the niches they
+ * picked in `caps.niches`, and the OPPONENT'S host fetches pictures from those niches itself, to
+ * draw on this player's throws. Only NAMES cross the wire: no url, no post id, no bytes, so there
+ * is nothing to allowlist and nothing a peer can steer but which public niche is read. Same
+ * grammar and cap as the host's GoonOnlineMediaRules (2..40 of [A-Za-z0-9_], at most 8, deduped
+ * without case). The presence of the list IS the version discriminator: a build that predates
+ * it sends none and its opponent simply draws from their own deck, exactly as before.
+ */
+export const NICHE_CAP_MAX = 8;
+const NICHE_RE = /^[A-Za-z0-9_]{2,40}$/;
+export function cleanNiches(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const n of list) {
+    if (typeof n !== 'string' || !NICHE_RE.test(n)) continue;
+    const k = n.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(n);
+    if (out.length >= NICHE_CAP_MAX) break;
+  }
+  return out;
+}
+/** A peer's `caps.niches`, from an UNTRUSTED hello, cleaned. [] when absent or unusable. */
+export function peerNiches(caps) { return cleanNiches(caps && caps.niches); }
 
 /** The voice-note protocol revision THIS build speaks. Advertised as `caps.voice`. */
 export const VOICE_CAP_VERSION = 1;

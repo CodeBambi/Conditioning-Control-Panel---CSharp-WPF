@@ -121,7 +121,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const boot = read('../boot.js');
   ok(PREF_DEFAULTS.mediaTransferEnabled === false, 'the send pref exists and defaults OFF');
   ok(/const transferCap = !!\(session\.caps && session\.caps\.mediaTransfer === true\);/.test(boot)
-    && /transfer: transferCap \}\)/.test(boot), 'the hello advertises transfer only for a seat that may send');
+    && /transfer: transferCap(?:, niches)? \}\)/.test(boot), 'the hello advertises transfer only for a seat that may send');
   ok(!/transfer: true \}\)/.test(boot), 'and never a flat transfer: true');
   ok(/prefs\.get\('mediaTransferEnabled'\) === true\s*\n\s*&& !!\(session\.caps && session\.caps\.mediaTransfer === true\)/.test(boot),
     'the consent seed needs BOTH the opt-in and the perk');
