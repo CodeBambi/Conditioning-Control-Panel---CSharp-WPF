@@ -155,6 +155,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly MemorySignalWriter? _signals;
         private EventHandler? _processExitHandler;
         private bool _disposed;
+        internal event Action? ChatMemoryEdited;
+        internal bool IsChatMemoryEnabled => ChatDerivedPersistenceEnabled;
 
         /// <summary>Production constructor: real path, auto-load, app signals mirrored automatically.</summary>
         public MemoryStore() : this(DefaultMemoryPath, null, null, mirrorAppSignals: true) { }
@@ -254,7 +256,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             // Only a real change costs a write. Level/streak signals are refreshed on every settings
             // notification, and most of those are about something else entirely.
-            if (changed) RequestSave();
+            if (changed)
+            {
+                if (key == KeyPreferredName) ChatMemoryEdited?.Invoke();
+                RequestSave();
+            }
         }
 
         // ===================== relationship =====================
@@ -394,6 +400,39 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             return fact;
         }
 
+        internal void SetAutomaticPreferredName(string? name)
+        {
+            if (!ChatDerivedPersistenceEnabled || !IsStorable(name ?? "", MemoryFact.SourceChat)) return;
+            lock (_lock)
+            {
+                if (name == null) _profile.Remove(KeyPreferredName);
+                else _profile[KeyPreferredName] = name;
+            }
+            RequestSave();
+        }
+
+        internal void ForgetAutomaticFact(string id)
+        {
+            lock (_lock) _facts.RemoveAll(f => f.Id == id && f.Source == MemoryFact.SourceChat);
+            RequestSave();
+        }
+
+        internal MemoryFact? SetAutomaticFact(string? previousId, string text, MemoryFactKind kind, string sourceTurnId)
+        {
+            if (!ChatDerivedPersistenceEnabled || !IsStorable(text, MemoryFact.SourceChat)) return null;
+            lock (_lock)
+            {
+                var previous = _facts.FirstOrDefault(f => f.Id == previousId);
+                if (previous != null && previous.Source != MemoryFact.SourceChat) return null;
+                if (previous != null) _facts.Remove(previous);
+                var added = AddFact(text, kind, 0.7, MemoryFact.SourceChat);
+                var cited = added with { SourceTurnId = sourceTurnId };
+                int index = _facts.FindIndex(f => f.Id == added.Id);
+                if (index >= 0) _facts[index] = cited;
+                return cited;
+            }
+        }
+
         public bool UpdateFact(string id, string? text = null, double? salience = null, bool? pinned = null)
         {
             if (string.IsNullOrEmpty(id)) return false;
@@ -417,6 +456,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     Source = text != null ? MemoryFact.SourceUserEdited : f.Source
                 };
             }
+            ChatMemoryEdited?.Invoke();
             RequestSave();
             return true;
         }
@@ -426,7 +466,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (string.IsNullOrEmpty(id)) return false;
             bool removed;
             lock (_lock) removed = _facts.RemoveAll(f => f.Id == id) > 0;
-            if (removed) RequestSave();
+            if (removed) { ChatMemoryEdited?.Invoke(); RequestSave(); }
             return removed;
         }
 
@@ -601,6 +641,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public void Wipe()
         {
+            ChatMemoryEdited?.Invoke();
             lock (_lock)
             {
                 // firstSeen survives. It is a latch, not a memory: MemorySignalWriter recomputes the
@@ -622,6 +663,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                      {
                          _path,
                          dir == null ? null : Path.Combine(dir, "episodes.json"),
+                         dir == null ? null : Path.Combine(dir, "maintenance.json"),
                          dir == null ? null : Path.Combine(dir, "session.json"),
                          LegacyLocalHistoryPath()
                      })
@@ -652,6 +694,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public void ForgetChatDerived()
         {
+            ChatMemoryEdited?.Invoke();
             lock (_lock)
             {
                 _relationship.Clear();
@@ -812,7 +855,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     LastUsed = f.LastUsed,
                     Uses = f.Uses,
                     Pinned = f.Pinned,
-                    Source = f.Source
+                    Source = f.Source,
+                    SourceTurnId = f.SourceTurnId
                 }).ToList()
             };
 
@@ -932,7 +976,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     LastUsed: f.LastUsed,
                     Uses: Math.Max(0, f.Uses),
                     Pinned: f.Pinned,
-                    Source: string.IsNullOrWhiteSpace(f.Source) ? MemoryFact.SourceChat : f.Source));
+                    Source: string.IsNullOrWhiteSpace(f.Source) ? MemoryFact.SourceChat : f.Source,
+                    SourceTurnId: f.SourceTurnId));
             }
 
             return new MemorySnapshot(profile, relationship, usage, facts);
@@ -1059,6 +1104,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             public int Uses { get; set; }
             public bool Pinned { get; set; }
             public string Source { get; set; } = MemoryFact.SourceChat;
+            public string? SourceTurnId { get; set; }
         }
 
         private sealed class PersistedRelationship

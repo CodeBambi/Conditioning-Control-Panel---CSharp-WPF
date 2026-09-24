@@ -72,6 +72,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly Action<Action> _scheduleEffects;
         private readonly object _conversationMutation = new();
         private int _conversationRevision;
+        private readonly CompanionMemoryMaintenance? _maintenance;
 
         // The linkable media pool, exactly as the stable prefix lists it. Injected so the
         // recommendation scan is testable without standing up BambiSprite and the whole mod stack.
@@ -118,7 +119,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _ownsMemory = memory == null;
             Memory = memory ?? new MemoryStore();
             Recommendations = recommendations ?? new RecentRecommendations();
-            _assembler = assembler ?? new PromptAssembler(Memory, Recommendations);
+            if (Memory is MemoryStore maintenanceStore)
+                _maintenance = new CompanionMemoryMaintenance(maintenanceStore, _transport.SendAsync,
+                    () => _preview() && maintenanceStore.IsChatMemoryEnabled, _contextStamp);
+            _assembler = assembler ?? new PromptAssembler(Memory, Recommendations,
+                rollingContext: () => _maintenance?.GetContext());
             _store = store ?? new CompanionSessionStore();
             _mediaTitles = mediaTitles ?? DefaultMediaTitles;
 
@@ -213,6 +218,17 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 App.Logger?.Debug("CompanionBrain: user send dropped (one already queued)");
                 return _preview() ? AiReplyResult.Failed(AiFailureKind.Busy, true)
                     : new AiReplyResult(GetThinkingPhrase(), IsAiGenerated: false, Refusal: null);
+            }
+
+            if (_preview() && _maintenance != null)
+            {
+                try
+                {
+                    await _maintenance.InterruptAsync().WaitAsync(TimeSpan.FromSeconds(2), cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (TimeoutException) { return AiReplyResult.Failed(AiFailureKind.Busy, true); }
+                catch (OperationCanceledException) { return AiReplyResult.Failed(AiFailureKind.Cancelled, true); }
             }
 
             _isUserQueued = true;
@@ -330,6 +346,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     Session.Append(TurnKind.AssistantChat, result.Text);
                     if (_preview() && Memory is MemoryStore relationshipStore)
                         relationshipStore.NoteChatTurn(App.Mods?.ActiveModId);
+                    if (_preview()) _maintenance?.Accept(userTurn);
                     _conversationRevision++;
                     ApplyPreviewCommands(result, cancellationToken);
                     NoteRecommendedTitles(result.Text);
@@ -378,7 +395,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (descriptor.Length == 0)
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
 
-            if (_isProcessing || _isUserQueued)
+            if (_isProcessing || _isUserQueued || (_preview() && _maintenance?.PendingJob.IsCompleted == false))
             {
                 App.Logger?.Debug("CompanionBrain: ambient reaction dropped (busy)");
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
@@ -671,6 +688,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             lock (_conversationMutation)
             {
                 _conversationRevision++;
+                _maintenance?.Forget();
                 Session.Clear();
                 Recommendations.Clear();
                 _store.Wipe();
@@ -790,6 +808,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             if (_disposed) return;
             _disposed = true;
+            _maintenance?.Dispose();
             DetachBarkSource();
             try { Flush(); } catch { /* shutdown is best-effort */ }
 
