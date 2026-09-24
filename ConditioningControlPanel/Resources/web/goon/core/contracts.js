@@ -328,11 +328,13 @@ export function makeCaps(o = {}) {
     min_v: o.min_v ?? PROTOCOL_VERSION,
     transfer: o.transfer ?? false,
     voice: clampVoiceCount(o.voice),
+    night: clampVoiceCount(o.night),
   };
 }
 
 /** The voice-note protocol revision THIS build speaks. Advertised as `caps.voice`. */
 export const VOICE_CAP_VERSION = 1;
+export const NIGHT_CAP_VERSION = 1;
 
 /**
  * A peer's `caps.voice`, from an UNTRUSTED hello, as a plain boolean "can we send to them".
@@ -345,6 +347,7 @@ export const VOICE_CAP_VERSION = 1;
 export function peerSpeaksVoice(caps) {
   return clampVoiceCount(caps && caps.voice) >= 1;
 }
+export function peerSpeaksNight(caps) { return clampVoiceCount(caps && caps.night) >= 1; }
 
 export function makeHello(o = {}) {
   return {
@@ -597,6 +600,42 @@ export function makeMediaPrep(o = {}) {
   };
 }
 
+/**
+ * GAME NIGHT DUEL (2026-09-23). A `t:'duel'` frame, gated on the peer's `caps.night >= 1`
+ * exactly the way `t:'voice'` is gated on `caps.voice`: an older peer drops the unknown `t`
+ * silently, so the sender checks the cap before anything leaves. Fire and forget, no receipt.
+ *
+ *   {t:'duel', sub:'cfg',   len_s}               host only, once at Live: the duel length it picked
+ *   {t:'duel', sub:'start', idx, len_s}          a game card was thrown: duel number idx begins
+ *   {t:'duel', sub:'score', idx, score, tile}    this side's final board for duel idx
+ *
+ * Every number is pinned in core/wire.js CLAMPED_FIELDS, both directions.
+ */
+export const DUEL_SUBS = Object.freeze(['cfg', 'start', 'score']);
+/** The duel lengths Customize offers. Anything else collapses to the first. */
+export const DUEL_LENGTHS_SEC = Object.freeze([60, 90, 120]);
+export function clampDuelSub(v) { return DUEL_SUBS.includes(v) ? v : ''; }
+export function clampDuelLen(v) {
+  const n = clampVoiceCount(v);
+  return DUEL_LENGTHS_SEC.includes(n) ? n : DUEL_LENGTHS_SEC[0];
+}
+/** Duel index: small non-negative integer. A match never sees more than a handful. */
+export function clampDuelIdx(v) { return Math.min(clampVoiceCount(v), 999); }
+/** A 2048 score or a tile tier. Generous ceiling, it is a sanity clamp on an untrusted number. */
+export function clampDuelNum(v) { return Math.min(clampVoiceCount(v), 10000000); }
+
+export function makeDuel(o = {}) {
+  return {
+    t: 'duel',
+    v: o.v ?? PROTOCOL_VERSION,
+    sub: clampDuelSub(o.sub),
+    idx: clampDuelIdx(o.idx),
+    len_s: clampDuelLen(o.len_s),
+    score: clampDuelNum(o.score),
+    tile: clampDuelNum(o.tile),
+  };
+}
+
 export function makeResult(o = {}) {
   return {
     t: 'result',
@@ -644,6 +683,7 @@ export const MessageFactories = Object.freeze({
   emote: makeEmote,
   voice: makeVoice,
   media_prep: makeMediaPrep,
+  duel: makeDuel,
   result: makeResult,
   clock_ping: makeClockPing,
   clock_pong: makeClockPong,

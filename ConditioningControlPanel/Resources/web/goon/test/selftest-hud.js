@@ -341,7 +341,8 @@ function makeFakeMatch() {
   });
   ok(left.children.length === 4, 'left rail renders 4 items', String(left.children.length));
   ok(right.children.length === 4, 'right rail renders 4 items', String(right.children.length));
-  ok(left.children.length + right.children.length === arsenalMod.ARSENAL_ITEMS.length,
+  // The game night card (duel: true) only gets a slot when mountArsenal is handed a duel hook.
+  ok(left.children.length + right.children.length === arsenalMod.ARSENAL_ITEMS.filter((i) => !i.duel).length,
     'every arsenal item got a slot (8: 7 payloads + emote)', String(left.children.length + right.children.length));
   ok(arsenalMod.ARSENAL_ITEMS.some((i) => i.id === 'spiral' && i.kind === GoonPayloadKind.Spiral),
     'the spiral slot is wired to GoonPayloadKind.Spiral');

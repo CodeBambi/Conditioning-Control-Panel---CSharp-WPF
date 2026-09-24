@@ -22,6 +22,8 @@ import { S, mmss } from '../strings.js';
 import { avatarSlot, emitAva } from '../avatar.js';
 import { GoonEndReason, GoonMatchPhase } from '../../core/contracts.js';
 import { evidenceFor, submitReport, NOTE_MAX, REPORT_REASONS } from '../report.js';
+import { duelSummary } from '../duel/duelController.js';
+import { DUEL_COPY } from '../duel/copy.js';
 
 const COLLAPSE_AT = 6;
 const GRACEFUL_MS = 8 * 60 * 1000;
@@ -655,6 +657,7 @@ export function mount(container, ctx) {
         ]),
         el('p', { class: 'gg-recap-fine', text: S.recap.scoreFineprint }),
         el('p', { class: 'gg-recap-fine', text: S.recap.survived(result.survivedMs) }),
+        duelSummary().won > 0 && el('p', { class: 'gg-recap-fine', text: DUEL_COPY.recapLine(duelSummary().won) }),
       ]));
     }
 

@@ -47,7 +47,7 @@ import { GoonMatchService } from './core/match.js';
 import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
 import {
-  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION,
+  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION, NIGHT_CAP_VERSION,
 } from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
@@ -609,7 +609,7 @@ function localCaps() {
   if (!caps.camera) rounds = rounds.filter((r) => r !== GoonRoundKind.StaringContest);
   if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, transfer: true });
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, transfer: true });
 }
 
 /* ============================================================================
