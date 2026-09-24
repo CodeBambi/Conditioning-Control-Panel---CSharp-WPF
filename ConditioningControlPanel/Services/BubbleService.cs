@@ -1047,7 +1047,7 @@ public class BubbleService : IDisposable
         App.Achievements?.TrackBubblePopped();
 
         // Natasha's favourite: the red one popped. +3:00 on the tab (inert unless the row is on).
-        if (bubble.IsNatasha) App.Chaster?.Note("natasha");
+        if (bubble.IsNatasha) App.Chaster?.NoteAt("natasha", bubble.CenterPx);
 
         // Haptic feedback with combo system
         _ = App.Haptics?.BubblePopAsync();
