@@ -65,7 +65,12 @@ internal static class ConversationDelivery
         var system = AiService.MiddleCutSystemPrompt(original, 10000 - extra.Length - SafetyComposer.Floor.Length - 4)
             + "\n\n" + extra + "\n\n" + SafetyComposer.Floor;
         var messages = new List<ChatMessage> { ChatMessage.System(system) };
-        messages.AddRange(request.Messages.Where(m => m.Role != ChatMessage.RoleSystem));
+        // A correction is a poor moment to feed back the very style the user just rejected.
+        // Keep the user's turns and memory; only the inference copy of earlier replies is omitted.
+        var resetStyle = emi && (DeclinesSuggestions(input) || Matches(input,
+            @"\b(too verbose|too long|be brief|stop repeating|stop calling|don't call me)\b"));
+        messages.AddRange(request.Messages.Where(m => m.Role != ChatMessage.RoleSystem
+            && (!resetStyle || m.Role != ChatMessage.RoleAssistant)));
         return new PromptRequest(system, messages);
     }
 
@@ -77,6 +82,15 @@ internal static class ConversationDelivery
         var ids = Marker.Matches(text).Select(m => m.Groups[1].Value.Trim())
             .Where(allowed.Contains).Distinct(StringComparer.Ordinal).Take(2).ToArray();
         var prose = BrokenMarker.Replace(Marker.Replace(text, ""), "").Trim();
+        if (ids.Length == 0 && prose.Length > 0)
+        {
+            // Small models may name a valid destination but omit the presentation tag.
+            // Resolve only exact offered titles, never a model-authored URL or arbitrary ID.
+            ids = offered.Where(a => prose.Contains(a.Label, StringComparison.OrdinalIgnoreCase))
+                .Select(a => a.Id).Distinct(StringComparer.Ordinal).Take(2).ToArray();
+            if (ids.Length == 0 && offered.Count == 1 && offered[0].Id == "page.assets")
+                ids = new[] { "page.assets" };
+        }
         return (prose, ids);
     }
 }

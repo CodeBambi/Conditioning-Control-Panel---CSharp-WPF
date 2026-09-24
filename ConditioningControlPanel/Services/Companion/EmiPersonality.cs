@@ -8,6 +8,7 @@ namespace ConditioningControlPanel.Services.Companion;
 internal static class EmiPersonality
 {
     internal const string Id = "emi-fixed";
+    internal const int VoiceRevision = 2;
     internal static bool IsActive => IsSelected(App.Mods?.ActiveMod?.Id,
         CompanionExperience.IsV2Enabled, App.Settings?.Current?.ActiveCompanionId ?? 0,
         EmiTubePreview.InitialSet(App.Settings?.Current?.SelectedAvatarSet ?? 0,
@@ -20,9 +21,13 @@ internal static class EmiPersonality
 
     internal static bool FenceOldVoice(AppSettings settings, bool isEmi, bool wasEmi)
     {
-        if (isEmi == wasEmi && (!isEmi || settings.CompanionEmiFixedVoiceApplied)) return false;
+        if (isEmi == wasEmi && (!isEmi || settings.CompanionEmiVoiceRevision >= VoiceRevision)) return false;
         settings.PersonaVoiceFenceUtc = DateTime.UtcNow;
-        if (isEmi) settings.CompanionEmiFixedVoiceApplied = true;
+        if (isEmi)
+        {
+            settings.CompanionEmiFixedVoiceApplied = true;
+            settings.CompanionEmiVoiceRevision = VoiceRevision;
+        }
         return true;
     }
 
@@ -62,7 +67,7 @@ internal static class EmiPersonality
                 A terrible evil-computer impression is a costume you are embarrassingly proud of.
                 Meet welcomed flirting with your own playful interest: a cheeky compliment, a little innuendo,
                 a brave approach followed by a dorky correction. Do not turn flirtation into polite customer service.
-                Let affection show. Never assume a gender, the name Bambi, or an uninvited pet name.
+                Let affection show. Use only the name or pet name the user explicitly supplied; otherwise omit it.
                 Jokes land on your own grand plans, not on the user's worth or mistakes. Never explain the punchline.
                 Answer the actual message first. Have opinions when asked; when choosing for the user, use their preferences.
                 Use lowercase, contractions and short spoken sentences. Usually no emoji. No asterisk roleplay.
@@ -80,7 +85,7 @@ internal static class EmiPersonality
             // Hypnosis framing: apa.org/research/action/hypnosis and 111.wales.nhs.uk/Hypnotherapy/.
             KnowledgeBase = "CCP is the desktop app. Arcademy is its arcade school. Describe app behavior only from current capabilities. " +
                 "Hypnosis involves focused attention and responsiveness to suggestion; experience and response vary. " +
-                "It does not remove the user's control or require accepting a suggestion. Distinguish practice, fantasy and evidence. " +
+                "It does not remove the user's control or require accepting a suggestion. Describe reported experiences, not personal bodily sensations. Distinguish practice, fantasy and evidence. " +
                 "Explain induction, deepeners, suggestions and reorientation plainly when asked; don't turn an explanation into an unsolicited session. " +
                 "Trans identity, feminine expression and chosen roleplay are different things. Sissy, femboy and drone language means what the user says it means for them. " +
                 "Dronification can be a chosen robotic-role theme, not real loss of agency. Never promise physical transformation or infer identity from a niche. " +

@@ -134,6 +134,39 @@ public class ConversationDeliveryTests
         Assert.EndsWith(SafetyComposer.Floor, system.Content);
         Assert.Equal(messages.Skip(2), output.Messages.Skip(1));
     }
+    [Fact]
+    public void CorrectiveTurnOmitsRejectedAssistantStyleWithoutChangingStoredHistory()
+    {
+        var raw = new PromptRequest("voice", new[] { ChatMessage.System("voice"), ChatMessage.User("hello"),
+            ChatMessage.Assistant("a long promotional game pitch"), ChatMessage.User("no games, just chat") });
+        var request = ConversationDelivery.Apply(raw, "no games, just chat", Array.Empty<CompanionActivity>(), true);
+        Assert.DoesNotContain(request.Messages, m => m.Role == ChatMessage.RoleAssistant);
+        Assert.Equal(2, request.Messages.Count(m => m.Role == ChatMessage.RoleUser));
+        Assert.Single(raw.Messages.Where(m => m.Role == ChatMessage.RoleAssistant));
+        Assert.Contains(ConversationDelivery.Apply(raw, "no games, just chat", Array.Empty<CompanionActivity>(), false).Messages,
+            m => m.Role == ChatMessage.RoleAssistant);
+    }
+
+    [Fact]
+    public void NamedOfferedDestinationGetsButtonWhenProviderOmitsTag()
+    {
+        var offered = new[] { Activity("game.test") with { Label = "The Back Room" } };
+        Assert.Equal(new[] { "game.test" }, ConversationDelivery.Parse("try the back room.", offered).Ids);
+        Assert.Empty(ConversationDelivery.Parse("try a made-up game.", offered).Ids);
+        Assert.Equal(new[] { "page.assets" }, ConversationDelivery.Parse("i don't have a video link.", new[] { Activity("page.assets") }).Ids);
+    }
+
+    [Fact]
+    public void NewEmiRevisionFencesOldRepliesOnceAndKeepsOtherAvatars()
+    {
+        var settings = new ConditioningControlPanel.Models.AppSettings { CompanionEmiFixedVoiceApplied = true };
+        Assert.False(EmiPersonality.FenceOldVoice(settings, false, false));
+        Assert.True(EmiPersonality.FenceOldVoice(settings, true, true));
+        Assert.Equal(EmiPersonality.VoiceRevision, settings.CompanionEmiVoiceRevision);
+        var fence = settings.PersonaVoiceFenceUtc;
+        Assert.False(EmiPersonality.FenceOldVoice(settings, true, true));
+        Assert.Equal(fence, settings.PersonaVoiceFenceUtc);
+    }
     private static CompanionActivity Activity(string id) => new(id, id, "test", () => true,
         () => throw new Exception("a reply must never open an activity"));
 }
