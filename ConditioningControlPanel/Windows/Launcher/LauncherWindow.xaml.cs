@@ -34,6 +34,8 @@ public partial class LauncherWindow : Window
     private readonly DispatcherTimer _shortcutTextTimer = new() { Interval = TimeSpan.FromSeconds(3) };
     private readonly List<Border> _tiles = new();
     private readonly Dictionary<string, Border> _tileById = new(StringComparer.OrdinalIgnoreCase);
+    // Which tiles wore their face at the last BuildTiles, so a grant change redraws only on a flip.
+    private readonly Dictionary<string, bool> _revealedAtBuild = new(StringComparer.OrdinalIgnoreCase);
     private MainWindow? _engineSource;
     private bool _firstShow = true;
 
@@ -60,6 +62,10 @@ public partial class LauncherWindow : Window
 
         var mods = App.Mods;
         if (mods != null) mods.ModChanged += OnModChanged;
+
+        // Purchases arrive with the first profile sync, usually AFTER the launcher is already up
+        // on a fresh launch, so a bought Racing Thoughts tile would stay a mystery card.
+        Services.Prizes.PrizeGrants.GrantsChanged += OnGrantsChanged;
 
         var lockdown = App.Lockdown;
         if (lockdown != null)
@@ -141,6 +147,7 @@ public partial class LauncherWindow : Window
         UnhookEngine();
         var mods = App.Mods;
         if (mods != null) mods.ModChanged -= OnModChanged;
+        Services.Prizes.PrizeGrants.GrantsChanged -= OnGrantsChanged;
         var lockdown = App.Lockdown;
         if (lockdown != null)
         {
@@ -217,6 +224,24 @@ public partial class LauncherWindow : Window
             ModPillText.Text = LauncherModMenu.Label(Loc.Get("launcher_mod_label"), App.Mods?.ActiveMod?.Name, "-");
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshMod failed"); }
+    }
+
+    /// <summary>
+    /// A grant came or went (sync, counter purchase, logout). Redraw only when a tile's reveal
+    /// flipped and the launcher is on screen; a hidden launcher rebuilds on its next show anyway.
+    /// </summary>
+    private void OnGrantsChanged()
+    {
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(DispatcherPriority.Normal, OnGrantsChanged); return; }
+        if (!IsVisible) return;
+        var flipped = LauncherCatalogue.Games.Where(g => g.Available)
+            .Any(g => !_revealedAtBuild.TryGetValue(g.Id, out var was) || was != g.Revealed);
+        if (!flipped) return;
+        Log.Information("[Launcher] grants changed a tile's reveal, redrawing tiles");
+        BuildTiles();
+        if (MotionFx.AllowTransitions)
+            foreach (var t in _tiles) t.Opacity = 0;
+        MotionFx.StaggerIn(_tiles);
     }
 
     private void OnModChanged(object? sender, ModPackage mod)
@@ -447,8 +472,10 @@ public partial class LauncherWindow : Window
         GamesGrid.Children.Clear();
         _tiles.Clear();
         _tileById.Clear();
+        _revealedAtBuild.Clear();
         foreach (var entry in LauncherCatalogue.Games.Where(g => g.Available))
         {
+            _revealedAtBuild[entry.Id] = entry.Revealed;
             try
             {
                 var tile = CreateTile(entry);
