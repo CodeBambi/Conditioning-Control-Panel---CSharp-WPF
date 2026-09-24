@@ -48,6 +48,7 @@ import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
 import {
   GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION, NIGHT_CAP_VERSION,
+  SCORE_CAP_VERSION,
 } from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
@@ -722,7 +723,7 @@ function localCaps() {
    * hello, so no peer ever opens the media lane with it. Advertising less is always safe. */
   const transferCap = !!(session.caps && session.caps.mediaTransfer === true);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, transfer: transferCap });
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, score: SCORE_CAP_VERSION, transfer: transferCap });
 }
 
 /* ============================================================================
@@ -1032,10 +1033,10 @@ function createMatchLog() {
         return res;
       };
       origFinish = match.notifyInboundPayloadFinished.bind(match);
-      match.notifyInboundPayloadFinished = (id, endured) => {
+      match.notifyInboundPayloadFinished = (id, endured, held) => {
         const e = byId.get(id);
         if (e) e.status = endured ? 'endured' : 'landed';
-        return origFinish(id, endured);
+        return origFinish(id, endured, held);
       };
     },
 
