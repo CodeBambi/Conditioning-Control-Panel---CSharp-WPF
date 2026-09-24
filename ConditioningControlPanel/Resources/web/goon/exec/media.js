@@ -136,11 +136,21 @@ export function drawStillImage(pool) {
 
 const SHA_RE = /^[0-9a-f]{64}$/;
 
+/** Share of the online set shown before the pool asks the host for the next wave. */
+export const ONLINE_LOW_SHARE = 0.7;
+
 export function createGoonMediaPool() {
   let hostEntries = [];   // the host's manifest — the user's active preset
   let localEntries = [];  // standalone: files the player picked in this browser
   let onlineEntries = []; // the in-game flavour's Scrolller pictures (host `online-media` frame)
   let entries = [];       // hostEntries + localEntries + onlineEntries - what the deck indexes
+  /* THE ONLINE DECK REFILLS (2026-09-24). The host fetches one wave per pick (about 24 stills,
+   * 12 clips). Once most of that wave has been on screen the pool asks for the next one, ONCE per
+   * list: a new `online-media` frame that grows the list re-arms it. Names are identities, so a
+   * picture drawn twice counts once. */
+  const onlineShown = new Set();
+  let onlineAsked = false;
+  let onOnlineLow = null;
   let skipped = 0;    // reported by the host (browser-undecodable formats etc.)
   let truncated = false;
   let deck = [];      // shuffled indices into entries, drawn from the end
@@ -241,6 +251,15 @@ export function createGoonMediaPool() {
     }
     // Nothing to read or revoke — the URL streams straight off the virtual host.
     return { url: entry.url, release() {}, provenance: 'local' };
+  }
+
+  function noteShown(e) {
+    if (!e || !e.online) return;
+    onlineShown.add(e.name);
+    if (onlineAsked || !onOnlineLow || !onlineEntries.length) return;
+    if (onlineShown.size < Math.ceil(onlineEntries.length * ONLINE_LOW_SHARE)) return;
+    onlineAsked = true;
+    try { onOnlineLow(); } catch (_e) { /* a refill is never load-bearing */ }
   }
 
   const view = (e) => ({
@@ -375,7 +394,7 @@ export function createGoonMediaPool() {
     for (let tries = 0; tries < 24; tries++) {
       const i = drawIndex();
       if (i < 0) return null;
-      if (entries[i].kind === kind) return view(entries[i]);
+      if (entries[i].kind === kind) { noteShown(entries[i]); return view(entries[i]); }
     }
     return null;
   }
@@ -439,12 +458,20 @@ export function createGoonMediaPool() {
      */
     setOnlineLibrary(m) {
       const src = m || {};
+      const before = onlineEntries.length;
       onlineEntries = [];
-      for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) onlineEntries.push(v); }
-      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url, clip: true }); if (v) onlineEntries.push(v); }
+      for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) { v.online = true; onlineEntries.push(v); } }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url, clip: true }); if (v) { v.online = true; onlineEntries.push(v); } }
+      // Forget what left the list; a list that grew (a refill landed) or a new pick re-arms the ask.
+      const names = new Set(onlineEntries.map((e) => e.name));
+      for (const n of Array.from(onlineShown)) if (!names.has(n)) onlineShown.delete(n);
+      if (onlineEntries.length > before || !onlineEntries.length) onlineAsked = false;
       rebuildEntries();
       return counts();
     },
+
+    /** fn() once the online set is mostly shown (boot sends `media-more`). One ask per list. */
+    setOnlineLowHandler(fn) { onOnlineLow = typeof fn === 'function' ? fn : null; },
 
     /** How many of the deck's entries came from the online flavour. */
     onlineCount: () => onlineEntries.length,
@@ -472,7 +499,9 @@ export function createGoonMediaPool() {
     /** Next entry from the shuffled deck (null when the pool is empty). */
     draw() {
       const i = drawIndex();
-      return i < 0 ? null : view(entries[i]);
+      if (i < 0) return null;
+      noteShown(entries[i]);
+      return view(entries[i]);
     },
 
     /** Draw specifically an image/video (null when that kind is absent). */
@@ -503,6 +532,7 @@ export function createGoonMediaPool() {
       }
       const i = clipDeck.pop();
       lastClip = i;
+      noteShown(entries[i]);
       return view(entries[i]);
     },
 

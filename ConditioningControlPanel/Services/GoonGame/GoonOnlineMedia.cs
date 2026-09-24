@@ -29,6 +29,13 @@ namespace ConditioningControlPanel.Services.GoonGame
         public const int StillTarget = 24;
         public const int ClipTarget = 12;
 
+        /// <summary>How many waves' worth the deck may hold. A refill past this retires the
+        /// oldest picture as each fresh one lands, so the files held stay bounded.</summary>
+        public const int MaxWaves = 3;
+
+        /// <summary>The most pictures of one kind the deck holds at once.</summary>
+        public static int Cap(int perWave) => perWave * MaxWaves;
+
         /// <summary>Downloads in flight at once, per kind.</summary>
         public const int Concurrency = 3;
 
@@ -159,6 +166,13 @@ namespace ConditioningControlPanel.Services.GoonGame
         private readonly List<Item> _videos = new();
         private bool _running;
         private bool _failed;
+        // Per wave: how many fresh pictures this wave has landed, per kind. A refill wave
+        // (More) adds another StillTarget / ClipTarget on top of what the deck holds.
+        private int _stillAdded;
+        private int _clipAdded;
+        // Every post id this niche list has already shown the deck, so a refill never
+        // brings back a picture it already had. Reset by Start (a new list is a new deck).
+        private readonly HashSet<string> _seenIds = new(StringComparer.Ordinal);
 
         public GoonOnlineMedia(Action<Snapshot> onSnapshot) => _onSnapshot = onSnapshot;
 
@@ -204,6 +218,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                     _subs = clean;
                     _failed = false;
                     _running = clean.Count > 0;
+                    _stillAdded = 0;
+                    _clipAdded = 0;
+                    _seenIds.Clear();
                     _cts = new CancellationTokenSource();
                     ct = _cts.Token;
                 }
@@ -220,7 +237,35 @@ namespace ConditioningControlPanel.Services.GoonGame
 
             Emit(gen);
             if (clean.Count == 0) return;
+            RunWave(gen, ct);
+        }
 
+        /// <summary>The page's deck is running low (page -> host <c>media-more</c>): fetch the
+        /// next wave for the SAME niches off the feed's own cursor, never a post this list has
+        /// already had. No-op while a wave runs, with no niches, or after Off / Dispose. Once
+        /// the deck holds <see cref="GoonOnlineMediaRules.MaxWaves"/> waves, each fresh picture
+        /// retires the oldest one, so the files held stay bounded.</summary>
+        public bool More()
+        {
+            int gen;
+            CancellationToken ct;
+            lock (_gate)
+            {
+                if (_disposed || _running || _subs.Count == 0 || _cts == null) return false;
+                gen = _gen;
+                ct = _cts.Token;
+                _running = true;
+                _failed = false;
+                _stillAdded = 0;
+                _clipAdded = 0;
+            }
+            Emit(gen);
+            RunWave(gen, ct);
+            return true;
+        }
+
+        private void RunWave(int gen, CancellationToken ct)
+        {
             _ = Task.Run(async () =>
             {
                 try
@@ -248,8 +293,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             var coord = FypOnlineCoordinator.For(tenant, Channels, fetchKind);
             using var slots = new SemaphoreSlim(GoonOnlineMediaRules.Concurrency);
             int dry = 0;
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            while (!ct.IsCancellationRequested && Count(isImage) < target && dry < GoonOnlineMediaRules.MaxDryBatches)
+            while (!ct.IsCancellationRequested && Added(isImage) < target && dry < GoonOnlineMediaRules.MaxDryBatches)
             {
                 var (entries, error) = await coord.FetchBatchAsync(fetchKind, ct).ConfigureAwait(false);
                 if (error != null)
@@ -259,12 +303,16 @@ namespace ConditioningControlPanel.Services.GoonGame
                     await Task.Delay(1500, ct).ConfigureAwait(false);
                     continue;
                 }
-                var usable = entries
-                    .Where(e => RemoteMediaFormats.Validate(e, checkKind, out _) && seen.Add(e.Id))
-                    .Take(Math.Max(0, target - Count(isImage)))
-                    .ToList();
+                List<FypAssetManifest.Entry> usable;
+                lock (_gate)
+                {
+                    usable = entries
+                        .Where(e => RemoteMediaFormats.Validate(e, checkKind, out _) && e.Id != null && _seenIds.Add(e.Id))
+                        .Take(Math.Max(0, target - (isImage ? _stillAdded : _clipAdded)))
+                        .ToList();
+                }
                 if (usable.Count == 0) { dry++; continue; }
-                int before = Count(isImage);
+                int before = Added(isImage);
                 var jobs = usable.Select(async e =>
                 {
                     await slots.WaitAsync(ct).ConfigureAwait(false);
@@ -272,14 +320,14 @@ namespace ConditioningControlPanel.Services.GoonGame
                     finally { slots.Release(); }
                 });
                 await Task.WhenAll(jobs).ConfigureAwait(false);
-                dry = Count(isImage) > before ? 0 : dry + 1;
+                dry = Added(isImage) > before ? 0 : dry + 1;
             }
         }
 
         private async Task MaterialiseOneAsync(int gen, FypAssetManifest.Entry e, bool isImage, int target,
             CancellationToken ct)
         {
-            if (ct.IsCancellationRequested || Count(isImage) >= target) return;
+            if (ct.IsCancellationRequested || Added(isImage) >= target) return;
             // ownerReleases: the pool holds these for the whole game and releases every one on a
             // niche change or close, so the app-wide 50-file sweep must not take them mid-match.
             var path = await RemoteMediaCache.MaterializeAsync(e.Url, ct, ownerReleases: true).ConfigureAwait(false);
@@ -291,19 +339,27 @@ namespace ConditioningControlPanel.Services.GoonGame
                 return;
             }
             bool kept = false;
+            Item? retired = null;
             lock (_gate)
             {
-                if (gen == _gen && !_disposed && !ct.IsCancellationRequested)
+                if (gen == _gen && !_disposed && !ct.IsCancellationRequested
+                    && (isImage ? _stillAdded : _clipAdded) < target)
                 {
                     var list = isImage ? _images : _videos;
-                    if (list.Count < target)
+                    // Past the cap the oldest picture makes room, and only once a fresh one has
+                    // actually landed: an exhausted feed never shrinks the deck.
+                    if (list.Count >= GoonOnlineMediaRules.Cap(target))
                     {
-                        list.Add(new Item(NameFor(e, isImage), url, path));
-                        kept = true;
+                        retired = list[0];
+                        list.RemoveAt(0);
                     }
+                    list.Add(new Item(NameFor(e, isImage), url, path));
+                    if (isImage) _stillAdded++; else _clipAdded++;
+                    kept = true;
                 }
             }
             if (!kept) { RemoteMediaCache.ReleaseTempFile(path); return; }
+            if (retired != null) ReleaseLater(retired);
             Emit(gen);
         }
 
@@ -315,9 +371,20 @@ namespace ConditioningControlPanel.Services.GoonGame
             return (isImage ? "online:" : "online-clip:") + id;
         }
 
-        private int Count(bool isImage)
+        private int Added(bool isImage)
         {
-            lock (_gate) return isImage ? _images.Count : _videos.Count;
+            lock (_gate) return isImage ? _stillAdded : _clipAdded;
+        }
+
+        /// <summary>A retired picture may still be on screen (the page got the new list a
+        /// moment ago), so its file goes a little later, not under a playing element.</summary>
+        private static void ReleaseLater(Item item)
+        {
+            _ = Task.Run(async () =>
+            {
+                try { await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false); } catch { }
+                Release(new[] { item });
+            });
         }
 
         private void Emit(int gen)
@@ -340,7 +407,10 @@ namespace ConditioningControlPanel.Services.GoonGame
         private Snapshot SnapshotLocked()
         {
             int have = _images.Count + _videos.Count;
-            int want = _subs.Count == 0 ? 0 : GoonOnlineMediaRules.StillTarget + GoonOnlineMediaRules.ClipTarget;
+            int want = _subs.Count == 0 ? 0
+                : _running ? have + Math.Max(0, GoonOnlineMediaRules.StillTarget - _stillAdded)
+                                 + Math.Max(0, GoonOnlineMediaRules.ClipTarget - _clipAdded)
+                           : Math.Max(have, GoonOnlineMediaRules.StillTarget + GoonOnlineMediaRules.ClipTarget);
             var state = GoonOnlineMediaRules.StateFor(true, _subs.Count, have, _running, _failed);
             return new Snapshot(state, _subs.ToList(), _images.ToList(), _videos.ToList(), have, want);
         }

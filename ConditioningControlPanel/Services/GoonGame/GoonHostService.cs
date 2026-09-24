@@ -669,6 +669,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "media-flavour":    // flavour card / options sheet: the pick, the edits, the niches
                     OnMediaFlavour(o);
                     break;
+                case "media-more":       // the page's online deck is mostly shown: fetch the next wave
+                    OnMediaMore();
+                    break;
                 case "open-prime":       // page's Prime sheet "See Prime": the app's own refusal and upgrade path
                     TierGate.DemandLab("Goon Game");
                     break;
@@ -1735,6 +1738,22 @@ namespace ConditioningControlPanel.Services.GoonGame
                 _onlineMedia.Start(subs);
             }
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.StartOnlineMedia: {E}", ex.Message); }
+        }
+
+        /// <summary>page -> host <c>media-more</c>: the next wave for the stored niches, under the
+        /// same gate as the first one (the switch on, a pick, niches). The pick stays the opt-in.</summary>
+        private static void OnMediaMore()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                bool online = s?.GoonMediaOnline ?? true;
+                var flavour = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour);
+                var subs = GoonOnlineMediaRules.SplitSubs(s?.GoonMediaSubs);
+                if (_onlineMedia == null || !GoonOnlineMediaRules.ShouldFetch(online, flavour, subs)) return;
+                if (_onlineMedia.More()) App.Logger?.Information("GoonHostService: media-more, next wave");
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnMediaMore: {E}", ex.Message); }
         }
 
         /// <summary>Worker thread -> UI thread -> page. The whole current list every time.</summary>

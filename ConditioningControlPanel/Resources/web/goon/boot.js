@@ -383,6 +383,14 @@ const mediaFlavour = (() => {
   return api;
 })();
 
+// The online deck is mostly shown: ask the host for the next wave (it re-checks the pick and
+// the switch, and fetches only posts this list has not had).
+media.setOnlineLowHandler(() => {
+  if (!mediaFlavour.available()) return;
+  try { bridge.send({ type: 'media-more' }); } catch (_e) { /* never load-bearing */ }
+  bridge.log('media-more: online deck mostly shown');
+});
+
 bridge.on('online-media', (m) => {
   const c = mediaFlavour.adopt(m);
   const o = mediaFlavour.info();
