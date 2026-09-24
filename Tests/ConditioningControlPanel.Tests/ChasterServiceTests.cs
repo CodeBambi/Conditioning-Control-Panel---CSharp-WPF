@@ -259,22 +259,80 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task With_no_lock_chosen_the_only_active_lock_is_used_and_two_are_never_guessed()
+    public async Task With_no_lock_chosen_nothing_is_pushed_not_even_to_the_only_lock()
     {
         _options = _options with { LockId = null };
         _http.Answer = p => p == "/locks" ? Json(200, "[{\"_id\":\"solo9\",\"role\":\"wearer\"}]") : new HttpResponseMessage(HttpStatusCode.NoContent);
         using var service = Make();
         service.NoteSeconds("watcher", 300);
 
+        Assert.Equal(SettleOutcome.NoLockChosen, await service.SettleAsync());
+        Assert.DoesNotContain(_http.Seen, s => s.Path.EndsWith("update-time"));
+        Assert.Equal(300, service.BalanceSeconds);
+        Assert.Equal(0, service.PushableTodaySeconds);
+
+        _options = _options with { LockId = "solo9" };
         Assert.Equal(SettleOutcome.Pushed, await service.SettleAsync());
         Assert.Contains(_http.Seen, s => s.Path == "/locks/solo9/update-time");
+    }
 
-        _utc = _utc.AddDays(1);
-        _http.Answer = p => p == "/locks" ? Json(200, "[{\"_id\":\"a1\",\"role\":\"wearer\"},{\"_id\":\"b2\",\"role\":\"wearer\"}]") : new HttpResponseMessage(HttpStatusCode.NoContent);
+    [Fact]
+    public async Task Paused_books_nothing_pushes_nothing_and_resuming_lets_the_balance_go()
+    {
+        _options = _options with { Prices = new HashSet<string> { "typo", "watcher", NatashasFavourite.EventId } };
+        using var service = Make();
         service.NoteSeconds("watcher", 300);
 
-        Assert.Equal(SettleOutcome.NoLockChosen, await service.SettleAsync());
+        _options = _options with { Paused = true };
+        Assert.True(service.IsPaused);
+        Assert.Equal(TabRefusal.Paused, service.Note("typo").Refusal);
+        Assert.False(service.NoteSeconds("watcher", 300).Booked);
+        Assert.False(service.CanBook(NatashasFavourite.EventId));
+        Assert.Equal(0, service.PushableTodaySeconds);
+        Assert.Equal(SettleOutcome.Nothing, await service.SettleAsync());
+        Assert.Empty(_http.Seen);
         Assert.Equal(300, service.BalanceSeconds);
+
+        _options = _options with { Paused = false };
+        Assert.True(service.CanBook(NatashasFavourite.EventId));
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleAsync());
+        Assert.Equal(0, service.BalanceSeconds);
+    }
+
+    [Fact]
+    public void An_escape_attempt_books_three_times_a_day_at_most()
+    {
+        _options = _options with { Prices = new HashSet<string> { "escape" } };
+        using var service = Make();
+
+        for (var i = 0; i < 3; i++) Assert.Equal(180, service.Note("escape").AppliedSeconds);
+        Assert.False(service.CanBook("escape"));
+        var fourth = service.Note("escape");
+        Assert.Equal(0, fourth.AppliedSeconds);
+        Assert.Equal(TabRefusal.RowCap, fourth.Refusal);
+        Assert.Equal(540, service.BalanceSeconds);
+
+        _utc = _utc.AddDays(1);
+        Assert.True(service.CanBook("escape"));
+        Assert.Equal(180, service.Note("escape").AppliedSeconds);
+    }
+
+    [Fact]
+    public void What_goes_today_stops_at_the_daily_limit_and_the_rest_waits()
+    {
+        _options = _options with { Limits = TabLimits.FromMinutes(15, 120) };
+        using var service = Make();
+        // Two days of bookings with no push in between: more than one day's limit waits.
+        Assert.Equal(900, service.NoteSeconds("watcher", 900).AppliedSeconds);
+        _utc = _utc.AddDays(1);
+        Assert.Equal(900, service.NoteSeconds("watcher", 900).AppliedSeconds);
+
+        Assert.Equal(1800, service.BalanceSeconds);
+        Assert.Equal(900, service.PushableTodaySeconds);
+        var line = TabPageText.Tag(service.BalanceSeconds, service.PushableTodaySeconds, paused: false, lockPicked: true);
+        Assert.Equal("chaster_tag_split", line.Key);
+        Assert.Equal("15:00", line.Today);
+        Assert.Equal("15:00", line.Later);
     }
 
     [Fact]
@@ -564,16 +622,25 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task The_only_active_lock_is_taken_when_none_was_picked()
+    public async Task One_lock_and_no_pick_is_still_a_pick_to_make()
     {
         _options = _options with { LockId = null };
         AnswerLocks("[{\"_id\":\"solo9\",\"role\":\"wearer\"}]");
         using var service = Make();
 
-        var snapshot = await service.RefreshLockAsync();
+        Assert.Null(await service.RefreshLockAsync());
+        Assert.Equal(LockLookup.Ambiguous, service.LockLookup);
+    }
 
-        Assert.Equal(LockLookup.Chosen, service.LockLookup);
-        Assert.Equal("solo9", snapshot!.Id);
+    [Fact]
+    public async Task A_picked_lock_that_is_gone_stays_unpicked_and_never_falls_back_to_another()
+    {
+        _options = _options with { LockId = "gone" };
+        AnswerLocks("[{\"_id\":\"solo9\",\"role\":\"wearer\"}]");
+        using var service = Make();
+
+        Assert.Null(await service.RefreshLockAsync());
+        Assert.Equal(LockLookup.Ambiguous, service.LockLookup);
     }
 
     [Fact]

@@ -373,13 +373,15 @@ namespace ConditioningControlPanel.Controls
                 var snapshot = chaster?.Lock;
                 var balance = chaster?.BalanceSeconds ?? 0;
                 var clock = LockClockText.State(chaster?.LockLookup ?? LockLookup.Unlinked, snapshot,
-                    chaster?.IsLinked == true, hold, now);
+                    chaster?.IsLinked == true, hold, now, paused: chaster?.IsPaused == true);
                 _state = clock.State;
 
                 _clock.Text = clock.State switch
                 {
                     LockClockState.Frozen => Loc.Get("chaster_chip_frozen"),
                     LockClockState.Held => Loc.GetF("chaster_chip_hold", clock.Text),
+                    LockClockState.Paused => Loc.GetF("chaster_chip_paused", clock.Text == "" || clock.Text == LockClockText.HiddenMark
+                        ? clock.Text : LiveText(snapshot, balance, now, clock.Text)).Trim(),
                     LockClockState.Locked or LockClockState.Away => LiveText(snapshot, balance, now, clock.Text),
                     _ => clock.Text,
                 };
@@ -422,13 +424,14 @@ namespace ConditioningControlPanel.Controls
         /// <summary>Whether the padlock is drawn shut. A safety hold is NOT a lock state, so the
         /// shackle keeps whatever the last lookup said: held only greys the chip out.</summary>
         private static bool IsShut(LockClockState state) => state is LockClockState.Locked
-            or LockClockState.Frozen or LockClockState.Hidden or LockClockState.Away or LockClockState.Held;
+            or LockClockState.Frozen or LockClockState.Hidden or LockClockState.Away or LockClockState.Held
+            or LockClockState.Paused;
 
         private static (Color Ink, Color Ring) Palette(LockClockState state) => state switch
         {
             LockClockState.Frozen => (Ice, RingIce),
             LockClockState.Away => (Ink, RingAmber),
-            LockClockState.Held => (Grey, RingGrey),
+            LockClockState.Held or LockClockState.Paused => (Grey, RingGrey),
             _ => (Ink, RingPink),
         };
 
@@ -529,7 +532,8 @@ namespace ConditioningControlPanel.Controls
                     BigNumber(left, snapshot.IsFrozen ? Ice : Color.FromRgb(0xFF, 0xF0, 0xF8));
                     _peekLead.Text = Loc.Get("chaster_peek_left");
                 }
-                if (snapshot.EndsAtUtc is { } ends)
+                // The same end the clock counts to: Chaster's own plus what the tab will add.
+                if (LiveLockClock.EndsAt(snapshot, balance, now) is { } ends)
                     _peekEnds.Text = Loc.GetF("chaster_chip_ends", ends.ToLocalTime().ToString("ddd d MMM HH:mm"));
                 if (snapshot.IsFrozen) _peekNote.Text = Loc.Get("chaster_chip_frozen_tip");
                 else if (chaster.LockLookup == LockLookup.Away) _peekNote.Text = Loc.Get("chaster_chip_away_tip");
@@ -538,6 +542,7 @@ namespace ConditioningControlPanel.Controls
 
             if (LiveLockClock.PendingAdd(balance) > 0)
                 _peekPending.Text = Loc.GetF("chaster_peek_pending", CircesTab.Format(balance));
+            if (chaster.IsPaused) _peekNote.Text = Loc.Get("chaster_chip_paused_tip");
             if (hold > TimeSpan.Zero)
                 _peekNote.Text = Loc.GetF("chaster_chip_hold_tip", LockClockText.HoldClock(hold));
             Collapse();

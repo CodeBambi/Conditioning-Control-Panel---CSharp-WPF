@@ -5132,7 +5132,8 @@ namespace ConditioningControlPanel.Models
             set { _chasterConsentSeen = value; OnPropertyChanged(); }
         }
 
-        /// <summary>The lock the tab settles to. Null = the only active lock, and never a guess between two.</summary>
+        /// <summary>The lock the tab settles to. Null = nothing is pushed until the player picks one,
+        /// even when only one lock exists.</summary>
         [JsonProperty]
         public string? ChasterLockId
         {
@@ -5166,6 +5167,69 @@ namespace ConditioningControlPanel.Models
         {
             get => _chasterBacklogLimitMinutes;
             set { _chasterBacklogLimitMinutes = value; OnPropertyChanged(); }
+        }
+
+        private int _chasterDailyLimitPendingMinutes;
+        private DateTime? _chasterDailyLimitPendingAtUtc;
+        private int _chasterBacklogLimitPendingMinutes;
+        private DateTime? _chasterBacklogLimitPendingAtUtc;
+
+        /// <summary>A raise of the daily limit waiting to land (LimitChange: a raise waits 24 hours,
+        /// a lowering applies at once). 0 = none waiting.</summary>
+        [JsonProperty]
+        public int ChasterDailyLimitPendingMinutes
+        {
+            get => _chasterDailyLimitPendingMinutes;
+            set { _chasterDailyLimitPendingMinutes = value; OnPropertyChanged(); }
+        }
+
+        [JsonProperty]
+        public DateTime? ChasterDailyLimitPendingAtUtc
+        {
+            get => _chasterDailyLimitPendingAtUtc;
+            set { _chasterDailyLimitPendingAtUtc = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>A raise of the backlog limit waiting to land. 0 = none waiting.</summary>
+        [JsonProperty]
+        public int ChasterBacklogLimitPendingMinutes
+        {
+            get => _chasterBacklogLimitPendingMinutes;
+            set { _chasterBacklogLimitPendingMinutes = value; OnPropertyChanged(); }
+        }
+
+        [JsonProperty]
+        public DateTime? ChasterBacklogLimitPendingAtUtc
+        {
+            get => _chasterBacklogLimitPendingAtUtc;
+            set { _chasterBacklogLimitPendingAtUtc = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>The daily limit with its waiting raise, as one value for LimitChange.</summary>
+        [JsonIgnore]
+        public ConditioningControlPanel.Services.Chaster.LimitSetting ChasterDayLimit
+        {
+            get => new(ChasterDailyLimitMinutes, ChasterDailyLimitPendingMinutes, ChasterDailyLimitPendingAtUtc);
+            set { ChasterDailyLimitMinutes = value.Minutes; ChasterDailyLimitPendingMinutes = value.PendingMinutes; ChasterDailyLimitPendingAtUtc = value.PendingAtUtc; }
+        }
+
+        /// <summary>The backlog limit with its waiting raise, as one value for LimitChange.</summary>
+        [JsonIgnore]
+        public ConditioningControlPanel.Services.Chaster.LimitSetting ChasterBacklogLimit
+        {
+            get => new(ChasterBacklogLimitMinutes, ChasterBacklogLimitPendingMinutes, ChasterBacklogLimitPendingAtUtc);
+            set { ChasterBacklogLimitMinutes = value.Minutes; ChasterBacklogLimitPendingMinutes = value.PendingMinutes; ChasterBacklogLimitPendingAtUtc = value.PendingAtUtc; }
+        }
+
+        private bool _chasterPaused;
+
+        /// <summary>The Circe's tab page's pause button: nothing books and nothing is pushed while
+        /// it is down. Instant both ways, survives a restart.</summary>
+        [JsonProperty]
+        public bool ChasterPaused
+        {
+            get => _chasterPaused;
+            set { _chasterPaused = value; OnPropertyChanged(); }
         }
 
         private bool _chasterRelockPastEnd;
