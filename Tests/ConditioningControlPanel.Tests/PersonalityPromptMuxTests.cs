@@ -91,6 +91,37 @@ public class PersonalityPromptMuxTests : IDisposable
         try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
+    [Fact]
+    public void EmiOwnsBothPromptPathsAndPreservesOtherAvatarCustomization()
+    {
+        var previous = Environment.GetEnvironmentVariable("CCP_COMPANION_V2");
+        try
+        {
+            Environment.SetEnvironmentVariable("CCP_COMPANION_V2", "1");
+            _settings.SelectedAvatarSet = 8;
+            _settings.ActiveCompanionId = 0;
+            _settings.CompanionEmiPreviewChoiceMade = true;
+            _settings.ActivePersonalityPresetId = PersonalityPresets.GentleTrainerId;
+            ActivateCommunityPrompt();
+            _settings.SlutModeEnabled = true;
+
+            Assert.Equal("emi-fixed", App.Personality!.GetActivePreset().Id);
+            Assert.Single(App.Personality.GetAllPresets());
+            Assert.False(App.Personality.SetActivePreset(PersonalityPresets.GentleTrainerId));
+            Assert.Contains("You are EMI", BambiSprite.GetConversationPrompt());
+            Assert.DoesNotContain(CustomCanary, BambiSprite.GetConversationPrompt());
+            Assert.DoesNotContain(CustomCanary, BambiSprite.GetStablePrompt());
+            Assert.True(_settings.CompanionPrompt.UseCustomPrompt);
+            Assert.Equal(PersonalityPresets.GentleTrainerId, _settings.ActivePersonalityPresetId);
+
+            _settings.SelectedAvatarSet = 1;
+            Assert.Contains(CustomCanary, BambiSprite.GetConversationPrompt());
+            Assert.Contains(CustomCanary, BambiSprite.GetStablePrompt());
+            Assert.True(App.Personality.GetAllPresets().Count > 1);
+        }
+        finally { Environment.SetEnvironmentVariable("CCP_COMPANION_V2", previous); }
+    }
+
     // ---------- 1: preset selection is authoritative ----------
 
     [Fact]

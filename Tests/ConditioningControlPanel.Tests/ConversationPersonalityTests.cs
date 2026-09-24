@@ -9,15 +9,33 @@ namespace ConditioningControlPanel.Tests;
 public class ConversationPersonalityTests
 {
     [Fact]
-    public void EmiPreviewDoesNotReplaceModOrChosenPersonalities()
+    public void EmiIdentityOverridesSavedPresetsOnlyForTheEmiAvatar()
     {
         var neutral = PersonalityPresets.GetNeutralDefault();
         Assert.Same(neutral, EmiPersonality.ForPreview(neutral, "circe", true));
         Assert.Same(neutral, EmiPersonality.ForPreview(neutral, null, false));
         Assert.Same(neutral, EmiPersonality.ForPreview(neutral, BuiltInMods.CCPDefaultId, true, 1));
         var gentle = PersonalityPresets.GetGentleTrainer();
-        Assert.Same(gentle, EmiPersonality.ForPreview(gentle, null, true));
+        Assert.Equal(EmiPersonality.Id, EmiPersonality.ForPreview(gentle, null, true).Id);
+        Assert.Same(gentle, EmiPersonality.ForPreview(gentle, null, true, 0, 1));
+        var custom = new PersonalityPreset { Id = "custom", Name = "custom" };
+        Assert.Equal(EmiPersonality.Id, EmiPersonality.ForPreview(custom, null, true).Id);
+        Assert.Same(custom, EmiPersonality.ForPreview(custom, "circe", true));
         Assert.Equal("EMI", EmiPersonality.ForPreview(neutral, BuiltInMods.CCPDefaultId, true).Name);
+    }
+
+    [Fact]
+    public void FixedVoiceAdoptionAndAvatarSwitchFenceOldRepliesOnlyOnce()
+    {
+        var settings = new AppSettings { ActivePersonalityPresetId = "keep-my-preset" };
+        Assert.True(EmiPersonality.FenceOldVoice(settings, true, true));
+        var first = settings.PersonaVoiceFenceUtc;
+        Assert.NotNull(first);
+        Assert.False(EmiPersonality.FenceOldVoice(settings, true, true));
+        Assert.Equal(first, settings.PersonaVoiceFenceUtc);
+        Assert.True(EmiPersonality.FenceOldVoice(settings, false, true));
+        Assert.True(EmiPersonality.FenceOldVoice(settings, true, false));
+        Assert.Equal("keep-my-preset", settings.ActivePersonalityPresetId);
     }
 
     [Fact]

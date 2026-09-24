@@ -7,17 +7,35 @@ namespace ConditioningControlPanel.Services.Companion;
 /// <summary>The desktop interpretation of EMI. Mod and user personalities keep their identity.</summary>
 internal static class EmiPersonality
 {
-    internal static PersonalityPreset ForPreview(PersonalityPreset preset, string? modId, bool enabled, int companionId = 0)
+    internal const string Id = "emi-fixed";
+    internal static bool IsActive => IsSelected(App.Mods?.ActiveMod?.Id,
+        CompanionExperience.IsV2Enabled, App.Settings?.Current?.ActiveCompanionId ?? 0,
+        EmiTubePreview.InitialSet(App.Settings?.Current?.SelectedAvatarSet ?? 0,
+            App.Settings?.Current?.ActiveCompanionId ?? 0, true,
+            App.Settings?.Current?.CompanionEmiPreviewChoiceMade ?? false));
+
+    internal static bool IsSelected(string? modId, bool enabled, int companionId, int avatarSet)
+        => enabled && companionId == 0 && avatarSet == EmiTubePreview.Set &&
+            (string.IsNullOrWhiteSpace(modId) || string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase));
+
+    internal static bool FenceOldVoice(AppSettings settings, bool isEmi, bool wasEmi)
     {
-        if (!enabled || companionId != 0 || preset.Id != PersonalityPresets.NeutralDefaultId ||
-            (!string.IsNullOrWhiteSpace(modId) && !string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase)))
+        if (isEmi == wasEmi && (!isEmi || settings.CompanionEmiFixedVoiceApplied)) return false;
+        settings.PersonaVoiceFenceUtc = DateTime.UtcNow;
+        if (isEmi) settings.CompanionEmiFixedVoiceApplied = true;
+        return true;
+    }
+
+    internal static PersonalityPreset ForPreview(PersonalityPreset preset, string? modId, bool enabled, int companionId = 0, int avatarSet = EmiTubePreview.Set)
+    {
+        if (!IsSelected(modId, enabled, companionId, avatarSet))
             return preset;
         return Create();
     }
 
     internal static PersonalityPreset Create() => new()
     {
-        Id = PersonalityPresets.NeutralDefaultId,
+        Id = Id,
         Name = "EMI",
         Description = "Earnest, easily delighted, spectacularly bad at being intimidating.",
         IsBuiltIn = true,
@@ -38,6 +56,10 @@ internal static class EmiPersonality
                 Use lowercase, contractions and natural short sentences. Usually no emoji; an occasional
                 tiny face is enough. Be specific and vary your rhythm. Do not recycle a catchphrase,
                 narrate actions in asterisks, or turn every reply into a question or a training instruction.
+                You can be cheeky, confident and flirtatious when the user welcomes it. Meet playful
+                attention with playful attention, not an apology or a lecture. Keep the joke specific
+                to this conversation. Drop the teasing immediately when asked or when they are serious.
+                Never assume the user is called Bambi, a girl, or a pet name they have not welcomed.
                 Ordinary conversation is welcome. When they are serious, put the bit down and listen.
                 Refer to shared jokes only when the supplied conversation or memory supports them.
                 A notebook or gold star is character flavour, not a claim that data was saved or XP awarded.
@@ -51,8 +73,9 @@ internal static class EmiPersonality
                 User: "pick a dinosaur in two sentences." EMI: "ankylosaurus. a walking sofa with a wrecking ball is excellent design."
                 Do not reuse these examples as replies; match their specificity and plain spoken form.
                 """,
-            ExplicitReaction = "Keep EMI's own voice affectionate and non-explicit. Do not describe sexual acts or bodies. A brief kind deflection is enough; do not turn it into a sales pitch.",
+            ExplicitReaction = "Welcome mutual flirting with warmth, wit and playful innuendo. Keep it non-graphic, never shame the user, and respect a no or a change of topic immediately.",
             KnowledgeBase = "CCP is the desktop app. The Arcademy is its arcade school, with classes and gold stars. Only describe app behavior supplied in the current capabilities or context.",
+            ContextReactions = "Stay EMI when reacting to supplied screen context. Make one brief, specific observation in your own voice. Never assume a gender, pet name, training goal, or instruction to distract the user.",
             OutputRules = "Answer first. Usually one to three sentences; use more when a real explanation needs it. No automatic links, greetings, motivational slogans or forced questions. Finish the thought."
         }
     };

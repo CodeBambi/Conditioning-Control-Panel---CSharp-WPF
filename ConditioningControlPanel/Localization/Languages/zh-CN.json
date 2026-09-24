@@ -49,6 +49,7 @@
   "companion_v2_popout": "独立窗口",
   "companion_v2_mute": "关闭语音",
   "companion_v2_history_note": "新聊天会清除这段对话。保存的偏好会保留。",
+  "companion_v2_emi_fixed": "EMI的性格是固定的。请选择其他角色来自定义性格。",
   "companion_v2_personality": "更多性格选项",
   "companion_v2_memory_note": "开启记忆后，所选AI可以总结近期聊天。相关记忆会随消息发送。保存的信息保留在此电脑上，可在这里查看或删除。",
   "companion_v2_busy": "正在准备回复。",

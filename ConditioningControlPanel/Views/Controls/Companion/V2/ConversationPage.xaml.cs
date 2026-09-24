@@ -90,7 +90,11 @@ public partial class ConversationPage : UserControl
         _vm.Room.Sync();
         string? source = kind switch { "memory" => "MemoryZone", "permissions" => "PermissionsZone", "connection" => "EngineZone", "personality" => "PersonalityZone", _ => null };
         SheetTitle.Text = Loc.Get(kind switch { "memory" => "companion_v2_memory", "permissions" => "companion_v2_allowed", "connection" => "companion_v2_connection", _ => "companion_v2_who" });
-        if (source != null && _legacy.FindName(source) is FrameworkElement existing && existing.Parent is Panel parent)
+        if (kind == "personality" && Services.Companion.EmiPersonality.IsActive)
+        {
+            SheetContent.Content = new TextBlock { Text = Loc.Get("companion_v2_emi_fixed"), TextWrapping = TextWrapping.Wrap };
+        }
+        else if (source != null && _legacy.FindName(source) is FrameworkElement existing && existing.Parent is Panel parent)
         {
             _borrowed = existing;
             _oldBinding = BindingOperations.GetBindingBase(existing, DataContextProperty);
@@ -113,6 +117,17 @@ public partial class ConversationPage : UserControl
             contents.Children.Add(new CompanionPickerCard());
             var advanced = new Button { Content = Loc.Get("companion_v2_personality"), Margin = new Thickness(0, 14, 0, 0) };
             advanced.Click += (_, _) => { if (PersonalityEditor != null && Window.GetWindow(this) is Window owner) { PersonalityEditor(owner); _vm.Room.Sync(); _vm.Refresh(); } else OpenSheet("personality"); };
+            var fixedVoice = new TextBlock { Text = Loc.Get("companion_v2_emi_fixed"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 14, 0, 0) };
+            contents.Children.Add(fixedVoice);
+            void SyncEditor()
+            {
+                var fixedEmi = Services.Companion.EmiPersonality.IsActive;
+                advanced.Visibility = fixedEmi ? Visibility.Collapsed : Visibility.Visible;
+                fixedVoice.Visibility = fixedEmi ? Visibility.Visible : Visibility.Collapsed;
+            }
+            SyncEditor();
+            contents.AddHandler(System.Windows.Controls.Primitives.Selector.SelectionChangedEvent,
+                new SelectionChangedEventHandler((_, _) => Dispatcher.BeginInvoke(new Action(SyncEditor))));
             contents.Children.Add(advanced);
             SheetContent.Content = contents;
         }

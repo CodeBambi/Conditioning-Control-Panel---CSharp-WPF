@@ -14,12 +14,15 @@ public static class EmiTubePreview
         var settings = App.Settings?.Current;
         if (!Available || settings == null) return savedSet;
         var selected = InitialSet(savedSet, settings.ActiveCompanionId, true, settings.CompanionEmiPreviewChoiceMade);
+        var isEmi = selected == Set && settings.ActiveCompanionId == 0;
+        var changed = EmiPersonality.FenceOldVoice(settings, isEmi, isEmi);
         if (!settings.CompanionEmiPreviewChoiceMade)
         {
             settings.SelectedAvatarSet = selected;
             settings.CompanionEmiPreviewChoiceMade = true;
-            App.Settings?.Save();
+            changed = true;
         }
+        if (changed) App.Settings?.Save();
         return selected;
     }
     public static bool SuppressesDesk(bool available, int set, bool visible, bool attached)
