@@ -317,14 +317,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // what we asked the model to produce. See AiCallOptions.ChatWithEffects.
                 var effectsOn = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
                 var options = effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat;
-                var offered = _preview() ? Activities().Where(a => a.Allowed).ToArray() : Array.Empty<CompanionActivity>();
+                var offered = _preview() ? ConversationDelivery.Select(Activities(), input, Session.Turns) : Array.Empty<CompanionActivity>();
                 if (_preview())
                 {
                     options = ConversationDelivery.Options(options, input, effectsOn);
-                    var messages = request.Messages.ToList();
-                    messages.Insert(1, ChatMessage.System(ConversationDelivery.Instructions(offered)
-                        + (EmiPersonality.IsActive ? "\n" + EmiVoiceExamples.For(input) : string.Empty)));
-                    request = new PromptRequest(request.SystemPrompt, messages);
+                    request = ConversationDelivery.Apply(request, input, offered, EmiPersonality.IsActive);
                 }
                 var result = await _transport
                     .SendAsync(request.Messages, options, cancellationToken)

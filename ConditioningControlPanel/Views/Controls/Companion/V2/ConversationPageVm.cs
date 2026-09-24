@@ -56,7 +56,7 @@ internal sealed class ConversationPageVm : CompanionObservable
         : string.Empty;
     public string Flavor => App.Personality?.GetActivePreset()?.Description ?? _room.Hero.Flavor;
     public string Face => Busy ? "..." : HasNotice ? "o_o" : NeedsStart ? "-_-" : "^_^";
-    public string StatusColor => HasNotice || NeedsSignIn || DailyExhausted ? "#FFCD83" : NeedsStart ? "#BFAEC9" : "#80E4C5";
+    public string StatusColor => HasNotice || NeedsSignIn || DailyExhausted ? "#FFCD83" : NeedsStart ? "#BFAEC9" : "#F2A8D4";
     public string Allowance => _room.Engine.Provider == CompanionProviderMode.Cloud && App.Ai?.DailyRequestsRemaining is int count && count >= 0
         ? Loc.GetF("companion_engine_status_ready_fmt", count) : string.Empty;
     public bool DailyExhausted => _room.Engine.Provider == CompanionProviderMode.Cloud && App.Ai?.DailyRequestsRemaining == 0;

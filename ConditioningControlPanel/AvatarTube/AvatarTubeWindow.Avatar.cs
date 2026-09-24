@@ -808,6 +808,8 @@ namespace ConditioningControlPanel
                 TakeoverCountdownBar.Margin = new Thickness(0, 0, 416 - dx, 264);
             }
 
+            ApplyEmiTubeFit();
+
             // The bubble is placed from one method for both modes now: attached it is anchored on
             // the hit-test seam rather than centred, so its margin is not simply "the attached
             // constant minus dx" any more. See ApplySpeechBubblePlacement.
@@ -886,6 +888,9 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ApplyAvatarTransform(int setNumber)
         {
+            ApplyEmiTubeFit();
+            if (Services.Companion.EmiTubePreview.IsEmi(setNumber)) return;
+
             // Portrait mode: all skins render at the same (already-reduced) size — skip the per-set
             // +12% border zoom so base/lingerie/beach/fishnet stay consistent, and raise the avatar.
             if (_portraitMode)
