@@ -45,7 +45,7 @@ import { getDuelLength } from '../screens/customize.js';
 import { finishedMatches } from '../nightProgress.js';
 
 const HINT_KEY = 'goon.night.cardHint.v1';
-const RESULT_HOLD_MS = 2600;
+const RESULT_HOLD_MS = 1200;
 /** Quiet time after a duel closes before the next may start, on top of that duel's length. */
 export const DUEL_GAP_EXTRA_MS = 30000;
 /** Duels one match may hold. */
@@ -207,6 +207,7 @@ export function createDuelController({
     cur.stage = 'wait';
     cur.mine = readMine(cur);
     dropRun(cur);
+    duck(false);
     if (match) match.sendDuel({ sub: 'score', idx: cur.idx, game: cur.game, score: cur.mine.score, tile: cur.mine.tile | 0 });
     v('waiting');
     if (peerScores.has(cur.idx)) { resolve(); return; }

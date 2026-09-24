@@ -62,6 +62,11 @@ const CSS = `
   font-family: var(--gg-font, system-ui, sans-serif); transform: translate(-50%, -50%);
   animation: ggDuelCardIn 300ms cubic-bezier(.2, 1.5, .4, 1) both; }
 .gg-nduel-card[hidden] { display: none; }
+.gg-nduel.is-notice .gg-nduel-dim { opacity: 0; }
+.gg-nduel.is-notice .gg-nduel-card { top: 12%; width: min(360px, 75vw); transform: translateX(-50%); pointer-events: none; padding: .6rem 1rem; animation: none; }
+.gg-nduel.is-notice .gg-nduel-stamp { font-size: 1rem; }
+.gg-nduel.is-notice .gg-nduel-pot { font-size: 1.2rem; }
+.gg-nduel.is-notice .gg-nduel-fine { margin: .2rem 0; }
 .gg-nduel-stamp { display: inline-block; margin: 0.2rem 0 0.4rem; padding: 0.25rem 0.8rem;
   border: 4px solid currentColor; border-radius: 8px; font-weight: 900; letter-spacing: 0.08em;
   text-transform: uppercase; font-size: 1.7rem; color: var(--gg-pink, #ff69b4); transform: rotate(-6deg);
@@ -170,14 +175,15 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
   let gen = 0;            // bumps on every close: a class that lands late is torn straight down
 
   const clearCard = () => { while (card.firstChild) card.removeChild(card.firstChild); };
-  function showCard() {
+  function showCard(compact = false) {
+    root.classList.toggle('is-notice', compact);
     clearCard();
     card.hidden = false;
     root.classList.add('is-card');
     // restart the entrance
     card.style.animation = 'none'; void card.offsetWidth; card.style.animation = '';
   }
-  function hideCard() { card.hidden = true; root.classList.remove('is-card'); clearCard(); }
+  function hideCard() { root.classList.remove('is-notice'); card.hidden = true; root.classList.remove('is-card'); clearCard(); }
 
   function killStage() {
     const h = live;
@@ -258,13 +264,13 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
     waiting() {
       gen++;
       killStage();
-      showCard();
+      showCard(true);
       card.appendChild(mk('p', 'gg-nduel-fine', DUEL_COPY.waiting));
     },
     result({ outcome, bonus, pot = false, mine, theirs }) {
       gen++;
       killStage();
-      showCard();
+      showCard(true);
       // Points model: the pot line shows what each side took, the winner's in gold and the
       // loser's (and a tie's) half in a softer colour. A legacy match keeps "won +N".
       const word = outcome === 'win' ? (pot ? DUEL_COPY.wonPlain : DUEL_COPY.won(bonus))
