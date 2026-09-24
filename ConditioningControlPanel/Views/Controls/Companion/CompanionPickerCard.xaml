@@ -1,0 +1,71 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.CompanionPickerCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+
+    <!-- THE one place that picks the companion's avatar and personality. Hosted by the
+         Customise window today and meant for the Companion tab next, so it knows nothing about
+         either host: it reads the live state from App.AvatarWindow / App.Personality and writes
+         through the existing doors (AvatarTubeWindow.SelectAvatarSet, the tube arrows' path, and
+         MainWindow.ActivatePersonalityPreset, the gated chip-row path). -->
+    <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="14">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- live preview -->
+            <Border Grid.Column="0" Width="116" Height="150" CornerRadius="8" Margin="0,0,14,0"
+                    Background="{DynamicResource DarkerBgBrush}" ClipToBounds="True">
+                <Grid>
+                    <TextBlock x:Name="TxtPreviewGlyph" Text="&#x2727;" FontSize="34"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Image x:Name="ImgPreview" Stretch="Uniform" Margin="4"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Column="1">
+                <TextBlock Text="{loc:Str modmgr_companion_heading}" FontSize="11" FontWeight="Bold"
+                           Foreground="{DynamicResource PinkBrush}" Margin="0,0,0,2"/>
+                <TextBlock Text="{loc:Str modmgr_companion_sub}" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,10"/>
+
+                <TextBlock Text="{loc:Str modmgr_label_look}" FontSize="11"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
+                <ComboBox x:Name="CmbAvatar" Style="{DynamicResource DarkComboBoxStyle}"
+                          Foreground="{DynamicResource TextLightBrush}" MinHeight="28"
+                          SelectionChanged="CmbAvatar_SelectionChanged" Margin="0,0,0,2"/>
+                <TextBlock x:Name="TxtAvatarHint" FontSize="10" TextWrapping="Wrap" Visibility="Collapsed"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,0"/>
+
+                <TextBlock Text="{loc:Str modmgr_label_personality}" FontSize="11"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,10,0,3"/>
+                <ComboBox x:Name="CmbPersonality" Style="{DynamicResource DarkComboBoxStyle}"
+                          Foreground="{DynamicResource TextLightBrush}" MinHeight="28"
+                          SelectionChanged="CmbPersonality_SelectionChanged"/>
+
+                <!-- how she talks: one or two lines in the personality's own voice -->
+                <StackPanel x:Name="SamplePanel" Margin="0,8,0,0"/>
+
+                <Button x:Name="BtnTubeFit" Content="{loc:Str btn_tube_fit}" ToolTip="{loc:Str tooltip_tube_fit}"
+                        Click="BtnTubeFit_Click" HorizontalAlignment="Left" Margin="0,10,0,0"
+                        Background="Transparent" Foreground="#B084DC" BorderThickness="0"
+                        FontSize="11" Cursor="Hand" Padding="0">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <TextBlock x:Name="t" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"/>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="t" Property="TextDecorations" Value="Underline"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
