@@ -655,9 +655,9 @@ export function mount(container, ctx) {
       outcome,
       log: matchLog,
       duels: duelSummary(match),
-      /* The scoring lane hands per-player stats here when it lands:
-       * match.scoreCard = { you, them } in shareWords.statsFromScoring's shape. */
-      scoring: (match && match.scoreCard) || null,
+      /* Per-player stats from the points model (match.matchStats), in shareWords.statsFromScoring's
+       * shape; null in an old-score match, which keeps the match-log numbers. */
+      scoring: (match && match.scoreCard) || scoreCardOf(match),
       youName: (match && match.localDisplayName) || (session && session.identity && session.identity.displayName) || '',
       themName: peerName(),
       youAvatar: (discord && discord.sharingAvatar && st) ? st.avatarDataUri : '',
@@ -975,3 +975,14 @@ export function mount(container, ctx) {
 }
 
 export default { mount };
+
+/** The scoring lane's ledger in the card's { you, them } shape; null outside the points model
+ *  (an old-score match keeps the card's match-log numbers). */
+function scoreCardOf(match) {
+  try {
+    if (!match || typeof match.matchStats !== 'function') return null;
+    const s = match.matchStats();
+    if (!s || !s.pointsModel || !s.me) return null;
+    return { you: s.me, them: s.them || null };
+  } catch (_e) { return null; }
+}
