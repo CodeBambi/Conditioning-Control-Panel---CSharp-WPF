@@ -126,13 +126,29 @@ namespace ConditioningControlPanel
                 _billboardSlots.Add(vm);
             }
             rack.ItemsSource = _billboardSlots;
+            for (int i = 0; i < Services.DashboardBillboard.Roster.Count; i++)
+            {
+                int index = i;
+                var dot = new RadioButton
+                {
+                    GroupName = "DashboardSlides",
+                    Style = (Style)dash!.BillboardDots.FindResource("SlideDot"),
+                    ToolTip = Loc.Get(Services.DashboardBillboard.CardAt(i).TitleKey),
+                };
+                System.Windows.Automation.AutomationProperties.SetName(dot, (string)dot.ToolTip);
+                dot.Click += (_, _) => StepBillboardRack(index - (_billboardRack?.Slots[0] ?? 0), automatic: false);
+                dash.BillboardDots.Children.Add(dot);
+            }
             UpdateBillboardPosition();
             dash!.BillboardPrevious.Click += (_, _) => StepBillboardRack(-1, automatic: false);
             dash.BillboardNext.Click += (_, _) => StepBillboardRack(1, automatic: false);
             dash.BillboardPause.Click += (_, _) =>
             {
                 _billboardPaused = !_billboardPaused;
-                dash.BillboardPause.Content = Loc.Get(_billboardPaused ? "btn_program_resume" : "btn_program_pause");
+                dash.BillboardPause.Content = _billboardPaused ? "▶" : "Ⅱ";
+                var label = Loc.Get(_billboardPaused ? "btn_program_resume" : "btn_program_pause");
+                dash.BillboardPause.ToolTip = label;
+                System.Windows.Automation.AutomationProperties.SetName(dash.BillboardPause, label);
                 RestartBillboardClock();
             };
             host.IsKeyboardFocusWithinChanged += (_, _) => RestartBillboardClock();
@@ -203,7 +219,8 @@ namespace ConditioningControlPanel
         private void UpdateBillboardPosition()
         {
             if (SettingsTab == null || _billboardRack == null) return;
-            SettingsTab.BillboardPosition.Text = $"{_billboardRack.Slots[0] + 1} / {Services.DashboardBillboard.Roster.Count}";
+            for (int i = 0; i < SettingsTab.BillboardDots.Children.Count; i++)
+                ((RadioButton)SettingsTab.BillboardDots.Children[i]).IsChecked = i == _billboardRack.Slots[0];
         }
 
         private void FillBillboardSlot(BillboardSlotVm vm, int cardIndex)

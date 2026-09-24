@@ -1,6 +1,7 @@
 <UserControl x:Class="ConditioningControlPanel.Features.SplitFeatureCard"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
              Cursor="Hand"
              MouseLeftButtonUp="OnLeftClick"
              MouseRightButtonUp="OnRightClick"
@@ -45,12 +46,13 @@
          card. Nothing about the RESTING tile changes: every piece of the
          peek chrome below is at zero until the fill starts running. -->
 
+    <!-- ContentRoot owns the rounded clip. Leave the outer glow unclipped so it has no square cutoff. -->
     <Border x:Name="RootBorder"
             Background="{DynamicResource ElevatedSurfaceBrush}"
             BorderBrush="{DynamicResource GlassBorderBrush}"
             BorderThickness="1"
             CornerRadius="12"
-            ClipToBounds="True"
+            ClipToBounds="False"
             Margin="6"
             RenderTransformOrigin="0.5,0.5">
         <Border.RenderTransform>
