@@ -164,6 +164,7 @@ export function createAnnexLab(caps) {
   let descent = null;
   let quads = null;
   let quadsWanted = false;
+  let feedMask = null;
   const timers = [];
 
   /* ONE page-owned blob under the key `annex`, never six keys. `read` is the
@@ -389,9 +390,8 @@ export function createAnnexLab(caps) {
 
   function mountFeeds() {
     loadQuads();
-    if (!quads || lite === 'never') { /* feeds are decoration; art alone is legal */ }
     if (!quads) return;
-    if (stage.querySelector('.al-feeds')) { if (wall) wall.start(); return; }
+    if (stage.querySelector('.al-feeds')) return;
 
     const feeds = el('div', 'al-feeds is-waiting');
     stage.appendChild(feeds);
@@ -420,31 +420,39 @@ export function createAnnexLab(caps) {
       feeds.appendChild(tile);
     });
 
-    /* the mask: red channel to alpha, feeds hidden until it lands */
-    const mask = new Image();
-    mask.onload = () => {
-      if (dead) return;
-      try {
-        const cv = doc.createElement('canvas');
-        cv.width = mask.naturalWidth;
-        cv.height = mask.naturalHeight;
-        const ctx = cv.getContext('2d');
-        ctx.drawImage(mask, 0, 0);
-        const im = ctx.getImageData(0, 0, cv.width, cv.height);
-        const px = im.data;
-        for (let i = 0; i < px.length; i += 4) { px[i + 3] = px[i]; }
-        ctx.putImageData(im, 0, 0);
-        const url = cv.toDataURL();
-        feeds.style.maskImage = 'url(' + url + ')';
-        feeds.style.webkitMaskImage = 'url(' + url + ')';
-        feeds.style.maskSize = '100% 100%';
-        feeds.style.webkitMaskSize = '100% 100%';
-      } catch (e) { log('annex mask failed', 'warn'); }
+    // Decode the full-size mask once per visit, not on every slide change.
+    if (!feedMask) {
+      feedMask = new Promise(resolve => {
+        const mask = new Image();
+        mask.onload = () => {
+          if (dead) { resolve(null); return; }
+          try {
+            const cv = doc.createElement('canvas');
+            cv.width = mask.naturalWidth;
+            cv.height = mask.naturalHeight;
+            const ctx = cv.getContext('2d');
+            ctx.drawImage(mask, 0, 0);
+            const im = ctx.getImageData(0, 0, cv.width, cv.height);
+            for (let i = 0; i < im.data.length; i += 4) im.data[i + 3] = im.data[i];
+            ctx.putImageData(im, 0, 0);
+            resolve(cv.toDataURL());
+          } catch (e) { log('annex mask failed', 'warn'); resolve(null); }
+        };
+        mask.onerror = () => { log('annex mask missing', 'warn'); resolve(null); };
+        mask.src = ART_BASE + MASK_FILE;
+      });
+    }
+    feedMask.then(url => {
+      // A late decode belongs only to the slide that requested it.
+      if (dead || view !== 'monitors' || feeds.parentNode !== stage) return;
+      if (!url) { feeds.remove(); return; }
+      feeds.style.maskImage = 'url(' + url + ')';
+      feeds.style.webkitMaskImage = 'url(' + url + ')';
+      feeds.style.maskSize = '100% 100%';
+      feeds.style.webkitMaskSize = '100% 100%';
       feeds.classList.remove('is-waiting');
-      if (wall) wall.start();
-    };
-    mask.onerror = () => { if (!dead) { feeds.remove(); log('annex mask missing', 'warn'); } };
-    mask.src = ART_BASE + MASK_FILE;
+      if (wall && !os) wall.start();
+    });
   }
 
   function mountLaptopHotspot() {
@@ -488,6 +496,7 @@ export function createAnnexLab(caps) {
 
   function openOs() {
     if (os) return;
+    if (wall) wall.stop();
     sfx('whoosh', 0.22);
     later(() => sfx('chime', 0.16), 180);
 
@@ -571,6 +580,8 @@ export function createAnnexLab(caps) {
     os.destroy();
     os = null;
     if (osLayer) { osLayer.remove(); osLayer = null; }
+    const feeds = stage.querySelector('.al-feeds');
+    if (wall && view === 'monitors' && feeds && !feeds.classList.contains('is-waiting')) wall.start();
   }
 
   /* ========================================================================

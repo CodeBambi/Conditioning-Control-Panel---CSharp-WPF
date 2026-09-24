@@ -1,9 +1,8 @@
 /* =========================================================================
  * THE NIGHT THE WALL MOVED - the Records Annex reveal cinematic.
  *
- * Fires exactly once in a save's whole life: the moment the tenth hole of the
- * LAST punch card lands (or, for a player who sealed the school before this
- * wave shipped, on their next arrival at the campus). Beat by beat:
+ * Fires once when the player reaches 75% of the current roster's stars,
+ * after the stamp ceremony or on the next campus arrival. Beat by beat:
  *
  *   cut to black -> a heavy THUD from somewhere below -> EMI, startled ->
  *   one second of the records office at night, a wall panel ajar, cold green
