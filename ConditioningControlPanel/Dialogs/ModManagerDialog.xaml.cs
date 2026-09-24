@@ -349,11 +349,36 @@ namespace ConditioningControlPanel
 
             foreach (var mod in App.Mods.InstalledMods.Values.OrderBy(m => !m.IsBuiltIn).ThenBy(m => m.Name))
             {
-                var prefix = mod.Id == App.Mods.ActiveModId ? "\u2605 " : "  "; // star for active
+                var inUse = mod.Id == App.Mods.ActiveModId;
+                var line = new DockPanel { LastChildFill = true };
+                if (inUse)
+                {
+                    var tag = new TextBlock
+                    {
+                        Text = Loc.Get("modmgr_in_use"),
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x7F, 0xF0, 0xCB)),
+                        FontSize = 10,
+                        FontWeight = FontWeights.Bold,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(6, 0, 0, 0)
+                    };
+                    DockPanel.SetDock(tag, Dock.Right);
+                    line.Children.Add(tag);
+                }
                 var row = new StackPanel { Orientation = Orientation.Horizontal };
+                line.Children.Add(row);
+                row.Children.Add(new System.Windows.Shapes.Ellipse
+                {
+                    Width = 10,
+                    Height = 10,
+                    Fill = new SolidColorBrush(AccentOf(mod)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 10, 0)
+                });
                 row.Children.Add(new TextBlock
                 {
-                    Text = prefix + mod.Name,
+                    Text = mod.Name,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                     VerticalAlignment = VerticalAlignment.Center
                 });
                 // Catalogue share status pill (user mods the owner has shared).
@@ -376,7 +401,7 @@ namespace ConditioningControlPanel
 
                 var item = new ListBoxItem
                 {
-                    Content = row,
+                    Content = line,
                     Tag = mod.Id,
                     Foreground = new SolidColorBrush(Colors.White)
                 };
@@ -411,42 +436,38 @@ namespace ConditioningControlPanel
             TxtModDescription.Text = mod.Manifest.Description ?? "";
             TxtModDescription.ToolTip = string.IsNullOrWhiteSpace(mod.Manifest.Description) ? null : mod.Manifest.Description;
 
-            // Banner beside the name + what the mod overrides on disk (the latter in Defaults).
+            // Banner across the top; what the mod overrides on disk rides its tooltip.
             ShowArtSummary(mod);
 
-            // Theme: a swatch, no hex. The hex is developer detail.
-            try
-            {
-                ThemeColorPreview.Background = new SolidColorBrush(
-                    (Color)ColorConverter.ConvertFromString(mod.Manifest.Theme?.AccentColor ?? "#FF69B4"));
-            }
-            catch
-            {
-                ThemeColorPreview.Background = new SolidColorBrush(Colors.HotPink);
-            }
-
-            // One primary action: "Use this mod", or the Active pill.
+            // One primary action: "Use this mod", or IN USE.
             var isActive = mod.Id == App.Mods?.ActiveModId;
             TxtActiveIndicator.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
             BtnActivate.Visibility = isActive ? Visibility.Collapsed : Visibility.Visible;
 
-            // The companion card edits the LIVE companion, which is the active mod's. For any
-            // other mod it would preview choices that do not apply, so it waits for "Use this mod".
-            CompanionCard.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
-            CompanionInactiveHint.Visibility = isActive ? Visibility.Collapsed : Visibility.Visible;
+            // The card edits the LIVE companion, which is the active mod's. Any other mod gets a
+            // read-only preview of its companion, read off its manifest without activating it.
             if (isActive) CompanionCard.Refresh();
+            else CompanionCard.ShowPreview(mod, AccentOf(mod));
 
-            // Can't uninstall built-in mods or active mod
+            // Overflow verbs for this mod: uninstall (never a built-in or the active one) and
+            // share (user-installed mods only).
             BtnUninstall.Visibility = (!mod.IsBuiltIn && !isActive) ? Visibility.Visible : Visibility.Collapsed;
-
-            // Only user-installed mods can be shared to the catalogue.
             BtnShare.Visibility = (!mod.IsBuiltIn && !string.IsNullOrEmpty(mod.InstalledPath))
+                ? Visibility.Visible : Visibility.Collapsed;
+            SepModActions.Visibility = BtnUninstall.Visibility == Visibility.Visible || BtnShare.Visibility == Visibility.Visible
                 ? Visibility.Visible : Visibility.Collapsed;
 
             ShowSuggestions(mod);
 
             // Built-in mods whose media still has to come down off the release.
             UpdatePackPanel(mod);
+        }
+
+        /// <summary>The mod's theme accent, for its list dot and its preview glyph.</summary>
+        private static Color AccentOf(ModPackage mod)
+        {
+            try { return (Color)ColorConverter.ConvertFromString(mod.Manifest.Theme?.AccentColor ?? "#FF69B4"); }
+            catch { return Colors.HotPink; }
         }
 
         // ------------------------------------------------------------------ recommended setup
@@ -469,24 +490,38 @@ namespace ConditioningControlPanel
         private static AssetPreset? SuggestedAssets(ModPackage mod) =>
             ModSuggestions.ResolveAssets(App.Settings?.Current?.AssetPresets, mod.Manifest.SuggestedAssetPreset);
 
+        /// <summary>One line: "Recommends X settings" (and/or assets). The mod in use gets Apply;
+        /// any other mod says it will be asked once on switching. No suggestion, no line.</summary>
         private void ShowSuggestions(ModPackage mod)
         {
             var settings = SuggestedSettings(mod);
             var assets = SuggestedAssets(mod);
 
-            RowSuggestedSettings.Visibility = settings != null ? Visibility.Visible : Visibility.Collapsed;
-            if (settings != null) TxtSuggestedSettings.Text = Loc.GetF("modmgr_suggested_settings", settings.Name);
+            RowSuggestions.Visibility = settings != null || assets != null ? Visibility.Visible : Visibility.Collapsed;
+            TxtSuggestions.Inlines.Clear();
+            if (settings == null && assets == null) return;
 
-            RowSuggestedAssets.Visibility = assets != null ? Visibility.Visible : Visibility.Collapsed;
-            if (assets != null) TxtSuggestedAssets.Text = Loc.GetF("modmgr_suggested_assets", assets.Name);
+            var text = settings != null && assets != null
+                ? Loc.GetF("modmgr_recommends_both", "\u0001", "\u0002")
+                : Loc.GetF(settings != null ? "modmgr_recommends_settings" : "modmgr_recommends_assets", "\u0001");
+            // Preset names in bold, the rest muted, without splitting the sentence into keys.
+            foreach (var part in System.Text.RegularExpressions.Regex.Split(text, "(\u0001|\u0002)"))
+            {
+                if (part == "\u0001") TxtSuggestions.Inlines.Add(Bold(settings?.Name ?? assets!.Name));
+                else if (part == "\u0002") TxtSuggestions.Inlines.Add(Bold(assets!.Name));
+                else if (part.Length > 0) TxtSuggestions.Inlines.Add(new System.Windows.Documents.Run(part));
+            }
 
-            TxtNoSuggestions.Visibility = settings == null && assets == null ? Visibility.Visible : Visibility.Collapsed;
-
-            // Applying only makes sense to the mod that is running.
             var isActive = mod.Id == App.Mods?.ActiveModId;
-            RowSuggestedSettings.IsEnabled = isActive;
-            RowSuggestedAssets.IsEnabled = isActive;
+            BtnApplySuggestions.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
+            TxtAskedOnce.Visibility = isActive ? Visibility.Collapsed : Visibility.Visible;
         }
+
+        private static System.Windows.Documents.Run Bold(string text) => new(text)
+        {
+            FontWeight = FontWeights.Bold,
+            Foreground = Brushes.White
+        };
 
         /// <summary>First activation of a mod with a recommended setup: ask once, remember the
         /// answer either way, apply only on a yes.</summary>
@@ -516,16 +551,11 @@ namespace ConditioningControlPanel
             if (settings != null) mw.ApplySettingsPresetFromCustomise(settings);
         }
 
-        private void BtnApplySuggestedSettings_Click(object sender, RoutedEventArgs e)
+        private void BtnApplySuggestions_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedMod == null || SuggestedSettings(_selectedMod) is not { } preset) return;
-            (Owner as MainWindow ?? App.MainWindowRef)?.ApplySettingsPresetFromCustomise(preset);
-        }
-
-        private void BtnApplySuggestedAssets_Click(object sender, RoutedEventArgs e)
-        {
-            if (_selectedMod == null || SuggestedAssets(_selectedMod) is not { } preset) return;
-            (Owner as MainWindow ?? App.MainWindowRef)?.ApplyAssetPresetFromLauncher(preset.Id);
+            if (_selectedMod == null || (Owner as MainWindow ?? App.MainWindowRef) is not { } mw) return;
+            if (SuggestedAssets(_selectedMod) is { } assets) mw.ApplyAssetPresetFromLauncher(assets.Id);
+            if (SuggestedSettings(_selectedMod) is { } settings) mw.ApplySettingsPresetFromCustomise(settings);
         }
 
         // ------------------------------------------------------------------ art summary
@@ -540,8 +570,7 @@ namespace ConditioningControlPanel
         private void ShowArtSummary(ModPackage mod)
         {
             ImgModPreview.Source = null;
-            PreviewImagePanel.Visibility = Visibility.Collapsed;
-            TxtArtOverrides.Visibility = Visibility.Collapsed;
+            BannerPanel.ToolTip = null;
 
             var installed = mod.InstalledPath;
             var hasFolder = !string.IsNullOrEmpty(installed) && Directory.Exists(installed);
@@ -554,7 +583,6 @@ namespace ConditioningControlPanel
             if (banner != null)
             {
                 ImgModPreview.Source = banner;
-                PreviewImagePanel.Visibility = Visibility.Visible;
             }
 
             if (!hasFolder) return;
@@ -562,8 +590,7 @@ namespace ConditioningControlPanel
             var summary = SummarizeOverrides(Path.Combine(installed!, "resources"));
             if (summary != null)
             {
-                TxtArtOverrides.Text = summary;
-                TxtArtOverrides.Visibility = Visibility.Visible;
+                BannerPanel.ToolTip = summary;
             }
         }
 

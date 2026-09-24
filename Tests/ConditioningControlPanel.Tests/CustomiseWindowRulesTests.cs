@@ -153,4 +153,47 @@ public class CustomiseWindowRulesTests
         Assert.Equal("ccp_banner.png", ModManagerDialog.BuiltInBannerFor(BuiltInMods.CCPDefaultId));
         Assert.Null(ModManagerDialog.BuiltInBannerFor("someone-elses-mod"));
     }
+
+    // ---- companion preview (a mod not in use) ----
+
+    [Fact]
+    public void PreviewCountsEveryStockLookWhenTheModDeclaresNone()
+    {
+        Assert.Equal(7, CompanionPreview.CountLooks(new ModManifest(), singleEmote: false));
+    }
+
+    [Fact]
+    public void PreviewCountsSupportedAndCustomLooks()
+    {
+        var m = new ModManifest
+        {
+            SupportedAvatarSets = new() { 1, 3, 8 },
+            CustomAvatarSets = new() { new CustomAvatarSet { SetNumber = 8 }, new CustomAvatarSet { SetNumber = 9 } }
+        };
+        Assert.Equal(3, CompanionPreview.CountLooks(m, singleEmote: false));
+        Assert.Equal(1, CompanionPreview.CountLooks(m, singleEmote: true));
+    }
+
+    [Fact]
+    public void PreviewUsesTheModsOwnPersonalities()
+    {
+        var m = new ModManifest { Name = "Circe's Lock", Identity = new ModIdentity { CompanionName = "Circe" } };
+        var info = CompanionPreview.Build(m, new List<ModPersonality>
+        {
+            new() { Id = "a", Name = "A", SampleLines = new() { "The key is safe." } },
+            new() { Id = "b", Name = "B" }
+        }, singleEmote: false, neutral: false);
+        Assert.Equal("Circe", info.Name);
+        Assert.Equal(2, info.Personalities);
+        Assert.Equal("The key is safe.", info.SampleLine);
+    }
+
+    [Fact]
+    public void PreviewFallsBackToTheStockSetAndTheModName()
+    {
+        var info = CompanionPreview.Build(new ModManifest { Name = "CCP Default" }, null, singleEmote: false, neutral: true);
+        Assert.Equal("CCP Default", info.Name);
+        Assert.Equal(PersonalityPresets.GetAllBuiltIn().Count, info.Personalities);
+        Assert.Equal(PersonalitySamples.For(PersonalityPresets.GetNeutralDefault())[0], info.SampleLine);
+    }
 }
