@@ -174,6 +174,8 @@ namespace ConditioningControlPanel.Views.Tabs
             FactRow.Visibility = linked ? Visibility.Collapsed : Visibility.Visible;
             LinkedPanel.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
             SwitchPill.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
+            PausePill.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
+            PaintPause(App.Settings?.Current?.ChasterPaused == true);
             AccountStrip.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
             PaperTag.Visibility = linked ? Visibility.Visible : Visibility.Collapsed;
             BtnLink.IsEnabled = chaster != null;
@@ -204,6 +206,7 @@ namespace ConditioningControlPanel.Views.Tabs
             TxtBalance.Foreground = FigureBrush(balance);
             TxtBalanceCaption.Text = Loc.Get(balance < 0 ? "chaster_credit_caption" : "chaster_balance_caption");
             RefreshTag(balance);
+            if (chaster.IsLinked) PaintHeroEnds(chaster.Lock, balance);
             RefreshDay(animate);
             RefreshRun();
             if (_billOpen) BuildBill();
@@ -243,12 +246,23 @@ namespace ConditioningControlPanel.Views.Tabs
 
             PaintHeroClock();
 
-            var ends = snapshot is { TimerHidden: false, EndsAtUtc: { } endUtc } ? endUtc.ToLocalTime() : (DateTime?)null;
-            TxtHeroEnds.Text = ends is { } when ? Loc.GetF("chaster_hero_ends", when.ToString("ddd d MMM HH:mm")) : "";
-            TxtHeroEnds.Visibility = ends == null ? Visibility.Collapsed : Visibility.Visible;
+            PaintHeroEnds(snapshot, chaster!.BalanceSeconds);
 
             RefreshPills(lookup, snapshot, chaster!.SafetyHoldRemaining);
             BuildCalendar(snapshot);
+        }
+
+        /// <summary>The "Ends" line counts to the same end the live clock does: Chaster's own end
+        /// plus what the tab will add. The tooltip names the two parts.</summary>
+        private void PaintHeroEnds(LockSnapshot? snapshot, int balance)
+        {
+            var ends = LiveLockClock.EndsAt(snapshot, balance, DateTime.UtcNow)?.ToLocalTime();
+            TxtHeroEnds.Text = ends is { } when ? Loc.GetF("chaster_hero_ends", when.ToString("ddd d MMM HH:mm")) : "";
+            TxtHeroEnds.Visibility = ends == null ? Visibility.Collapsed : Visibility.Visible;
+            var pending = LiveLockClock.PendingAdd(balance);
+            TxtHeroEnds.ToolTip = ends != null && pending > 0 && snapshot?.EndsAtUtc is { } own
+                ? Loc.GetF("chaster_hero_ends_tip", own.ToLocalTime().ToString("ddd d MMM HH:mm"), CircesTab.Format(pending))
+                : null;
         }
 
         /// <summary>The unit set the clock was last built for ("dhms", "hms", "ms"), so a second
@@ -385,7 +399,10 @@ namespace ConditioningControlPanel.Views.Tabs
             TxtTagAmount.Text = balance == 0 ? CircesTab.Format(0, signed: false) : CircesTab.Format(balance);
             TxtTagAmount.Foreground = balance > 0 ? Frozen(Color.FromRgb(0xC8, 0x24, 0x4A))
                 : balance < 0 ? Frozen(Color.FromRgb(0x1E, 0x8A, 0x6E)) : Frozen(Color.FromRgb(0x24, 0x1A, 0x2E));
-            TxtTagLands.Text = Loc.Get(balance > 0 ? "chaster_tag_lands" : "chaster_tag_credit_lands");
+            var chaster = App.Chaster;
+            var line = TabPageText.Tag(balance, chaster?.PushableTodaySeconds ?? 0, chaster?.IsPaused == true,
+                !string.IsNullOrEmpty(App.Settings?.Current?.ChasterLockId) && chaster?.LockLookup != LockLookup.Ambiguous);
+            TxtTagLands.Text = line.Today == null ? Loc.Get(line.Key) : Loc.GetF(line.Key, line.Today, line.Later!);
             TxtTagStamp.Text = Loc.Get(balance > 0 ? "chaster_tag_unpaid" : balance < 0 ? "chaster_tag_credit" : "chaster_tag_clear");
             var stampColour = balance > 0 ? Color.FromRgb(0xC8, 0x24, 0x4A) : balance < 0 ? Color.FromRgb(0x1E, 0x8A, 0x6E) : Color.FromRgb(0x6E, 0x66, 0x86);
             TagStamp.BorderBrush = Frozen(stampColour);
@@ -659,15 +676,25 @@ namespace ConditioningControlPanel.Views.Tabs
         private void RefreshLimits()
         {
             var caps = App.Chaster?.Caps ?? TabLimits.Default;
+            var settings = App.Settings?.Current;
             _loading = true;
             try
             {
-                SliderDayLimit.Value = caps.DailySeconds / 60;
-                SliderBacklogLimit.Value = caps.BacklogSeconds / 60;
+                // The sliders sit where the player put them: a raise still waiting shows at its
+                // waiting figure, and the line under the number says when it lands.
+                SliderDayLimit.Value = Wanted(settings?.ChasterDayLimit, caps.DailySeconds / 60);
+                SliderBacklogLimit.Value = Wanted(settings?.ChasterBacklogLimit, caps.BacklogSeconds / 60);
                 ChkRelock.IsChecked = App.Settings?.Current?.ChasterRelockPastEnd == true;
             }
             finally { _loading = false; }
             PaintLimits(caps);
+        }
+
+        private static int Wanted(LimitSetting? setting, int inForce)
+        {
+            if (setting is not { } s) return inForce;
+            var settled = LimitChange.Settle(s, DateTime.UtcNow);
+            return settled.HasPending ? settled.PendingMinutes : inForce;
         }
 
         private void PaintLimits(TabLimits caps)
@@ -675,6 +702,18 @@ namespace ConditioningControlPanel.Views.Tabs
             TxtDayLimit.Text = CircesTab.Format(caps.DailySeconds, signed: false);
             TxtBacklogLimit.Text = CircesTab.Format(caps.BacklogSeconds, signed: false);
             TxtFactCap1.Text = TxtFactCap2.Text = CircesTab.Format(caps.DailySeconds, signed: false);
+            var settings = App.Settings?.Current;
+            PaintPending(TxtDayPending, settings?.ChasterDayLimit);
+            PaintPending(TxtBacklogPending, settings?.ChasterBacklogLimit);
+        }
+
+        private static void PaintPending(TextBlock line, LimitSetting? setting)
+        {
+            var s = setting is { } v ? LimitChange.Settle(v, DateTime.UtcNow) : default;
+            if (!s.HasPending) { line.Visibility = Visibility.Collapsed; return; }
+            line.Text = Loc.GetF("chaster_limit_pending", CircesTab.Format(s.PendingMinutes * 60, signed: false),
+                s.PendingAtUtc!.Value.ToLocalTime().ToString("ddd HH:mm"));
+            line.Visibility = Visibility.Visible;
         }
 
         private void LimitSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -683,15 +722,18 @@ namespace ConditioningControlPanel.Views.Tabs
             var settings = App.Settings?.Current;
             if (settings == null) return;
             // The backlog never sits under the day: dragging the day past it carries it along.
-            var caps = TabLimits.FromMinutes((int)SliderDayLimit.Value, (int)SliderBacklogLimit.Value);
-            settings.ChasterDailyLimitMinutes = caps.DailySeconds / 60;
-            settings.ChasterBacklogLimitMinutes = caps.BacklogSeconds / 60;
-            if ((int)SliderBacklogLimit.Value != caps.BacklogSeconds / 60)
+            var wanted = TabLimits.FromMinutes((int)SliderDayLimit.Value, (int)SliderBacklogLimit.Value);
+            // Down applies now; up waits a day (LimitChange). Each limit is asked on its own.
+            var now = DateTime.UtcNow;
+            settings.ChasterDayLimit = LimitChange.Request(settings.ChasterDayLimit, wanted.DailySeconds / 60, now);
+            settings.ChasterBacklogLimit = LimitChange.Request(settings.ChasterBacklogLimit, wanted.BacklogSeconds / 60, now);
+            if ((int)SliderBacklogLimit.Value != wanted.BacklogSeconds / 60)
             {
                 _loading = true;
-                try { SliderBacklogLimit.Value = caps.BacklogSeconds / 60; }
+                try { SliderBacklogLimit.Value = wanted.BacklogSeconds / 60; }
                 finally { _loading = false; }
             }
+            var caps = App.Chaster?.Caps ?? wanted;
             PaintLimits(caps);
             RefreshDay(animate: true);
             App.Settings?.Save();
@@ -883,15 +925,31 @@ namespace ConditioningControlPanel.Views.Tabs
             try
             {
                 var locks = await chaster.GetLocksAsync();
-                // Chaster is away, or the link just died (LinkChanged repaints for that). One lock:
-                // the hero already names it. None: the pill says so.
-                if (locks == null || locks.Count < 2)
+                // Chaster is away, or the link just died (LinkChanged repaints for that). None: the
+                // pill says so. Otherwise the pick shows whenever it is not made: nothing is ever
+                // pushed to a lock the player did not pick, not even the only one.
+                if (locks == null || locks.Count == 0)
+                {
+                    LockRow.Visibility = Visibility.Collapsed;
+                    return;
+                }
+                var chosen = App.Settings?.Current?.ChasterLockId;
+                var picked = locks.Any(l => l.Id == chosen);
+                if (picked && locks.Count == 1)
                 {
                     LockRow.Visibility = Visibility.Collapsed;
                     return;
                 }
                 LockRow.Visibility = Visibility.Visible;
-                FillLockPicker(locks);
+                var oneTap = locks.Count == 1;
+                CmbLock.Visibility = oneTap ? Visibility.Collapsed : Visibility.Visible;
+                UseLockPill.Visibility = oneTap ? Visibility.Visible : Visibility.Collapsed;
+                if (oneTap)
+                {
+                    TxtUseLock.Text = Loc.GetF("chaster_lock_use", TitleOf(locks[0]));
+                    BtnUseLock.Tag = locks[0].Id;
+                }
+                else FillLockPicker(locks);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster lock list for the page"); }
         }
@@ -919,10 +977,55 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (_loading || App.Settings?.Current is not { } settings) return;
             if ((CmbLock.SelectedItem as ComboBoxItem)?.Tag is not string id) return;
+            PickLock(id);
+        }
+
+        private void BtnUseLock_Click(object sender, RoutedEventArgs e)
+        {
+            if (BtnUseLock.Tag is string id) PickLock(id);
+        }
+
+        private void PickLock(string id)
+        {
+            if (App.Settings?.Current is not { } settings) return;
             settings.ChasterLockId = id;
             App.Settings?.Save();
-            // The hero is showing the old lock until this lands.
-            _ = App.Chaster?.RefreshLockAsync();
+            UseLockPill.Visibility = Visibility.Collapsed;
+            // The hero is showing the old lock until this lands; a waiting balance can go now.
+            _ = RepickAsync();
+        }
+
+        private async Task RepickAsync()
+        {
+            var chaster = App.Chaster;
+            if (chaster == null) return;
+            try
+            {
+                await chaster.RefreshLockAsync();
+                chaster.NoteChoiceChanged();
+                await Dispatcher.InvokeAsync(() => { _ = LoadLocksAsync(); RefreshNumbers(animate: false); });
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster lock pick"); }
+        }
+
+        // ============================== pause ==============================
+
+        private void PaintPause(bool paused)
+        {
+            TxtPause.Text = Loc.Get(paused ? "chaster_paused" : "chaster_pause");
+            TxtPause.Foreground = paused ? Frozen(Color.FromRgb(0xE0, 0xB0, 0x52)) : (Brush)FindResource("TextLightBrush");
+            PausePill.BorderBrush = paused ? Frozen(Color.FromRgb(0xE0, 0xB0, 0x52)) : (Brush)FindResource("GlassBorderBrush");
+            PausePill.ToolTip = Loc.Get(paused ? "chaster_paused_tip" : "chaster_pause_tip");
+        }
+
+        private void BtnPause_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current is not { } settings) return;
+            settings.ChasterPaused = !settings.ChasterPaused;
+            App.Settings?.Save();
+            PaintPause(settings.ChasterPaused);
+            App.Chaster?.NoteChoiceChanged();
+            RefreshNumbers(animate: false);
         }
 
         // ============================== 4. the keys ==============================

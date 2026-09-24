@@ -35,9 +35,9 @@ public enum LockLookup
     Away,
     /// <summary>Linked, no active lock.</summary>
     None,
-    /// <summary>Linked, one lock chosen (or the only one there is).</summary>
+    /// <summary>Linked, and the lock the player picked is active.</summary>
     Chosen,
-    /// <summary>Linked, several locks, none picked yet.</summary>
+    /// <summary>Linked, at least one lock, none picked (or the pick is gone).</summary>
     Ambiguous,
 }
 
@@ -78,7 +78,8 @@ public sealed partial class ChasterService
             var locks = await GetLocksAsync(ct).ConfigureAwait(false);
             if (locks == null) return SetLock(Lock, LockLookup.Away);
             var chosenId = (_options() ?? ChasterOptions.Off).LockId;
-            var pick = locks.FirstOrDefault(l => l.Id == chosenId) ?? (locks.Count == 1 ? locks[0] : null);
+            // The picked lock and nothing else: one lock is still the player's to pick.
+            var pick = string.IsNullOrEmpty(chosenId) ? null : locks.FirstOrDefault(l => l.Id == chosenId);
             if (pick == null) return SetLock(null, locks.Count == 0 ? LockLookup.None : LockLookup.Ambiguous);
             var ends = pick.EndDate is { } end ? (end.Kind == DateTimeKind.Utc ? end : end.ToUniversalTime()) : (DateTime?)null;
             var started = pick.StartDate is { } from ? (from.Kind == DateTimeKind.Utc ? from : from.ToUniversalTime()) : (DateTime?)null;

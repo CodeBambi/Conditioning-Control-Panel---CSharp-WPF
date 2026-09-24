@@ -30,6 +30,10 @@ public enum LockClockState
     /// <summary>Panic or the emergency exit opened a hold. Nothing books, and the chip counts the
     /// hold down instead of the lock, because that is the number that matters in that minute.</summary>
     Held,
+
+    /// <summary>The player paused the tab. The lock still runs on Chaster, so the digits stay;
+    /// the chip greys out and wears a pause mark, because nothing CCP does lands right now.</summary>
+    Paused,
 }
 
 /// <summary>The chip's readout, with no WPF in sight: the state to paint and the string under the
@@ -96,10 +100,15 @@ public static class LockClockText
     /// on the chip and must be able to sit over any of these states.</para>
     /// </summary>
     public static LockClock State(LockLookup lookup, LockSnapshot? snapshot, bool linked,
-        TimeSpan safetyHold, DateTime utcNow)
+        TimeSpan safetyHold, DateTime utcNow, bool paused = false)
     {
         if (safetyHold > TimeSpan.Zero) return new LockClock(LockClockState.Held, HoldClock(safetyHold));
         if (!linked || lookup == LockLookup.Unlinked) return new LockClock(LockClockState.Unlinked, "");
+        // Paused after the hold (the hold is the louder promise) and before the lookup: whatever
+        // the lock says, the chip's first job is to say the tab is not running.
+        if (paused)
+            return new LockClock(LockClockState.Paused,
+                snapshot == null || lookup is LockLookup.None or LockLookup.Ambiguous ? "" : snapshot.TimerHidden ? HiddenMark : Digits(snapshot, utcNow));
 
         // Away keeps the last snapshot, so it still shows a number; it is the ring that says the
         // number is old. Away with nothing ever fetched has nothing to show.
@@ -141,6 +150,18 @@ public static class LiveLockClock
         if (snapshot?.Remaining(utcNow) is not { } left) return null;
         if (left <= TimeSpan.Zero) return TimeSpan.Zero;
         return left + TimeSpan.FromSeconds(PendingAdd(balanceSeconds));
+    }
+
+    /// <summary>
+    /// When the lock ends as the live clock counts it: Chaster's own end plus what the tab will
+    /// add, so the "Ends" line and the ticking clock never disagree. Null when there is no clock.
+    /// A lock already at its end stays at its own end: a push cannot reopen a finished clock.
+    /// </summary>
+    public static DateTime? EndsAt(LockSnapshot? snapshot, int balanceSeconds, DateTime utcNow)
+    {
+        if (snapshot is not { TimerHidden: false, EndsAtUtc: { } end }) return null;
+        if (Remaining(snapshot, balanceSeconds, utcNow) is not { } left || left <= TimeSpan.Zero) return end;
+        return end.AddSeconds(PendingAdd(balanceSeconds));
     }
 
     /// <summary>Whether the clock runs down on its own: a lock with an end date, not frozen, not hidden.</summary>

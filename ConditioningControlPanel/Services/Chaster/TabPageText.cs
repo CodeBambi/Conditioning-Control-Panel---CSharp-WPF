@@ -83,6 +83,26 @@ public static class TabPageText
             : null,
     };
 
+    // ============================== the tag ==============================
+
+    /// <summary>The line under the tag's amount, as a loc key and its figures. A positive balance
+    /// splits into what goes to the lock today (the day's push ceiling allows it) and what waits
+    /// for tomorrow; paused or with no lock picked, all of it waits.</summary>
+    public readonly record struct TagLine(string Key, string? Today = null, string? Later = null);
+
+    public static TagLine Tag(int balanceSeconds, int pushableTodaySeconds, bool paused, bool lockPicked)
+    {
+        if (balanceSeconds < 0) return new("chaster_tag_credit_lands");
+        if (balanceSeconds == 0) return new("chaster_tag_lands");
+        if (paused) return new("chaster_tag_paused");
+        if (!lockPicked) return new("chaster_tag_nolock");
+        var today = Math.Clamp(pushableTodaySeconds, 0, balanceSeconds);
+        var later = balanceSeconds - today;
+        if (later == 0) return new("chaster_tag_lands");
+        if (today == 0) return new("chaster_tag_tomorrow");
+        return new("chaster_tag_split", CircesTab.Format(today, signed: false), CircesTab.Format(later, signed: false));
+    }
+
     // ============================== the day ==============================
 
     /// <summary>How full today's 60:00 is, 0 to 1. Clamped both ways: the cap clamps bookings, but

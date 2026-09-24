@@ -11,9 +11,10 @@ namespace ConditioningControlPanel.Services.Chaster;
 /// <summary>What the player chose. Read fresh on every call, so a switch flipped in Settings
 /// takes hold on the next event with no restart. <paramref name="RemoteOpen"/> is a Remote
 /// session running right now; <paramref name="PanicArmed"/> is the panic key switched on.
-/// <paramref name="RelockPastEnd"/> is the player's opt-in to lock again when the timer has run out.</summary>
+/// <paramref name="RelockPastEnd"/> is the player's opt-in to lock again when the timer has run out.
+/// <paramref name="Paused"/> is the page's pause button: nothing books and nothing is pushed.</summary>
 public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string> Prices, TabLimits? Limits = null,
-    bool RemoteOpen = false, bool PanicArmed = true, bool RelockPastEnd = false)
+    bool RemoteOpen = false, bool PanicArmed = true, bool RelockPastEnd = false, bool Paused = false)
 {
     public TabLimits Caps => Limits ?? TabLimits.Default;
 
@@ -56,8 +57,8 @@ public enum SettleOutcome
     /// <summary>Nothing to send: tab off, not linked, already pushed today, or no positive balance.</summary>
     Nothing,
     Pushed,
-    /// <summary>More than one active lock and the player has not picked one, or the one they
-    /// picked has ended. Either way: ask, never guess.</summary>
+    /// <summary>The player has not picked a lock, or the one they picked has ended. Either way:
+    /// ask, never guess. Not even with one lock: a push only goes where the player sent it.</summary>
     NoLockChosen,
     LinkExpired,
     /// <summary>Chaster did not take it this time. The balance waits; nothing is lost.</summary>
@@ -133,6 +134,34 @@ public sealed partial class ChasterService : IDisposable
 
     public bool IsLinked => _tokens.Read() is { RefreshToken.Length: > 0 };
 
+    /// <summary>The page's pause button is down: nothing books, nothing goes to the lock.</summary>
+    public bool IsPaused => (_options() ?? ChasterOptions.Off).Paused;
+
+    /// <summary>How much of a positive balance would go to the lock today, under today's push
+    /// ceiling. The rest waits for tomorrow. 0 while paused, with no lock picked, or with nothing owed.</summary>
+    public int PushableTodaySeconds
+    {
+        get
+        {
+            var options = _options() ?? ChasterOptions.Off;
+            if (options.Paused || string.IsNullOrEmpty(options.LockId)) return 0;
+            lock (_gate)
+            {
+                var plan = CircesTab.PlanPush(_tab, canRemove: false, options.Caps, _localNow());
+                return plan.Kind == TabPushKind.Add ? plan.Seconds : 0;
+            }
+        }
+    }
+
+    /// <summary>The player paused, resumed, or picked a lock. Everything that paints the lock
+    /// repaints (through <see cref="LockChanged"/>), and a balance that can now go is sent on the
+    /// next push.</summary>
+    public void NoteChoiceChanged()
+    {
+        LockChanged?.Invoke();
+        if (!IsPaused && BalanceSeconds > 0) SchedulePush();
+    }
+
     /// <summary>The player's two limits, as the next booking will read them.</summary>
     public TabLimits Caps => (_options() ?? ChasterOptions.Off).Caps;
 
@@ -153,13 +182,13 @@ public sealed partial class ChasterService : IDisposable
     {
         if (string.IsNullOrEmpty(eventId) || TabPrices.NeverPriced.Contains(eventId)) return false;
         if (!Active(out var options) || !options.Prices.Contains(eventId) || TabPrices.Find(eventId) == null) return false;
-        lock (_gate) return _utcNow() >= _safetyUntilUtc && RemoteRoom(options) > 0;
+        lock (_gate) return _utcNow() >= _safetyUntilUtc && RemoteRoom(options) > 0 && CircesTab.UseLeft(_tab, eventId, _localNow());
     }
 
     private bool Active(out ChasterOptions options)
     {
         options = _options() ?? ChasterOptions.Off;
-        return options.TabEnabled && IsLinked;
+        return options.TabEnabled && !options.Paused && IsLinked;
     }
 
     /// <summary>A priced event happened. Books nothing unless the tab is on, an account is linked
@@ -170,7 +199,7 @@ public sealed partial class ChasterService : IDisposable
     /// "+3:00" pops there rather than on the rail.</summary>
     public TabBooking NoteAt(string eventId, System.Windows.Point? originPx, int units = 1)
     {
-        if (!Active(out var options)) return new(0, TabRefusal.Nothing);
+        if (!Active(out var options)) return new(0, options.Paused ? TabRefusal.Paused : TabRefusal.Nothing);
         // The first finished session after coming back forgives half of what being away cost,
         // whether or not the session row itself is switched on.
         if (eventId == "session") ForgiveMisses();
@@ -280,6 +309,7 @@ public sealed partial class ChasterService : IDisposable
         {
             var now = _utcNow();
             var options = _options() ?? ChasterOptions.Off;
+            if (seconds > 0 && !CircesTab.UseLeft(_tab, eventId, _localNow())) return new(0, TabRefusal.RowCap);
             var remote = seconds > 0 && options.RemoteOpen;
             if (remote)
             {
@@ -288,6 +318,7 @@ public sealed partial class ChasterService : IDisposable
                 seconds = Math.Min(seconds, room);
             }
             booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps);
+            if (booking.AppliedSeconds > 0) CircesTab.NoteUse(_tab, eventId, _localNow());
             if (remote && booking.AppliedSeconds > 0)
             {
                 var today = CircesTab.DayKey(_localNow());
@@ -356,19 +387,13 @@ public sealed partial class ChasterService : IDisposable
             var access = await AccessTokenAsync(ct).ConfigureAwait(false);
             if (access == null) return IsLinked ? SettleOutcome.TryLater : SettleOutcome.LinkExpired;
 
+            // Only ever the lock the player picked (security pass 2): not even the only one there
+            // is. With none picked the balance waits on the tab and the page asks.
             var lockId = options.LockId;
-            IReadOnlyList<ChasterLock>? active = null;
-            if (string.IsNullOrEmpty(lockId))
-            {
-                var locks = await _client.GetLocksAsync(access, ct).ConfigureAwait(false);
-                if (!locks.Ok) return Failed(locks.Status);
-                if (locks.Value!.Count != 1) return locks.Value.Count == 0 ? SettleOutcome.Nothing : SettleOutcome.NoLockChosen;
-                lockId = locks.Value[0].Id;
-                active = locks.Value;
-            }
+            if (string.IsNullOrEmpty(lockId)) return SettleOutcome.NoLockChosen;
 
             if (options.RelockPastEnd)
-                await CatchUpPastEndAsync(access, lockId!, active, ct).ConfigureAwait(false);
+                await CatchUpPastEndAsync(access, lockId!, null, ct).ConfigureAwait(false);
 
             lock (_gate)
             {
