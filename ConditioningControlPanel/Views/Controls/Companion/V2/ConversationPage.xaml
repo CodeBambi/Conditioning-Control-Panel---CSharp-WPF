@@ -1,0 +1,111 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.V2.ConversationPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+ MinHeight="560" PreviewKeyDown="Page_KeyDown">
+ <UserControl.Resources>
+  <BooleanToVisibilityConverter x:Key="Visible"/>
+  <Style TargetType="Button">
+   <Setter Property="Foreground" Value="#FAF4FF"/><Setter Property="Background" Value="#33243E"/>
+   <Setter Property="Padding" Value="13,8"/><Setter Property="Margin" Value="0,0,8,6"/>
+   <Setter Property="BorderBrush" Value="#66506E"/><Setter Property="Cursor" Value="Hand"/>
+  </Style>
+  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#F4ECF8"/></Style>
+ </UserControl.Resources>
+ <Border CornerRadius="20" Padding="22" Background="#100B18" BorderBrush="#44304F" BorderThickness="1">
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Grid Margin="0,0,0,14">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="132"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Border CornerRadius="24" Margin="0,0,18,0">
+     <Border.Background><RadialGradientBrush><GradientStop Color="#53365F" Offset="0"/><GradientStop Color="#100B18" Offset="1"/></RadialGradientBrush></Border.Background>
+     <Image Source="{Binding Room.Hero.Portrait}" Height="132" Stretch="Uniform" IsHitTestVisible="False"/>
+    </Border>
+    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+     <TextBlock Text="{Binding Room.Hero.Name}" FontSize="29" FontWeight="SemiBold"/>
+     <TextBlock Text="{Binding Room.Hero.Flavor}" Foreground="#C6B4D0" TextTrimming="CharacterEllipsis"/>
+     <TextBlock Text="{Binding Status}" Foreground="#80E4C5" Margin="0,5,0,10" AutomationProperties.LiveSetting="Polite"/>
+     <WrapPanel>
+      <Button Content="{loc:Str companion_v2_who}" Tag="who" Click="Sheet_Click"/>
+      <Button Content="{loc:Str companion_v2_memory}" Tag="memory" Click="Sheet_Click"/>
+      <Button Content="{loc:Str companion_v2_allowed}" Tag="permissions" Click="Sheet_Click"/>
+      <Button Content="{loc:Str companion_v2_connection}" Tag="connection" Click="Sheet_Click"/>
+      <Button Content="{loc:Str companion_v2_popout}" Command="{Binding Room.Hero.DetachCommand}"/>
+      <Button Content="{loc:Str companion_v2_mute}" Command="{Binding Room.Hero.ToggleMuteCommand}"/>
+     </WrapPanel>
+    </StackPanel>
+   </Grid>
+   <Grid Grid.Row="1" MinHeight="220">
+    <ScrollViewer x:Name="Transcript" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" ScrollChanged="Transcript_ScrollChanged">
+     <StackPanel>
+      <StackPanel Visibility="{Binding HasNoTurns, Converter={StaticResource Visible}}" Margin="14,24">
+       <TextBlock Text="{loc:Str companion_v2_intro}" FontSize="23" TextWrapping="Wrap"/>
+       <TextBlock Text="{loc:Str companion_v2_hello}" Foreground="#BFAEC9" Margin="0,10,0,18" TextWrapping="Wrap"/>
+      </StackPanel>
+      <ItemsControl x:Name="Messages" ItemsSource="{Binding Turns}">
+       <ItemsControl.ItemTemplate>
+        <DataTemplate>
+         <Border CornerRadius="14" Padding="16" Margin="0,0,6,12" Background="#251A30">
+          <StackPanel>
+           <DockPanel Margin="0,0,0,6">
+            <Button DockPanel.Dock="Right" Content="{loc:Str companion_v2_copy}" Tag="{Binding Text}" Click="Copy_Click" FontSize="11" Padding="7,3" Margin="0"/>
+            <TextBlock Text="{Binding Time}" DockPanel.Dock="Right" Foreground="#BBAAC5" Margin="8,0"/>
+            <TextBlock Text="{Binding Speaker}" FontWeight="SemiBold" Foreground="#DABAE8"/>
+           </DockPanel>
+           <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Foreground="#F4ECF8" TextWrapping="Wrap" FontSize="15" Padding="0" IsReadOnlyCaretVisible="False"/>
+          </StackPanel>
+         </Border>
+        </DataTemplate>
+       </ItemsControl.ItemTemplate>
+      </ItemsControl>
+     </StackPanel>
+    </ScrollViewer>
+   </Grid>
+   <StackPanel Grid.Row="2" Margin="0,10,0,0">
+    <Border Background="#312239" Padding="14" CornerRadius="12" Margin="0,0,0,10" Visibility="{Binding ShowStart, Converter={StaticResource Visible}}">
+     <StackPanel>
+      <TextBlock Text="{Binding Privacy}" TextWrapping="Wrap" Margin="0,0,0,10" Foreground="#CCBAD5"/>
+      <WrapPanel>
+       <Button Content="{Binding StartLabel}" Click="Start_Click" Background="#61416F"/>
+       <Button Content="{loc:Str companion_v2_local}" Tag="connection" Click="Sheet_Click"/>
+      </WrapPanel>
+     </StackPanel>
+    </Border>
+    <WrapPanel Visibility="{Binding HasNoTurns, Converter={StaticResource Visible}}">
+     <Button Content="{loc:Str companion_v2_chat}" Click="Starter_Click"/>
+     <Button Content="{loc:Str companion_v2_pick}" Click="Starter_Click"/>
+     <Button Content="{loc:Str companion_v2_capabilities}" Click="Starter_Click"/>
+    </WrapPanel>
+    <Border Background="#40311F" CornerRadius="9" Padding="10" Margin="0,0,0,10" Visibility="{Binding HasNotice, Converter={StaticResource Visible}}">
+     <DockPanel>
+      <Button DockPanel.Dock="Right" Content="{loc:Str companion_v2_retry}" Click="Send_Click" Visibility="{Binding CanRetry, Converter={StaticResource Visible}}" Margin="10,0,0,0"/>
+      <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite"/>
+     </DockPanel>
+    </Border>
+    <Grid>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <TextBox x:Name="Composer" Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding Busy}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="50" MaxHeight="130" VerticalScrollBarVisibility="Auto" Background="#251A30" Foreground="#FAF4FF" CaretBrush="#FAF4FF" BorderBrush="#786184" Padding="12" FontSize="15" PreviewKeyDown="Composer_KeyDown" AutomationProperties.Name="{loc:Str companion_v2_input}"/>
+     <StackPanel Grid.Column="1" Margin="10,0,0,0">
+      <Button Content="{loc:Str companion_v2_send}" Click="Send_Click" IsEnabled="{Binding CanCompose}" Background="#61416F" Margin="0"/>
+      <Button Content="{loc:Str companion_v2_stop}" Click="Stop_Click" Visibility="{Binding Busy, Converter={StaticResource Visible}}" Margin="0,4,0,0"/>
+     </StackPanel>
+    </Grid>
+    <DockPanel Margin="0,8,0,0">
+     <Button Content="{loc:Str companion_v2_new}" Click="New_Click" ToolTip="{loc:Str companion_v2_history_note}" DockPanel.Dock="Right" Padding="7,3" FontSize="11" Margin="8,0,0,0" IsEnabled="{Binding CanCompose}"/>
+     <TextBlock Text="{loc:Str companion_v2_keyboard}" Foreground="#BFAEC9" FontSize="11" VerticalAlignment="Center"/>
+    </DockPanel>
+   </StackPanel>
+   <Grid x:Name="SheetOverlay" Grid.RowSpan="3" Visibility="Collapsed" Background="#B00B0710">
+    <Border Background="#1B1225" BorderBrush="#735180" BorderThickness="1" CornerRadius="16" HorizontalAlignment="Right" Width="580" MaxWidth="680" Padding="18">
+     <DockPanel>
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+       <Button Content="{loc:Str companion_v2_close}" Click="Close_Click" DockPanel.Dock="Right"/>
+       <TextBlock x:Name="SheetTitle" FontSize="22" FontWeight="SemiBold"/>
+      </DockPanel>
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ContentControl x:Name="SheetContent"/></ScrollViewer>
+     </DockPanel>
+    </Border>
+   </Grid>
+  </Grid>
+ </Border>
+</UserControl>

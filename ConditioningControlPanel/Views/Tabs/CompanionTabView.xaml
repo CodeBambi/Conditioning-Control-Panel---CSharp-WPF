@@ -29,7 +29,7 @@
          hero's viewmodel, so there is one title and not two.
          ================================================================ -->
 
-    <Grid>
+    <Grid x:Name="PageHost">
         <cmp:CompanionRoomView x:Name="Room" x:FieldModifier="internal"
                                AutomationProperties.AutomationId="CompanionTabRoom"/>
 
