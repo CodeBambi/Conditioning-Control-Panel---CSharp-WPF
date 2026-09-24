@@ -49,6 +49,7 @@
   "companion_v2_popout": "別ウィンドウへ",
   "companion_v2_mute": "音声をミュート",
   "companion_v2_history_note": "新しいチャットを始めると、この会話は消去されます。保存した好みは残ります。",
+  "companion_v2_emi_fixed": "EMIの性格は固定です。性格をカスタマイズするには別のアバターを選んでください。",
   "companion_v2_personality": "性格の詳細設定",
   "companion_v2_memory_note": "メモリーがオンの場合、選択したAIが最近の会話を要約できます。関連する記憶はメッセージと一緒に送信されます。保存した情報はこのPCに残り、ここで確認・削除できます。",
   "companion_v2_busy": "返信を準備しています。",

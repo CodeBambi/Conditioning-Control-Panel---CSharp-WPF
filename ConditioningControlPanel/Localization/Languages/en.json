@@ -49,6 +49,7 @@
   "companion_v2_popout": "Pop out",
   "companion_v2_mute": "Mute voice",
   "companion_v2_history_note": "New chat clears this conversation. Saved preferences stay.",
+  "companion_v2_emi_fixed": "EMI has one fixed voice. Choose another avatar to customize a personality.",
   "companion_v2_personality": "More personality options",
   "companion_v2_memory_note": "With memory on, your selected AI can summarize recent chat. Relevant memories accompany your messages. Saved details stay on this PC; review or forget them here.",
   "companion_v2_busy": "A reply is in progress.",

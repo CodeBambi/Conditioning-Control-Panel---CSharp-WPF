@@ -4,50 +4,50 @@
  xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
  xmlns:controls="clr-namespace:ConditioningControlPanel.Controls"
  xmlns:v2="clr-namespace:ConditioningControlPanel.Views.Controls.Companion.V2"
- MinHeight="560" PreviewKeyDown="Page_KeyDown">
+ Foreground="#F8FAFC" FontFamily="Segoe UI" FontSize="14" TextOptions.TextFormattingMode="Display" MinHeight="560" PreviewKeyDown="Page_KeyDown">
  <UserControl.Resources>
   <BooleanToVisibilityConverter x:Key="Visible"/>
   <Style TargetType="Button">
-   <Setter Property="Foreground" Value="#FAF4FF"/><Setter Property="Background" Value="#33243E"/>
+   <Setter Property="Foreground" Value="#F8FAFC"/><Setter Property="Background" Value="#222B36"/>
    <Setter Property="Padding" Value="13,8"/><Setter Property="Margin" Value="0,0,8,6"/>
-   <Setter Property="BorderBrush" Value="#66506E"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="BorderBrush" Value="#536170"/><Setter Property="Cursor" Value="Hand"/>
    <Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
     <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
      <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/>
     </Border>
     <ControlTemplate.Triggers>
-     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#A184B2"/></Trigger>
-     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#DABAE8"/></Trigger>
-     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="#61416F"/></Trigger>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#87DCCB"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#91E8D2"/></Trigger>
+     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Background" Value="#275C58"/></Trigger>
      <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Chrome" Property="Opacity" Value="0.45"/></Trigger>
     </ControlTemplate.Triggers>
    </ControlTemplate></Setter.Value></Setter>
   </Style>
-  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#F4ECF8"/></Style>
+  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#F8FAFC"/></Style>
  </UserControl.Resources>
- <Border CornerRadius="20" Padding="22" Background="#100B18" BorderBrush="#44304F" BorderThickness="1">
+ <Border CornerRadius="20" Padding="22" Background="#10151C" BorderBrush="#3E4C5B" BorderThickness="1">
   <Grid>
    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
    <Grid Margin="0,0,0,14">
-    <Grid.ColumnDefinitions><ColumnDefinition Width="132"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="104"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
     <Border CornerRadius="24" Margin="0,0,18,0">
-     <Border.Background><RadialGradientBrush><GradientStop Color="#53365F" Offset="0"/><GradientStop Color="#100B18" Offset="1"/></RadialGradientBrush></Border.Background>
+     <Border.Background><RadialGradientBrush><GradientStop Color="#53365F" Offset="0"/><GradientStop Color="#10151C" Offset="1"/></RadialGradientBrush></Border.Background>
      <Grid>
       <controls:AmbientFxCanvas x:Name="StageDust" IsHitTestVisible="False"/>
-      <Image Source="{Binding Room.Hero.Portrait}" Height="132" Stretch="Uniform" IsHitTestVisible="False">
+      <Image Source="{Binding Room.Hero.Portrait}" Height="96" Stretch="Uniform" IsHitTestVisible="False">
        <Image.Style><Style TargetType="Image"><Style.Triggers><DataTrigger Binding="{Binding IsEmi}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Image.Style>
       </Image>
-      <v2:EmiConversationStage Height="132" Face="{Binding Face}" Visibility="{Binding IsEmi, Converter={StaticResource Visible}}"/>
+      <v2:EmiConversationStage Height="96" Face="{Binding Face}" Visibility="{Binding IsEmi, Converter={StaticResource Visible}}"/>
      </Grid>
     </Border>
     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-     <TextBlock Text="{Binding Name}" FontSize="29" FontWeight="SemiBold"/>
-     <TextBlock Text="{Binding Flavor}" Foreground="#C6B4D0" TextTrimming="CharacterEllipsis"/>
+     <TextBlock Text="{Binding Name}" FontSize="25" FontWeight="SemiBold"/>
+     <TextBlock Text="{Binding Flavor}" Foreground="#CBD5E1" TextTrimming="CharacterEllipsis"/>
      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="{Binding StatusColor}" Margin="0,5,0,10" AutomationProperties.LiveSetting="Polite"/>
-     <TextBlock Text="{Binding PerkCost}" Foreground="#FF7777" FontSize="12" FontWeight="SemiBold"/>
-     <TextBlock Text="{Binding Familiarity}" Foreground="#BFAEC9" FontSize="11" ToolTip="{loc:Str companion_v2_familiarity_hint}"/>
-     <TextBlock Text="{Binding Allowance}" Foreground="#BFAEC9" FontSize="11"/>
+     <TextBlock Text="{Binding PerkCost}" Foreground="#FF9999" FontSize="12" FontWeight="SemiBold"><TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers><DataTrigger Binding="{Binding PerkCost}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+     <TextBlock Text="{Binding Familiarity}" Foreground="#BAC8D8" FontSize="11" ToolTip="{loc:Str companion_v2_familiarity_hint}"/>
+     <TextBlock Text="{Binding Allowance}" Foreground="#BAC8D8" FontSize="11"/>
      <WrapPanel>
       <Button Content="{loc:Str companion_v2_who}" Tag="who" Click="Sheet_Click"/>
       <Button Content="{loc:Str companion_v2_memory}" Tag="memory" Click="Sheet_Click"/>
@@ -57,31 +57,32 @@
       <Button Content="{Binding VoiceLabel}" Command="{Binding Room.Hero.ToggleMuteCommand}"/>
      </WrapPanel>
     </StackPanel>
+    <Button Grid.Column="2" Content="&#xE713;" FontFamily="Segoe MDL2 Assets, Segoe UI" FontSize="22" Width="46" Height="46" Padding="0" Margin="16,0,0,0" VerticalAlignment="Top" Tag="who" Click="Sheet_Click" ToolTip="{loc:Str companion_v2_who}" AutomationProperties.Name="{loc:Str companion_v2_who}"/>
    </Grid>
    <Grid Grid.Row="1" MinHeight="220">
     <ScrollViewer x:Name="Transcript" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" ScrollChanged="Transcript_ScrollChanged">
-     <StackPanel>
+     <StackPanel MaxWidth="920">
       <StackPanel Visibility="{Binding HasNoTurns, Converter={StaticResource Visible}}" Margin="14,24">
        <TextBlock Text="{loc:Str companion_v2_intro}" FontSize="23" TextWrapping="Wrap"/>
-       <TextBlock Text="{loc:Str companion_v2_hello}" Foreground="#BFAEC9" Margin="0,10,0,18" TextWrapping="Wrap"/>
+       <TextBlock Text="{loc:Str companion_v2_hello}" Foreground="#BAC8D8" Margin="0,10,0,18" TextWrapping="Wrap"/>
       </StackPanel>
       <ItemsControl x:Name="Messages" ItemsSource="{Binding Turns}">
        <ItemsControl.ItemTemplate>
         <DataTemplate>
-         <Border CornerRadius="14" Padding="16">
+         <Border CornerRadius="6" Padding="18,14" BorderThickness="3,0,0,0">
           <Border.Style><Style TargetType="Border">
-           <Setter Property="Background" Value="#251A30"/><Setter Property="Margin" Value="0,0,40,12"/>
+           <Setter Property="BorderBrush" Value="#76DCC2"/><Setter Property="Background" Value="#19232E"/><Setter Property="Margin" Value="0,0,44,16"/>
            <Style.Triggers><DataTrigger Binding="{Binding IsUser}" Value="True">
-            <Setter Property="Background" Value="#362740"/><Setter Property="Margin" Value="60,0,6,12"/>
+            <Setter Property="Background" Value="#263E4A"/><Setter Property="Margin" Value="72,0,6,16"/><Setter Property="BorderBrush" Value="#8DBFEA"/>
            </DataTrigger></Style.Triggers>
           </Style></Border.Style>
           <StackPanel>
            <DockPanel Margin="0,0,0,6">
             <Button DockPanel.Dock="Right" Content="{loc:Str companion_v2_copy}" Tag="{Binding Text}" Click="Copy_Click" FontSize="11" Padding="7,3" Margin="0"/>
-            <TextBlock Text="{Binding Time}" DockPanel.Dock="Right" Foreground="#BBAAC5" Margin="8,0"/>
-            <TextBlock Text="{Binding Speaker}" FontWeight="SemiBold" Foreground="#DABAE8"/>
+            <TextBlock Text="{Binding Time}" DockPanel.Dock="Right" Foreground="#B8C5D4" Margin="8,0"/>
+            <TextBlock Text="{Binding Speaker}" FontWeight="SemiBold" Foreground="#91E8D2"/>
            </DockPanel>
-           <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Foreground="#F4ECF8" TextWrapping="Wrap" FontSize="15" Padding="0" IsReadOnlyCaretVisible="False"/>
+           <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Foreground="#F8FAFC" TextWrapping="Wrap" FontSize="17" Padding="0" SelectionBrush="#49798A" IsReadOnlyCaretVisible="False"/>
           </StackPanel>
          </Border>
         </DataTemplate>
@@ -90,13 +91,13 @@
      </StackPanel>
     </ScrollViewer>
    </Grid>
-   <StackPanel Grid.Row="2" Margin="0,10,0,0">
-    <Border Background="#312239" Padding="14" CornerRadius="12" Margin="0,0,0,10" Visibility="{Binding ShowStart, Converter={StaticResource Visible}}">
+   <StackPanel Grid.Row="2" Margin="0,14,0,0" MaxWidth="920">
+    <Border Background="#202D38" Padding="14" CornerRadius="12" Margin="0,0,0,10" Visibility="{Binding ShowStart, Converter={StaticResource Visible}}">
      <StackPanel>
-      <TextBlock Text="{Binding Privacy}" TextWrapping="Wrap" Margin="0,0,0,10" Foreground="#CCBAD5"/>
-      <TextBlock Text="{Binding Allowance}" Foreground="#BFAEC9" FontSize="11"/>
+      <TextBlock Text="{Binding Privacy}" TextWrapping="Wrap" Margin="0,0,0,10" Foreground="#CBD5E1"/>
+      <TextBlock Text="{Binding Allowance}" Foreground="#BAC8D8" FontSize="11"/>
      <WrapPanel>
-       <Button Content="{Binding StartLabel}" Click="Start_Click" Background="#61416F"/>
+       <Button Content="{Binding StartLabel}" Click="Start_Click" Background="#275C58"/>
        <Button Content="{loc:Str companion_v2_local}" Tag="connection" Click="Sheet_Click"/>
       </WrapPanel>
      </StackPanel>
@@ -115,29 +116,29 @@
     <Grid>
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <Grid>
-     <TextBox x:Name="Composer" Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding Busy}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="50" MaxHeight="130" VerticalScrollBarVisibility="Auto" Background="#251A30" Foreground="#FAF4FF" CaretBrush="#FAF4FF" BorderBrush="#786184" Padding="12" FontSize="15" PreviewKeyDown="Composer_KeyDown" AutomationProperties.Name="{loc:Str companion_v2_input}"/>
-      <TextBlock Text="{loc:Str companion_v2_input}" Foreground="#BFAEC9" Margin="13,11,13,0" VerticalAlignment="Top" IsHitTestVisible="False">
+     <TextBox x:Name="Composer" Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding Busy}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="50" MaxHeight="130" VerticalScrollBarVisibility="Auto" Background="#19232E" Foreground="#F8FAFC" CaretBrush="#F8FAFC" BorderBrush="#63778A" Padding="12" FontSize="17" PreviewKeyDown="Composer_KeyDown" AutomationProperties.Name="{loc:Str companion_v2_input}"/>
+      <TextBlock Text="{loc:Str companion_v2_input}" Foreground="#BAC8D8" Margin="13,11,13,0" VerticalAlignment="Top" IsHitTestVisible="False">
        <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Draft.Length}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
       </TextBlock>
      </Grid>
      <StackPanel Grid.Column="1" Margin="10,0,0,0">
-      <Button Content="{loc:Str companion_v2_send}" Click="Send_Click" IsEnabled="{Binding CanSend}" Background="#61416F" Margin="0"/>
+      <Button Content="{loc:Str companion_v2_send}" Click="Send_Click" IsEnabled="{Binding CanSend}" Background="#275C58" Margin="0"/>
       <Button Content="{loc:Str companion_v2_stop}" Click="Stop_Click" Visibility="{Binding Busy, Converter={StaticResource Visible}}" Margin="0,4,0,0"/>
      </StackPanel>
     </Grid>
     <DockPanel Margin="0,8,0,0">
      <Button Content="{loc:Str companion_v2_new}" Click="New_Click" ToolTip="{loc:Str companion_v2_history_note}" DockPanel.Dock="Right" Padding="7,3" FontSize="11" Margin="8,0,0,0" IsEnabled="{Binding CanCompose}"/>
-     <TextBlock Text="{loc:Str companion_v2_keyboard}" Foreground="#BFAEC9" FontSize="11" VerticalAlignment="Center"/>
+     <TextBlock Text="{loc:Str companion_v2_keyboard}" Foreground="#BAC8D8" FontSize="11" VerticalAlignment="Center"/>
     </DockPanel>
    </StackPanel>
    <Grid x:Name="SheetOverlay" Grid.RowSpan="3" Visibility="Collapsed" Background="#B00B0710">
-    <Border Background="#1B1225" BorderBrush="#735180" BorderThickness="1" CornerRadius="16" HorizontalAlignment="Right" Width="580" MaxWidth="680" Padding="18">
+    <Border Background="#17212B" BorderBrush="#66808A" BorderThickness="1" CornerRadius="16" HorizontalAlignment="Right" Width="580" MaxWidth="680" Padding="18">
      <DockPanel>
       <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
        <Button Content="{loc:Str companion_v2_close}" Click="Close_Click" DockPanel.Dock="Right"/>
        <TextBlock x:Name="SheetTitle" FontSize="22" FontWeight="SemiBold"/>
       </DockPanel>
-      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ContentControl x:Name="SheetContent"/></ScrollViewer>
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ContentControl x:Name="SheetContent" Foreground="#F8FAFC"/></ScrollViewer>
      </DockPanel>
     </Border>
    </Grid>

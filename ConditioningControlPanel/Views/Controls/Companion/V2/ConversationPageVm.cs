@@ -41,11 +41,9 @@ internal sealed class ConversationPageVm : CompanionObservable
     private bool HouseCharacter => string.IsNullOrWhiteSpace(App.Mods?.ActiveMod?.Id) ||
         string.Equals(App.Mods.ActiveMod.Id, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
     public string Name => HouseCharacter
-        ? (App.Settings?.Current?.ActiveCompanionId ?? 0) == 0 ? "EMI" : App.Companion?.ActiveCompanionDef.Name ?? _room.Hero.Name
+        ? IsEmi ? "EMI" : App.Companion?.ActiveCompanionDef.Name ?? _room.Hero.Name
         : App.Mods?.GetCompanionName() ?? _room.Hero.Name;
-    public bool IsEmi => HouseCharacter && (App.Settings?.Current?.ActiveCompanionId ?? 0) == 0 &&
-        Services.Companion.EmiTubePreview.InitialSet(App.Settings?.Current?.SelectedAvatarSet ?? 0, 0, true,
-            App.Settings?.Current?.CompanionEmiPreviewChoiceMade ?? false) == Services.Companion.EmiTubePreview.Set;
+    public bool IsEmi => Services.Companion.EmiPersonality.IsActive;
     public string PerkCost => App.Companion?.ActivePerk == CompanionBonusType.XPDrain ? "Leech: -3 XP/s" : string.Empty;
     public string Familiarity => App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false &&
         App.Brain?.Memory is MemoryStore memory

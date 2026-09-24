@@ -49,6 +49,7 @@
   "companion_v2_popout": "별도 창으로",
   "companion_v2_mute": "음소거",
   "companion_v2_history_note": "새 대화를 시작하면 이 대화가 지워집니다. 저장한 취향은 유지됩니다.",
+  "companion_v2_emi_fixed": "EMI의 성격은 고정되어 있어요. 성격을 꾸미려면 다른 아바타를 선택하세요.",
   "companion_v2_personality": "성격 상세 설정",
   "companion_v2_memory_note": "메모리가 켜져 있으면 선택한 AI가 최근 대화를 요약할 수 있습니다. 관련 기억은 메시지와 함께 전송됩니다. 저장된 정보는 이 PC에 남으며 여기서 확인하거나 삭제할 수 있습니다.",
   "companion_v2_busy": "답변을 준비하고 있습니다.",

@@ -36,8 +36,7 @@ namespace ConditioningControlPanel.Services
             var modPresets = GetActiveModPersonalities();
             fromMod = modPresets != null && modPresets.Count > 0;
             var presets = fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
-            return presets.Select(p => Companion.EmiPersonality.ForPreview(p,
-                App.Mods?.ActiveMod?.Id, Companion.CompanionExperience.IsV2Enabled, App.Settings?.Current?.ActiveCompanionId ?? 0)).ToList();
+            return Companion.EmiPersonality.IsActive ? new() { Companion.EmiPersonality.Create() } : presets;
         }
 
         /// <summary>
@@ -114,6 +113,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public List<PersonalityPreset> GetAllPresets()
         {
+            if (Companion.EmiPersonality.IsActive) return new() { Companion.EmiPersonality.Create() };
             var presets = new List<PersonalityPreset>();
 
             // Built-in presets first (mod-supplied if the active mod defines personalities)
@@ -134,6 +134,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public PersonalityPreset GetActivePreset()
         {
+            if (Companion.EmiPersonality.IsActive) return Companion.EmiPersonality.Create();
             var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.NeutralDefaultId;
 
             // Try the active context's built-in set (mod personalities if the active mod
@@ -152,7 +153,7 @@ namespace ConditioningControlPanel.Services
             //
             // Unmodded, that means the neutral CCP Default persona: a fresh install must never
             // land on a themed one it was not asked for.
-            if (IsNeutralContext()) return Companion.EmiPersonality.ForPreview(PersonalityPresets.GetNeutralDefault(), null, Companion.CompanionExperience.IsV2Enabled, App.Settings?.Current?.ActiveCompanionId ?? 0);
+            if (IsNeutralContext()) return PersonalityPresets.GetNeutralDefault();
 
             // A themed mod that ships its own set leads with its intended default personality,
             // so the AI speaks in the mod's voice.
@@ -170,6 +171,8 @@ namespace ConditioningControlPanel.Services
         /// <returns>True if successful, false if preset not found or access denied.</returns>
         public bool SetActivePreset(string presetId)
         {
+            // EMI never overwrites the user's saved choice for the other avatars.
+            if (Companion.EmiPersonality.IsActive) return presetId == Companion.EmiPersonality.Id;
             // Check if preset exists
             var preset = GetPresetById(presetId);
             if (preset == null)

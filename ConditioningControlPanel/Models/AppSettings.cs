@@ -359,6 +359,7 @@ namespace ConditioningControlPanel.Models
 
         /// <summary>Local preview migration latch. Ignored outside the companion preview.</summary>
         public bool CompanionEmiPreviewChoiceMade { get; set; }
+        public bool CompanionEmiFixedVoiceApplied { get; set; }
 
         private bool _welcomed = false;
         public bool Welcomed

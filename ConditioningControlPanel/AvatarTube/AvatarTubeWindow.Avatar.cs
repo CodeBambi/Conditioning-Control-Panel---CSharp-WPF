@@ -404,6 +404,7 @@ namespace ConditioningControlPanel
             if (!IsAvatarSetUnlocked(setNumber, playerLevel)) return;
 
             int gen = ++_avatarSwitchGen;
+            var wasEmi = Services.Companion.EmiTubePreview.IsEmi(_currentAvatarSet);
             _currentAvatarSet = setNumber;
             _selectedAvatarSet = setNumber;
             _useAnimatedAvatar = HasAnimatedAvatar(setNumber);
@@ -413,7 +414,11 @@ namespace ConditioningControlPanel
             {
                 App.Settings.Current.SelectedAvatarSet = setNumber;
                 if (Services.Companion.EmiTubePreview.Available)
+                {
                     App.Settings.Current.CompanionEmiPreviewChoiceMade = true;
+                    Services.Companion.EmiPersonality.FenceOldVoice(App.Settings.Current,
+                        setNumber == Services.Companion.EmiTubePreview.Set, wasEmi);
+                }
                 App.Settings.Save();
             }
 

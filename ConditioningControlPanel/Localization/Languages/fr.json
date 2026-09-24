@@ -49,6 +49,7 @@
   "companion_v2_popout": "Détacher",
   "companion_v2_mute": "Couper la voix",
   "companion_v2_history_note": "Nouveau chat efface cette conversation. Les préférences enregistrées restent.",
+  "companion_v2_emi_fixed": "EMI a une voix fixe. Choisissez un autre avatar pour personnaliser sa personnalité.",
   "companion_v2_personality": "Plus d'options de personnalité",
   "companion_v2_memory_note": "Avec la mémoire activée, l’IA choisie peut résumer les échanges récents. Les souvenirs pertinents accompagnent vos messages. Les détails enregistrés restent sur ce PC ; consultez-les ou oubliez-les ici.",
   "companion_v2_busy": "Une réponse est en cours.",
