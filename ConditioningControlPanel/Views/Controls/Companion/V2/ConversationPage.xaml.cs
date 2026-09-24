@@ -92,7 +92,7 @@ public partial class ConversationPage : UserControl
         SheetTitle.Text = Loc.Get(kind switch { "memory" => "companion_v2_memory", "permissions" => "companion_v2_allowed", "connection" => "companion_v2_connection", _ => "companion_v2_who" });
         if (kind == "personality" && Services.Companion.EmiPersonality.IsActive)
         {
-            SheetContent.Content = new TextBlock { Text = Loc.Get("companion_v2_emi_fixed"), TextWrapping = TextWrapping.Wrap };
+            SheetContent.Content = new TextBlock { Foreground = System.Windows.Media.Brushes.White, Text = Loc.Get("companion_v2_emi_fixed"), TextWrapping = TextWrapping.Wrap };
         }
         else if (source != null && _legacy.FindName(source) is FrameworkElement existing && existing.Parent is Panel parent)
         {
@@ -106,7 +106,7 @@ public partial class ConversationPage : UserControl
             existing.DataContext = kind switch { "memory" => _vm.Room.Memory, "connection" => _vm.Room.Engine, "personality" => _vm.Room.Personality, _ => existing.DataContext };
             if (kind == "connection") _vm.Room.Engine.IsExpanded = true;
             var contents = new StackPanel();
-            if (kind == "memory") contents.Children.Add(new TextBlock { Text = Loc.Get("companion_v2_memory_note"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
+            if (kind == "memory") contents.Children.Add(new TextBlock { Foreground = System.Windows.Media.Brushes.White, Text = Loc.Get("companion_v2_memory_note"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
             if (kind == "memory") { contents.Children.Add(new PreferredNameEditor()); contents.Children.Add(new ConversationRecap()); }
             contents.Children.Add(existing);
             SheetContent.Content = contents;
@@ -117,7 +117,7 @@ public partial class ConversationPage : UserControl
             contents.Children.Add(new CompanionPickerCard());
             var advanced = new Button { Content = Loc.Get("companion_v2_personality"), Margin = new Thickness(0, 14, 0, 0) };
             advanced.Click += (_, _) => { if (PersonalityEditor != null && Window.GetWindow(this) is Window owner) { PersonalityEditor(owner); _vm.Room.Sync(); _vm.Refresh(); } else OpenSheet("personality"); };
-            var fixedVoice = new TextBlock { Text = Loc.Get("companion_v2_emi_fixed"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 14, 0, 0) };
+            var fixedVoice = new TextBlock { Foreground = System.Windows.Media.Brushes.White, Text = Loc.Get("companion_v2_emi_fixed"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 14, 0, 0) };
             contents.Children.Add(fixedVoice);
             void SyncEditor()
             {

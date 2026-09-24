@@ -4,7 +4,7 @@
  xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
  xmlns:controls="clr-namespace:ConditioningControlPanel.Controls"
  xmlns:v2="clr-namespace:ConditioningControlPanel.Views.Controls.Companion.V2"
- FontFamily="Segoe UI" FontSize="14" TextOptions.TextFormattingMode="Display" MinHeight="560" PreviewKeyDown="Page_KeyDown">
+ Foreground="#F8FAFC" FontFamily="Segoe UI" FontSize="14" TextOptions.TextFormattingMode="Display" MinHeight="560" PreviewKeyDown="Page_KeyDown">
  <UserControl.Resources>
   <BooleanToVisibilityConverter x:Key="Visible"/>
   <Style TargetType="Button">
@@ -138,7 +138,7 @@
        <Button Content="{loc:Str companion_v2_close}" Click="Close_Click" DockPanel.Dock="Right"/>
        <TextBlock x:Name="SheetTitle" FontSize="22" FontWeight="SemiBold"/>
       </DockPanel>
-      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ContentControl x:Name="SheetContent"/></ScrollViewer>
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ContentControl x:Name="SheetContent" Foreground="#F8FAFC"/></ScrollViewer>
      </DockPanel>
     </Border>
    </Grid>
