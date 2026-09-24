@@ -687,7 +687,7 @@ namespace ConditioningControlPanel
             }
         }
         
-        internal bool ShowStyledDialog(string title, string message, string yesText, string noText)
+        private bool ShowStyledDialog(string title, string message, string yesText, string noText)
             => ShowStyledDialog(title, message, yesText, noText, null, out _);
 
         /// <summary>
@@ -2172,11 +2172,28 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>The Customise window's "recommended setup" door: the same LoadPreset the
-        /// Presets card uses, session-lock guard and confirmation included.</summary>
-        internal void ApplySettingsPresetFromCustomise(Models.Preset preset) => LoadPreset(preset);
+        /// <summary>
+        /// The per-mod defaults picked in the Customise window, applied on every switch to
+        /// <paramref name="modId"/>. Only the user's stored choice applies (ModPresetDefaults);
+        /// assets go through the one asset apply path, settings through LoadPreset (session-lock
+        /// guard included), quietly, since a mod switch is not the moment for a "loaded" box.
+        /// </summary>
+        internal void ApplyModDefaultPresets(string? modId)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
 
-        private void LoadPreset(Models.Preset preset)
+            var assetId = Services.ModPresetDefaults.ForActivation(s.ModDefaultAssetPreset, modId);
+            if (assetId != null && Services.AssetPresetService.Find(s.AssetPresets, assetId) != null)
+                ApplyAssetPresetFromLauncher(assetId);
+
+            var settingsId = Services.ModPresetDefaults.ForActivation(s.ModDefaultSettingsPreset, modId);
+            var preset = settingsId == null ? null
+                : Models.Preset.GetDefaultPresets().Concat(s.UserPresets).FirstOrDefault(p => p.Id == settingsId);
+            if (preset != null) LoadPreset(preset, quiet: true);
+        }
+
+        private void LoadPreset(Models.Preset preset, bool quiet = false)
         {
             // The chokepoint: Preset.ApplyTo overwrites ~40 of the fields a running session
             // prescribes, so applying a preset mid-session discards the dose wholesale. Guarded
@@ -2198,6 +2215,7 @@ namespace ConditioningControlPanel
             RefreshPresetsDropdown();
 
             App.Logger?.Information("Loaded preset: {Name}", preset.Name);
+            if (quiet) return;
             MessageBox.Show(Loc.GetF("msg_preset_0_loaded", preset.Name), Loc.Get("title_preset_loaded"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }

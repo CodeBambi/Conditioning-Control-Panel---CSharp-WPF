@@ -457,7 +457,7 @@ namespace ConditioningControlPanel
             SepModActions.Visibility = BtnUninstall.Visibility == Visibility.Visible || BtnShare.Visibility == Visibility.Visible
                 ? Visibility.Visible : Visibility.Collapsed;
 
-            ShowSuggestions(mod);
+            ShowDefaults(mod);
 
             // Built-in mods whose media still has to come down off the release.
             UpdatePackPanel(mod);
@@ -470,11 +470,15 @@ namespace ConditioningControlPanel
             catch { return Colors.HotPink; }
         }
 
-        // ------------------------------------------------------------------ recommended setup
+        // ------------------------------------------------------------------ per-mod defaults
         //
-        // A mod may name a settings preset and an asset preset it recommends. They are shown in the
-        // folded Defaults section with an Apply button each, and offered ONCE on first activation
-        // (ModSuggestions.ShouldAsk). Never applied without a yes.
+        // Two dropdowns: the settings preset and the asset preset to load each time this mod is
+        // switched to. Stored per mod id in AppSettings (ModPresetDefaults), applied by
+        // MainWindow.ApplyModDefaultPresets on every activation. A mod's suggestion pre-selects
+        // its item and reads "(recommended)"; the user's choice, or pressing "Use this mod" with it
+        // showing, is what stores it. Nothing is applied behind the user's back.
+
+        private bool _fillingDefaults;
 
         private static System.Collections.Generic.List<Preset> AllSettingsPresets()
         {
@@ -484,78 +488,71 @@ namespace ConditioningControlPanel
             return list;
         }
 
-        private static Preset? SuggestedSettings(ModPackage mod) =>
-            ModSuggestions.ResolveSettings(AllSettingsPresets(), mod.Manifest.SuggestedSettingsPreset);
-
-        private static AssetPreset? SuggestedAssets(ModPackage mod) =>
-            ModSuggestions.ResolveAssets(App.Settings?.Current?.AssetPresets, mod.Manifest.SuggestedAssetPreset);
-
-        /// <summary>One line: "Recommends X settings" (and/or assets). The mod in use gets Apply;
-        /// any other mod says it will be asked once on switching. No suggestion, no line.</summary>
-        private void ShowSuggestions(ModPackage mod)
-        {
-            var settings = SuggestedSettings(mod);
-            var assets = SuggestedAssets(mod);
-
-            RowSuggestions.Visibility = settings != null || assets != null ? Visibility.Visible : Visibility.Collapsed;
-            TxtSuggestions.Inlines.Clear();
-            if (settings == null && assets == null) return;
-
-            var text = settings != null && assets != null
-                ? Loc.GetF("modmgr_recommends_both", "\u0001", "\u0002")
-                : Loc.GetF(settings != null ? "modmgr_recommends_settings" : "modmgr_recommends_assets", "\u0001");
-            // Preset names in bold, the rest muted, without splitting the sentence into keys.
-            foreach (var part in System.Text.RegularExpressions.Regex.Split(text, "(\u0001|\u0002)"))
-            {
-                if (part == "\u0001") TxtSuggestions.Inlines.Add(Bold(settings?.Name ?? assets!.Name));
-                else if (part == "\u0002") TxtSuggestions.Inlines.Add(Bold(assets!.Name));
-                else if (part.Length > 0) TxtSuggestions.Inlines.Add(new System.Windows.Documents.Run(part));
-            }
-
-            var isActive = mod.Id == App.Mods?.ActiveModId;
-            BtnApplySuggestions.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
-            TxtAskedOnce.Visibility = isActive ? Visibility.Collapsed : Visibility.Visible;
-        }
-
-        private static System.Windows.Documents.Run Bold(string text) => new(text)
-        {
-            FontWeight = FontWeights.Bold,
-            Foreground = Brushes.White
-        };
-
-        /// <summary>First activation of a mod with a recommended setup: ask once, remember the
-        /// answer either way, apply only on a yes.</summary>
-        private void OfferSuggestionsOnce(ModPackage mod)
+        private void ShowDefaults(ModPackage mod)
         {
             var s = App.Settings?.Current;
-            if (s == null) return;
-            var settings = SuggestedSettings(mod);
-            var assets = SuggestedAssets(mod);
-            if (!ModSuggestions.ShouldAsk(mod.Id, settings != null || assets != null, s.ModSuggestionsAsked)) return;
+            var none = new System.Collections.Generic.Dictionary<string, string>();
+            _fillingDefaults = true;
+            try
+            {
+                var settings = AllSettingsPresets();
+                FillDefaults(CmbDefaultSettings, settings.Select(p => (p.Id, p.Name)),
+                    ModPresetDefaults.ResolveSettings(settings, mod.Manifest.SuggestedSettingsPreset)?.Id,
+                    s?.ModDefaultSettingsPreset ?? none, mod.Id);
 
-            ModSuggestions.MarkAsked(mod.Id, s.ModSuggestionsAsked);
-            App.Settings!.Save();
-
-            var parts = new System.Collections.Generic.List<string>();
-            if (settings != null) parts.Add(Loc.GetF("modmgr_suggested_settings", settings.Name));
-            if (assets != null) parts.Add(Loc.GetF("modmgr_suggested_assets", assets.Name));
-
-            var mw = Owner as MainWindow ?? App.MainWindowRef;
-            if (mw == null) return;
-            var yes = mw.ShowStyledDialog(Loc.Get("modmgr_ask_title"),
-                Loc.GetF("modmgr_ask_body", mod.Name, string.Join("\n", parts)),
-                Loc.Get("modmgr_ask_yes"), Loc.Get("modmgr_ask_no"));
-            if (!yes) return;
-
-            if (assets != null) mw.ApplyAssetPresetFromLauncher(assets.Id);
-            if (settings != null) mw.ApplySettingsPresetFromCustomise(settings);
+                var assets = s?.AssetPresets ?? new System.Collections.Generic.List<AssetPreset>();
+                FillDefaults(CmbDefaultAssets, assets.Select(p => (p.Id, p.Name)),
+                    ModPresetDefaults.ResolveAssets(assets, mod.Manifest.SuggestedAssetPreset)?.Id,
+                    s?.ModDefaultAssetPreset ?? none, mod.Id);
+            }
+            finally
+            {
+                _fillingDefaults = false;
+            }
         }
 
-        private void BtnApplySuggestions_Click(object sender, RoutedEventArgs e)
+        private static void FillDefaults(ComboBox combo, System.Collections.Generic.IEnumerable<(string Id, string Name)> presets,
+            string? suggestedId, System.Collections.Generic.IReadOnlyDictionary<string, string> stored, string modId)
         {
-            if (_selectedMod == null || (Owner as MainWindow ?? App.MainWindowRef) is not { } mw) return;
-            if (SuggestedAssets(_selectedMod) is { } assets) mw.ApplyAssetPresetFromLauncher(assets.Id);
-            if (SuggestedSettings(_selectedMod) is { } settings) mw.ApplySettingsPresetFromCustomise(settings);
+            combo.Items.Clear();
+            combo.Items.Add(new ComboBoxItem { Content = Loc.Get("modmgr_keep_current"), Tag = ModPresetDefaults.KeepCurrent });
+            foreach (var (id, name) in presets)
+            {
+                var label = id == suggestedId ? Loc.GetF("modmgr_recommended_fmt", name) : name;
+                combo.Items.Add(new ComboBoxItem { Content = label, Tag = id });
+            }
+
+            var initial = ModPresetDefaults.Initial(stored, modId, suggestedId);
+            combo.SelectedItem = combo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == initial)
+                                 ?? combo.Items[0];
+        }
+
+        private void CmbDefaultSettings_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+            StoreDefault(CmbDefaultSettings, App.Settings?.Current?.ModDefaultSettingsPreset);
+
+        private void CmbDefaultAssets_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+            StoreDefault(CmbDefaultAssets, App.Settings?.Current?.ModDefaultAssetPreset);
+
+        /// <summary>An explicit pick is the consent: store it for the selected mod.</summary>
+        private void StoreDefault(ComboBox combo, System.Collections.Generic.Dictionary<string, string>? map)
+        {
+            if (_fillingDefaults || map == null || _selectedMod == null) return;
+            if (combo.SelectedItem is not ComboBoxItem { Tag: string id }) return;
+            ModPresetDefaults.Store(map, _selectedMod.Id, id);
+            App.Settings!.Save();
+        }
+
+        /// <summary>"Use this mod" with the dropdowns showing is a choice too: store what they show,
+        /// so a pre-selected recommendation the user saw and accepted applies on the switch.</summary>
+        private void CommitShownDefaults()
+        {
+            var s = App.Settings?.Current;
+            if (s == null || _selectedMod == null) return;
+            if (CmbDefaultSettings.SelectedItem is ComboBoxItem { Tag: string sid })
+                ModPresetDefaults.Store(s.ModDefaultSettingsPreset, _selectedMod.Id, sid);
+            if (CmbDefaultAssets.SelectedItem is ComboBoxItem { Tag: string aid })
+                ModPresetDefaults.Store(s.ModDefaultAssetPreset, _selectedMod.Id, aid);
+            App.Settings!.Save();
         }
 
         // ------------------------------------------------------------------ art summary
@@ -721,6 +718,7 @@ namespace ConditioningControlPanel
         {
             if (_selectedMod == null || App.Mods == null) return;
             var mod = _selectedMod;
+            CommitShownDefaults();
 
             // The one switching path the top-bar combo and the launcher use (ActivateMod +
             // ApplyActiveModChange), run NOW so the companion card below reads the new mod.
@@ -737,7 +735,6 @@ namespace ConditioningControlPanel
             }
 
             RefreshListKeepingSelection();
-            if (mod.Id == App.Mods.ActiveModId) OfferSuggestionsOnce(mod);
         }
 
         private void BtnMore_Click(object sender, RoutedEventArgs e)

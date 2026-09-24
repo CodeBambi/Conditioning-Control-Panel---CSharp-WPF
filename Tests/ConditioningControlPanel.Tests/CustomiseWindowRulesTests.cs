@@ -14,43 +14,82 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class CustomiseWindowRulesTests
 {
-    // ---- ask once ----
+    // ---- per-mod default presets ----
+
+    private static Dictionary<string, string> Map() => new(StringComparer.OrdinalIgnoreCase);
 
     [Fact]
-    public void AsksTheFirstTimeAModWithASuggestionIsActivated()
+    public void NothingAppliesOnActivationUntilTheUserChooses()
     {
-        var asked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        Assert.True(ModSuggestions.ShouldAsk("drone-mode", true, asked));
+        var map = Map();
+        Assert.False(ModPresetDefaults.HasChoice(map, "drone-mode"));
+        Assert.Null(ModPresetDefaults.ForActivation(map, "drone-mode"));
     }
 
     [Fact]
-    public void NeverAsksTwiceWhateverTheAnswerWas()
+    public void AStoredChoiceAppliesOnEveryActivationOfThatModOnly()
     {
-        var asked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        Assert.True(ModSuggestions.MarkAsked("drone-mode", asked));
-        Assert.False(ModSuggestions.ShouldAsk("drone-mode", true, asked));
-        Assert.False(ModSuggestions.ShouldAsk("DRONE-MODE", true, asked));
-        Assert.False(ModSuggestions.MarkAsked("drone-mode", asked));
+        var map = Map();
+        ModPresetDefaults.Store(map, "drone-mode", "default-gentle");
+        Assert.Equal("default-gentle", ModPresetDefaults.ForActivation(map, "drone-mode"));
+        Assert.Equal("default-gentle", ModPresetDefaults.ForActivation(map, "DRONE-MODE"));
+        Assert.Null(ModPresetDefaults.ForActivation(map, "builtin-locked"));
     }
 
     [Fact]
-    public void NeverAsksWhenTheModSuggestsNothingThatResolves()
+    public void KeepCurrentIsAChoiceThatAppliesNothing()
     {
-        Assert.False(ModSuggestions.ShouldAsk("drone-mode", false, new HashSet<string>()));
+        var map = Map();
+        ModPresetDefaults.Store(map, "drone-mode", null);
+        Assert.True(ModPresetDefaults.HasChoice(map, "drone-mode"));
+        Assert.Null(ModPresetDefaults.ForActivation(map, "drone-mode"));
+        // and it beats the mod's suggestion in the dropdown
+        Assert.Equal(ModPresetDefaults.KeepCurrent, ModPresetDefaults.Initial(map, "drone-mode", "default-gentle"));
     }
 
     [Fact]
-    public void NeverAsksForABlankModId()
+    public void TheSuggestionOnlyPreselectsUntilAChoiceIsStored()
     {
-        Assert.False(ModSuggestions.ShouldAsk("", true, null));
-        Assert.False(ModSuggestions.ShouldAsk(null, true, null));
+        var map = Map();
+        Assert.Equal("default-gentle", ModPresetDefaults.Initial(map, "drone-mode", "default-gentle"));
+        Assert.Null(ModPresetDefaults.ForActivation(map, "drone-mode"));
+        Assert.Equal(ModPresetDefaults.KeepCurrent, ModPresetDefaults.Initial(map, "drone-mode", null));
+
+        ModPresetDefaults.Store(map, "drone-mode", "default-pink");
+        Assert.Equal("default-pink", ModPresetDefaults.Initial(map, "drone-mode", "default-gentle"));
     }
 
     [Fact]
-    public void OneModsAnswerDoesNotSilenceAnother()
+    public void BlankModIdsAreIgnored()
     {
-        var asked = new HashSet<string> { "builtin-locked" };
-        Assert.True(ModSuggestions.ShouldAsk("drone-mode", true, asked));
+        var map = Map();
+        ModPresetDefaults.Store(map, " ", "x");
+        Assert.Empty(map);
+        Assert.Null(ModPresetDefaults.ForActivation(map, null));
+    }
+
+    [Fact]
+    public void PerModDefaultsSurviveASettingsRoundTrip()
+    {
+        var s = new AppSettings();
+        ModPresetDefaults.Store(s.ModDefaultSettingsPreset, "drone-mode", "default-gentle");
+        ModPresetDefaults.Store(s.ModDefaultAssetPreset, "drone-mode", null);
+        var back = JsonConvert.DeserializeObject<AppSettings>(JsonConvert.SerializeObject(s))!;
+        Assert.Equal("default-gentle", ModPresetDefaults.ForActivation(back.ModDefaultSettingsPreset, "Drone-Mode"));
+        Assert.True(ModPresetDefaults.HasChoice(back.ModDefaultAssetPreset, "drone-mode"));
+    }
+
+    // ---- companion perks ----
+
+    [Fact]
+    public void EveryPerkHasALineAndOnlyTheDrainReadsAsACost()
+    {
+        foreach (CompanionBonusType t in Enum.GetValues(typeof(CompanionBonusType)))
+        {
+            var perk = CompanionPerks.For(t);
+            Assert.StartsWith("perk_", perk.LocKey);
+            Assert.Equal(t == CompanionBonusType.XPDrain, perk.Negative);
+        }
     }
 
     // ---- resolving a suggestion ----
@@ -63,18 +102,18 @@ public class CustomiseWindowRulesTests
             new() { Id = "a1", Name = "Gentle" },
             new() { Id = "Gentle", Name = "Other" },
         };
-        Assert.Equal("Gentle", ModSuggestions.ResolveSettings(presets, "Gentle")!.Id);
-        Assert.Equal("a1", ModSuggestions.ResolveSettings(presets, "gentle")!.Id);
+        Assert.Equal("Gentle", ModPresetDefaults.ResolveSettings(presets, "Gentle")!.Id);
+        Assert.Equal("a1", ModPresetDefaults.ResolveSettings(presets, "gentle")!.Id);
     }
 
     [Fact]
     public void UnknownOrMissingSuggestionResolvesToNothing()
     {
         var presets = new List<AssetPreset> { new() { Id = "x", Name = "All Assets" } };
-        Assert.Null(ModSuggestions.ResolveAssets(presets, "nope"));
-        Assert.Null(ModSuggestions.ResolveAssets(presets, null));
-        Assert.Null(ModSuggestions.ResolveAssets(null, "x"));
-        Assert.Equal("x", ModSuggestions.ResolveAssets(presets, " all assets ")!.Id);
+        Assert.Null(ModPresetDefaults.ResolveAssets(presets, "nope"));
+        Assert.Null(ModPresetDefaults.ResolveAssets(presets, null));
+        Assert.Null(ModPresetDefaults.ResolveAssets(null, "x"));
+        Assert.Equal("x", ModPresetDefaults.ResolveAssets(presets, " all assets ")!.Id);
     }
 
     // ---- manifest stays tolerant ----
