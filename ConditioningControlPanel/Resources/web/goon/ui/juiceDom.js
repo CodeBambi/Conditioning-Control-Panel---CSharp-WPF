@@ -259,3 +259,28 @@ export function countUp(node, from, to, { ms, format = String, onStep = null, on
 export { THUD_MS, EXIT_MS, ENTER_MS, SHIVER_MS, THUD_EASE, OUT_EASE, SETTLE_EASE };
 
 export default { isCalm, isLite, play, popIn, popOut, squash, shake, staggerIn, burst, juiceLayer, centreOf, flyArc, countUp };
+
+// A brief impact signature shared by sending and receiving. No input or game timing.
+const impactMarks = new Set();
+export function impactMark(x, y, { glyph = '◆', tint = '255, 105, 180', incoming = false } = {}) {
+  const host = juiceLayer();
+  if (!host || !Number.isFinite(x) || !Number.isFinite(y)) return;
+  burst(x, y, { count: incoming ? 24 : 18, color: tint, dist: incoming ? 100 : 65, life: 540, sizeMin: 3, sizeMax: 7 });
+  const node = doc().createElement('div');
+  node.className = 'gg-impact-mark' + (incoming ? ' is-incoming' : '');
+  node.textContent = glyph;
+  node.style.left = x + 'px'; node.style.top = y + 'px';
+  node.style.setProperty('--gg-impact-tint', tint);
+  host.appendChild(node);
+  const remove = () => { try { node.remove(); } catch (_e) { /* gone */ } impactMarks.delete(remove); };
+  impactMarks.add(remove);
+  while (impactMarks.size > 6) impactMarks.values().next().value();
+  const frames = isCalm() ? [{ opacity: .85 }, { opacity: 0 }] : [
+    { opacity: 0, transform: 'translate(-50%,-50%) scale(.35) rotate(-15deg)' },
+    { opacity: 1, transform: 'translate(-50%,-50%) scale(1.1) rotate(4deg)', offset: .22 },
+    { opacity: 0, transform: 'translate(-50%,-65%) scale(1.25) rotate(0deg)' },
+  ];
+  const anim = play(node, frames, { duration: 520, easing: 'ease-out', fill: 'forwards' });
+  if (anim) anim.onfinish = remove;
+  setTimeout(remove, 600);
+}

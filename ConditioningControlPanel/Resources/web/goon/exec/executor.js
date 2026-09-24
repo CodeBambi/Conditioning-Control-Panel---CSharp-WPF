@@ -48,6 +48,7 @@
 
 import { GoonElement, GoonPayloadKind, PAYLOAD_ELEMENT, enumName } from '../core/contracts.js';
 import { localMonotonicMs } from '../core/clock.js';
+import { observeDuelField } from '../core/duelActivity.js';
 
 import * as defaultLayers from './layers.js';
 import { media as defaultMedia } from './media.js';
@@ -139,6 +140,7 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
     [GoonElement.LockCards, createLockCards({ ...deps,
       getLead: () => (match?.scoring?.scoreExact || 0) - (match?.opponent?.score || 0),
       onBounty: (points) => match?.noteLockBounty?.(points),
+      observePause: (fn) => observeDuelField(match, fn),
     })],
     [GoonElement.ToyPatterns, createToys({ logger: log, toyBridge: bridge })],
     [GoonElement.BrainDrain, createBrainDrain(deps)],

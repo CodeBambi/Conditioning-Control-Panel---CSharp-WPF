@@ -51,7 +51,7 @@ import { GoonReceiptStatus } from '../core/scoring.js';
 import { S } from './strings.js';
 import { emoteLine } from './emotes.js';
 import { createPreview, stickerUrl, markFor, throwWord, warmSticker } from './throwPreview.js';
-import { popIn, popOut, squash, shake } from './juiceDom.js';
+import { popIn, popOut, squash, shake, impactMark } from './juiceDom.js';
 
 /** Closeness 0-3 -> the word that always rides with the colour. */
 export const CLOSENESS_WORDS = Object.freeze(['steady', 'warm', 'close', 'edge']);
@@ -1184,6 +1184,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
       const tint = rec.tint;
       dropFlight(rec);
       splash(at, tint);
+      impactMark(at.x, at.y, { ...markFor(kind), incoming: true });
       const d = doc();
       shake(d?.getElementById?.('gg-fx'), 3);
       shake(d?.getElementById?.('gg-stage'), 3);

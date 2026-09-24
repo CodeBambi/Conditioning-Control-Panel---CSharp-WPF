@@ -17,6 +17,7 @@ import {
 import { local as localCaps } from '../core/caps.js';
 import { GoonMatchService } from '../core/match.js';
 import { GoonScoring } from '../core/scoring.js';
+import { observeDuelField } from '../core/duelActivity.js';
 import {
   DUEL_GAMES, DEFAULT_DUEL_GAME, duelGame, knownGame, normalizeGameId, pickDuelGame, botResult,
 } from '../ui/duel/games.js';
@@ -276,6 +277,8 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
     return r;
   };
   const H = createDuelController({ match: host, view: view('h'), runGame: runner('h'), now: () => now, later, finished: () => 3, duelLength: () => 90 });
+  let fieldActive = false;
+  const stopObserving = observeDuelField(host, (on) => { fieldActive = on; });
   const G = createDuelController({ match: guest, view: view('g'), runGame: runner('g'), now: () => now, later, finished: () => 3, duelLength: () => 120 });
 
   ok(wireLog.some((f) => f.sub === 'cfg' && f.len_s === 90), 'host announces its duel length at Live');
@@ -286,6 +289,7 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   ok(wireLog.some((f) => f.sub === 'start' && f.game === 'the-deep-end'), 'the start frame names the game');
   ok(G.state && H.state && G.state.idx === 0 && H.state.idx === 0, 'both sides are in duel 0');
   ok(G.state.len === 90 && H.state.len === 90, "the host's length wins", `${G.state.len}/${H.state.len}`);
+  ok(fieldActive && H.arsenalHook.blocksThrows(), 'intro reserves the field and blocks throws');
   ok(H.busy() && G.busy() && !H.arsenalHook.eligible(0), 'throws pause and no card drops mid-duel');
   ok(H.state.stage === 'intro' && views.h.includes('intro'), 'both show the incoming card first');
   ok(G.arsenalHook.throwCard() === false, 'a second card cannot start over a running duel');
@@ -304,6 +308,8 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   const guestBefore = guest.scoring.score;
 
   advance(90 * 1000 + 300);
+  ok(!fieldActive && !H.arsenalHook.blocksThrows() && H.busy(), 'results release locks and throws but reserve the duel');
+  ok(!H.arsenalHook.throwCard(), 'a new duel cannot replace pending results');
   ok(H.state && H.state.stage === 'result' && G.state && G.state.stage === 'result', 'both resolved once both scores crossed');
   ok(runs.h[0].destroyed >= 1 && runs.g[0].destroyed >= 1 && !H.run, 'the duel bell tears both classes down');
   ok(wireLog.some((f) => f.sub === 'score' && f.tile === 7 && f.score === 640 && f.game === 'the-deep-end'), 'the host reports its class\'s own result');
@@ -321,6 +327,7 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   ok(H.arsenalHook.throwCard() === true && H.state.idx === 1 && G.state && G.state.idx === 1, 'duel 1 on the next index');
   advance(DUEL_INTRO_MS + 90 * 1000 + 300);
   ok(H.state.stage === 'wait', 'host waits for a report that never comes');
+  ok(!fieldActive && !H.arsenalHook.blocksThrows() && H.busy(), 'waiting releases locks and throws but reserves the duel');
   const before = host.scoring.score;
   const tiedBefore = duelSummary(host).tied;
   advance(DUEL_REPORT_GRACE_MS + 10);
@@ -341,6 +348,8 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
   host._phase = GoonMatchPhase.Recap;
   host._ev.phaseChanged.emit(GoonMatchPhase.Recap, () => {});
   ok(!H.busy() && host.scoring.score === s0, 'leaving Live closes the duel, no bonus');
+  ok(!fieldActive, 'Mercy releases the duel field');
+  stopObserving();
   ok(live.destroyed >= 1, 'and tears the class down');
   host._phase = GoonMatchPhase.Live;
   guest._phase = GoonMatchPhase.Recap;

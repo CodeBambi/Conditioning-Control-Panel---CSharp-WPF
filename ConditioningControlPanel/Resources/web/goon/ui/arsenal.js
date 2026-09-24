@@ -49,11 +49,11 @@ import { GoonConsts, GoonMatchPhase, GoonPayloadKind, PAYLOAD_ELEMENT, costOf } 
 import { ALWAYS_ON_ELEMENT } from '../core/draft.js';
 import { GoonPayloadRateLimiter, GoonReceiptStatus } from '../core/scoring.js';
 import { localMonotonicMs } from '../core/clock.js';
-import { dressGhost } from './throwPreview.js';
+import { dressGhost, markFor } from './throwPreview.js';
 import { S } from './strings.js';
 import { GAME_CARD_COST } from './duel/rules.js';
 import { DUEL_COPY } from './duel/copy.js';
-import { burst, centreOf, flyArc, popIn, shake as shakeNode, squash, isCalm } from './juiceDom.js';
+import { burst, centreOf, flyArc, popIn, shake as shakeNode, squash, isCalm, impactMark } from './juiceDom.js';
 
 /**
  * The rails, in owner order — which is also the KEYBOARD order (1..7), so new
@@ -510,7 +510,7 @@ export function mountArsenal({
     if (rec && rec.item.duel) return fireGameCard(rec, at);
     if (!rec || rec.item.kind === null) return { ok: false, error: 'not a payload', id: null };
     // A duel is running: throws pause until the board closes.
-    if (duel && duel.busy()) { refuse(rec, DUEL_COPY.busy); return { ok: false, error: 'duel', id: null }; }
+    if (duel && (duel.blocksThrows?.() ?? duel.busy())) { refuse(rec, DUEL_COPY.busy); return { ok: false, error: 'duel', id: null }; }
     if (!match || typeof match.tryFirePayload !== 'function') return { ok: false, error: 'no match', id: null };
 
     // LOCKED outranks every other refusal: nothing else about the tile matters
@@ -591,10 +591,11 @@ export function mountArsenal({
         const ms = Math.round(Math.min(620, Math.max(380, Math.hypot(land.x - from.x, land.y - from.y) * 0.7)));
         flyArc(node, from, land, { ms, lift: 0.32, spin: land.x < from.x ? -24 : 24, scaleTo: 0.55 }).then(() => {
           try { node.remove(); } catch (_e) { /* gone */ }
-          burst(land.x, land.y, { count: 12, dist: 60, spread: 70, life: 480 });
+          impactMark(land.x, land.y, markFor(rec.item.kind));
+          squash(target, { amount: 0.05, ms: 240 });
+          // Add the shake after the replacing squash so both transforms survive.
           shakeNode(target, 4);
           sfx(audio, 'throw-impact');
-          squash(target, { amount: 0.05, ms: 240 });
         });
       };
       if (fx && typeof fx.play === 'function') fx.play(700, run); else run();
