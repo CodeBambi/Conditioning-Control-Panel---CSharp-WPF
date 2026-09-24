@@ -418,8 +418,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // the ephemeral wipe above already emptied it.)
                 GoonCacheBridge.Attach(_host);
 
-                // Online pictures: a returning player's saved pick starts fetching now, so the
-                // first pictures can land before they press anything.
+                // Online pictures: only a pick made in THIS session fetches (a page reload inside
+                // one window keeps it); a fresh window waits for the flavour card.
                 StartOnlineMediaFromSettings();
 
                 // ...and tell the page which window it is actually painted in. Its affordances read
@@ -1678,15 +1678,25 @@ namespace ConditioningControlPanel.Services.GoonGame
         // app-wide MediaSource / HasRemoteMediaConsent are deliberately not read here; the
         // player's own switch is GoonMediaOnline. Every niche the page sends is re-validated
         // (same grammar as its cleanNiche) and capped at 8 before it reaches the feed.
+        //
+        // THE PICK LASTS ONE SESSION (owner, 2026-09-24). A pick is the Scrolller opt-in for this
+        // window only: it is never written as app-wide consent and never read back as consent on
+        // the next open. The stored flavour, niches and edits are remembered as a preselection
+        // (`last`), but init tells the page "no pick yet" until the player picks again, and
+        // nothing is fetched before that. Declining leaves the deck to the asset manager rules
+        // (their own pictures, or the app-wide online set they already enabled).
 
         private static GoonOnlineMedia? _onlineMedia;
+        private static bool _sessionOptIn;
 
         private static object BuildMediaBlock()
         {
             var s = App.Settings?.Current;
+            var stored = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour);
             return new
             {
-                flavour = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour),
+                flavour = _sessionOptIn ? stored : "",
+                last = stored,
                 custom = GoonOnlineMediaRules.ParseCustom(s?.GoonMediaCustom),
                 online = s?.GoonMediaOnline ?? true,
             };
@@ -1708,6 +1718,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     s.GoonMediaCustom = GoonOnlineMediaRules.CleanCustom(o["custom"]);
                 s.GoonMediaSubs = GoonOnlineMediaRules.JoinSubs(subs);
                 if (o["online"]?.Type == JTokenType.Boolean) s.GoonMediaOnline = (bool)o["online"]!;
+                _sessionOptIn = GoonOnlineMediaRules.IsSessionOptIn(s.GoonMediaOnline, flavour);
                 try { App.Settings?.Save(); } catch (Exception ex) { App.Logger?.Debug("GoonHostService: media save: {E}", ex.Message); }
                 App.Logger?.Information("GoonHostService: media-flavour {F} ({N} niches, online {O})",
                     flavour == "" ? "(none)" : flavour, subs.Count, s.GoonMediaOnline);
@@ -1727,6 +1738,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                 bool online = s?.GoonMediaOnline ?? true;
                 var flavour = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour);
                 var subs = GoonOnlineMediaRules.SplitSubs(s?.GoonMediaSubs);
+                // No pick this session = no fetch and no word to the page: its flavour card is up.
+                if (!_sessionOptIn) return;
                 _onlineMedia ??= new GoonOnlineMedia(PostOnlineMedia);
                 if (!online) { _onlineMedia.Off(); return; }
                 if (!GoonOnlineMediaRules.ShouldFetch(online, flavour, subs))
@@ -1750,7 +1763,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 bool online = s?.GoonMediaOnline ?? true;
                 var flavour = GoonOnlineMediaRules.CleanFlavour(s?.GoonMediaFlavour);
                 var subs = GoonOnlineMediaRules.SplitSubs(s?.GoonMediaSubs);
-                if (_onlineMedia == null || !GoonOnlineMediaRules.ShouldFetch(online, flavour, subs)) return;
+                if (!_sessionOptIn || _onlineMedia == null || !GoonOnlineMediaRules.ShouldFetch(online, flavour, subs)) return;
                 if (_onlineMedia.More()) App.Logger?.Information("GoonHostService: media-more, next wave");
             }
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnMediaMore: {E}", ex.Message); }
@@ -1805,6 +1818,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // Online pictures: stop fetching and hand back every temp file this window owned.
                 try { _onlineMedia?.Dispose(); } catch { }
                 _onlineMedia = null;
+                _sessionOptIn = false;
                 try { _host?.Dispose(); } catch { }
                 _host = null;
                 // The handler dies with the core it was attached to; forgetting the reference is

@@ -97,6 +97,11 @@ namespace ConditioningControlPanel.Services.GoonGame
         public static List<string> SplitSubs(string? stored)
             => CleanSubs((stored ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries));
 
+        /// <summary>Does this media-flavour frame opt the session in: the switch on and a real
+        /// flavour picked. Session-only; never stored as consent.</summary>
+        public static bool IsSessionOptIn(bool online, string flavour)
+            => online && !string.IsNullOrEmpty(flavour);
+
         /// <summary>Should anything be fetched at all.</summary>
         public static bool ShouldFetch(bool online, string flavour, IReadOnlyCollection<string> subs)
             => online && !string.IsNullOrEmpty(flavour) && subs.Count > 0;
