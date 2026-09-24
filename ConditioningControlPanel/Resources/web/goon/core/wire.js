@@ -8,6 +8,7 @@ import {
   clampVoiceCount, clampVoiceSub, clampWindowCount,
 } from './contracts.js';
 import { seedFromAny, seedToString } from './rng.js';
+import { clampSongSec, clampSongSub } from './song.js';
 
 export const MAX_WIRE_BYTES = 16 * 1024;
 
@@ -53,6 +54,15 @@ const CLAMPED_FIELDS = Object.freeze({
     bytes: clampVoiceCount,
     parts: clampVoiceCount,
     durMs: clampVoiceCount,
+  }),
+  /**
+   * Game Night, the song (2026-09-23). `sub` is a discriminator and `dur_sec` a label, both
+   * pinned both ways like `voice`. `url` and `title` stay out of this table for the null-strip
+   * reason above and are checked in core/match.js (wireSongUrl, sanitizeText).
+   */
+  song: Object.freeze({
+    sub: clampSongSub,
+    dur_sec: clampSongSec,
   }),
 });
 

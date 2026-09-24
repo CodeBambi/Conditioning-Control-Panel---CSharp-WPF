@@ -1132,6 +1132,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
     text(timerClock, sd ? 'sudden death' : mmss(remaining));
     cls(timerBox, 'is-sd', sd);
+    // GAME NIGHT: with a song picked, this bar IS the song (start -> game over). No new number.
+    let song = null;
+    try { song = match.song || null; } catch (_e) { song = null; }
+    cls(timerBox, 'is-song', !!song);
+    try { if (timerBox.title !== (song ? song.title : '')) timerBox.title = song ? song.title : ''; } catch (_e) { /* stub node */ }
     const pct = total > 0 ? Math.max(0, Math.min(100, ((total - remaining) / total) * 100)) : 0;
     if (timerFill && timerFill.style) timerFill.style.width = pct.toFixed(2) + '%';
 
