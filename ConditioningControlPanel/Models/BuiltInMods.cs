@@ -1130,21 +1130,22 @@ namespace ConditioningControlPanel.Models
                     "TRANCE"
                 },
 
-                // Generic bouncing-text pool. Mirrors the historical AppSettings default
-                // so every mode that doesn't theme its own bouncing text (Bambi, Sissy,
-                // Drone) keeps exactly the words it had before bouncing text became
-                // mod-aware. Locked overrides this with its own themed pool.
+                // Generic bouncing-text pool: classic, gender-neutral trance words only, the same
+                // list as the AppSettings fresh-install default. Every mode that doesn't theme its
+                // own bouncing text (Bambi, Sissy, Drone, Infection) falls back to this one when its
+                // pool is empty; Locked overrides it with its own themed pool. GOOD GIRL / BIMBO /
+                // PRETTY / PINK left in the 2026-09-25 pivot (CCP Default ships classic triggers).
                 BouncingTextPool = new Dictionary<string, bool>
                 {
-                    { "GOOD GIRL", true },
+                    { "DEEPER", true },
                     { "OBEY", true },
                     { "SUBMIT", true },
-                    { "BIMBO", true },
+                    { "BLANK", true },
                     { "EMPTY", true },
                     { "MINDLESS", true },
                     { "OBEDIENT", true },
-                    { "PRETTY", true },
-                    { "PINK", true },
+                    { "RELAX", true },
+                    { "SINK", true },
                     { "DROP", true }
                 },
 

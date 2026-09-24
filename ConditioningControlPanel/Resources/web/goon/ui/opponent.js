@@ -530,7 +530,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     }
     if (m.key === 'Spiral') add(node, el('i', 'gg-mini-spiral-disc'));
     if (m.key === 'Subliminals') add(node, el('span', 'gg-mini-line', 'deeper'));
-    if (m.key === 'BouncingText') add(node, el('span', 'gg-mini-word', 'good girl'));
+    if (m.key === 'BouncingText') add(node, el('span', 'gg-mini-word', 'good pet'));
     if (m.key === 'LockCards') {
       const card = add(node, el('div', 'gg-mini-card'));
       for (let i = 0; i < 3; i++) add(card, el('i', 'gg-mini-scribble'));
