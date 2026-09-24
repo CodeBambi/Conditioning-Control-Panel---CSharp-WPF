@@ -388,7 +388,7 @@
         <!-- feature (PlayTabView.xaml:1165 rule); FX toggles mirror the    -->
         <!-- popup side effects and respect the session dose lock.          -->
         <!-- ============================================================ -->
-        <Grid Grid.Column="1" Grid.Row="1" x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="5">
+        <Grid Grid.Column="1" Grid.Row="1" x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="5,5,16,5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
@@ -526,7 +526,7 @@
                     </Grid.RenderTransform>
 
                     <!-- FACE A: the wordmark. Default face; the only face premium users and
-                         spent-week users ever see, byte-for-byte what shipped before. -->
+                         spent-week users see, inset to leave space around the mark. -->
                     <!-- The Ken Burns drift (scale 1.00 -> 1.04 over 40s, MainWindow.DashboardFx)
                          lives on THIS border and not on ImgLogo or on LogoFlipHost, and that is
                          a correctness rule, not a preference: LogoFlipHost's TransformGroup is
@@ -534,7 +534,7 @@
                          by the rapid-click easter-egg pulse. Both would snap the drift back to
                          1.0 mid-animation. This border sits between them and is otherwise
                          untouched, so the three transforms compose instead of fighting. -->
-                    <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True"
+                    <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True" Margin="24"
                             RenderTransformOrigin="0.5,0.5">
                         <Border.RenderTransform>
                             <ScaleTransform x:Name="LogoDriftScale" ScaleX="1" ScaleY="1"/>
@@ -1573,33 +1573,23 @@
             <!-- art with a dark shade at the bottom, a small mono eyebrow,  -->
             <!-- a title, one line and a chevron.                            -->
             <!--                                                             -->
-            <!-- A RACK, not a poster. The first cut was one card filling the -->
-            <!-- whole freed space (874x504 at the desk), which blew the      -->
-            <!-- square marks - discord.png, logo.png - up into a blurry      -->
-            <!-- giant. So: four small 16:9 cards in a 2x2 grid, and every    -->
-            <!-- 12s ONE slot swaps to the card that has been off screen      -->
-            <!-- longest. No dots: the grid is its own index.                 -->
-            <!--                                                             -->
-            <!-- Two art treatments, decided per card by BillboardArt.        -->
-            <!-- Cover: wide feature art, cover-fitted. Plate: a square mark, -->
-            <!-- which is NOT cover-fitted - the same image goes behind it    -->
-            <!-- blurred and darkened and the mark itself sits at 72px in the -->
-            <!-- middle, so a logo reads as a logo.                           -->
-            <!--                                                             -->
-            <!-- Visible ONLY while the browser is folded, so an unfolded     -->
-            <!-- dashboard is byte-for-byte the one that shipped. The roster  -->
-            <!-- and the walk are Services/DashboardBillboard.cs; the paint,  -->
-            <!-- the clock and the click are MainWindow.DashboardBillboard.cs.-->
-            <!-- ============================================================ -->
+            <!-- One full-size poster, with manual navigation below. The clock pauses
+                 during hover or keyboard focus and follows the shared motion setting.
+                 Wide posters use cover fit; square marks keep the bounded plate treatment. -->
             <Border x:Name="DashBillboard" x:FieldModifier="internal" Grid.Row="1"
                     Visibility="Collapsed" Margin="0,0,0,5"
                     CornerRadius="12" ClipToBounds="True"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                <ItemsControl x:Name="BillboardRackHost" x:FieldModifier="internal" Margin="5">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                <ItemsControl x:Name="BillboardRackHost" x:FieldModifier="internal" Margin="7,7,7,0">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <UniformGrid Rows="2" Columns="2"/>
+                            <UniformGrid Rows="1" Columns="1"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -1609,6 +1599,7 @@
                                  none of the default chrome shows through. -->
                             <Button Click="BillboardCard_Click" Cursor="Hand" Margin="3"
                                     Padding="0" MinHeight="74" ToolTip="{Binding Tip}"
+                                    AutomationProperties.Name="{Binding Tip}"
                                     HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
@@ -1664,23 +1655,23 @@
                                         </Border.Background>
                                     </Border>
                                     <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Left"
-                                                Margin="10,0,34,7" IsHitTestVisible="False">
+                                                Margin="24,0,54,22" IsHitTestVisible="False">
                                         <TextBlock Text="{Binding Eyebrow}"
-                                                   FontFamily="{DynamicResource Font.Mono}" FontSize="9"
+                                                   FontFamily="{DynamicResource Font.Mono}" FontSize="11"
                                                    Foreground="{DynamicResource PinkBrush}"
                                                    TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding Title}"
-                                                   FontSize="13" FontWeight="Bold" Margin="0,1,0,0"
+                                                   FontSize="24" FontWeight="Bold" Margin="0,1,0,0"
                                                    Foreground="{DynamicResource TextLightBrush}"
                                                    TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding Line}"
-                                                   FontSize="10" Margin="0,1,0,0"
+                                                   FontSize="13" Margin="0,5,0,0"
                                                    Foreground="{DynamicResource TextMutedBrush}"
                                                    TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Border Width="20" Height="20" CornerRadius="10" IsHitTestVisible="False"
                                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                            Margin="0,0,8,8" BorderThickness="1"
+                                            Margin="0,0,22,24" BorderThickness="1"
                                             Background="#8C14142B" BorderBrush="{DynamicResource PinkBrush}">
                                         <TextBlock Text="›" FontSize="13" Margin="0,-3,0,0"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -1691,6 +1682,20 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,8">
+                        <Button x:Name="BillboardPrevious" x:FieldModifier="internal" Content="&#x2039;"
+                                Width="32" Height="28" Padding="0" FontSize="22"
+                                ToolTip="{loc:Str btn_previous}" AutomationProperties.Name="{loc:Str btn_previous}"/>
+                        <TextBlock x:Name="BillboardPosition" x:FieldModifier="internal"
+                                   VerticalAlignment="Center" Margin="14,0" FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                        <Button x:Name="BillboardNext" x:FieldModifier="internal" Content="&#x203A;"
+                                Width="32" Height="28" Padding="0" FontSize="22"
+                                ToolTip="{loc:Str btn_next}" AutomationProperties.Name="{loc:Str btn_next}"/>
+                        <Button x:Name="BillboardPause" x:FieldModifier="internal" Content="{loc:Str btn_program_pause}"
+                                MinWidth="64" Height="28" Margin="12,0,0,0" Padding="8,0"/>
+                    </StackPanel>
+                </Grid>
             </Border>
 
             <!-- ============================================================ -->

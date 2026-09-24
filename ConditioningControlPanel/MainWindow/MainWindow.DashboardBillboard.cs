@@ -14,10 +14,7 @@ using ConditioningControlPanel.Services;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// One card in the dashboard billboard's 2x2 rack. A tiny view model rather than four sets of
-    /// x:Names: the card's anatomy is declared once in the DataTemplate and a swap is four property
-    /// writes, which is also what lets the paint fade the one slot that changed and leave the other
-    /// three alone.
+    /// The visible dashboard slide. Its art and copy update together when navigating.
     /// </summary>
     internal sealed class BillboardSlotVm : INotifyPropertyChanged
     {
@@ -69,24 +66,8 @@ namespace ConditioningControlPanel
     }
 
     /// <summary>
-    /// The billboard that takes the row the folded browser card gives back (owner ask,
-    /// 2026-09-12). A 2x2 rack: four of the six roster cards on screen at once, and every twelve
-    /// seconds ONE slot swaps to the card that has been off screen longest.
-    ///
-    /// <para>It was a single full-width poster until the first desk pass, where a 512px square mark
-    /// cover-fitted into 874x504 read as a blurry giant. Small cards fixed the scale and
-    /// <see cref="BillboardArt.Plate"/> fixed the square art: the same file blurred and dimmed
-    /// behind, the mark itself at 72px in front.</para>
-    ///
-    /// <para>The roster and the walk are pure and live in <see cref="Services.DashboardBillboard"/>;
-    /// this file is the paint, the clock and the click. Manners are the remix doors': nothing opens
-    /// by itself, the pointer on the rack stops the clock, and the dashboard works exactly the same
-    /// with the rack ignored. A tick touches the content of ONE slot and nothing else - never the
-    /// fold, never a Visibility outside the rack, never the setting.</para>
-    ///
-    /// <para>The clock is an ambient loop by MotionFx's own definition (8-60s), so it only runs at
-    /// <see cref="MotionFx.AllowAmbientLoops"/>. Below that the rack is four still cards, which is
-    /// the house fallback: static art, never a slower loop.</para>
+    /// One full-size promo slide in the folded browser space. Automatic rotation pauses while
+    /// reading or focusing the card; manual navigation remains available with motion disabled.
     /// </summary>
     public partial class MainWindow
     {
@@ -97,6 +78,7 @@ namespace ConditioningControlPanel
         private BillboardRack? _billboardRack;
         private bool _billboardPointerOver;
         private bool _billboardWired;
+        private bool _billboardPaused;
 
         /// <summary>The fold's one hook: the rack exists only while the browser is shut.</summary>
         partial void OnBrowserFoldChanged(bool collapsed)
@@ -122,7 +104,7 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// One-time wiring: the slot collection, the four cards, and the two reasons the clock ever
+        /// One-time wiring: the visible slide, navigation, and the reasons the clock ever
         /// stops. The pointer pauses it, and the host's own visibility starts and stops it, so
         /// switching away from Home costs nothing and coming back needs no help from the tab
         /// machinery.
@@ -135,7 +117,7 @@ namespace ConditioningControlPanel
             var rack = dash?.BillboardRackHost;
             if (host == null || rack == null) return;
 
-            _billboardRack = Services.DashboardBillboard.InitialRack(Services.DashboardBillboard.Roster.Count);
+            _billboardRack = Services.DashboardBillboard.InitialRack(Services.DashboardBillboard.Roster.Count, slots: 1);
             _billboardSlots.Clear();
             for (int i = 0; i < _billboardRack.Slots.Count; i++)
             {
@@ -144,6 +126,16 @@ namespace ConditioningControlPanel
                 _billboardSlots.Add(vm);
             }
             rack.ItemsSource = _billboardSlots;
+            UpdateBillboardPosition();
+            dash!.BillboardPrevious.Click += (_, _) => StepBillboardRack(-1, automatic: false);
+            dash.BillboardNext.Click += (_, _) => StepBillboardRack(1, automatic: false);
+            dash.BillboardPause.Click += (_, _) =>
+            {
+                _billboardPaused = !_billboardPaused;
+                dash.BillboardPause.Content = Loc.Get(_billboardPaused ? "btn_program_resume" : "btn_program_pause");
+                RestartBillboardClock();
+            };
+            host.IsKeyboardFocusWithinChanged += (_, _) => RestartBillboardClock();
 
             host.MouseEnter += (_, _) => { _billboardPointerOver = true; StopBillboardClock(); };
             host.MouseLeave += (_, _) => { _billboardPointerOver = false; RestartBillboardClock(); };
@@ -161,7 +153,7 @@ namespace ConditioningControlPanel
 
             var host = SettingsTab?.DashBillboard;
             if (host == null || !host.IsVisible) return;
-            if (!MotionFx.AllowAmbientLoops) return;
+            if (_billboardPaused || host.IsKeyboardFocusWithin || !MotionFx.AllowAmbientLoops) return;
             if (!Services.DashboardBillboard.ShouldAdvance(_billboardPointerOver, onScreen: true)) return;
 
             _billboardTimer = new DispatcherTimer(DispatcherPriority.Background)
@@ -179,23 +171,39 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>One swap: the content of exactly one slot, and nothing else anywhere.</summary>
-        private void StepBillboardRack()
+        private void StepBillboardRack(int direction = 1, bool automatic = true)
         {
             try
             {
                 var host = SettingsTab?.DashBillboard;
-                if (!Services.DashboardBillboard.ShouldAdvance(_billboardPointerOver, host?.IsVisible == true)) return;
+                if (host?.IsVisible != true) return;
+                if (automatic && (_billboardPaused || host.IsKeyboardFocusWithin || !MotionFx.AllowAmbientLoops ||
+                    !Services.DashboardBillboard.ShouldAdvance(_billboardPointerOver, onScreen: true)))
+                {
+                    StopBillboardClock();
+                    return;
+                }
                 if (_billboardRack == null) return;
 
-                var next = Services.DashboardBillboard.NextRack(_billboardRack, Services.DashboardBillboard.Roster.Count);
+                int count = Services.DashboardBillboard.Roster.Count;
+                int index = Services.DashboardBillboard.SlideIndex(_billboardRack.Slots[0], direction, count);
+                var next = Services.DashboardBillboard.NextRack(_billboardRack with { NextCard = index }, count);
                 _billboardRack = next;
                 int slot = next.ChangedSlot;
                 if (slot < 0 || slot >= _billboardSlots.Count) return;
 
                 FillBillboardSlot(_billboardSlots[slot], next.Slots[slot]);
                 FadeBillboardSlot(slot);
+                UpdateBillboardPosition();
+                if (!automatic) RestartBillboardClock();
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Dashboard billboard: rack step failed"); }
+        }
+
+        private void UpdateBillboardPosition()
+        {
+            if (SettingsTab == null || _billboardRack == null) return;
+            SettingsTab.BillboardPosition.Text = $"{_billboardRack.Slots[0] + 1} / {Services.DashboardBillboard.Roster.Count}";
         }
 
         private void FillBillboardSlot(BillboardSlotVm vm, int cardIndex)
