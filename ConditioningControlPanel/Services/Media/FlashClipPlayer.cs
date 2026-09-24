@@ -45,7 +45,8 @@ internal sealed class FlashClipPlayer : IDisposable
         _width = Math.Max(2, (int)(width * scale));
         _height = Math.Max(2, (int)(height * scale));
         _buffer = Marshal.AllocHGlobal(_width * _height * 4);
-        _player = new MediaPlayer(vlc) { Mute = true, EnableHardwareDecoding = false };
+        // Never set Mute here: LibVLC mutes the whole process's audio session (LibVlcSilence).
+        _player = new MediaPlayer(vlc) { EnableHardwareDecoding = false };
         _media = new Media(vlc, path, FromType.FromPath);
         try
         {
