@@ -20,6 +20,7 @@
 // Every effect has an IN and an OUT; reduced motion (juiceDom isCalm) turns motion into fades.
 
 import { heatTarget, smoothHeat } from '../core/points.js';
+import { S } from './strings.js';
 import { POP_EVENT } from '../exec/bubbles.js';
 import { FLASH_POP_EVENT } from '../exec/flashes.js';
 import { localMonotonicMs } from '../core/clock.js';
@@ -337,7 +338,7 @@ export function mountScoreHud({ match, host = null, audio = null } = {}) {
     mult.textContent = 'x' + (Number(chip) || 1).toFixed(2);
     combo.classList.toggle('is-on', liveCombo >= 2);
     if (liveCombo >= 2) {
-      comboTxt.textContent = 'COMBO x' + liveCombo;
+      comboTxt.textContent = S.desk.combo(liveCombo);
       let left = 1;
       try { left = match.scoring.points.comboLeft(now); } catch (_e) { /* ignore */ }
       drainFill.style.transform = `scaleX(${left.toFixed(3)})`;

@@ -71,7 +71,7 @@ export function mount(container, ctx) {
   const them = mkSide('them');
   const duel = el('div', { class: 'gg-duel' }, [
     you.side,
-    el('span', { class: 'gg-duel-vs', text: 'vs', 'aria-hidden': 'true' }),
+    el('span', { class: 'gg-duel-vs', text: S.aria.vs, 'aria-hidden': 'true' }),
     them.side,
   ]);
 
@@ -331,7 +331,7 @@ export function mount(container, ctx) {
       : S.lobby.confirm;
     confirmBtn.classList.toggle('is-ready', localOk);
     confirmBtn.disabled = match.phase !== GoonMatchPhase.Consent;
-    confirmBtn.title = localOk ? 'click to withdraw' : '';
+    confirmBtn.title = localOk ? S.aria.withdraw : '';
   }
 
   /**

@@ -18,6 +18,7 @@
  * ==========================================================================*/
 
 import { GoonEndReason } from '../core/contracts.js';
+import { S } from './strings.js';
 
 export const RIVALRY_KEY = 'goon.rivalry.v1';
 /** Opponents remembered. The oldest-seen falls off past this. */
@@ -141,9 +142,8 @@ export function createRivalry({ store = defaultStore(), now = () => Date.now() }
 /** "you 3 - 2 Sam", plus the draws when there are any. '' for a stranger. */
 export function formatRecord(rec, name) {
   if (!rec || !rec.known) return '';
-  const who = cleanName(name) || 'them';
-  let s = 'you ' + rec.w + ' - ' + rec.l + ' ' + who;
-  if (rec.d > 0) s += ', ' + rec.d + (rec.d === 1 ? ' draw' : ' draws');
+  let s = S.rivalry.record(rec.w, rec.l, cleanName(name));
+  if (rec.d > 0) s += S.rivalry.draws(rec.d);
   return s;
 }
 

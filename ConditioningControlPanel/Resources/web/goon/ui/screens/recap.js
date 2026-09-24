@@ -51,10 +51,8 @@ export const EXPLORE_URL = 'https://cclabs.app/explore.html';
 /** One retry on a failed submit, then the card stops offering false hope. */
 export const REPORT_MAX_RETRIES = 1;
 
-const KIND_NAMES = Object.freeze({
-  0: 'flash burst', 1: 'subliminal storm', 2: 'bubble swarm',
-  3: 'video', 4: 'lock card', 5: 'toy pattern', 6: 'brain drain',
-});
+/* Payload names, by GoonPayloadKind code: S.payloads in ui/strings.js. */
+const KIND_NAMES = S.payloads;
 
 /**
  * DEFENCE IN DEPTH, NOT THE FIX. boot.js clearForRecap() empties #gg-stage when
@@ -474,7 +472,7 @@ export function mount(container, ctx) {
     return el('li', { class: 'gg-plrow gg-plrow--' + entry.dir }, [
       el('span', { class: 'gg-plrow-t', text: mmss(entry.atMs) }),
       el('span', { class: 'gg-plrow-dir', text: entry.dir === 'in' ? S.recap.dirIn : S.recap.dirOut }),
-      el('span', { class: 'gg-plrow-kind', text: KIND_NAMES[entry.kind] || ('kind ' + entry.kind) }),
+      el('span', { class: 'gg-plrow-kind', text: (typeof KIND_NAMES[entry.kind] === 'string' && KIND_NAMES[entry.kind]) || S.payloads.unknown(entry.kind) }),
       el('span', { class: 'gg-chip ' + chip.cls, text: chip.text }),
       chip.note && entry.dir === 'in' ? el('span', { class: 'gg-plrow-note', text: chip.note }) : null,
     ]);

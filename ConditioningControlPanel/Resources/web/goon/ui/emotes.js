@@ -12,6 +12,7 @@
  * ==========================================================================*/
 
 import { popIn, popOut, squash, shake, staggerIn, burst, centreOf } from './juiceDom.js';
+import { S } from './strings.js';
 
 export const EMOTE_PRESETS = Object.freeze([
   'gg',
@@ -23,6 +24,16 @@ export const EMOTE_PRESETS = Object.freeze([
 ]);
 
 export const EMOTE_ICONS = Object.freeze(['😏', '💦', '🔥', '🫠', '👀', '💪']);
+
+/**
+ * The line as THIS player reads it. The wire always carries the English preset
+ * (both sides agree on those), so a preset is shown in the local language and
+ * anything else is shown exactly as it arrived.
+ */
+export function emoteLine(text) {
+  const i = EMOTE_PRESETS.indexOf(String(text || ''));
+  return i >= 0 ? (S.emotes.presets[i] || EMOTE_PRESETS[i]) : String(text || '');
+}
 
 /** One emote every five seconds, locally enforced. */
 const RATE_MS = 5000;
@@ -177,11 +188,11 @@ export function mountEmotes({ host, match, audio = null, onLog = null, voiceProv
   if (!root || !host) return { unmount() { led.run(); }, open() {}, close() {}, toggle() {}, isOpen() { return false; } };
   root.hidden = true;
 
-  add(root, el('div', 'gg-emotes-title', 'say one thing'));
+  add(root, el('div', 'gg-emotes-title', S.emotes.title));
   const lines = add(root, el('div', 'gg-emotes-lines'));
   const buttons = [];
   for (const line of EMOTE_PRESETS) {
-    const b = add(lines, el('button', 'gg-emote-line', line));
+    const b = add(lines, el('button', 'gg-emote-line', emoteLine(line)));
     if (!b) continue;
     b.type = 'button';
     led.listen(b, 'click', () => send(line, '', b));
@@ -206,7 +217,7 @@ export function mountEmotes({ host, match, audio = null, onLog = null, voiceProv
     const cooling = left > 0;
     cls(root, 'is-cooling', cooling);
     for (const b of buttons) { b.disabled = cooling; }
-    if (cool) cool.textContent = cooling ? 'one more in ' + Math.ceil(left / 1000) + 's' : '';
+    if (cool) cool.textContent = cooling ? S.emotes.cooling(Math.ceil(left / 1000)) : '';
   }
 
   function send(text, icon, btn) {

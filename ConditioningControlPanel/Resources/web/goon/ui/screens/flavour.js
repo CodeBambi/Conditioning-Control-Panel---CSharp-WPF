@@ -59,7 +59,7 @@ export function mountFlavourCard(container, { ledger, api, audio = null, onDone,
       style: '--flv-tint:' + f.tint + ';--flv-i:' + i,
     }, [
       el('span', { class: 'gg-flv-name', text: f.name }),
-      el('span', { class: 'gg-flv-line', text: f.line }),
+      el('span', { class: 'gg-flv-line', text: S.flavourLines[f.id] || f.line }),
       el('span', { class: 'gg-flv-niches', text: f.subs.map((s) => 'r/' + s).join('  ') }),
     ]);
     ledger.listen(t, 'click', (e) => {

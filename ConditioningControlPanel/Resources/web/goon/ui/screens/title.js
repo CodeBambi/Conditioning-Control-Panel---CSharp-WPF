@@ -173,7 +173,7 @@ export function mount(container, ctx) {
   ]);
 
   /* THE REST OF THE OLD MENU, one quiet row. Same actions, same strings. */
-  const menu = el('nav', { class: 'gg-ot-menu', 'aria-label': 'main menu' });
+  const menu = el('nav', { class: 'gg-ot-menu', 'aria-label': S.aria.mainMenu });
   const item = (label, onClick, { sfx = 'ui-select' } = {}) => {
     const b = button(ledger, label, onClick, { variant: 'ghost', audio, sfx });
     b.classList.add('gg-ot-menu-item', 'gg-menu-item');

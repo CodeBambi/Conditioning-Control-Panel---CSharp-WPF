@@ -8,9 +8,11 @@
 
 import { RAW, ELEMENTS_RAW } from '../ui/strings.js';
 import { DUEL_COPY_RAW } from '../ui/duel/copy.js';
+import { MERCY_COPY_RAW } from '../ui/mercy.js';
 
 export const DECKS = Object.freeze([
   ['gg', RAW],
   ['gg_element', ELEMENTS_RAW],
   ['gg_duel', DUEL_COPY_RAW],
+  ['gg_mercy', MERCY_COPY_RAW],
 ]);

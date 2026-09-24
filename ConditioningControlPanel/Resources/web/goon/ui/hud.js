@@ -120,7 +120,7 @@ const ARSENAL_KEY_COUNT = PAYLOAD_SLOTS.length;
  * others, which is exactly why the index is taken off the unfiltered list.
  */
 const SLOT_KEYS = Object.freeze(PAYLOAD_SLOTS.reduce((map, item, i) => {
-  map[item.id] = { key: i + 1, label: item.label };
+  map[item.id] = { key: i + 1, get label() { return item.label; } };
   return map;
 }, Object.create(null)));
 
@@ -155,27 +155,27 @@ function isNarrowViewport() {
 
 /** Own-draft element cues -> the chip that shows them on the bottom-left rail. */
 const ELEMENT_META = Object.freeze({
-  [GoonElement.Flashes]: { glyph: '✦', label: 'flashes' },
-  [GoonElement.Videos]: { glyph: '▶', label: 'video' },
-  [GoonElement.Subliminals]: { glyph: '≋', label: 'subliminals' },
-  [GoonElement.Bubbles]: { glyph: '○', label: 'bubbles' },
-  [GoonElement.LockCards]: { glyph: '▢', label: 'lock card' },
-  [GoonElement.ToyPatterns]: { glyph: '∿', label: 'toy' },
-  [GoonElement.BrainDrain]: { glyph: '◍', label: 'brain drain' },
-  [GoonElement.BouncingText]: { glyph: '⇄', label: 'bouncing text' },
-  [GoonElement.Spiral]: { glyph: '◎', label: 'spiral' },
+  [GoonElement.Flashes]: { glyph: '✦', get label() { return S.fx[GoonElement.Flashes]; } },
+  [GoonElement.Videos]: { glyph: '▶', get label() { return S.fx[GoonElement.Videos]; } },
+  [GoonElement.Subliminals]: { glyph: '≋', get label() { return S.fx[GoonElement.Subliminals]; } },
+  [GoonElement.Bubbles]: { glyph: '○', get label() { return S.fx[GoonElement.Bubbles]; } },
+  [GoonElement.LockCards]: { glyph: '▢', get label() { return S.fx[GoonElement.LockCards]; } },
+  [GoonElement.ToyPatterns]: { glyph: '∿', get label() { return S.fx[GoonElement.ToyPatterns]; } },
+  [GoonElement.BrainDrain]: { glyph: '◍', get label() { return S.fx[GoonElement.BrainDrain]; } },
+  [GoonElement.BouncingText]: { glyph: '⇄', get label() { return S.fx[GoonElement.BouncingText]; } },
+  [GoonElement.Spiral]: { glyph: '◎', get label() { return S.fx[GoonElement.Spiral]; } },
 });
 
 /** Admitted inbound payloads -> the same chip, violet-edged: THEY did this. */
 const PAYLOAD_META = Object.freeze({
-  [GoonPayloadKind.FlashBurst]: { glyph: '✦', label: 'flash burst' },
-  [GoonPayloadKind.SubliminalStorm]: { glyph: '≋', label: 'subliminal storm' },
-  [GoonPayloadKind.BubbleSwarm]: { glyph: '○', label: 'bubble swarm' },
-  [GoonPayloadKind.Video]: { glyph: '▶', label: 'video' },
-  [GoonPayloadKind.LockCard]: { glyph: '▢', label: 'lock card' },
-  [GoonPayloadKind.ToyPattern]: { glyph: '∿', label: 'toy pattern' },
-  [GoonPayloadKind.BrainDrain]: { glyph: '◍', label: 'brain drain' },
-  [GoonPayloadKind.Spiral]: { glyph: '◎', label: 'spiral' },
+  [GoonPayloadKind.FlashBurst]: { glyph: '✦', get label() { return S.payloads[GoonPayloadKind.FlashBurst]; } },
+  [GoonPayloadKind.SubliminalStorm]: { glyph: '≋', get label() { return S.payloads[GoonPayloadKind.SubliminalStorm]; } },
+  [GoonPayloadKind.BubbleSwarm]: { glyph: '○', get label() { return S.payloads[GoonPayloadKind.BubbleSwarm]; } },
+  [GoonPayloadKind.Video]: { glyph: '▶', get label() { return S.payloads[GoonPayloadKind.Video]; } },
+  [GoonPayloadKind.LockCard]: { glyph: '▢', get label() { return S.payloads[GoonPayloadKind.LockCard]; } },
+  [GoonPayloadKind.ToyPattern]: { glyph: '∿', get label() { return S.payloads[GoonPayloadKind.ToyPattern]; } },
+  [GoonPayloadKind.BrainDrain]: { glyph: '◍', get label() { return S.payloads[GoonPayloadKind.BrainDrain]; } },
+  [GoonPayloadKind.Spiral]: { glyph: '◎', get label() { return S.payloads[GoonPayloadKind.Spiral]; } },
 });
 
 /**
@@ -582,7 +582,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const gear = add(rightTop, el('button', 'gg-gear', '⚙'));
   if (gear) {
     gear.type = 'button';
-    gear.setAttribute && gear.setAttribute('aria-label', 'options');
+    gear.setAttribute && gear.setAttribute('aria-label', S.options.headline);
     led.listen(gear, 'click', () => {
       try {
         if (d && typeof d.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
@@ -1203,7 +1203,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     let remaining = 0;
     try { remaining = match.liveRemainingMs | 0; } catch (_e) { remaining = 0; }
 
-    text(timerClock, sd ? 'sudden death' : mmss(remaining));
+    text(timerClock, sd ? S.desk.suddenDeath : mmss(remaining));
     cls(timerBox, 'is-sd', sd);
     // GAME NIGHT: with a song picked, this bar IS the song (start -> game over). No new number.
     let song = null;

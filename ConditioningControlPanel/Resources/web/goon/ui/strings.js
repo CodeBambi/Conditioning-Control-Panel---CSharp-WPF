@@ -14,7 +14,7 @@
  *     part of the safety contract, not the copy deck.
  * ==========================================================================*/
 
-import { GoonElement } from '../core/contracts.js';
+import { GoonElement, GoonPayloadKind, GoonRoundKind } from '../core/contracts.js';
 import { deck, tpl, one } from '../core/i18n.js';
 
 /** The pick for a line whose wording changes when its name is missing. */
@@ -1394,6 +1394,209 @@ export const RAW = {
        charge surface rather than left as a toast for a thing that no longer
        means anything. */
     left: 'left the match',
+  },
+
+  /* ------------------------------------------------ chrome from the modules
+   * Words that were written inline in the module that draws them until the
+   * page learned other languages (2026-09-24). Moved here so they translate
+   * with the rest; each block names its module. Game CONTENT stays where it
+   * is and stays English: lock card and quick-draw phrases, subliminal and
+   * bouncing words, and the share card (it reads the same in every locale). */
+
+  /* boot.js - the loader note and the two boot failures a player can see. */
+  boot: {
+    warming: 'warming up…',
+    warmingNoApp: 'warming up - waiting for the app…',
+    failed: tpl('could not start - {why}', (why) => ({ why })),
+    uiFailed: 'ui failed to start',
+    practiceFailed: 'practice could not start',
+  },
+
+  /* ui/arsenal.js - the tile names (keyed by ARSENAL_ITEMS id) and states. */
+  items: {
+    flash: 'flash',
+    subliminal: 'subliminal',
+    video: 'video',
+    lockcard: 'lock card',
+    toy: 'toy',
+    braindrain: 'brain drain',
+    spiral: 'spiral',
+    emote: 'emote',
+  },
+  itemState: {
+    used: 'used',
+    filtered: "they can't receive this",
+    cooling: 'cooling',
+    oneDrain: 'one brain drain a match',
+    nextPayload: tpl('next payload in {n}s', (n) => ({ n })),
+    notNow: 'not now',
+    dropOnMonitor: 'drop it on their monitor',
+    sent: 'sent',
+  },
+
+  /* ui/hud.js - the element chips on the rail, by GoonElement code. */
+  fx: {
+    [GoonElement.Flashes]: 'flashes',
+    [GoonElement.Videos]: 'video',
+    [GoonElement.Subliminals]: 'subliminals',
+    [GoonElement.Bubbles]: 'bubbles',
+    [GoonElement.LockCards]: 'lock card',
+    [GoonElement.ToyPatterns]: 'toy',
+    [GoonElement.BrainDrain]: 'brain drain',
+    [GoonElement.BouncingText]: 'bouncing text',
+    [GoonElement.Spiral]: 'spiral',
+  },
+  /* ui/hud.js + ui/screens/recap.js - payload names, by GoonPayloadKind code. */
+  payloads: {
+    [GoonPayloadKind.FlashBurst]: 'flash burst',
+    [GoonPayloadKind.SubliminalStorm]: 'subliminal storm',
+    [GoonPayloadKind.BubbleSwarm]: 'bubble swarm',
+    [GoonPayloadKind.Video]: 'video',
+    [GoonPayloadKind.LockCard]: 'lock card',
+    [GoonPayloadKind.ToyPattern]: 'toy pattern',
+    [GoonPayloadKind.BrainDrain]: 'brain drain',
+    [GoonPayloadKind.Spiral]: 'spiral',
+    unknown: tpl('kind {n}', (n) => ({ n })),
+  },
+  /* ui/hitStamps.js - the rubber stamps. Capitals on purpose. */
+  stamps: {
+    hit: 'HIT',
+    tooSoon: 'TOO SOON',
+    blocked: 'BLOCKED',
+    kinds: {
+      [GoonPayloadKind.FlashBurst]: 'FLASHED',
+      [GoonPayloadKind.SubliminalStorm]: 'WORDS',
+      [GoonPayloadKind.BubbleSwarm]: 'BUBBLES',
+      [GoonPayloadKind.Video]: 'VIDEO',
+      [GoonPayloadKind.LockCard]: 'LOCK CARD',
+      [GoonPayloadKind.ToyPattern]: 'BUZZ',
+      [GoonPayloadKind.BrainDrain]: 'DRAINED',
+      [GoonPayloadKind.Spiral]: 'SPIRAL',
+    },
+  },
+  /* ui/hud.js + ui/scoreHud.js - the clock in sudden death, the combo chip. */
+  desk: {
+    suddenDeath: 'sudden death',
+    combo: tpl('COMBO x{n}', (n) => ({ n })),
+  },
+
+  /* ui/attention.js - the no-cam focus checks. */
+  attention: {
+    nextCheck: tpl('next check ~{n}s', (n) => ({ n })),
+    due: 'check due now',
+    tap: 'tap',
+    held: 'focus held',
+    missed: 'missed check - ×0.6 for 60 seconds.',
+  },
+
+  /* ui/closeness.js + ui/opponent.js - the dial. The wire carries the index. */
+  closeness: {
+    telling: "you're telling them",
+    fine: 'they can only see what you say.',
+    stops: ['steady', 'warm', 'close', 'edge'],
+  },
+
+  /* ui/emotes.js - the sheet. The wire carries the ENGLISH line; each side
+     shows it in its own language (emoteLine in ui/emotes.js). */
+  emotes: {
+    title: 'say one thing',
+    presets: ['gg', 'still here', 'nice try', 'that one hurt', 'you good?', 'not even close'],
+    cooling: tpl('one more in {n}s', (n) => ({ n })),
+  },
+
+  /* ui/opponent.js - the monitor's own labels. */
+  opponent: {
+    name: 'opponent',
+    focus: tpl('their focus {value}%', (value) => ({ value })),
+    claim: 'they claim',
+    unknown: 'unknown',
+    noWord: 'no word yet',
+    live: 'live',
+    wobbly: 'wobbly',
+    gone: 'gone',
+    abandonIn: tpl('abandon in {n}s', (n) => ({ n })),
+    abandoned: 'abandoned',
+  },
+
+  /* ui/rivalry.js - "you 3 - 2 Sam", plus the draws when there are any. */
+  rivalry: {
+    record: tpl({ named: 'you {w} - {l} {name}', anon: 'you {w} - {l} them' }, (w, l, name) => ({ w, l, name }), (w, l, name) => (name ? 'named' : 'anon')),
+    draws: tpl({ one: ', {n} draw', other: ', {n} draws' }, (n) => ({ n }), one),
+  },
+
+  /* ui/sd/*.js - sudden death. */
+  sd: {
+    title: 'sudden death',
+    track: 'three clear rounds ends it.',
+    round: tpl('round {n} · {title}', (n, title) => ({ n, title })),
+    roundFallback: 'round',
+    holdOn: 'hold on.',
+    level: tpl('level {n}', (n) => ({ n })),
+    go: 'go',
+    getReady: 'get ready',
+    rounds: {
+      [GoonRoundKind.QuickDrawLockCard]: { title: 'quick draw', rule: 'type the card first.' },
+      [GoonRoundKind.StaringContest]: { title: 'staring contest', rule: "don't blink." },
+      [GoonRoundKind.ReactionDuel]: { title: 'reaction duel', rule: 'hit it when it turns pink. not before.' },
+      [GoonRoundKind.BubbleRace]: { title: 'bubble race', rule: 'pop them all. faster than them.' },
+    },
+    slips: tpl('slips {n}', (n) => ({ n })),
+    dots: tpl('{done} of {total}', (done, total) => ({ done, total })),
+    typeIt: 'type it',
+    enterEachLine: 'press enter for each line',
+    giveUp: 'give up on this card',
+    wait: 'wait',
+    now: 'now',
+    noCamHead: 'no camera - reaction duel instead.',
+    noCamLine: 'this one needs two cameras. nobody loses it.',
+    bubYou: tpl('you {done}/{total}', (done, total) => ({ done, total })),
+    bubThem: 'them ?',
+    suspect: 'suspect reaction',
+    aborted: 'round aborted.',
+    toYou: 'round to you.',
+    toThem: 'round to them.',
+    deadHeat: 'dead heat.',
+    nobody: 'nobody scores that one.',
+    tooFast: 'faster than a human blink. scored anyway.',
+    noPress: 'no press',
+    ms: tpl('{n} ms', (n) => ({ n })),
+    cmpPopped: tpl('you {a} popped · them {b} popped', (a, b) => ({ a, b })),
+    cmp: tpl('you {a} · them {b}', (a, b) => ({ a, b })),
+  },
+
+  /* exec/lockCards.js - the card's chrome. The phrase itself is game content. */
+  lockCard: {
+    eyebrow: 'lock card',
+    typePhrase: 'type the phrase',
+    exact: 'type it exactly',
+    unlock: 'type it to unlock',
+    dismiss: 'dismiss',
+  },
+
+  /* exec/videos.js - the floating window's buttons. */
+  video: {
+    close: 'close this video',
+    flag: 'hide this and flag it for reporting',
+  },
+
+  /* ui/flavours.js - the one line under each flavour. The names stay as they are. */
+  flavourLines: {
+    trance: 'Spirals and soft voices.',
+    pink: 'Bimbo, top to bottom.',
+    frills: 'Lace, bows, best behaviour.',
+    shiny: 'Latex, rubber, drones.',
+    censored: 'Look, never see.',
+    mine: 'Your own niches.',
+  },
+
+  /* Labels a screen reader reads, and small words the screens draw. */
+  aria: {
+    effects: 'effects both of you allow',
+    inviteCode: 'invite code',
+    inviteCodeSix: 'invite code, six characters',
+    mainMenu: 'main menu',
+    withdraw: 'click to withdraw',
+    vs: 'vs',
   },
 
   /* ----------------------------------------------------------- share card */

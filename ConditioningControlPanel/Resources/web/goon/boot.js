@@ -552,7 +552,7 @@ function armDeadline() {
   warmTimer = setTimeout(() => {
     if (bootSettled) return;
     const note = el('gg-loader-note');
-    if (note) note.textContent = 'warming up' + (gotInit ? '' : ' — waiting for the app') + '…';
+    if (note) note.textContent = gotInit ? S.boot.warming : S.boot.warmingNoApp;
     bridge.log('boot: 12s with no ' + (gotInit ? 'manifest' : 'init'));
   }, WARM_MS);
   deadlineTimer = setTimeout(() => {
@@ -576,7 +576,7 @@ function settle() {
     .then(() => {
       try { buildApp(); } catch (e) {
         logger.error('app build failed: ' + ((e && e.stack) || e));
-        showLoaderFailure('ui failed to start');
+        showLoaderFailure(S.boot.uiFailed);
         return;
       }
       const loader = el('gg-loader');
@@ -643,7 +643,7 @@ function openFirstScreen() {
 
 function showLoaderFailure(msg) {
   const note = el('gg-loader-note');
-  if (note) note.textContent = 'could not start — ' + String(msg).slice(0, 120);
+  if (note) note.textContent = S.boot.failed(String(msg).slice(0, 120));
   const ring = hasDom() ? document.querySelector('.gg-loader-ring') : null;
   if (ring) ring.remove();
 }
@@ -2472,7 +2472,7 @@ async function startSolo() {
     if (!ok) logger.warn('practice: clock sync did not converge');
   } catch (e) {
     logger.error('practice: connect failed: ' + ((e && e.stack) || e));
-    toasts?.bad?.('practice could not start');
+    toasts?.bad?.(S.boot.practiceFailed);
     await teardownEverything();
     router.show('title');
   }

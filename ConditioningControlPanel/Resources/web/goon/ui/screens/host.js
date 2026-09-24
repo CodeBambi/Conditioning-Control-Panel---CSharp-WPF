@@ -99,7 +99,7 @@ export function mount(container, ctx) {
   ]);
 
   /* --- the rail: share the code, and what they see ------------------------ */
-  const codeRow = el('div', { class: 'gg-ot-bigcode-c', role: 'group', 'aria-label': 'invite code', text: '------' });
+  const codeRow = el('div', { class: 'gg-ot-bigcode-c', role: 'group', 'aria-label': S.aria.inviteCode, text: '------' });
   const copyChip = el('span', { class: 'gg-code-chip', text: S.host.copied, hidden: true });
   const expiryBar = el('div', { class: 'gg-expiry' }, [el('i', { class: 'gg-expiry-fill' })]);
   const expiryText = el('p', { class: 'gg-expiry-text', text: '' });

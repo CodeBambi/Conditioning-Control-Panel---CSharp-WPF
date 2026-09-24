@@ -23,6 +23,8 @@
  * ==========================================================================*/
 
 import { sanitizeText, TEXT_MAX_CHARS } from './sanitize.js';
+/* exec/ stays clear of ui/: the chrome is read by key (ui/strings.js S.lockCard). */
+import { t } from '../core/i18n.js';
 // Juice pass (2026-09-23): an unsolved card LEAVES (shrink + fade, 220 ms)
 // instead of vanishing in one frame. A solved card has its own exit (fx.css).
 import { fadeOut } from './motion.js';
@@ -98,7 +100,7 @@ export function createLockCardView(container, o = {}) {
   eyebrow.className = 'gg-eyebrow gg-lock-eyebrow';
   const dot = document.createElement('i');
   eyebrow.appendChild(dot);
-  eyebrow.appendChild(document.createTextNode('lock card'));
+  eyebrow.appendChild(document.createTextNode(t('gg_lockCard_eyebrow')));
   inner.appendChild(eyebrow);
 
   const phraseEl = document.createElement('p');
@@ -130,20 +132,20 @@ export function createLockCardView(container, o = {}) {
   input.autocomplete = 'off';
   input.autocapitalize = 'off';
   input.spellcheck = false;
-  input.setAttribute('aria-label', 'type the phrase');
+  input.setAttribute('aria-label', t('gg_lockCard_typePhrase'));
   inner.appendChild(input);
 
   const foot = document.createElement('div');
   foot.className = 'gg-lock-foot';
   const hint = document.createElement('span');
   hint.className = 'gg-lock-hint';
-  hint.textContent = strict ? 'type it exactly' : 'type it to unlock';
+  hint.textContent = strict ? t('gg_lockCard_exact') : t('gg_lockCard_unlock');
   const mistakeEl = document.createElement('span');
   mistakeEl.className = 'gg-lock-mistakes';
   const give = document.createElement('button');
   give.type = 'button';
   give.className = 'gg-btn gg-btn--ghost';
-  give.textContent = 'dismiss';
+  give.textContent = t('gg_lockCard_dismiss');
   foot.appendChild(hint);
   foot.appendChild(mistakeEl);
   foot.appendChild(give);

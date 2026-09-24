@@ -24,6 +24,7 @@
  * ==========================================================================*/
 
 import { GoonPayloadKind } from '../core/contracts.js';
+import { S } from './strings.js';
 import { GoonReceiptStatus } from '../core/scoring.js';
 import { localMonotonicMs } from '../core/clock.js';
 import { shake } from './juiceDom.js';
@@ -36,23 +37,15 @@ export const HIT_KNOCK_PX = 5;
 export const STAMP_MAX = 3;
 const PARTICLES = 14;
 
-const KIND_WORD = Object.freeze({
-  [GoonPayloadKind.FlashBurst]: 'FLASHED',
-  [GoonPayloadKind.SubliminalStorm]: 'WORDS',
-  [GoonPayloadKind.BubbleSwarm]: 'BUBBLES',
-  [GoonPayloadKind.Video]: 'VIDEO',
-  [GoonPayloadKind.LockCard]: 'LOCK CARD',
-  [GoonPayloadKind.ToyPattern]: 'BUZZ',
-  [GoonPayloadKind.BrainDrain]: 'DRAINED',
-  [GoonPayloadKind.Spiral]: 'SPIRAL',
-});
+/* The words live in ui/strings.js (S.stamps.kinds), so they follow the page's language. */
+const KIND_WORD = S.stamps.kinds;
 
 /** What stamp (if any) a receipt for OUR payload earns. Pure. */
 export function stampForReceipt(receipt) {
   const status = receipt && receipt.status;
-  if (status === GoonReceiptStatus.Accepted) return { text: 'HIT', tone: 'hit', size: 'big', sfx: 'gg-hit' };
-  if (status === GoonReceiptStatus.RejectedRate) return { text: 'TOO SOON', tone: 'dull', size: 'mid', sfx: 'gg-hit-dull' };
-  if (status === GoonReceiptStatus.RejectedFiltered) return { text: 'BLOCKED', tone: 'dull', size: 'mid', sfx: 'gg-hit-dull' };
+  if (status === GoonReceiptStatus.Accepted) return { text: S.stamps.hit, tone: 'hit', size: 'big', sfx: 'gg-hit' };
+  if (status === GoonReceiptStatus.RejectedRate) return { text: S.stamps.tooSoon, tone: 'dull', size: 'mid', sfx: 'gg-hit-dull' };
+  if (status === GoonReceiptStatus.RejectedFiltered) return { text: S.stamps.blocked, tone: 'dull', size: 'mid', sfx: 'gg-hit-dull' };
   return null;
 }
 

@@ -28,13 +28,15 @@
  * deep-end. A receiver that does not know an id refuses the throw ('busy').
  * ==========================================================================*/
 
+import { DUEL_COPY } from './copy.js';
+
 export const DEFAULT_DUEL_GAME = 'the-deep-end';
 
 export const DUEL_GAMES = Object.freeze([
   Object.freeze({
     id: 'the-deep-end',
     name: 'The Deep End',
-    rule: 'Swipe or arrow keys. Deepest tile wins.',
+    get rule() { return DUEL_COPY.ruleDeepEnd; },
     path: '../../../arcademy/games/the-deep-end/index.js',
     tiled: true,
     // tier reached and score per second of play at a novice-to-steady pace
@@ -48,7 +50,7 @@ export const DUEL_GAMES = Object.freeze([
   Object.freeze({
     id: 'sort',
     name: 'Sort',
-    rule: 'Swipe right for moving, left for still.',
+    get rule() { return DUEL_COPY.ruleSort; },
     path: '../../../arcademy/games/sort/index.js',
     tiled: false,
     // points per second: a composite of about .35 to .75 over a short bell

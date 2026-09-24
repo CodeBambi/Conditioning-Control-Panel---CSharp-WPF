@@ -74,19 +74,19 @@ import { burst, centreOf, flyArc, popIn, shake, squash } from './juiceDom.js';
  * no way to throw one back.
  */
 export const ARSENAL_ITEMS = Object.freeze([
-  { id: 'flash', rail: 'left', kind: GoonPayloadKind.FlashBurst, img: 'item_flash', label: 'flash', durationMs: 6000, cost: 1 },
-  { id: 'subliminal', rail: 'left', kind: GoonPayloadKind.SubliminalStorm, img: 'item_subliminal', label: 'subliminal', durationMs: 8000, cost: 1 },
-  { id: 'video', rail: 'left', kind: GoonPayloadKind.Video, img: 'item_video', label: 'video', durationMs: 45000, cost: 2 },
-  { id: 'lockcard', rail: 'right', kind: GoonPayloadKind.LockCard, img: 'item_lockcard', label: 'lock card', durationMs: 30000, cost: 2 },
-  { id: 'toy', rail: 'right', kind: GoonPayloadKind.ToyPattern, img: 'item_toy', label: 'toy', durationMs: 10000, cost: 2 },
-  { id: 'braindrain', rail: 'right', kind: GoonPayloadKind.BrainDrain, img: 'item_braindrain', label: 'brain drain', durationMs: 60000, cost: 3 },
-  { id: 'spiral', rail: 'left', kind: GoonPayloadKind.Spiral, img: 'item_spiral', label: 'spiral', durationMs: 40000, cost: 2 },
-  { id: 'emote', rail: 'right', kind: null, img: 'item_emote', label: 'emote', durationMs: 0, cost: 0 },
+  { id: 'flash', rail: 'left', kind: GoonPayloadKind.FlashBurst, img: 'item_flash', get label() { return S.items.flash; }, durationMs: 6000, cost: 1 },
+  { id: 'subliminal', rail: 'left', kind: GoonPayloadKind.SubliminalStorm, img: 'item_subliminal', get label() { return S.items.subliminal; }, durationMs: 8000, cost: 1 },
+  { id: 'video', rail: 'left', kind: GoonPayloadKind.Video, img: 'item_video', get label() { return S.items.video; }, durationMs: 45000, cost: 2 },
+  { id: 'lockcard', rail: 'right', kind: GoonPayloadKind.LockCard, img: 'item_lockcard', get label() { return S.items.lockcard; }, durationMs: 30000, cost: 2 },
+  { id: 'toy', rail: 'right', kind: GoonPayloadKind.ToyPattern, img: 'item_toy', get label() { return S.items.toy; }, durationMs: 10000, cost: 2 },
+  { id: 'braindrain', rail: 'right', kind: GoonPayloadKind.BrainDrain, img: 'item_braindrain', get label() { return S.items.braindrain; }, durationMs: 60000, cost: 3 },
+  { id: 'spiral', rail: 'left', kind: GoonPayloadKind.Spiral, img: 'item_spiral', get label() { return S.items.spiral; }, durationMs: 40000, cost: 2 },
+  { id: 'emote', rail: 'right', kind: null, img: 'item_emote', get label() { return S.items.emote; }, durationMs: 0, cost: 0 },
   /* GAME NIGHT (2026-09-23): the Deep End game card. Not a payload (kind null, so no number key),
      but it IS earned: `duel` makes it a drop-pool slot. Only built when mountArsenal gets a `duel`
      hook (ui/duel/duelController.js), only visible from the player's second match against a peer
      that speaks night, and at most one held. */
-  { id: 'gamecard', rail: 'right', kind: null, duel: true, img: 'item_gamecard', label: DUEL_COPY.cardLabel, durationMs: 0, cost: GAME_CARD_COST },
+  { id: 'gamecard', rail: 'right', kind: null, duel: true, img: 'item_gamecard', get label() { return DUEL_COPY.cardLabel; }, durationMs: 0, cost: GAME_CARD_COST },
 ]);
 
 /** Payload slots, i.e. everything the number keys can reach. */
@@ -212,15 +212,15 @@ function makeCooldownProbe(match) {
 
 function receiptWord(status) {
   switch (status) {
-    case GoonReceiptStatus.Accepted: return { word: 'landed', tone: 'ok' };
-    case GoonReceiptStatus.Completed: return { word: 'landed', tone: 'ok' };
+    case GoonReceiptStatus.Accepted: return { word: S.recap.chipLanded, tone: 'ok' };
+    case GoonReceiptStatus.Completed: return { word: S.recap.chipLanded, tone: 'ok' };
     // 'endured' carried the note "+1 charge for them" until 2026-08-05. It was
     // true and it is not any more — enduring buys them nothing, because nothing
     // is bought. The word is the whole story: they rode it out.
-    case GoonReceiptStatus.Survived: return { word: 'endured', tone: 'gold', note: 'they rode it out' };
-    case GoonReceiptStatus.RejectedRate: return { word: 'too soon', tone: 'warn' };
-    case GoonReceiptStatus.RejectedFiltered: return { word: 'blocked', tone: 'warn' };
-    default: return { word: String(status || 'sent'), tone: 'dim' };
+    case GoonReceiptStatus.Survived: return { word: S.recap.chipEndured, tone: 'gold', note: S.recap.chipEnduredNote };
+    case GoonReceiptStatus.RejectedRate: return { word: S.recap.chipTooSoon, tone: 'warn' };
+    case GoonReceiptStatus.RejectedFiltered: return { word: S.recap.chipBlocked, tone: 'warn' };
+    default: return { word: String(status || S.itemState.sent), tone: 'dim' };
   }
 }
 
@@ -406,10 +406,10 @@ export function mountArsenal({
       if (item.duel) { paintGameCard(rec); continue; }
       let state = 'ready';
       let word = '';
-      if (isSpent(rec)) { state = 'used'; word = 'used'; }
-      else if (!peerCanTake(item.kind)) { state = 'filtered'; word = "they can't receive this"; }
+      if (isSpent(rec)) { state = 'used'; word = S.itemState.used; }
+      else if (!peerCanTake(item.kind)) { state = 'filtered'; word = S.itemState.filtered; }
       else if (rec.armed <= 0) { state = 'locked'; word = S.arsenal.locked; }
-      else if (cooling) { state = 'cooling'; word = 'cooling'; }
+      else if (cooling) { state = 'cooling'; word = S.itemState.cooling; }
       /* `else if (rec.cost > have) { state = 'poor'; word = 'need ' + rec.cost; }`
          was the "Need 1/2/3" the owner named. Removed 2026-08-05: an item you are
          holding is an item you can throw. */
@@ -425,7 +425,7 @@ export function mountArsenal({
 
     if (coolHost) {
       coolHost.hidden = !cooling;
-      if (cooling) text(coolHost, 'next payload in ' + Math.ceil(coolMs / 1000) + 's');
+      if (cooling) text(coolHost, S.itemState.nextPayload(Math.ceil(coolMs / 1000)));
     }
     if (armed && (armed.state !== 'ready' || !isLive())) disarm();
   }
@@ -517,9 +517,9 @@ export function mountArsenal({
     if (rec.needsArm && rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return { ok: false, error: 'locked', id: null }; }
     /* The affordability refusal stood next — shake + "costs 3 — you have 1" +
        {error:'charges'}. Gone 2026-08-05: there is no balance to be short of. */
-    if (rec.state === 'filtered') { refuse(rec, "they can't receive this"); return { ok: false, error: 'filtered', id: null }; }
-    if (rec.state === 'used') { refuse(rec, 'one brain drain a match'); return { ok: false, error: 'used', id: null }; }
-    if (rec.state === 'cooling') { refuse(rec, 'next payload in ' + Math.ceil(cool.msLeft() / 1000) + 's'); return { ok: false, error: 'cooling', id: null }; }
+    if (rec.state === 'filtered') { refuse(rec, S.itemState.filtered); return { ok: false, error: 'filtered', id: null }; }
+    if (rec.state === 'used') { refuse(rec, S.itemState.oneDrain); return { ok: false, error: 'used', id: null }; }
+    if (rec.state === 'cooling') { refuse(rec, S.itemState.nextPayload(Math.ceil(cool.msLeft() / 1000))); return { ok: false, error: 'cooling', id: null }; }
 
     const res = match.tryFirePayload({
       kind: rec.item.kind,
@@ -543,7 +543,7 @@ export function mountArsenal({
       }
       if (typeof onLog === 'function') { try { onLog({ t: 'payload-out', kind: rec.item.label, id: res.id }); } catch (_e) { /* ignore */ } }
     } else {
-      refuse(rec, String(res.error || 'not now'));
+      refuse(rec, String(res.error || S.itemState.notNow));
     }
     paint();
     return res;
@@ -723,7 +723,7 @@ export function mountArsenal({
     const row = el('div', 'gg-receipt');
     if (!row) return;
     add(row, el('span', 'gg-receipt-kind', label));
-    const st = add(row, el('span', 'gg-receipt-state', 'sent'));
+    const st = add(row, el('span', 'gg-receipt-state', S.itemState.sent));
     const note = add(row, el('span', 'gg-receipt-note'));
     add(receiptsHost, row);
     const entry = { id, row, st, note, timer: 0 };
@@ -865,7 +865,7 @@ export function mountArsenal({
       const hit = target && inRect(rectOf(target), x, y, 12);
       if (typeof onTargeted === 'function') onTargeted(false);
       if (hit) fire(rec, { x, y });
-      else tipOn(rec, 'drop it on their monitor');
+      else tipOn(rec, S.itemState.dropOnMonitor);
     }
 
     led.listen(root, 'pointerup', endPointer);

@@ -36,6 +36,9 @@ export const DUEL_COPY_RAW = Object.freeze({
   lengthLabel: 'Game card length',
   lengthChoice: tpl('{sec}s', (sec) => ({ sec })),
   hostWins: "The host's pick is the one you play.",
+  /* ui/duel/games.js - the rule line under each game's name. The names are the games' own. */
+  ruleDeepEnd: 'Swipe or arrow keys. Deepest tile wins.',
+  ruleSort: 'Swipe right for moving, left for still.',
   recapLine: tpl({ one: '+ {n} game won', other: '+ {n} games won' }, (won) => ({ n: won }), one),
 });
 
