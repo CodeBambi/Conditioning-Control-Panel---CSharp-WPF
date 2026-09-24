@@ -66,6 +66,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly IAiService _transport;
         private readonly IPromptAssembler _assembler;
         private readonly ICompanionSessionStore _store;
+        private readonly Func<bool> _preview;
 
         // The linkable media pool, exactly as the stable prefix lists it. Injected so the
         // recommendation scan is testable without standing up BambiSprite and the whole mod stack.
@@ -97,9 +98,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             IMemoryStore? memory = null,
             ICompanionSessionStore? store = null,
             RecentRecommendations? recommendations = null,
-            Func<IReadOnlyList<string>>? mediaTitles = null)
+            Func<IReadOnlyList<string>>? mediaTitles = null, Func<bool>? preview = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+            _preview = preview ?? (() => CompanionExperience.IsV2Enabled);
             _ownsMemory = memory == null;
             Memory = memory ?? new MemoryStore();
             Recommendations = recommendations ?? new RecentRecommendations();
@@ -196,18 +198,28 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (_isUserQueued)
             {
                 App.Logger?.Debug("CompanionBrain: user send dropped (one already queued)");
-                return new AiReplyResult(GetThinkingPhrase(), IsAiGenerated: false, Refusal: null);
+                return _preview() ? AiReplyResult.Failed(AiFailureKind.Busy, true)
+                    : new AiReplyResult(GetThinkingPhrase(), IsAiGenerated: false, Refusal: null);
             }
 
             _isUserQueued = true;
             try
             {
-                await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (_preview())
+                {
+                    if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+                    {
+                        _isUserQueued = false;
+                        return AiReplyResult.Failed(AiFailureKind.Busy, true);
+                    }
+                }
+                else await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
                 _isUserQueued = false;
-                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+                return _preview() ? AiReplyResult.Failed(AiFailureKind.Cancelled, true)
+                    : new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
             }
 
             _isUserQueued = false;
@@ -234,10 +246,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // the 100-token chat cap and get guillotined mid-string. Size the budget to
                 // what we asked the model to produce. See AiCallOptions.ChatWithEffects.
                 var effectsOn = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
+                var options = effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat;
+                if (_preview()) options = AiCallOptions.ForPreview(options);
                 var result = await _transport
-                    .SendAsync(request.Messages,
-                        effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat,
-                        cancellationToken)
+                    .SendAsync(request.Messages, options, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (result.Refusal != null)
@@ -256,8 +268,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     // once the provider comes back. The bubble transcript the user actually reads is
                     // AvatarTubeWindow.ChatHistory, which is untouched by this.
                     Session.Remove(userTurn);
-                    return result;
+                    return _preview() && result.Failure == null
+                        ? AiReplyResult.Failed(cancellationToken.IsCancellationRequested
+                            ? AiFailureKind.Cancelled : AiFailureKind.Unavailable, true)
+                        : result;
                 }
+
+                cancellationToken.ThrowIfCancellationRequested();
 
                 // Live 0806: small models imitate the bark-echo sigil and wrap their own replies in
                 // «X said aloud: "…"». Unwrap before the text reaches the bubble, history, or disk.
@@ -281,7 +298,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     // Nothing but sigil shell, or nothing but invented links. Either way there is no
                     // reply left to show: same treatment as a canned fallback.
                     Session.Remove(userTurn);
-                    return new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
+                    return _preview() ? AiReplyResult.Failed(AiFailureKind.InvalidResponse, true)
+                        : new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
                 }
                 if (!string.Equals(chatText, result.Text, StringComparison.Ordinal))
                     result = result with { Text = chatText };
@@ -292,10 +310,18 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 SignalMemoryRecallIfDue();
                 return result;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                Session.Remove(userTurn);
+                return _preview() ? AiReplyResult.Failed(AiFailureKind.Cancelled, true)
+                    : new AiReplyResult(string.Empty, false, null);
+            }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "CompanionBrain: chat turn failed");
-                return new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
+                Session.Remove(userTurn);
+                App.Logger?.Warning("CompanionBrain: chat turn failed ({ErrorType})", ex.GetType().Name);
+                return _preview() ? AiReplyResult.Failed(AiFailureKind.Unavailable, true)
+                    : new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
             }
             finally
             {
@@ -342,7 +368,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             {
                 var request = _assembler.BuildRequest(AiPurpose.Reaction, Session, descriptor);
                 var result = await _transport
-                    .SendAsync(request.Messages, AiCallOptions.Reaction, cancellationToken)
+                    .SendAsync(request.Messages, _preview() ? AiCallOptions.ForPreview(AiCallOptions.Reaction)
+                        : AiCallOptions.Reaction, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (result.Refusal != null || !result.IsAiGenerated)

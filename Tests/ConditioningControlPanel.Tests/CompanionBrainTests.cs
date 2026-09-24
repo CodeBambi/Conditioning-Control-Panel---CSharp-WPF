@@ -85,8 +85,8 @@ public class CompanionBrainTests
         }
     }
 
-    private static CompanionBrain Build(FakeTransport transport, FakeStore store) =>
-        new(transport, new StubAssembler(), new InertMemoryStore(), store);
+    private static CompanionBrain Build(FakeTransport transport, FakeStore store, bool preview = false) =>
+        new(transport, new StubAssembler(), new InertMemoryStore(), store, preview: () => preview);
 
     private static CompanionBrain Build(FakeTransport transport, FakeStore store,
         RecentRecommendations recommendations, params string[] mediaTitles) =>
@@ -102,6 +102,61 @@ public class CompanionBrainTests
             await Task.Delay(10);
         }
         lock (store.Writes) return store.Saved;
+    }
+
+    [Fact]
+    public async Task Preview_TransportException_RollsBackAndReturnsStatus()
+    {
+        var transport = new FakeTransport { Respond = (_, _) => throw new InvalidOperationException("fake") };
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        var reply = await brain.ChatAsync("hello");
+        Assert.Equal(AiFailureKind.Unavailable, reply.Failure);
+        Assert.Empty(reply.Text);
+        Assert.Empty(brain.Session.Turns);
+    }
+
+    [Fact]
+    public async Task Preview_CancelledAfterTransport_DoesNotCommitReply()
+    {
+        using var cancel = new CancellationTokenSource();
+        var transport = new FakeTransport { Respond = (_, _) =>
+        {
+            cancel.Cancel();
+            return new AiReplyResult("too late", true, null);
+        }};
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        var reply = await brain.ChatAsync("hello", cancel.Token);
+        Assert.Equal(AiFailureKind.Cancelled, reply.Failure);
+        Assert.Empty(brain.Session.Turns);
+    }
+
+    [Fact]
+    public async Task Preview_CannedFailure_IsNotCharacterSpeech()
+    {
+        var transport = new FakeTransport { Respond = (_, _) => new AiReplyResult("generic praise", false, null) };
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        var reply = await brain.ChatAsync("hello");
+        Assert.Equal(AiFailureKind.Unavailable, reply.Failure);
+        Assert.Empty(reply.Text);
+        Assert.Empty(brain.Session.Turns);
+        Assert.Equal(240, Assert.Single(transport.Sends).Options.MaxTokens);
+        Assert.True(Guid.TryParse(transport.Sends[0].Options.RequestId, out _));
+    }
+
+    [Fact]
+    public async Task Preview_ConcurrentSend_IsRejectedWithoutSecondGeneration()
+    {
+        var transport = new FakeTransport();
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        transport.Respond = (_, _) =>
+        {
+            var second = brain.ChatAsync("duplicate").GetAwaiter().GetResult();
+            Assert.Equal(AiFailureKind.Busy, second.Failure);
+            return new AiReplyResult("hello", true, null);
+        };
+        await brain.ChatAsync("first");
+        Assert.Single(transport.Sends);
+        Assert.Equal(2, brain.Session.Turns.Count);
     }
 
     // ---------- happy path ----------

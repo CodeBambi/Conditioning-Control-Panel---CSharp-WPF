@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Data;
 using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Views.Controls.Companion.Runtime;
@@ -17,6 +18,8 @@ public partial class ConversationPage : UserControl
     private UIElement? _borrowed;
     private Panel? _parent;
     private int _index;
+    private BindingBase? _oldBinding;
+    private object? _oldContext;
     private IInputElement? _returnFocus;
     public Action<Window>? PersonalityEditor { get; set; }
     internal ConversationPage(CompanionRoomRuntimeVm room, CompanionRoomView legacy)
@@ -26,7 +29,7 @@ public partial class ConversationPage : UserControl
         _vm = new(room);
         DataContext = _vm;
         _vm.Turns.CollectionChanged += TurnsChanged;
-        IsVisibleChanged += (_, _) => { if (IsVisible) _vm.Refresh(); else { CloseSheet(); _vm.Detach(); } };
+        IsVisibleChanged += (_, _) => { if (IsVisible) _vm.Resume(); else { CloseSheet(); _vm.Detach(); } };
         Unloaded += (_, _) => { _vm.Stop(); CloseSheet(); _vm.Detach(); };
         SizeChanged += (_, _) => { if (SheetOverlay.Children[0] is FrameworkElement sheet) sheet.Width = Math.Max(240, Math.Min(580, ActualWidth - 48)); };
     }
@@ -66,7 +69,7 @@ public partial class ConversationPage : UserControl
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string text })
-            try { Clipboard.SetText(text); } catch (System.Runtime.InteropServices.COMException) { }
+            try { Clipboard.SetText(text); } catch (System.Runtime.InteropServices.COMException) { App.Logger?.Debug("Companion copy deferred: clipboard is busy"); }
     }
     private void Sheet_Click(object sender, RoutedEventArgs e)
     {
@@ -82,6 +85,8 @@ public partial class ConversationPage : UserControl
         if (source != null && _legacy.FindName(source) is FrameworkElement existing && existing.Parent is Panel parent)
         {
             _borrowed = existing;
+            _oldBinding = BindingOperations.GetBindingBase(existing, DataContextProperty);
+            _oldContext = existing.ReadLocalValue(DataContextProperty);
             _parent = parent;
             _index = parent.Children.IndexOf(existing);
             parent.Children.Remove(existing);
@@ -98,7 +103,7 @@ public partial class ConversationPage : UserControl
             var contents = new StackPanel();
             contents.Children.Add(new CompanionPickerCard());
             var advanced = new Button { Content = Loc.Get("companion_v2_personality"), Margin = new Thickness(0, 14, 0, 0) };
-            advanced.Click += (_, _) => { if (PersonalityEditor != null && Window.GetWindow(this) is Window owner) PersonalityEditor(owner); else OpenSheet("personality"); };
+            advanced.Click += (_, _) => { if (PersonalityEditor != null && Window.GetWindow(this) is Window owner) { PersonalityEditor(owner); _vm.Room.Sync(); _vm.Refresh(); } else OpenSheet("personality"); };
             contents.Children.Add(advanced);
             SheetContent.Content = contents;
         }
@@ -118,6 +123,12 @@ public partial class ConversationPage : UserControl
         {
             if (_borrowed is FrameworkElement { Parent: Panel current }) current.Children.Remove(_borrowed);
             _parent.Children.Insert(Math.Min(_index, _parent.Children.Count), _borrowed);
+            if (_borrowed is FrameworkElement restored)
+            {
+                if (_oldBinding != null) BindingOperations.SetBinding(restored, DataContextProperty, _oldBinding);
+                else if (_oldContext == DependencyProperty.UnsetValue) restored.ClearValue(DataContextProperty);
+                else restored.DataContext = _oldContext;
+            }
         }
         SheetContent.Content = null;
         _borrowed = null;
