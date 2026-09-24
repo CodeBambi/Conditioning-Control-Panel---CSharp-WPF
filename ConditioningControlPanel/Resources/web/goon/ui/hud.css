@@ -2922,3 +2922,5 @@ html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
 .gg-mini-video:has(.gg-mon-media.is-ready) .gg-mini-bar,
 .gg-mini-video:has(.gg-mon-media.is-ready) .gg-mini-scan { visibility: hidden; }
 .gg-mini-record { position: absolute; right: 7%; top: 7%; width: 7px; height: 7px; border-radius: 50%; background: #ff304b; box-shadow: 0 0 7px #ff304b; z-index: 2; }
+
+.gg-drop-fly.gg-drop-item { width: 42px; height: 42px; object-fit: contain; margin: -21px; border-radius: 0; background: none; box-shadow: none; filter: drop-shadow(0 0 9px #ffbb66); transition: none; }

@@ -53,7 +53,7 @@ import { dressGhost } from './throwPreview.js';
 import { S } from './strings.js';
 import { GAME_CARD_COST } from './duel/rules.js';
 import { DUEL_COPY } from './duel/copy.js';
-import { burst, centreOf, flyArc, popIn, shake, squash } from './juiceDom.js';
+import { burst, centreOf, flyArc, popIn, shake, squash, isCalm } from './juiceDom.js';
 
 /**
  * The rails, in owner order — which is also the KEYBOARD order (1..7), so new
@@ -253,6 +253,7 @@ export function mountArsenal({
   const led = createLedger();
   const cool = makeCooldownProbe(match);
   const tiles = new Map();      // id -> tile record
+  const dropFlights = new Set();
   const receipts = [];          // {id, row, timer}
   let armed = null;             // tile record
   let heavyUsed = false;
@@ -693,28 +694,41 @@ export function mountArsenal({
     tipOn(rec, S.arsenal.drop(rec.item.label));
     const d = doc();
     if (!d || !d.body || !rec.root) return;
-    const to = rectOf(rec.root);
-    const run = () => {
-      cls(rec.root, 'is-dropped', true);
-      setTimeout(() => cls(rec.root, 'is-dropped', false), DROP_FLASH_MS);
-      if (!from || typeof from.x !== 'number' || typeof from.y !== 'number' || !to.width) return;
-      const node = el('i', 'gg-drop-fly');
-      if (!node || !node.style) return;
-      node.style.left = from.x + 'px';
-      node.style.top = from.y + 'px';
-      add(d.body, node);
-      const dx = (to.left + to.width / 2) - from.x;
-      const dy = (to.top + to.height / 2) - from.y;
-      const fly = () => {
-        if (node.style) {
-          node.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(0.35)';
-          node.style.opacity = '0';
-        }
-      };
-      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(fly); else fly();
-      setTimeout(() => { try { node.remove(); } catch (_e) { /* gone */ } }, DROP_FLASH_MS + 120);
+    let target = rec.root;
+    let to = rectOf(target);
+    if (!to.width) {
+      target = rec.root.closest?.('.gg-arsenal')?.querySelector?.('.gg-arsenal-tab') || rec.root;
+      to = rectOf(target);
+    }
+    const land = () => {
+      if (!target.isConnected) return;
+      cls(target, 'is-dropped', true);
+      squash(target, { amount: 0.1, ms: 200 });
+      sfx(audio, 'drop-land');
+      setTimeout(() => cls(target, 'is-dropped', false), DROP_FLASH_MS);
     };
-    if (fx && typeof fx.play === 'function') fx.play(DROP_FLASH_MS, run); else run();
+    if (!from || !Number.isFinite(from.x) || !Number.isFinite(from.y) || !to.width || isCalm()) { land(); return; }
+    const node = el('img', 'gg-drop-fly gg-drop-item');
+    if (!node) return;
+    node.src = rec.img?.src || '';
+    node.alt = rec.item.label;
+    node.style.left = from.x + 'px'; node.style.top = from.y + 'px';
+    add(d.body, node);
+    const retire = () => { try { node.remove(); } catch (_e) { /* gone */ } dropFlights.delete(retire); };
+    dropFlights.add(retire);
+    while (dropFlights.size > 6) dropFlights.values().next().value();
+    const dx = to.left + to.width / 2 - from.x, dy = to.top + to.height / 2 - from.y;
+    const finish = () => { if (dropFlights.has(retire)) { retire(); land(); } };
+    try {
+      const flight = node.animate([
+        { transform: 'translate(0,0) scale(.35)', opacity: 0 },
+        { transform: 'translate(0,28px) scale(1.2)', opacity: 1, offset: .25 },
+        { transform: `translate(${dx * .35}px,${Math.max(36, dy * .2)}px) scale(1)`, opacity: 1, offset: .45 },
+        { transform: `translate(${dx}px,${dy}px) scale(.65)`, opacity: .9 },
+      ], { duration: 780, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+      flight.onfinish = finish;
+    } catch (_e) { finish(); }
+    setTimeout(finish, 850);
   }
 
   // ------------------------------------------------------------- receipts
@@ -941,6 +955,7 @@ export function mountArsenal({
     unmount() {
       disarm();
       led.run();
+      for (const retire of Array.from(dropFlights)) retire();
       for (const rec of tiles.values()) { try { rec.root.remove(); } catch (_e) { /* gone */ } }
       tiles.clear();
       while (receipts.length) dropReceipt(receipts[0]);
