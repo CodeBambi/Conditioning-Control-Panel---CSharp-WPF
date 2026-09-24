@@ -627,6 +627,13 @@ export class GoonMatchService {
    * A bubble or flash we popped (ui/scoreHud.js hears the page events). Live only. Returns the
    * award ({points, combo}; points 0 past the pop limiter) or null outside the points model.
    */
+  noteLockBounty(points) {
+    if (this._ended || this._phase !== GoonMatchPhase.Live) return null;
+    const award = this._scoring.awardLockBounty(points);
+    if (award) this._emitPoints(award);
+    return award;
+  }
+
   notePop(nowMs = localMonotonicMs()) {
     if (this._ended || this._phase !== GoonMatchPhase.Live) return null;
     const a = this._scoring.awardPop(nowMs);
@@ -1253,7 +1260,7 @@ export class GoonMatchService {
       const kind = this._inboundKinds.get(payloadId);
       this._inboundKinds.delete(payloadId);
       const live = this._phase === GoonMatchPhase.Live || this._phase === GoonMatchPhase.SuddenDeath;
-      const a = live ? this._scoring.awardHeld(kind, share) : null;
+      const a = live && kind !== GoonPayloadKind.LockCard ? this._scoring.awardHeld(kind, share) : null;
       if (a) this._emitPoints(a);
     }
   }

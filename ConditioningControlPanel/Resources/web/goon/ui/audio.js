@@ -232,6 +232,9 @@ export const SFX_REGISTRY = Object.freeze({
   'subliminal':     gameCue({ files: [L('custody-log-tick-1.mp3'), L('custody-log-tick-2.mp3')], gain: 0.10, minGapMs: 300 }),
   /** The lock card is a match payload, so its chime and its buzz are GAME even
    *  though the player is typing — the keyboard is not chrome here. */
+  'lock-in': gameCue({ files: [L('freeze-sting-1.mp3')], gain: 0.38 }),
+  'lock-tick': gameCue({ files: [L('custody-log-tick-1.mp3')], gain: 0.13, minGapMs: 200 }),
+  'lock-type': gameCue({ files: [L('checkbox-tick-1.mp3')], gain: 0.12, minGapMs: 45 }),
   'lock-solved':    gameCue({ files: [D('chime1.mp3')],            gain: 0.40 }),
   'lock-slip':      gameCue({ files: [L('error-blip-1.mp3')],      gain: 0.24, minGapMs: 90 }),
 

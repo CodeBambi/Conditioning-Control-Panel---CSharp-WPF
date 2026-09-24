@@ -117,6 +117,7 @@ export class GoonScoring {
   /** Our throw came back completed/survived with this held share. Points model only. */
   awardLanded(kind, held) { return this._pointsOn ? this._award(this._points.landed(kind, held)) : null; }
   /** Their throw finished on us. Points model only. */
+  awardLockBounty(points) { return this._pointsOn ? this._award(this._points.lockBounty(points)) : null; }
   awardHeld(kind, held) { return this._pointsOn ? this._award(this._points.held(kind, held, this.ownMultiplier)) : null; }
   /** A bubble or flash pop at monotonic nowMs. Points model only. */
   awardPop(nowMs) { return this._pointsOn ? this._award(this._points.pop(nowMs, this.ownMultiplier)) : null; }

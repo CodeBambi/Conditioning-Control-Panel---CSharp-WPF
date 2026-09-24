@@ -146,6 +146,13 @@ export class PointsLedger {
     return { type: 'held', points, kind, held: share };
   }
 
+  lockBounty(points) {
+    const prize = Math.max(0, Math.min(120, Math.round(Number(points) || 0)));
+    if (!prize) return null;
+    this.ownPts += prize;
+    return { type: 'held', points: prize, kind: GoonPayloadKind.LockCard };
+  }
+
   /** A pop at monotonic `nowMs`. Combo counts every pop; only pops inside the limiter score. */
   pop(nowMs, mult = 1) {
     const now = Number(nowMs) || 0;
