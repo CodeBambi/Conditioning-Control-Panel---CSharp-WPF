@@ -579,3 +579,38 @@ test('10.16.A: the receipt carries the jar beside the melt', async () => {
   assert.equal(res.body.jar, 51, 'and the state route reports the stored count');
   assert.equal(typeof res.body.melt, 'number');
 });
+
+test('10.24 onLanded names each server outcome that played, main by tape id and index, a freeze by side', async () => {
+  let t = 0;
+  const server = createMockServer({ now: () => t, sp: 50 });
+  const landed = [];
+  const tape = createTape({
+    request: (op, body, idem) => server.handle(op, body, idem),
+    sleep: async ms => { t += ms; },
+    onLanded: l => landed.push(l),
+  });
+  await tape.open();
+  const none = ['gif1', 'spiral1', 'sub2'];
+  server.script(none, none, none, none, none, none, none, none, none, none, ['x', 'gif1', 'x'], ['x', 'x', 'x']);
+  const a = await tape.press(); tape.land(a.outcome); t += 1000;
+  const b = await tape.press(); tape.land(b.outcome); t += 1000;
+  const id = tape.cursor().tapeId;
+  assert.deepEqual(landed, [{ tapeId: id, i: 0 }, { tapeId: id, i: 1 }]);
+  tape.toggleHold(1);
+  const f = await tape.press();
+  assert.equal(f.from, 'side');
+  tape.land(f.outcome);
+  assert.deepEqual(landed.at(-1), { side: true, i: 0 });
+  assert.equal(tape.land(f.outcome), false, 'an outcome lands once');
+  assert.equal(landed.length, 3);
+});
+
+test('10.24 a throwing onLanded never stops the landing', async () => {
+  let t = 0;
+  const server = createMockServer({ now: () => t, sp: 50 });
+  const tape = createTape({ request: (op, body, idem) => server.handle(op, body, idem), sleep: async ms => { t += ms; },
+    onLanded: () => { throw new Error('listener'); } });
+  await tape.open();
+  const p = await tape.press();
+  assert.equal(tape.land(p.outcome), true);
+});

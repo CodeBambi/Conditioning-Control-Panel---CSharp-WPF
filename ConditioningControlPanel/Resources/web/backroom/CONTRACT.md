@@ -70,6 +70,7 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `fx-release` | `token, station` | Fade out what that `fx` token still holds on screen, no reply (10.13.B). |
 | `melt` | `station, left` | Current melted spins left, sent whenever it changes. |
 | `haptic` | `station, level, ms, tag?` | One flat toy pulse, or a stop at `level:0`. No reply (10.23). |
+| `landed` | `station:'slot', i, tapeId?, side?` | A server outcome just played (`tape.land`, never a demo row). The host books Circe's tab off ITS copy of that outcome's line. No reply (10.24). |
 | `arcade-open` | `game:'race'` | The player tapped the unlocked arcade cabinet (2026-09-18). The host opens that game as a guest surface IN THE ROOM'S WINDOW (its own WebView2 over the room's, `ChaosWebViewHost.Options.MountIn`), hides the room's page and sends `suspend {on:true, reason:'arcade'}`. Answered with exactly one `arcade`. Unhosted, the page never sends it. |
 
 ### 2.2 Host -> page
@@ -2441,6 +2442,27 @@ A station may ask the host to pulse the player's toy (the app's Lovense / Intifa
 - Haptics stay on under reduced motion and Motion Off: a pulse is not motion. Calm does not scale them; the user's
   haptic intensity does. First caller: the Breakout cabinet (`planPulse` in its `haptics.js` is the map from game
   event to pulse; GREY is a faint brick tick and nothing else).
+
+## 10.24 Circe's tab: "this spin was real" (2026-09-24)
+The Chaster tab (`Services/Chaster`) prices two slot moments: a `melt` line books the `melt` row and the jackpot line
+(`emi3`) wipes the tab. A free "Keep playing" row fires the same `fx.melt` / `fx.jackpot` as a paid one, so the tab
+NEVER books off an effect. It books off the server's own outcomes:
+
+```json
+{ "type": "landed", "station": "slot", "tapeId": "t_a771...", "i": 3 }
+{ "type": "landed", "station": "slot", "side": true, "i": 0 }
+```
+
+- The page sends one frame from `tape.land` (the `onLanded` callback), which only ever runs for an outcome off a
+  server tape or freeze. A demo row never reaches `tape.land`. Comp spins and free spins are server outcomes and count.
+- The frame names WHICH outcome played, nothing else: a main-tape outcome by `tapeId` and its index, the freeze in play
+  by `side: true` and its index. A `line` on the frame is ignored.
+- The host (`BackRoomTabLedger`) writes down every slot `tape` (with `outcomes`) and `freeze.outcomes` it relays,
+  refusal bodies included (`tape_unplayed` carries the stored tape), and looks the line up there. An outcome books
+  once per window; a main-tape index below the `played` the server reported when the tape was relayed (a resumed tape)
+  never books; at most 4 landings are read in any second; an unknown tape, index or station is dropped silently.
+- The page and the web shims send and ignore this frame freely: on the web nothing listens, and a frame without a host
+  costs nothing.
 
 ## Casino and racing window transfer (2026-09-17)
 The racing cabinet opens Racing Thoughts in the current window with `game-open {game:"race"}`. The host acknowledges `game-open-result` and finishes the room close handshake before transferring its browser. Race init sets `settings.returnToCasino`; normal exit returns to `/backroom/index.html?raceReturn=1`. A bounded one-use camera pose survives; no balance or reward state is restored from it. The separate Play entry retains normal exit behavior. Native callbacks are invalidated on transfer, and each run may settle rewards once. Preview uses the same camera contract with a local-ledger-only adapter and full same-origin navigation.

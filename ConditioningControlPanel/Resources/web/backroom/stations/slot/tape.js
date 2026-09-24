@@ -64,7 +64,7 @@ function adoptTape(t) {
 const unplayed = t => !!t && t.played < t.outcomes.length;
 
 export function createTape({ request, sleep = ms => new Promise(r => setTimeout(r, ms)),
-                             mint = mintId, onMelt = () => {}, chaseSession = null }) {
+                             mint = mintId, onMelt = () => {}, onLanded = () => {}, chaseSession = null }) {
   let sp = 0, table = null, strips = null, shown = null, floorMs = 800;
   let main = null, side = null, wheelChase = null;
   let chaseEnabled = !!chaseSession;
@@ -254,16 +254,20 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
     },
     /** The reels have stopped on `outcome`: its pay lands, readouts move to its after-state. */
     land(outcome) {
-      let fromMain = false;
+      let fromMain = false, landed;
       if (unplayed(side) && side.outcomes[side.played] === outcome) {
+        landed = { side: true, i: side.played };
         side.played++;
         if (!unplayed(side)) side = null;
       } else if (unplayed(main) && main.outcomes[main.played] === outcome) {
+        landed = { tapeId: main.id, i: main.played };
         main.played++;
         fromMain = true;
       } else {
         return false;
       }
+      // 10.24: a server outcome really played. The host looks its line up in the tape it relayed.
+      try { onLanded(landed); } catch (e) { /* a listener never breaks the reels */ }
       last = outcome;
       // The shown melt follows the tape cursor. A freeze and everything it expands into are sealed from
       // melt (10.2) and carry the melt left at the END of the stored tape (3.4, settled up front), so a
