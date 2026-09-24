@@ -840,7 +840,7 @@ namespace ConditioningControlPanel
 
             var routing = Services.AchievementSharePromptRule.Decide(
                 s.DiscordShareAchievements,
-                ChaosWebViewHost.AnyGameActive,
+                Services.AchievementSharePromptRule.GameOnScreen(ChaosWebViewHost.AnyGameActive),
                 App.StartupLadder?.Held == true,
                 // The general case behind the other two: the panel closes to the tray, and a link
                 // can resolve minutes after the click with no game and no launcher to blame.
