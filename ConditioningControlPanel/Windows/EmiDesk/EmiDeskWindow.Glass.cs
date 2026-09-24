@@ -203,7 +203,7 @@ public partial class EmiDeskWindow
         {
             if (Application.Current?.Dispatcher == null) return;
             if (Application.Current.Dispatcher.HasShutdownStarted) return;
-            if (_glassLive) return;
+            if (PresentationActive || _glassLive) return;
             if (!GlassMayFlip()) return;
             if ((DateTime.UtcNow - _lastActivityUtc) < EmiChannels.IdleBeforeFlip) return;
             BeginFlip();

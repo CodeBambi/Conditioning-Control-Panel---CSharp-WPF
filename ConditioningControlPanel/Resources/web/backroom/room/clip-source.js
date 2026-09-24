@@ -124,7 +124,7 @@ export async function clipSource(url, { signal, onFrame, maxEdge = MAX_EDGE } = 
   let dueAt = 0, painted = 0, first = true;
 
   const paint = () => {
-    if (closed) return false;
+    if (closed || video.readyState < 2) return false;
     try { ctx.drawImage(video, 0, 0, w, h); } catch { return false; }
     painted++;
     if (first) first = false;
@@ -155,6 +155,7 @@ export async function clipSource(url, { signal, onFrame, maxEdge = MAX_EDGE } = 
     tick(now, still) {
       if (closed) return false;
       if (still) {
+        if (!painted) paint();
         if (!video.paused) { try { video.pause(); } catch { /* noop */ } }
         return false;
       }

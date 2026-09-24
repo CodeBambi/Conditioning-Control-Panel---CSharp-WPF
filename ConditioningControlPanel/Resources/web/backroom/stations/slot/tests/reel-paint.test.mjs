@@ -53,3 +53,32 @@ test('actual painter refreshes nearby animated cells at rest, all cells while sp
   h.clear();h.paint(220);assert.deepEqual(h.counts(),{draws:0,uploads:0,patched:0});
   h.spin({});h.paint(300);assert.deepEqual(h.counts(),{draws:39,uploads:3,patched:0});
 });
+
+test('entry leaves the borrowed reel art alone until strips arrive', () => {
+  const source = readFileSync(new URL('../scene.js', import.meta.url), 'utf8');
+  const entry = source.slice(source.indexOf('  function setStrips(next)'), source.indexOf('  // Keep the final dealt picture'));
+  let swaps = 0;
+  vm.runInNewContext(entry, { setStrips: () => swaps++ });
+  assert.equal(swaps, 0);
+});
+
+test('shared slot follows delayed viewport and stretch changes without browser events', () => {
+  const source = readFileSync(new URL('../scene.js', import.meta.url), 'utf8');
+  const registration = source.slice(source.indexOf('  if (shared) releaseView = shared.register('), source.indexOf('  else raf = requestAnimationFrame(loop);'));
+  let view, resizes = 0, updates = 0;
+  const canvas = { clientWidth: 390, clientHeight: 844 };
+  const fixture = { userData: { slotStretch: 3, slotStretchX: 1 } };
+  const shared = { ready: true, fixture, register(v) { view = v; } };
+  vm.runInNewContext(registration, { shared, canvas, sharedSize: '', performance: { now: () => 0 },
+    resize: () => resizes++, update: () => updates++, look: {}, frameFailed: false, console });
+  view.update(); view.update();
+  assert.equal(resizes, 1);
+  canvas.clientWidth = 844; canvas.clientHeight = 390;
+  fixture.userData.slotStretch = 1; fixture.userData.slotStretchX = 1.6;
+  view.update();
+  assert.equal(resizes, 2);
+  fixture.userData.slotStretchX = 1.7;
+  view.update(); view.update();
+  assert.equal(resizes, 3);
+  assert.equal(updates, 5);
+});
