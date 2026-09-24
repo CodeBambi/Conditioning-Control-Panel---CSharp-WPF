@@ -394,16 +394,17 @@ namespace ConditioningControlPanel.Features
 
         // ============================== input ==============================
 
-        private void OnLeftClick(object sender, MouseButtonEventArgs e)
-        {
-            var evt = ResolveHalfA(e.GetPosition(ContentRoot)) ? ClickAEvent : ClickBEvent;
-            RaiseEvent(new RoutedEventArgs(evt, this));
-        }
+        private void OnLeftClick(object sender, MouseButtonEventArgs e) => RouteClick(e, right: false);
 
-        private void OnRightClick(object sender, MouseButtonEventArgs e)
+        private void OnRightClick(object sender, MouseButtonEventArgs e) => RouteClick(e, right: true);
+
+        private void RouteClick(MouseButtonEventArgs e, bool right)
         {
-            e.Handled = true;
-            var evt = ResolveHalfA(e.GetPosition(ContentRoot)) ? ToggleAEvent : ToggleBEvent;
+            bool invert = DashboardDepth && App.Settings?.Current?.DashboardInvertClicks == true;
+            bool toggle = right != invert;
+            bool halfA = ResolveHalfA(e.GetPosition(ContentRoot));
+            if (right || toggle) e.Handled = true;
+            var evt = toggle ? (halfA ? ToggleAEvent : ToggleBEvent) : (halfA ? ClickAEvent : ClickBEvent);
             RaiseEvent(new RoutedEventArgs(evt, this));
         }
 

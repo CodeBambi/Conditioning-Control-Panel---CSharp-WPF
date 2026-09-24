@@ -14,6 +14,15 @@ namespace ConditioningControlPanel.Views.Tabs
         public SettingsTabView()
         {
             InitializeComponent();
+            _clickChoiceClose.Tick += (_, _) =>
+            {
+                _clickChoiceClose.Stop();
+                if (!_clickChoicePinned && !ClickChoiceAnchor.IsMouseOver && !ClickChoiceBody.IsMouseOver && !ClickChoiceBody.IsKeyboardFocusWithin)
+                    ClickChoicePopup.IsOpen = false;
+            };
+            Loaded += (_, _) => RefreshClickPreference();
+            Unloaded += (_, _) => { _clickChoiceClose.Stop(); ClickChoicePopup.IsOpen = false; };
+            IsVisibleChanged += (_, _) => { if (!IsVisible) { _clickChoiceClose.Stop(); ClickChoicePopup.IsOpen = false; } };
             // The Dashboard is the one tab the app LANDS on - it ships Visible in MainWindow.xaml
             // and nothing calls ShowTab("settings") at startup - so its one-shot ? box explainer
             // has no navigation to ride. Wired in code rather than XAML because the seam is
@@ -34,6 +43,77 @@ namespace ConditioningControlPanel.Views.Tabs
             // app's life, but the hook is balanced on Loaded/Unloaded all the same.
             Loaded += (_, _) => { Services.Prizes.PrizeGrants.GrantsChanged += RefreshV2Badges; RefreshV2Badges(); };
             Unloaded += (_, _) => Services.Prizes.PrizeGrants.GrantsChanged -= RefreshV2Badges;
+        }
+
+        private readonly System.Windows.Threading.DispatcherTimer _clickChoiceClose = new()
+        {
+            Interval = TimeSpan.FromMilliseconds(450),
+        };
+        private bool _refreshingClickChoice;
+        private bool _clickChoicePinned;
+
+        internal void RefreshClickPreference()
+        {
+            _refreshingClickChoice = true;
+            bool invert = App.Settings?.Current?.DashboardInvertClicks == true;
+            InvertDashboardClicks.IsChecked = invert;
+            ClickChoiceDescription.Text = Localization.Loc.Get(invert ? "dash_click_swapped" : "dash_click_default");
+            DashToggleHint.Text = Localization.Loc.Get(invert ? "dash_click_swapped" : "dash_toggle_hint");
+            _refreshingClickChoice = false;
+        }
+
+        private void HoverClickChoice(object sender, MouseEventArgs e)
+        {
+            _clickChoiceClose.Stop();
+            if (ClickChoicePopup.IsOpen) return;
+            RefreshClickPreference();
+            // Hover must not capture the mouse: capture makes the anchor lose IsMouseOver.
+            ClickChoicePopup.StaysOpen = true;
+            ClickChoicePopup.IsOpen = true;
+        }
+
+        private void OpenClickChoice(object sender, RoutedEventArgs e)
+        {
+            _clickChoiceClose.Stop();
+            RefreshClickPreference();
+            _clickChoicePinned = true;
+            ClickChoicePopup.StaysOpen = false;
+            ClickChoicePopup.IsOpen = true;
+            InvertDashboardClicks.Focus();
+        }
+
+        private void ClickChoiceClosed(object sender, EventArgs e)
+        {
+            _clickChoiceClose.Stop();
+            _clickChoicePinned = false;
+            ClickChoicePopup.StaysOpen = true;
+        }
+
+        private void KeepClickChoiceOpen(object sender, MouseEventArgs e) => _clickChoiceClose.Stop();
+
+        private void ScheduleClickChoiceClose(object sender, MouseEventArgs e)
+        {
+            _clickChoiceClose.Stop();
+            if (!_clickChoicePinned) _clickChoiceClose.Start();
+        }
+
+        private void ClickChoiceKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape) return;
+            ClickChoicePopup.IsOpen = false;
+            e.Handled = true;
+            ClickChoiceAnchor.Focus();
+        }
+
+        private void ClickChoiceChanged(object sender, RoutedEventArgs e)
+        {
+            if (_refreshingClickChoice || App.Settings?.Current is not { } settings) return;
+            _clickChoicePinned = true;
+            _clickChoiceClose.Stop();
+            ClickChoicePopup.StaysOpen = false;
+            settings.DashboardInvertClicks = InvertDashboardClicks.IsChecked == true;
+            App.Settings.Save();
+            RefreshClickPreference();
         }
 
         private void FeatureSection_SizeChanged(object sender, SizeChangedEventArgs e)

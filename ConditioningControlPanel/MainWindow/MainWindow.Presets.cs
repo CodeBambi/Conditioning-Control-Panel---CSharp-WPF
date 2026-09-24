@@ -1311,6 +1311,7 @@ namespace ConditioningControlPanel
         {
             var dash = SettingsTab;
             if (dash == null) return;
+            dash.RefreshClickPreference();
             var show = Services.DashboardToggleHintRule.ShouldShow(App.Settings?.Current?.DashboardToggleHintUses ?? 0);
             var v = show ? Visibility.Visible : Visibility.Collapsed;
             if (dash.DashToggleHint != null) dash.DashToggleHint.Visibility = v;
