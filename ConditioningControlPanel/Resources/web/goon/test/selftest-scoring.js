@@ -183,7 +183,7 @@ function simMatch(seed) {
   m._handleReceipt(rc);
   ok(awards.length === 1, 'a duplicate receipt scores once');
 
-  const inbound = makePayload({ id: 'x1', kind: GoonPayloadKind.LockCard, duration_ms: 8000, fire_at_match_ms: 0 });
+  const inbound = makePayload({ id: 'x1', kind: GoonPayloadKind.Video, duration_ms: 8000, fire_at_match_ms: 0 });
   m._handleInboundPayload(inbound);
   m.sent.length = 0;
   m.notifyInboundPayloadFinished('x1', false, 0.4);
@@ -204,7 +204,7 @@ function simMatch(seed) {
 
   m._handleTick(parse(serialize(makeTick({ score: 77, sc: { s: 50, o: 20, d: 7, p: 9, b: 4, c: 0 } }))));
   const st = m.matchStats();
-  ok(st.pointsModel && st.me.sent.landed === 1 && st.me.received.byKind[GoonPayloadKind.LockCard] === 1 && st.me.pops === 1, 'matchStats: me', JSON.stringify(st.me));
+  ok(st.pointsModel && st.me.sent.landed === 1 && st.me.received.byKind[GoonPayloadKind.Video] === 1 && st.me.pops === 1, 'matchStats: me', JSON.stringify(st.me));
   ok(st.them.score === 77 && st.them.pops === 9 && st.them.bestCombo === 4 && st.them.split.sent === 50, 'matchStats: them off their tick', JSON.stringify(st.them));
 
   const d = m.noteDuel('win');
@@ -212,6 +212,16 @@ function simMatch(seed) {
 
   m._phase = GoonMatchPhase.Recap;
   ok(m.notePop(5000) === null, 'no pop scores outside Live');
+
+  m._phase = GoonMatchPhase.Live;
+  const beforeLock = m.scoring.scoreExact;
+  m._inboundKinds.set('lock-timeout', GoonPayloadKind.LockCard);
+  m.notifyInboundPayloadFinished('lock-timeout', false, 1);
+  ok(m.scoring.scoreExact === beforeLock, 'waiting out a lock pays no own points');
+  const prize = m.noteLockBounty(72);
+  ok(prize?.points === 72 && m.scoring.scoreExact === beforeLock + 72, 'solved bounty enters the score');
+  m._phase = GoonMatchPhase.Recap;
+  ok(m.noteLockBounty(72) === null, 'no bounty can arrive after the match');
 
   // a legacy match never puts held / sc on the wire
   const lg = mk(localCaps({ score: SCORE_CAP_VERSION }));

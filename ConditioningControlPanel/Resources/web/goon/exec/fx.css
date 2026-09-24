@@ -1100,3 +1100,34 @@ html[data-gg-perf="lite"] .gg-drain.is-glitching { animation-name: ggDrainGlitch
   100% { transform: translate(1.2%, 0) scale(1.03); }
 }
 html[data-gg-perf="lite"] .gg-bounce-word.is-hit { animation: none; }
+
+/* The timed lock is above all effects, below Mercy. Other stage content stays covered. */
+html[data-gg-lock-active] #gg-stage { z-index: 58; pointer-events: auto; background: rgba(9, 3, 18, .28); }
+html[data-gg-lock-active] #gg-stage > :not(.gg-lock) { visibility: hidden; pointer-events: none; }
+html[data-gg-lock-active] #gg-fx, html[data-gg-lock-active] #gg-fx * { pointer-events: none !important; }
+.gg-lock--bounty { animation: ggLockArrival 480ms cubic-bezier(.2,1.3,.4,1); box-shadow: 0 0 60px #ffc85c55; }
+.gg-lock-prize { position: relative; margin: .5rem auto 1rem; text-align: center; color: #ffdc82; }
+.gg-lock-prize strong { display: block; font-size: clamp(2.4rem, 5vw, 4rem); line-height: 1.3; font-variant-numeric: tabular-nums; text-shadow: 0 0 20px #ffbf5580; }
+.gg-lock-prize small { display: block; position: relative; background: #241329; padding: .25rem; }
+.gg-lock-chain { position: absolute; left: 7%; right: 7%; top: 42%; height: 9px; border: 1px solid #bd985c; background: repeating-linear-gradient(90deg, #725838 0 5px, #eed6a0 5px 10px, #4d3927 10px 14px); transform: rotate(-12deg); animation: ggChainLatch 480ms ease-out; }
+.gg-lock-chain--1 { transform: rotate(12deg); animation-delay: 80ms; }
+.gg-lock-clock { margin-right: auto; color: #ffe7a2; font-weight: 800; font-variant-numeric: tabular-nums; }
+.gg-lock--bounty.is-urgent { animation: ggLockBeat var(--gg-lock-beat, 600ms) ease-in-out infinite; }
+.gg-lock.is-urgent .gg-lock-clock { color: #ff4f67; animation: ggClockBeat var(--gg-lock-beat, 600ms) ease-in-out infinite; }
+.gg-lock.is-wrong .gg-lock-prize strong, .gg-lock-ch.is-error { color: #ff3c58; }
+.gg-lock--bounty.is-wrong { animation: ggBountyShake 240ms ease-out; }
+.gg-lock.is-solved .gg-lock-chain { opacity: 0; transform: translateY(18px) rotate(25deg); transition: transform 260ms, opacity 260ms; }
+.gg-lock.is-solved .gg-lock-prize strong { color: #a5ffc4; }
+@keyframes ggLockArrival { from { opacity: 0; transform: scale(.82) translateY(-35px); } to { opacity: 1; transform: none; } }
+@keyframes ggChainLatch { from { opacity: 0; scale: 1.5; } to { opacity: 1; scale: 1; } }
+@keyframes ggLockBeat { 50% { scale: 1.008; box-shadow: 0 0 40px #ff315050; } }
+@keyframes ggClockBeat { 50% { scale: 1.12; } }
+@keyframes ggBountyShake { 25% { translate: -4px; } 75% { translate: 4px; } }
+@media (prefers-reduced-motion: reduce) { .gg-lock--bounty, .gg-lock-chain, .gg-lock-clock { animation: none !important; } }
+html[data-gg-motion="reduced"] .gg-lock--bounty, html[data-gg-motion="reduced"] .gg-lock-chain,
+html[data-gg-motion="reduced"] .gg-lock-clock { animation: none !important; }
+
+.gg-lock-win-spark { position: absolute; top: 45%; left: 50%; width: 5px; height: 5px; background: #ffe8a0; border-radius: 50%; pointer-events: none; animation: ggLockWin 340ms ease-out forwards; }
+@keyframes ggLockWin { from { transform: rotate(var(--a)) translateX(20px); opacity: 1; } to { transform: rotate(var(--a)) translateX(95px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .gg-lock-win-spark { display: none; } }
+html[data-gg-motion="reduced"] .gg-lock-win-spark { display: none; }

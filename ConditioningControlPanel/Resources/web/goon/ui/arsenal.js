@@ -636,12 +636,13 @@ export function mountArsenal({
     for (const rec of tiles.values()) {
       if (!rec.needsArm) continue;
       if (rec.item.duel) {
-        if (duel && duel.eligible(rec.armed)) out.push({ id: rec.item.id, kind: null, cost: rec.cost, armed: rec.armed });
+        if (duel && duel.eligible(rec.armed)) out.push({ id: rec.item.id, kind: null, cost: rec.item.id === 'lockcard' ? 8 : rec.cost, armed: rec.armed });
         continue;
       }
       if (isSpent(rec)) continue;
       if (!peerCanTake(rec.item.kind)) continue;
-      out.push({ id: rec.item.id, kind: rec.item.kind, cost: rec.cost, armed: rec.armed });
+      if (rec.item.id === 'lockcard' && rec.armed > 0) continue;
+      out.push({ id: rec.item.id, kind: rec.item.kind, cost: rec.item.id === 'lockcard' ? 8 : rec.cost, armed: rec.armed });
     }
     return out;
   }

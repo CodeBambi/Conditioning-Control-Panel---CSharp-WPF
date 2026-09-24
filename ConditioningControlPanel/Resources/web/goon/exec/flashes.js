@@ -307,7 +307,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
         if (impact.hits) {
           rec.bubbleGrowth = Math.min(1.12, (rec.bubbleGrowth || 1) + impact.hits * 0.008);
           rec.node.style.scale = String(rec.bubbleGrowth);
-          const quiet = calm || document.documentElement?.getAttribute('data-gg-motion') === 'off'
+          const quiet = calm || ['off', 'reduced'].includes(document.documentElement?.getAttribute('data-gg-motion'))
             || document.querySelector?.('.gg-hud-frame.is-calm');
           rec.bubblePulse?.cancel();
           if (!quiet && typeof rec.node.animate === 'function') {
@@ -552,6 +552,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
   }
 
   function onPointerMove(e) {
+    if (document.documentElement?.getAttribute('data-gg-lock-active')) { endDrag('cancel'); return; }
     const d = drag;
     if (!d || !idMatch(d, e)) return;
     // A stale release notice is dispatched BEFORE the next pointer event, so if
