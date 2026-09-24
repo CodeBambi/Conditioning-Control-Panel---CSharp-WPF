@@ -15,9 +15,9 @@
  *
  * Wire (v1):
  *   Host -> Page : init · manifest · fullscreen · ping · end-run ·
- *                  haptics-state · net-post-result
+ *                  haptics-state · net-post-result · share-card-result
  *   Page -> Host : ready · log · boot-error · heartbeat · pong · exit ·
- *                  exit-done · fullscreen-set · net-post
+ *                  exit-done · fullscreen-set · net-post · share-card
  *
  * HARD RULES (both learned the expensive way in intake/dtrh):
  *   1. NOTHING may throw at module import — WebView2 has no devtools, so a
