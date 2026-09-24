@@ -4911,9 +4911,34 @@ namespace ConditioningControlPanel.Services
         /// no-op. Nothing is lost in any ordering, because both choices are pure functions of a
         /// lifetime XP total that never moves.</para>
         /// </summary>
+        /// <summary>A server-recorded Cycle choice owes Cycle I and the lasting XP bonus. Only ever
+        /// raises (a Restore echo or a missing choice changes nothing). True when it wrote.</summary>
+        internal static bool EnsureCycleBonus(AppSettings settings, string? serverChoice)
+        {
+            if (serverChoice != DescentMigrationChoices.Cycle) return false;
+            var changed = false;
+            if (settings.DescentCycle < 1) { settings.DescentCycle = 1; changed = true; }
+            if (settings.DescentCycleXpBonus < DescentMigration.CycleXpBonus)
+            {
+                settings.DescentCycleXpBonus = DescentMigration.CycleXpBonus;
+                changed = true;
+            }
+            if (changed)
+                App.Logger?.Information("[Descent] Restored the Cycle bonus from the server's record of the choice.");
+            return changed;
+        }
+
         private static void HandleDescentMigrationAck(AppSettings settings, V2DescentMigration? block)
         {
             if (block?.Completed != true) return;
+
+            // THE CYCLE BONUS FOLLOWS THE ACCOUNT, NOT THE PC. ApplyChoice writes it on the machine
+            // that took the ceremony, and nothing else ever did: a second PC, a reinstall, or a
+            // settings file replaced by another account (support ticket, 2026-09-24) kept the
+            // choice on the server and lost the permanent +10% XP. The ack rides every sync, so
+            // it heals here, before the "already settled" return.
+            if (EnsureCycleBonus(settings, block.Choice)) App.Settings?.Save();
+
             if (settings.DescentMigrationCompleted) return;   // already settled; idempotent
 
             // Prefer the server's echo of the choice; fall back to what we submitted. They can

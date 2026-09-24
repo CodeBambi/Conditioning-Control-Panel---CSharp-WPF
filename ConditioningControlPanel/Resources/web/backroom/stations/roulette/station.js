@@ -72,6 +72,7 @@ import { FLICK, flickStart, flickMove, flickRelease } from './flick.js';
 import { createBowl } from './bowl.js';
 import { createMat } from './mat.js';
 import { createBank } from './bank.js';
+import { rotateWanted } from './rotate.js';
 
 export const roomStage = true;
 
@@ -171,11 +172,11 @@ export async function mount(ctx) {
   const armed = () => !!(alive && !suspended && st && phase === 'bet' && stage?.ready !== false && (resume || check().ok));
 
   const coarse = () => (typeof matchMedia === 'function' && matchMedia('(any-pointer: coarse)').matches) || (navigator.maxTouchPoints || 0) > 0;
-  /** The nudge shows on a touch screen held SIDEWAYS while bets are open, and never again once it is tapped. */
+  /** The nudge shows on a PHONE held SIDEWAYS while bets are open (rotate.js), and never again once it is tapped. */
   function paintRotate() {
     const n = el && $('.roul-rotate');
     if (!n) return;
-    n.hidden = rotateSeen || !coarse() || !(innerWidth > innerHeight) || phase !== 'bet';
+    n.hidden = rotateSeen || !rotateWanted({ touch: coarse(), w: innerWidth, h: innerHeight }) || phase !== 'bet';
   }
 
   function sync() {
