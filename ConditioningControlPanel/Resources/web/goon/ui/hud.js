@@ -57,6 +57,7 @@ import { avatarNode, emitAva } from './avatar.js';
 import { setPreviewMedia } from './throwPreview.js';
 import { resolveArsenalOpen, ARSENAL_OPEN_ON, ARSENAL_OPEN_OFF } from './prefs.js';
 import { S } from './strings.js';
+import { mountScoreHud } from './scoreHud.js';
 import { ease, countUpMs } from './juice.js';
 import { popIn as jPopIn, burst as jBurst, centreOf as jCentre, play as jPlay, isCalm as jCalm } from './juiceDom.js';
 
@@ -394,6 +395,10 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   // ---------------------------------------------------------------- top bar
   const top = add(root, el('div', 'gg-hud-top'));
+  // The points model's face-off, tug bar, floats, combo and heat (ui/scoreHud.js). A legacy
+  // match never switches it on.
+  const scoreHud = mountScoreHud({ match, host: root });
+  led.add(() => scoreHud.unmount());
 
   const scoreBox = add(top, el('div', 'gg-scorebox'));
   const scoreEl = add(scoreBox, el('div', 'gg-score', '0'));
