@@ -160,6 +160,15 @@ export async function mount(ctx) {
     else if (ctx.bridge && typeof ctx.bridge.send === 'function') ctx.bridge.send(frame);
   }
 
+  /** CONTRACT 10.24: a SERVER outcome just landed (tape.land, never a demo row). Names only which one; the
+   *  host reads its line off the tape it relayed, so Circe's tab books a real melt or jackpot and nothing else. */
+  function sendLanded(l) {
+    if (!l || !ctx.bridge || typeof ctx.bridge.send !== 'function') return;
+    const frame = { type: 'landed', station: STATION, i: l.i };
+    if (l.side) frame.side = true; else frame.tapeId = l.tapeId;
+    ctx.bridge.send(frame);
+  }
+
   function build() {
     const root = document.createElement('div');
     root.className = 'slot-station'; root.dataset.phase = 'loading';
@@ -855,7 +864,7 @@ export async function mount(ctx) {
     el = build();
     ctx.root.append(el);
     addEventListener('keydown', onKey); addEventListener('resize', onResize);
-    tape = createTape({ request: (op, body, idem) => ctx.request(op, body, idem), onMelt: sendMelt, chaseSession: chaseSession ||= mintId() });
+    tape = createTape({ request: (op, body, idem) => ctx.request(op, body, idem), onMelt: sendMelt, onLanded: sendLanded, chaseSession: chaseSession ||= mintId() });
     visualDealSpins = 0; rotateSpiralDeal();
     media = createMedia($('.slot-media'), ctx.lex, (level, msg) => ctx.log?.(level, msg));
     sound = createSound();
