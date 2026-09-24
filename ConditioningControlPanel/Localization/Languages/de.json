@@ -6,7 +6,7 @@
   "companion_v2_cancel": "Abbrechen",
   "companion_v2_error_signin": "Melde dich an, um fortzufahren. Deine Nachricht ist noch da.",
   "companion_v2_error_limit": "Das tägliche Chat-Limit ist erreicht. Deine Nachricht ist noch da.",
-  "companion_v2_error_budget": "Der Cloud-Chat macht eine Pause. Deine Nachricht ist noch da.",
+  "companion_v2_error_budget": "Der Cloud-Chat hat sein Wochenlimit erreicht. Deine Nachricht ist noch da.",
   "companion_v2_error_offline": "Das Modell ist nicht erreichbar. Prüfe die Verbindung und versuche es erneut.",
   "companion_v2_error_invalid": "Die Antwort war unvollständig oder unlesbar. Versuche es erneut.",
   "companion_v2_memory_empty": "Noch keine Fakten gespeichert. Gespeicherte Vorlieben erscheinen hier.",

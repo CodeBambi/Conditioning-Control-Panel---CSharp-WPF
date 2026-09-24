@@ -71,6 +71,24 @@ public class ConversationRecallTests
         Assert.DoesNotContain("Companion replied:", prompt);
     }
 
+    [Theory]
+    [InlineData("We were talking about \"The Long Goodbye\".")]
+    [InlineData("Try reading \"The Left Hand of Darkness\".")]
+    [InlineData("Your cat is called \"Captain Marmalade\".")]
+    public void Preview_HistoryPreservesQuotedNamesInsteadOfReplacingThemWithMedia(string reply)
+    {
+        var session = new ChatSession();
+        session.Append(TurnKind.UserChat, "Continue our conversation.");
+        session.Append(TurnKind.AssistantChat, reply);
+        session.Append(TurnKind.UserChat, "Tell me more.");
+        var assembler = new PromptAssembler(new InertMemoryStore(), new RecentRecommendations(),
+            systemPromptProvider: () => "Current character", preview: () => true,
+            linkPool: () => new[] { ("Training Tape", "https://example.test/tape") }, lockdownContext: () => null);
+        var request = assembler.BuildRequest(AiPurpose.Chat, session, "Tell me more.");
+        Assert.Contains(request.Messages, m => m.Role == ChatMessage.RoleAssistant && m.Content == reply);
+        Assert.DoesNotContain(request.Messages, m => m.Content.Contains("Training Tape"));
+    }
+
     [Fact]
     public void FailedUnpairedTurn_IsNeverRecalled()
     {

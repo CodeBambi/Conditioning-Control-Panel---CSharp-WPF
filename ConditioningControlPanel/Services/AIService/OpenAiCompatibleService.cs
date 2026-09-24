@@ -410,7 +410,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// </summary>
         private async Task<string?> SendChatCoreAsync(List<MessageDto> messages, string? newestUserInput,
             bool returnRefusalSentinel, string purpose, CancellationToken cancellationToken = default,
-            AiCallOptions? options = null)
+            AiCallOptions? options = null, Action<IReadOnlyList<AiCommandData>>? proposedCommands = null)
         {
             if (App.Settings?.Current?.OfflineMode == true)
             {
@@ -535,7 +535,7 @@ namespace ConditioningControlPanel.Services.AIService
                     var content = CleanTokenizerArtifacts(contentElement.GetString());
                     cancellationToken.ThrowIfCancellationRequested();
                     var processed = ProcessResponse(content, returnRefusalSentinel, out var outputBlocked,
-                        preview: options?.CompanionV2 == true);
+                        preview: options?.CompanionV2 == true, proposedCommands: proposedCommands);
                     Meter(outputBlocked ? AiMeter.OutcomeRefusedOutput
                             : string.IsNullOrWhiteSpace(processed) ? AiMeter.OutcomeEmpty : AiMeter.OutcomeOk,
                         content?.Length ?? 0);
@@ -623,7 +623,8 @@ namespace ConditioningControlPanel.Services.AIService
             return false;
         }
 
-        private string? ProcessResponse(string? content, bool returnRefusalSentinel, out bool outputBlocked, bool preview = false)
+        private string? ProcessResponse(string? content, bool returnRefusalSentinel, out bool outputBlocked, bool preview = false,
+            Action<IReadOnlyList<AiCommandData>>? proposedCommands = null)
         {
             outputBlocked = false;
 
@@ -658,7 +659,8 @@ namespace ConditioningControlPanel.Services.AIService
 
             if (preview && string.IsNullOrWhiteSpace(CompanionProxyContract.CleanReply(parsed.CleanText, "stop")))
                 return null;
-            if (commands.Count > 0)
+            if (preview) proposedCommands?.Invoke(commands.ToArray());
+            else if (commands.Count > 0)
             {
                 App.Logger?.Information("OpenAiCompatibleService: parsed {Count} command(s) from response", commands.Count);
                 if (App.Commands != null)
@@ -754,9 +756,11 @@ namespace ConditioningControlPanel.Services.AIService
 
             var newestUser = NewestUserText(list);
 
+            IReadOnlyList<AiCommandData>? proposedCommands = null;
             var reply = await SendChatCoreAsync(dtos, newestUser,
                 returnRefusalSentinel: options.Interactive, purpose: options.MeterPurpose,
-                cancellationToken: cancellationToken, options: options).ConfigureAwait(false);
+                cancellationToken: cancellationToken, options: options,
+                proposedCommands: commands => proposedCommands = commands).ConfigureAwait(false);
 
             var refusalSource = ModerationRefusal.GetSource(reply);
             if (refusalSource.HasValue)
@@ -772,7 +776,8 @@ namespace ConditioningControlPanel.Services.AIService
 
             if (options.CompanionV2 && string.IsNullOrWhiteSpace(CompanionProxyContract.CleanReply(reply, "stop")))
                 return AiReplyResult.Failed(AiFailureKind.InvalidResponse, true);
-            return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null);
+            return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null,
+                ProposedCommands: options.CompanionV2 ? proposedCommands : null);
         }
 
         /// <summary>

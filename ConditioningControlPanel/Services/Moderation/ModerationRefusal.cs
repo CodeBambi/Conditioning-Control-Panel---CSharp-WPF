@@ -35,7 +35,8 @@ namespace ConditioningControlPanel.Services.Moderation
     /// replies. Cloud fallbacks, login-required hints, and refusals get no badge.
     /// </summary>
     public sealed record AiReplyResult(string Text, bool IsAiGenerated, ModerationRefusalInfo? Refusal,
-        AiFailureKind? Failure = null, bool Retryable = false, string? FinishReason = null, string? RequestId = null)
+        AiFailureKind? Failure = null, bool Retryable = false, string? FinishReason = null, string? RequestId = null,
+        System.Collections.Generic.IReadOnlyList<Models.AiCommandData>? ProposedCommands = null)
     {
         public static AiReplyResult Failed(AiFailureKind failure, bool retryable = false) =>
             new(string.Empty, false, null, failure, retryable);

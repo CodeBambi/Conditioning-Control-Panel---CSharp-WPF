@@ -550,7 +550,7 @@ namespace ConditioningControlPanel.Services.AIService
                 if (options.CompanionV2 && string.IsNullOrWhiteSpace(CompanionProxyContract.CleanReply(parsed.CleanText, "stop")))
                     return Fail(AiFailureKind.InvalidResponse);
                 cancellationToken.ThrowIfCancellationRequested();
-                _currentCommands = parsed.Commands;
+                _currentCommands = options.CompanionV2 ? new List<AiCommandData>() : parsed.Commands;
                 if (_currentCommands.Count > 0 && App.Commands != null)
                 {
                     App.Logger?.Information("LocalAiService.SendAsync: parsed {Count} command(s) from response",
@@ -566,7 +566,8 @@ namespace ConditioningControlPanel.Services.AIService
                 }
 
                 Meter(AiMeter.OutcomeOk, content.Length);
-                return new AiReplyResult(parsed.CleanText, IsAiGenerated: true, Refusal: null);
+                return new AiReplyResult(parsed.CleanText, IsAiGenerated: true, Refusal: null,
+                    ProposedCommands: options.CompanionV2 ? parsed.Commands.ToArray() : null);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
