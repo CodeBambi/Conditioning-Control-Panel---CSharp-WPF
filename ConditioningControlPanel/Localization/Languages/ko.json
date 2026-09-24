@@ -6084,5 +6084,16 @@
   "friends_settings": "설정",
   "friends_my_code": "내 코드",
   "friends_copy": "내 코드 복사",
-  "friends_copied": "복사됨"
+  "friends_copied": "복사됨",
+  "companion_studio_title": "성격 스튜디오",
+  "companion_studio_intro": "나만의 말투로 복사본을 만드세요. 원본은 그대로 유지됩니다. 예문은 생성된 답변이 아닙니다.",
+  "companion_studio_name": "이름",
+  "companion_studio_voice": "말투와 성격",
+  "companion_studio_style": "답변 스타일",
+  "companion_studio_samples": "예문 두 줄",
+  "companion_studio_advanced": "세부 정보",
+  "companion_studio_background": "배경",
+  "companion_studio_boundaries": "주제 제한",
+  "companion_studio_cancel": "취소",
+  "companion_studio_save": "복사본 저장 후 사용"
 }

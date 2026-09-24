@@ -6839,5 +6839,16 @@
   "friends_settings": "Settings",
   "friends_my_code": "YOUR CODE",
   "friends_copy": "Copy your code",
-  "friends_copied": "copied"
+  "friends_copied": "copied",
+  "companion_studio_title": "Personality studio",
+  "companion_studio_intro": "Make a copy in your own voice. The original stays available. Samples are examples, not generated replies.",
+  "companion_studio_name": "Name",
+  "companion_studio_voice": "Voice and personality",
+  "companion_studio_style": "Reply style",
+  "companion_studio_samples": "Two sample lines",
+  "companion_studio_advanced": "More detail",
+  "companion_studio_background": "Background",
+  "companion_studio_boundaries": "Topic boundaries",
+  "companion_studio_cancel": "Cancel",
+  "companion_studio_save": "Save copy and use"
 }

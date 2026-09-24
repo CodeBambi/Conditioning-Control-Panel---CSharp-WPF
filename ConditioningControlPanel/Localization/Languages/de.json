@@ -6084,5 +6084,16 @@
   "friends_settings": "Einstellungen",
   "friends_my_code": "DEIN CODE",
   "friends_copy": "Code kopieren",
-  "friends_copied": "kopiert"
+  "friends_copied": "kopiert",
+  "companion_studio_title": "Persönlichkeitsstudio",
+  "companion_studio_intro": "Erstelle eine Kopie mit deiner Stimme. Das Original bleibt verfügbar. Beispiele sind keine generierten Antworten.",
+  "companion_studio_name": "Name",
+  "companion_studio_voice": "Stimme und Persönlichkeit",
+  "companion_studio_style": "Antwortstil",
+  "companion_studio_samples": "Zwei Beispielzeilen",
+  "companion_studio_advanced": "Mehr Details",
+  "companion_studio_background": "Hintergrund",
+  "companion_studio_boundaries": "Thematische Grenzen",
+  "companion_studio_cancel": "Abbrechen",
+  "companion_studio_save": "Kopie speichern und nutzen"
 }
