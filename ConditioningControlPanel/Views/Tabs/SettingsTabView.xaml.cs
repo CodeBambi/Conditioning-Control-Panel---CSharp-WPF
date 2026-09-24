@@ -14,6 +14,15 @@ namespace ConditioningControlPanel.Views.Tabs
         public SettingsTabView()
         {
             InitializeComponent();
+            _clickChoiceClose.Tick += (_, _) =>
+            {
+                _clickChoiceClose.Stop();
+                if (!ClickChoiceAnchor.IsMouseOver && !ClickChoiceBody.IsMouseOver && !ClickChoiceBody.IsKeyboardFocusWithin)
+                    ClickChoicePopup.IsOpen = false;
+            };
+            Loaded += (_, _) => RefreshClickPreference();
+            Unloaded += (_, _) => { _clickChoiceClose.Stop(); ClickChoicePopup.IsOpen = false; };
+            IsVisibleChanged += (_, _) => { if (!IsVisible) { _clickChoiceClose.Stop(); ClickChoicePopup.IsOpen = false; } };
             // The Dashboard is the one tab the app LANDS on - it ships Visible in MainWindow.xaml
             // and nothing calls ShowTab("settings") at startup - so its one-shot ? box explainer
             // has no navigation to ride. Wired in code rather than XAML because the seam is
@@ -34,6 +43,53 @@ namespace ConditioningControlPanel.Views.Tabs
             // app's life, but the hook is balanced on Loaded/Unloaded all the same.
             Loaded += (_, _) => { Services.Prizes.PrizeGrants.GrantsChanged += RefreshV2Badges; RefreshV2Badges(); };
             Unloaded += (_, _) => Services.Prizes.PrizeGrants.GrantsChanged -= RefreshV2Badges;
+        }
+
+        private readonly System.Windows.Threading.DispatcherTimer _clickChoiceClose = new()
+        {
+            Interval = TimeSpan.FromMilliseconds(250),
+        };
+        private bool _refreshingClickChoice;
+
+        internal void RefreshClickPreference()
+        {
+            _refreshingClickChoice = true;
+            bool invert = App.Settings?.Current?.DashboardInvertClicks == true;
+            InvertDashboardClicks.IsChecked = invert;
+            ClickChoiceDescription.Text = Localization.Loc.Get(invert ? "dash_click_swapped" : "dash_click_default");
+            DashToggleHint.Text = Localization.Loc.Get(invert ? "dash_click_swapped" : "dash_toggle_hint");
+            _refreshingClickChoice = false;
+        }
+
+        private void OpenClickChoice(object sender, RoutedEventArgs e)
+        {
+            _clickChoiceClose.Stop();
+            RefreshClickPreference();
+            ClickChoicePopup.IsOpen = true;
+        }
+
+        private void KeepClickChoiceOpen(object sender, MouseEventArgs e) => _clickChoiceClose.Stop();
+
+        private void ScheduleClickChoiceClose(object sender, MouseEventArgs e)
+        {
+            _clickChoiceClose.Stop();
+            _clickChoiceClose.Start();
+        }
+
+        private void ClickChoiceKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape) return;
+            ClickChoicePopup.IsOpen = false;
+            e.Handled = true;
+            ClickChoiceAnchor.Focus();
+        }
+
+        private void ClickChoiceChanged(object sender, RoutedEventArgs e)
+        {
+            if (_refreshingClickChoice || App.Settings?.Current is not { } settings) return;
+            settings.DashboardInvertClicks = InvertDashboardClicks.IsChecked == true;
+            App.Settings.Save();
+            RefreshClickPreference();
         }
 
         private void FeatureSection_SizeChanged(object sender, SizeChangedEventArgs e)

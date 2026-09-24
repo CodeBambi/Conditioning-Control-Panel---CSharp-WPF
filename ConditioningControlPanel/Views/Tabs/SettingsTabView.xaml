@@ -348,7 +348,35 @@
                      stack's are 4. -->
                 <Border Grid.Row="1" Margin="8,0,8,0" Padding="0,5,0,7"
                         BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="0,1,0,0">
-                    <TextBlock Text="{loc:Str rail_gesture_hint}" Style="{StaticResource RailGestureHint}"/>
+                    <Grid>
+                        <Button x:Name="ClickChoiceAnchor"
+                                FontSize="11" FontWeight="SemiBold" Padding="2,8" Cursor="Hand"
+                                Background="Transparent" Foreground="{DynamicResource TextLightBrush}"
+                                BorderThickness="0" Click="OpenClickChoice" MouseEnter="OpenClickChoice"
+                                MouseLeave="ScheduleClickChoiceClose">
+                            <TextBlock Text="{loc:Str dash_click_choice}" TextWrapping="Wrap" TextAlignment="Center"/>
+                        </Button>
+                        <Popup x:Name="ClickChoicePopup" PlacementTarget="{Binding ElementName=ClickChoiceAnchor}"
+                               Placement="Right" HorizontalOffset="6" StaysOpen="False"
+                               AllowsTransparency="True" PopupAnimation="None">
+                            <Border x:Name="ClickChoiceBody" Width="290" Padding="18" CornerRadius="12"
+                                    Background="#FF1B1B30" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
+                                    MouseEnter="KeepClickChoiceOpen" MouseLeave="ScheduleClickChoiceClose"
+                                    PreviewKeyDown="ClickChoiceKeyDown">
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str dash_click_choice}" FontSize="17" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}" Margin="0,0,0,10"/>
+                                    <TextBlock x:Name="ClickChoiceDescription" FontSize="13" LineHeight="20"
+                                               Foreground="White" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                                    <CheckBox x:Name="InvertDashboardClicks" Content="{loc:Str dash_click_invert}"
+                                              Foreground="White" FontSize="13" Cursor="Hand"
+                                              Checked="ClickChoiceChanged" Unchecked="ClickChoiceChanged"/>
+                                    <TextBlock Text="{loc:Str dash_click_pages_pin}" FontSize="12" LineHeight="18"
+                                               Foreground="#CCCCDF" TextWrapping="Wrap" Margin="0,14,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
                 </Border>
             </Grid>
         </Border>

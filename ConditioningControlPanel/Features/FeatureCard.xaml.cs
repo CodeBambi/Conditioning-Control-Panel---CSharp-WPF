@@ -793,25 +793,18 @@ namespace ConditioningControlPanel.Features
             catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyHover: {E}", ex.Message); }
         }
 
-        private void OnClick(object sender, MouseButtonEventArgs e)
-        {
-            // Swallow clicks that originate inside the help button so the user
-            // can hover/click the "?" without also opening the feature popup.
-            if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, BtnHelp))
-                return;
-            RaiseEvent(new RoutedEventArgs(ClickEvent, this));
-        }
+        private void OnClick(object sender, MouseButtonEventArgs e) => RouteClick(e, right: false);
 
-        private void OnRightClick(object sender, MouseButtonEventArgs e)
+        private void OnRightClick(object sender, MouseButtonEventArgs e) => RouteClick(e, right: true);
+
+        private void RouteClick(MouseButtonEventArgs e, bool right)
         {
-            // Swallow right-clicks inside the help button so they don't toggle.
-            if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, BtnHelp))
-                return;
-            // QoL: right-click is a quick on/off shortcut. A locked feature can't be
-            // toggled on, so right-clicking it does nothing.
-            if (IsLocked) return;
-            e.Handled = true;
-            RaiseEvent(new RoutedEventArgs(ToggleRequestedEvent, this));
+            if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, BtnHelp)) return;
+            bool invert = DashboardDepth && DimWhenInactive && App.Settings?.Current?.DashboardInvertClicks == true;
+            bool toggle = right != invert;
+            if (toggle && IsLocked) return;
+            if (right || toggle) e.Handled = true;
+            RaiseEvent(new RoutedEventArgs(toggle ? ToggleRequestedEvent : ClickEvent, this));
         }
 
         private static bool IsDescendantOf(DependencyObject node, DependencyObject ancestor)
