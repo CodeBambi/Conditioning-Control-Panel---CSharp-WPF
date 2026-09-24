@@ -132,13 +132,28 @@ async function load(p, say) {
  * @param {number} o.lenSec          the duel length (the class's budget)
  * @param {object} [o.media]         exec/media.js pool (list())
  * @param {boolean} [o.reduced]
+ * @param {object} [o.volume]        {level(): 0..1, subscribe(fn): unsubscribe} the Goon mix the
+ *                                   class synth follows (master x game). Absent = the old fixed mix.
  * @param {Function} [o.onEnd]       (report) the class rang its own bell / ended early
  * @param {Function} [o.log]
  * @returns {Promise<{game, result(): object, destroy(): void, instance, ctx}|null>}
  */
+/**
+ * The pictures a duel's class plays with: the online flavour's Scrolller pool when there is
+ * one (owner, 2026-09-24: the Sort duel never runs on a player's own files, it runs on the
+ * zero-setup pool), and the whole deck only when no online pool exists. Pure over the pool.
+ */
+export function duelRows(media) {
+  try {
+    const online = media && typeof media.listOnline === 'function' ? media.listOnline() : [];
+    if (online && online.length) return online;
+    return media && typeof media.list === 'function' ? media.list() : [];
+  } catch (_e) { return []; }
+}
+
 export async function mountArcademyGame({
   root, fxLayer = null, ceremonyLayer = null, game, seed, lenSec = 60, media = null,
-  reduced = false, onEnd = null, log = null,
+  reduced = false, onEnd = null, log = null, volume = null,
 } = {}) {
   const lines = [];         // the last few log lines, for a driver or a bug report
   const say = (m) => {
@@ -177,8 +192,9 @@ export async function mountArcademyGame({
 
   /* --- media: the Goon deck, as the provider's local inventory --- */
   let assets = null;
+  let rows = [];
   try {
-    const rows = media && typeof media.list === 'function' ? media.list() : [];
+    rows = duelRows(media);
     assets = provNs && provNs.createAssets({
       bridge: null, remoteMediaEnabled: false, remoteMediaRatio: 0, offlineMode: true,
       platform, localManifest: manifestFromDeck(rows),
@@ -199,14 +215,35 @@ export async function mountArcademyGame({
   if (engine && typeof engine.dispose === 'function') cleanups.push(() => engine.dispose());
 
   /* --- sound: the Arcademy synth, while this class is up --- */
+  /* THE GOON VOLUME (2026-09-24). The class synth is its own AudioContext, so the Goon mix
+   * never reached it. The Arcademy audio already takes masterVolume / audioMute in its init
+   * and through its own `setting` echo (onSetting), so this is only wiring: no arcademy file
+   * changes. Zero is a real mute, which also cuts any clip the synth fell back to. */
+  const level = () => {
+    if (!volume || typeof volume.level !== 'function') return 0.8;
+    try { const v = Number(volume.level()); return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.8; } catch (_e) { return 0.8; }
+  };
   let audio = null;
   try {
+    const v0 = level();
     audio = audNs && audNs.createAudio({
-      init: { audioLevels: { fx: 0.7, voice: 0.6, tutorial: 0, drops: 0.6, music: 0.4 }, masterVolume: 0.8, audioMute: false },
+      init: { audioLevels: { fx: 0.7, voice: 0.6, tutorial: 0, drops: 0.6, music: 0.4 }, masterVolume: v0, audioMute: v0 <= 0 },
       bridge: null, log: say, autoplayOk: true,
     });
   } catch (_e) { audio = null; }
   if (audio) cleanups.push(() => audio.destroy());
+  if (audio && typeof audio.onSetting === 'function' && volume && typeof volume.subscribe === 'function') {
+    let muted = level() <= 0;
+    let off = null;
+    try {
+      off = volume.subscribe(() => {
+        const v = level();
+        guard(() => audio.onSetting({ key: 'masterVolume', value: v }));
+        if ((v <= 0) !== muted) { muted = v <= 0; guard(() => audio.onSetting({ key: 'audioMute', value: muted })); }
+      });
+    } catch (_e) { off = null; }
+    if (typeof off === 'function') cleanups.push(off);
+  }
 
   let ceremonies = null;
   try {

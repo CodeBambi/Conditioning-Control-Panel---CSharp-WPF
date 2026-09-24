@@ -115,9 +115,10 @@ export function resultLine(who, r) {
  * @param {object} [o.media]   exec/media.js pool (default: the page's)
  * @param {Function} [o.mount] the class mounter (default: arcademyHost.mountArcademyGame)
  * @param {Function} [o.onLog]
+ * @param {object} [o.volume]  {level(), subscribe(fn)} the Goon mix the class synth follows
  * @returns {object} the view handle ui/duel/duelController.js drives, or null without a DOM.
  */
-export function createDuelView({ media = goonMedia, mount = mountArcademyGame, onLog = null } = {}) {
+export function createDuelView({ media = goonMedia, mount = mountArcademyGame, onLog = null, volume = null } = {}) {
   const d = typeof document !== 'undefined' ? document : null;
   if (!d || !d.body) return null;
   injectDuelStyle(d);
@@ -231,7 +232,7 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
       try {
         h = await mount({
           root: classRoot, fxLayer: fx, ceremonyLayer: cer, game, seed, lenSec: len, media,
-          reduced: reduced(d), onEnd, log: say,
+          reduced: reduced(d), onEnd, log: say, volume,
         });
       } catch (e) { say('mount threw: ' + ((e && e.message) || e)); h = null; }
       if (!h) {

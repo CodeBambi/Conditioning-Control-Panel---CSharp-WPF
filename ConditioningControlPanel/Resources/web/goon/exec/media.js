@@ -463,6 +463,10 @@ export function createGoonMediaPool() {
      */
     list: () => entries.map((e) => (e.clip ? { kind: e.kind, url: e.url, clip: true } : { kind: e.kind, url: e.url })),
 
+    /** Only the online flavour's rows, same shape as list(). A duel's class draws these first
+     *  (owner, 2026-09-24: zero setup), and the whole deck only when there are none. */
+    listOnline: () => onlineEntries.map((e) => (e.clip ? { kind: e.kind, url: e.url, clip: true } : { kind: e.kind, url: e.url })),
+
     /** Resolve an asset name to its virtual-host URL (null if not in the pool). */
     urlByName(name) {
       const e = name ? entries.find((x) => x.name === name) : null;

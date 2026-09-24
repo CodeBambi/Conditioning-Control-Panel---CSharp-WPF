@@ -348,11 +348,20 @@ export function busGain(entryGain, busVol, master) {
  * @param {object} [o.logger] console-shaped; omit for total silence
  * @param {boolean} [o.trace] log every call (default: only the first of each id)
  */
+/** What the match's cues and bed keep while a duel plays, and how long the glide takes. */
+export const DUEL_DUCK = 0.5;
+export const DUEL_DUCK_SEC = 0.3;
+
 export function createAudio({ prefs = null, logger = null, trace = false } = {}) {
   const log = logger;
   const seen = new Set();
   let logged = 0;
   let ducked = false;
+  /* THE DUEL DUCK (2026-09-24, owner: "duck the Goon game audio a bit while a duel is
+   * running, glide down/up"). While the Arcademy class plays in the window, the match's
+   * own cues and the drone bed sit at DUEL_DUCK of their slider, gliding over
+   * DUEL_DUCK_SEC both ways so it never reads as a cut. */
+  let duelDucked = false;
   let currentMusic = null;
   let disposed = false;
 
@@ -492,6 +501,8 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
 
   const clamp01 = (v) => Math.max(0, Math.min(1, (typeof v === 'number' && isFinite(v)) ? v : 0));
 
+  const duelGain = () => (duelDucked ? DUEL_DUCK : 1);
+
   function applyBusGains() {
     try {
       if (masterBus) masterBus.gain.value = clamp01(vol.master);
@@ -503,11 +514,11 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
       // They GLIDE for the same reason the bed does — a drag mid-pop should not
       // click — just over a much shorter constant, because nothing here sustains.
       if (uiBus) glide(uiBus.gain, clamp01(vol.ui), BUS_GLIDE_SEC);
-      if (gameBus) glide(gameBus.gain, clamp01(vol.game), BUS_GLIDE_SEC);
+      if (gameBus) glide(gameBus.gain, clamp01(vol.game) * duelGain(), BUS_GLIDE_SEC);
       // THE BED IS THE ONE THAT REALLY NEEDS IT. It is playing while the slider
       // moves, so a stepped write would zipper on every pixel of the drag (the
       // Intake's pref buses use setTargetAtTime for exactly this reason).
-      if (droneBus) glide(droneBus.gain, droneMuted ? 0 : clamp01(vol.drone), DRONE_GLIDE_SEC);
+      if (droneBus) glide(droneBus.gain, droneMuted ? 0 : clamp01(vol.drone) * duelGain(), DRONE_GLIDE_SEC);
       // ...and the voice bus glides on the CUE constant, not the bed's: a note is
       // ten seconds long, so a drag can land in the middle of one, but there is
       // nothing sustaining that a longer ramp would help.
@@ -942,6 +953,20 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
       note('drone:' + (droneMuted ? 'under-song' : 'back'));
     },
     get droneMuted() { return droneMuted; },
+
+    /** Ride the match cues and the drone down while a duel's class plays. Idempotent. */
+    duelDuck(on) {
+      if (disposed) return;
+      const next = !!on;
+      if (next === duelDucked) return;
+      duelDucked = next;
+      try {
+        if (gameBus) glide(gameBus.gain, clamp01(vol.game) * duelGain(), DUEL_DUCK_SEC);
+        if (droneBus) glide(droneBus.gain, droneMuted ? 0 : clamp01(vol.drone) * duelGain(), DUEL_DUCK_SEC);
+      } catch (_e) { /* ignore */ }
+      note('duel-duck:' + (duelDucked ? 'on' : 'off'));
+    },
+    get isDuelDucked() { return duelDucked; },
 
     /** Ride the music bus down under speech/lock cards. Idempotent. */
     duck(on) {
