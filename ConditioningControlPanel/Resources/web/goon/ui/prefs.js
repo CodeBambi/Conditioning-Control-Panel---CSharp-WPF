@@ -219,6 +219,11 @@ export const PREF_DEFAULTS = Object.freeze({
    * options or the lobby. Before this key existed the lobby's write was dropped (set()
    * refuses unknown keys) and every read came back undefined, which boot read as ON. */
   mediaTransferEnabled: false,
+  /* THE LIVING BACKGROUND's intensity (exec/background.js), 0..1. 1 = full heat as
+   * built (the default); 0 = a still dark gradient. A slider, not a toggle (owner,
+   * 2026-09-24). Mirrored onto <html data-gg-bgint> below; reduced motion and the
+   * lite tier still win over it. */
+  bgIntensity: 1,
   voiceVolume: 0.9,
   voiceEmoteMap: Object.freeze({}),
 });
@@ -356,7 +361,7 @@ function coerce(key, value) {
   if (typeof def === 'number') {
     const n = Number(value);
     if (!isFinite(n)) return def;
-    return (key.endsWith('Volume')) ? clamp01(n) : n;
+    return (key.endsWith('Volume') || key === 'bgIntensity') ? clamp01(n) : n;
   }
   /* AN OBJECT DEFAULT (voiceEmoteMap, so far) — checked BEFORE the string
    * fall-through, which is the whole reason this branch exists: `String({})` is
@@ -416,6 +421,8 @@ const REFLECT = Object.freeze({
    *  store plays its videos at the volume exec/videos.js chose on its own. */
   mediaVolume: MEDIA_SPEC,
   masterVolume: MEDIA_SPEC,
+  /** exec/background.js scales the living backdrop by this (absent = 1). */
+  bgIntensity: { attr: 'data-gg-bgint', derive: (values) => clamp01(values.bgIntensity).toFixed(2) },
 });
 
 /**

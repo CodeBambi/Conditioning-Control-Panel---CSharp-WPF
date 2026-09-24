@@ -8,7 +8,7 @@
 // calm is greyer and dimmer than hot, and the dev hooks / event parsing reject junk.
 
 import {
-  BG_PALETTES, HOUSE_PALETTE, paletteFor, mixHue, mixPalette, glide, heatParams,
+  BG_PALETTES, HOUSE_PALETTE, applyIntensity, readIntensity, paletteFor, mixHue, mixPalette, glide, heatParams,
   readBgQuery, heatFromDetail, DEFAULT_HEAT, MAX_STRANDS, MAX_MOTES,
 } from '../exec/background.js';
 import { FLAVOURS, MINE } from '../ui/flavours.js';
@@ -93,6 +93,19 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
   ok(heatFromDetail({ heat: 0.42 }) === 0.42, 'event detail read');
   ok(heatFromDetail({ heat: 3 }) === 1, 'event detail clamps');
   ok(heatFromDetail(null) === null && heatFromDetail({}) === null && heatFromDetail({ heat: 'hot' }) === null, 'junk event is ignored');
+}
+
+/* ---- intensity slider (Options, <html data-gg-bgint>) */
+{
+  const hot = heatParams(1);
+  ok(applyIntensity(hot, 1) === hot, 'intensity 1 is exactly as built');
+  const off = applyIntensity(hot, 0);
+  ok(off.strands === 0 && off.motes === 0 && off.rate === 0 && off.line === 0 && off.clusters === 0, 'intensity 0 is a still field');
+  ok(off.room > 0, 'intensity 0 keeps the dark room gradient');
+  const half = applyIntensity(hot, 0.5);
+  ok(half.strands < hot.strands && half.strands > off.strands, 'half intensity sits between');
+  ok(readIntensity(null) === 1 && readIntensity('') === 1 && readIntensity('x') === 1, 'absent or junk attribute = full');
+  ok(readIntensity('0.25') === 0.25 && readIntensity('7') === 1 && readIntensity('-1') === 0, 'attribute read clamps');
 }
 
 console.log(`background: ${n - failures}/${n} passed`);

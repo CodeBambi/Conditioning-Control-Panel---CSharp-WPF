@@ -476,6 +476,9 @@ export const S = Object.freeze({
     media: 'Media',
     mediaNote: 'the volume of the clips your opponent throws at you. a click still mutes one window on its own.',
     motion: 'Reduce motion',
+    /* The living backdrop's slider (exec/background.js). Full = as built. */
+    background: 'Background',
+    backgroundNote: 'how much the backdrop moves and glows with your lead. all the way down, it sits still and dark.',
     skippable: 'Skippable videos',
     /* Says what the toggle does AND what it does not take away: a window can
        always be muted with a click, on or off. */

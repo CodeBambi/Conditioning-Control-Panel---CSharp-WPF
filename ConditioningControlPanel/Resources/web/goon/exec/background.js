@@ -38,7 +38,8 @@
  * the load governor is busy. Lite tier (exec/perfTier.js): a static field,
  * repainted only while the heat or palette is gliding, at 2 fps. Reduced
  * motion: the field stands still (motion clock frozen) and only its colour
- * and brightness follow the heat. A hidden page schedules nothing.
+ * and brightness follow the heat. The Options intensity slider scales the
+ * whole field (applyIntensity); at 0 it is a still dark gradient. A hidden page schedules nothing.
  *
  * Pure parts (palettes, heat -> params, glide, hue mix, query parsing) are
  * exported for test/selftest-background.js and import clean under node.
@@ -120,6 +121,40 @@ export function heatParams(heat) {
     sat: 0.45 + 0.55 * h,             // calm is greyer
     room: 0.55 + 0.45 * h,            // room light
     grain: 0.05 - 0.015 * h,          // grain shows most when things are quiet
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * INTENSITY (the Options slider, 0..1, default 1 = as built). It scales how much
+ * of the heat's life the field shows: 0 is the static dark room gradient with
+ * no ribbons, motes, pearls or motion; 1 is exactly heatParams(). The pref
+ * lives in ui/prefs.js and reaches this tier as <html data-gg-bgint>, the same
+ * way data-gg-shader does (exec/ never imports ui/). Absent = 1.
+ * ------------------------------------------------------------------------ */
+export const BG_INTENSITY_ATTR = 'data-gg-bgint';
+export function readIntensity(value) {
+  if (value === null || value === undefined || value === '') return 1;
+  const n = Number(value);
+  return Number.isFinite(n) ? clamp01(n) : 1;
+}
+/** Scale a heatParams() bag by intensity k. Pure; k = 1 returns the same values. */
+export function applyIntensity(P, k) {
+  const i = clamp01(k);
+  if (i >= 1) return P;
+  return {
+    ...P,
+    rate: P.rate * i,
+    strands: P.strands * i,
+    motes: P.motes * i,
+    fields: P.fields * i,
+    line: P.line * i,
+    beads: P.beads * i,
+    trails: P.trails * i,
+    clusters: P.clusters * i,
+    sat: P.sat * (0.6 + 0.4 * i),
+    room: P.room * (0.55 + 0.45 * i),
+    grain: P.grain * i,
+    intensity: i,
   };
 }
 
@@ -363,6 +398,9 @@ function reducedMotion() {
     return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch (_e) { return false; }
 }
+function intensity() {
+  try { return readIntensity(document.documentElement.getAttribute(BG_INTENSITY_ATTR)); } catch (_e) { return 1; }
+}
 function fxHot() {
   try { return document.documentElement.getAttribute('data-gg-fx') === 'hot'; } catch (_e) { return false; }
 }
@@ -397,14 +435,14 @@ export function mountBackground(opts = {}) {
     if (document.hidden) return;
     const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
     last = now;
-    const lite = perfLite(), still = reducedMotion();
+    const lite = perfLite(), still = reducedMotion() || intensity() <= 0.001;
     const busy = fxHot() || governorBusy();
     const minGap = lite ? 500 : busy ? 66 : 33;
     heat = glide(heat, target, dt, target > heat ? HEAT_TAU_UP_S : HEAT_TAU_DOWN_S);
     palK = glide(palK, 1, dt, PALETTE_TAU_S);
     const gliding = Math.abs(heat - target) > 0.003 || palK < 0.997;
     if (gliding) dirty = true;
-    const P = heatParams(heat);
+    const P = applyIntensity(heatParams(heat), intensity());
     if (!still && !lite) { u += dt * P.rate; dirty = true; }
     stats.mode = lite ? 'lite' : still ? 'still' : busy ? 'busy' : 'full';
     if (dirty && now - lastPaint >= minGap) {
@@ -439,7 +477,7 @@ export function mountBackground(opts = {}) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { dirty = true; wake(); } });
   try {
     new MutationObserver(() => { dirty = true; wake(); })
-      .observe(document.documentElement, { attributes: true, attributeFilter: ['data-gg-perf', 'data-gg-motion', 'data-gg-fx'] });
+      .observe(document.documentElement, { attributes: true, attributeFilter: ['data-gg-perf', 'data-gg-motion', 'data-gg-fx', BG_INTENSITY_ATTR] });
   } catch (_e) { /* no observer: the loop still picks the change up on its next frame */ }
 
   let debugOut = null;

@@ -99,6 +99,24 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
     ]);
   }
 
+  /** 0..100 % slider over a 0..1 pref, applied live (the pref mirror does the rest). */
+  function levelRow(key, label) {
+    const value = el('span', { class: 'gg-panel-value', text: '' });
+    const input = el('input', {
+      type: 'range', min: '0', max: '100', step: '1',
+      value: String(Math.round((Number(prefs.get(key)) || 0) * 100)),
+      'aria-label': label,
+    });
+    const paint = () => { value.textContent = Math.round(Number(input.value)) + '%'; };
+    paint();
+    ledger.listen(input, 'input', () => { paint(); prefs.set(key, Number(input.value) / 100); });
+    ledger.listen(input, 'change', () => { try { audio?.sfx?.('ui-move'); } catch (_e) { /* stub */ } });
+    return el('div', { class: 'gg-panel-row gg-panel-row--slider' }, [
+      el('span', { class: 'gg-panel-label' }, [el('span', { text: label }), value]),
+      input,
+    ]);
+  }
+
   function toggleRow(label, get, set) {
     const b = el('button', { type: 'button', class: 'gg-toggle', 'aria-pressed': String(!!get()) });
     b.appendChild(el('i'));
@@ -151,6 +169,12 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
       picturesSection = buildPicturesSection({ ledger, api: pictures, audio });
       body.appendChild(picturesSection.node);
     }
+
+    /* BACKGROUND - the living backdrop's intensity (exec/background.js reads it off
+     * <html data-gg-bgint>). A slider, not a toggle: 100% is full heat as built.
+     * Reduced motion and lite graphics still win over it. */
+    body.appendChild(levelRow('bgIntensity', S.options.background));
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.backgroundNote }));
 
     /* SENDING MY FILES - patrons only, off by default, and never shown to a seat that
      * cannot send (no upsell, no greyed switch). Online pictures never travel. */
