@@ -13,8 +13,8 @@
 
     <!-- CUSTOMISE. One mental model, left to right: pick a MOD (the skin: look, words, voice),
          and the mod carries a COMPANION (look + personality), edited in its own card (or previewed,
-         read-only, for a mod not in use). Presets a mod recommends are one line of suggestion,
-         asked once on switching, never silent writes. -->
+         read-only, for a mod not in use). Per-mod default presets are
+         dropdowns: a mod's suggestion only pre-selects, the user's choice is what applies. -->
     <Window.Resources>
         <Style x:Key="CcpBtn" TargetType="Button">
             <Setter Property="Foreground" Value="White"/>
@@ -190,32 +190,38 @@
                         <!-- 2. The companion this mod carries: live for the mod in use, a read-only preview otherwise -->
                         <cmp:CompanionPickerCard x:Name="CompanionCard" Margin="0,0,0,14"/>
 
-                        <!-- 3. One line of recommended setup, and the dashboard layout door (not built yet) -->
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Border x:Name="RowSuggestions" Background="{DynamicResource PanelBgBrush}" CornerRadius="12"
-                                    BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1" Padding="14,0"
-                                    MinHeight="44" Margin="0,0,10,0" Visibility="Collapsed">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="TxtSuggestions" FontSize="13" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextMutedBrush}"/>
-                                    <TextBlock x:Name="TxtAskedOnce" Grid.Column="1" Text="{loc:Str modmgr_asked_once}" FontSize="12"
-                                               VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{DynamicResource TextMutedBrush}"/>
-                                    <Button x:Name="BtnApplySuggestions" Grid.Column="1" Content="{loc:Str modmgr_apply}"
-                                            Click="BtnApplySuggestions_Click" Style="{StaticResource CcpBtn}"
-                                            Padding="14,6" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
-                                </Grid>
-                            </Border>
-                            <Button x:Name="BtnQuickLinkLayout" Grid.Column="1" Content="{loc:Str modmgr_dashboard_soon}"
-                                    Style="{StaticResource CcpBtn}" IsEnabled="False" Padding="16,0" MinHeight="44"/>
-                        </Grid>
+                        <!-- 3. Per-mod defaults: what loads each time you switch to this mod. Shown for the
+                             mod in use and for a previewed one, so it can be set before switching. -->
+                        <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="12" Padding="14,10"
+                                BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                                ToolTip="{loc:Str modmgr_defaults_tooltip}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Str modmgr_label_settings_preset}" FontSize="11"
+                                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
+                                    <ComboBox x:Name="CmbDefaultSettings" Style="{DynamicResource DarkComboBoxStyle}"
+                                              Foreground="{DynamicResource TextLightBrush}" MinHeight="30"
+                                              SelectionChanged="CmbDefaultSettings_SelectionChanged"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Str modmgr_label_asset_preset}" FontSize="11"
+                                               Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
+                                    <ComboBox x:Name="CmbDefaultAssets" Style="{DynamicResource DarkComboBoxStyle}"
+                                              Foreground="{DynamicResource TextLightBrush}" MinHeight="30"
+                                              SelectionChanged="CmbDefaultAssets_SelectionChanged"/>
+                                </StackPanel>
+                                <Button x:Name="BtnQuickLinkLayout" Grid.Column="4" Content="{loc:Str modmgr_dashboard_soon}"
+                                        Style="{StaticResource CcpBtn}" IsEnabled="False" Padding="14,0" MinHeight="30"
+                                        VerticalAlignment="Bottom"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

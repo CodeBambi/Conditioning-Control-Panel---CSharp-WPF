@@ -2246,16 +2246,26 @@ namespace ConditioningControlPanel.Models
             set { _assetPresets = value ?? new(); OnPropertyChanged(); }
         }
 
-        private HashSet<string> _modSuggestionsAsked = new(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, string> _modDefaultSettingsPreset = new(StringComparer.OrdinalIgnoreCase);
         /// <summary>
-        /// Mod ids whose recommended setup the Customise window has already offered (yes or no).
-        /// Local only: the ask is once per mod per machine, never on later switches.
+        /// Per mod id, the settings preset (Preset.Id) to load each time that mod is switched to,
+        /// picked in the Customise window. "" = the user chose "Keep current" on purpose; a missing
+        /// key = never chosen. Local only. See Services/ModPresetDefaults.
         /// </summary>
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
-        public HashSet<string> ModSuggestionsAsked
+        public Dictionary<string, string> ModDefaultSettingsPreset
         {
-            get => _modSuggestionsAsked;
-            set { _modSuggestionsAsked = new HashSet<string>(value ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+            get => _modDefaultSettingsPreset;
+            set { _modDefaultSettingsPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modDefaultAssetPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Per mod id, the asset preset (AssetPreset.Id) to apply on switching to it. Same rules.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModDefaultAssetPreset
+        {
+            get => _modDefaultAssetPreset;
+            set { _modDefaultAssetPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
         }
 
         private string? _currentAssetPresetId = null;

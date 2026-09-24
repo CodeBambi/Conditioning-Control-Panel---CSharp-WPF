@@ -56,6 +56,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 PreviewPanel.Visibility = Visibility.Collapsed;
                 TxtPreviewGlyph.ClearValue(TextBlock.ForegroundProperty);
                 TxtLiveName.Text = LiveName();
+                ShowPerk();
                 FillAvatars();
                 FillPersonalities();
             }
@@ -69,12 +70,27 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             }
         }
 
-        /// <summary>The live companion's name, the way the Companion tab's hero card shows it.</summary>
+        /// <summary>The companion's own name (the active mod's identity), not the look's name.</summary>
         private static string LiveName()
         {
+            var name = App.Mods?.ActiveMod?.Manifest?.Identity?.CompanionName;
+            if (string.IsNullOrWhiteSpace(name)) name = Loc.Get("modmgr_companion_fallback");
+            return App.Mods?.MakeModAware(name!) ?? name!;
+        }
+
+        /// <summary>
+        /// The companion's XP perk, read from the current companion definition. The companion
+        /// travels with the user across mods, so a preview shows the perk they would keep.
+        /// </summary>
+        private void ShowPerk()
+        {
             var def = CompanionDefinition.GetById(App.Companion?.ActiveCompanion ?? CompanionId.OGBambiSprite);
-            var display = def.GetDisplayName(App.Settings?.Current?.SlutModeEnabled == true);
-            return App.Mods?.MakeModAware(display) ?? display;
+            var perk = CompanionPerks.For(def.BonusType);
+            TxtPerkGlyph.Text = perk.Glyph;
+            TxtPerk.Text = Loc.Get(perk.LocKey);
+            var tone = perk.Negative ? Color.FromRgb(0xFF, 0x6B, 0x6B) : (Color?)null;
+            if (tone is { } c) TxtPerkGlyph.Foreground = new SolidColorBrush(c);
+            else TxtPerkGlyph.SetResourceReference(TextBlock.ForegroundProperty, "PinkBrush");
         }
 
         // ------------------------------------------------------------------ preview
@@ -89,6 +105,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             LivePanel.Visibility = Visibility.Collapsed;
             PreviewPanel.Visibility = Visibility.Visible;
             _previewing = true;
+            ShowPerk();
             try
             {
                 var personalities = ModCompanionContent.GetPersonalities(
