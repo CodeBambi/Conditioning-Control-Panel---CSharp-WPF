@@ -1,13 +1,14 @@
 /* ============================================================================
  * ui/duel/rules.js - the pure rules of a game night duel. No DOM, no clock.
  *
- * A duel is a thrown GAME CARD: both players play the same seeded Deep End
- * board for the duel length, each reports its own final board, and both sides
- * compute the same winner from the same two numbers.
+ * A duel is a thrown GAME CARD: both players play the same real Arcademy class
+ * (ui/duel/games.js) on the same seed for the duel length, each reports its
+ * own result, and both sides compute the same winner from the same numbers.
  * ==========================================================================*/
 
 import { saltSeed } from '../../core/rng.js';
 import { DUEL_LENGTHS_SEC } from '../../core/contracts.js';
+import { duelGame } from './games.js';
 
 /** Points added to the winner's match score. Tie = nothing. */
 export const DUEL_WIN_BONUS = 100;
@@ -36,17 +37,21 @@ export function duelSeed(matchSeed, idx) {
 }
 
 /**
- * Who won, from the two reported boards. Highest tile first, then score.
+ * Who won, from the two reported results. Each side reports its game's own
+ * result, generic `{game, score, tile?}`. A tiled game (The Deep End) is
+ * highest tile first, then score; any other game is score alone.
  * Symmetric by construction: outcome(a,b) is always the mirror of outcome(b,a),
  * which is what lets both sides agree without a third message.
- * @param {{tile:number, score:number}} mine
- * @param {{tile:number, score:number}|null} theirs null = never reported = 0
+ * @param {{game?:string, tile?:number, score:number}} mine
+ * @param {{game?:string, tile?:number, score:number}|null} theirs null = never reported = 0
  * @returns {'win'|'lose'|'tie'}
  */
 export function duelOutcome(mine, theirs) {
   const a = { tile: num(mine && mine.tile), score: num(mine && mine.score) };
   const b = { tile: num(theirs && theirs.tile), score: num(theirs && theirs.score) };
-  if (a.tile !== b.tile) return a.tile > b.tile ? 'win' : 'lose';
+  // The game is the duel's, so either side's row decides; missing = The Deep End (tiled).
+  const g = duelGame((mine && mine.game) || (theirs && theirs.game));
+  if ((!g || g.tiled) && a.tile !== b.tile) return a.tile > b.tile ? 'win' : 'lose';
   if (a.score !== b.score) return a.score > b.score ? 'win' : 'lose';
   return 'tie';
 }
