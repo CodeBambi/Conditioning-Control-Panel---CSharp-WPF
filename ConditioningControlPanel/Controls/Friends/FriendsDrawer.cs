@@ -164,6 +164,7 @@ public sealed partial class FriendsDrawer : Border
         Rebind();
         try { _svc?.SetDrawerOpen(true); } catch { }
         try { if (_svc?.Available == true) _ = SafeRefreshAsync(); } catch { }
+        try { if (_svc?.Available == true) StartTables(); } catch { }
         Render();
         PlayEntrance();
         Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => Focus()));
@@ -177,6 +178,7 @@ public sealed partial class FriendsDrawer : Border
         _picker = null;
         _addBox.Visibility = Visibility.Collapsed;
         StopAmbient();
+        StopTables();
     }
 
     private void Rebind()
@@ -205,6 +207,7 @@ public sealed partial class FriendsDrawer : Border
         _svc.SnapshotChanged -= OnSnapshot;
         _svc.Sent -= OnSent;
         _subscribed = false;
+        StopTables();
     }
 
     private async Task SafeRefreshAsync()
@@ -353,6 +356,7 @@ public sealed partial class FriendsDrawer : Border
         }
 
         var (online, offline) = FriendsDrawerRules.Split(snap);
+        (online, offline) = FriendsDrawerRules.HostingFirst(online, offline, f => TableFor(f) != null);
         if (_openId != null && !ContainsFriend(snap, _openId)) { _openId = null; _picker = null; }
 
         if (online.Count > 0)
@@ -412,6 +416,7 @@ public sealed partial class FriendsDrawer : Border
     private FrameworkElement BuildFriendRow(Friend f)
     {
         bool open = _openId == f.Id;
+        var table = TableFor(f);
         var row = new Border
         {
             CornerRadius = new CornerRadius(10),
@@ -432,8 +437,8 @@ public sealed partial class FriendsDrawer : Border
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var avatar = FriendsLook.Avatar(f.Name, f.AvatarUrl, 38, f.Online);
-        if (!f.Online) avatar.Opacity = 0.55;
+        var avatar = FriendsLook.Avatar(f.Name, f.AvatarUrl, 38, f.Online || table != null);
+        if (!f.Online && table == null) avatar.Opacity = 0.55;
         avatar.RenderTransformOrigin = new Point(0.5, 1);
         avatar.RenderTransform = new TranslateTransform();
         _avatars[f.Id] = avatar;
@@ -453,7 +458,7 @@ public sealed partial class FriendsDrawer : Border
             nameLine.Children.Add(sq);
         }
         mid.Children.Add(nameLine);
-        mid.Children.Add(ActivityLine(f));
+        mid.Children.Add(table != null ? HostingLine() : ActivityLine(f));
         Grid.SetColumn(mid, 1);
         top.Children.Add(mid);
 
@@ -472,6 +477,14 @@ public sealed partial class FriendsDrawer : Border
             };
             Grid.SetColumn(lockChip, 2);
             top.Children.Add(lockChip);
+        }
+        if (table != null)
+        {
+            top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var join = TableJoinButton(f, table);
+            Grid.SetColumn(join, 3);
+            top.Children.Add(join);
+            if (!open) DressHostingRow(row);
         }
         outer.Children.Add(top);
 

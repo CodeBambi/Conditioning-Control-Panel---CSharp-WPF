@@ -93,6 +93,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         private static bool _disposing;          // reentrancy guard (Dispose closes the window -> Closed -> DisposeAll)
         private static bool _recoveryWindowed;   // this relaunch is a recovery: ignore the remembered fullscreen
         private static bool _duckPreference = true;
+        private static string? _pendingJoinCode;  // open tables: handed to the NEXT init, then spent
         private static bool _duckedMainWindow;   // WE minimized main at launch, so WE owe a restore
         /// <summary>The CoreWebView2 whose <c>PermissionRequested</c> we have already subscribed to.
         /// The page's "ready" handshake fires again on every reload (and a recovery relaunch builds a
@@ -125,9 +126,26 @@ namespace ConditioningControlPanel.Services.GoonGame
         }
 
         /// <summary>Launch the Goon Game window (idempotent). A running instance is re-focused.</summary>
-        public static void Launch(bool duckMainWindow = true)
+        public static void Launch(bool duckMainWindow = true) => Launch(duckMainWindow, joinCode: null);
+
+        /// <summary>Launch the Goon Game straight into joining <paramref name="joinCode"/> (open
+        /// tables, 2026-09-23). A fresh page reads it as the init field <c>joinCode</c>; a page
+        /// that is already up gets a <c>join-code</c> frame instead. A code that fails
+        /// <see cref="GoonJoinCode.Normalize"/> is dropped and the game opens as usual.</summary>
+        public static void Launch(bool duckMainWindow, string? joinCode)
         {
-            if (_host != null) { _host.FocusWeb(); return; }
+            var code = GoonJoinCode.Normalize(joinCode);
+            if (_host != null)
+            {
+                if (code != null)
+                {
+                    try { _host.Post(new { type = "join-code", code }); }
+                    catch (Exception ex) { App.Logger?.Debug("GoonHostService: join-code post: {E}", ex.Message); }
+                }
+                _host.BringToFront();   // restore + raise + focus, not just Activate
+                return;
+            }
+            _pendingJoinCode = code;
             try
             {
                 // EMI Desk: the ring learns from every open, not just its own cards.
@@ -210,6 +228,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "GoonHostService.Launch failed");
+                _pendingJoinCode = null;
                 DisposeAll();
             }
         }
@@ -341,7 +360,13 @@ namespace ConditioningControlPanel.Services.GoonGame
                         video = true,
                         mediaTransfer = TransferAllowed(),
                         canHost = HostingAllowed(),
+                        // Every 1v1 is Prime since open tables (2026-09-23): joining asks the
+                        // same bar as hosting. The server's /v2/goon/join is the real gate.
+                        canJoin = JoiningAllowed(),
                     },
+                    // Open tables: a Join pressed in the friends drawer lands here. Spent on the
+                    // first init so a reload (heartbeat recovery) does not rejoin a finished room.
+                    joinCode = TakePendingJoinCode() ?? "",
                     consent = new
                     {
                         liveDurationSec = consent.LiveDurationSec,
@@ -630,6 +655,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "last-opponent-clear":
                     OnLastOpponentClear();
                     break;
+                case "open-prime":       // page's Prime sheet "See Prime": the app's own refusal and upgrade path
+                    TierGate.DemandLab("Goon Game");
+                    break;
             }
         }
 
@@ -908,13 +936,24 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// tier 1, hosting a duel is tier 2. The server enforces it at <c>/v2/goon/invite</c>
         /// (403 <c>no_host_access</c> below <c>computeEffectiveTier &gt;= 2</c>) and this is the
         /// same verdict computed locally, so the title screen can dim Host instead of routing the
-        /// player to a screen whose only content is a refusal. JOINING is free for everyone and is
-        /// never gated here. The page reads this with <c>=== true</c>, so a host that predates the
+        /// player to a screen whose only content is a refusal. JOINING asks the same bar since open
+        /// tables (see JoiningAllowed). The page reads this with <c>=== true</c>, so a host that predates the
         /// flag leaves Host enabled and falls back to the server's answer.</summary>
         private static bool HostingAllowed()
         {
             try { return App.Patreon?.HasLabAccess == true; }
             catch { return false; }
+        }
+
+        /// <summary>May the page JOIN a room? TIER 2 since open tables (2026-09-23): every 1v1
+        /// is a Prime perk, host or guest. Practice against the bot never asks.</summary>
+        private static bool JoiningAllowed() => HostingAllowed();
+
+        private static string? TakePendingJoinCode()
+        {
+            var c = _pendingJoinCode;
+            _pendingJoinCode = null;
+            return c;
         }
 
         // ============================ Discord sharing (contract §4/§5) ============================
