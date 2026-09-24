@@ -791,7 +791,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _ => "Eerie"
         };
 
-        private string Instruction(AiPurpose purpose) => _preview() && purpose == AiPurpose.Chat
+        // The brief, no-recommendations delivery is EMI's voice, not a rule for every persona.
+        private string Instruction(AiPurpose purpose) => _preview() && purpose == AiPurpose.Chat && EmiPersonality.IsActive
             ? ConversationInstruction : PurposeInstruction(purpose);
 
         private static string PurposeInstruction(AiPurpose purpose) => purpose switch
