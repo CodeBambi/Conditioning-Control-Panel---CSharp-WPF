@@ -72,6 +72,15 @@ internal sealed class CompanionMemoryMaintenance : IDisposable
                 ? ExplicitMemoryRules.Render(_state.Summary) : null;
     }
 
+    internal IReadOnlyList<string> SummaryQuotes
+    {
+        get
+        {
+            lock (_sync) return _enabled() && !_disposed && _state.Context == _context()
+                ? _state.Summary.Select(e => e.Quote).ToArray() : Array.Empty<string>();
+        }
+    }
+
     internal Task PendingJob { get { lock (_sync) return _job; } }
 
     internal Task InterruptAsync()
@@ -94,10 +103,14 @@ internal sealed class CompanionMemoryMaintenance : IDisposable
             else if (retraction != null && _state.FactIds.Remove(retraction, out var removed))
                 _memory.ForgetAutomaticFact(removed);
             var fact = ExplicitMemoryRules.Parse(turn.Text);
+            if (fact == null && retraction == null && ExplicitMemoryRules.IsCorrection(turn.Text))
+                _memory.ForgetUncertainAutomaticFacts();
             if (fact?.PreferredName != null) _memory.SetAutomaticPreferredName(fact.PreferredName);
             else if (fact != null)
             {
                 _state.FactIds.TryGetValue(fact.Key, out var previous);
+                var old = _memory.GetFacts().FirstOrDefault(f => f.Id == previous);
+                if (old != null && old.Text != fact.Text) ClearContext();
                 var saved = _memory.SetAutomaticFact(previous, fact.Text, fact.Kind, turn.Id);
                 if (saved != null) _state.FactIds[fact.Key] = saved.Id;
             }

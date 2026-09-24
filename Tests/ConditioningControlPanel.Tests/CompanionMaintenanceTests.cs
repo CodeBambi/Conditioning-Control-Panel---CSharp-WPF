@@ -100,6 +100,39 @@ public class CompanionMaintenanceTests
     }
 
     [Fact]
+    public async Task ReplacingFavoriteWithoutCorrectionWordRemovesOldSummaryCandidates()
+    {
+        using var rig = new Rig();
+        rig.Accept("remember my favorite tea is jasmine");
+        rig.Accept("remember my favorite tea is mint");
+        for (int i = 0; i < 6; i++) rig.Accept();
+        await rig.Entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await rig.Drain();
+        var state = File.ReadAllText(Path.Combine(rig.DirectoryPath, "maintenance.json"));
+        Assert.DoesNotContain("jasmine", state);
+        Assert.Contains("mint", Assert.Single(rig.Memory.GetFacts()).Text);
+    }
+
+    [Theory]
+    [InlineData("small correction: mint not jasmine")]
+    [InlineData("I meant mint, not jasmine")]
+    [InlineData("I no longer like jasmine")]
+    public void AmbiguousCorrectionDropsAutomaticClaimsAndPreservesUserControlledFacts(string correction)
+    {
+        using var rig = new Rig();
+        rig.Accept("remember my favorite tea is jasmine");
+        var edited = rig.Memory.AddFact("My edited choice", MemoryFactKind.Preference);
+        rig.Memory.UpdateFact(edited.Id, "My edited choice");
+        var pinned = rig.Memory.AddFact("My pinned choice", MemoryFactKind.Preference);
+        rig.Memory.UpdateFact(pinned.Id, pinned: true);
+        rig.Memory.AddFact("Respect this boundary", MemoryFactKind.Boundary);
+        rig.Accept(correction);
+        Assert.DoesNotContain(rig.Memory.GetFacts(), f => f.Text.Contains("jasmine"));
+        Assert.Equal(3, rig.Memory.GetFacts().Count);
+        Assert.Null(rig.Worker.GetContext());
+    }
+
+    [Fact]
     public void PreferredName_ClearStaysClearAndNoDuplicateFactSurvives()
     {
         using var rig = new Rig();
@@ -123,7 +156,10 @@ public class CompanionMaintenanceTests
         Assert.Contains("small garden", rig.Worker.GetContext());
         Assert.True(rig.Worker.GetContext()!.Length <= 960);
         Assert.Equal(1, rig.Calls);
+        Assert.Contains("I am building a small garden", rig.Worker.SummaryQuotes);
         await rig.Drain();
+        rig.Worker.Forget();
+        Assert.Empty(rig.Worker.SummaryQuotes);
     }
 
     [Theory]

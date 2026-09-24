@@ -49,7 +49,7 @@
   "companion_v2_mute": "Mute voice",
   "companion_v2_history_note": "New chat clears this conversation. Saved preferences stay.",
   "companion_v2_personality": "More personality options",
-  "companion_v2_memory_note": "Saved on this PC. Relevant memories are sent with your messages.",
+  "companion_v2_memory_note": "With memory on, your selected AI can summarize recent chat. Relevant memories accompany your messages. Saved details stay on this PC; review or forget them here.",
   "companion_v2_busy": "A reply is in progress.",
   "br_counter_sold": "SOLD",
   "friends_land_invite_line": "invites you to {0}",
@@ -6913,5 +6913,7 @@
   "companion_perk_name_1": "Hands Off",
   "companion_perk_name_2": "Leech",
   "companion_perk_name_3": "Drill",
-  "companion_perk_name_4": "Finisher"
+  "companion_perk_name_4": "Finisher",
+  "companion_v2_recap": "Recent conversation context",
+  "companion_v2_recap_clear": "Forget this context"
 }

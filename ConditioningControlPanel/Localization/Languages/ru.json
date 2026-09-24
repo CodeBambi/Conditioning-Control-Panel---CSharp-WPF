@@ -49,7 +49,7 @@
   "companion_v2_mute": "Выключить голос",
   "companion_v2_history_note": "Новый чат удаляет этот разговор. Сохранённые предпочтения остаются.",
   "companion_v2_personality": "Настройки личности",
-  "companion_v2_memory_note": "Хранится на этом ПК. Связанные воспоминания отправляются вместе с сообщениями.",
+  "companion_v2_memory_note": "При включённой памяти выбранный ИИ может резюмировать недавнюю беседу. Нужные воспоминания отправляются с сообщениями. Сохранённые сведения остаются на этом ПК; здесь их можно просмотреть или забыть.",
   "companion_v2_busy": "Ответ уже готовится.",
   "br_counter_sold": "ПРОДАНО",
   "friends_land_invite_line": "зовёт тебя: {0}",
@@ -6158,5 +6158,7 @@
   "companion_perk_name_1": "Hands Off",
   "companion_perk_name_2": "Leech",
   "companion_perk_name_3": "Drill",
-  "companion_perk_name_4": "Finisher"
+  "companion_perk_name_4": "Finisher",
+  "companion_v2_recap": "Контекст недавней беседы",
+  "companion_v2_recap_clear": "Забыть этот контекст"
 }

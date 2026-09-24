@@ -49,7 +49,7 @@
   "companion_v2_mute": "关闭语音",
   "companion_v2_history_note": "新聊天会清除这段对话。保存的偏好会保留。",
   "companion_v2_personality": "更多性格选项",
-  "companion_v2_memory_note": "保存在此电脑上。相关记忆会随消息一起发送。",
+  "companion_v2_memory_note": "开启记忆后，所选AI可以总结近期聊天。相关记忆会随消息发送。保存的信息保留在此电脑上，可在这里查看或删除。",
   "companion_v2_busy": "正在准备回复。",
   "br_counter_sold": "已售出",
   "friends_land_invite_line": "邀请你去{0}",
@@ -6670,5 +6670,7 @@
   "companion_perk_name_1": "Hands Off",
   "companion_perk_name_2": "Leech",
   "companion_perk_name_3": "Drill",
-  "companion_perk_name_4": "Finisher"
+  "companion_perk_name_4": "Finisher",
+  "companion_v2_recap": "近期聊天背景",
+  "companion_v2_recap_clear": "忘记这些背景"
 }

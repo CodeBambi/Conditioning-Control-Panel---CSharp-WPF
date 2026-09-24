@@ -23,7 +23,7 @@ public sealed record EmiMoment(string Id, object? Context);
 /// path: no window until the first summon, no timers while she is away, and every gate the rest of
 /// the app asks (<see cref="AvatarMuted"/>) short-circuits on <see cref="IsOut"/>.
 /// </summary>
-public sealed class EmiDeskService : IDisposable
+public sealed partial class EmiDeskService : IDisposable
 {
     /// <summary>The default summon chord. A chord is required; bare keys are refused.</summary>
     public const string DefaultHotkey = "Ctrl+Alt+E";
@@ -83,7 +83,7 @@ public sealed class EmiDeskService : IDisposable
         {
             try
             {
-                if (!IsOut) return false;
+                if (!IsOut || _tubeVisibility.Suppressed) return false;
                 var s = App.Settings?.Current;
                 if (s == null || !s.EmiDeskMuteAvatar) return false;
                 return _muteAccepted;
@@ -278,7 +278,7 @@ public sealed class EmiDeskService : IDisposable
                 disp.BeginInvoke(new Action(() => Summon(why)));
                 return;
             }
-            if (IsOut) return;
+            if (IsOut || _tubeVisibility.Suppressed) return;
 
             var win = EnsureWindow();
             if (win == null) return;
@@ -297,6 +297,13 @@ public sealed class EmiDeskService : IDisposable
             // while that pump was running, this summon is stale and stops here.
             MaybeAskAboutMuting();
             if (_disposed) return;
+            // The tube may take EMI while the mute prompt runs its nested message pump.
+            if (_tubeVisibility.Suppressed)
+            {
+                IsOut = false;
+                RaiseOutChanged();
+                return;
+            }
             if (_summonGen != gen || !IsOut)
             {
                 Log.Information("[EmiDesk] summon abandoned: she was sent away while the mute prompt was up");
@@ -422,6 +429,7 @@ public sealed class EmiDeskService : IDisposable
                 disp.BeginInvoke(new Action(Dismiss));
                 return;
             }
+            _tubeVisibility.Dismiss();
             // Invalidate any summon parked in a nested message pump before anything else: without
             // this, the mute prompt returns and puts her straight back on screen behind us.
             _summonGen++;
