@@ -286,6 +286,8 @@
   "chaster_limit_day": "Most a day",
   "chaster_limit_backlog": "Most on the tab",
   "chaster_limit_backlog_hint": "The most unpaid time the tab holds while there is no lock or Chaster is down.",
+  "chaster_relock": "Lock again when the timer has run out",
+  "chaster_relock_hint": "If the lock's end has already passed, a push first brings it up to now, then adds the price. Only for a lock that ran out in the last 6 hours.",
   "chaster_fact_push_launch": "Sent as it happens",
   "chaster_fact_floor_long": "She only takes back what she gave",
   "chaster_menu_eyebrow": "The menu",

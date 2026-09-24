@@ -10,13 +10,35 @@ namespace ConditioningControlPanel.Services.Chaster;
 
 /// <summary>What the player chose. Read fresh on every call, so a switch flipped in Settings
 /// takes hold on the next event with no restart. <paramref name="RemoteOpen"/> is a Remote
-/// session running right now; <paramref name="PanicArmed"/> is the panic key switched on.</summary>
+/// session running right now; <paramref name="PanicArmed"/> is the panic key switched on.
+/// <paramref name="RelockPastEnd"/> is the player's opt-in to lock again when the timer has run out.</summary>
 public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string> Prices, TabLimits? Limits = null,
-    bool RemoteOpen = false, bool PanicArmed = true)
+    bool RemoteOpen = false, bool PanicArmed = true, bool RelockPastEnd = false)
 {
     public TabLimits Caps => Limits ?? TabLimits.Default;
 
     public static readonly ChasterOptions Off = new(false, null, new HashSet<string>());
+}
+
+/// <summary>
+/// update-time adds to the lock's end date, so a push onto a lock whose timer already ran out
+/// lands in the past and the lock stays "ready to unlock". With the option on, a push first
+/// catches the end up to now. That catch-up is not a price: it never touches the tab or the
+/// daily limit. A lock that ran out more than <see cref="MaxCatchUpSeconds"/> ago is left alone,
+/// so a lock forgotten for days is never pulled back shut.
+/// </summary>
+public static class LockRelock
+{
+    public const int MaxCatchUpSeconds = 6 * 3600;
+    public const int MarginSeconds = 30;
+
+    public static int CatchUpSeconds(DateTime? endUtc, DateTime nowUtc)
+    {
+        if (endUtc is not { } end) return 0;
+        var late = (nowUtc - end).TotalSeconds;
+        if (late <= 0 || late > MaxCatchUpSeconds) return 0;
+        return (int)Math.Ceiling(late) + MarginSeconds;
+    }
 }
 
 public sealed record ChasterStoredTokens(string AccessToken, string RefreshToken, DateTime ExpiresAtUtc);
@@ -335,13 +357,18 @@ public sealed partial class ChasterService : IDisposable
             if (access == null) return IsLinked ? SettleOutcome.TryLater : SettleOutcome.LinkExpired;
 
             var lockId = options.LockId;
+            IReadOnlyList<ChasterLock>? active = null;
             if (string.IsNullOrEmpty(lockId))
             {
                 var locks = await _client.GetLocksAsync(access, ct).ConfigureAwait(false);
                 if (!locks.Ok) return Failed(locks.Status);
                 if (locks.Value!.Count != 1) return locks.Value.Count == 0 ? SettleOutcome.Nothing : SettleOutcome.NoLockChosen;
                 lockId = locks.Value[0].Id;
+                active = locks.Value;
             }
+
+            if (options.RelockPastEnd)
+                await CatchUpPastEndAsync(access, lockId!, active, ct).ConfigureAwait(false);
 
             lock (_gate)
             {
@@ -367,6 +394,24 @@ public sealed partial class ChasterService : IDisposable
             return SettleOutcome.Pushed;
         }
         finally { _settleGate.Release(); }
+    }
+
+    /// <summary>Opt-in: bring a run-out lock's end up to now before the priced push, so the
+    /// price lands in the future. Best effort: any failure just leaves the push as it was.</summary>
+    private async Task CatchUpPastEndAsync(string access, string lockId, IReadOnlyList<ChasterLock>? active, CancellationToken ct)
+    {
+        if (active == null)
+        {
+            var locks = await _client.GetLocksAsync(access, ct).ConfigureAwait(false);
+            if (!locks.Ok) return;
+            active = locks.Value;
+        }
+        var pick = active!.FirstOrDefault(l => l.Id == lockId);
+        var end = pick?.EndDate is { } e ? (e.Kind == DateTimeKind.Utc ? e : e.ToUniversalTime()) : (DateTime?)null;
+        var seconds = LockRelock.CatchUpSeconds(end, _utcNow());
+        if (seconds <= 0) return;
+        var caught = await _client.AddTimeAsync(access, lockId, seconds, ct).ConfigureAwait(false);
+        if (caught.Ok) App.Logger?.Information("[Chaster] the lock had run out; caught its end up by {Seconds}s", seconds);
     }
 
     private SettleOutcome Failed(ChasterStatus status)

@@ -664,6 +664,7 @@ namespace ConditioningControlPanel.Views.Tabs
             {
                 SliderDayLimit.Value = caps.DailySeconds / 60;
                 SliderBacklogLimit.Value = caps.BacklogSeconds / 60;
+                ChkRelock.IsChecked = App.Settings?.Current?.ChasterRelockPastEnd == true;
             }
             finally { _loading = false; }
             PaintLimits(caps);
@@ -693,6 +694,15 @@ namespace ConditioningControlPanel.Views.Tabs
             }
             PaintLimits(caps);
             RefreshDay(animate: true);
+            App.Settings?.Save();
+        }
+
+        private void ChkRelock_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading || !IsLoaded) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.ChasterRelockPastEnd = ChkRelock.IsChecked == true;
             App.Settings?.Save();
         }
 

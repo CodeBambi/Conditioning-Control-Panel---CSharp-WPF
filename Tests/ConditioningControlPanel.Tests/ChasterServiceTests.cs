@@ -212,6 +212,44 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_run_out_lock_is_caught_up_to_now_before_the_price_only_when_opted_in()
+    {
+        var ended = _utc.AddMinutes(-18).ToString("o");
+        _http.Answer = p => p == "/locks"
+            ? Json(200, "[{\"_id\":\"lock1\",\"role\":\"wearer\",\"endDate\":\"" + ended + "\"}]")
+            : new HttpResponseMessage(HttpStatusCode.NoContent);
+        using (var off = Make())
+        {
+            off.NoteSeconds("watcher", 300);
+            Assert.Equal(SettleOutcome.Pushed, await off.SettleAsync());
+            Assert.DoesNotContain(_http.Seen, s => s.Path == "/locks");
+        }
+
+        _http.Seen.Clear();
+        _options = _options with { RelockPastEnd = true };
+        using var service = Make();
+        service.NoteSeconds("watcher", 300);
+
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleAsync());
+        var pushes = _http.Seen.Where(s => s.Path.EndsWith("update-time")).ToList();
+        Assert.Equal(2, pushes.Count);
+        Assert.Contains("\"duration\":" + (18 * 60 + LockRelock.MarginSeconds), pushes[0].Body);
+        Assert.Contains("\"duration\":300", pushes[1].Body);
+        Assert.Equal(300, service.Bill().PushedSeconds);
+    }
+
+    [Theory]
+    [InlineData(-60, 0)]
+    [InlineData(18 * 60, 18 * 60 + LockRelock.MarginSeconds)]
+    [InlineData(LockRelock.MaxCatchUpSeconds + 1, 0)]
+    public void Catch_up_covers_only_a_recent_run_out(int lateSeconds, int expected)
+    {
+        var now = new DateTime(2026, 9, 23, 20, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(expected, LockRelock.CatchUpSeconds(now.AddSeconds(-lateSeconds), now));
+        Assert.Equal(0, LockRelock.CatchUpSeconds(null, now));
+    }
+
+    [Fact]
     public async Task A_credit_or_an_empty_tab_sends_nothing()
     {
         using var service = Make();
