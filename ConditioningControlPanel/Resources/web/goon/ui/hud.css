@@ -2913,3 +2913,8 @@ html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
   .gg-rightcol > .gg-arsenal { width: min(100%, 208px); }
   .gg-rightcol .gg-arsenal-tab { min-height: 44px; }
 }
+
+/* Actual session media inside the TV. Decoration remains only until decode. */
+.gg-mon-media { position: absolute; inset: 8% 12%; width: 76%; height: 84%; object-fit: cover; border-radius: 3px; opacity: 0; pointer-events: none; }
+.gg-mon-media.is-ready { opacity: 1; }
+.gg-mini-flash:has(.gg-mon-media.is-ready) .gg-mini-shard { visibility: hidden; }

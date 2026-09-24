@@ -586,6 +586,13 @@ export function createGoonMediaPool() {
     /** How many gif clips the deck holds (drawClip's pool). */
     clipCount: () => entries.reduce((n, e) => n + (e.clip ? 1 : 0), 0),
 
+    // Preview without consuming the GIF shuffle or changing its echo guard.
+    peekClip() {
+      const next = entries[clipDeck[clipDeck.length - 1]];
+      const entry = next?.clip ? next : entries.find((e) => e.clip);
+      return entry ? view(entry) : null;
+    },
+
     /**
      * A NON-CONSUMING look at what the next drawKind(kind) would most likely
      * hand back: the topmost entry of that kind still in the shuffled deck (and,
