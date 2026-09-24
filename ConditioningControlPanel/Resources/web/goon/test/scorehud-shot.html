@@ -1,0 +1,55 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>score hud shot</title>
+<style>
+  :root { --gg-font: 'Fredoka', 'Segoe UI', system-ui, sans-serif; }
+  html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50% 30%, #3a1a55, #120818 70%); overflow: hidden; }
+  .gg-hud-frame { position: fixed; inset: 0; }
+  .note { position: fixed; left: 12px; bottom: 10px; color: #fff8; font: 12px system-ui; }
+</style></head>
+<body>
+<div class="gg-hud-frame" id="frame"></div>
+<div class="note" id="note"></div>
+<script type="module">
+// Headless look harness for ui/scoreHud.js (never shipped: test/ is not loaded by the game).
+// ?state=lead | trail | combo
+import { mountScoreHud } from '../ui/scoreHud.js';
+import { GoonScoring } from '../core/scoring.js';
+import { GoonAttentionMode, GoonPayloadKind } from '../core/contracts.js';
+import { localMonotonicMs } from '../core/clock.js';
+import { POP_EVENT } from '../exec/bubbles.js';
+
+const state = new URLSearchParams(location.search).get('state') || 'lead';
+const scoring = new GoonScoring(GoonAttentionMode.Cam, 2);
+scoring.setPointsModel(true);
+scoring.reportAttention(80);
+const listeners = new Set();
+const match = {
+  pointsModel: true,
+  scoring,
+  opponent: { score: 0 },
+  onPointsAwarded(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+  notePop(now) { const a = scoring.awardPop(now); if (a) listeners.forEach((f) => f(a)); return a; },
+};
+const emit = (a) => { if (a) listeners.forEach((f) => f(a)); };
+mountScoreHud({ match, host: document.getElementById('frame') });
+
+for (let i = 0; i < 9; i++) scoring.awardLanded(GoonPayloadKind.Video, 1);
+for (let i = 0; i < 6; i++) scoring.awardHeld(GoonPayloadKind.Spiral, 1);
+match.opponent.score = state === 'trail' ? 420 : 160;
+let heat = 0;
+addEventListener('gg-heat', (e) => { heat = e.detail.heat; document.getElementById('note').textContent = 'state ' + state + ', heat ' + heat.toFixed(2); });
+
+setTimeout(() => {
+  emit(scoring.awardLanded(GoonPayloadKind.Spiral, 1));
+  emit(scoring.awardHeld(GoonPayloadKind.FlashBurst, 1));
+  if (state === 'combo') {
+    let k = 0;
+    const t = setInterval(() => {
+      const x = 380 + k * 70, y = 420 - (k % 2) * 40;
+      document.dispatchEvent(new CustomEvent(POP_EVENT, { detail: { x, y } }));
+      if (++k >= 7) clearInterval(t);
+    }, 120);
+  }
+}, 700);
+</script>
+</body></html>
