@@ -45,8 +45,8 @@ public class PersonalityPromptMuxTests : IDisposable
     /// <summary>Deliberately free of "Bambi" so the mod-aware string rewrite cannot eat it.</summary>
     private const string CustomCanary = "CUSTOM-PROMPT-CANARY-7f3a speak only in riddles";
 
-    /// <summary>Gentle Trainer's deflection block — present only when that preset compiled in.</summary>
-    private const string PresetMarker = "GENTLE DEFLECTION";
+    /// <summary>Gentle Trainer's explicit-reaction block — present only when that preset compiled in.</summary>
+    private const string PresetMarker = "[SOFT TEASE]";
 
     private const string CommunityId = "community-prompt-under-test";
 

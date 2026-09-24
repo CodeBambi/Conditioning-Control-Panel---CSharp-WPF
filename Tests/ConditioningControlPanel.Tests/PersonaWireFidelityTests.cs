@@ -99,7 +99,7 @@ public class PersonaWireFidelityTests : IDisposable
 
         var request = BuildStrictDommeRequest(RestoredOldVoiceSession(turnPairs: 4));
 
-        Assert.Contains("You are a strict, commanding domme trainer", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("You are a strict, commanding hypno domme", request.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("CURRENT PERSONA OVERRIDES HISTORY", request.SystemPrompt, StringComparison.Ordinal);
         // And no slutmode persona bleed-through in the system message.
         Assert.DoesNotContain("SLUT MODE", request.SystemPrompt, StringComparison.Ordinal);
