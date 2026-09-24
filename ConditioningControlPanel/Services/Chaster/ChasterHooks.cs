@@ -25,6 +25,27 @@ public static class ChasterHooks
 
     public static string QuestRow(QuestType type) => type == QuestType.Weekly ? "quest_weekly" : "quest";
 
+    /// <summary>The Back Room slot (CONTRACT 10.24). The bridge hands over the SERVER'S line for an
+    /// outcome that really landed, read off the tape the host relayed, so a free demo spin and the
+    /// <c>fx.melt</c> / <c>fx.jackpot</c> it fires can never reach here. The melt line books the melt
+    /// row; the jackpot line (<c>emi3</c>) wipes the tab. Every other line books nothing.</summary>
+    public static string? SlotLineRow(string? line) => line switch
+    {
+        "melt" => "melt",
+        "emi3" => CircesTab.JackpotEventId,
+        _ => null,
+    };
+
+    public static void SlotLanded(string? line)
+    {
+        if (App.Chaster is not { } chaster) return;
+        switch (SlotLineRow(line))
+        {
+            case "melt": Safe(() => chaster.Note("melt")); break;
+            case CircesTab.JackpotEventId: Safe(() => chaster.Wipe()); break;
+        }
+    }
+
     private static bool _attached;
 
     /// <summary>Call once, after the services below exist.</summary>

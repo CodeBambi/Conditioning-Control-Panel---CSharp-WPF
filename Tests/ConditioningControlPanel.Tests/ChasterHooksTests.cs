@@ -48,10 +48,12 @@ public class ChasterHooksTests
         Assert.Equal(0, TabPrices.Resolve("typo", on, 0));
     }
 
-    /// <summary>Rows that exist on the page and are not wired yet. The slot's melt and jackpot
-    /// and the five web-game rows need a page-to-host message that says the event was real (a
-    /// free demo spin fires the same effects as a paid one). This list only ever shrinks.</summary>
-    private static readonly string[] OwedRows = { "melt", "bubbles", "ball", "wall", "padlock", "crash" };
+    /// <summary>Rows that exist on the page and are not wired yet. This list only ever shrinks.
+    /// The slot's melt (and the jackpot wipe) book off the server's own tape through the Back Room
+    /// bridge's <c>landed</c> frame (CONTRACT 10.24). What is left has no moment to hook: Breakout
+    /// (ball, wall) is not in the desktop build at all, Racing Thoughts has no crash and no padlock
+    /// pickup (its no-lose contract), and the Rabbit Hole has no lock bubble.</summary>
+    private static readonly string[] OwedRows = { "bubbles", "ball", "wall", "padlock", "crash" };
 
     [Fact]
     public void Every_row_on_the_page_is_wired_to_something_or_listed_as_owed()

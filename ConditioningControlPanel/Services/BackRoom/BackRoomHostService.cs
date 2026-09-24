@@ -324,6 +324,8 @@ internal static class BackRoomHostService
                 NoteEvent = key => App.FeatureDayLog?.Note(key),
                 // 10.23: a station's flat pulses reach the toy; the director gates on the haptics settings.
                 Haptic = Haptics.BackRoomHapticDirector.OnHaptic,
+                // 10.24: a slot outcome the server dealt really landed; Circe's tab reads its line.
+                SlotLanded = ConditioningControlPanel.Services.Chaster.ChasterHooks.SlotLanded,
                 SetOption = option => OnUi(() =>
                 {
                     if (App.Settings?.Current is not { } s) return;
