@@ -542,19 +542,6 @@ namespace ConditioningControlPanel
             App.Settings!.Save();
         }
 
-        /// <summary>"Use this mod" with the dropdowns showing is a choice too: store what they show,
-        /// so a pre-selected recommendation the user saw and accepted applies on the switch.</summary>
-        private void CommitShownDefaults()
-        {
-            var s = App.Settings?.Current;
-            if (s == null || _selectedMod == null) return;
-            if (CmbDefaultSettings.SelectedItem is ComboBoxItem { Tag: string sid })
-                ModPresetDefaults.Store(s.ModDefaultSettingsPreset, _selectedMod.Id, sid);
-            if (CmbDefaultAssets.SelectedItem is ComboBoxItem { Tag: string aid })
-                ModPresetDefaults.Store(s.ModDefaultAssetPreset, _selectedMod.Id, aid);
-            App.Settings!.Save();
-        }
-
         // ------------------------------------------------------------------ art summary
         //
         // Two read-only rows under the description: the manifest's own previewImage (declared
@@ -718,7 +705,7 @@ namespace ConditioningControlPanel
         {
             if (_selectedMod == null || App.Mods == null) return;
             var mod = _selectedMod;
-            CommitShownDefaults();
+            // Defaults are stored only by an explicit dropdown selection.
 
             // The one switching path the top-bar combo and the launcher use (ActivateMod +
             // ApplyActiveModChange), run NOW so the companion card below reads the new mod.

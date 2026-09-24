@@ -34,6 +34,18 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public AiPermissionsGrid()
         {
             InitializeComponent();
+            if (Services.Companion.CompanionExperience.IsV2Enabled)
+            {
+                // The sheet is narrower than the original page. Each permission group gets a row.
+                PermissionColumns.ColumnDefinitions.Clear();
+                PermissionColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                PermissionColumns.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                Grid.SetColumn(MemoryPane, 0);
+                Grid.SetRow(MemoryPane, 1);
+                MemoryPane.Margin = new Thickness(0, 16, 0, 0);
+                PreviewBetaTag.Visibility = Visibility.Collapsed;
+                HeaderTierTag.Visibility = Visibility.Collapsed;
+            }
 
             // Two hooks, both cheap, because entitlement can change from either direction: the tab
             // can be opened after a validation landed (IsVisibleChanged), or a validation can land

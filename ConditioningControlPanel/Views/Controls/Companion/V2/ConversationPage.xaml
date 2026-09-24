@@ -31,6 +31,7 @@
      <TextBlock Text="{Binding Name}" FontSize="29" FontWeight="SemiBold"/>
      <TextBlock Text="{Binding Flavor}" Foreground="#C6B4D0" TextTrimming="CharacterEllipsis"/>
      <TextBlock Text="{Binding Status}" Foreground="{Binding StatusColor}" Margin="0,5,0,10" AutomationProperties.LiveSetting="Polite"/>
+     <TextBlock Text="{Binding Familiarity}" Foreground="#BFAEC9" FontSize="11" ToolTip="{loc:Str companion_v2_familiarity_hint}"/>
      <TextBlock Text="{Binding Allowance}" Foreground="#BFAEC9" FontSize="11"/>
      <WrapPanel>
       <Button Content="{loc:Str companion_v2_who}" Tag="who" Click="Sheet_Click"/>

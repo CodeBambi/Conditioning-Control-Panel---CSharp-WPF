@@ -275,6 +275,11 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Information("Using default settings ({Reason})",
                 WasSettingsFileCorrupt ? "previous file unparseable, preserved a backup" : "fresh install detected");
             var fresh = new AppSettings();
+            if (Companion.CompanionExperience.IsV2Enabled)
+            {
+                fresh.AiChatEnabled = true;
+                fresh.CompanionPrompt.AiProvider = AiProviderType.Cloud;
+            }
             MergeBuiltInAwarenessPresets(fresh);
             return fresh;
         }
