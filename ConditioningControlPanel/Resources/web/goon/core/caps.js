@@ -43,6 +43,7 @@ export function local(overrides = {}) {
     // dark, because `t:'voice'` is fire-and-forget and an old peer drops it without a word.
     voice: overrides.voice,
     night: overrides.night,
+    score: overrides.score,
   });
 }
 
