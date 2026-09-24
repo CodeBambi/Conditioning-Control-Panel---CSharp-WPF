@@ -1,4 +1,5 @@
 {
+  "companion_v2_media_library_only": "Puedo abrir tu biblioteca multimedia, pero no buscar un vídeo concreto desde aquí.",
   "companion_v2_open_activity": "Abrir {0}",
   "companion_v2_activity_unavailable": "Esta actividad ya no está disponible. Pide otra idea.",
   "companion_v2_calls_you": "Te llama",

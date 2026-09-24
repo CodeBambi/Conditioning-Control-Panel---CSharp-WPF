@@ -227,13 +227,14 @@ public class CompanionSessionStoreTests
             var turns = new[]
             {
                 CompanionTurn.Create(TurnKind.UserChat, "remember my cat?"),
-                CompanionTurn.Create(TurnKind.AssistantChat, "Prime Minister Beans~")
+                CompanionTurn.Create(TurnKind.AssistantChat, "Prime Minister Beans~") with { IsApplicationReply = true }
             };
 
             // PersistAsync fires a Task per reply and Flush runs on the shutdown thread, so
             // overlapping writes are a real production shape, not a contrived one. A truncated
             // session.json parses as empty, i.e. the whole conversation lost with no error.
             System.Threading.Tasks.Parallel.For(0, 16, _ => store.Save(turns));
+            Assert.True(store.Load().Turns.Last().IsApplicationReply);
 
             Assert.False(System.IO.File.Exists(path + ".tmp"));
             Assert.Equal(2, CompanionSessionStore.ParseSession(System.IO.File.ReadAllText(path)).Count);

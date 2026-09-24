@@ -45,6 +45,20 @@ public class CompanionBrainTests
         Assert.Equal(0, opened);
     }
 
+    [Fact]
+    public async Task MediaWithoutRetrievalIsAnAppReplyWithAButtonAndNoProviderCall()
+    {
+        var transport = new FakeTransport { Respond = (_, _) => throw new Exception("no video lookup exists") };
+        using var brain = Build(transport, new FakeStore(), preview: true);
+        brain.Activities = () => new[] { new ConditioningControlPanel.Services.Companion.CompanionActivity(
+            "page.assets", "Media library", "Library", () => true, () => throw new Exception("click required")) };
+        var reply = await brain.ChatAsync("any video for me?");
+        Assert.True(reply.IsApplicationReply);
+        Assert.False(reply.IsAiGenerated);
+        Assert.NotEmpty(reply.Text);
+        Assert.Empty(transport.Sends);
+        Assert.Equal(new[] { "page.assets" }, brain.Session.Turns.Last().ActivityIds);
+    }
     // ---------- fakes ----------
 
     /// <summary>Scriptable transport. Records what was actually put on the wire.</summary>

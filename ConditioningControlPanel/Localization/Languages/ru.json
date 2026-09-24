@@ -1,4 +1,5 @@
 {
+  "companion_v2_media_library_only": "Я могу открыть твою медиатеку, но не могу найти конкретное видео отсюда.",
   "companion_v2_open_activity": "Открыть {0}",
   "companion_v2_activity_unavailable": "Это занятие больше недоступно. Попросите другую идею.",
   "companion_v2_calls_you": "Как вас называть",

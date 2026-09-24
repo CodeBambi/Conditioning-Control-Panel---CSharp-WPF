@@ -71,6 +71,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         [System.Text.Json.Serialization.JsonIgnore]
         public string[] ActivityIds { get; init; } = Array.Empty<string>();
 
+        public bool IsApplicationReply { get; init; }
+
         public const string EventOpen = "«event: ";
         /// <summary>Closing sigil of an <see cref="TurnKind.AmbientEvent"/> line.</summary>
         public const string EventClose = "»";

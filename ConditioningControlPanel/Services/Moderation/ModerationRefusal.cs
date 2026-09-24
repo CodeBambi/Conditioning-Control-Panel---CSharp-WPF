@@ -38,6 +38,12 @@ namespace ConditioningControlPanel.Services.Moderation
         AiFailureKind? Failure = null, bool Retryable = false, string? FinishReason = null, string? RequestId = null,
         System.Collections.Generic.IReadOnlyList<Models.AiCommandData>? ProposedCommands = null)
     {
+        /// <summary>
+        /// A handled reply supplied by the application without a model call. Unlike
+        /// <see cref="IsAiGenerated"/>, this accepts the chat turn without labeling its text as AI output.
+        /// </summary>
+        public bool IsApplicationReply { get; init; }
+
         public static AiReplyResult Failed(AiFailureKind failure, bool retryable = false) =>
             new(string.Empty, false, null, failure, retryable);
     }

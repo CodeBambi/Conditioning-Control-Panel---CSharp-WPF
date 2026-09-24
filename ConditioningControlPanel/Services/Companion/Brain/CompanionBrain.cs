@@ -323,7 +323,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     options = ConversationDelivery.Options(options, input, effectsOn);
                     request = ConversationDelivery.Apply(request, input, offered, EmiPersonality.IsActive);
                 }
-                var result = await _transport
+                var result = (_preview() ? ConversationDelivery.LibraryReply(input, offered) : null) ?? await _transport
                     .SendAsync(request.Messages, options, cancellationToken)
                     .ConfigureAwait(false);
 
@@ -334,7 +334,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     return result;
                 }
 
-                if (!result.IsAiGenerated)
+                if (!result.IsAiGenerated && !result.IsApplicationReply)
                 {
                     // Canned fallback / login hint / transport failure. Roll the user turn back the
                     // way the legacy path always did ("don't poison history with an unanswered
@@ -390,10 +390,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     }
                     cancellationToken.ThrowIfCancellationRequested();
                     Session.Append(CompanionTurn.Create(TurnKind.AssistantChat, result.Text) with
-                    { ActivityIds = delivery.Ids });
-                    if (_preview() && Memory is MemoryStore relationshipStore)
+                    { ActivityIds = delivery.Ids, IsApplicationReply = result.IsApplicationReply });
+                    if (_preview() && !result.IsApplicationReply && Memory is MemoryStore relationshipStore)
                         relationshipStore.NoteChatTurn(App.Mods?.ActiveModId);
-                    if (_preview()) _maintenance?.Accept(userTurn);
+                    if (_preview() && !result.IsApplicationReply) _maintenance?.Accept(userTurn);
                     _conversationRevision++;
                     ApplyPreviewCommands(result, cancellationToken);
                     NoteRecommendedTitles(result.Text);

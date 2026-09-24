@@ -1,4 +1,5 @@
 {
+  "companion_v2_media_library_only": "I can open your media library, but I cannot fetch a specific video from here.",
   "companion_v2_open_activity": "Open {0}",
   "companion_v2_activity_unavailable": "That activity is no longer available. Ask for another idea.",
   "companion_v2_calls_you": "Calls you",

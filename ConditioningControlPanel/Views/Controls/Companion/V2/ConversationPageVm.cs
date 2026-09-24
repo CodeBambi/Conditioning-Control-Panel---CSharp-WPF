@@ -203,7 +203,7 @@ internal sealed class ConversationPageVm : CompanionObservable
                 Notice = Loc.Get("companion_v2_refused");
                 App.AvatarWindow?.ShowModerationRefusalBubble(result.Refusal.Source);
             }
-            else if (result.IsAiGenerated) Draft = string.Empty;
+            else if (result.IsAiGenerated || result.IsApplicationReply) Draft = string.Empty;
             else
             {
                 Notice = Loc.Get(FailureNoticeKey(result.Failure));
