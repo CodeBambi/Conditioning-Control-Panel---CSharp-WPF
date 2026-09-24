@@ -85,11 +85,13 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// Returns the session name adjusted for the current content mode.
+        /// Returns the session name adjusted for the current content mode. Built-in sessions read
+        /// a per-mod name with variants (Services/PresetNaming); custom and imported sessions keep
+        /// their own name through the mod's text replacements.
         /// </summary>
         public string GetModeAwareName()
         {
-            return App.Mods?.MakeModAware(Name) ?? Name;
+            return Services.PresetNaming.DisplayName(this);
         }
 
         /// <summary>
