@@ -1266,7 +1266,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
   ok(/mountHud\(\{[\s\S]{0,600}?discord, voice,/.test(boot),
     'the service is threaded into mountHud deps for wave 2');
   ok(/getVoice: \(\) => voice/.test(boot), 'and into the screen ctx as a THUNK, never a snapshot');
-  ok(/localCapsOf\(\{ elements, payloads, rounds, platform: 'web', voice: voiceCap, (?:night: NIGHT_CAP_VERSION, )?transfer: (?:true|transferCap)(?:, niches)? \}\)/.test(boot),
+  ok(/localCapsOf\(\{ elements, payloads, rounds, platform: 'web', voice: voiceCap, (?:night: NIGHT_CAP_VERSION, )?(?:score: SCORE_CAP_VERSION, )?transfer: (?:true|transferCap)(?:, niches)? \}\)/.test(boot),
     'boot advertises caps.voice AND caps.transfer — the only way a fire-and-forget sender ever learns the peer can hear it');
   ok(/const voiceCap = VOICE_CAP_VERSION;/.test(boot), 'from the pinned revision constant');
 

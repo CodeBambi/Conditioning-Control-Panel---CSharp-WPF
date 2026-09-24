@@ -329,6 +329,8 @@ export function makeCaps(o = {}) {
     transfer: o.transfer ?? false,
     voice: clampVoiceCount(o.voice),
     night: clampVoiceCount(o.night),
+    // The points model (core/points.js, 2026-09-24). A revision, on the night precedent.
+    score: clampVoiceCount(o.score),
   };
   // NICHES (2026-09-24), APPEND-ONLY and OMITTED when empty, so every hello that has none is
   // byte-identical to before. See cleanNiches below.
@@ -369,6 +371,8 @@ export function peerNiches(caps) { return cleanNiches(caps && caps.niches); }
 /** The voice-note protocol revision THIS build speaks. Advertised as `caps.voice`. */
 export const VOICE_CAP_VERSION = 1;
 export const NIGHT_CAP_VERSION = 1;
+/** The points model revision THIS build speaks. Advertised as `caps.score`. */
+export const SCORE_CAP_VERSION = 1;
 
 /**
  * A peer's `caps.voice`, from an UNTRUSTED hello, as a plain boolean "can we send to them".
@@ -382,6 +386,8 @@ export function peerSpeaksVoice(caps) {
   return clampVoiceCount(caps && caps.voice) >= 1;
 }
 export function peerSpeaksNight(caps) { return clampVoiceCount(caps && caps.night) >= 1; }
+/** Their build scores with the points model. Both seats must, or neither does (legacy score). */
+export function peerScoresPoints(caps) { return clampVoiceCount(caps && caps.score) >= 1; }
 
 export function makeHello(o = {}) {
   return {
@@ -487,6 +493,9 @@ export function makeTick(o = {}) {
     closeness: o.closeness ?? null,
     charges: o.charges ?? 0,
     vwin: clampWindowCount(o.vwin),
+    // APPEND-ONLY, optional: the points model split {s,o,d,p,b,c} (core/points.js wire()).
+    // null is stripped on the way out, so a peer that predates it never sees the field.
+    sc: o.sc ?? null,
   };
 }
 
@@ -512,6 +521,8 @@ export function makePayloadReceipt(o = {}) {
     v: o.v ?? PROTOCOL_VERSION,
     id: o.id ?? '',
     status: o.status ?? '',
+    // APPEND-ONLY, optional: the share (0..1) of the throw the receiver held. Points model only.
+    held: o.held ?? null,
   };
 }
 

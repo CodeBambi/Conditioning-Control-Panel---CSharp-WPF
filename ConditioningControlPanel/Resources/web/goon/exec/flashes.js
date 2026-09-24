@@ -101,6 +101,9 @@ import { governorHold } from './loadGovernor.js';
 // LEAVES (shrink, fade) on fixed timings layered over its CSS hold.
 import { landFlash, scheduleFlashExit, cancelMotion } from './motion.js';
 
+/** Fired on document for every flash the player clicks away: {x, y}. The points model's pop tick. */
+export const FLASH_POP_EVENT = 'gg-flash-pop';
+
 export const MAX_LIVE = 20;          // concurrent <img> nodes, hydra children included
 /* The LITE tier's cap (exec/perfTier.js — phones). Half the field: each flash is
  * a ~44vmin GPU layer and twenty of them is most of what an iPhone was choking
@@ -1078,8 +1081,15 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     // the cap - 1. At the cap room is 0 and the click is a plain dismissal.
     // liveCap(), not MAX_LIVE: the hydra spends the same headroom the tier set.
     const room = Math.max(0, liveCap() - live.size);
+    const popX = curX(rec), popY = curY(rec);
     dismiss(rec);
     sfx('flash-pop');
+    // The points model's pop seam (ui/scoreHud.js): an event, not an import.
+    try {
+      if (typeof document !== 'undefined' && document && typeof CustomEvent === 'function') {
+        document.dispatchEvent(new CustomEvent(FLASH_POP_EVENT, { detail: { x: num(e && e.clientX, popX), y: num(e && e.clientY, popY) } }));
+      }
+    } catch (_e) { /* a listener never reaches the field */ }
 
     const kids = Math.min(HYDRA_CHILDREN, room);
     // Children hatch off where the parent IS (drag included) and taper off the

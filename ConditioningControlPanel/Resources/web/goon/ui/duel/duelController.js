@@ -220,8 +220,11 @@ export function createDuelController({
     // No report inside the grace window is a TIE, never a forfeit: a dropped frame (or a peer
     // that stopped talking) must not hand anybody the bonus.
     const outcome = theirs ? duelOutcome(cur.mine, theirs) : 'tie';
-    const bonus = bonusFor(outcome);
-    if (bonus > 0 && match && match.scoring && typeof match.scoring.awardBonus === 'function') match.scoring.awardBonus(bonus);
+    // Points model (core/points.js): a pot, winner takes it, loser and each side of a tie half.
+    // A legacy match (older peer) keeps the flat win bonus.
+    const pot = match && typeof match.noteDuel === 'function' ? match.noteDuel(outcome) : null;
+    const bonus = pot ? Math.round(pot.points) : bonusFor(outcome);
+    if (!pot && bonus > 0 && match && match.scoring && typeof match.scoring.awardBonus === 'function') match.scoring.awardBonus(bonus);
     if (outcome === 'win') ms.summary.won++; else if (outcome === 'lose') ms.summary.lost++; else ms.summary.tied++;
     sfx(outcome === 'win' ? 'gg-endured' : 'gg-drop-dud');
     v('result', { outcome, bonus, game: cur.game, mine: cur.mine, theirs: theirs || { game: cur.game, tile: 0, score: 0 } });

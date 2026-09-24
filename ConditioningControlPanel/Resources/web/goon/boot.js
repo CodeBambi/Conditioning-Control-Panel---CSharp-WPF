@@ -48,7 +48,7 @@ import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
 import {
   GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION, NIGHT_CAP_VERSION,
-  cleanNiches, peerNiches,
+  cleanNiches, peerNiches, SCORE_CAP_VERSION,
 } from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
@@ -787,7 +787,7 @@ function localCaps() {
    * cleanNiches). Only while the player's own online pictures are on for this game. */
   const niches = ownNiches();
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, transfer: transferCap, niches });
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, night: NIGHT_CAP_VERSION, score: SCORE_CAP_VERSION, transfer: transferCap, niches });
 }
 
 /* ============================================================================
@@ -1097,10 +1097,10 @@ function createMatchLog() {
         return res;
       };
       origFinish = match.notifyInboundPayloadFinished.bind(match);
-      match.notifyInboundPayloadFinished = (id, endured) => {
+      match.notifyInboundPayloadFinished = (id, endured, held) => {
         const e = byId.get(id);
         if (e) e.status = endured ? 'endured' : 'landed';
-        return origFinish(id, endured);
+        return origFinish(id, endured, held);
       };
     },
 

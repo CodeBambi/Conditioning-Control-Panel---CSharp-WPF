@@ -44,6 +44,7 @@ export function local(overrides = {}) {
     voice: overrides.voice,
     night: overrides.night,
     niches: overrides.niches,
+    score: overrides.score,
   });
 }
 

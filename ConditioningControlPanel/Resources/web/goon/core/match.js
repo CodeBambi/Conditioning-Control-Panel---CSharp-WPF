@@ -68,8 +68,15 @@ import {
   GoonConsts, PAYLOAD_ELEMENT, clampWindowCount, costOf, enumName, isClockMessage,
   makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMediaPrep, makeMercy,
   makePayloadReceipt, makeResult, makeTick, makePayload, makeVoice, peerSpeaksVoice, VOICE_SUBS,
-  makeDuel, peerSpeaksNight, DUEL_SUBS, makeSong,
+  makeDuel, peerSpeaksNight, DUEL_SUBS, makeSong, peerScoresPoints,
 } from './contracts.js';
+import { heldShareOf, readWireStats } from './points.js';
+
+function sumKinds(byKind) {
+  let n = 0;
+  for (const k of Object.keys(byKind || {})) n += byKind[k] | 0;
+  return n;
+}
 import { SONG_TITLE_MAX, clampSongSec, wireSongUrl } from './song.js';
 import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
 import { localMonotonicMs } from './clock.js';
@@ -115,6 +122,9 @@ export class GoonOpponentState {
     this.attentionMode = GoonAttentionMode.NoCam;
 
     this.score = 0;
+    /* The points model split off their tick (`sc`, core/points.js readWireStats): {s,o,d,p,b,c}
+       or null (older peer, legacy match). Display only; their score above stays the number. */
+    this.stats = null;
     this.attentionPct = 100;
     this.charges = 0;
     this.toyActive = false;
@@ -288,6 +298,11 @@ export class GoonMatchService {
     this._peerSupportsVoice = false;
     // Game night: their build speaks `t:'duel'` (caps.night >= 1). Never send a duel frame otherwise.
     this._peerSupportsNight = false;
+    // The points model (core/points.js): their build scores with it (caps.score >= 1). Both seats
+    // must, or the match keeps the legacy survival score so the two numbers stay comparable.
+    this._peerScoresPoints = false;
+    this._outboundKinds = new Map();   // our payload id -> kind, until its closing receipt
+    this._inboundKinds = new Map();    // their payload id -> kind, until we finish it
     this._peerDuelLen = 0;
     this._localVoiceNotes = false;
     this._remoteVoiceNotes = false;
@@ -374,6 +389,7 @@ export class GoonMatchService {
       payloadAccepted: makeEvent(),
       payloadRejected: makeEvent(),
       payloadReceiptReceived: makeEvent(),
+      pointsAwarded: makeEvent(),
       consentChanged: makeEvent(),
       draftChanged: makeEvent(),
       opponentStateChanged: makeEvent(),
@@ -582,6 +598,53 @@ export class GoonMatchService {
   onPayloadAccepted(fn) { return this._ev.payloadAccepted.on(fn); }
   onPayloadRejected(fn) { return this._ev.payloadRejected.on(fn); }
   onPayloadReceiptReceived(fn) { return this._ev.payloadReceiptReceived.on(fn); }
+  /** Points model: every award as it lands, {type:'hit'|'held'|'pop'|'duel', points, kind?, combo?}. */
+  onPointsAwarded(fn) { return this._ev.pointsAwarded.on(fn); }
+
+  /** true when BOTH seats score with the points model this match. */
+  get pointsModel() { return this._scoring.pointsModel; }
+
+  /**
+   * Per-player stats for the recap card. `me` is the full ledger; `them` is what we can know:
+   * their split off their last tick, and the throws that crossed between us seen from our side.
+   */
+  matchStats() {
+    const me = this._scoring.points.stats(this._scoring.score);
+    const o = this._opponent.stats;
+    const them = {
+      score: this._opponent.score | 0,
+      sent: { landed: me.received ? sumKinds(me.received.byKind) : 0, held: me.received.held, byKind: Object.assign({}, me.received.byKind) },
+      received: { held: me.sent.held, byKind: Object.assign({}, me.sent.byKind) },
+      pops: o ? o.p : 0,
+      bestCombo: o ? o.b : 0,
+      duels: { won: me.duels.lost, lost: me.duels.won, points: o ? o.d : 0 },
+      split: o ? { sent: o.s, own: o.o, duel: o.d } : null,
+    };
+    return { pointsModel: this.pointsModel, me, them };
+  }
+
+  /**
+   * A bubble or flash we popped (ui/scoreHud.js hears the page events). Live only. Returns the
+   * award ({points, combo}; points 0 past the pop limiter) or null outside the points model.
+   */
+  notePop(nowMs = localMonotonicMs()) {
+    if (this._ended || this._phase !== GoonMatchPhase.Live) return null;
+    const a = this._scoring.awardPop(nowMs);
+    if (a) this._emitPoints(a);
+    return a;
+  }
+
+  /** A finished duel, 'win' | 'lose' | 'tie'. null outside the points model (legacy bonus applies). */
+  noteDuel(outcome) {
+    if (this._ended) return null;
+    const a = this._scoring.awardDuel(outcome);
+    if (a) this._emitPoints(a);
+    return a;
+  }
+
+  _emitPoints(a) {
+    this._ev.pointsAwarded.emit(a, (e) => this._warn(`pointsAwarded handler threw: ${e && e.message}`));
+  }
   onConsentChanged(fn) { return this._ev.consentChanged.on(fn); }
   onDraftChanged(fn) { return this._ev.draftChanged.on(fn); }
   onOpponentStateChanged(fn) { return this._ev.opponentStateChanged.on(fn); }
@@ -1128,6 +1191,7 @@ export class GoonMatchService {
       this._localHeavyPayloadId = id;
     }
     this._outboundCosts.set(id, cost);
+    this._outboundKinds.set(id, request.kind);
     this._send(msg);
     this._info(`payload out ${id} ${request.kind}`);
     return { ok: true, error: '', id };
@@ -1172,13 +1236,26 @@ export class GoonMatchService {
    * that is now bookkeeping: since 2026-08-05 nothing anywhere spends a charge, so riding out a
    * payload buys the receiver no ammunition. The RECEIPT is the whole of what it earns.
    */
-  notifyInboundPayloadFinished(payloadId, endured) {
+  notifyInboundPayloadFinished(payloadId, endured, held) {
     if (!payloadId) return;
+    const status = endured ? GoonReceiptStatus.Survived : GoonReceiptStatus.Completed;
+    // `held` (0..1, from the executor's own clock) is how much of it we sat through. Endured is all.
+    const share = endured ? 1 : heldShareOf(status, held);
     this._send(makePayloadReceipt({
       id: payloadId,
-      status: endured ? GoonReceiptStatus.Survived : GoonReceiptStatus.Completed,
+      status,
+      // Only a peer that scores with it hears it; null is stripped for everybody else.
+      held: this._peerScoresPoints ? Math.round(share * 100) / 100 : null,
     }));
     if (endured) this._scoring.awardPayloadEndured();
+    // Points model: our half of the same throw, once per payload, Live/SuddenDeath only.
+    if (this._inboundKinds.has(payloadId)) {
+      const kind = this._inboundKinds.get(payloadId);
+      this._inboundKinds.delete(payloadId);
+      const live = this._phase === GoonMatchPhase.Live || this._phase === GoonMatchPhase.SuddenDeath;
+      const a = live ? this._scoring.awardHeld(kind, share) : null;
+      if (a) this._emitPoints(a);
+    }
   }
 
   // ------------------------------------------------------------- mercy
@@ -1318,6 +1395,7 @@ export class GoonMatchService {
     this._peerSupportsVoice = peerSpeaksVoice(caps);
     // Game Night, on the same terms. A host that picked before the guest arrived tells them now.
     this._peerSupportsNight = peerSpeaksNight(caps);
+    this._peerScoresPoints = peerScoresPoints(caps);
     if (this._isHost && this._localSong) this._sendSong();
 
     if (caps && caps.min_v > GoonConsts.ProtocolVersion) {
@@ -1503,7 +1581,10 @@ export class GoonMatchService {
 
     this._scoring.reset();
     this._scoring.configure(this.localAttentionMode, matchRiskTier(pool));
-    this._ramp = buildRamp(pool, this._matchSeed, this._consentSheet.live_duration_sec, this._rngFactory);
+    this._scoring.setPointsModel(this._peerScoresPoints && peerScoresPoints(this._localCaps));
+    this._outboundKinds.clear();
+    this._inboundKinds.clear();
+    this._ramp =buildRamp(pool, this._matchSeed, this._consentSheet.live_duration_sec, this._rngFactory);
     this._rampIndex = 0;
     this._liveDurationMs = this._consentSheet.live_duration_sec * 1000;
     this._activeElements.clear();
@@ -1603,6 +1684,8 @@ export class GoonMatchService {
       // APPEND-ONLY optional field. A peer that predates it drops it on the floor; the C#
       // reference client sends 0 because it has no floating windows to report.
       vwin: this._localWindowCount,
+      // Points model split for their HUD and recap; null (stripped) in a legacy match.
+      sc: this._scoring.pointsModel ? this._scoring.points.wire(localMonotonicMs()) : null,
     }));
   }
 
@@ -1626,6 +1709,7 @@ export class GoonMatchService {
 
   _handleTick(tick) {
     this._opponent.score = tick.score;
+    this._opponent.stats = readWireStats(tick.sc);
     this._opponent.attentionPct = clamp(tick.attention_pct, 0, 100);
     this._opponent.attentionMode = tick.attention_mode;
     this._opponent.activeEffects = tick.active_effects || [];
@@ -1730,6 +1814,7 @@ export class GoonMatchService {
     if (payload.fire_at_match_ms < earliestMatchMs) payload.fire_at_match_ms = earliestMatchMs;
 
     this._send(makePayloadReceipt({ id: payload.id, status: GoonReceiptStatus.Accepted }));
+    this._inboundKinds.set(payload.id, payload.kind);
 
     let fireAtLocalMs;
     try { fireAtLocalMs = this._clock().matchMsToLocal(payload.fire_at_match_ms); }
@@ -1778,6 +1863,18 @@ export class GoonMatchService {
       this._info(`payload ${receipt.id} rejected (${status})`);
     } else if (receipt.id && (status === GoonReceiptStatus.Completed || status === GoonReceiptStatus.Survived)) {
       this._outboundCosts.delete(receipt.id);
+    }
+    // Points model: a closing receipt for one of OUR throws scores once; a rejection never does.
+    if (receipt.id && this._outboundKinds.has(receipt.id)) {
+      if (status.toLowerCase().startsWith('rejected')) {
+        this._outboundKinds.delete(receipt.id);
+      } else if (status === GoonReceiptStatus.Completed || status === GoonReceiptStatus.Survived) {
+        const kind = this._outboundKinds.get(receipt.id);
+        this._outboundKinds.delete(receipt.id);
+        const live = this._phase === GoonMatchPhase.Live || this._phase === GoonMatchPhase.SuddenDeath;
+        const a = live ? this._scoring.awardLanded(kind, heldShareOf(status, receipt.held)) : null;
+        if (a) this._emitPoints(a);
+      }
     }
 
     this._ev.payloadReceiptReceived.emit(receipt, (e) => this._warn(`payloadReceiptReceived handler threw: ${e && e.message}`));

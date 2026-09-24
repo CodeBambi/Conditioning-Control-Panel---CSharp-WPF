@@ -215,9 +215,9 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
 
   /* ------------------------------------------------------------- payloads */
 
-  function notifyFinished(id, endured) {
+  function notifyFinished(id, endured, held) {
     if (!match || typeof match.notifyInboundPayloadFinished !== 'function') return;
-    try { match.notifyInboundPayloadFinished(id, endured); }
+    try { match.notifyInboundPayloadFinished(id, endured, held); }
     catch (e) { warn(`notifyInboundPayloadFinished(${id}) threw: ${e && e.message}`); }
   }
 
@@ -234,19 +234,23 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
       // The engine already receipted `accepted`, so this needs a closing
       // receipt or the sender waits forever. Nothing ran: completed, no charge.
       warn(`no renderer for payload kind ${enumName(GoonPayloadKind, p.kind)} — receipting completed`);
-      notifyFinished(id, false);
+      notifyFinished(id, false, 0);
       return;
     }
 
     let settled = false;
-    const entry = { cancel: null, timer: 0, kind: p.kind, settle: null };
+    const entry = { cancel: null, timer: 0, kind: p.kind, settle: null, firedAt: 0 };
     const settle = (endured) => {
       if (settled) return;
       settled = true;
       try { clearTimeout(entry.timer); } catch (_e) { /* ignore */ }
       activePayloads.delete(id);
       syncHeat();
-      notifyFinished(id, endured);
+      // The points model's held share: how much of the throw was on screen (endured = all of it,
+      // cancelled before it fired = none).
+      const dur = Math.max(1, Number(p.duration_ms) || 1);
+      const held = endured ? 1 : entry.firedAt ? Math.min(1, Math.max(0, (localMonotonicMs() - entry.firedAt) / dur)) : 0;
+      notifyFinished(id, endured, held);
       info(`payload ${id} ${enumName(GoonPayloadKind, p.kind)} finished (endured=${!!endured})`);
     };
     entry.settle = settle;
@@ -256,6 +260,7 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
     const fire = () => {
       if (settled) return;
       if (!activePayloads.has(id)) return;      // cancelled while pending
+      entry.firedAt = localMonotonicMs();
       try {
         entry.cancel = r.renderPayload(p, (endured) => settle(!!endured));
       } catch (err) {
