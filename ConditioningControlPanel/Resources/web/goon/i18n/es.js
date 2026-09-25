@@ -814,6 +814,7 @@ export default Object.freeze({
   gg_duel_pickedThem: "su ruido",
   gg_duel_theyPick: "están eligiendo",
   gg_duel_rolled: "elegido por ti",
+  gg_duel_rolledPlay: "Se acabó el tiempo. Te tocó {name}.",
   gg_duel_noiseArchitecture: "Arquitectura",
   gg_duel_noiseLandscapes: "Paisajes",
   gg_duel_noiseSpace: "Espacio",

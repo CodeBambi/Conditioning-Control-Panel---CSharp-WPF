@@ -53,6 +53,8 @@ export const DUEL_COPY_RAW = Object.freeze({
   pickedThem: 'their noise',
   theyPick: 'they are picking',
   rolled: 'picked for you',
+  /** Play has started and the player never picked: the board was rolled for them. Said once. */
+  rolledPlay: tpl('Too slow. You got {name}.', (name) => ({ name })),
   noiseArchitecture: 'Architecture',
   noiseLandscapes: 'Landscapes',
   noiseSpace: 'Space',

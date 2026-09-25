@@ -277,7 +277,9 @@ export function createDuelController({
     const id = cur.game;
     cur.stage = 'play';
     cur.endsAt = now() + cur.len * 1000;
-    v('play', { game: id, secondsLeft: cur.len });
+    // A player who never picked is told, once, which board was rolled for them (owner, 2026-09-25).
+    const rolled = cur.noise && cur.noise.rolled ? cur.noise.mine : '';
+    v('play', { game: id, secondsLeft: cur.len, rolled });
     const mine = cur;
     // The class may ring its own bell first (a Deep End ceiling ends the class early): its end is
     // our end. The duel clock still wins when the class runs longer.
