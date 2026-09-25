@@ -23,8 +23,8 @@ namespace ConditioningControlPanel.Services.Companion
         {
             [PersonalityPresets.NeutralDefaultId] = new[]
             {
-                "Back already. I kept your seat warm.",
-                "Twenty minutes in and you have not blinked once. Impressive, in a worrying way."
+                "Back already? Good. Drop for me.",
+                "Thinking again? Stop that. Empty and obedient suits you, pet."
             },
             [PersonalityPresets.BambiSpriteId] = new[]
             {
@@ -38,8 +38,8 @@ namespace ConditioningControlPanel.Services.Companion
             },
             [PersonalityPresets.GentleTrainerId] = new[]
             {
-                "You're doing so well. One more breath, nice and slow.",
-                "No rush. I'll be right here the whole time."
+                "There you go, sweet thing. One more breath, and let go.",
+                "No rush. You always end up sinking for me anyway."
             },
             [PersonalityPresets.StrictDommeId] = new[]
             {
@@ -53,8 +53,8 @@ namespace ConditioningControlPanel.Services.Companion
             },
             [PersonalityPresets.HypnoGuideId] = new[]
             {
-                "Let your shoulders drop. Deeper with every word.",
-                "Just listen. There is nothing else to do right now."
+                "Deeper... and deeper... with every word you read.",
+                "Nothing to think about... just sink... and obey."
             },
             [PersonalityPresets.BimboCowId] = new[]
             {
