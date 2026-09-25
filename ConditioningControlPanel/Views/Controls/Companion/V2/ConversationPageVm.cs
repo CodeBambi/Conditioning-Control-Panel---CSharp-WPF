@@ -17,6 +17,10 @@ internal sealed record ConversationAction(string TurnId, string Id, string Label
 internal sealed record ConversationLine(string Id, string Speaker, string Text, string Time, bool IsUser)
 {
     public ConversationAction[] Actions { get; init; } = Array.Empty<ConversationAction>();
+    // A sanctioned video the reply names; the page draws it as a watch button (old chat's chip).
+    public string? LinkTitle { get; init; }
+    public string? LinkUrl { get; init; }
+    public bool HasLink => !string.IsNullOrEmpty(LinkTitle) && !string.IsNullOrEmpty(LinkUrl);
 }
 
 /// <summary>One projection of the brain's shared conversation. No transcript of its own is persisted.</summary>
@@ -140,12 +144,32 @@ internal sealed class ConversationPageVm : CompanionObservable
         while (common < Turns.Count && common < next.Length && Turns[common].Id == next[common].Id) common++;
         while (Turns.Count > common) Turns.RemoveAt(Turns.Count - 1);
         foreach (var t in next.Skip(common))
-            Turns.Add(new(t.Id, t.Kind == TurnKind.UserChat ? Loc.Get("companion_v2_you") : Name,
-                t.Text, t.Utc.ToLocalTime().ToString("t"), t.Kind == TurnKind.UserChat)
+            Turns.Add(Line(t, Name, Services.Companion.CompanionLinkIndex.FindMentionedTitle) with
                 { Actions = t.ActivityIds.Select(Services.Companion.CompanionActivities.Find)
                     .Where(a => a?.Allowed == true).Select(a => new ConversationAction(t.Id, a!.Id,
                         Services.Companion.CompanionActivities.ButtonLabel(a.Label))).ToArray() });
         Raise(nameof(HasNoTurns));
+    }
+    /// <summary>
+    /// One transcript line. Only a model reply gets a watch link: a title in the user's own message
+    /// is them talking, and an app reply never named a video. The visible text loses the dead
+    /// "[Title]" brackets or "[PLAY THE VIDEO]" placeholder the button now stands in for.
+    /// </summary>
+    internal static ConversationLine Line(CompanionTurn t, string name,
+        Func<string?, Services.Companion.CompanionLinkIndex.Entry?> findTitle)
+    {
+        var isUser = t.Kind == TurnKind.UserChat;
+        var link = !isUser && t.Kind == TurnKind.AssistantChat && !t.IsApplicationReply ? findTitle(t.Text) : null;
+        var text = t.Kind == TurnKind.AssistantChat && !t.IsApplicationReply
+            ? Services.Companion.ConversationLinks.Tidy(t.Text, link?.Title)
+            : t.Text;
+        return new(t.Id, isUser ? Loc.Get("companion_v2_you") : name, text, t.Utc.ToLocalTime().ToString("t"), isUser)
+        { LinkTitle = link?.Title, LinkUrl = link?.Url };
+    }
+    public void OpenLink(ConversationLine line)
+    {
+        if (!line.HasLink || !Services.Companion.CompanionLinkIndex.IsSanctioned(line.LinkUrl)) return;
+        CompanionLinkLauncher.Open(line.LinkUrl);
     }
     public void OpenActivity(ConversationAction action)
     {
@@ -199,7 +223,11 @@ internal sealed class ConversationPageVm : CompanionObservable
                 Notice = Loc.Get("companion_v2_refused");
                 App.AvatarWindow?.ShowModerationRefusalBubble(result.Refusal.Source);
             }
-            else if (result.IsAiGenerated || result.IsApplicationReply) Draft = string.Empty;
+            else if (result.IsAiGenerated || result.IsApplicationReply)
+            {
+                Draft = string.Empty;
+                SpeakThroughTube(result.Text, result.IsAiGenerated);
+            }
             else
             {
                 Notice = Loc.Get(FailureNoticeKey(result.Failure));
@@ -215,6 +243,27 @@ internal sealed class ConversationPageVm : CompanionObservable
         }
         finally { _send = null; Busy = false; Refresh(); }
     }
+    /// <summary>
+    /// A reply typed on this page is also said through the avatar's speech bubble when the tube is
+    /// showing, the same GigglePriority a tube chat ends with. This page's send never passes through
+    /// the tube's own input box, so the reply is spoken exactly once.
+    /// </summary>
+    private static void SpeakThroughTube(string? text, bool aiGenerated)
+    {
+        if (!ShouldSpeak(text, App.Settings?.Current?.AvatarEnabled == true)) return;
+        var avatar = App.AvatarWindow;
+        if (avatar == null) return;
+        try
+        {
+            avatar.RunOnAvatar(() =>
+            {
+                if (!avatar.IsVisible) return;
+                avatar.GigglePriority(text!, aiGenerated: aiGenerated);
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("Companion page reply not spoken: {Type}", ex.GetType().Name); }
+    }
+    internal static bool ShouldSpeak(string? text, bool avatarEnabled) => avatarEnabled && !string.IsNullOrWhiteSpace(text);
     internal static string FailureNoticeKey(AiFailureKind? failure) => failure switch
     {
         AiFailureKind.SignInRequired => "companion_v2_error_signin",
