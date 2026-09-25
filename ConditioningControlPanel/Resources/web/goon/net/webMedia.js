@@ -8,6 +8,8 @@
  *   media-flavour {flavour, custom, subs, online}  ->  online-media {state, subs, images, videos, progress}
  *   media-more                                      ->  the next wave of the same pool
  *   peer-niches {subs}                              ->  peer-media  (same shape; 'declined' when off)
+ *   noise-want {set}                                ->  noise-media {set, state, images}  (a Sort duel's
+ *                                                       NOISE board: a known set id only, stills only)
  *
  * BRIGHT LINE (same law as the desktop feed and the site's Intake): the BROWSER fetches
  * api.scrolller.com itself (it answers `access-control-allow-origin: *`); nothing passes
@@ -26,6 +28,8 @@
  * Pure of the DOM; `fetch`, the clock and the emitter are injected, so node tests drive it.
  * Nothing here throws at import.
  * ==========================================================================*/
+
+import { NOISE_STILLS, noiseSet } from '../core/noiseSets.js';
 
 export const ENDPOINT = 'https://api.scrolller.com/admin';
 export const MAX_SUBS = 8;
@@ -116,9 +120,15 @@ function pickByWidth(list, cap) {
  * @param {()=>number} [o.now]
  * @param {(ms:number)=>Promise<void>} [o.sleep]
  * @param {(msg:string)=>void} [o.log]
+ * @param {number} [o.stillTarget]      stills per wave (default STILL_TARGET)
+ * @param {number} [o.clipTarget]       clips per wave (default CLIP_TARGET; 0 = stills only)
+ * @param {object} [o.extra]            fields stamped on every frame (a noise board's `set`)
  */
 export function createWebMediaPool(o) {
   const frameType = o.frameType;
+  const STILLS = Number.isInteger(o.stillTarget) && o.stillTarget >= 0 ? o.stillTarget : STILL_TARGET;
+  const CLIPS = Number.isInteger(o.clipTarget) && o.clipTarget >= 0 ? o.clipTarget : CLIP_TARGET;
+  const extra = o.extra && typeof o.extra === 'object' ? o.extra : null;
   const emit = typeof o.emit === 'function' ? o.emit : () => {};
   const doFetch = typeof o.fetch === 'function' ? o.fetch : null;
   const now = typeof o.now === 'function' ? o.now : () => Date.now();
@@ -141,9 +151,10 @@ export function createWebMediaPool(o) {
   function snapshot() {
     const have = images.length + videos.length;
     const want = subs.length === 0 ? 0
-      : running ? have + Math.max(0, STILL_TARGET - stillAdded) + Math.max(0, CLIP_TARGET - clipAdded)
-        : Math.max(have, STILL_TARGET + CLIP_TARGET);
+      : running ? have + Math.max(0, STILLS - stillAdded) + Math.max(0, CLIPS - clipAdded)
+        : Math.max(have, STILLS + CLIPS);
     return {
+      ...(extra || {}),
       type: frameType,
       state: stateFor(true, subs.length, have, running, failed),
       subs: subs.slice(),
@@ -188,7 +199,7 @@ export function createWebMediaPool(o) {
   }
 
   async function fillKind(g, kind) {
-    const target = kind === 'image' ? STILL_TARGET : CLIP_TARGET;
+    const target = kind === 'image' ? STILLS : CLIPS;
     const cap = target * MAX_WAVES;
     const count = () => (kind === 'image' ? stillAdded : clipAdded);
     let dry = 0;
@@ -273,7 +284,7 @@ export function createWebMediaPool(o) {
       videos = [];
       running = false;
       failed = false;
-      try { emit({ type: frameType, state: 'off', subs: [], images: [], videos: [], progress: { have: 0, want: 0 } }); } catch (_e) { /* ignore */ }
+      try { emit({ ...(extra || {}), type: frameType, state: 'off', subs: [], images: [], videos: [], progress: { have: 0, want: 0 } }); } catch (_e) { /* ignore */ }
     },
     snapshot,
     get running() { return running; },
@@ -314,6 +325,7 @@ export function createWebMediaHost(o) {
   const own = createWebMediaPool(Object.assign({ frameType: 'online-media', emit: o.emit }, common));
   const peer = createWebMediaPool(Object.assign({ frameType: 'peer-media', emit: o.emit }, common));
   const save = typeof o.savePrefs === 'function' ? o.savePrefs : () => {};
+  const noise = new Map();   // set id -> pool (stills only, one board each)
   let online = o.online !== false;
   let flavour = '';          // this session's pick; '' until the card is answered
   let ownSubs = [];
@@ -341,6 +353,25 @@ export function createWebMediaHost(o) {
         if (online && flavour && ownSubs.length) own.more();
         return true;
       }
+      if (t === 'noise-want') {
+        const id = typeof (m && m.set) === 'string' ? m.set : '';
+        if (!id) { for (const p of noise.values()) p.off(); noise.clear(); return true; }
+        const board = noiseSet(id);
+        if (!board) return true;                       // an id off the list is nothing
+        if (!online) {
+          try { o.emit({ type: 'noise-media', set: board.id, state: 'declined', subs: [], images: [], videos: [] }); } catch (_e) { /* ignore */ }
+          return true;
+        }
+        let pool = noise.get(board.id);
+        if (!pool) {
+          pool = createWebMediaPool(Object.assign({
+            frameType: 'noise-media', emit: o.emit, stillTarget: NOISE_STILLS, clipTarget: 0, extra: { set: board.id },
+          }, common));
+          noise.set(board.id, pool);
+        }
+        pool.start([board.sub]);
+        return true;
+      }
       if (t === 'peer-niches') {
         const subs = cleanSubs(m && m.subs);
         if (!subs.length) { peer.off(); return true; }
@@ -354,6 +385,6 @@ export function createWebMediaHost(o) {
       }
       return false;
     },
-    own, peer,
+    own, peer, noise,
   };
 }

@@ -68,7 +68,7 @@ import {
   GoonConsts, PAYLOAD_ELEMENT, clampWindowCount, costOf, enumName, isClockMessage,
   makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMediaPrep, makeMercy,
   makePayloadReceipt, makeResult, makeTick, makePayload, makeVoice, peerSpeaksVoice, VOICE_SUBS,
-  makeDuel, peerSpeaksNight, DUEL_SUBS, makeSong, peerScoresPoints,
+  makeDuel, peerSpeaksNight, peerPicksNoise, DUEL_SUBS, makeSong, peerScoresPoints,
 } from './contracts.js';
 import { heldShareOf, readWireStats } from './points.js';
 
@@ -78,6 +78,7 @@ function sumKinds(byKind) {
   return n;
 }
 import { SONG_TITLE_MAX, clampSongSec, wireSongUrl } from './song.js';
+import { clampNoiseSet } from './noiseSets.js';
 import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
 import { localMonotonicMs } from './clock.js';
 import { ticker } from './scheduler.js';
@@ -298,6 +299,7 @@ export class GoonMatchService {
     this._peerSupportsVoice = false;
     // Game night: their build speaks `t:'duel'` (caps.night >= 1). Never send a duel frame otherwise.
     this._peerSupportsNight = false;
+    this._peerPicksNoise = false;
     // The points model (core/points.js): their build scores with it (caps.score >= 1). Both seats
     // must, or the match keeps the legacy survival score so the two numbers stay comparable.
     this._peerScoresPoints = false;
@@ -454,6 +456,8 @@ export class GoonMatchService {
   get peerSupportsVoice() { return this._peerSupportsVoice; }
   /** Their BUILD advertised `caps.night >= 1`: game night duel frames may be sent. */
   get peerSupportsNight() { return this._peerSupportsNight; }
+  /** Their build runs the Sort duel's noise pick (`caps.night >= 2`). False before their hello. */
+  get peerPicksNoise() { return !!this._peerPicksNoise; }
   /** Guest: the duel length the host announced (`t:'duel' sub:'cfg'`), or 0 before it arrives. */
   get peerDuelLen() { return this._peerDuelLen | 0; }
   /**
@@ -1402,6 +1406,8 @@ export class GoonMatchService {
     this._peerSupportsVoice = peerSpeaksVoice(caps);
     // Game Night, on the same terms. A host that picked before the guest arrived tells them now.
     this._peerSupportsNight = peerSpeaksNight(caps);
+    // Night revision 2: the Sort duel's VS reveal and noise pick. Below that, Sort plays the old way.
+    this._peerPicksNoise = peerPicksNoise(caps);
     this._peerScoresPoints = peerScoresPoints(caps);
     if (this._isHost && this._localSong) this._sendSong();
 
@@ -1923,6 +1929,11 @@ export class GoonMatchService {
   /** Their `t:'duel'` frame. Live/SuddenDeath only; ui/duel/duelController.js owns the rest. */
   _handleDuel(frame) {
     if (!frame.sub || !DUEL_SUBS.includes(frame.sub)) return;
+    // A noise pick names a known board or it is nothing (an older or broken build: dropped here).
+    if (frame.sub === 'noise') {
+      frame.set = clampNoiseSet(frame.set);
+      if (!frame.set || !this._peerPicksNoise) return;
+    }
     // The host's duel length is kept here so a UI that mounts after the frame still sees it. It
     // is also accepted in Countdown: the host sends it as its Live starts, and a guest whose
     // clock is a hair behind must not drop it.

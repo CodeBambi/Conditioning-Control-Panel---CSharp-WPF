@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- test/noise-shot.html - a look at the Sort duel's VS reveal and noise pick with no match behind it.
+     Serve Resources/web over http and open /goon/test/noise-shot.html (?stage=reveal|pick|lock). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../goon.css">
+<style>html, body { margin: 0; height: 100%; background: #14142B; }</style>
+</head>
+<body>
+<div id="host" style="position:fixed;inset:0;"></div>
+<script type="module">
+import { createNoiseView } from '../ui/duel/noiseView.js';
+import { nicheLabel } from '../ui/duel/noisePick.js';
+const stage = new URLSearchParams(location.search).get('stage') || 'pick';
+const v = createNoiseView({ d: document, host: document.getElementById('host') });
+v.reveal({ name: 'Sort', you: nicheLabel(['bimbofication', 'Bimbos']), them: nicheLabel(['EroticHypnosis']) });
+if (stage !== 'reveal') {
+  v.pick({ secondsLeft: 8, theirs: '', preview: () => '', onPick: (id) => v.picked({ who: 'you', set: id }) });
+  v.pickTimer(stage === 'lock' ? 0 : 5);
+  if (stage === 'lock' || stage === 'picked') {
+    v.picked({ who: 'you', set: 'space' });
+    v.picked({ who: 'them', set: 'cats' });
+  }
+  if (stage === 'lock') v.lock();
+}
+</script>
+</body>
+</html>
