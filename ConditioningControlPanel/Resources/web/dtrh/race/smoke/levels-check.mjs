@@ -332,7 +332,7 @@ await sleep(700);
 {
   const sent = logs.filter((l) => l.indexOf('cloud-open') >= 0).pop() || '';
   ok(sent.indexOf('"url":"https://bambicloud.com/file/stub-one"') >= 0, 'a tap posts cloud-open with the track\'s PAGE url: ' + sent.slice(0, 120));
-  ok(logs.some((l) => l.indexOf('press play over there') >= 0), 'and the player is told to press play over there');
+  ok(logs.some((l) => l.indexOf('just press play') >= 0), 'and the player is told bambicloud opens behind the game and to just press play');
   const after = asked.slice(before).filter((u) => /\.wav|\.mp3/.test(u));
   ok(after.length === 0, 'and not one byte of audio was asked for on this page' + (after.length ? ': ' + after.join(', ') : ''));
 }

@@ -176,6 +176,30 @@ let cloud = null;                   // race/cloud.js, when the host says this bu
 let levels = null;                  // race/levels.js, the panel the mini-player hangs under
 let cloudSource = null;             // race/cloudChart.js, the thing that answers hooks.chart
 let cloudWhere = '';                // ' · 3 of 9', kept so an upgraded chart repaints the same plate
+let cloudLevel = '';                // desktop: a BambiCloud level picked and waiting behind the game
+let cloudPressTimer = 0;
+/** How long a play press waits for their player before the window is brought forward instead. */
+const CLOUD_PRESS_MS = 9000;
+/**
+ * The menu's play on a desktop BambiCloud level: the host presses play over there
+ * (Services/Race/RaceCloudWindow.cs, cloud-start) and the `cloud-run` their player's start sends
+ * back is what starts the run, so the audio and the road begin together. If nothing plays in
+ * CLOUD_PRESS_MS the window comes forward and the player presses play there by hand.
+ */
+function cloudPress() {
+  clearCloudPress();
+  host.send({ type: 'cloud-start' });
+  plate({ stage: 'starting', name: cloudLevel });
+  cloudPressTimer = setTimeout(() => {
+    cloudPressTimer = 0;
+    if (started || exiting || !cloudLevel) return;
+    plate({ stage: 'stuck', name: cloudLevel });
+    host.send({ type: 'cloud-open', front: true });
+  }, CLOUD_PRESS_MS);
+}
+function clearCloudPress() {
+  if (cloudPressTimer) { clearTimeout(cloudPressTimer); cloudPressTimer = 0; }
+}
 
 const note = (t) => { if (waitEl) waitEl.textContent = t || ''; };
 function fail(err) {
@@ -304,7 +328,7 @@ bridge.on('track-error', (m) => trackError((m && m.message) || 'the track would 
 // bambicloud: the host saw their player start, so the run starts too - the audio over there is the
 // clock, and a run that waited for a menu press would already be behind it. The chart lands after,
 // through track-chart, the same swap-in a picked file's partial chart makes.
-bridge.on('cloud-run', () => { if (!started && !exiting && race) startRun(false); });
+bridge.on('cloud-run', () => { clearCloudPress(); cloudLevel = ''; if (!started && !exiting && race) startRun(false); });
 bridge.on('track-progress', (m) => {
   trackProgress = m || null;
   host.log(`track-progress: ${(m && m.stage) || '?'} ${Math.round(((m && m.pct) || 0) * 100)}% ${(m && m.name) || ''}`);
@@ -435,10 +459,10 @@ async function boot() {
     // the window away (the browser host with neither a same-origin ?back= nor a same-origin referrer).
     if ((!hosted && !standaloneExit) || (settings.canSurface === false && !settings.returnToCasino)) { menu.hideVerb('surface'); host.log('surface hidden: nowhere to go'); }
     menu.onPick((id) => {
-      if (id === 'race') startRun(true);
+      if (id === 'race') { if (cloudLevel) cloudPress(); else startRun(true); }
       else if (id === 'surface') surface();
-      else if (id === 'track') { plate({ stage: 'picking' }); host.send({ type: 'track-pick' }); }
-      else if (id === 'clear') { host.send({ type: 'track-cancel' }); race.setTrack(null); trackReady = null; plate(null); }
+      else if (id === 'track') { clearCloudPress(); cloudLevel = ''; plate({ stage: 'picking' }); host.send({ type: 'track-pick' }); }
+      else if (id === 'clear') { clearCloudPress(); cloudLevel = ''; host.send({ type: 'track-cancel' }); race.setTrack(null); trackReady = null; plate(null); }
       else if (id === 'story') { menu.hide(); menu.refreshView(); showCards().then(() => { if (!exiting && !started) menu.show(); }); }
     });
     if (trackReady) plate(trackReady); else if (trackProgress && trackProgress.stage !== 'cancelled') plate(trackProgress);
@@ -629,7 +653,12 @@ async function makeLevels() {
       // window there (Services/Race/RaceCloudWindow.cs) and the player presses play over
       // there. A host that only knows the bare message ignores the url and opens the front
       // door, which is still a working answer.
-      open: (url) => { host.send({ type: 'cloud-open', url }); if (settings.trackPick) plate({ stage: 'opening' }); },
+      // The window opens BEHIND the game (owner, 2026-09-25) and the menu's own play starts it:
+      // cloudPress below. The level stays in hand until a run starts or another track is picked.
+      open: (url, title) => {
+        host.send({ type: 'cloud-open', url });
+        if (settings.trackPick) { cloudLevel = String(title || 'bambicloud'); plate({ stage: 'opening', name: cloudLevel }); }
+      },
       toast,
     },
   });

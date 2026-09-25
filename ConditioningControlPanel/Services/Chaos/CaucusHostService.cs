@@ -341,7 +341,14 @@ internal static class CaucusHostService
             case "cloud-open":
                 // `url` is optional: the levels panel names the track's own page, and a page
                 // that does not send one just gets the site's front door.
-                OpenCloudWindow((string?)o["url"]);
+                // `front` is the page's fallback when a play press did not start their player:
+                // the window comes forward so the player can press play over there by hand.
+                OpenCloudWindow((string?)o["url"], background: (bool?)o["front"] != true);
+                break;
+            case "cloud-start":
+                // The game's play button on a BambiCloud level: their player starts the track,
+                // and the cloud-play it reports starts the run (OnCloudPlay).
+                StartCloudTrack();
                 break;
             case "exit":       // page-initiated: it winds itself down, then exit-done
                 _exiting = true;
@@ -1072,7 +1079,7 @@ internal static class CaucusHostService
         _host?.Post(new { type = "race-ownership", tracks = owned });
     }
 
-    private static void OpenCloudWindow(string? url = null)
+    private static void OpenCloudWindow(string? url = null, bool background = false)
     {
         if (!RacingAccess.CanOpenCloud(url)) { RefuseCloudTrack(); return; }
         var disp = Application.Current?.Dispatcher;
@@ -1087,7 +1094,15 @@ internal static class CaucusHostService
                     _cloud.Message += OnCloudMessage;
                     _cloud.Hidden += OnCloudHidden;
                 }
-                _cloud.ShowOrFocus(RaceCloudWindow.IsSiteUri(url) ? url : null);
+                var landing = RaceCloudWindow.IsSiteUri(url) ? url : null;
+                if (background)
+                {
+                    // Behind the game (owner, 2026-09-25): the level page loads out of the way and
+                    // the race keeps the keyboard; the game's play button starts it.
+                    _cloud.ShowInBackground(landing);
+                    _host?.FocusWeb();
+                }
+                else _cloud.ShowOrFocus(landing);
             }
             catch (Exception ex)
             {
@@ -1103,6 +1118,30 @@ internal static class CaucusHostService
     {
         if (_clock is CloudTrackClock) return;
         PostProgress("cancelled", 0, "", force: true);
+    }
+
+    /// <summary>cloud-start: press play over there for the player, a press of the game's own play
+    /// button. The track it starts meets RacingAccess in OnCloudTrack like any other (a refused
+    /// source is paused there), and the window is opened behind the game if it does not exist.</summary>
+    private static void StartCloudTrack()
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        QueueSession(() =>
+        {
+            try
+            {
+                if (_cloud == null)
+                {
+                    _cloud = new RaceCloudWindow();
+                    _cloud.Message += OnCloudMessage;
+                    _cloud.Hidden += OnCloudHidden;
+                }
+                _cloud.RequestStart();
+                _host?.FocusWeb();
+            }
+            catch (Exception ex) { App.Logger?.Warning("RaceHost.cloud-start: {E}", ex.Message); }
+        });
     }
 
     /// <summary>Every cloud-* frame the watcher posts, on the UI thread.</summary>
@@ -1184,7 +1223,12 @@ internal static class CaucusHostService
         if (_cloudTrackRefused || !RacingAccess.CanLaunch) { SetCloudPaused(true); return; }
         if (_cloudClock == null || !ReferenceEquals(_clock, _cloudClock)) return;
         _cloudClock.Update(_cloudClock.PositionSec, true, _cloudClock.DurationSec);
-        if (!RunLifecycle.IsActive) PostTrack(new { type = "cloud-run" });
+        if (!RunLifecycle.IsActive)
+        {
+            PostTrack(new { type = "cloud-run" });
+            // a play pressed over there hands the keyboard back to the race
+            QueueSession(() => _host?.FocusWeb());
+        }
         StartTrackClock();
         PostClock();
     }
