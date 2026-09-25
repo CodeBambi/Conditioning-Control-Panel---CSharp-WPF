@@ -525,6 +525,7 @@ namespace ConditioningControlPanel
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             _tubeHandle = new WindowInteropHelper(this).Handle;
+            HookSpeechBubblePlacement();
             // NOTE: _parentHandle is read on the PARENT thread inside HookParent() below — reading the
             // parent window's handle here would VerifyAccess-throw when this Loaded runs on the avatar thread.
 
