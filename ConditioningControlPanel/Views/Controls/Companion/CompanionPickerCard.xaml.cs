@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -139,7 +140,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             }
 
             TxtPreviewGlyph.Foreground = new SolidColorBrush(accent);
-            ShowPreview(PortraitInFolder(mod.InstalledPath));
+            // An animated companion (the shared avatar0 emote set of CCP Default, Bambi Sleep and
+            // Sissy) previews its own idle frame; pose files on disk are the fallback.
+            ShowPreview(EmoteStill(AvatarTubeWindow.EmoteIdleClipUri(mod.Id, 1, mod.InstalledPath))
+                        ?? PortraitInFolder(mod.InstalledPath));
         }
 
         /// <summary>Pose 1 from a mod's own folder, never through the resolver (which answers
@@ -220,9 +224,43 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             try
             {
                 if (setNumber < 1) setNumber = 1;
+
+                // An animated set shows what the tube really plays. Without this the single-look
+                // mods (CCP Default, Bambi Sleep, Sissy all reuse avatar0_emotes on set 1) fell
+                // through to avatar_pose1.png, the retired neon-girl art.
+                var mod = App.Mods?.ActiveMod;
+                var emote = EmoteStill(AvatarTubeWindow.EmoteIdleClipUri(
+                    App.Mods?.ActiveModId ?? mod?.Id, setNumber, mod?.InstalledPath));
+                if (emote != null) return emote;
+
                 var name = (setNumber == 1 ? "avatar_pose" : $"avatar{setNumber}_pose") + "1.png";
                 return ModResourceResolver.ResolveImageDecoded(name, PreviewDecodeWidth)
                        ?? ModResourceResolver.ResolveImage(name);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>First frame of an emote clip, frozen, or null when it cannot be read.</summary>
+        internal static ImageSource? EmoteStill(Uri? clip)
+        {
+            if (clip == null) return null;
+            try
+            {
+                System.IO.Stream? stream = clip.IsFile
+                    ? System.IO.File.OpenRead(clip.LocalPath)
+                    : Application.GetResourceStream(clip)?.Stream;
+                if (stream == null) return null;
+                using (stream)
+                {
+                    var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                    if (decoder.Frames.Count == 0) return null;
+                    var frame = decoder.Frames[0];
+                    frame.Freeze();
+                    return frame;
+                }
             }
             catch
             {
@@ -304,6 +342,31 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             Foreground = (Brush)FindResource("TextLightBrush"),
             Margin = new Thickness(0, 0, 0, 4)
         };
+
+        // ------------------------------------------------------------------ more options
+
+        private Action<Window>? _morePersonalityOptions;
+
+        /// <summary>
+        /// Opens the deeper personality editor. When a host sets it, the card shows a link right
+        /// under the personality choice, so it is in view without scrolling; null hides it.
+        /// </summary>
+        public Action<Window>? MorePersonalityOptions
+        {
+            get => _morePersonalityOptions;
+            set
+            {
+                _morePersonalityOptions = value;
+                BtnMorePersonality.Visibility = value != null ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        private void BtnMorePersonality_Click(object sender, RoutedEventArgs e)
+        {
+            if (_morePersonalityOptions == null || Window.GetWindow(this) is not Window owner) return;
+            _morePersonalityOptions(owner);
+            if (!_previewing) Refresh();
+        }
 
         // ------------------------------------------------------------------ fit
 

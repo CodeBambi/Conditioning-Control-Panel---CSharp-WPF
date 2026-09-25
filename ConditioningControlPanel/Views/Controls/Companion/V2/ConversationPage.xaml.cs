@@ -114,10 +114,16 @@ public partial class ConversationPage : UserControl
         else if (kind == "who")
         {
             var contents = new StackPanel();
-            contents.Children.Add(new CompanionPickerCard());
-            var advanced = new Button { Content = Loc.Get("companion_v2_personality"), Margin = new Thickness(0, 14, 0, 0) };
-            advanced.Click += (_, _) => { if (PersonalityEditor != null && Window.GetWindow(this) is Window owner) { PersonalityEditor(owner); _vm.Room.Sync(); _vm.Refresh(); } else OpenSheet("personality"); };
-            contents.Children.Add(advanced);
+            // "More personality options" lives inside the card, under the personality choice: as a
+            // button below the whole card it sat off screen in this sheet.
+            contents.Children.Add(new CompanionPickerCard
+            {
+                MorePersonalityOptions = owner =>
+                {
+                    if (PersonalityEditor != null) { PersonalityEditor(owner); _vm.Room.Sync(); _vm.Refresh(); }
+                    else OpenSheet("personality");
+                }
+            });
             SheetContent.Content = contents;
         }
         SheetOverlay.Visibility = Visibility.Visible;

@@ -38,6 +38,10 @@ namespace ConditioningControlPanel
         public ModManagerDialog()
         {
             InitializeComponent();
+            // The deeper personality editor, shown under the personality choice (v2 only: the
+            // studio edits the v2 prompt).
+            if (Services.Companion.CompanionExperience.IsV2Enabled)
+                CompanionCard.MorePersonalityOptions = Services.Companion.PersonalityStudio.Show;
             RefreshModList();
             SubscribeToPackEvents();
             Closed += (_, _) => UnsubscribeFromPackEvents();
