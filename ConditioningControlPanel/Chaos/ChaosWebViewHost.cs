@@ -794,6 +794,24 @@ internal sealed class ChaosWebViewHost : IDisposable
     }
 
     /// <summary>Return Win32 focus to the game surface (e.g. after a payload window closed).</summary>
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    /// <summary>True while this game window is the foreground window (the player is looking at it).</summary>
+    public bool IsForeground
+    {
+        get
+        {
+            try
+            {
+                if (_window == null || !_window.IsVisible) return false;
+                var own = new WindowInteropHelper(_window).Handle;
+                return own != IntPtr.Zero && GetForegroundWindow() == own;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); return false; }
+        }
+    }
+
     public void FocusWeb()
     {
         try

@@ -1455,8 +1455,46 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>When Racing Thoughts last kept an Escape as its pause; see <see cref="TryRacePauseOnEscape"/>.</summary>
+        private DateTime? _lastRaceEscapeClaimUtc;
+
+        /// <summary>
+        /// Escape in front of Racing Thoughts is its pause, not a panic (owner, 2026-09-25). The race
+        /// page hears the same key and brakes on its own; this only keeps the panic pass from closing
+        /// the game under it. Every condition is in <see cref="Services.Safety.PanicPolicy.GameClaimsEscapeAsPause"/>,
+        /// including the one that matters most: a second Escape within 2 s is a full panic.
+        /// </summary>
+        private bool TryRacePauseOnEscape()
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                bool claim = Services.Safety.PanicPolicy.GameClaimsEscapeAsPause(
+                    App.Settings?.Current?.PanicKey,
+                    gameInFront: Services.Chaos.CaucusHostService.IsInFront,
+                    engineRunning: _isRunning,
+                    lockCardOpen: LockCardWindow.IsAnyOpen(),
+                    lastClaimUtc: _lastRaceEscapeClaimUtc,
+                    nowUtc: now);
+                if (!claim) { _lastRaceEscapeClaimUtc = null; return false; }
+                _lastRaceEscapeClaimUtc = now;
+                VideoDiag.Log("PANIC", "Escape kept by Racing Thoughts as its pause (again within 2 s = full panic)");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // A probe that throws must never eat a panic press.
+                App.Logger?.Warning("PANIC: race pause probe failed: {Error}", ex.Message);
+                return false;
+            }
+        }
+
         private void HandlePanicKeyPress()
         {
+            // Racing Thoughts' pause, BEFORE everything below: a pause is not a panic, so it must not
+            // arm EMI's silence, the Chaster safety hold or the stop pass.
+            if (TryRacePauseOnEscape()) return;
+
             // EMI Desk (MOMENTS 4.B): FIRST LINE, before any of the ladder below. panicPressed is a
             // HOLD with a five-minute silence tail, and it has to be armed even if something further
             // down this method throws - the whole point is that she says nothing after a panic.
