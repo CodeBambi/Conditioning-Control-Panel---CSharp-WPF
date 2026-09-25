@@ -44,6 +44,8 @@ public partial class EmiDeskWindow
     private string? _channel;
 
     private DateTime _lastActivityUtc = DateTime.UtcNow;
+    private static readonly Random FlipRng = new();
+    private TimeSpan _flipAfter = EmiChannels.NextIdleBeforeFlip(FlipRng);
     private DateTime _channelUpUtc;
     private bool _glassLive;
 
@@ -172,11 +174,15 @@ public partial class EmiDeskWindow
     /// <summary>
     /// Anything the user did resets the clock and kills a live channel. A channel is only ever
     /// allowed on an untouched desk: the moment they come back, the glass is her face again.
+    ///
+    /// <para>Coming back is not a decline. This used to close with <c>declined: true</c>, which
+    /// armed the effectDeclined hold on the same mouse-down, so the pat on its mouse-up was
+    /// silenced (sfx, vox and the petted line all sit behind the hold).</para>
     /// </summary>
     private void NoteGlassActivity()
     {
         _lastActivityUtc = DateTime.UtcNow;
-        if (_glassLive) CloseChannel(declined: true);
+        if (_glassLive) CloseChannel(declined: false);
     }
 
     private void StartIdleWatch()
@@ -205,7 +211,7 @@ public partial class EmiDeskWindow
             if (Application.Current.Dispatcher.HasShutdownStarted) return;
             if (_glassLive) return;
             if (!GlassMayFlip()) return;
-            if ((DateTime.UtcNow - _lastActivityUtc) < EmiChannels.IdleBeforeFlip) return;
+            if ((DateTime.UtcNow - _lastActivityUtc) < _flipAfter) return;
             BeginFlip();
         }
         catch (Exception ex)
@@ -216,7 +222,7 @@ public partial class EmiDeskWindow
 
     /// <summary>
     /// Has the desk been left alone at least this long? The idle watch reads
-    /// <c>EmiChannels.IdleBeforeFlip</c> off the same clock; the fidget wheel's screen beat
+    /// <c>EmiChannels.NextIdleBeforeFlip</c> off the same clock; the fidget wheel's screen beat
     /// (<c>EmiAlive.ScreenBeatRestMs</c>) reads a shorter one. Both are the same "nobody has
     /// touched her" stamp, which <see cref="NoteGlassActivity"/> owns.
     /// </summary>
@@ -455,6 +461,7 @@ public partial class EmiDeskWindow
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] glass clear failed"); }
 
         _lastActivityUtc = DateTime.UtcNow;
+        _flipAfter = EmiChannels.NextIdleBeforeFlip(FlipRng);
 
         if (!wasLive || silent) return;
         if (!_closingForGood && Visibility == Visibility.Visible && !ChainLive && !AskLive)
