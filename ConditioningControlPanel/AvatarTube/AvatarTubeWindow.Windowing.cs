@@ -855,14 +855,38 @@ namespace ConditioningControlPanel
                 int newLeftPx = pr.Left - tubeW - (int)Math.Round(BaseOffsetFromParent * _scaleFactor * tubeToPx);
                 int newTopPx = pr.Top + (prH - tubeH) / 2 + (int)Math.Round(VerticalOffset * _scaleFactor * tubeToPx);
 
+                // Dock where she fits: main's left edge by default, main's right edge when the left
+                // would push her art off the monitor, floating fully on the monitor when neither side
+                // has room (main maximised). Replaces the old right-only clamp that slid her over
+                // main's side rail and still cut her pipes off at the screen edge.
+                var dockWork = DockWorkAreaPx(pr);
+                if (dockWork.HasValue)
+                {
+                    double artScale = _scaleFactor * tubeToPx;
+                    int leftInset = (int)Math.Round(TubeArtLeftPadding * artScale);
+                    int rightInset = (int)Math.Round((TubeArtRightPadding - SeamOverlapOverMain) * artScale);
+                    var plan = AvatarTubeLayout.TubeDockPlacement.Place(
+                        AvatarTubeLayout.Box.FromEdges(pr.Left, pr.Top, pr.Right, pr.Bottom),
+                        tubeW, tubeH, leftInset, rightInset,
+                        (int)Math.Round(VerticalOffset * artScale), dockWork.Value);
+                    newLeftPx = plan.Left;
+                    newTopPx = plan.Top;
+                    if (plan.Side != _dockSide)
+                    {
+                        App.Logger?.Debug("AvatarTube dock side {Old} -> {New}", _dockSide, plan.Side);
+                        _dockSide = plan.Side;
+                    }
+                }
+
                 // Sanity check: reject positions far off the virtual desktop (transitional garbage
                 // during focus/minimize churn — the physical twin of the old DIP guard).
                 var vs = System.Windows.Forms.SystemInformation.VirtualScreen;
                 if (newLeftPx < vs.Left - 2000 || newLeftPx > vs.Right + 2000 ||
                     newTopPx < vs.Top - 1000 || newTopPx > vs.Bottom + 1000) return;
 
-                // Keep her PAINTED pixels on the monitor (see ClampAttachedLeftToScreenPx).
-                newLeftPx = ClampAttachedLeftToScreenPx(newLeftPx, pr, tubeToPx);
+                // No monitor answer: keep the old right-only clamp as the fallback.
+                if (!dockWork.HasValue)
+                    newLeftPx = ClampAttachedLeftToScreenPx(newLeftPx, pr, tubeToPx);
 
                 // Already there? Skip the SetWindowPos — a layered window doesn't need
                 // WM_WINDOWPOSCHANGING churn on every parent event that didn't move it.
@@ -906,6 +930,37 @@ namespace ConditioningControlPanel
             Top = newTop;
         }
 
+        private AvatarTubeLayout.DockSide _dockSide = AvatarTubeLayout.DockSide.Left;
+
+        /// <summary>Work area (physical px) of the monitor main is on, through the same cache as the clamp.</summary>
+        private AvatarTubeLayout.Box? DockWorkAreaPx(RECT pr)
+        {
+            try
+            {
+                var centre = new System.Drawing.Point((pr.Left + pr.Right) / 2, (pr.Top + pr.Bottom) / 2);
+                if (!_clampScreenValid || Services.UI.DisplayChangeCoordinator.SpawnsSuppressed
+                    || !_clampScreenBounds.Contains(centre))
+                {
+                    var screen = System.Windows.Forms.Screen.FromPoint(centre);
+                    if (screen == null) return null;
+                    _clampScreenBounds = screen.Bounds;
+                    _clampWorkLeftPx = screen.WorkingArea.Left;
+                    _clampWorkArea = screen.WorkingArea;
+                    _clampScreenValid = true;
+                }
+                var wa = _clampWorkArea;
+                if (wa.Width <= 0 || wa.Height <= 0) return null;
+                return AvatarTubeLayout.Box.FromEdges(wa.Left, wa.Top, wa.Right, wa.Bottom);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AvatarTube dock work area skipped: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        private System.Drawing.Rectangle _clampWorkArea;
+
         // Screen lookup cache for the per-move clamp: Screen.FromPoint materializes the whole screen
         // list, and this runs once per WM_MOVE of main during a drag. Re-query only when the parent's
         // centre actually leaves the cached monitor.
@@ -932,6 +987,7 @@ namespace ConditioningControlPanel
                     if (screen == null) return newLeftPx;
                     _clampScreenBounds = screen.Bounds;
                     _clampWorkLeftPx = screen.WorkingArea.Left;
+                    _clampWorkArea = screen.WorkingArea;
                     _clampScreenValid = true;
                 }
 

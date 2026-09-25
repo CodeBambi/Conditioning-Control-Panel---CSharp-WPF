@@ -92,15 +92,34 @@
                    VerticalAlignment="Center"
                    IsHitTestVisible="False"/>
 
+            <!-- Speech bubble tail: points at the avatar from whichever edge the placement picked.
+                 Follows the bubble's visibility and fade. -->
+            <Path x:Name="SpeechTail"
+                  Panel.ZIndex="11"
+                  HorizontalAlignment="Left"
+                  VerticalAlignment="Top"
+                  IsHitTestVisible="False"
+                  Data="M0,0 L18,0 L9,14 Z"
+                  Fill="{DynamicResource PinkBrush}"
+                  RenderTransformOrigin="0.5,0.5"
+                  Visibility="{Binding Visibility, ElementName=SpeechBubble}"
+                  Opacity="{Binding Opacity, ElementName=SpeechBubble}">
+                <Path.RenderTransform>
+                    <ScaleTransform x:Name="SpeechTailFlip" ScaleY="1"/>
+                </Path.RenderTransform>
+            </Path>
+
             <!-- Speech Bubble - Z-Index 10, positioned next to avatar -->
             <!-- Dynamic bubble that sizes to content, grows UPWARD, scrolls when exceeding max -->
+            <!-- Placement (Margin, content width, tail) is computed in code by
+                 AvatarTubeLayout.SpeechBubblePlacement: kept on the monitor, off main's window. -->
             <Border x:Name="SpeechBubble"
                     Panel.ZIndex="10"
                     Visibility="Collapsed"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Bottom"
-                    Opacity="0.92"
-                    Margin="0,0,125,550"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Opacity="0.96"
+                    Margin="0,0,0,0"
                     MouseEnter="SpeechBubble_MouseEnter"
                     MouseLeave="SpeechBubble_MouseLeave"
                     MinWidth="120" MaxWidth="380"
