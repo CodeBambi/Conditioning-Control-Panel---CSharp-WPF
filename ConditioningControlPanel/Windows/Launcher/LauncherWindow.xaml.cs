@@ -155,6 +155,7 @@ public partial class LauncherWindow : Window
             lockdown.LockdownDeactivated -= OnLockdownChanged;
         }
         try { FxOnClosed(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnClosed threw"); }
+        TierBadgeFxStop();
     }
 
     // ------------------------------------------------------------------ title bar
@@ -430,6 +431,8 @@ public partial class LauncherWindow : Window
             };
             TierBadge.Source = badge == null ? null : ModResourceResolver.ResolveImageDecoded(badge, 64);
             TierBadge.Visibility = TierBadge.Source == null ? Visibility.Collapsed : Visibility.Visible;
+            if (TierBadge.Source != null) EnsureTierBadgeFx();
+            else TierBadgePopup.IsOpen = false;
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshAccount failed"); }
     }
