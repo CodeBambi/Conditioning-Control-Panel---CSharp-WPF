@@ -979,6 +979,10 @@ internal sealed class ChaosWebViewHost : IDisposable
             var hwnd = new WindowInteropHelper(_window).Handle;
             if (hwnd == IntPtr.Zero) return;
             SetWindowLongPtr(hwnd, GWL_HWNDPARENT, owned ? _glueOwnerHandle : IntPtr.Zero);
+            // Re-owning a SHOWN window drops its taskbar button even with WS_EX_APPWINDOW set at
+            // creation (desk run 2026-09-25: the Goon window had none). Re-assert the style and
+            // hand the shell the button explicitly after every owner change.
+            if (_opts.InputEnabled && _opts.OwnedByMainWindow) EnsureTaskbarButton(_window);
             // Owner changes are cached — flush the frame so the z-order link takes effect now.
             SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -1778,6 +1782,38 @@ internal sealed class ChaosWebViewHost : IDisposable
         }
         catch (Exception ex) { Diag.Swallowed(ex); }
     }
+
+    /// <summary>WS_EX_APPWINDOW plus ITaskbarList.AddTab: the shell only evaluates the style when a
+    /// window is shown, so a window owned AFTER showing needs the button added by hand.</summary>
+    private static void EnsureTaskbarButton(Window w)
+    {
+        ApplyAppWindowExStyle(w);
+        try
+        {
+            var hwnd = new WindowInteropHelper(w).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            var list = (ITaskbarList)new TaskbarListCoClass();
+            list.HrInit();
+            list.AddTab(hwnd);
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+    }
+
+    [System.Runtime.InteropServices.ComImport]
+    [System.Runtime.InteropServices.Guid("56FDF342-FD6D-11d0-958A-006097C9A090")]
+    [System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
+    private interface ITaskbarList
+    {
+        void HrInit();
+        void AddTab(IntPtr hwnd);
+        void DeleteTab(IntPtr hwnd);
+        void ActivateTab(IntPtr hwnd);
+        void SetActiveAlt(IntPtr hwnd);
+    }
+
+    [System.Runtime.InteropServices.ComImport]
+    [System.Runtime.InteropServices.Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
+    private class TaskbarListCoClass { }
 
     // A game window keeps its own taskbar button even while owned by (a possibly hidden) MainWindow.
     private static void ApplyAppWindowExStyle(Window w)

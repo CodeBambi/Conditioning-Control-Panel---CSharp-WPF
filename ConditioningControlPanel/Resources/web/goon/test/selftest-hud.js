@@ -2621,8 +2621,9 @@ const audioMod = await import('../ui/audio.js');
 
   // The two roots are used, and used the right way round.
   const urls = SFX_IDS.flatMap((id) => SFX_REGISTRY[id].files);
-  ok(urls.some((u) => u.startsWith(DTRH_SFX_DIR)),
-    'DtRH cues are hotlinked absolute (/dtrh/…), never copied');
+  ok(!urls.some((u) => u.startsWith(DTRH_SFX_DIR)),
+    'DtRH cues are local copies (assets/sfx/dtrh-*), never hotlinked: /dtrh/ mp3s ride the audio-web pack');
+  ok(urls.some((u) => /assets[\\/]sfx[\\/]dtrh-Pop\.mp3$/.test(u)), 'the bubble pops resolve to the copied DtRH pops');
   ok(urls.some((u) => /assets[\\/]sfx[\\/]/.test(u)),
     'and the intake/bureau recycles are local copies under assets/sfx/');
   ok(LOCAL_SFX_DIR === '../assets/sfx/', 'the local dir is module-relative (ui/ -> ../assets/sfx/)');
@@ -2633,7 +2634,7 @@ const audioMod = await import('../ui/audio.js');
   // the kinds differ by level only.
   const pops = ['bubble-pop', 'bubble-pop-fx', 'bubble-pop-video'];
   ok(pops.every((p) => SFX_REGISTRY[p]), 'plain / effect / video bubbles each have their own cue');
-  ok(pops.every((p) => ['Pop.mp3', 'Pop2.mp3', 'Pop3.mp3'].every((f) => SFX_REGISTRY[p].files.some((u) => u.endsWith('/' + f)))),
+  ok(pops.every((p) => ['Pop.mp3', 'Pop2.mp3', 'Pop3.mp3'].every((f) => SFX_REGISTRY[p].files.some((u) => u.endsWith('/dtrh-' + f)))),
     'and every one draws from the three classic pops');
   ok(SFX_REGISTRY['bubble-pop-fx'].gain > SFX_REGISTRY['bubble-pop'].gain,
     'the effect pop is the juicier of the two');
