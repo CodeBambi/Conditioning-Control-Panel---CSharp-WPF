@@ -886,8 +886,39 @@ namespace ConditioningControlPanel
                         AvatarTubeLayout.Box.FromEdges(pr.Left, pr.Top, pr.Right, pr.Bottom),
                         tubeW, tubeH, leftInset, rightInset,
                         (int)Math.Round(VerticalOffset * artScale), dockWork.Value);
+                    var parentBox = AvatarTubeLayout.Box.FromEdges(pr.Left, pr.Top, pr.Right, pr.Bottom);
+
+                    // Main moved or resized since our own make-room move? That was the user: forget
+                    // the saved bounds and leave main alone until the next attach / show.
+                    if (_makeRoom.NoteParentRect(parentBox))
+                        App.Logger?.Information("AvatarTube makeroom: user moved main, saved bounds dropped");
+
+                    // No side has room: move / narrow main so she can dock beside it (owner decision).
+                    if (plan.Side == AvatarTubeLayout.DockSide.Float && MakeRoomAllowed(pr, dockWork.Value))
+                    {
+                        double painted = tubeW - leftInset - rightInset;
+                        var target = AvatarTubeLayout.MakeRoomPlacement.Plan(parentBox, Math.Max(_parentMinWidthPx, 800), painted, dockWork.Value);
+                        if (target is AvatarTubeLayout.Box t)
+                        {
+                            int tx = (int)Math.Round(t.X), ty = (int)Math.Round(t.Y);
+                            int tw = (int)Math.Round(t.W), th = (int)Math.Round(t.H);
+                            var targetBox = new AvatarTubeLayout.Box(tx, ty, tw, th);
+                            _makeRoom.Applied(parentBox, targetBox);
+                            App.Logger?.Information("AvatarTube makeroom: from=({L},{T},{R},{B}) to=({NL},{NT},{NR},{NB}) art={A} minW={M:F0}",
+                                pr.Left, pr.Top, pr.Right, pr.Bottom, tx, ty, tx + tw, ty + th, (int)painted, _parentMinWidthPx);
+                            // ASYNC: never block on main's thread from the avatar thread.
+                            SetWindowPos(_parentHandle, IntPtr.Zero, tx, ty, tw, th,
+                                SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                            // Dock against where main is going, not where it was.
+                            plan = AvatarTubeLayout.TubeDockPlacement.Place(targetBox, tubeW, tubeH, leftInset, rightInset,
+                                (int)Math.Round(VerticalOffset * artScale), dockWork.Value);
+                            pr = new RECT { Left = tx, Top = ty, Right = tx + tw, Bottom = ty + th };
+                        }
+                    }
+
                     newLeftPx = plan.Left;
                     newTopPx = plan.Top;
+                    ApplyTubeArtFlip(plan.Side == AvatarTubeLayout.DockSide.Right);
 
                     var w = dockWork.Value;
                     string decision = $"{plan.Side}|{plan.Left},{plan.Top}|{pr.Left},{pr.Top},{pr.Right},{pr.Bottom}|{tubeW}x{tubeH}|{leftInset},{rightInset}";
@@ -957,6 +988,67 @@ namespace ConditioningControlPanel
         }
 
         private AvatarTubeLayout.DockSide _dockSide = AvatarTubeLayout.DockSide.Left;
+        private readonly AvatarTubeLayout.MakeRoomState _makeRoom = new();
+        private double _parentMinWidthPx;
+        private bool _parentMaximized;
+        private const uint SWP_ASYNCWINDOWPOS = 0x4000;
+
+        [DllImport("user32.dll")]
+        private static extern bool IsZoomed(IntPtr hWnd);
+
+        /// <summary>Never while main is maximised, fullscreen, or a lockdown session is running.</summary>
+        private bool MakeRoomAllowed(RECT pr, AvatarTubeLayout.Box work)
+        {
+            if (!_makeRoom.CanAdjust || _parentHandle == IntPtr.Zero) return false;
+            if (_parentMaximized || IsZoomed(_parentHandle)) return false;
+            try
+            {
+                var bounds = System.Windows.Forms.Screen.FromHandle(_parentHandle).Bounds;
+                if (pr.Left <= bounds.Left && pr.Top <= bounds.Top && pr.Right >= bounds.Right && pr.Bottom >= bounds.Bottom)
+                    return false;   // fullscreen
+            }
+            catch { }
+            try { if (App.Lockdown?.IsActive == true) return false; } catch { }
+            return true;
+        }
+
+        /// <summary>Put main back where it was before a make-room move (detach, hide, off).</summary>
+        internal void RestoreMadeRoom()
+        {
+            var g = _parentGeom;
+            var saved = _makeRoom.TakeRestore(g?.Minimized == true);
+            if (saved is not AvatarTubeLayout.Box b || _parentHandle == IntPtr.Zero) return;
+            App.Logger?.Information("AvatarTube makeroom: restore to=({L},{T},{R},{B})",
+                (int)b.X, (int)b.Y, (int)b.Right, (int)b.Bottom);
+            SetWindowPos(_parentHandle, IntPtr.Zero, (int)b.X, (int)b.Y, (int)b.W, (int)b.H,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        }
+
+        private bool _tubeArtFlipped;
+
+        /// <summary>
+        /// Docked on main's RIGHT, the tube ART is mirrored so its cables plug into main, as they do
+        /// on the left. The flip axis is the painted art's own centre, so the glass stays where it
+        /// is and her box, the measured insets and the bubble maths do not move. Only the frame image
+        /// flips; the avatar sprite, labels, arrows and bubble keep reading normally.
+        /// </summary>
+        private void ApplyTubeArtFlip(bool flip)
+        {
+            if (flip == _tubeArtFlipped && (!flip || ImgTubeFrame.RenderTransform is ScaleTransform)) return;
+            _tubeArtFlipped = flip;
+            if (!flip) { ImgTubeFrame.RenderTransform = Transform.Identity; return; }
+
+            double cx = ImgTubeFrame.ActualWidth / 2;
+            if (ImgTubeFrame.Source is System.Windows.Media.Imaging.BitmapSource bmp && _artMaxCol >= 0 && _artPixelWidth > 0)
+            {
+                double aw = ImgTubeFrame.ActualWidth, ah = ImgTubeFrame.ActualHeight;
+                double sc = Math.Min(aw / bmp.PixelWidth, ah / bmp.PixelHeight);
+                double offX = (aw - bmp.PixelWidth * sc) / 2;
+                double colScale = (double)bmp.PixelWidth / _artPixelWidth;
+                cx = offX + (_artMinCol + _artMaxCol + 1) / 2.0 * colScale * sc;
+            }
+            ImgTubeFrame.RenderTransform = new ScaleTransform(-1, 1, cx, 0);
+        }
         private string? _lastDockDecision;
         private const double DockDaylight = 3;   // DIPs between her painted art and main's frame
 
@@ -1925,6 +2017,8 @@ namespace ConditioningControlPanel
 
                 art ??= Services.ModResourceResolver.ResolveImage(tubeName);
                 ImgTubeFrame.Source = art;
+                _tubeArtFlipped = false;
+                ImgTubeFrame.RenderTransform = Transform.Identity;
                 // New art, new painted bounds: re-dock once layout has the new image.
                 if (_isAttached) Dispatcher.BeginInvoke(new Action(UpdatePosition), DispatcherPriority.Normal);
                 App.Logger?.Information("Tube style changed to: {Style}", tubeName);
@@ -2035,6 +2129,8 @@ namespace ConditioningControlPanel
             if (!_isAttached) return;
 
             _isAttached = false;
+            RestoreMadeRoom();
+            ApplyTubeArtFlip(false);
 
             // Switch to alternative tube image
             SetTubeStyle(true);
@@ -2094,6 +2190,7 @@ namespace ConditioningControlPanel
             if (_isAttached) return;
 
             _isAttached = true;
+            _makeRoom.Rearm();
 
             // Switch back to original tube image
             SetTubeStyle(false);

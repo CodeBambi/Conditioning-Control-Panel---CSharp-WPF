@@ -168,4 +168,100 @@ namespace ConditioningControlPanel.AvatarTubeLayout
             return new DockPlan((int)Math.Round(left), (int)Math.Round(top), side);
         }
     }
+
+    /// <summary>
+    /// "Make room" (owner, Sep 25): when the attached tube fits on neither side of main, main
+    /// moves and, if that is not enough, narrows (never below its MinWidth) just enough for the
+    /// tube to dock fully on the monitor beside it: left preferred, else right. Physical px.
+    /// </summary>
+    public static class MakeRoomPlacement
+    {
+        /// <param name="parent">Main window rect now.</param>
+        /// <param name="parentMinWidth">Main's MinWidth in px.</param>
+        /// <param name="paintedWidth">Width of the tube's painted art (what must fit beside main).</param>
+        /// <param name="workArea">Work area of main's monitor.</param>
+        /// <returns>The new main rect, or null when no move is needed or none can make room.</returns>
+        public static Box? Plan(Box parent, double parentMinWidth, double paintedWidth, Box workArea)
+        {
+            if (parent.IsEmpty || workArea.IsEmpty || paintedWidth <= 0) return null;
+            double minW = Math.Max(1, parentMinWidth);
+
+            bool leftFits = parent.X - paintedWidth >= workArea.X;
+            bool rightFits = parent.Right + paintedWidth <= workArea.Right;
+            if (leftFits || rightFits) return null;
+
+            // Left dock: main's left edge moves to workLeft + art, its right edge stays on the monitor.
+            double lx = workArea.X + paintedWidth;
+            double lRight = Math.Min(lx + parent.W, workArea.Right);
+            double lw = lRight - lx;
+            if (lw >= minW) return new Box(lx, parent.Y, lw, parent.H);
+
+            // Right dock: main's right edge moves to workRight - art, left edge stays on the monitor.
+            double rRight = workArea.Right - paintedWidth;
+            double rx = Math.Max(workArea.X, rRight - parent.W);
+            double rw = rRight - rx;
+            if (rw >= minW) return new Box(rRight - rw, parent.Y, rw, parent.H);
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Bookkeeping for a make-room move: what main looked like before, what we moved it to, and
+    /// whether the user has since taken over (then we forget and do not adjust again until the
+    /// next attach or show).
+    /// </summary>
+    public sealed class MakeRoomState
+    {
+        public const double Tolerance = 3;
+
+        public Box? Saved { get; private set; }
+        public Box? Target { get; private set; }
+        public bool Suppressed { get; private set; }
+
+        public bool CanAdjust => !Suppressed && Saved == null;
+
+        public void Applied(Box before, Box target)
+        {
+            Saved ??= before;   // the FIRST bounds are what a restore goes back to
+            Target = target;
+        }
+
+        /// <summary>Main moved or resized. True when it was the user (not our own move): forget.</summary>
+        public bool NoteParentRect(Box current)
+        {
+            if (Target is not Box t) return false;
+            bool ours = Math.Abs(current.X - t.X) <= Tolerance && Math.Abs(current.Y - t.Y) <= Tolerance
+                && Math.Abs(current.W - t.W) <= Tolerance && Math.Abs(current.H - t.H) <= Tolerance;
+            if (ours) return false;
+            Saved = null;
+            Target = null;
+            Suppressed = true;
+            return true;
+        }
+
+        /// <summary>Tube detached, hidden or turned off: the rect to put main back to (once), or null.</summary>
+        public Box? TakeRestore(bool parentMinimized)
+        {
+            if (parentMinimized || Saved is not Box s) return null;
+            Saved = null;
+            Target = null;
+            return s;
+        }
+
+        /// <summary>A fresh attach or show re-arms the adjustment.</summary>
+        public void Rearm() => Suppressed = false;
+    }
+
+    /// <summary>When the speech bubble's own window may be on screen.</summary>
+    public static class SpeechBubbleVisibility
+    {
+        public static bool ShouldShow(bool bubbleWanted, bool tubeVisible, bool tubeMinimized,
+            bool attached, bool parentVisible, bool parentMinimized)
+        {
+            if (!bubbleWanted || !tubeVisible || tubeMinimized) return false;
+            if (attached && (!parentVisible || parentMinimized)) return false;
+            return true;
+        }
+    }
 }
