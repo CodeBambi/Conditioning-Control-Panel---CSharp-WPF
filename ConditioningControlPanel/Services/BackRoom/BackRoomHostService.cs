@@ -216,9 +216,28 @@ internal static class BackRoomHostService
 
     public static bool IsActive => _host != null;
 
+    /// <summary>
+    /// What a signed-out Launch does instead of opening the room: the account sign-in. Settable so
+    /// a test can see the refusal without a MainWindow.
+    /// </summary>
+    internal static Action RequestSignIn { get; set; } = () =>
+        // MainWindowRef, not Application.Current.MainWindow: that can be the launcher or null in the tray.
+        (App.MainWindowRef ?? Application.Current?.MainWindow as MainWindow)?.OpenUnifiedLoginDialog();
+
+    /// <summary>
+    /// Every door into the casino ends here (Play card, Exclusives, the Sparkle wallet, EMI, the
+    /// friends drawer, the launcher), so the sign-in gate lives here once. The room's balance,
+    /// stations and prizes are the account's; a signed-out room could only fail at every table.
+    /// </summary>
     public static void Launch()
     {
         if (_host != null) { _host.FocusWeb(); return; }
+        if (Launcher.LauncherCatalogue.NeedsAccount)
+        {
+            App.Logger?.Information("BackRoomHostService: refused, nobody is signed in");
+            try { RequestSignIn(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom sign-in"); }
+            return;
+        }
         try { App.EmiDesk?.NoteOpen("backroom"); } catch (Exception ex) { Diag.Swallowed(ex); }
 
         try
