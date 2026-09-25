@@ -681,6 +681,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "peer-niches":      // the opponent's hello named their niches; fill a pool from them
                     OnPeerNiches(o);
                     break;
+                case "noise-want":       // a Sort duel's noise board, by set id ('' = release them all)
+                    OnNoiseWant(o);
+                    break;
                 case "share-card":       // recap's match card: copy (clipboard) or save (system dialog), PNG bytes only
                 {
                     var disp = Application.Current?.Dispatcher;
@@ -1819,6 +1822,64 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnPeerNiches: {E}", ex.Message); }
         }
 
+        // ============================ the Sort duel's noise boards ============================
+        //
+        // A Sort duel deals the player's niche as the pile they keep and a NOISE board as the pile
+        // they bin (2026-09-25). The page asks by set id only (`noise-want { set }`); the board name
+        // comes from GoonNoiseSets here, so nothing on the page can steer this fetch to a niche of
+        // its choosing. One small stills-only pool per board, kept for the match and handed back on
+        // `set: ''` (match over) or window close. CONSENT: this session's flavour pick, or the
+        // app-wide remote consent with a non-local media source, and never with Goon online
+        // pictures switched off (GoonNoiseSets.FetchAllowed). Refused = 'declined', and the duel
+        // plays the old Sort.
+
+        private static readonly Dictionary<string, GoonOnlineMedia> _noiseMedia = new(StringComparer.Ordinal);
+
+        private static void OnNoiseWant(JObject o)
+        {
+            try
+            {
+                if (_host == null) return;
+                var set = o["set"]?.Type == JTokenType.String ? (string?)o["set"] : null;
+                if (string.IsNullOrEmpty(set)) { ReleaseNoiseMedia(); return; }
+                if (GoonNoiseSets.SubFor(set) == null) return;
+                var s = App.Settings?.Current;
+                if (!GoonNoiseSets.FetchAllowed(s?.GoonMediaOnline, _sessionOptIn, s?.MediaSource, s?.HasRemoteMediaConsent == true))
+                {
+                    PostFrame(new { type = "noise-media", set, state = "declined", images = Array.Empty<object>() });
+                    return;
+                }
+                if (!_noiseMedia.TryGetValue(set, out var pool))
+                {
+                    var id = set;
+                    pool = GoonOnlineMedia.ForNoise(id, snap => PostNoiseMedia(id, snap));
+                    if (pool == null) return;
+                    _noiseMedia[id] = pool;
+                }
+                App.Logger?.Information("GoonHostService: noise board {Set}", set);
+                pool.Start(new[] { GoonNoiseSets.SubFor(set)! });
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnNoiseWant: {E}", ex.Message); }
+        }
+
+        private static void ReleaseNoiseMedia()
+        {
+            foreach (var p in _noiseMedia.Values) { try { p.Dispose(); } catch { } }
+            _noiseMedia.Clear();
+        }
+
+        private static void PostNoiseMedia(string set, GoonOnlineMedia.Snapshot snap)
+        {
+            PostFrame(new
+            {
+                type = "noise-media",
+                set,
+                state = snap.State,
+                images = snap.Images.Select(i => new { name = i.Name, url = i.Url }).ToList(),
+                progress = new { have = snap.Have, want = snap.Want },
+            });
+        }
+
         /// <summary>The consent rule for the peer pool: on unless the player switched online
         /// pictures off for the Goon Game. Pure, for the tests.</summary>
         internal static bool PeerFetchAllowed(bool? goonMediaOnline) => goonMediaOnline != false;
@@ -1898,6 +1959,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 _sessionOptIn = false;
                 try { _peerMedia?.Dispose(); } catch { }
                 _peerMedia = null;
+                try { ReleaseNoiseMedia(); } catch { }
                 try { _host?.Dispose(); } catch { }
                 _host = null;
                 // The handler dies with the core it was attached to; forgetting the reference is

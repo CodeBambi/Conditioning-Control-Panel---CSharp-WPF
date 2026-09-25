@@ -448,6 +448,19 @@ bridge.on('peer-media', (m) => {
   bridge.log('peer-media: ' + ((m && m.state) || '?') + ' ' + n + ' pictures');
 });
 
+/* THE SORT DUEL'S NOISE BOARDS (2026-09-25). The duel asks for a board by set id only; the host
+ * (or net/webMedia.js in a browser) fetches that safe-for-work Scrolller board and answers with
+ * `noise-media {set, state, images}`. Kept out of the deck; released at match end. */
+media.setNoiseRequester((set) => {
+  if (!(session.hosted || bridge.hasLocalHost())) return;
+  try { bridge.send({ type: 'noise-want', set }); } catch (_e) { /* never load-bearing */ }
+  bridge.log('noise-want: ' + (set || '(release)'));
+});
+bridge.on('noise-media', (m) => {
+  const n = media.setNoiseLibrary(m);
+  bridge.log('noise-media: ' + ((m && m.set) || '?') + ' ' + ((m && m.state) || '?') + ' ' + n + ' pictures');
+});
+
 bridge.on('online-media', (m) => {
   const c = mediaFlavour.adopt(m);
   const o = mediaFlavour.info();
@@ -1670,6 +1683,7 @@ function detachMatch() {
   try { songPlayer?.dispose?.(); } catch (_e) { /* ignore */ }
   songPlayer = null;
   peerNicheLink.clear();
+  try { media.clearNoise(); } catch (_e) { /* ignore */ }
   try { wakeLock?.stop?.(); } catch (_e) { /* a screen convenience, never load-bearing */ }
   try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
   currentSd = null;

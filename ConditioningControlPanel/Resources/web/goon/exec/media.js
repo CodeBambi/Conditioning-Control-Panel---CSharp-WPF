@@ -18,6 +18,8 @@
  *   setOnlineLibrary({images,videos})                  the flavour's online set, a third source
  *   setPeerNicheLibrary({images,videos})               the OPPONENT'S niches, fetched here;
  *                                                      only drawReceived/peekReceived reach it
+ *   setNoiseLibrary({set,images}) / listNoise(set)     a Sort duel's NOISE boards (never the deck)
+ *   setNoiseRequester(fn) / requestNoise(set)          ask the host for one board, once per set
  *   draw() / drawKind('image'|'video') -> {kind, name, url, acquire} | null
  *   acquire(entry) -> {url, release(), provenance}
  *   counts() -> {images, videos, skipped, truncated}   hasMedia() -> bool
@@ -152,6 +154,12 @@ export function createGoonMediaPool() {
   let peerNicheEntries = [];
   const peerNicheShownAt = new Map();
   let peerNicheSeq = 0;
+  /* THE SORT DUEL'S NOISE BOARDS (host `noise-media` frame, 2026-09-25): safe-for-work Scrolller
+   * boards the player sorts AGAINST. Kept per set id, NEVER in the deck: only the Sort duel's
+   * left pile reads them (ui/duel/duelController.js via listNoise). */
+  const noiseEntries = new Map();   // set id -> [{kind:'image', url}]
+  const noiseAsked = new Set();
+  let noiseRequester = null;
   let entries = [];       // hostEntries + localEntries + onlineEntries - what the deck indexes
   /* THE ONLINE DECK REFILLS (2026-09-24). The host fetches one wave per pick (about 24 stills,
    * 12 clips). Once most of that wave has been on screen the pool asks for the next one, ONCE per
@@ -511,6 +519,36 @@ export function createGoonMediaPool() {
       for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url, clip: true }); if (v) peerNicheEntries.push(v); }
       peerNicheShownAt.clear();
       return peerNicheEntries.length;
+    },
+
+    /** The bridge seam: fn(set) sends `noise-want {set}` to the host. '' = release them all. */
+    setNoiseRequester(fn) { noiseRequester = typeof fn === 'function' ? fn : null; },
+    /** Ask for one noise board, once per set until the boards are released. */
+    requestNoise(set) {
+      const id = typeof set === 'string' ? set : '';
+      if (!id || noiseAsked.has(id) || !noiseRequester) return false;
+      noiseAsked.add(id);
+      try { noiseRequester(id); } catch (_e) { noiseAsked.delete(id); return false; }
+      return true;
+    },
+    /** Host `noise-media {set, state, images}`: the whole current list for that board. */
+    setNoiseLibrary(m) {
+      const id = m && typeof m.set === 'string' ? m.set : '';
+      if (!id) return 0;
+      const list = [];
+      for (const e of (m.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) list.push({ kind: 'image', url: v.url }); }
+      if (list.length) noiseEntries.set(id, list); else noiseEntries.delete(id);
+      if (m.state === 'declined' || m.state === 'off') noiseAsked.delete(id);
+      return list.length;
+    },
+    /** A board's pictures as plain rows (a copy). [] until it lands. */
+    listNoise(set) { return (noiseEntries.get(set) || []).map((e) => ({ kind: e.kind, url: e.url })); },
+    /** Match over: forget every board and tell the host to hand the files back. */
+    clearNoise() {
+      const had = noiseAsked.size > 0 || noiseEntries.size > 0;
+      noiseEntries.clear();
+      noiseAsked.clear();
+      if (had && noiseRequester) { try { noiseRequester(''); } catch (_e) { /* ignore */ } }
     },
 
     /** How many pictures the opponent's niches have landed here. */

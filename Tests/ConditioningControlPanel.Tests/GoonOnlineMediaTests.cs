@@ -160,4 +160,48 @@ public class GoonOnlineMediaTests
     [InlineData(false, "pink", false)]
     public void OnlyAPickWithTheSwitchOnOptsTheSessionIn(bool online, string flavour, bool expected)
         => Assert.Equal(expected, GoonOnlineMediaRules.IsSessionOptIn(online, flavour));
+
+    // ---- the Sort duel's noise boards (2026-09-25) ----
+
+    [Theory]
+    [InlineData("architecture", "ArchitecturePorn")]
+    [InlineData("landscapes", "EarthPorn")]
+    [InlineData("space", "spaceporn")]
+    [InlineData("food", "FoodPorn")]
+    [InlineData("cars", "carporn")]
+    [InlineData("rooms", "RoomPorn")]
+    [InlineData("cats", "cats")]
+    public void NoiseSetIdsMapToTheirBoards(string id, string sub)
+        => Assert.Equal(sub, GoonNoiseSets.SubFor(id));
+
+    [Theory]
+    [InlineData("Cats")]
+    [InlineData("r/cats")]
+    [InlineData("ArchitecturePorn")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void AnythingOffTheNoiseListIsNothing(string? id)
+        => Assert.Null(GoonNoiseSets.SubFor(id));
+
+    [Fact]
+    public void EveryNoiseBoardIsAValidNiche()
+        => Assert.All(GoonNoiseSets.Boards.Values, b => Assert.True(GoonOnlineMediaRules.IsNiche(b)));
+
+    [Theory]
+    [InlineData(null, true, "local", false, true)]     // this session's flavour pick is the opt-in
+    [InlineData(true, false, "online", true, true)]    // or the app-wide consent with a remote source
+    [InlineData(true, false, "mixed", true, true)]
+    [InlineData(true, false, "local", true, false)]    // consent alone with a local source: no
+    [InlineData(true, false, "online", false, false)]  // a remote source without consent: no
+    [InlineData(false, true, "online", true, false)]   // Goon online pictures switched off: never
+    public void NoiseFetchNeedsAnOptIn(bool? goonOnline, bool sessionOptIn, string source, bool consent, bool expected)
+        => Assert.Equal(expected, GoonNoiseSets.FetchAllowed(goonOnline, sessionOptIn, source, consent));
+
+    [Fact]
+    public void ForNoiseRefusesAnUnknownBoard()
+    {
+        Assert.Null(GoonOnlineMedia.ForNoise("porn", _ => { }));
+        using var m = GoonOnlineMedia.ForNoise("cats", _ => { });
+        Assert.NotNull(m);
+    }
 }
