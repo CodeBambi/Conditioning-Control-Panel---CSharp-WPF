@@ -763,8 +763,9 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
             if (Settings.BouncingTextEnabled)
             {
                 var speed = Settings.BouncingTextSpeed <= 3 ? Loc.Get("session_spoiler_speed_slow") : Settings.BouncingTextSpeed <= 6 ? Loc.Get("session_spoiler_speed_medium") : Loc.Get("session_spoiler_speed_fast");
-                var phrases = Settings.BouncingTextPhrases.Any()
-                    ? Loc.GetF("session_spoiler_using_phrases", string.Join("\", \"", Settings.BouncingTextPhrases))
+                var bouncingWords = Services.PresetNaming.BouncingWords(this);
+                var phrases = bouncingWords.Any()
+                    ? Loc.GetF("session_spoiler_using_phrases", string.Join("\", \"", bouncingWords))
                     : Loc.Get("session_spoiler_uses_global_phrase_pool");
                 parts.Add(Loc.GetF("session_spoiler_bouncing_text", speed, phrases));
             }
