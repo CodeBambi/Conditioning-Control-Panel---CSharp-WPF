@@ -192,7 +192,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             var activeId = App.Companion?.ActiveCompanion ?? CompanionId.OGBambiSprite;
             var def = CompanionDefinition.GetById(activeId);
             var display = def.GetDisplayName(slutMode);
-            Name = App.Mods?.MakeModAware(display) ?? display;
+            // CCP Default names its companion neutrally (the reused animated avatar), never the
+            // legacy roster title of the active companion id ("Synthetic Blowdoll").
+            var neutral = App.Mods?.IsCCPDefault == true ? App.Mods.GetCompanionName() : null;
+            Name = !string.IsNullOrWhiteSpace(neutral) ? neutral! : App.Mods?.MakeModAware(display) ?? display;
             ModName = App.Mods?.ActiveMod?.Name ?? string.Empty;
             Flavor = App.Mods?.MakeModAware(def.Description) ?? def.Description;
 

@@ -3,6 +3,18 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
 
+    <UserControl.Resources>
+        <ControlTemplate x:Key="PickerLinkTemplate" TargetType="Button">
+            <TextBlock x:Name="t" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                       Background="Transparent" TextWrapping="Wrap"/>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="t" Property="TextDecorations" Value="Underline"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+    </UserControl.Resources>
+
     <!-- THE one place that picks the companion's avatar and personality. Hosted by the
          Customise window today and meant for the Companion tab next, so it knows nothing about
          either host: it reads the live state from App.AvatarWindow / App.Personality and writes
@@ -56,6 +68,12 @@
                         <ComboBox x:Name="CmbPersonality" Style="{DynamicResource DarkComboBoxStyle}"
                                   Foreground="{DynamicResource TextLightBrush}" MinHeight="30"
                                   SelectionChanged="CmbPersonality_SelectionChanged"/>
+                        <!-- The deeper personality editor, right under the choice it refines. It used
+                             to sit below the whole card and was off screen in the Companion sheet. -->
+                        <Button x:Name="BtnMorePersonality" Content="{loc:Str companion_v2_personality}"
+                                Click="BtnMorePersonality_Click" Visibility="Collapsed"
+                                HorizontalAlignment="Left" Margin="0,5,0,0" Cursor="Hand"
+                                Foreground="#B084DC" FontSize="11" Template="{StaticResource PickerLinkTemplate}"/>
                     </StackPanel>
                 </Grid>
                 <TextBlock x:Name="TxtAvatarHint" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"
@@ -68,19 +86,7 @@
 
                 <Button x:Name="BtnTubeFit" Content="{loc:Str btn_tube_fit}" ToolTip="{loc:Str tooltip_tube_fit}"
                         Click="BtnTubeFit_Click" HorizontalAlignment="Left" Margin="0,8,0,0"
-                        Foreground="#B084DC" FontSize="11" Cursor="Hand">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <TextBlock x:Name="t" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
-                                       Background="Transparent"/>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="t" Property="TextDecorations" Value="Underline"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
+                        Foreground="#B084DC" FontSize="11" Cursor="Hand" Template="{StaticResource PickerLinkTemplate}"/>
             </StackPanel>
 
             <!-- PREVIEW: another mod's companion, read-only -->
