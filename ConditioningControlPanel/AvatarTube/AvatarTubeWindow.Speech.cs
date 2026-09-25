@@ -2326,7 +2326,7 @@ namespace ConditioningControlPanel
             {
                 // Bambi Sleep mode: suppress the canned "hehehe" giggle SFX entirely — it sounds cheap
                 // next to that mod's real voiceline barks, so a clip-less bubble just stays silent.
-                if (IsBambiSleepMod()) return;
+                if (SuppressGiggleSfx()) return;
 
                 // Use giggle sounds 5-8 for AI responses (reserved for special interactions)
                 var giggleFiles = new[] {
