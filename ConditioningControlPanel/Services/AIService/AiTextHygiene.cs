@@ -61,6 +61,33 @@ namespace ConditioningControlPanel.Services
         private static readonly Regex UnclosedKeyedTag = new(
             @"\[[A-Za-z][A-Za-z0-9 _-]*:[^\]\r\n]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        // A reply that opens with a bracketed speaker name, "[Dosha] ...": MythoMax borrows a creator
+        // from the link titles and wears it as a script tag (desk run 2026-09-25). Only at the very
+        // start, one to three Capitalised words (never an all-caps verdict like [PASS]), no colon (keyed tags are StripMetadataTags' job).
+        private static readonly Regex LeadingSpeakerTag = new(
+            @"^\s*\[[A-Z][a-z][A-Za-z0-9._'-]*(?: [A-Z][a-z][A-Za-z0-9._'-]*){0,2}\]\s*", RegexOptions.Compiled);
+
+        private static readonly System.Collections.Generic.HashSet<string> VerdictWords =
+            new(System.StringComparer.OrdinalIgnoreCase) { "pass", "fail", "yes", "no", "ok", "done", "skip" };
+
+        /// <summary>Drops a leading "[Name]" speaker tag, then the quotes the whole line was wrapped
+        /// in, which came with it.</summary>
+        internal static string StripSpeakerTag(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+            var m = LeadingSpeakerTag.Match(text!);
+            if (!m.Success) return text!;
+            // A bracketed VERDICT is an answer, not a speaker ([Pass], [Fail] from the awareness parser).
+            var tag = m.Value.Trim().TrimStart('[').TrimEnd(']');
+            if (VerdictWords.Contains(tag)) return text!;
+            var rest = text!.Substring(m.Length).Trim();
+            // Nothing real after it: leave it alone rather than empty the reply.
+            if (!System.Linq.Enumerable.Any(rest, char.IsLetter)) return text!;
+            if (rest.Length >= 2 && rest[0] == '"' && rest[^1] == '"' && rest.IndexOf('"', 1) == rest.Length - 1)
+                rest = rest.Substring(1, rest.Length - 2).Trim();
+            return rest;
+        }
+
         /// <summary>
         /// Strip leaked context-metadata tags, closed or truncated, then collapse the whitespace the
         /// removal leaves behind. An empty result means the reply was nothing but metadata - the caller
@@ -478,7 +505,7 @@ namespace ConditioningControlPanel.Services
             // newlines. Seeing either in user-visible text means raw tokens reached the bubble.
             cleaned = cleaned.Replace("Ġ", " ").Replace("Ċ", "\n");
 
-            return StripInstructionLeak(cleaned.Trim());
+            return StripInstructionLeak(StripSpeakerTag(cleaned.Trim()));
         }
 
         // ===================== leaked instruction text =====================

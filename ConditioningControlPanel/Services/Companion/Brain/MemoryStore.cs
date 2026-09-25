@@ -97,6 +97,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         // Curated profile keys. Constants because MemorySignalWriter, the panel and the injection
         // ordering all have to agree on the spelling, and a typo would silently create a second key.
         public const string KeyPreferredName = "preferredName";
+        /// <summary>The account's display name: what she calls them until they give a preferredName.</summary>
+        public const string KeyUsername = "username";
         public const string KeyFirstSeen = "firstSeen";
         public const string KeyLevel = "level";
         public const string KeyStreakDays = "streakDays";
@@ -112,7 +114,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         private static readonly string[] ProfileKeyOrder =
         {
-            KeyPreferredName, KeyFirstSeen, KeyLevel, KeyStreakDays,
+            KeyPreferredName, KeyUsername, KeyFirstSeen, KeyLevel, KeyStreakDays,
             KeyTotalSessions, KeyArchetype, KeyFavoriteFeatures, KeyLastSessionRecap
         };
 
@@ -596,7 +598,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (text.Length > 0) ordered.Add($"{pair.Key}={text}");
             }
 
-            return ordered.Count == 0 ? null : "What you know about them: " + string.Join(", ", ordered);
+            if (ordered.Count == 0) return null;
+            var line = "What you know about them: " + string.Join(", ", ordered);
+            // Owner, 2026-09-25: she knows them by their username unless they said otherwise.
+            if (profile.ContainsKey(KeyUsername) || profile.ContainsKey(KeyPreferredName))
+                line += ". Call them by preferredName when set, otherwise by username.";
+            return line;
         }
 
         /// <summary>

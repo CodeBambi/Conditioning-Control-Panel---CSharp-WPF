@@ -287,6 +287,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             if (settings != null)
             {
+                var username = settings.UserDisplayName?.Trim();
+                Set(MemoryStore.KeyUsername, string.IsNullOrWhiteSpace(username) ? null : username);
                 Set(MemoryStore.KeyLevel, (long)settings.PlayerLevel);
                 Set(MemoryStore.KeyStreakDays, (long)settings.CurrentStreak);
                 Set(MemoryStore.KeyTotalSessions, (long)settings.TotalSessions);
