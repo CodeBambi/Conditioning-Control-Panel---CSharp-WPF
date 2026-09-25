@@ -740,7 +740,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     for (let k = 0; k < VERBS.length; k++) { i = (i + dir + VERBS.length) % VERBS.length; if (!verbEls[i].hidden) return i; }
     return from;
   };
-  const STAGE_CAP = { picking: 'pick a file', opening: 'over to bambicloud', fetching: 'pulling the audio down', decode: 'reading the file', energy: 'feeling the pulse', words: 'listening for the words', cancelled: '', error: '' };
+  const STAGE_CAP = { picking: 'pick a file', opening: 'bambicloud opens behind the game · just press play', starting: 'starting it in bambicloud', stuck: 'press play over in bambicloud', fetching: 'pulling the audio down', decode: 'reading the file', energy: 'feeling the pulse', words: 'listening for the words', cancelled: '', error: '' };
   let trackState = null, trackOnRow = false;
   /** The stored best for the track in hand, read ONCE per setTrack: the paints below run every frame. */
   let trackBestRec = null;
