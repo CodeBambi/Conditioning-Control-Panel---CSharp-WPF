@@ -704,6 +704,31 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// thing the model read. Returns "" when there is nothing to say, so a stock build's prompt is
         /// exactly the cached prefix and nothing else.
         /// </summary>
+        /// <summary>preferredName when they gave one in chat, else the account username.</summary>
+        internal static string? UserNameForPrompt(IMemoryStore? memory)
+        {
+            try
+            {
+                if (memory is MemoryStore store)
+                {
+                    foreach (var key in new[] { MemoryStore.KeyPreferredName, MemoryStore.KeyUsername })
+                    {
+                        if (!store.Profile.TryGetValue(key, out var v)) continue;
+                        var s = v switch
+                        {
+                            string x => x,
+                            System.Text.Json.JsonElement je when je.ValueKind == System.Text.Json.JsonValueKind.String => je.GetString(),
+                            _ => null,
+                        };
+                        if (!string.IsNullOrWhiteSpace(s)) return s.Trim().Length > 40 ? s.Trim()[..40] : s.Trim();
+                    }
+                }
+                var fallback = App.Settings?.Current?.UserDisplayName?.Trim();
+                return string.IsNullOrWhiteSpace(fallback) ? null : (fallback.Length > 40 ? fallback[..40] : fallback);
+            }
+            catch { return null; }
+        }
+
         internal string BuildTail(AiPurpose purpose, IReadOnlyList<CompanionTurn> window, string? input = null,
             string? recall = null)
         {
@@ -720,6 +745,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
             }
             if (!string.IsNullOrWhiteSpace(recall)) lines.Add(recall!);
+
+            // Owner, 2026-09-25: she knows them by their username unless they said otherwise.
+            if (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction)
+            {
+                var name = UserNameForPrompt(_memory);
+                if (name != null)
+                    lines.Insert(0, $"The user's name is {name}. Use it now and then; never ask for their name. " +
+                                    "If they tell you to call them something else, use that instead.");
+            }
 
             // Anti-fixation lines FIRST: Compose sheds tail lines from the end, and the budget
             // loop below drops whatever no longer fits — with these after the time-of-day line
