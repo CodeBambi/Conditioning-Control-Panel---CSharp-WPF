@@ -18,7 +18,9 @@ namespace ConditioningControlPanel.Services.Race;
 /// WE ARE A GUEST. The window shows their site and nothing else: no login form of ours, no API
 /// call of ours, no markup added to their page. The one script that runs inside it (the watcher,
 /// <see cref="WatcherScript"/>) reads the state of their audio element and the tab title, and
-/// takes one instruction back (pause / resume). Everything else about their page is theirs.
+/// takes two instructions back: pause / resume, and start (the game's play button, which plays
+/// their element or, before one exists, presses the play action on the track page). Everything
+/// else about their page is theirs.
 ///
 /// Own user-data folder, so a sign-in survives between sessions and the descent's WebView2
 /// profile is never touched. Navigation stays on the site and its subdomains; anything else is
@@ -40,6 +42,8 @@ internal sealed class RaceCloudWindow : IDisposable
     /// InitWebAsync, so a window built for a track lands on that track and not the front door.</summary>
     private string? _openOn;
     private bool _disposed;
+    /// <summary>The game's play button asked for the track and their player has not started yet.</summary>
+    private bool _startWanted;
 
     /// <summary>Every cloud-* frame the watcher posts. Raised on the UI thread.</summary>
     public event Action<JObject>? Message;
@@ -54,17 +58,41 @@ internal sealed class RaceCloudWindow : IDisposable
     /// <paramref name="url"/> is the page to land on (a track's own page, from the levels
     /// panel); null keeps whatever is already loaded, or the site's front door on a fresh
     /// window. Checked against the site here as well, never trusted from the caller.</summary>
-    public void ShowOrFocus(string? url = null)
+    public void ShowOrFocus(string? url = null) => Open(url, background: false);
+
+    /// <summary>Open the window BEHIND the game (owner, 2026-09-25): a level pick lands the track
+    /// page without taking focus, and the game's own play button starts it (<see cref="RequestStart"/>).
+    /// The caller hands focus back to the race window after this.</summary>
+    public void ShowInBackground(string? url = null) => Open(url, background: true);
+
+    /// <summary>Start the landed track from the game's play button. Remembered until their player
+    /// reports it is playing, and re-sent when a page finishes loading, because a level pick and a
+    /// play press can both land while the page is still on its way.</summary>
+    public void RequestStart()
+    {
+        if (_disposed) return;
+        _startWanted = true;
+        if (_window == null) Open(null, background: true);
+        PostToPage(new { type = "cloud-start" });
+    }
+
+    private void Open(string? url, bool background)
     {
         if (_disposed) return;
         try
         {
             var want = IsSiteUri(url) ? url : null;
-            if (_window == null) { _openOn = want; Build(); }
+            if (want != null) _startWanted = false;   // a new track page: an old press does not carry over
+            if (_window == null) { _openOn = want; Build(background); }
             else if (want != null && _coreReady && _web?.CoreWebView2 != null) _web.CoreWebView2.Navigate(want);
             else if (want != null) _openOn = want;   // still starting up: InitWebAsync takes it
             if (_window == null) return;
-            if (!_window.IsVisible) _window.Show();
+            if (!_window.IsVisible)
+            {
+                _window.ShowActivated = !background;
+                _window.Show();
+            }
+            if (background) return;
             _window.Activate();
             _web?.Focus();
         }
@@ -86,7 +114,7 @@ internal sealed class RaceCloudWindow : IDisposable
 
     // ============================ window ============================
 
-    private void Build()
+    private void Build(bool background)
     {
         _web = new WebView2
         {
@@ -122,6 +150,7 @@ internal sealed class RaceCloudWindow : IDisposable
             try { _window?.Hide(); } catch (Exception ex) { App.Logger?.Debug("RaceCloud.hide: {E}", ex.Message); }
             try { Hidden?.Invoke(); } catch (Exception ex) { App.Logger?.Debug("RaceCloud.Hidden: {E}", ex.Message); }
         };
+        _window.ShowActivated = !background;
         _window.Show();
         _ = InitWebAsync();
         App.Logger?.Information("RaceCloud: window up");
@@ -172,8 +201,12 @@ internal sealed class RaceCloudWindow : IDisposable
             // the descent's or the race's own WebView2 state.
             var userDataFolder = Path.Combine(App.UserDataPath, "browser_data_bambicloud");
             Directory.CreateDirectory(userDataFolder);
+            // Autoplay without a gesture in THIS profile only: the game's play button starts their
+            // player from the race window, so the click that "counts" happened somewhere else.
+            // The argument string is constant, which a user-data folder needs across launches.
+            var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
             var env = await CoreWebView2Environment
-                .CreateAsync(browserExecutableFolder: null, userDataFolder: userDataFolder, options: null)
+                .CreateAsync(browserExecutableFolder: null, userDataFolder: userDataFolder, options: options)
                 .ConfigureAwait(true);
             await _web.EnsureCoreWebView2Async(env).ConfigureAwait(true);
             if (_disposed || _web.CoreWebView2 == null) return;
@@ -198,6 +231,7 @@ internal sealed class RaceCloudWindow : IDisposable
             core.NewWindowRequested += OnNewWindowRequested;
             core.WebMessageReceived += OnWebMessageReceived;
             core.ProcessFailed += OnProcessFailed;
+            core.NavigationCompleted += OnNavigationCompleted;
             _coreReady = true;
             var landing = _openOn; _openOn = null;
             core.Navigate(IsSiteUri(landing) ? landing! : StartUrl);
@@ -275,9 +309,16 @@ internal sealed class RaceCloudWindow : IDisposable
             var o = JObject.Parse(json);
             var type = (string?)o["type"];
             if (string.IsNullOrEmpty(type) || !type.StartsWith("cloud-", StringComparison.Ordinal)) return;
+            if (type == "cloud-play") _startWanted = false;
             Message?.Invoke(o);
         }
         catch (Exception ex) { App.Logger?.Debug("RaceCloud.OnWebMessageReceived: {E}", ex.Message); }
+    }
+
+    /// <summary>A play press that landed while the page was still loading is sent again once it is up.</summary>
+    private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (_startWanted) PostToPage(new { type = "cloud-start" });
     }
 
     private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
@@ -299,6 +340,7 @@ internal sealed class RaceCloudWindow : IDisposable
                 _web.CoreWebView2.NewWindowRequested -= OnNewWindowRequested;
                 _web.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
                 _web.CoreWebView2.ProcessFailed -= OnProcessFailed;
+                _web.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
             }
         }
         catch (Exception ex) { App.Logger?.Debug("RaceCloud.Dispose unhook: {E}", ex.Message); }
@@ -426,12 +468,41 @@ internal sealed class RaceCloudWindow : IDisposable
       } catch (e) {}
     }, CLOCK_MS);
 
-    // The one instruction we take: the race's Brake pauses their player, and letting go resumes it.
+    // cloud-start: the game's play button. Press the play action in the track page's header (the
+    // round play button beside the title), or play their element on a page without one, and keep
+    // trying for eight seconds while their page is still putting itself together.
+    var startTimer = 0;
+    function start() {
+      try {
+        if (startTimer) clearInterval(startTimer);
+        var tries = 0, pressed = 0;
+        var attempt = function () {
+          try {
+            tries++;
+            var el = scan();
+            if (el && isPlaying(el)) { clearInterval(startTimer); startTimer = 0; return; }
+            // The track page's own play action first: their player may still hold the LAST track,
+            // and resuming that would start the wrong song. Only pressed while nothing plays (it
+            // toggles), as soon as it exists and then every 3 s until the audio runs.
+            var btn = document.querySelector('.section-header .action');
+            if (btn && btn.click) { if (!pressed || tries - pressed >= 6) { pressed = tries; btn.click(); } }
+            else if (el && srcOf(el)) { var p = el.play(); if (p && p['catch']) p['catch'](function () {}); }
+            if (tries >= 16) { clearInterval(startTimer); startTimer = 0; }
+          } catch (e) {}
+        };
+        startTimer = setInterval(attempt, 500);
+        attempt();
+      } catch (e) {}
+    }
+
+    // The instructions we take: the race's Brake pauses their player, letting go resumes it,
+    // and cloud-start (above) starts the landed track.
     try {
       if (window.chrome && window.chrome.webview && window.chrome.webview.addEventListener) {
         window.chrome.webview.addEventListener('message', function (ev) {
           try {
             var m = ev && ev.data;
+            if (m && m.type === 'cloud-start') { start(); return; }
             if (!m || m.type !== 'cloud-set-paused') return;
             var el = current || scan();
             if (!el) return;
