@@ -156,7 +156,10 @@ export const DEFAULT_SFX_BUS = BUS_GAME;
  * the section headers are executable instead of decorative and a cue cannot be
  * pasted into the wrong section and still sound like the section it landed in.
  * -------------------------------------------------------------------------- */
-const D = dtrhSfxUrl;
+// DtRH cues are COPIED in as assets/sfx/dtrh-<name> (2026-09-25): every mp3 under
+// /dtrh/assets ships in the separately downloaded audio-web pack, so the hotlink was silent
+// on any install (and any build) without it, and every bubble pop went quiet.
+const D = (file) => localSfxUrl('dtrh-' + file);
 const L = localSfxUrl;
 /** Chrome the player drives. */
 const uiCue = (e) => Object.assign({ bus: BUS_UI }, e);
