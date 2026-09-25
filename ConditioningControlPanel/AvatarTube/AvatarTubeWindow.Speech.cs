@@ -447,7 +447,7 @@ namespace ConditioningControlPanel
                 _isShowingChatHistory = false;
                 ChatHistoryView.Visibility = Visibility.Collapsed;
                 SpeechScroller.Visibility = Visibility.Visible;
-                SpeechBubble.MaxWidth = 380;
+                SpeechBubble.MaxWidth = SpeechBubbleMaxWidth;
             }
 
             // Skip only when the avatar isn't on screen. Mute silences her VOICE (audio is gated
@@ -655,6 +655,8 @@ namespace ConditioningControlPanel
             return b;
         }
 
+        private static readonly Brush GlassBubbleBrush = FreezeBrush(Color.FromArgb(0xEB, 0x15, 0x0F, 0x1E));
+        private static readonly Brush GlassTextBrush = FreezeBrush(Color.FromRgb(0xF4, 0xEE, 0xF8));
         private static Brush? _defaultBubbleBrush;
         private static Brush? _sissyBubbleBrush;
 
@@ -672,27 +674,17 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Applies per-mod speech-bubble styling. In sissy mod the fill is the more-transparent variant
-        /// and the text uses a brighter high-contrast color so it pops; other mods keep the opaque fill
-        /// and their accent (PinkBrush) text. Cheap and idempotent — called every time the bubble is
-        /// shown, so it always reflects the current mod without mod-change wiring.
+        /// Applies the speech-bubble skin: one dark glass card with white text for every mod. Cheap and
+        /// idempotent, called every time the bubble is shown.
         /// </summary>
         private void ApplyBubbleBackgroundForMod()
         {
             try
             {
-                _defaultBubbleBrush ??= BuildBubbleBrush(0xFF);
-                _sissyBubbleBrush ??= BuildBubbleBrush((byte)Math.Round(SissyBubbleAlpha * 255));
-
-                var id = App.Mods?.ActiveModId ?? "";
-                bool isSissy = id.IndexOf("sissy", StringComparison.OrdinalIgnoreCase) >= 0;
-                SpeechBubble.Background = isSissy ? _sissyBubbleBrush : _defaultBubbleBrush;
-
-                // Sissy → brighter text; otherwise restore the mod-accent dynamic resource (PinkBrush).
-                if (isSissy)
-                    TxtSpeech.Foreground = SissyTextBrush;
-                else
-                    TxtSpeech.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "PinkBrush");
+                // One glass card for every mod: near-black violet at ~92%, white text, the mod's accent
+                // only on the thin border and links. Pink-on-pink was unreadable (owner, Sep 25).
+                SpeechBubble.Background = GlassBubbleBrush;
+                TxtSpeech.Foreground = GlassTextBrush;
             }
             catch { /* non-fatal — keep whatever brush is set */ }
         }
@@ -750,7 +742,7 @@ namespace ConditioningControlPanel
                         _isShowingChatHistory = false;
                         ChatHistoryView.Visibility = Visibility.Collapsed;
                         SpeechScroller.Visibility = Visibility.Visible;
-                        SpeechBubble.MaxWidth = 380;
+                        SpeechBubble.MaxWidth = SpeechBubbleMaxWidth;
                     }
 
                     var baseText = text ?? "";
@@ -828,7 +820,7 @@ namespace ConditioningControlPanel
                 Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(180, 180, 200))
             });
-            TxtSpeech.FontSize = 20;
+            TxtSpeech.FontSize = 15;
 
             SpeechBubble.Visibility = Visibility.Visible;
 
@@ -855,19 +847,19 @@ namespace ConditioningControlPanel
             double fontSize;
             if (charCount <= 50)
             {
-                fontSize = 22; // Normal size for short messages
+                fontSize = 15; // real DIPs now (the bubble left the scaled canvas)
             }
             else if (charCount <= 120)
             {
-                fontSize = 20; // Slightly smaller for medium messages
+                fontSize = 15;
             }
             else if (charCount <= 250)
             {
-                fontSize = 18; // Smaller for longer messages
+                fontSize = 15;
             }
             else
             {
-                fontSize = 16; // Smallest for very long AI responses
+                fontSize = 14; // long replies
             }
 
             TxtSpeech.FontSize = fontSize;
@@ -884,11 +876,12 @@ namespace ConditioningControlPanel
         /// ApplyTubeLayoutOffsets, chat history, the Loaded hop) plus the live re-placement hooks
         /// (the bubble growing, the tube window moving or resizing).
         ///
-        /// <para>The maths lives in <see cref="AvatarTubeLayout.SpeechBubblePlacement"/>. This
-        /// method only maps the world into the tube's 780x1080 design canvas: the work area of the
-        /// monitor she is on, and, while attached, main's window. Keeping the bubble off main is the
-        /// old seam rule in general form (an opaque pixel over main swallows main's clicks, see
-        /// <c>AttachedBubbleRightMargin</c>); it now holds whichever side of main she docks on.</para>
+        /// <para>The bubble is its own popup window (<c>SpeechPopup</c>), outside the tube's scaled
+        /// design canvas: text renders at its real size and the bubble can use the whole monitor.
+        /// Everything here is physical px. The maths lives in
+        /// <see cref="AvatarTubeLayout.SpeechBubblePlacement"/>: inside the work area of the monitor
+        /// she is on, never over main's window while attached (an opaque pixel over main swallows
+        /// main's clicks), above her head on the roomier side, tail aimed at her.</para>
         /// </summary>
         private void ApplySpeechBubblePlacement()
         {
@@ -896,56 +889,27 @@ namespace ConditioningControlPanel
             _placingSpeechBubble = true;
             try
             {
-                if (SpeechBubble.Parent is not FrameworkElement canvasEl) return;
-                double cw = canvasEl.ActualWidth > 0 ? canvasEl.ActualWidth : DesignWidth;
-                double ch = canvasEl.ActualHeight > 0 ? canvasEl.ActualHeight : 1080;
-                var canvas = new AvatarTubeLayout.Box(0, 0, cw, ch);
+                SyncSpeechPopupOpen();
+                if (PresentationSource.FromVisual(this) == null || AvatarBorder.ActualWidth <= 0) return;
 
-                var avatarRect = AvatarBorder.ActualWidth > 0 && AvatarBorder.IsDescendantOf(canvasEl)
-                    ? AvatarBorder.TransformToAncestor(canvasEl).TransformBounds(
-                        new Rect(0, 0, AvatarBorder.ActualWidth, AvatarBorder.ActualHeight))
-                    : new Rect(cw / 2 - 99, ch - 210 - 306, 198, 306);
-                var avatar = new AvatarTubeLayout.Box(avatarRect.X, avatarRect.Y, avatarRect.Width, avatarRect.Height);
+                // Avatar box in physical px.
+                var a0 = AvatarBorder.PointToScreen(new Point(0, 0));
+                var a1 = AvatarBorder.PointToScreen(new Point(AvatarBorder.ActualWidth, AvatarBorder.ActualHeight));
+                var avatar = AvatarTubeLayout.Box.FromEdges(Math.Min(a0.X, a1.X), Math.Min(a0.Y, a1.Y),
+                    Math.Max(a0.X, a1.X), Math.Max(a0.Y, a1.Y));
 
-                var work = canvas;
+                var screen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(
+                    (int)Math.Round(avatar.X + avatar.W / 2), (int)Math.Round(avatar.Y + avatar.H / 2)));
+                if (screen == null) return;
+                var wa = screen.WorkingArea;
+                var work = AvatarTubeLayout.Box.FromEdges(wa.Left, wa.Top, wa.Right, wa.Bottom);
+
                 AvatarTubeLayout.Box? obstacle = null;
-                bool mapped = false;
-                try
-                {
-                    if (PresentationSource.FromVisual(canvasEl) != null)
-                    {
-                        var p0 = canvasEl.PointToScreen(new Point(0, 0));
-                        var p1 = canvasEl.PointToScreen(new Point(cw, ch));
-                        double sx = (p1.X - p0.X) / cw, sy = (p1.Y - p0.Y) / ch;
-                        if (sx > 0 && sy > 0)
-                        {
-                            AvatarTubeLayout.Box ToCanvas(double l, double t, double r, double b) =>
-                                AvatarTubeLayout.Box.FromEdges((l - p0.X) / sx, (t - p0.Y) / sy, (r - p0.X) / sx, (b - p0.Y) / sy);
+                if (_isAttached && _parentHandle != IntPtr.Zero && GetWindowRect(_parentHandle, out var pr))
+                    obstacle = AvatarTubeLayout.Box.FromEdges(pr.Left, pr.Top, pr.Right, pr.Bottom);
 
-                            var mid = canvasEl.PointToScreen(new Point(avatarRect.X + avatarRect.Width / 2,
-                                avatarRect.Y + avatarRect.Height / 2));
-                            var screen = System.Windows.Forms.Screen.FromPoint(
-                                new System.Drawing.Point((int)Math.Round(mid.X), (int)Math.Round(mid.Y)));
-                            if (screen != null)
-                            {
-                                var wa = screen.WorkingArea;
-                                work = ToCanvas(wa.Left, wa.Top, wa.Right, wa.Bottom);
-                            }
-                            if (_isAttached && _parentHandle != IntPtr.Zero && GetWindowRect(_parentHandle, out var pr))
-                                obstacle = ToCanvas(pr.Left, pr.Top, pr.Right, pr.Bottom);
-                            mapped = true;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("Speech bubble screen mapping skipped: {Error}", ex.Message);
-                }
-
-                // Not on screen yet (no HWND): assume the classic left dock, main on the seam.
-                if (!mapped && (_isAttached || ModOverridesAttachedTubeOnly()))
-                    obstacle = new AvatarTubeLayout.Box(DesignWidth - TubeArtRightPadding + SeamOverlapOverMain, 0,
-                        TubeArtRightPadding, ch);
+                // DIP -> px of the popup's own window when it is up, else of the monitor she is on.
+                double s = SpeechPopupScale();
 
                 var content = SpeechBubble.Child as FrameworkElement;
                 double chromeW = SpeechBubble.Padding.Left + SpeechBubble.Padding.Right
@@ -953,32 +917,48 @@ namespace ConditioningControlPanel
                 double chromeH = SpeechBubble.Padding.Top + SpeechBubble.Padding.Bottom
                     + SpeechBubble.BorderThickness.Top + SpeechBubble.BorderThickness.Bottom;
                 double configured = double.IsFinite(SpeechBubble.MaxWidth) && SpeechBubble.MaxWidth > 0
-                    ? SpeechBubble.MaxWidth : 380;
+                    ? SpeechBubble.MaxWidth : SpeechBubbleMaxWidth;
 
-                var plan = AvatarTubeLayout.SpeechBubblePlacement.Place(canvas, work, obstacle, avatar,
-                    configured, chromeW, outerMax =>
+                var plan = AvatarTubeLayout.SpeechBubblePlacement.Place(work, work, obstacle, avatar,
+                    configured * s, chromeW * s, outerMaxPx =>
                     {
-                        if (content == null) return (outerMax, 80.0);
+                        double outerMax = outerMaxPx / s;
+                        if (content == null) return (outerMaxPx, 80 * s);
                         double inner = Math.Max(0, outerMax - chromeW);
                         content.MaxWidth = inner;
                         content.Measure(new Size(inner, double.PositiveInfinity));
                         double w = Math.Max(SpeechBubble.MinWidth, content.DesiredSize.Width + chromeW);
-                        return (Math.Min(outerMax, w), content.DesiredSize.Height + chromeH);
-                    });
+                        return (Math.Min(outerMax, w) * s, (content.DesiredSize.Height + chromeH) * s);
+                    },
+                    edgeGap: Math.Max(AvatarTubeLayout.SpeechBubblePlacement.Gap, SpeechBubble.Margin.Left * s + 2));
 
-                if (content != null) content.MaxWidth = plan.ContentMaxWidth;
-                if (Math.Abs(SpeechBubble.Margin.Left - plan.Bubble.X) > 0.5
-                    || Math.Abs(SpeechBubble.Margin.Top - plan.Bubble.Y) > 0.5
-                    || SpeechBubble.Margin.Right != 0 || SpeechBubble.Margin.Bottom != 0)
-                    SpeechBubble.Margin = new Thickness(plan.Bubble.X, plan.Bubble.Y, 0, 0);
+                if (content != null) content.MaxWidth = plan.ContentMaxWidth / s;
 
-                // Tail: an 18x14 wedge overlapping the bubble's 3px border so it reads as one shape.
-                const double tailW = 18, tailH = 14, overlap = 3;
-                double tailTop = plan.Tail == AvatarTubeLayout.TailEdge.Bottom
-                    ? plan.Bubble.Bottom - overlap
-                    : plan.Bubble.Y - tailH + overlap;
-                SpeechTail.Margin = new Thickness(plan.TailX - tailW / 2, tailTop, 0, 0);
+                // The popup window is the bubble plus its 16 DIP margin (room for shadow and tail).
+                double pad = SpeechBubble.Margin.Left;
+                double hOff = plan.Bubble.X / s - pad, vOff = plan.Bubble.Y / s - pad;
+                if (Math.Abs(SpeechPopup.HorizontalOffset - hOff) > 0.5) SpeechPopup.HorizontalOffset = hOff;
+                if (Math.Abs(SpeechPopup.VerticalOffset - vOff) > 0.5) SpeechPopup.VerticalOffset = vOff;
+
+                // Tail: a 14x9 wedge in the glass colour, tucked 1px into the bubble's edge.
+                const double tailW = 14, tailH = 9;
+                double bubbleH = plan.Bubble.H / s;
+                double tailLeft = plan.TailX / s - plan.Bubble.X / s + pad - tailW / 2;
+                double tailTop = plan.Tail == AvatarTubeLayout.TailEdge.Bottom ? pad + bubbleH - 1 : pad - tailH + 1;
+                SpeechTail.Margin = new Thickness(tailLeft, tailTop, 0, 0);
                 SpeechTailFlip.ScaleY = plan.Tail == AvatarTubeLayout.TailEdge.Bottom ? 1 : -1;
+
+                string decision = $"{(int)plan.Bubble.X},{(int)plan.Bubble.Y},{(int)plan.Bubble.W}x{(int)plan.Bubble.H}|{plan.Tail}|{plan.GrowsLeft}";
+                if (decision != _lastBubbleDecision)
+                {
+                    _lastBubbleDecision = decision;
+                    App.Logger?.Debug(
+                        "Speech bubble: rect=({X},{Y} {W}x{H}) tail={Tail} growsLeft={Left} avatar=({AX},{AY} {AW}x{AH}) work=({WL},{WT},{WR},{WB}) main={Main} scale={S:F2}",
+                        (int)plan.Bubble.X, (int)plan.Bubble.Y, (int)plan.Bubble.W, (int)plan.Bubble.H, plan.Tail, plan.GrowsLeft,
+                        (int)avatar.X, (int)avatar.Y, (int)avatar.W, (int)avatar.H,
+                        wa.Left, wa.Top, wa.Right, wa.Bottom,
+                        obstacle is AvatarTubeLayout.Box m ? $"{(int)m.X},{(int)m.Y},{(int)m.Right},{(int)m.Bottom}" : "-", s);
+                }
             }
             catch (Exception ex)
             {
@@ -990,19 +970,59 @@ namespace ConditioningControlPanel
             }
         }
 
+        private double SpeechPopupScale()
+        {
+            try
+            {
+                if (PresentationSource.FromVisual(SpeechBubble) is PresentationSource ps && ps.CompositionTarget != null)
+                {
+                    double m = ps.CompositionTarget.TransformToDevice.M11;
+                    if (m > 0) return m;
+                }
+                if (_tubeHandle != IntPtr.Zero)
+                {
+                    double d = GetDpiForWindow(_tubeHandle) / 96.0;
+                    if (d > 0) return d;
+                }
+            }
+            catch { }
+            return 1.0;
+        }
+
+        /// <summary>The popup is open exactly while the bubble is meant to show and the tube is up.</summary>
+        private void SyncSpeechPopupOpen()
+        {
+            bool want = SpeechBubble.Visibility == Visibility.Visible && IsVisible;
+            if (SpeechPopup.IsOpen != want) SpeechPopup.IsOpen = want;
+        }
+
         private bool _placingSpeechBubble;
         private bool _speechBubblePlacementHooked;
-        private const double SpeechBubbleOpacity = 0.96;
+        private string? _lastBubbleDecision;
+        internal const double SpeechBubbleMaxWidth = 340;       // outer DIPs; text column about 300
+        internal const double SpeechBubbleHistoryWidth = 460;   // chat history panel
 
         /// <summary>
         /// Re-place the bubble whenever something that decides its spot changes while it is up:
-        /// its own size (typewriter text growing), the tube window moving or resizing. Also fades it
-        /// in when it appears, motion permitting. Idempotent; called from OnLoaded.
+        /// its own size (typewriter text growing), the tube window moving or resizing. Opens and
+        /// closes its popup with the bubble's Visibility, and fades it in when it appears, motion
+        /// permitting. Idempotent; called from OnLoaded.
         /// </summary>
         private void HookSpeechBubblePlacement()
         {
             if (_speechBubblePlacementHooked) return;
             _speechBubblePlacementHooked = true;
+
+            SpeechPopup.PlacementTarget = this;
+            System.ComponentModel.DependencyPropertyDescriptor
+                .FromProperty(VisibilityProperty, typeof(Border))
+                .AddValueChanged(SpeechBubble, (_, __) =>
+                {
+                    if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+                    else SyncSpeechPopupOpen();
+                });
+            IsVisibleChanged += (_, __) => SyncSpeechPopupOpen();
+            SpeechPopup.Opened += (_, __) => ApplySpeechBubblePlacement();
 
             SpeechBubble.SizeChanged += (_, __) =>
             {
@@ -1019,18 +1039,17 @@ namespace ConditioningControlPanel
             SpeechBubble.IsVisibleChanged += (_, e) =>
             {
                 if (e.NewValue is not true) return;
-                ApplySpeechBubblePlacement();
                 if (!Services.MotionFx.AllowTransitions)
                 {
-                    SpeechBubble.BeginAnimation(OpacityProperty, null);
+                    SpeechPopupRoot.BeginAnimation(OpacityProperty, null);
                     return;
                 }
-                var fade = new DoubleAnimation(0, SpeechBubbleOpacity, TimeSpan.FromMilliseconds(160))
+                var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160))
                 {
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
                     FillBehavior = FillBehavior.Stop,
                 };
-                SpeechBubble.BeginAnimation(OpacityProperty, fade);
+                SpeechPopupRoot.BeginAnimation(OpacityProperty, fade);
             };
         }
 
