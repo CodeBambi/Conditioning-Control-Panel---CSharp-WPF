@@ -27,7 +27,7 @@ public enum EmiFidget
     /// <summary>
     /// She puts something on her own glass: pong, a spiral, a burst, gif rain, a film strip. The
     /// channels already existed behind a stillness gate of their own
-    /// (<c>EmiChannels.IdleBeforeFlip</c>, ~10 s since the 2026-08-30 campus port); this is the same flip, reached from the fidget wheel so
+    /// (<c>EmiChannels.NextIdleBeforeFlip</c>, 30-60 s since 2026-09-25); this is the same flip, reached from the fidget wheel so
     /// that the screen takes its turn among the small body moves instead of being a separate
     /// clock. Like <see cref="Prop"/> it can no-op - a channel needs a library to draw from and the
     /// desk has to have been left alone - which is why <c>RunFidget</c> reports whether it did

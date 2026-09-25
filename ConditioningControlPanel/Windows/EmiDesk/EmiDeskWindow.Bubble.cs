@@ -552,7 +552,7 @@ public partial class EmiDeskWindow
             CloseChannel(declined: true);
             CancelChain();
             StopIdleBeats();
-            EmiLineEngine.Instance.Ack(line.Id);
+            EmiLineEngine.Instance.Ack(line.Id, spoke: false);
 
             DrawFace(string.IsNullOrEmpty(line.Face) ? "-_-" : line.Face);
 
