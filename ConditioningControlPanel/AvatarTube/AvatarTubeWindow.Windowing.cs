@@ -863,19 +863,45 @@ namespace ConditioningControlPanel
                 if (dockWork.HasValue)
                 {
                     double artScale = _scaleFactor * tubeToPx;
-                    int leftInset = (int)Math.Round(TubeArtLeftPadding * artScale);
-                    int rightInset = (int)Math.Round((TubeArtRightPadding - SeamOverlapOverMain) * artScale);
+                    // The PAINTED art, measured from the tube image actually shown (a mod's tube can
+                    // carry pipes well past the stock tube.png's bounds), then a few px of daylight so
+                    // not one opaque pixel lands on main. Stock constants only when it cannot be read.
+                    int leftInset, rightInset;
+                    string insetSource;
+                    if (TryMeasureArtInsetsPx(tr, out var mL, out var mR))
+                    {
+                        leftInset = mL; rightInset = mR; insetSource = "measured";
+                    }
+                    else
+                    {
+                        leftInset = (int)Math.Round(TubeArtLeftPadding * artScale);
+                        rightInset = (int)Math.Round((TubeArtRightPadding - SeamOverlapOverMain) * artScale);
+                        insetSource = "stock";
+                    }
+                    int daylight = (int)Math.Round(DockDaylight * tubeToPx);
+                    leftInset = Math.Max(0, leftInset - daylight);
+                    rightInset = Math.Max(0, rightInset - daylight);
+
                     var plan = AvatarTubeLayout.TubeDockPlacement.Place(
                         AvatarTubeLayout.Box.FromEdges(pr.Left, pr.Top, pr.Right, pr.Bottom),
                         tubeW, tubeH, leftInset, rightInset,
                         (int)Math.Round(VerticalOffset * artScale), dockWork.Value);
                     newLeftPx = plan.Left;
                     newTopPx = plan.Top;
-                    if (plan.Side != _dockSide)
+
+                    var w = dockWork.Value;
+                    string decision = $"{plan.Side}|{plan.Left},{plan.Top}|{pr.Left},{pr.Top},{pr.Right},{pr.Bottom}|{tubeW}x{tubeH}|{leftInset},{rightInset}";
+                    if (decision != _lastDockDecision)
                     {
-                        App.Logger?.Debug("AvatarTube dock side {Old} -> {New}", _dockSide, plan.Side);
-                        _dockSide = plan.Side;
+                        _lastDockDecision = decision;
+                        App.Logger?.Information(
+                            "AvatarTube dock: side={Side} tube=({L},{T} {W}x{H}) art=({AL}..{AR}) main=({ML},{MT},{MR},{MB}) work=({WL},{WT},{WR},{WB}) insets={IL}/{IR} ({Src})",
+                            plan.Side, plan.Left, plan.Top, tubeW, tubeH,
+                            plan.Left + leftInset, plan.Left + tubeW - rightInset,
+                            pr.Left, pr.Top, pr.Right, pr.Bottom,
+                            (int)w.X, (int)w.Y, (int)w.Right, (int)w.Bottom, leftInset, rightInset, insetSource);
                     }
+                    _dockSide = plan.Side;
                 }
 
                 // Sanity check: reject positions far off the virtual desktop (transitional garbage
@@ -931,6 +957,82 @@ namespace ConditioningControlPanel
         }
 
         private AvatarTubeLayout.DockSide _dockSide = AvatarTubeLayout.DockSide.Left;
+        private string? _lastDockDecision;
+        private const double DockDaylight = 3;   // DIPs between her painted art and main's frame
+
+        // Alpha bounds of the tube image, in the IMAGE's pixel columns, cached per source.
+        private System.Windows.Media.ImageSource? _artBoundsSource;
+        private int _artMinCol = -1, _artMaxCol = -1, _artPixelWidth;
+
+        /// <summary>
+        /// Transparent px left and right of her PAINTED art inside the tube window (physical px),
+        /// read from the tube image's alpha and the avatar's own box. False when the image cannot be
+        /// read (no source yet, not a bitmap): the caller then uses the stock tube.png constants.
+        /// </summary>
+        private bool TryMeasureArtInsetsPx(RECT tr, out int leftInset, out int rightInset)
+        {
+            leftInset = rightInset = 0;
+            try
+            {
+                if (ImgTubeFrame?.Source is not System.Windows.Media.Imaging.BitmapSource bmp
+                    || ImgTubeFrame.ActualWidth <= 0 || ImgTubeFrame.ActualHeight <= 0
+                    || ImgTubeFrame.Visibility != Visibility.Visible
+                    || PresentationSource.FromVisual(ImgTubeFrame) == null) return false;
+
+                if (!ReferenceEquals(bmp, _artBoundsSource))
+                {
+                    var conv = new System.Windows.Media.Imaging.FormatConvertedBitmap(
+                        bmp, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+                    int pw = conv.PixelWidth, ph = conv.PixelHeight, stride = pw * 4;
+                    var px = new byte[stride * ph];
+                    conv.CopyPixels(px, stride, 0);
+                    int min = int.MaxValue, max = -1;
+                    for (int y = 0; y < ph; y++)
+                    {
+                        int row = y * stride;
+                        for (int x = 0; x < pw; x++)
+                        {
+                            if (px[row + x * 4 + 3] <= 12) continue;
+                            if (x < min) min = x;
+                            if (x > max) max = x;
+                        }
+                    }
+                    _artBoundsSource = bmp;
+                    _artPixelWidth = pw;
+                    _artMinCol = max < 0 ? -1 : min;
+                    _artMaxCol = max;
+                }
+                if (_artMaxCol < 0 || _artPixelWidth <= 0) return false;
+
+                // Stretch="Uniform", centred inside the Image element.
+                double aw = ImgTubeFrame.ActualWidth, ah = ImgTubeFrame.ActualHeight;
+                double imgW = bmp.PixelWidth, imgH = bmp.PixelHeight;
+                double sc = Math.Min(aw / imgW, ah / imgH);
+                double offX = (aw - imgW * sc) / 2;
+                double colScale = imgW / _artPixelWidth;
+                var a = ImgTubeFrame.PointToScreen(new Point(offX + _artMinCol * colScale * sc, ah / 2));
+                var b = ImgTubeFrame.PointToScreen(new Point(offX + (_artMaxCol + 1) * colScale * sc, ah / 2));
+                double artL = Math.Min(a.X, b.X), artR = Math.Max(a.X, b.X);
+
+                // Her own layer (drop shadow, emote art) can reach past the glass.
+                if (AvatarBorder != null && AvatarBorder.ActualWidth > 0 && PresentationSource.FromVisual(AvatarBorder) != null)
+                {
+                    var al = AvatarBorder.PointToScreen(new Point(0, 0));
+                    var ar = AvatarBorder.PointToScreen(new Point(AvatarBorder.ActualWidth, 0));
+                    artL = Math.Min(artL, al.X);
+                    artR = Math.Max(artR, ar.X);
+                }
+
+                leftInset = Math.Max(0, (int)Math.Floor(artL - tr.Left));
+                rightInset = Math.Max(0, (int)Math.Floor(tr.Right - artR));
+                return artR > artL;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AvatarTube art bounds skipped: {Error}", ex.Message);
+                return false;
+            }
+        }
 
         /// <summary>Work area (physical px) of the monitor main is on, through the same cache as the clamp.</summary>
         private AvatarTubeLayout.Box? DockWorkAreaPx(RECT pr)
@@ -1823,6 +1925,8 @@ namespace ConditioningControlPanel
 
                 art ??= Services.ModResourceResolver.ResolveImage(tubeName);
                 ImgTubeFrame.Source = art;
+                // New art, new painted bounds: re-dock once layout has the new image.
+                if (_isAttached) Dispatcher.BeginInvoke(new Action(UpdatePosition), DispatcherPriority.Normal);
                 App.Logger?.Information("Tube style changed to: {Style}", tubeName);
             }
             catch (Exception ex)
