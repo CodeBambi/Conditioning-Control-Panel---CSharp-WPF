@@ -50,10 +50,28 @@ export const ARC_SCOPE_CLASS = 'gg-arc';
 
 const url = (p) => new URL(p, import.meta.url).href;
 
+/* The Goon's own sizing on top of a mounted class. The Sort duel's cards are 20% bigger on a
+ * PC (owner, 2026-09-25): `--sort-card-w` is Sort's one sizing token, so this re-states its
+ * value times 1.2 under the duel scope, and only where there is a mouse. The Arcademy's own
+ * Sort and every phone keep the stock size. */
+const GOON_ARC_STYLE_ID = 'gg-arc-goon-style';
+export const GOON_ARC_CSS =
+  '@media (hover:hover) and (pointer:fine){.' + ARC_SCOPE_CLASS + ' .g-sort{' +
+  '--sort-card-w:min(50.4vh,min(408px,72vw))}}';
+
+function ensureGoonArcStyle(d) {
+  if (d.getElementById(GOON_ARC_STYLE_ID)) return;
+  const s = d.createElement('style');
+  s.id = GOON_ARC_STYLE_ID;
+  s.textContent = GOON_ARC_CSS;
+  d.head.appendChild(s);
+}
+
 let styleOnce = null;
 /** Fetch arcademy/styles.css once and inject the fenced copy. Never throws. */
 export function ensureArcShellStyle(d = typeof document !== 'undefined' ? document : null) {
   if (!d || !d.head) return Promise.resolve(false);
+  try { ensureGoonArcStyle(d); } catch (_e) { /* sizing is a nicety */ }
   if (d.getElementById(STYLE_ID)) return Promise.resolve(true);
   if (styleOnce) return styleOnce;
   const href = url(ARC + 'styles.css');

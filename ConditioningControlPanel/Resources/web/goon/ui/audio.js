@@ -103,7 +103,7 @@ import {
 // writer for every such pref). This tier only needs to be able to answer with
 // the same number — see mediaVolume() on the api.
 import { mediaGain } from './prefs.js';
-import { pentaHz, rungGain } from './juice.js';
+import { pentaHz, rungGain, ROOT_HZ } from './juice.js';
 
 /* ----------------------------------------------------------------------------
  * URL RESOLUTION — pure, exported, and testable without a network.
@@ -223,23 +223,24 @@ export const SFX_REGISTRY = Object.freeze({
   'announce-in':    gameCue({ files: [L('briefing-open-1.mp3')],   gain: 0.20, minGapMs: 500 }),
 
   /* ---- the field ---------------------------------------------------- game - */
-  'bubble-pop':     gameCue({ files: [D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.34, minGapMs: 24 }),
-  /** An EFFECT bubble is juicier than a plain one: bigger sample, more gain. */
-  'bubble-pop-fx':  gameCue({ files: [D('Pop.mp3')],               gain: 0.46, minGapMs: 24 }),
-  /** ...and the prism/video bubble is hollower still, because it earns a window. */
-  'bubble-pop-video': gameCue({ files: [L('void_pop.mp3')],        gain: 0.44, minGapMs: 60 }),
+  /** The three classic CCP pops, the same set DtRH and the desktop bubbles draw from (owner, 2026-09-25). */
+  'bubble-pop':     gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.17, minGapMs: 24 }),
+  /** An EFFECT bubble pops the same set, a touch louder. */
+  'bubble-pop-fx':  gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.21, minGapMs: 24 }),
+  /** ...and the prism/video bubble too: every bubble sounds like a CCP bubble. */
+  'bubble-pop-video': gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.21, minGapMs: 40 }),
   'flash':          gameCue({ files: [L('grid-tile-flicker-1.mp3'), L('grid-tile-flicker-2.mp3')], gain: 0.16, minGapMs: 260 }),
-  'flash-pop':      gameCue({ files: [D('Pop3.mp3')],              gain: 0.30, minGapMs: 24 }),
+  'flash-pop':      gameCue({ files: [D('Pop3.mp3')],              gain: 0.15, minGapMs: 24 }),
   /** Barely there on purpose — a word you half-hear is the whole point. */
   'subliminal':     gameCue({ files: [L('custody-log-tick-1.mp3'), L('custody-log-tick-2.mp3')], gain: 0.10, minGapMs: 300 }),
   /** The lock card is a match payload, so its chime and its buzz are GAME even
    *  though the player is typing — the keyboard is not chrome here. */
   'drop-land': gameCue({ files: [L('slip_dling.mp3')], gain: 0.22, minGapMs: 90 }),
-  'lock-in': gameCue({ files: [L('freeze-sting-1.mp3')], gain: 0.38 }),
-  'lock-tick': gameCue({ files: [L('custody-log-tick-1.mp3')], gain: 0.13, minGapMs: 200 }),
-  'lock-type': gameCue({ files: [L('checkbox-tick-1.mp3')], gain: 0.12, minGapMs: 45 }),
-  'lock-solved':    gameCue({ files: [D('chime1.mp3')],            gain: 0.40 }),
-  'lock-slip':      gameCue({ files: [L('error-blip-1.mp3')],      gain: 0.24, minGapMs: 90 }),
+  'lock-in': gameCue({ files: [L('freeze-sting-1.mp3')], gain: 0.18 }),
+  'lock-tick': gameCue({ files: [L('custody-log-tick-1.mp3')], gain: 0.06, minGapMs: 200 }),
+  'lock-type': gameCue({ files: [L('checkbox-tick-1.mp3')], gain: 0.06, minGapMs: 45 }),
+  'lock-solved':    gameCue({ files: [D('chime1.mp3')],            gain: 0.22 }),
+  'lock-slip':      gameCue({ files: [L('error-blip-1.mp3')],      gain: 0.12, minGapMs: 90 }),
 
   /* ---- the recap ---------------------------------------------------- game - */
   'recap-reveal':   gameCue({ files: [L('ticket_reveal.mp3')],     gain: 0.45 }),
@@ -257,6 +258,74 @@ export const SFX_REGISTRY = Object.freeze({
   'spiral-in':        gameCue({ files: [L('loom-spiral-up-1.mp3')],   gain: 0.16 }),
   'spiral-out':       gameCue({ files: [L('loom-spiral-down-1.mp3')], gain: 0.16 }),
 });
+
+/* ----------------------------------------------------------------------------
+ * SYNTH MOTIFS - Breakout's pickup and warning cues, ported (owner, 2026-09-25:
+ * "steal some sounds from the breakout game"). Same key as Breakout and the Back
+ * Room kit (C pentatonic, C5 root, ui/juice.js), so nothing here can clash with
+ * a pop or a rising GIF note. When an id has a motif, sfx() plays the motif and
+ * the registry file above is only the fallback for a context without oscillators.
+ * Quiet by rule: every note sits in 0.012..0.07 before the trim.
+ *   hz, at (s after now), dur (s), gain, wave, pan (-1..1), attack (s)
+ * -------------------------------------------------------------------------- */
+const semiHz = (semi) => ROOT_HZ * Math.pow(2, semi / 12);
+const STEP = 0.075;   // one sixteenth at Breakout's default tempo, near enough
+export const SFX_MOTIFS = Object.freeze({
+  /** An item dropped into the rack: Breakout's multiball catch, a detuned pair climbing root, fifth, octave. */
+  'gg-drop': Object.freeze([0, 7, 12].flatMap((semi, i) => [-1, 1].map((side) => ({
+    hz: semiHz(semi + 12) * (1 + side * 0.004), at: i * STEP, dur: 0.16, gain: 0.05, wave: 'triangle', pan: side * 0.22,
+  })))),
+  /** The item lands in its slot: Breakout's shield catch, two glass bells (fifth, then the octave) with a glint. */
+  'drop-land': Object.freeze([pentaHz(3), pentaHz(5)].flatMap((f, i) => [
+    { hz: f, at: i * STEP * 2, dur: 0.36, gain: 0.05, wave: 'sine' },
+    { hz: f * 4, at: i * STEP * 2, dur: 0.1, gain: 0.012, wave: 'sine' },
+  ])),
+  /** A lock card arrives: Breakout's fireball catch, warm and low, three steps up. */
+  'lock-in': Object.freeze([3, 5, 7].map((rung, i) => ({
+    hz: pentaHz(rung, -1), at: i * STEP, dur: i === 2 ? 0.34 : 0.2, gain: 0.05, wave: 'triangle',
+  }))),
+  /** The bounty clock: one soft, low tick (Breakout's powerWarn, an octave and a half down). */
+  'lock-tick': Object.freeze([{ hz: pentaHz(0, -1), at: 0, dur: 0.06, gain: 0.022, wave: 'triangle' }]),
+  /** A correct key: a tiny dry pluck, well under the music. */
+  'lock-type': Object.freeze([{ hz: pentaHz(2, -1), at: 0, dur: 0.045, gain: 0.018, wave: 'triangle', attack: 0.003 }]),
+  /** Unlocked: Breakout's shield bells climbing root, fifth, octave. */
+  'lock-solved': Object.freeze([0, 7, 12].flatMap((semi, i) => [
+    { hz: semiHz(semi), at: i * STEP, dur: 0.34, gain: 0.055, wave: 'sine' },
+    { hz: semiHz(semi) * 4, at: i * STEP, dur: 0.1, gain: 0.012, wave: 'sine' },
+  ])),
+  /** A slip: Breakout's powerMiss, one dull, low, short note. Nothing falls in pitch. */
+  'lock-slip': Object.freeze([{ hz: ROOT_HZ / 4, at: 0, dur: 0.16, gain: 0.04, wave: 'triangle', attack: 0.05 }]),
+});
+
+/** Schedule a motif on `bus`. Every voice disconnects itself when it ends. */
+function playMotif(c, notes, bus) {
+  const t0 = c.currentTime + 0.005;
+  for (const n of notes) {
+    const at = t0 + (n.at || 0);
+    const osc = c.createOscillator();
+    const g = c.createGain();
+    osc.type = n.wave || 'sine';
+    osc.frequency.value = n.hz;
+    const peak = Math.max(0.0002, Math.min(0.13, (n.gain || 0.03) * SFX_TRIM));
+    const attack = n.attack || 0.006;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(peak, at + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + Math.max(attack + 0.02, n.dur));
+    osc.connect(g);
+    let out = g;
+    if (n.pan && typeof c.createStereoPanner === 'function') {
+      const p = c.createStereoPanner();
+      p.pan.value = n.pan;
+      g.connect(p);
+      out = p;
+    }
+    out.connect(bus);
+    osc.start(at);
+    osc.stop(at + n.dur + 0.03);
+    osc.onended = () => { try { osc.disconnect(); g.disconnect(); if (out !== g) out.disconnect(); } catch (_e) { /* gone */ } };
+  }
+  return true;
+}
 
 /** Every sfx id the game may ask for. Derived, so the two can never drift. */
 export const SFX_IDS = Object.freeze(Object.keys(SFX_REGISTRY));
@@ -767,6 +836,17 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
       const gap = (typeof entry.minGapMs === 'number') ? entry.minGapMs : MIN_GAP_MS;
       const prev = lastAt.get(id);
       if (prev != null && t - prev < gap) { stats.throttled++; return false; }
+
+      // A motif needs no fetch: it is synthesised on the spot, on the same bus.
+      const motif = SFX_MOTIFS[id];
+      if (motif && typeof c.createOscillator === 'function') {
+        if (c.state !== 'running') { stats.dropped++; return false; }
+        lastAt.set(id, t);
+        try { playMotif(c, motif, busFor(id, c)); } catch (_e) { stats.dropped++; return false; }
+        stats.played++;
+        note('sfx:' + id);
+        return true;
+      }
 
       // Warm on demand: the first ask for an id kicks its fetch and stays quiet.
       let ready = null;

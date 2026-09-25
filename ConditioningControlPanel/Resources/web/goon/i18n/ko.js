@@ -733,6 +733,7 @@ export default Object.freeze({
   gg_lockCard_exact: "정확히 입력해",
   gg_lockCard_unlock: "입력해서 잠금 해제",
   gg_lockCard_dismiss: "닫기",
+  gg_lockCard_forfeit: "상품 포기",
   gg_video_close: "이 영상 닫기",
   gg_video_flag: "숨기고 신고용으로 표시",
   gg_flavourLines_trance: "나선과 부드러운 목소리.",
