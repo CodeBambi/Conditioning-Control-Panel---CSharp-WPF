@@ -28,6 +28,7 @@
 import { createLedger, el, button } from './router.js';
 import { S } from './strings.js';
 import { buildPicturesSection } from './screens/flavour.js';
+import { openGuideSheet } from './startGuide.js';
 
 /** Height reserved at the bottom of the drawer for the mercy button. */
 const MERCY_CLEARANCE_PX = 96;
@@ -50,8 +51,19 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
   let open = false;
   /** The Pictures section's live copy, committed ONCE when the drawer closes. */
   let picturesSection = null;
+  /** The "How to win" sheet, if the player reopened it from here. */
+  let guideSheet = null;
+
+  function closeGuide() {
+    const g = guideSheet;
+    guideSheet = null;
+    try { g?.close(); } catch (_e) { /* already gone */ }
+  }
 
   function close() {
+    // BEFORE the open check: boot's closeChrome() calls this at Live and at
+    // every exit, and the sheet must go even when the drawer itself is shut.
+    closeGuide();
     if (!open) return;
     open = false;
     /* ONE refetch per close, never one per keystroke: the host re-fetches on every
@@ -153,6 +165,14 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
      * it already knows. It is a real bus (ui/audio.js), so a drag retunes a note
      * that is already playing rather than only the next one. */
     const body = el('div', { class: 'gg-panel-body' }, [
+      /* HOW TO WIN - the countdown's three cards, on demand. First row: it is the
+       * one thing a lost player opens the drawer for. Opening it closes the drawer
+       * (the sheet is the whole screen); the sheet closes on any click. */
+      button(ledger, S.guide.title, () => {
+        const body_ = doc ? doc.body : null;
+        close();
+        guideSheet = openGuideSheet({ host: body_, onClose: () => { guideSheet = null; } });
+      }, { variant: 'ghost', audio, sfx: 'ui-select' }),
       volumeRow('masterVolume', S.options.master),
       volumeRow('musicVolume', S.options.music),
       volumeRow('droneVolume', S.options.drone),

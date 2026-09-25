@@ -6521,6 +6521,77 @@ const audioMod = await import('../ui/audio.js');
   }
 }
 
+/* ---- L. the start guide (ui/startGuide.js) rides the countdown ------------ */
+{
+  const guideMod = await import('../ui/startGuide.js');
+  const countdownMod = await import('../ui/screens/countdown.js');
+  const fsG = await import('node:fs/promises');
+  const urlG = await import('node:url');
+  const readUi = (rel) => fsG.readFile(urlG.fileURLToPath(new URL('../' + rel, import.meta.url)), 'utf8');
+
+  // Built alone: a title and exactly the three cards, in the documented order.
+  const built = guideMod.buildGuide({ you: 'me', them: 'them' });
+  ok(!!built && hasClass(built, 'gg-guide'), 'buildGuide returns the .gg-guide section');
+  const cards = findAll(built, 'gg-guide-card');
+  ok(cards.length === 3 && guideMod.GUIDE_CARDS.length === 3, 'three cards, one per way to score', cards.length);
+  ok(cards.every((c, i) => hasClass(c, 'gg-guide-card--' + guideMod.GUIDE_CARDS[i])),
+    'the cards read pop, throw, duel');
+  ok(!!findOne(built, 'gg-guide-title') && findOne(built, 'gg-guide-title').textContent === S.guide.title,
+    'the title is the deck\'s "How to win" line', findOne(built, 'gg-guide-title')?.textContent);
+  ok(findAll(built, 'gsc').length === 3, 'every card carries a scene');
+  ok(findAll(built, 'gsc-spark').length === 6 && !!findOne(built, 'gsc-crown') && !!findOne(built, 'gsc-item'),
+    'the scenes have their pieces (sparks, item, crown)');
+  ok(findAll(built, 'gsc-lane-name').map((x) => x.textContent).join('|') === 'me|them',
+    'the duel lanes wear the two names');
+
+  // Over the countdown: it mounts inside the stage and leaves with the screen.
+  // Reduced motion for the mount, so the punch is a no-op under the stub DOM
+  // and this doubles as the "static" path: the cards are all there, still.
+  dom.doc.documentElement.setAttribute('data-gg-motion', 'reduced');
+  const section = dom.doc.createElement('section');
+  const ctx = {
+    audio: { sfx() {} }, logger: null,
+    getMatch: () => ({ localDisplayName: 'me', opponent: { displayName: 'them' }, startMatchMs: 0 }),
+    getClock: () => null,
+  };
+  let handle = null;
+  let threw = null;
+  try { handle = countdownMod.mount(section, ctx); } catch (e) { threw = e; }
+  ok(!threw, 'the countdown mounts with the guide inside it', threw && threw.message);
+  const stage = findOne(section, 'gg-count');
+  ok(!!stage && hasClass(stage, 'has-guide'), 'the stage wears has-guide so the numeral moves to the foot');
+  ok(findAll(section, 'gg-guide-card').length === 3, 'three cards sit over the count');
+  ok(!!findOne(section, 'gg-count-num'), 'and the shared-clock numeral is still there');
+  try { handle?.unmount(); } catch (e) { threw = e; }
+  ok(!threw, 'unmount does not throw', threw && threw.message);
+  ok(findAll(section, 'gg-guide-card').length === 0, 'the cards are gone when play starts (unmount)');
+  dom.doc.documentElement.removeAttribute('data-gg-motion');
+
+  // The options sheet: opens on the body, any click closes it, close is idempotent.
+  let closed = 0;
+  const sheet = guideMod.openGuideSheet({ host: dom.doc.body, onClose: () => { closed++; } });
+  ok(!!sheet && sheet.isOpen() && findAll(dom.doc.body, 'gg-guide-sheet').length === 1, 'the sheet mounts once on the body');
+  ok(findAll(sheet.node, 'gg-guide-card').length === 3 && !!findOne(sheet.node, 'gg-guide-done'), 'with the three cards and a Got it');
+  sheet.node.dispatchEvent({ type: 'click' });
+  ok(!sheet.isOpen() && closed === 1 && hasClass(sheet.node, 'is-leaving'), 'a click on the scrim closes it');
+  sheet.close();
+  ok(closed === 1, 'close is idempotent');
+  await sleep(260);
+  ok(findAll(dom.doc.body, 'gg-guide-sheet').length === 0, 'and the node is removed after the fade');
+
+  // The still rails live in the CSS, all three of them, and the loops park.
+  const css = await readUi('ui/startGuide.css');
+  ok(/html\[data-gg-motion="reduced"\] \.gg-guide \*[\s\S]*?animation: none !important/.test(css),
+    'reduced motion switches every guide animation off');
+  ok(/html\[data-gg-perf="lite"\] \.gg-guide \*/.test(css), 'so does the lite perf tier');
+  ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.gg-guide \*[\s\S]*?animation: none !important/.test(css),
+    'and the OS media query');
+  ok(/\.gsc \* \{ animation-play-state: var\(--gg-deco-play\); \}/.test(css), 'the scene loops park under the heat governor');
+  ok(/\.gg-count\.has-guide \.gg-count-num/.test(css), 'has-guide restyles the numeral');
+  ok(/@media \(max-width: 800px\)/.test(css), 'and the cards restack under 800px');
+  ok(!/—/.test(css) && !/—/.test(await readUi('ui/startGuide.js')), 'no em-dashes in the new files');
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

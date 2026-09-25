@@ -336,6 +336,22 @@ export const RAW = {
     go: 'go',
   },
 
+  /* ---------------------------------------------------------------- guide */
+  /* "How to win" (ui/startGuide.js): three cards over the countdown, and the
+     same cards as a sheet from the options drawer. Pictures do the explaining;
+     each card gets a title of a few words and one plain line, nothing longer -
+     the count is five seconds and a paragraph would not be read. */
+  guide: {
+    title: 'How to win',
+    popTitle: 'Pop and click',
+    popLine: 'Bubbles and pictures pay out points and items.',
+    throwTitle: 'Throw things',
+    throwLine: 'Land an item on them for a bonus.',
+    duelTitle: 'Win the minigame',
+    duelLine: 'You both play. Best score takes the bounty.',
+    gotIt: 'Got it',
+  },
+
   /* ---------------------------------------------------------------- recap */
   recap: {
     held: 'You held.',
