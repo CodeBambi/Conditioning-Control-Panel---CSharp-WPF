@@ -42,11 +42,14 @@ public enum EmiPokeStep
     /// <summary>An ordinary pat: whatever the pet path was going to do anyway.</summary>
     Pat,
 
-    /// <summary>The second poke inside the window: the same flick, wearing <c>-_-</c>.</summary>
+    /// <summary>The fourth poke inside the window: the same flick, wearing <c>-_-</c>.</summary>
     Annoyed,
 
-    /// <summary>The third: the rage beat, wordless, and then a truce.</summary>
-    Rage
+    /// <summary>The fifth: the rage beat, wordless, and then a truce.</summary>
+    Rage,
+
+    /// <summary>The third: the pet streak. A chime and glee, the campus's three-pets beat.</summary>
+    Glee
 }
 
 /// <summary>
@@ -331,11 +334,15 @@ public static class EmiAlive
     /// <summary>How long a run of pokes stays a run, in ms. CAMPUS <c>PET_WINDOW_MS</c>.</summary>
     public const int PokeWindowMs = 4_000;
 
-    /// <summary>The poke inside the window that earns <c>-_-</c>.</summary>
-    public const int PokeAnnoyAt = 2;
+    /// <summary>The poke inside the window that earns glee: the campus's pet streak (2026-09-25,
+    /// owner: the desk was missing the charm the Arcademy has, where three quick pets delight her).</summary>
+    public const int PokeGleeAt = 3;
+
+    /// <summary>The poke inside the window that earns <c>-_-</c>. Pushed past the glee on 2026-09-25.</summary>
+    public const int PokeAnnoyAt = 4;
 
     /// <summary>...and the one that earns the rage beat.</summary>
-    public const int PokeRageAt = 3;
+    public const int PokeRageAt = 5;
 
     /// <summary>After the rage, this long of peace: the ladder cannot climb again, in ms.</summary>
     public const int PokeTruceMs = 60_000;
@@ -350,9 +357,9 @@ public static class EmiAlive
     public const string PokeAnnoyFace = "-_-";
 
     /// <summary>
-    /// THE POKE LADDER. Three pats inside <see cref="PokeWindowMs"/> climb: the first is an
-    /// ordinary pat, the second wears <c>-_-</c>, the third is the rage beat and then she calls a
-    /// truce for a minute.
+    /// THE POKE LADDER. Pats inside <see cref="PokeWindowMs"/> of each other climb: the first two
+    /// are ordinary pats, the third is the pet streak (glee), the fourth wears <c>-_-</c>, the fifth
+    /// is the rage beat and then she calls a truce for a minute.
     ///
     /// <para>It counts EVERY completed pat, including the one that drew a line, because a poke is a
     /// poke however the pet path chose to answer it. It does not decide what a pat does - that is
@@ -392,7 +399,9 @@ public static class EmiAlive
                 _truceUntil = nowUtc.AddMilliseconds(PokeTruceMs);
                 return EmiPokeStep.Rage;
             }
-            return _count == PokeAnnoyAt ? EmiPokeStep.Annoyed : EmiPokeStep.Pat;
+            return _count == PokeGleeAt ? EmiPokeStep.Glee
+                 : _count == PokeAnnoyAt ? EmiPokeStep.Annoyed
+                 : EmiPokeStep.Pat;
         }
 
         /// <summary>Forget the run (she left, or she was dismissed). The truce is NOT forgotten.</summary>

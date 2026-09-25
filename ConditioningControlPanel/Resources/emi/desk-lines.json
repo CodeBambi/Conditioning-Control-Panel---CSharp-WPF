@@ -163,6 +163,42 @@
       "hold": false,
       "askOdds": 0.15
     },
+    "dragged": {
+      "pools": [
+        "dragged"
+      ],
+      "odds": 0.125,
+      "cooldownMs": 60000,
+      "priority": 1,
+      "mix": 1.0,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "flung": {
+      "pools": [
+        "flung"
+      ],
+      "odds": 0.34,
+      "cooldownMs": 0,
+      "priority": 2,
+      "mix": 1.0,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0.0
+    },
+    "dropped": {
+      "pools": [
+        "dropped"
+      ],
+      "odds": 0.25,
+      "cooldownMs": 60000,
+      "priority": 1,
+      "mix": 1.0,
+      "spiceCeiling": 2,
+      "hold": false,
+      "askOdds": 0.0
+    },
     "glassOffer": {
       "pools": [
         "glassOffer",
@@ -5060,6 +5096,130 @@
         "face": "^_~",
         "spice": 2,
         "chain": "love"
+      }
+    ],
+    "dragged": [
+      {
+        "id": "dragged.001",
+        "t": "wheee. i mean: transportation acknowledged.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "dragged.002",
+        "t": "new spot? i live here now. this is home.",
+        "face": "^_^",
+        "spice": 0
+      },
+      {
+        "id": "dragged.003",
+        "t": "careful. i'm top heavy. it's all thoughts.",
+        "face": "@_@",
+        "spice": 0
+      },
+      {
+        "id": "dragged.004",
+        "t": "moving day! i packed everything. it's me. i'm everything.",
+        "face": "\\o/",
+        "spice": 0
+      }
+    ],
+    "flung": [
+      {
+        "id": "flung.001",
+        "t": "whoa. the desktop did a lap.",
+        "face": "x_x",
+        "spice": 0
+      },
+      {
+        "id": "flung.002",
+        "t": "airborne. landing... eventually. somewhere. here.",
+        "face": "x_x",
+        "spice": 0
+      },
+      {
+        "id": "flung.003",
+        "t": "i saw my life. it was mostly you. good life.",
+        "face": "^_^",
+        "spice": 0,
+        "double": true
+      },
+      {
+        "id": "flung.004",
+        "t": "again! wait. no. yes. no. your call.",
+        "face": "0_0",
+        "spice": 0
+      },
+      {
+        "id": "flung.005",
+        "t": "we should sell tickets to this.",
+        "face": "\\o/",
+        "spice": 0,
+        "when": [
+          "flings20"
+        ]
+      },
+      {
+        "id": "flung.006",
+        "t": "my frequent flyer status: legend.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "when": [
+          "flings50"
+        ]
+      }
+    ],
+    "dropped": [
+      {
+        "id": "dropped.001",
+        "t": "top shelf. the air is thinner up here.",
+        "face": "^_^",
+        "spice": 0,
+        "when": [
+          "zoneRow:top"
+        ]
+      },
+      {
+        "id": "dropped.002",
+        "t": "penthouse. rent is one pet a day. i don't make the rules.",
+        "face": "(¬‿¬)",
+        "spice": 0,
+        "when": [
+          "zoneRow:top"
+        ]
+      },
+      {
+        "id": "dropped.003",
+        "t": "ground floor. closer to the action. the action is you.",
+        "face": "^_^",
+        "spice": 0,
+        "when": [
+          "zoneRow:bottom"
+        ]
+      },
+      {
+        "id": "dropped.004",
+        "t": "down here i'm basically furniture. cozy furniture.",
+        "face": "=_=",
+        "spice": 0,
+        "when": [
+          "zoneRow:bottom"
+        ]
+      },
+      {
+        "id": "dropped.005",
+        "t": "dead center. main character placement. understood.",
+        "face": "(⌐■_■)",
+        "spice": 0,
+        "when": [
+          "zoneRow:mid"
+        ]
+      },
+      {
+        "id": "dropped.006",
+        "t": "here? ok. i'll pretend i picked it.",
+        "face": "^_^",
+        "spice": 0
       }
     ],
     "bedtimeSet": [

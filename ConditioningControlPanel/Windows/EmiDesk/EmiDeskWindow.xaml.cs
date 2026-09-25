@@ -1530,7 +1530,11 @@ public partial class EmiDeskWindow : Window
             if (s <= 0) s = 1.0;
             double dx = (now.X - _dragStartScreen.X) / s;
             double dy = (now.Y - _dragStartScreen.Y) / s;
-            if (!_dragMoved && Math.Abs(dx) + Math.Abs(dy) > DragThresholdDip) _dragMoved = true;
+            if (!_dragMoved && Math.Abs(dx) + Math.Abs(dy) > DragThresholdDip)
+            {
+                _dragMoved = true;
+                OnPickedUp();
+            }
             if (!_dragMoved) return;
 
             Left = _dragStartLeft + dx;
@@ -1559,6 +1563,7 @@ public partial class EmiDeskWindow : Window
                 SavePlacement();
                 try { Moved?.Invoke(this, EventArgs.Empty); }
                 catch (Exception ex) { Log.Debug(ex, "[EmiDesk] Moved handler threw"); }
+                OnPutDown();
                 return;
             }
 
