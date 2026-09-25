@@ -880,49 +880,158 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Where the speech bubble sits. One method for all three callers (this file's
-        /// <see cref="AdjustBubbleSize"/>, ApplyTubeLayoutOffsets, and the deferred placement reset
-        /// on the Loaded hop), which each carried their own copy of this arithmetic.
+        /// Where the speech bubble sits. One method for every caller (AdjustBubbleSize,
+        /// ApplyTubeLayoutOffsets, chat history, the Loaded hop) plus the live re-placement hooks
+        /// (the bubble growing, the tube window moving or resizing).
         ///
-        /// <para><b>Attached, the bubble is right-anchored on the seam</b> - see
-        /// <c>AttachedBubbleRightMargin</c> in AvatarTubeWindow.Windowing.cs for why an opaque
-        /// pixel past that line goes on to eat every click aimed at main's nav rail underneath.
-        /// Right-anchored rather than re-centred: the bubble's right edge is the edge that has to
-        /// hold, so a short line barely moves from where it has always sat beside her and only a
-        /// long one grows further left, instead of every bubble sliding 90px off her mouth.</para>
-        ///
-        /// <para>A mod's avatar offset may pull the bubble LEFT with the art it belongs to, never
-        /// right - the seam is main's, not the mod's. And a bubble too wide to fit left of the
-        /// seam (chat-history mode widens MaxWidth to 600) gives the seam up rather than hang off
-        /// the canvas and get clipped by the window: an unreadable bubble is the worse bug, and
-        /// chat history is a panel the user opened and can close.</para>
-        ///
-        /// <para>Detached there is nothing underneath to protect, so that mode keeps the centred
-        /// placement it has always had, untouched.</para>
+        /// <para>The maths lives in <see cref="AvatarTubeLayout.SpeechBubblePlacement"/>. This
+        /// method only maps the world into the tube's 780x1080 design canvas: the work area of the
+        /// monitor she is on, and, while attached, main's window. Keeping the bubble off main is the
+        /// old seam rule in general form (an opaque pixel over main swallows main's clicks, see
+        /// <c>AttachedBubbleRightMargin</c>); it now holds whichever side of main she docks on.</para>
         /// </summary>
         private void ApplySpeechBubblePlacement()
         {
-            var useAttached = _isAttached || ModOverridesAttachedTubeOnly();
-            var dx = useAttached ? EffAvatarOffsetX() : EffAvatarDetachedOffsetX();
-
-            double right;
-            if (useAttached)
+            if (_placingSpeechBubble) return;
+            _placingSpeechBubble = true;
+            try
             {
-                right = Math.Max(AttachedBubbleRightMargin, AttachedBubbleRightMargin - dx);
+                if (SpeechBubble.Parent is not FrameworkElement canvasEl) return;
+                double cw = canvasEl.ActualWidth > 0 ? canvasEl.ActualWidth : DesignWidth;
+                double ch = canvasEl.ActualHeight > 0 ? canvasEl.ActualHeight : 1080;
+                var canvas = new AvatarTubeLayout.Box(0, 0, cw, ch);
 
-                var maxWidth = SpeechBubble.MaxWidth;
-                if (double.IsFinite(maxWidth) && maxWidth > 0)
-                    right = Math.Min(right, Math.Max(0, DesignWidth - maxWidth));
+                var avatarRect = AvatarBorder.ActualWidth > 0 && AvatarBorder.IsDescendantOf(canvasEl)
+                    ? AvatarBorder.TransformToAncestor(canvasEl).TransformBounds(
+                        new Rect(0, 0, AvatarBorder.ActualWidth, AvatarBorder.ActualHeight))
+                    : new Rect(cw / 2 - 99, ch - 210 - 306, 198, 306);
+                var avatar = new AvatarTubeLayout.Box(avatarRect.X, avatarRect.Y, avatarRect.Width, avatarRect.Height);
+
+                var work = canvas;
+                AvatarTubeLayout.Box? obstacle = null;
+                bool mapped = false;
+                try
+                {
+                    if (PresentationSource.FromVisual(canvasEl) != null)
+                    {
+                        var p0 = canvasEl.PointToScreen(new Point(0, 0));
+                        var p1 = canvasEl.PointToScreen(new Point(cw, ch));
+                        double sx = (p1.X - p0.X) / cw, sy = (p1.Y - p0.Y) / ch;
+                        if (sx > 0 && sy > 0)
+                        {
+                            AvatarTubeLayout.Box ToCanvas(double l, double t, double r, double b) =>
+                                AvatarTubeLayout.Box.FromEdges((l - p0.X) / sx, (t - p0.Y) / sy, (r - p0.X) / sx, (b - p0.Y) / sy);
+
+                            var mid = canvasEl.PointToScreen(new Point(avatarRect.X + avatarRect.Width / 2,
+                                avatarRect.Y + avatarRect.Height / 2));
+                            var screen = System.Windows.Forms.Screen.FromPoint(
+                                new System.Drawing.Point((int)Math.Round(mid.X), (int)Math.Round(mid.Y)));
+                            if (screen != null)
+                            {
+                                var wa = screen.WorkingArea;
+                                work = ToCanvas(wa.Left, wa.Top, wa.Right, wa.Bottom);
+                            }
+                            if (_isAttached && _parentHandle != IntPtr.Zero && GetWindowRect(_parentHandle, out var pr))
+                                obstacle = ToCanvas(pr.Left, pr.Top, pr.Right, pr.Bottom);
+                            mapped = true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Speech bubble screen mapping skipped: {Error}", ex.Message);
+                }
+
+                // Not on screen yet (no HWND): assume the classic left dock, main on the seam.
+                if (!mapped && (_isAttached || ModOverridesAttachedTubeOnly()))
+                    obstacle = new AvatarTubeLayout.Box(DesignWidth - TubeArtRightPadding + SeamOverlapOverMain, 0,
+                        TubeArtRightPadding, ch);
+
+                var content = SpeechBubble.Child as FrameworkElement;
+                double chromeW = SpeechBubble.Padding.Left + SpeechBubble.Padding.Right
+                    + SpeechBubble.BorderThickness.Left + SpeechBubble.BorderThickness.Right;
+                double chromeH = SpeechBubble.Padding.Top + SpeechBubble.Padding.Bottom
+                    + SpeechBubble.BorderThickness.Top + SpeechBubble.BorderThickness.Bottom;
+                double configured = double.IsFinite(SpeechBubble.MaxWidth) && SpeechBubble.MaxWidth > 0
+                    ? SpeechBubble.MaxWidth : 380;
+
+                var plan = AvatarTubeLayout.SpeechBubblePlacement.Place(canvas, work, obstacle, avatar,
+                    configured, chromeW, outerMax =>
+                    {
+                        if (content == null) return (outerMax, 80.0);
+                        double inner = Math.Max(0, outerMax - chromeW);
+                        content.MaxWidth = inner;
+                        content.Measure(new Size(inner, double.PositiveInfinity));
+                        double w = Math.Max(SpeechBubble.MinWidth, content.DesiredSize.Width + chromeW);
+                        return (Math.Min(outerMax, w), content.DesiredSize.Height + chromeH);
+                    });
+
+                if (content != null) content.MaxWidth = plan.ContentMaxWidth;
+                if (Math.Abs(SpeechBubble.Margin.Left - plan.Bubble.X) > 0.5
+                    || Math.Abs(SpeechBubble.Margin.Top - plan.Bubble.Y) > 0.5
+                    || SpeechBubble.Margin.Right != 0 || SpeechBubble.Margin.Bottom != 0)
+                    SpeechBubble.Margin = new Thickness(plan.Bubble.X, plan.Bubble.Y, 0, 0);
+
+                // Tail: an 18x14 wedge overlapping the bubble's 3px border so it reads as one shape.
+                const double tailW = 18, tailH = 14, overlap = 3;
+                double tailTop = plan.Tail == AvatarTubeLayout.TailEdge.Bottom
+                    ? plan.Bubble.Bottom - overlap
+                    : plan.Bubble.Y - tailH + overlap;
+                SpeechTail.Margin = new Thickness(plan.TailX - tailW / 2, tailTop, 0, 0);
+                SpeechTailFlip.ScaleY = plan.Tail == AvatarTubeLayout.TailEdge.Bottom ? 1 : -1;
             }
-            else
+            catch (Exception ex)
             {
-                right = 425 - dx;
+                App.Logger?.Debug("ApplySpeechBubblePlacement failed: {Error}", ex.Message);
             }
+            finally
+            {
+                _placingSpeechBubble = false;
+            }
+        }
 
-            SpeechBubble.HorizontalAlignment = useAttached
-                ? HorizontalAlignment.Right
-                : HorizontalAlignment.Center;
-            SpeechBubble.Margin = new Thickness(0, 0, right, 550);
+        private bool _placingSpeechBubble;
+        private bool _speechBubblePlacementHooked;
+        private const double SpeechBubbleOpacity = 0.96;
+
+        /// <summary>
+        /// Re-place the bubble whenever something that decides its spot changes while it is up:
+        /// its own size (typewriter text growing), the tube window moving or resizing. Also fades it
+        /// in when it appears, motion permitting. Idempotent; called from OnLoaded.
+        /// </summary>
+        private void HookSpeechBubblePlacement()
+        {
+            if (_speechBubblePlacementHooked) return;
+            _speechBubblePlacementHooked = true;
+
+            SpeechBubble.SizeChanged += (_, __) =>
+            {
+                if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+            };
+            LocationChanged += (_, __) =>
+            {
+                if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+            };
+            SizeChanged += (_, __) =>
+            {
+                if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+            };
+            SpeechBubble.IsVisibleChanged += (_, e) =>
+            {
+                if (e.NewValue is not true) return;
+                ApplySpeechBubblePlacement();
+                if (!Services.MotionFx.AllowTransitions)
+                {
+                    SpeechBubble.BeginAnimation(OpacityProperty, null);
+                    return;
+                }
+                var fade = new DoubleAnimation(0, SpeechBubbleOpacity, TimeSpan.FromMilliseconds(160))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.Stop,
+                };
+                SpeechBubble.BeginAnimation(OpacityProperty, fade);
+            };
         }
 
         /// <summary>
