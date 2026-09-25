@@ -463,8 +463,9 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Strip tokenizer artifacts and reasoning blocks. Whitespace is normalised but the text is
-        /// otherwise left alone - callers layer their own product-specific sanitising on top.
+        /// Strip tokenizer artifacts, reasoning blocks and leaked instruction text. Whitespace is
+        /// normalised but the text is otherwise left alone - callers layer their own
+        /// product-specific sanitising on top.
         /// </summary>
         internal static string Clean(string? text)
         {
@@ -477,7 +478,190 @@ namespace ConditioningControlPanel.Services
             // newlines. Seeing either in user-visible text means raw tokens reached the bubble.
             cleaned = cleaned.Replace("Ġ", " ").Replace("Ċ", "\n");
 
-            return cleaned.Trim();
+            return StripInstructionLeak(cleaned.Trim());
+        }
+
+        // ===================== leaked instruction text =====================
+        //
+        // Live 2026-09-25 (Circe on MythoMax, a model with no system role): replies ended in an
+        // author's note the model wrote ABOUT its own reply -
+        //   `...for your conditioning needs. » (Note: The response should be in Circe's usual style,
+        //    but she should also acknowledge and address the pet's specific request ...)`
+        // and a placeholder where a link should be ("[PLAY THE VIDEO DESCRIBED HERE]"). Stored as
+        // the assistant turn, that note then sat in the next request's history and taught the model
+        // to write another one. Stripped on every reply path (Clean) and on history load/replay.
+
+        // Words that mark a note as talking ABOUT the reply or the character rather than to the
+        // user. A note must hit one of these to be cut, so "(note to self: breathe)" survives.
+        private static readonly Regex MetaTalk = new(
+            @"\b(?:the\s+(?:response|reply|answer|assistant|ai|model|user|prompt|character)|responses?\s+should|repl(?:y|ies)\s+should|should\s+(?:also\s+)?(?:be\s+in|reflect|acknowledge|address|stay|remain|keep|sound|respond|mention|include)|(?:usual|own|typical)\s+(?:style|voice|tone|manner)|in[- ]character|out\s+of\s+character|break(?:ing)?\s+character|role-?play|persona|instructions?)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // An opener that always means a note to the author, whatever follows: (OOC ...), [Note: ...],
+        // (Author's note ...), (Instruction ...). Group "open" is the bracket, if any.
+        private static readonly Regex AlwaysMetaOpener = new(
+            @"(?<open>[\(\[])\s*(?:OOC\b|author'?s?\s+note|A/N\b|instruction|system\s*:|response\s*:)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // "(Note: ...", "[Note ...", "(Notes: ..." - cut only when the content is meta talk.
+        private static readonly Regex NoteOpener = new(
+            @"(?<open>[\(\[])\s*notes?\b\s*[:\-]?",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // A "Note:" line (no bracket) that starts a line or follows a sentence end.
+        private static readonly Regex BareNoteLine = new(
+            @"(?:^|(?<=[.!?~\n""”*])\s*)notes?\s*:",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Multiline);
+
+        // Alpaca / chat-template scaffolding: "### Instruction:", "### Response:", "<|im_end|>",
+        // "[/INST]", and a bare "Instruction:" / "User:" / "Assistant:" line.
+        private static readonly Regex ScaffoldMarker = new(
+            @"(?:#{2,}\s*(?:instruction|response|input|user|assistant|system)\b\s*:?|<\|(?:im_end|im_start|eot_id|end_of_turn)\|>|\[/?INST\]|(?:^|\n)\s*(?:instruction|input|system)\s*:)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // A leading "### Response:" / "Response:" label in front of the real reply.
+        private static readonly Regex LeadingResponseLabel = new(
+            @"^\s*(?:#{2,}\s*)?(?:response|assistant|reply)\s*:\s*",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // A bracketed ALL-CAPS placeholder the model wrote instead of a link:
+        // "[PLAY THE VIDEO DESCRIBED HERE]", "[INSERT LINK]", "[VIDEO LINK]". Two words minimum and
+        // no lowercase, so a pool title the tube autolinks ("[Deep Acceptance]") survives.
+        private static readonly Regex CapsPlaceholder = new(
+            @"\[\s*[A-Z][A-Z0-9'’,&/_-]*(?:\s+[A-Z0-9'’,&/_-]+)+\s*\]",
+            RegexOptions.Compiled);
+
+        // "Click here:" / "Watch it here:" left pointing at nothing once a placeholder is gone.
+        private static readonly Regex DanglingLinkLead = new(
+            @"(?:click|watch(?:\s+it)?|tap|check\s+it\s+out)\s+here\s*[:\-]?\s*(?=$|[.!?]\s*$)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>
+        /// Removes text the model wrote about its reply instead of to the user: trailing author's
+        /// notes ("(Note: the response should ...)", "(OOC ...)", "Note: she should ..."), guillemet
+        /// markers followed by such a note, chat-template scaffolding ("### Instruction:"), and
+        /// bracketed ALL-CAPS link placeholders. Everything from the leak to the end of the reply
+        /// goes, because what follows a leaked instruction is more instruction. A reply that is
+        /// nothing but a leak strips to empty and the caller falls back as for an empty reply.
+        ///
+        /// <para>Deliberately narrow: a note is cut only when it talks about the response, the
+        /// character or the instructions, so ordinary parentheses and the word "note" survive.</para>
+        /// </summary>
+        internal static string StripInstructionLeak(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+
+            var current = text!;
+            int cut = current.Length;
+
+            void Consider(int index)
+            {
+                if (index >= 0 && index < cut) cut = index;
+            }
+
+            // 1. A guillemet (never legitimate in her own speech, the prompt forbids it) followed by
+            //    a note, scaffolding or meta talk. The bark-echo wrapper «X said aloud: ...» is
+            //    UnwrapSpokenSigil's job and is left alone here.
+            for (int i = 0; i < current.Length; i++)
+            {
+                if (current[i] != '»' && current[i] != '«') continue;
+                var rest = current.Substring(i + 1);
+                if (rest.IndexOf("said aloud", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                var head = rest.TrimStart(' ', '"', '\'', '”');
+                if (head.Length == 0)
+                {
+                    // A lone trailing close: TrimSigilDebris-style debris, drop just the mark.
+                    if (current[i] == '»' && current.IndexOf('«') < 0) Consider(i);
+                    continue;
+                }
+                if (head[0] == '(' || head[0] == '[' || head.StartsWith("#", System.StringComparison.Ordinal)
+                    || Regex.IsMatch(head, @"^(?:notes?|ooc|instruction|response)\b", RegexOptions.IgnoreCase)
+                    || MetaTalk.IsMatch(rest))
+                {
+                    Consider(i);
+                    break;
+                }
+            }
+
+            // 2. Bracketed notes: always-meta openers, and "(Note ..." only when it is meta talk.
+            foreach (Match m in AlwaysMetaOpener.Matches(current)) { Consider(m.Index); break; }
+            foreach (Match m in NoteOpener.Matches(current))
+            {
+                var body = NoteBody(current, m.Index);
+                if (MetaTalk.IsMatch(body)) { Consider(m.Index); break; }
+            }
+
+            // 3. A bare "Note:" line about the response.
+            foreach (Match m in BareNoteLine.Matches(current))
+            {
+                var body = current.Substring(m.Index + m.Length);
+                var eol = body.IndexOf('\n');
+                if (eol >= 0) body = body.Substring(0, eol);
+                if (MetaTalk.IsMatch(body)) { Consider(m.Index); break; }
+            }
+
+            // 4. Template scaffolding after the reply began.
+            var scaffold = ScaffoldMarker.Match(current);
+            if (scaffold.Success && scaffold.Index > 0) Consider(scaffold.Index);
+
+            if (cut < current.Length) current = current.Substring(0, cut);
+
+            // Scaffolding at the very front: shed the label, keep the reply behind it.
+            current = LeadingResponseLabel.Replace(current, "");
+            var front = ScaffoldMarker.Match(current);
+            if (front.Success && front.Index == 0)
+            {
+                // "### Instruction: ..." first means the whole thing is prompt echo.
+                current = string.Empty;
+            }
+
+            // 5. ALL-CAPS placeholders and the "Click here:" they leave dangling.
+            if (current.IndexOf('[') >= 0)
+            {
+                var without = CapsPlaceholder.Replace(current, "");
+                if (!string.Equals(without, current, System.StringComparison.Ordinal))
+                {
+                    current = DanglingLinkLead.Replace(without, "");
+                }
+            }
+
+            if (string.Equals(current, text, System.StringComparison.Ordinal)) return text!;
+
+            current = Regex.Replace(current, @"[ \t]{2,}", " ");
+            current = TidyTail(current);
+            App.Logger?.Information("[AI-HYGIENE] stripped {Chars} char(s) of leaked instruction text",
+                text!.Length - current.Length);
+            return current;
+        }
+
+        // The note's content: up to its closing bracket, or to the end when the token cap ate it.
+        private static string NoteBody(string text, int openIndex)
+        {
+            var open = text[openIndex];
+            var close = open == '(' ? ')' : ']';
+            var end = text.IndexOf(close, openIndex + 1);
+            return end < 0 ? text.Substring(openIndex + 1) : text.Substring(openIndex + 1, end - openIndex - 1);
+        }
+
+        // After a cut: trailing whitespace, a dangling separator, an unbalanced closing quote and
+        // the doubled terminator the model often wrote in front of its note (`you?"?`).
+        private static string TidyTail(string current)
+        {
+            current = current.TrimEnd();
+            current = Regex.Replace(current, @"[\s\-–:;,»«]+$", "");
+
+            int quotes = 0;
+            foreach (var ch in current) if (ch == '"') quotes++;
+            if ((quotes & 1) == 1)
+            {
+                var lastQuote = current.LastIndexOf('"');
+                if (lastQuote >= current.Length - 3)
+                    current = current.Remove(lastQuote, 1);
+            }
+
+            current = Regex.Replace(current, @"([?!.])\1+$", "$1");
+            current = Regex.Replace(current, @"([?!.])[?!.]$", "$1");
+            return current.Trim();
         }
     }
 }

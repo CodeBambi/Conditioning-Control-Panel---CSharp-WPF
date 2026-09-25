@@ -136,7 +136,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         /// <summary>~40 tokens each, and always the LAST thing the model reads.</summary>
         public const string ChatInstruction =
-            "The last line is them talking to you directly. Answer that line in one short bubble, in character.";
+            "The last line is them talking to you directly. Answer that line in one short bubble, in character, " +
+            "and write only the words you say to them: no notes, no commentary about the reply, nothing after it.";
 
         public const string ReactionInstruction =
             "The last \"event\" line is something that just happened on their screen. React to it unprompted in one short beat - do not greet them, do not ask what they need.";
@@ -273,14 +274,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             var spec = purpose == AiPurpose.Chat ? ChatWindowSpec.Chat : ChatWindowSpec.Ambient;
             var window = session?.BuildWindow(spec) ?? Array.Empty<CompanionTurn>();
-            window = FenceHistoryToPersona(window);
+            window = FenceHistoryToPersona(window, log: true);
 
             var prefix = _systemPromptProvider() ?? string.Empty;
             string? recall = null;
             if (_preview() && purpose == AiPurpose.Chat && session != null)
             {
                 var all = session.Turns;
-                recall = ConversationRecall.Build(all, window, FenceHistoryToPersona(all), input, _chatMemoryEnabled());
+                recall = ConversationRecall.Build(all, window, FenceHistoryToPersona(all, log: false), input, _chatMemoryEnabled());
             }
             var tail = BuildTail(purpose, window, input, recall);
             // Pin BOTH anti-fixation lines through the hard-cap floor branch: with a fat preset
@@ -289,10 +290,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             var pinnedLines = _recommendations.BuildExclusionLine();
             if (!_preview() && (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction))
                 pinnedLines = pinnedLines == null ? VaryPicksRule : pinnedLines + "\n" + VaryPicksRule;
+            var repeat = purpose == AiPurpose.Chat ? RepeatHint(window) : null;
+            if (repeat != null) pinnedLines = pinnedLines == null ? repeat : pinnedLines + "\n" + repeat;
             var systemPrompt = Compose(prefix, tail, Instruction(purpose), pinned: pinnedLines);
 
             var messages = new List<ChatMessage>(window.Count + 1) { ChatMessage.System(systemPrompt) };
-            messages.AddRange(ChatSession.ToMessages(SanitizeAssistantHistory(window)));
+            messages.AddRange(ChatSession.ToMessages(SanitizeAssistantHistory(StripLeakedInstructionText(window))));
             ShedHistoryToContextFit(messages);
 
             App.Logger?.Debug(
@@ -322,7 +325,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// with the user's "hi Circe, ..." reads to a small model as one unbroken conversation with
         /// Circe and it answers as Circe under the new prompt (Kathryn, 2026-09-14).</para>
         /// </summary>
-        internal IReadOnlyList<CompanionTurn> FenceHistoryToPersona(IReadOnlyList<CompanionTurn> window)
+        internal IReadOnlyList<CompanionTurn> FenceHistoryToPersona(IReadOnlyList<CompanionTurn> window, bool log = true)
         {
             if (window == null || window.Count == 0) return window ?? Array.Empty<CompanionTurn>();
 
@@ -358,9 +361,17 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
 
             if (dropped == 0 && cut == 0) return window;
-            App.Logger?.Information(
-                "[AI-PROMPT] persona fence dropped {Dropped} pre-switch assistant turn(s) and cut {Cut} turn(s) from before a companion change",
-                dropped, cut);
+            // The fence is a timestamp, so every send after a switch cuts the same old turns again:
+            // that is the fence working, not a new switch. Log it once per fence and per change in
+            // the counts, and never for the recall pass, which re-fences the whole session.
+            var stamp = (fence, identityFence, dropped, cut);
+            if (log && !stamp.Equals(_lastFenceLog))
+            {
+                _lastFenceLog = stamp;
+                App.Logger?.Information(
+                    "[AI-PROMPT] persona fence dropped {Dropped} pre-switch assistant turn(s) and cut {Cut} turn(s) from before a companion change",
+                    dropped, cut);
+            }
             return kept;
         }
 
@@ -419,6 +430,87 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// own words; neither is touched. Any failure degrades to the unsanitized window — a
         /// hygiene pass must never take chat down.</para>
         /// </summary>
+        private (DateTime? Fence, DateTime? Identity, int Dropped, int Cut)? _lastFenceLog;
+
+        /// <summary>The fence counts last logged; test seam.</summary>
+        internal (DateTime? Fence, DateTime? Identity, int Dropped, int Cut)? LastFenceLog => _lastFenceLog;
+
+        /// <summary>
+        /// Wire-only: runs <see cref="Services.AiTextHygiene.StripInstructionLeak"/> over every
+        /// assistant-authored turn, so a leaked "(Note: the response should ...)" stored before the
+        /// strip existed never reaches the next request as few-shot bait. Preview and legacy alike.
+        /// </summary>
+        internal static IReadOnlyList<CompanionTurn> StripLeakedInstructionText(IReadOnlyList<CompanionTurn> window)
+        {
+            if (window == null || window.Count == 0) return window ?? Array.Empty<CompanionTurn>();
+            List<CompanionTurn>? cleaned = null;
+            for (int i = 0; i < window.Count; i++)
+            {
+                var turn = window[i];
+                if (turn.Kind is not (TurnKind.AssistantChat or TurnKind.AmbientReply)) continue;
+                var text = Services.AiTextHygiene.StripInstructionLeak(turn.Text);
+                if (string.Equals(text, turn.Text, StringComparison.Ordinal)) continue;
+                cleaned ??= new List<CompanionTurn>(window);
+                cleaned[i] = turn with { Text = text };
+            }
+            if (cleaned == null) return window;
+            cleaned.RemoveAll(t => t.Kind is (TurnKind.AssistantChat or TurnKind.AmbientReply) && string.IsNullOrWhiteSpace(t.Text));
+            return cleaned;
+        }
+
+        /// <summary>
+        /// <see cref="JustSuggestedLine"/> over the recent picks plus the whole sanctioned pool: a
+        /// pool title she named last turn counts even when the recommendation producer missed it.
+        /// </summary>
+        private string? RepeatHint(IReadOnlyList<CompanionTurn> window)
+        {
+            IEnumerable<string> known = _recommendations.Current();
+            try { known = known.Concat((_linkPool() ?? Array.Empty<(string Title, string Url)>()).Select(e => e.Title)); }
+            catch (Exception ex) { App.Logger?.Debug("PromptAssembler: link pool for repeat hint failed: {Error}", ex.Message); }
+            return JustSuggestedLine(window, known.ToList());
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex AsksForRepeat = new(
+            @"\b(?:again|same (?:one|video)|that one|replay|rewatch|one more time)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>
+        /// Live 2026-09-25: "Click here: [Deep Acceptance]" three replies in a row. The 24 h
+        /// exclusion line sits far up the system message and a small model imitates its own last
+        /// reply harder than it reads that list. When one of her last two replies named a recently
+        /// suggested title and the user's newest line does not ask for it again, this names it
+        /// right next to the instruction. A hint, never a block: asking for it by name, or for
+        /// "again" / "same one" / "that one", lifts it.
+        /// </summary>
+        internal static string? JustSuggestedLine(IReadOnlyList<CompanionTurn> window, IReadOnlyList<string> recent)
+        {
+            if (window == null || window.Count == 0 || recent == null || recent.Count == 0) return null;
+
+            string lastUser = string.Empty;
+            for (int i = window.Count - 1; i >= 0; i--)
+                if (window[i].Kind == TurnKind.UserChat) { lastUser = window[i].Text ?? string.Empty; break; }
+            if (AsksForRepeat.IsMatch(lastUser)) return null;
+
+            var named = new List<string>();
+            int seen = 0;
+            for (int i = window.Count - 1; i >= 0 && seen < 2; i--)
+            {
+                var turn = window[i];
+                if (turn.Kind is not (TurnKind.AssistantChat or TurnKind.AmbientReply)) continue;
+                seen++;
+                foreach (var title in recent)
+                {
+                    if (string.IsNullOrWhiteSpace(title) || title.Trim().Length < 5 || named.Contains(title, StringComparer.OrdinalIgnoreCase)) continue;
+                    if ((turn.Text ?? string.Empty).IndexOf(title, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (lastUser.IndexOf(title, StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    named.Add(title);
+                }
+            }
+            if (named.Count == 0) return null;
+            return "You just suggested " + string.Join(", ", named.Select(t => "\"" + t + "\""))
+                   + ". Do not suggest it again now; pick a different one or simply talk.";
+        }
+
         internal IReadOnlyList<CompanionTurn> SanitizeAssistantHistory(IReadOnlyList<CompanionTurn> window)
         {
             if (window == null || window.Count == 0) return window ?? Array.Empty<CompanionTurn>();
@@ -636,6 +728,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             // and no vary rule, and the same invented titles came back all day).
             var exclusion = _recommendations.BuildExclusionLine();
             if (exclusion != null) lines.Add(exclusion);
+            if (purpose == AiPurpose.Chat)
+            {
+                var repeat = RepeatHint(window);
+                if (repeat != null) lines.Add(repeat);
+            }
 
             // The warden briefing, when a lockdown is running. Chat and Reaction only: those are the
             // two purposes where SHE speaks. Memory extracts JSON facts and Summary writes prose about
