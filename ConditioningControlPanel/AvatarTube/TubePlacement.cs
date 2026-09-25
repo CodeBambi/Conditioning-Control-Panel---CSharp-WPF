@@ -49,12 +49,14 @@ namespace ConditioningControlPanel.AvatarTubeLayout
         /// <param name="avatar">The avatar's box (her head is its top edge).</param>
         /// <param name="configuredMaxWidth">The bubble's own MaxWidth (380 normally, 600 for chat history).</param>
         /// <param name="chrome">Horizontal padding + border of the bubble (outer width minus content width).</param>
+        /// <param name="edgeGap">Daylight kept from the work area's edges (defaults to <see cref="Gap"/>).</param>
         /// <param name="measure">Outer size of the bubble when laid out at a given outer max width.</param>
         public static BubblePlan Place(Box canvas, Box workArea, Box? obstacle, Box avatar,
-            double configuredMaxWidth, double chrome, Func<double, (double W, double H)> measure)
+            double configuredMaxWidth, double chrome, Func<double, (double W, double H)> measure,
+            double edgeGap = Gap)
         {
             var allowed = canvas.Intersect(Box.FromEdges(
-                workArea.X + Gap, workArea.Y + Gap, workArea.Right - Gap, workArea.Bottom - Gap));
+                workArea.X + edgeGap, workArea.Y + edgeGap, workArea.Right - edgeGap, workArea.Bottom - edgeGap));
             if (allowed.IsEmpty) allowed = canvas;   // nothing sensible to clamp to: keep old behaviour
 
             double anchorX = avatar.X + avatar.W / 2;

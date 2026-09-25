@@ -539,6 +539,9 @@ namespace ConditioningControlPanel
                 if (double.IsNaN(ContentViewbox.Width) || ContentViewbox.Width <= 0) return;
                 if (Width != ContentViewbox.Width) Width = ContentViewbox.Width;
                 if (Height != ContentViewbox.Height) Height = ContentViewbox.Height;
+                // Every size change (scale step, DPI refit, user zoom) re-docks: the dock is
+                // measured from the tube's real footprint, so it must follow the footprint.
+                if (_isAttached) Dispatcher.BeginInvoke(new Action(UpdatePosition), DispatcherPriority.Normal);
             };
 
             // Hook window messages (minimal hook, no z-order forcing)
