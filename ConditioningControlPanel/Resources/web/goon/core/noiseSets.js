@@ -2,7 +2,7 @@
  * core/noiseSets.js - the NOISE boards a Sort duel sorts against. PURE.
  *
  * Owner, 2026-09-24: a Sort duel opens with a VS reveal of both players' niches,
- * then each player picks a NOISE set (8 s, a random roll for a player who does
+ * then each player picks a NOISE set (5 s, a random roll for a player who does
  * not pick). The Sort then deals the player's own niche pictures as the right
  * pile (keep) and their noise pictures as the left pile (bin).
  *
@@ -28,12 +28,12 @@ export const NOISE_SETS = Object.freeze([
 
 export const NOISE_SET_IDS = Object.freeze(NOISE_SETS.map((s) => s.id));
 
-/** How long the VS reveal holds before the pick opens. */
-export const NOISE_REVEAL_MS = 2000;
+/** How long the VS reveal holds before the pick opens. Owner, 2026-09-25: about 6 s of pre-play in all (was 10.7). */
+export const NOISE_REVEAL_MS = 1000;
 /** How long the pick stays open. A player who has not picked by then gets a roll. */
-export const NOISE_PICK_MS = 8000;
+export const NOISE_PICK_MS = 5000;
 /** The beat after the pick closes: both picks on screen, then the class. */
-export const NOISE_LOCK_MS = 700;
+export const NOISE_LOCK_MS = 500;
 /** Everything before the class is up, on each side's own clock. */
 export const NOISE_PRE_PLAY_MS = NOISE_REVEAL_MS + NOISE_PICK_MS + NOISE_LOCK_MS;
 /** Stills one noise board fetches: plenty for the left pile of a short Sort. */

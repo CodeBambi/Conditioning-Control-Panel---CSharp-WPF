@@ -814,6 +814,7 @@ export default Object.freeze({
   gg_duel_pickedThem: "相手のノイズ",
   gg_duel_theyPick: "相手が選択中",
   gg_duel_rolled: "ランダムで決定",
+  gg_duel_rolledPlay: "時間切れ。{name} に決定。",
   gg_duel_noiseArchitecture: "建築",
   gg_duel_noiseLandscapes: "風景",
   gg_duel_noiseSpace: "宇宙",

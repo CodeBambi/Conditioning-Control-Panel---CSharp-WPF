@@ -814,6 +814,7 @@ export default Object.freeze({
   gg_duel_pickedThem: "шум соперника",
   gg_duel_theyPick: "соперник выбирает",
   gg_duel_rolled: "выбрано за тебя",
+  gg_duel_rolledPlay: "Время вышло. Тебе выпало: {name}.",
   gg_duel_noiseArchitecture: "Архитектура",
   gg_duel_noiseLandscapes: "Пейзажи",
   gg_duel_noiseSpace: "Космос",
