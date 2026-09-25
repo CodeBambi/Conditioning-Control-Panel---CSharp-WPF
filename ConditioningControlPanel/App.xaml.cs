@@ -2179,6 +2179,7 @@ namespace ConditioningControlPanel
             {
                 Brain = new Services.Companion.Brain.CompanionBrain(Ai);
                 Brain.AttachBarkSource(Bark);
+                Services.Companion.Asks.CompanionAskService.Instance.Start();
                 Logger?.Information("CompanionBrain initialized (enabled={Enabled}, restored={Restored} turns)",
                     Services.Companion.Brain.CompanionBrain.IsEnabled, Brain.RestoredTurnCount);
             }

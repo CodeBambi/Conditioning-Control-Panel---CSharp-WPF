@@ -36,6 +36,7 @@ public partial class ConversationPage : UserControl
         DataContext = _vm;
         _vm.Turns.CollectionChanged += TurnsChanged;
         _vm.AccountChanged += CloseSheet;
+        Services.Companion.Asks.CompanionAskService.Instance.FocusChatRequested += FocusComposer;
         IsVisibleChanged += (_, _) => { if (IsVisible) _vm.Resume(); else { CloseSheet(); _vm.Detach(); } };
         Unloaded += (_, _) => { _vm.Stop(); CloseSheet(); _vm.Detach(); };
         SizeChanged += (_, _) => { if (SheetOverlay.Children[0] is FrameworkElement sheet) sheet.Width = Math.Max(240, Math.Min(580, ActualWidth - 48)); };
@@ -81,6 +82,16 @@ public partial class ConversationPage : UserControl
     private void Activity_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { DataContext: ConversationAction action }) _vm.OpenActivity(action);
+    }
+    private void AskChoice_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: ConversationAskChoice choice }) _vm.AnswerAsk(choice);
+    }
+    private void FocusComposer()
+    {
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(FocusComposer)); return; }
+        if (IsVisible) Composer.Focus();
+        else App.AvatarWindow?.OpenChatInput();
     }
     private void Link_Click(object sender, RoutedEventArgs e)
     {

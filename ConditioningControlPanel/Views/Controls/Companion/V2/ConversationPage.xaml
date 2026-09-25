@@ -99,6 +99,13 @@
              <Button Content="{Binding Label}" Click="Activity_Click" Margin="0,12,8,0" Style="{StaticResource PrimaryButton}"/>
             </DataTemplate></ItemsControl.ItemTemplate>
            </ItemsControl>
+           <ItemsControl ItemsSource="{Binding AskChoices}" Visibility="{Binding HasAsk, Converter={StaticResource Visible}}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate><DataTemplate>
+             <Button Content="{Binding Label}" Click="AskChoice_Click" IsEnabled="{Binding Enabled}" Margin="0,12,8,0" FontWeight="SemiBold"
+                     Background="{Binding Background}" BorderBrush="{Binding BorderColor}" Foreground="{Binding Foreground}"/>
+            </DataTemplate></ItemsControl.ItemTemplate>
+           </ItemsControl>
           </StackPanel>
          </Border>
         </DataTemplate>
@@ -159,6 +166,9 @@
         <Button Content="{loc:Str companion_v2_popout}" Command="{Binding Room.Hero.DetachCommand}" Style="{StaticResource QuietButton}"/>
         <Button Content="{Binding VoiceLabel}" Command="{Binding Room.Hero.ToggleMuteCommand}" Style="{StaticResource QuietButton}"/>
        </WrapPanel>
+       <CheckBox IsChecked="{Binding AsksEnabled}" Foreground="#FFF8FF" Margin="0,0,0,10" ToolTip="{loc:Str companion_asks_toggle_hint}">
+        <TextBlock Text="{loc:Str companion_asks_toggle}" Foreground="#FFF8FF"/>
+       </CheckBox>
        <TextBlock Text="{Binding Familiarity}" Foreground="#CBB5D8" FontSize="12" ToolTip="{loc:Str companion_v2_familiarity_hint}"/>
        <TextBlock Text="{Binding Allowance}" Foreground="#BDAACA" FontSize="11" Margin="0,3,0,14"/>
        <Border Height="1" Background="#54365D" Margin="0,0,0,16"/>

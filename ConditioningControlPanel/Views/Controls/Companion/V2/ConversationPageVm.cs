@@ -14,13 +14,37 @@ using ConditioningControlPanel.Views.Controls.Companion.Runtime;
 namespace ConditioningControlPanel.Views.Controls.Companion.V2;
 
 internal sealed record ConversationAction(string TurnId, string Id, string Label);
+/// <summary>One ask card answer on the chat page. Colours come from the card's tone.</summary>
+internal sealed record ConversationAskChoice(string CardId, string ChoiceId, string Label, bool Enabled,
+    string Background, string BorderColor, string Foreground);
 internal sealed record ConversationLine(string Id, string Speaker, string Text, string Time, bool IsUser)
 {
     public ConversationAction[] Actions { get; init; } = Array.Empty<ConversationAction>();
+    public ConversationAskChoice[] AskChoices { get; init; } = Array.Empty<ConversationAskChoice>();
+    public string? AskCardId { get; init; }
     // A sanctioned video the reply names; the page draws it as a watch button (old chat's chip).
     public string? LinkTitle { get; init; }
     public string? LinkUrl { get; init; }
     public bool HasLink => !string.IsNullOrEmpty(LinkTitle) && !string.IsNullOrEmpty(LinkUrl);
+    public bool HasAsk => AskChoices.Length > 0;
+
+    /// <summary>Attaches the live ask card (question and answers). A card the service no longer knows draws as plain text.</summary>
+    internal ConversationLine WithAsk(string? cardId)
+    {
+        if (Services.Companion.Asks.CompanionAskService.Instance.Find(cardId) is not { } card) return this;
+        var open = card.IsOpen(DateTime.UtcNow);
+        return this with
+        {
+            AskCardId = card.Id,
+            Text = card.Question,
+            AskChoices = card.Choices.Select(c =>
+            {
+                var (bg, border, fg) = Services.Companion.Asks.AskTones.Colours(c.Tone);
+                return new ConversationAskChoice(card.Id, c.Id, card.ChosenId == c.Id ? "✓ " + c.Label : c.Label,
+                    open, bg, border, fg);
+            }).ToArray()
+        };
+    }
 }
 
 /// <summary>One projection of the brain's shared conversation. No transcript of its own is persisted.</summary>
@@ -63,6 +87,17 @@ internal sealed class ConversationPageVm : CompanionObservable
     public bool NeedsStart => _room.Engine.Provider == CompanionProviderMode.Off;
     public bool NeedsSignIn => _room.Engine.Provider == CompanionProviderMode.Cloud && !_room.Engine.IsLoggedIn;
     public bool HasNoTurns => Turns.Count == 0;
+    public bool AsksEnabled
+    {
+        get => App.Settings?.Current?.CompanionAsksEnabled != false;
+        set
+        {
+            if (App.Settings?.Current is not { } settings || settings.CompanionAsksEnabled == value) return;
+            settings.CompanionAsksEnabled = value;
+            try { App.Settings.Save(); } catch (Exception ex) { App.Logger?.Debug("Asks toggle not saved: {E}", ex.Message); }
+            Raise(nameof(AsksEnabled));
+        }
+    }
     public string VoiceLabel => Loc.Get(_room.Hero.IsMuted ? "companion_v2_unmute" : "companion_v2_mute");
     public string StartLabel => Loc.Get(NeedsSignIn ? "companion_v2_signin" : "companion_v2_start");
     public string Status => Busy ? Loc.Get("companion_v2_replying") : HasNotice ? Loc.Get("companion_v2_reply_failed") : NeedsStart ? Loc.Get("companion_v2_off")
@@ -100,6 +135,7 @@ internal sealed class ConversationPageVm : CompanionObservable
             App.UnifiedIdentityChanged += IdentityChanged;
             _room.EngineVm.PropertyChanged += RoomChanged;
             _room.HeroVm.PropertyChanged += RoomChanged;
+            Services.Companion.Asks.CompanionAskService.Instance.CardChanged += AskChanged;
         }
         Refresh();
     }
@@ -109,6 +145,7 @@ internal sealed class ConversationPageVm : CompanionObservable
         App.UnifiedIdentityChanged -= IdentityChanged;
         _room.EngineVm.PropertyChanged -= RoomChanged;
         _room.HeroVm.PropertyChanged -= RoomChanged;
+        Services.Companion.Asks.CompanionAskService.Instance.CardChanged -= AskChanged;
         Attach(null);
     }
     private void IdentityChanged(object? sender, EventArgs e)
@@ -144,12 +181,25 @@ internal sealed class ConversationPageVm : CompanionObservable
         while (common < Turns.Count && common < next.Length && Turns[common].Id == next[common].Id) common++;
         while (Turns.Count > common) Turns.RemoveAt(Turns.Count - 1);
         foreach (var t in next.Skip(common))
-            Turns.Add(Line(t, Name, Services.Companion.CompanionLinkIndex.FindMentionedTitle) with
+            Turns.Add((Line(t, Name, Services.Companion.CompanionLinkIndex.FindMentionedTitle) with
                 { Actions = t.ActivityIds.Select(Services.Companion.CompanionActivities.Find)
                     .Where(a => a?.Allowed == true).Select(a => new ConversationAction(t.Id, a!.Id,
-                        Services.Companion.CompanionActivities.ButtonLabel(a.Label))).ToArray() });
+                        Services.Companion.CompanionActivities.ButtonLabel(a.Label))).ToArray() }).WithAsk(t.AskCardId));
         Raise(nameof(HasNoTurns));
     }
+    private void AskChanged(Services.Companion.Asks.AskCard card)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+        void Update()
+        {
+            for (int i = 0; i < Turns.Count; i++)
+                if (Turns[i].AskCardId == card.Id) Turns[i] = Turns[i].WithAsk(card.Id);
+        }
+        if (dispatcher.CheckAccess()) Update(); else dispatcher.BeginInvoke(new Action(Update), DispatcherPriority.Normal);
+    }
+    public void AnswerAsk(ConversationAskChoice choice) =>
+        Services.Companion.Asks.CompanionAskService.Instance.Answer(choice.CardId, choice.ChoiceId);
     /// <summary>
     /// One transcript line. Only a model reply gets a watch link: a title in the user's own message
     /// is them talking, and an app reply never named a video. The visible text loses the dead
@@ -227,6 +277,7 @@ internal sealed class ConversationPageVm : CompanionObservable
             {
                 Draft = string.Empty;
                 SpeakThroughTube(result.Text, result.IsAiGenerated);
+                Services.Companion.Asks.CompanionAskService.Instance.OfferForRequest(text);
             }
             else
             {

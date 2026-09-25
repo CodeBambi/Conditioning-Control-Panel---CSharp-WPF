@@ -835,6 +835,7 @@ namespace ConditioningControlPanel
                         // the AI badge (P2/C4 — audit smoke-test #1).
                         PlayDoubleBounce();
                         GigglePriority(result.Text, aiGenerated: result.IsAiGenerated);
+                        if (routesThroughBrain) Services.Companion.Asks.CompanionAskService.Instance.OfferForRequest(input);
                     }
                 }
                 catch (Exception ex)

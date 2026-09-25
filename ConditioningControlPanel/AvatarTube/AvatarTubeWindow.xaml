@@ -135,6 +135,7 @@
                                           MaxHeight="280"
                                           Style="{StaticResource TinyPinkScrollViewer}">
 
+                                <StackPanel>
                                 <!-- Speech text: white on dark glass, real 15px, relaxed leading -->
                                 <TextBlock x:Name="TxtSpeech"
                                            Text=""
@@ -145,6 +146,9 @@
                                            TextWrapping="Wrap"
                                            TextAlignment="Left"
                                            Padding="0,0,6,0"/>
+                                <!-- Ask card answers (AvatarTubeWindow.Asks.cs); empty and collapsed otherwise -->
+                                <WrapPanel x:Name="AskButtons" Visibility="Collapsed" Margin="0,10,0,0"/>
+                                </StackPanel>
                             </ScrollViewer>
 
                             <!-- AI-generated content badge (top-left). Visibility is controlled in code-behind
