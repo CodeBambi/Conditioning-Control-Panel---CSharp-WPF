@@ -58,6 +58,30 @@ namespace ConditioningControlPanel.Services.Safety
             return overrideAll ? Rung.StopEverything : Rung.RunLadder;
         }
 
+        /// <summary>How long after a game kept an Escape as its pause the next Escape is a full panic.</summary>
+        internal static readonly TimeSpan GamePauseDoubleTap = TimeSpan.FromSeconds(2);
+
+        /// <summary>
+        /// Racing Thoughts pauses on Escape (owner, 2026-09-25: "pressing esc immediately closes the
+        /// racing game, we should have a pause with esc"). Escape is the race's Brake, and with the
+        /// override on, the same key as the default panic closed the whole game on the first tap.
+        ///
+        /// <para>The press is left to the game ONLY when all of this holds, so panic stays panic
+        /// everywhere else: the panic key is Escape (a rebound key is always a real panic), the
+        /// race window is the one in front (the player is looking at it), no session is running
+        /// (no flashes or spiral in front of it that a pause would leave up), no Lock Card is
+        /// open, and the previous claim was not inside <see cref="GamePauseDoubleTap"/>: a quick
+        /// second Escape is a full panic, so getting out is still two taps away at most.</para>
+        /// </summary>
+        internal static bool GameClaimsEscapeAsPause(string? panicKey, bool gameInFront, bool engineRunning,
+            bool lockCardOpen, DateTime? lastClaimUtc, DateTime nowUtc)
+        {
+            if (!string.Equals(panicKey?.Trim(), "Escape", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!gameInFront || engineRunning || lockCardOpen) return false;
+            if (lastClaimUtc is { } last && nowUtc - last < GamePauseDoubleTap && nowUtc >= last) return false;
+            return true;
+        }
+
         /// <summary>Reads the master switch off settings, defaulting to ON when settings are missing
         /// (a panic with no settings loaded should still stop everything).</summary>
         internal static bool OverrideEnabled(AppSettings? settings) => settings?.PanicOverridesAll != false;

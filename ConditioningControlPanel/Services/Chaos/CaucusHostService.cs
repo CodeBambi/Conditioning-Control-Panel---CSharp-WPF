@@ -91,6 +91,10 @@ internal static class CaucusHostService
     /// <summary>True while the race window is open.</summary>
     public static bool IsActive => _host != null;
 
+    /// <summary>The race window is up AND in front: the panic key's Escape is the race's pause then
+    /// (PanicPolicy.GameClaimsEscapeAsPause).</summary>
+    public static bool IsInFront => _host?.IsForeground == true;
+
     /// <summary>Open the race window (idempotent - refocuses if already open).</summary>
     /// <param name="devTrackPath">The `--race-track` dev arg's file, or null in a normal launch.</param>
     /// <param name="openCloud">The `--race-cloud` dev arg: open the BambiCloud window on its own.</param>
