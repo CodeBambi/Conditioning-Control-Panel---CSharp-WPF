@@ -176,6 +176,11 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("patreon_is_whitelisted")]
             public bool PatreonIsWhitelisted { get; set; }
+
+            // Every provider folded into one number (0..2, whitelist 2). Raw token on purpose: read
+            // through EntitlementTierRule.ParseTier so a malformed value is "no signal", never a throw.
+            [JsonProperty("effective_tier")]
+            public JToken? EffectiveTierRaw { get; set; }
         }
 
         public class Unlocks
@@ -759,21 +764,7 @@ namespace ConditioningControlPanel.Services
             // the Takeover paths, #465) relies on that window — extend it here so a
             // server-confirmed linked tier keeps premium alive, mirroring the 2-week grace
             // direct Patreon validation writes. Never shorten an existing longer window.
-            if (user.PatreonTier >= 1)
-            {
-                var until = DateTime.UtcNow.AddDays(14);
-                if (settings.PatreonPremiumValidUntil == null || settings.PatreonPremiumValidUntil < until)
-                    settings.PatreonPremiumValidUntil = until;
-
-                // Tier-2 half of the same grace. Until the Lab window became its own stamp,
-                // HasCachedLabAccess was (PatreonTier >= 2 && premium window), so a linked tier-2
-                // Discord user got Lab offline for free; without this line that user silently
-                // loses the Lab the moment they go offline. Gated on the tier the SERVER just
-                // returned, never on the persisted one - that is the read the stamp replaced.
-                if (user.PatreonTier >= 2 &&
-                    (settings.PatreonLabValidUntil == null || settings.PatreonLabValidUntil < until))
-                    settings.PatreonLabValidUntil = until;
-            }
+            EntitlementTierRule.ExtendGrace(settings, user.PatreonTier, DateTime.UtcNow);
 
             // Store auth token if provided
             if (!string.IsNullOrEmpty(authToken))

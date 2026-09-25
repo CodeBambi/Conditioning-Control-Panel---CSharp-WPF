@@ -829,6 +829,9 @@ namespace ConditioningControlPanel.Services
                         {
                             var body = await v2Response.Content.ReadAsStringAsync();
                             TryAdoptFromHeartbeatBody(body);
+                            // Same body, second reading: a tier bought on the site (PayPal / Stripe)
+                            // unlocks here without a sign-in. Rises only; see EntitlementTierRule.
+                            EntitlementTierSync.Offer(EntitlementTierRule.ParseHeartbeatTier(body), "heartbeat");
                         }
                         catch (Exception ex)
                         {
@@ -1183,6 +1186,8 @@ namespace ConditioningControlPanel.Services
                 }
 
                 ApplyServerCurveEpoch(user.CurveEpoch, "read-before-write");
+                // Tier is still not adopted wholesale here; only a RISE of the folded tier is offered.
+                EntitlementTierSync.Offer(EntitlementTierRule.ParseTier(user.EffectiveTierRaw), "read-before-write");
 
                 var preLevel = settings.PlayerLevel;
                 var preLevelXp = settings.PlayerXP;
