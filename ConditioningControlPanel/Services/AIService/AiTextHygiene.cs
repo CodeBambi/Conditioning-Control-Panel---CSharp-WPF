@@ -70,6 +70,31 @@ namespace ConditioningControlPanel.Services
         private static readonly System.Collections.Generic.HashSet<string> VerdictWords =
             new(System.StringComparer.OrdinalIgnoreCase) { "pass", "fail", "yes", "no", "ok", "done", "skip" };
 
+        // Stage directions in caps, "[DROP]" or "[WATCH <title>]" (MythoMax script habit, desk run
+        // 2026-09-25). A bare cue goes; WATCH/LISTEN keep their title as plain text so the link index
+        // can still chip it. Verdict replies ([PASS]) are left to StripSpeakerTag's guard.
+        private static readonly Regex StageTag = new(
+            @"\[(?<cue>[A-Z]{3,}(?: [A-Z]{2,})?)(?:[ :]+(?<rest>[^\]\r\n]{1,120}))?\]", RegexOptions.Compiled);
+
+        internal static string StripStageTags(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+            var trimmed = text!.Trim();
+            if (trimmed.StartsWith("[") && trimmed.EndsWith("]") && VerdictWords.Contains(trimmed.Trim('[', ']', ' ')))
+                return text!;
+            var result = StageTag.Replace(text!, m =>
+            {
+                var cue = m.Groups["cue"].Value;
+                if (VerdictWords.Contains(cue)) return m.Value;
+                var rest = m.Groups["rest"].Success ? m.Groups["rest"].Value.Trim() : "";
+                return (cue == "WATCH" || cue == "LISTEN") && rest.Length > 0 ? "\"" + rest + "\"" : "";
+            });
+            if (ReferenceEquals(result, text) || result == text) return text!;
+            result = Regex.Replace(result, @"[ \t]{2,}", " ");
+            result = Regex.Replace(result, @"\s+([.,!?])", "$1");
+            return result.Trim();
+        }
+
         /// <summary>Drops a leading "[Name]" speaker tag, then the quotes the whole line was wrapped
         /// in, which came with it.</summary>
         internal static string StripSpeakerTag(string? text)
@@ -505,7 +530,7 @@ namespace ConditioningControlPanel.Services
             // newlines. Seeing either in user-visible text means raw tokens reached the bubble.
             cleaned = cleaned.Replace("Ġ", " ").Replace("Ċ", "\n");
 
-            return StripInstructionLeak(StripSpeakerTag(cleaned.Trim()));
+            return StripInstructionLeak(StripStageTags(StripSpeakerTag(cleaned.Trim())));
         }
 
         // ===================== leaked instruction text =====================

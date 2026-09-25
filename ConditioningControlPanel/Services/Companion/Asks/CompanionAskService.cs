@@ -279,7 +279,11 @@ internal sealed class CompanionAskService
         var settings = App.Settings?.Current;
         return new AskSources
         {
-            Videos = CompanionLinkIndex.CurrentEntries().Select(e => new AskVideo(e.Title, e.Url)).ToArray(),
+            // The active mod's own pool only. CompanionLinkIndex also sanctions the Bambi catalogue
+            // and knowledge-base links, so offering from it put Bambi videos in CCP Default.
+            Videos = (App.Mods?.GetVideoLinks() ?? new Dictionary<string, string>())
+                .Where(kv => !string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+                .Select(kv => new AskVideo(kv.Key, kv.Value)).ToArray(),
             LovedVideos = settings?.CompanionAskLovedVideos.ToArray() ?? Array.Empty<string>(),
             MehVideos = settings?.CompanionAskMehVideos.ToArray() ?? Array.Empty<string>(),
             Games = activities.Where(a => a.Id.StartsWith("game.", StringComparison.Ordinal))
