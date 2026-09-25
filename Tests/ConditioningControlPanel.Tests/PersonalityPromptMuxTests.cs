@@ -92,32 +92,25 @@ public class PersonalityPromptMuxTests : IDisposable
     }
 
     [Fact]
-    public void EmiOwnsBothPromptPathsAndPreservesOtherAvatarCustomization()
+    public void NoAvatarSetReplacesThePersonalityWithAFixedVoice()
     {
+        // Tube EMI was retired as the companion (2026-09-25): the old EMI set number, in the
+        // house mod with v2 on, is an ordinary avatar and every personality path stays open.
         var previous = Environment.GetEnvironmentVariable("CCP_COMPANION_V2");
         try
         {
             Environment.SetEnvironmentVariable("CCP_COMPANION_V2", "1");
             _settings.SelectedAvatarSet = 8;
             _settings.ActiveCompanionId = 0;
-            _settings.CompanionEmiPreviewChoiceMade = true;
             _settings.ActivePersonalityPresetId = PersonalityPresets.GentleTrainerId;
             ActivateCommunityPrompt();
-            _settings.SlutModeEnabled = true;
 
-            Assert.Equal("emi-fixed", App.Personality!.GetActivePreset().Id);
-            Assert.Single(App.Personality.GetAllPresets());
-            Assert.False(App.Personality.SetActivePreset(PersonalityPresets.GentleTrainerId));
-            Assert.Contains("You are EMI", BambiSprite.GetConversationPrompt());
-            Assert.DoesNotContain(CustomCanary, BambiSprite.GetConversationPrompt());
-            Assert.DoesNotContain(CustomCanary, BambiSprite.GetStablePrompt());
-            Assert.True(_settings.CompanionPrompt.UseCustomPrompt);
-            Assert.Equal(PersonalityPresets.GentleTrainerId, _settings.ActivePersonalityPresetId);
-
-            _settings.SelectedAvatarSet = 1;
-            Assert.Contains(CustomCanary, BambiSprite.GetConversationPrompt());
-            Assert.Contains(CustomCanary, BambiSprite.GetStablePrompt());
+            Assert.NotEqual("emi-fixed", App.Personality!.GetActivePreset().Id);
             Assert.True(App.Personality.GetAllPresets().Count > 1);
+            Assert.Contains(CustomCanary, BambiSprite.GetStablePrompt());
+            Assert.DoesNotContain("You are EMI", BambiSprite.GetStablePrompt());
+            Assert.True(App.Personality.SetActivePreset(PersonalityPresets.GentleTrainerId));
+            Assert.Equal(PersonalityPresets.GentleTrainerId, App.Personality.GetActivePreset().Id);
         }
         finally { Environment.SetEnvironmentVariable("CCP_COMPANION_V2", previous); }
     }

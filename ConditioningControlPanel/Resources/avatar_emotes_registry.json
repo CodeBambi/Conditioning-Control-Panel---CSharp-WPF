@@ -6,6 +6,7 @@
     { "modId": "builtin-locked", "avatarSet": 3, "folder": "circe_emotes_p3" },
     { "modId": "builtin-locked", "avatarSet": 4, "folder": "circe_emotes_p4" },
     { "modId": "builtin-bambisleep", "avatarSet": 1, "folder": "avatar0_emotes" },
-    { "modId": "builtin-sissyhypno", "avatarSet": 1, "folder": "avatar0_emotes" }
+    { "modId": "builtin-sissyhypno", "avatarSet": 1, "folder": "avatar0_emotes" },
+    { "modId": "builtin-ccp-default", "avatarSet": 1, "folder": "avatar0_emotes" }
   ]
 }

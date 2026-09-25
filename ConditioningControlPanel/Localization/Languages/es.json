@@ -1,5 +1,4 @@
 {
-  "companion_v2_media_library_only": "Puedo abrir tu biblioteca multimedia, pero no buscar un vídeo concreto desde aquí.",
   "companion_v2_open_activity": "Abrir {0}",
   "companion_v2_activity_unavailable": "Esta actividad ya no está disponible. Pide otra idea.",
   "companion_v2_calls_you": "Te llama",
@@ -52,7 +51,6 @@
   "companion_v2_popout": "Separar ventana",
   "companion_v2_mute": "Silenciar voz",
   "companion_v2_history_note": "Nuevo chat borra esta conversación. Las preferencias guardadas se conservan.",
-  "companion_v2_emi_fixed": "EMI tiene una voz fija. Elige otro avatar para personalizar su personalidad.",
   "companion_v2_personality": "Más opciones de personalidad",
   "companion_v2_memory_note": "Con la memoria activa, la IA elegida puede resumir el chat reciente. Los recuerdos relevantes acompañan tus mensajes. Los datos guardados quedan en este PC; revísalos u olvídalos aquí.",
   "companion_v2_busy": "Se está preparando una respuesta.",

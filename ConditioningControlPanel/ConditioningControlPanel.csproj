@@ -402,7 +402,6 @@
     <!-- Feature images - embedded as Resource for pack:// URIs to work -->
     <Resource Include="Resources\features\*.png" />
     <!-- The Sparkle wallet's croupier EMI (Controls/SparkleWallet.xaml): body + waving arm layers. -->
-    <Resource Include="Resources\emi\tube\*.png" />
     <Resource Include="Resources\emi\wallet_croupier_body.png" />
     <Resource Include="Resources\emi\wallet_croupier_arm.png" />
     <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
