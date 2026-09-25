@@ -751,11 +751,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction)
             {
                 var name = UserNameForPrompt(_memory);
-                lines.Insert(0, (name != null
-                        ? $"The user's name is {name}. Use it now and then; never ask for their name. "
-                        : "Never ask for their name. ") +
-                    "Never ask for a real or legal name, and never mention their parents or family. " +
-                    "If they tell you to call them something else, use that instead.");
+                if (name != null)
+                    lines.Insert(0, $"Call them {name} now and then. Never ask their name, a real name or about family; " +
+                                    "if they give you another name, use it.");
+                else if (_preview())
+                    lines.Insert(0, "Never ask for a real name or about family.");
             }
 
             // Anti-fixation lines FIRST: Compose sheds tail lines from the end, and the budget
