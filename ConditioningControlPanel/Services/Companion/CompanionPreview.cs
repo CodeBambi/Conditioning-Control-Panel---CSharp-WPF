@@ -54,7 +54,7 @@ namespace ConditioningControlPanel.Services.Companion
                 return new CompanionPreviewInfo(name, looks, modPersonalities.Count, line);
             }
 
-            var stock = PersonalityPresets.GetAllBuiltIn();
+            var stock = PersonalityPresets.ForPicker(PersonalityPresets.GetAllBuiltIn(), neutral);
             var leadId = neutral ? PersonalityPresets.NeutralDefaultId : PersonalityPresets.BambiSpriteId;
             var sample = PersonalitySamples.For(stock.FirstOrDefault(p => p.Id == leadId)).FirstOrDefault();
             return new CompanionPreviewInfo(name, looks, stock.Count, sample);
