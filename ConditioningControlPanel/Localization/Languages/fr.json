@@ -1,4 +1,8 @@
 {
+  "rail_gesture_short": "Aide aux clics",
+  "chaster_setup_pick": "1. Choisis ton verrou ci-dessous. 2. Choisis un préréglage. 3. Active l’ardoise en haut.",
+  "chaster_setup_none": "Aucun verrou actif. Crée un verrou ou rejoins-en un sur Chaster, puis reviens ici pour le choisir.",
+  "chaster_setup_run": "Choisis un préréglage ci-dessous, puis active l’ardoise en haut. Les effets sélectionnés fonctionnent uniquement quand elle est active.",
   "br_counter_sold": "VENDU",
   "friends_land_invite_line": "t'invite : {0}",
   "friends_land_watch_line": "t'envoie quelque chose à regarder",

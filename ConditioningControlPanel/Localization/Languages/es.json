@@ -1,4 +1,8 @@
 {
+  "rail_gesture_short": "Cómo hacer clic",
+  "chaster_setup_pick": "1. Elige tu candado abajo. 2. Elige un ajuste. 3. Activa la cuenta arriba.",
+  "chaster_setup_none": "Aún no hay un candado activo. Crea uno o únete a uno en Chaster y vuelve aquí para elegirlo.",
+  "chaster_setup_run": "Elige un ajuste abajo y activa la cuenta arriba. Los efectos marcados solo funcionan con la cuenta activada.",
   "br_counter_sold": "VENDIDO",
   "friends_land_invite_line": "te invita a {0}",
   "friends_land_watch_line": "te envía algo para ver",

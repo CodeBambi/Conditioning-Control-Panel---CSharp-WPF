@@ -55,6 +55,22 @@ public class ChasterTabRenderTests
         Assert.DoesNotContain("'", ChasterTrailerView.MountScript("a'b").Replace("__mount('", "").Replace("')", ""));
     }
 
+    [Fact]
+    public void Preview_has_a_loaded_warmup_host_and_reparents_into_the_hover_plate()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            Assert.Same(tab.TrailerWarmHost, tab.TrailerWeb.Parent);
+            Assert.Equal(Visibility.Hidden, tab.TrailerWarmHost.Visibility);
+            tab.OpenTrailer(new ToggleButton { Tag = "natasha" });
+            Assert.Same(tab.TrailerPlate, tab.TrailerWeb.Parent);
+            Assert.Equal(Visibility.Collapsed, tab.TrailerWeb.Visibility);
+            Assert.Equal("natasha", tab.TrailerId);
+            tab.HideTrailer();
+        });
+    }
+
     private static void Realize(FrameworkElement element, double width, double height)
     {
         var host = new Grid { Width = width, Height = height };

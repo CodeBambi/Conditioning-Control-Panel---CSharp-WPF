@@ -1,4 +1,8 @@
 {
+  "rail_gesture_short": "クリック操作",
+  "chaster_setup_pick": "1. 下でロックを選ぶ。2. プリセットを選ぶ。3. 上の集計スイッチをオンにする。",
+  "chaster_setup_none": "有効なロックがありません。Chasterでロックを作成するか参加してから、ここに戻って選んでください。",
+  "chaster_setup_run": "下でプリセットを選び、上の集計スイッチをオンにしてください。選択した効果は集計がオンの間だけ動作します。",
   "br_counter_sold": "売約済み",
   "friends_land_invite_line": "{0}に招待されました",
   "friends_land_watch_line": "見てほしいものが届きました",

@@ -493,19 +493,22 @@
                                     </StackPanel>
                                     <TextBlock x:Name="TxtHeroEnds" FontSize="13" Margin="0,2,0,0" Visibility="Collapsed"
                                                Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock x:Name="SetupHint" Visibility="Collapsed" FontSize="16" FontWeight="SemiBold"
+                                               Foreground="White" TextWrapping="Wrap" MaxWidth="480"
+                                               HorizontalAlignment="Left" Margin="0,8,0,12"/>
                                     <!-- the state pills: test lock, frozen, hidden, offline, no lock, on hold -->
                                     <WrapPanel x:Name="HeroPills" Margin="0,10,0,0"/>
                                     <!-- The pick. Nothing is pushed to a lock the player did not pick, so this
                                          shows whenever no pick matches an active lock; with one lock it is one tap. -->
                                     <Grid x:Name="LockRow" Margin="0,8,0,0" Visibility="Collapsed" HorizontalAlignment="Left">
-                                        <ComboBox x:Name="CmbLock" Style="{StaticResource DarkComboBoxStyle}" FontSize="12"
-                                                  Foreground="{DynamicResource TextLightBrush}" Width="240" MinHeight="30"
+                                        <ComboBox x:Name="CmbLock" FontSize="16"
+                                                  Foreground="Black" Background="White" Width="320" MinHeight="48"
                                                   SelectionChanged="CmbLock_SelectionChanged"/>
                                         <Border x:Name="UseLockPill" Visibility="Collapsed" BorderBrush="#99E0B052" BorderThickness="1.5"
-                                                CornerRadius="15" Height="30" Background="#26E0B052" ToolTip="{loc:Str chaster_lock_use_tip}">
-                                            <Button x:Name="BtnUseLock" Style="{StaticResource CirceLink}" Padding="14,0"
+                                                CornerRadius="12" MinHeight="48" Background="#E0B052" ToolTip="{loc:Str chaster_lock_use_tip}">
+                                            <Button x:Name="BtnUseLock" Style="{StaticResource CirceCta}" Padding="20,0" Height="48" Background="#E0B052"
                                                     VerticalAlignment="Center" Click="BtnUseLock_Click">
-                                                <TextBlock x:Name="TxtUseLock" FontSize="12" FontWeight="SemiBold" Foreground="#E0B052"/>
+                                                <TextBlock x:Name="TxtUseLock" FontSize="16" FontWeight="Bold" Foreground="#21152E"/>
                                             </Button>
                                         </Border>
                                     </Grid>
@@ -805,6 +808,10 @@
              sits under the browser as its loading frame and as the fallback when there is no
              runtime. The figure, the badge and the two lines live BELOW the plate, where the
              browser's airspace cannot swallow them. -->
+        <!-- A loaded, hidden host lets WebView2 initialize before the first hover. -->
+        <Grid x:Name="TrailerWarmHost" Width="320" Height="190" Visibility="Hidden" IsHitTestVisible="False">
+            <ctrl:ChasterTrailerView x:Name="TrailerWeb"/>
+        </Grid>
         <Popup x:Name="Trailer" AllowsTransparency="False" Placement="Bottom" VerticalOffset="6" PopupAnimation="None"
                StaysOpen="True" MouseEnter="Trailer_MouseEnter" MouseLeave="Trailer_MouseLeave">
             <Border x:Name="TrailerCard" Width="320" Background="#FF1A1230" BorderBrush="{DynamicResource GlassBorderBrush}"
@@ -824,7 +831,7 @@
                                     </Image.RenderTransform>
                                 </Image>
                             </Border>
-                            <ctrl:ChasterTrailerView x:Name="TrailerWeb" Visibility="Collapsed"/>
+
                         </Grid>
                         <Grid Margin="6,8,6,0">
                             <Grid.ColumnDefinitions>
