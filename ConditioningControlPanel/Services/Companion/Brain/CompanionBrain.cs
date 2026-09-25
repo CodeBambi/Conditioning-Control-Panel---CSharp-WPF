@@ -317,7 +317,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // what we asked the model to produce. See AiCallOptions.ChatWithEffects.
                 var effectsOn = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
                 var options = effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat;
-                var offered = _preview() ? ConversationDelivery.Select(Activities(), input, Session.Turns) : Array.Empty<CompanionActivity>();
+                var offered = _preview() && !ConversationDelivery.CardFollows(input)
+                    ? ConversationDelivery.Select(Activities(), input, Session.Turns) : Array.Empty<CompanionActivity>();
                 if (_preview())
                 {
                     options = ConversationDelivery.Options(options, input, effectsOn);
