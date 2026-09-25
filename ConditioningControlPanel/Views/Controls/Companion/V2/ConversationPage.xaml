@@ -90,6 +90,9 @@
             <TextBlock Text="{Binding Speaker}" FontSize="12" FontWeight="SemiBold" Foreground="#F5A3D3"/>
            </DockPanel>
            <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Foreground="#FFF8FF" TextWrapping="Wrap" FontSize="17" Padding="0" SelectionBrush="#965198" IsReadOnlyCaretVisible="False"/>
+           <Button Click="Link_Click" Margin="0,12,8,0" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}" Visibility="{Binding HasLink, Converter={StaticResource Visible}}" ToolTip="{Binding LinkTitle}" AutomationProperties.Name="{Binding LinkTitle}">
+            <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE768;" FontFamily="Segoe MDL2 Assets, Segoe UI" Margin="0,0,8,0" VerticalAlignment="Center"/><TextBlock Text="{Binding LinkTitle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520"/></StackPanel>
+           </Button>
            <ItemsControl ItemsSource="{Binding Actions}">
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate><DataTemplate>

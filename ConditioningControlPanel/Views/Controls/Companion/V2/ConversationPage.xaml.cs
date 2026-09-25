@@ -82,6 +82,10 @@ public partial class ConversationPage : UserControl
     {
         if (sender is Button { DataContext: ConversationAction action }) _vm.OpenActivity(action);
     }
+    private void Link_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: ConversationLine line }) _vm.OpenLink(line);
+    }
     private void Sheet_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string kind }) OpenSheet(kind);
