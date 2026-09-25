@@ -415,6 +415,8 @@ namespace ConditioningControlPanel
             // An uninterruptible recorded clip owns the bubble — only its own (bypassing) call may render.
             if (_isPlayingUninterruptibleClip && !bypassClipLock) return;
 
+            SyncAskButtonsFor(text);
+
             // EMI Desk hears every line the tube is about to say, muted or not, so she can keep out
             // of the avatar's way. Cheap by contract: this runs on every bubble.
             App.EmiDesk?.NoteAvatarSpeaking();
