@@ -879,6 +879,8 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const duel = createDuelController({
     match, view: createDuelView({ onLog, volume: duelVolume(prefs) }), audio, onLog,
     isPractice: () => (typeof isPractice === 'function' ? !!isPractice() : false),
+    // The Sort duel's noise boards: fetched by the host, kept out of the deck (exec/media.js).
+    noise: media,
   });
   led.add(() => { try { duel.dispose(); } catch (_e) { /* gone */ } });
   const arsenal = mountArsenal({

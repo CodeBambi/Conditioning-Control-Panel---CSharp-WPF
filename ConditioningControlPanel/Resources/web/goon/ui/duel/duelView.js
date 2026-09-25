@@ -25,6 +25,7 @@ import { duelGame } from './games.js';
 import { tileValue } from './rules.js';
 import { mountArcademyGame } from './arcademyHost.js';
 import { media as goonMedia } from '../../exec/media.js';
+import { createNoiseView } from './noiseView.js';
 
 // The prefix is gg-nduel, NOT gg-duel: the lobby's YOU vs THEM card owns .gg-duel and
 // .gg-duel-name, and this sheet's fixed full-screen .gg-duel lifted that card out of the
@@ -150,6 +151,9 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
   root.appendChild(stage);
   root.appendChild(card);
   d.body.appendChild(root);
+  // The Sort duel's VS reveal + noise pick (ui/duel/noiseView.js): its own layer in this overlay.
+  const noise = createNoiseView({ d, host: root });
+  const noiseOut = (animate) => { try { if (noise) noise.clear(animate); } catch (_e) { /* scenery */ } };
 
   let timeEl = null;
   let fitted = null;      // the class root being kept clear of Mercy
@@ -201,6 +205,7 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
     intro({ by, name, rule, hint }) {
       gen++;
       killStage();
+      noiseOut(false);
       showCard();
       card.appendChild(mk('div', 'gg-nduel-stamp', by === 'you' ? DUEL_COPY.incomingYou : DUEL_COPY.incomingThem));
       card.appendChild(mk('div', 'gg-nduel-name', name || DUEL_COPY.gameName));
@@ -208,9 +213,22 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
       if (hint) card.appendChild(mk('p', 'gg-nduel-hint', DUEL_COPY.firstHint));
       root.hidden = false;
     },
+    /** Sort duel: both niches face to face. The card and stage stay down; the layer owns the screen. */
+    reveal(o = {}) {
+      gen++;
+      killStage();
+      hideCard();
+      root.hidden = false;
+      if (noise) noise.reveal(o);
+    },
+    pick(o) { if (noise) noise.pick(o); },
+    pickTimer(left) { if (noise) noise.pickTimer(left); },
+    picked(o) { if (noise) noise.picked(o); },
+    lock(o) { if (noise) noise.lock(o); },
     /** The class is about to mount: open the stage, with the duel strip over it. */
     play({ game, secondsLeft } = {}) {
       hideCard();
+      noiseOut(true);
       root.hidden = false;
       stage.hidden = false;
       const row = duelGame(game);
@@ -226,7 +244,7 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
      * Mount the real class into the stage. Resolves to {result(), destroy()} or null.
      * Called by the controller right after play().
      */
-    async startGame({ game, seed, len, onEnd }) {
+    async startGame({ game, seed, len, onEnd, noise: piles = null }) {
       const my = ++gen;
       const classRoot = mk('div', 'gg-nduel-classroot');
       const fx = mk('div', 'gg-nduel-fx');
@@ -241,7 +259,7 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
       try {
         h = await mount({
           root: classRoot, fxLayer: fx, ceremonyLayer: cer, game, seed, lenSec: len, media,
-          reduced: reduced(d), onEnd, log: say, volume,
+          reduced: reduced(d), onEnd, log: say, volume, noise: piles,
         });
       } catch (e) { say('mount threw: ' + ((e && e.message) || e)); h = null; }
       if (!h) {
@@ -264,6 +282,7 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
     waiting() {
       gen++;
       killStage();
+      noiseOut(false);
       showCard(true);
       card.appendChild(mk('p', 'gg-nduel-fine', DUEL_COPY.waiting));
     },
@@ -280,10 +299,11 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
       card.appendChild(mk('p', 'gg-nduel-fine', resultLine('you', mine)));
       card.appendChild(mk('p', 'gg-nduel-fine', resultLine('them', theirs)));
     },
-    close() { gen++; killStage(); hideCard(); root.hidden = true; },
+    close() { gen++; killStage(); noiseOut(false); hideCard(); root.hidden = true; },
     dispose() {
       gen++;
       killStage();
+      noiseOut(false);
       try { root.remove(); } catch (_e) { /* gone */ }
     },
   };

@@ -39,6 +39,27 @@ export const DUEL_COPY_RAW = Object.freeze({
   /* ui/duel/games.js - the rule line under each game's name. The names are the games' own. */
   ruleDeepEnd: 'Swipe or arrow keys. Deepest tile wins.',
   ruleSort: 'Swipe right for moving, left for still.',
+  /* The Sort duel's VS reveal and noise pick (ui/duel/noiseView.js). */
+  vs: 'VS',
+  revealYou: 'you',
+  revealThem: 'them',
+  revealRule: 'Keep yours. Bin the noise.',
+  houseMix: 'house mix',
+  botNiche: 'the bot',
+  nicheMore: tpl('+{n} more', (n) => ({ n })),
+  pickTitle: 'Pick your noise',
+  pickLine: 'The pictures you bin. Slow hands get a random one.',
+  pickedYou: 'your noise',
+  pickedThem: 'their noise',
+  theyPick: 'they are picking',
+  rolled: 'picked for you',
+  noiseArchitecture: 'Architecture',
+  noiseLandscapes: 'Landscapes',
+  noiseSpace: 'Space',
+  noiseFood: 'Food',
+  noiseCars: 'Cars',
+  noiseRooms: 'Rooms',
+  noiseCats: 'Cats',
   recapLine: tpl({ one: '+ {n} game won', other: '+ {n} games won' }, (won) => ({ n: won }), one),
 });
 

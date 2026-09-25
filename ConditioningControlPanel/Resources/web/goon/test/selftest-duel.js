@@ -50,10 +50,10 @@ const { finishedMatches, noteMatchFinished } = await import('../ui/nightProgress
 
 // ================================================= 1. the shared cap contract
 {
-  ok(NIGHT_CAP_VERSION === 1, 'NIGHT_CAP_VERSION is 1');
+  ok(NIGHT_CAP_VERSION >= 1, 'NIGHT_CAP_VERSION is a revision (2 since the Sort noise pick, selftest-noise.js)');
   ok(makeCaps().night === 0, 'absent caps.night reads 0');
   ok(makeCaps({ night: 1 }).night === 1, 'caps.night round-trips through makeCaps');
-  ok(localCaps({ night: NIGHT_CAP_VERSION, voice: VOICE_CAP_VERSION }).night === 1, 'core/caps local() passes night through');
+  ok(localCaps({ night: NIGHT_CAP_VERSION, voice: VOICE_CAP_VERSION }).night === NIGHT_CAP_VERSION, 'core/caps local() passes night through');
   ok(localCaps().night === 0, 'and a caller that omits it advertises 0');
   ok(peerSpeaksNight({ night: 1 }) && peerSpeaksNight({ night: '1' }), 'a revision (quoted or not) speaks night');
   ok(!peerSpeaksNight({ night: true }) && !peerSpeaksNight({}) && !peerSpeaksNight(null), 'a boolean, absent or null does not');
