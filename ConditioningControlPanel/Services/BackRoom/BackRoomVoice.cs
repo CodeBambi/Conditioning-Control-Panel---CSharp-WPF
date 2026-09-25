@@ -65,9 +65,10 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     private readonly Action _stop;
     private readonly Action<string>? _log;
 
-    /// <summary>The app's live sources.</summary>
+    /// <summary>The app's live sources. No synthetic speech (owner, 2026-09-25): a word with no
+    /// recorded clip stays silent, so the chain's third rung is <see cref="NoTts"/>.</summary>
     public BackRoomVoice()
-        : this(FindPlayerClip, FindPresetClip, RenderTts, ReverseToCache, ProbeDurationMs, PlayThroughApp, StopApp,
+        : this(FindPlayerClip, FindPresetClip, NoTts, ReverseToCache, ProbeDurationMs, PlayThroughApp, StopApp,
                msg => App.Logger?.Debug("BackRoomVoice: {Msg}", msg))
     {
     }
@@ -86,6 +87,9 @@ internal sealed class BackRoomVoice : IBackRoomVoice
         _stop = stop;
         _log = log;
     }
+
+    /// <summary>The live TTS rung: never renders. Windows speech is off by owner decision.</summary>
+    internal static string? NoTts(string _) => null;
 
     // ============================ the chain ============================
 
@@ -256,6 +260,15 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     }
 
     /// <summary>The bundled clip for an already normalised phrase, or null.</summary>
+    /// <summary>The recorded neutral (Circe) clip for a phrase, or null. The main app's
+    /// subliminals and triggers use it for mods that may not borrow the Bambi clips (CCP Default,
+    /// Locked), so those mods speak with a real voice instead of staying silent.</summary>
+    public static string? FindNeutralClip(string? phrase)
+    {
+        var key = Normalize(phrase);
+        return key.Length == 0 ? null : FindPresetClip(key);
+    }
+
     private static string? FindPresetClip(string key)
     {
         if (!Manifest().TryGetValue(key, out var name)) return null;
