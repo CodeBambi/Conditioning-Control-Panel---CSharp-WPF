@@ -33,6 +33,36 @@ namespace ConditioningControlPanel.Models
         };
 
         /// <summary>
+        /// Niche personas the CCP Default picker hides (owner, 2026-09-25): Bambi, bimbo and
+        /// explicit-first voices read wrong on the plain mod. They are NOT removed: they stay in
+        /// <see cref="BuiltInIds"/>, resolve by id everywhere, and still list under the themed
+        /// mods that run on the stock set (Bambi Sleep, Sissy Hypno).
+        /// </summary>
+        public static readonly string[] HiddenInNeutralIds =
+        {
+            BambiSpriteId, SlutModeId, BimboCoachId, BimboCowId
+        };
+
+        public static bool IsHiddenInNeutral(string? id) =>
+            id != null && System.Array.IndexOf(HiddenInNeutralIds, id) >= 0;
+
+        /// <summary>
+        /// The stock presets a picker lists. Outside the neutral context the list is untouched.
+        /// In it the niche personas drop out, except <paramref name="keepId"/>: a user who already
+        /// has one selected keeps seeing it (and keeps using it) until they pick another.
+        /// </summary>
+        public static List<PersonalityPreset> ForPicker(IEnumerable<PersonalityPreset> stock, bool neutral, string? keepId = null)
+        {
+            var list = new List<PersonalityPreset>();
+            foreach (var p in stock)
+            {
+                if (neutral && IsHiddenInNeutral(p.Id) && p.Id != keepId) continue;
+                list.Add(p);
+            }
+            return list;
+        }
+
+        /// <summary>
         /// Gets all built-in presets. The neutral CCP Default leads the list so it reads as the
         /// house default in the picker; a mod that ships its own personalities replaces this
         /// whole list (see PersonalityService.GetBuiltInPresetsForActiveMod).

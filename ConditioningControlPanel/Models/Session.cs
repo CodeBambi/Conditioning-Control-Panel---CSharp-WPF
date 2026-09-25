@@ -95,12 +95,19 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// Returns the session description adjusted for the current content mode.
-        /// Replaces Bambi-specific trigger names with generic equivalents in SH mode.
+        /// Returns the session description adjusted for the current content mode. Built-in
+        /// sessions read neutral copy under CCP Default (Services/PresetNaming); every other mod
+        /// keeps the authored text through the mod's text replacements.
         /// </summary>
         public string GetModeAwareDescription()
         {
-            return App.Mods?.MakeModAware(Description) ?? Description;
+            return Services.PresetNaming.Description(this);
+        }
+
+        /// <summary>A phase's name as shown, mod-aware like the description.</summary>
+        public string GetModeAwarePhaseName(SessionPhase phase)
+        {
+            return Services.PresetNaming.PhaseName(this, phase);
         }
 
         /// <summary>

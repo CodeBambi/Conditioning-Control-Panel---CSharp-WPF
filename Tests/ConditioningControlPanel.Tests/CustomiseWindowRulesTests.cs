@@ -232,7 +232,8 @@ public class CustomiseWindowRulesTests
     {
         var info = CompanionPreview.Build(new ModManifest { Name = "CCP Default" }, null, singleEmote: false, neutral: true);
         Assert.Equal("CCP Default", info.Name);
-        Assert.Equal(PersonalityPresets.GetAllBuiltIn().Count, info.Personalities);
+        // The neutral picker hides the four niche personas (owner, 2026-09-25).
+        Assert.Equal(PersonalityPresets.GetAllBuiltIn().Count - PersonalityPresets.HiddenInNeutralIds.Length, info.Personalities);
         Assert.Equal(PersonalitySamples.For(PersonalityPresets.GetNeutralDefault())[0], info.SampleLine);
     }
 }
