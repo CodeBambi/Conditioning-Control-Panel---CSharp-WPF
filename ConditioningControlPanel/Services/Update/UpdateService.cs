@@ -20,73 +20,49 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.10.3";
+        public const string AppVersion = "6.11.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.10.3 - Let the games begin
+        public const string CurrentPatchNotes = @"v6.11.0 - Locktober
 
-NEW IN 6.10.3
-- the launcher plays a tune. moving across the tiles picks out a little melody instead of the same note over and over, and no two sweeps of the grid come out the same.
-- a speaker button in the launcher title bar turns the launcher's own sounds off. a session or a game behind it keeps its voice, and the master volume is still behind the Media button.
+LOCKTOBER: CHASTER
+- link your Chaster lock and CCP keeps a tab. slip-ups you choose to price add time, good behaviour takes it off.
+- the tab reaches your lock as you go, never past the daily limit you set.
+- panic and the emergency exit never add time, and nothing adds for ten minutes after either.
+- its own page behind the padlock in the side rail: a calendar, a receipt and the menu of prices.
 
-NEW IN 6.10.2
-- the v2 flashes and bubbles can be bought where you use them: a Get it row in the Flashes and Bubble Pop options, 30 Sparkle Points each, no trip to the Back Room needed.
-- pendulum flashes each hang from their own nail instead of swinging as one stack, the v2 marker no longer covers the light or the question mark on a tile, and the motion picker is readable on every skin.
-- the Deeper library fills from every door. it used to open blank from the dashboard tile and from Ctrl+K. editor rules that sit past the end of a clip can be seen and clicked.
-- a game goes fullscreen on the monitor it is on, not always the main one.
-- two escapes inside Racing Thoughts, Goon or the Graded Intake close the game, not the whole app.
-- leaving Down the Rabbit Hole early still books the run: Sparks are paid for the time you played, and it counts as a run after a minute. picture flashes inside it reach your toy again, and the achievement share prompt waits in the Inbox instead of landing over the two doors.
-- Settings, Account grows a Reconnect Patreon button when this PC has lost touch with Patreon, so a paid tier that reads as locked is one click to fix.
-- Ctrl+K understands more of the words people actually type, the ramp link chips say Master volume and Whisper volume, and Brain Drain blur goes all the way down to 0.
-- the online niche box says why it refused a name, instead of doing nothing.
-- voice control finds a speech model that Windows unzipped two folders deep, and there is a button that opens the models folder.
-- media history keeps online items, with Copy link and Go to source.
-- the companion picks up the new persona after a mod switch, and the prompt editor starts from the persona you are wearing.
+THE COMPANION, REWORKED
+- its own page: a proper conversation view, a customise gear, links that open.
+- it remembers what you tell it, keeps a recap, and gets more familiar over time.
+- shorter replies, and now and then a card with something to do, checked against your tier.
+- Customise replaces the Mod Manager: mod, avatar, personality, perk and starting presets in one place.
+- CCP Default is plain now: classic triggers, neutral names, no Bambi audio. its companion wears the animated avatar, has new personalities and speaks with Circe's recorded voice. no more computer voice anywhere.
 
-CC LABS
-- the app now opens on a launcher, with the panel on one side and the games on the other: the Back Room, Down the Rabbit Hole, the Arcademy, Goon and the Graded Intake. you sign in there first, since every game wants an account, though the Back Room is happy with a free one.
-- the Media button sets your media once for everything, whether that is your own library, online niches or a mix, and holds your asset presets and the master volume too.
-- the mod you are wearing sits in the title bar, so you can swap one for another without going through the panel.
+THE LAUNCHER
+- a friend list: add people, poke them, invite them to a game, send something to watch. sharing what you do is off until you turn it on. no chat.
+- your tier badge wobbles and shows itself large on hover.
+- a tier bought on the site unlocks straight away.
+- Just Drop is for everyone.
 
-THE BACK ROOM
-- a casino behind the panel that also plays on your phone at cclabs.app, with five tables to lose your evening at: Daily Daze, three Candy slots, Soft Hand and Velvet Vortex.
-- it runs on Sparkle Points, which you earn on every level up and every 100 bubbles you pop, and which the house tends to give back.
-- EMI works the counter, where she trades them for things you cannot get anywhere else, and the shelf keeps growing.
-- the pictures on the walls come from your library or your niches, following whatever you picked in the launcher.
-- click once and the room takes the mouse, so you look around by moving it. escape gives it back. walk up to a table and it tells you what it is and how to sit.
-- there is a list of tables behind a pill now, instead of the map. pick one and you walk to it.
-- the slot will keep spinning for free when you are out of Sparkles. nothing is paid out, everything still happens.
-- a door in the west wall opens on the Annex, which has the racing cabinet in it and two doors that do not open yet.
-
-FLASHES AND BUBBLES
-- online pictures that move now move. flashes and bubble faces play the real thing instead of a frozen first frame.
-- a picture on a bubble sits inside the glass and fades into it at the edge.
-- flashes stop drawing from the first page they ever loaded, so a niche you turn off actually goes away.
-
-???
-- one card is a question mark, because something is waiting at the counter.
-
-DEEPER
-- the editor has proper chrome and a quality of life pass, the player has keys, and the library finally has filters.
-
-EMI
-- she has new lines on the marquee between announcements, and Circe speaks gender neutral.
+EVERYTHING ELSE
+- EMI offers new players a short welcome show. anyone can replay it from Help.
+- EMI on the desk has more life, and flies when you throw her.
+- Goon Game: plays with no setup from online niches, patrons host and everyone signed in joins, open tables, game night with song picks and Deep End and Sort duels, a live score and a share card.
+- Home: one slideshow, a moving logo, tiles that press, and a choice of which click does what.
+- the Back Room asks you to sign in first, and can be looked around by click and drag.
+- Breakout is open to every patron on the web at app.cclabs.app/breakout.
 
 FIXES
-- clicking a file in the Deeper library opens it in the editor again.
-- the launcher fits all of its cards on the screen, and the way back to it is spelled out now, in the title bar and in the tray.
-- the launcher cards are landscape, so the art is shown whole instead of cropped at the sides, the Arcademy has a picture on it instead of a star, and every card's title sits on the same line.
-- the card table hands your Sparkle total back when it is done with it, instead of leaving it reading zero until the next hand.
-- every table draws its own way out, the card table says so when you lose, and reduced motion no longer swallows the payout.
-- the pictures on the walls run at their own speed rather than a third of it.
-- the streak and perfect week cards show their art again, and every help card marks its key words and says where Sparkle Points come from.
-- a blank second account from a mobile sign in is recovered rather than kept, free quests stop asking for premium, the nav rail no longer sticks open, and the Arcademy annex opens like it should.
-- the Graded Intake pass is weekly and says so, with unlimited runs at tier 2.
+- SubscribeStar links work again, and your level matches between phone and desktop.
+- unticked folders keep new files out, games keep their taskbar button, videos keep their sound and their full length.
+- EMI answers the first summon and stays on top, online pictures never run out, season popups are gone.
+- Racing Thoughts: Esc pauses instead of closing the game, and a BambiCloud level opens behind the game and starts when you press play.
+- the log says why Lovense or the local AI failed.
 
-full nerd changelog in pull requests 1107 through 1500.";
+full nerd changelog in pull requests 1501 through 1699.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
