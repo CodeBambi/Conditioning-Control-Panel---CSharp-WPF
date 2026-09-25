@@ -260,6 +260,15 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     }
 
     /// <summary>The bundled clip for an already normalised phrase, or null.</summary>
+    /// <summary>The recorded neutral (Circe) clip for a phrase, or null. The main app's
+    /// subliminals and triggers use it for mods that may not borrow the Bambi clips (CCP Default,
+    /// Locked), so those mods speak with a real voice instead of staying silent.</summary>
+    public static string? FindNeutralClip(string? phrase)
+    {
+        var key = Normalize(phrase);
+        return key.Length == 0 ? null : FindPresetClip(key);
+    }
+
     private static string? FindPresetClip(string key)
     {
         if (!Manifest().TryGetValue(key, out var name)) return null;
