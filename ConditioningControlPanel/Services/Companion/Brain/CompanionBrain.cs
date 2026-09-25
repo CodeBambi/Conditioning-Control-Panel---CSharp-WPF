@@ -358,6 +358,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 var delivery = _preview() ? ConversationDelivery.Parse(result.Text, offered)
                     : (Text: result.Text, Ids: Array.Empty<string>());
                 var chatText = AiTextHygiene.UnwrapSpokenSigil(delivery.Text, ActiveSpeakerName());
+                chatText = AiTextHygiene.StripInstructionLeak(chatText);
 
                 // Live 0806: and they invent URLs when asked for a video they have no link for.
                 // Strip before the reply is appended — a fabricated link left in the window teaches
@@ -478,6 +479,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
 
                 var reactionText = AiTextHygiene.UnwrapSpokenSigil(result.Text, ActiveSpeakerName());
+                reactionText = AiTextHygiene.StripInstructionLeak(reactionText);
                 reactionText = AiTextHygiene.StripUnsanctionedLinks(reactionText);
                 if (reactionText.Length == 0)
                 {
