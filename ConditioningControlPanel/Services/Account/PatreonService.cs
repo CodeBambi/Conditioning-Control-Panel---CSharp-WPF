@@ -141,6 +141,13 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// A server-confirmed tier rise that did not come through Patreon OAuth (a site purchase
+        /// read off the heartbeat or a focus refresh, see EntitlementTierSync). The grace stamps are
+        /// already written; this only tells every TierChanged subscriber to repaint. Call on the UI thread.
+        /// </summary>
+        public void NotifyEntitlementRaised(PatreonTier tier) => TierChanged?.Invoke(this, tier);
+
+        /// <summary>
         /// Whether the user has AI access (Tier 1+ OR whitelisted).
         /// All features are currently Tier 1. Also grants access during the 2-week grace period.
         /// This is the app's canonical AI gate: SubscribeStar is OR'd in here so either

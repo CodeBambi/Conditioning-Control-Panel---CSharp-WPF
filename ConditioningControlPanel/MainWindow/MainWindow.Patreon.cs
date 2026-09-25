@@ -1095,6 +1095,7 @@ namespace ConditioningControlPanel
             {
                 UpdatePatreonUI();
                 UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
+                RefreshProfileBubble();
                 // Programs gate on the same entitlement: locked browse cards, the "needs a pledge"
                 // task badges and RequiredTasks itself all read HasPremiumAccess at BUILD time. A
                 // subscriber who opened the tab before async validation landed saw everything locked
@@ -1116,27 +1117,73 @@ namespace ConditioningControlPanel
         /// </summary>
         private void MaybeShowPremiumCelebration()
         {
+            // A live rise (EntitlementTierSync) is raised just before TierChanged lands here; it
+            // is consumed on this one pass whatever happens below.
+            var riseTier = _pendingRiseTier;
+            _pendingRiseTier = 0;
             try
             {
-                if (App.Patreon?.HasPremiumAccess != true) return;
-                if (App.Settings?.Current?.SeenFeatureIntros.Contains(FeatureIntroPopup.CelebrationKey) == true) return;
+                var patreon = App.Patreon;
+                if (patreon?.HasPremiumAccess != true) return;
+                var tier = patreon.HasLabAccess ? 2 : 1;
+                var onRise = riseTier > 0;
+                if (!TierCelebration.IsOwed(App.Settings?.Current?.SeenFeatureIntros, tier, onRise)) return;
+                var key = TierCelebration.KeyFor(tier)!;
+
+                // A purchase the user just made is celebrated at once, not filed in the Inbox,
+                // unless they are busy: a session, a game, a dialog or the tour.
+                if (onRise && CanCelebrateNow())
+                {
+                    FeatureIntroPopup.ShowCelebrationIfFirstTime(this, key);
+                    return;
+                }
 
                 // Through the presenter. A running session or a dialog on screen are two of its
                 // quiet inputs, so the card becomes an Inbox row in both cases rather than being
-                // dropped until the next launch's re-check (the early returns that used to sit
-                // here did exactly that). The seen-flag is still spent inside ShowCore, at open time.
+                // dropped until the next launch's re-check. The seen-flag is spent inside ShowCore,
+                // at open time.
                 PresentOrInbox(new Services.Startup.InboxItem
                 {
-                    Key = "intro:" + FeatureIntroPopup.CelebrationKey,
+                    Key = "intro:" + key,
                     Glyph = "💖",
-                    Title = "Premium is yours",
+                    Title = tier >= 2 ? "Prime is yours" : "Premium is yours",
                     Summary = "Everything that was locked is open.",
-                    Open = () => FeatureIntroPopup.ShowCelebrationIfFirstTime(this),
+                    Open = () => FeatureIntroPopup.ShowCelebrationIfFirstTime(this, key),
                 });
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Premium celebration hook failed");
+            }
+        }
+
+        /// <summary>Tier of a live rise waiting for the celebration pass, 0 when none.</summary>
+        private int _pendingRiseTier;
+
+        private bool CanCelebrateNow()
+            => IsVisible && WindowState != WindowState.Minimized
+               && !App.IsSessionRunning
+               && Services.Launcher.LauncherHost.AwaitingGame == null
+               && App.Tutorial?.IsActive != true
+               && !App.IsUpdateDialogActive && !IsStartupDialogShowing;
+
+        /// <summary>
+        /// A tier bought outside the app just landed. Arms the immediate celebration and gives the
+        /// profile bubble its fanfare in the tier colour: gold for Basic, cyan for Prime.
+        /// </summary>
+        private void OnEntitlementTierRaised(int tier)
+        {
+            _pendingRiseTier = tier;
+            try
+            {
+                var colour = tier >= 2 ? Color.FromRgb(0x5E, 0xE6, 0xFF) : Color.FromRgb(0xFF, 0xD7, 0x00);
+                RefreshProfileBubble();
+                FireBurstAt(BtnProfileBubble, color: colour, count: 60);
+                FlashProfileBubbleGlow(colour);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Tier rise fanfare failed: {Error}", ex.Message);
             }
         }
 
@@ -1152,6 +1199,11 @@ namespace ConditioningControlPanel
             {
                 App.Patreon.TierChanged += OnPatreonTierChanged;
             }
+
+            // Instant unlock for a tier bought on the site: a focus refresh when the user clicks back
+            // in, and the rise's own fanfare on the profile bubble (EntitlementTierSync).
+            Activated += (_, __) => EntitlementTierSync.OnAppFocused();
+            EntitlementTierSync.TierRaised += OnEntitlementTierRaised;
 
             // SubscribeStar is the third login provider and it OR's into the canonical premium gate
             // (PatreonService.HasPremiumAccess), but its own init was never actually called from

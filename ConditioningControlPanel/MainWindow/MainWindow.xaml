@@ -2103,6 +2103,17 @@
                                     <DropShadowEffect Color="#FFD700" BlurRadius="12" ShadowDepth="0" Opacity="0.9"/>
                                 </Ellipse.Effect>
                             </Ellipse>
+                            <!-- Tier badge (Basic gold / Prime cyan), tucked over the bottom-right rim.
+                                 Painted by RefreshProfileBubble; collapsed for free accounts. The Grid
+                                 does not clip, so the negative margin hangs it past the circle. -->
+                            <Image x:Name="ProfileBubbleTierBadge" Width="30" Stretch="Uniform"
+                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                   Margin="0,0,-12,-5" Visibility="Collapsed" IsHitTestVisible="False"
+                                   RenderTransformOrigin="0.5,0.5">
+                                <Image.RenderTransform>
+                                    <RotateTransform Angle="-12"/>
+                                </Image.RenderTransform>
+                            </Image>
                         </Grid>
                     </Button>
                     <!-- The bubble's account menu. StaysOpen + manual close-grace timers, same
