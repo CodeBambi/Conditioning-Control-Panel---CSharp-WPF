@@ -26,16 +26,26 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public event EventHandler? PresetsChanged;
 
-        /// <summary>Presets suitable for display in the Awareness tab card grid.</summary>
+        /// <summary>Presets suitable for display in the Awareness tab card grid. Themed built-ins
+        /// (bimbo, puppy, chastity) show only under their own mods; see
+        /// <see cref="ModAudioPolicy.AwarenessPresetVisible"/>.</summary>
         public IReadOnlyList<KeywordTriggerPreset> VisiblePresets
         {
             get
             {
                 var list = App.Settings?.Current?.KeywordTriggerPresets;
                 if (list == null || list.Count == 0) return Array.Empty<KeywordTriggerPreset>();
-                return list.ToList();
+                var mod = App.Mods?.ActiveMod;
+                var modId = mod?.Id ?? App.Settings?.Current?.ActiveModId;
+                var modIsBuiltIn = mod?.IsBuiltIn ?? true;
+                return list
+                    .Where(p => ModAudioPolicy.AwarenessPresetVisible(p.Id, modId, p.MasterEnabled, modIsBuiltIn))
+                    .ToList();
             }
         }
+
+        /// <summary>The active mod changed: the visible preset set may have too.</summary>
+        public void NotifyVisibilityChanged() => PresetsChanged?.Invoke(this, EventArgs.Empty);
 
         public KeywordTriggerPreset? GetPreset(string presetId)
         {

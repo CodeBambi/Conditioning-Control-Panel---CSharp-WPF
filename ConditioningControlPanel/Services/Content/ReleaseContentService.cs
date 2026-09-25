@@ -1242,8 +1242,9 @@ namespace ConditioningControlPanel.Services
         // ---------------------------------------------------------------- startup
 
         /// <summary>
-        /// Fire-and-forget at startup: makes sure the baseline avatar audio (<c>audio-base</c>) is on
-        /// disk, and — for upgraders (plan §5) — the pack for the ONE mod they were actually using,
+        /// Fire-and-forget at startup and on a mod switch: makes sure the baseline avatar audio
+        /// (<c>audio-base</c>) is on disk WHEN the active mod plays it (Bambi Sleep only, see
+        /// <see cref="ModAudioPolicy.UsesBaselineVoicePack"/>), and — for upgraders (plan §5) — the pack for the ONE mod they were actually using,
         /// whose bundled media the modular installer's <c>[InstallDelete]</c> sweep just removed.
         /// No-ops on a full/dev layout, under a debugger, in offline mode, or when everything is
         /// already stamped, so the common case costs zero network. <c>audio-web</c> and every OTHER
@@ -1273,7 +1274,10 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
-                var needsBaseline = !(GetStamp(PackAudioBase) != null && IsInstalled(PackAudioBase));
+                // audio-base is Bambi Sleep's flash voice; no other mod plays it, so nobody else
+                // downloads it (owner pivot 2026-09-25). Switching to Bambi Sleep asks again.
+                var needsBaseline = ModAudioPolicy.UsesBaselineVoicePack(App.Settings?.Current?.ActiveModId)
+                    && !(GetStamp(PackAudioBase) != null && IsInstalled(PackAudioBase));
                 var activeModPack = ResolveMissingActiveModPack();
 
                 if (!needsBaseline && activeModPack == null)

@@ -179,6 +179,26 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ; pack instead.
 #include "installer-content-deletions.iss"
 
+; RETIRED 2026-09-25 (not pack payload, so not in the generated list above): orphaned Bambi
+; trigger clips from the Resources\sounds ROOT that no code read. Duplicates of Resources\sub_audio.
+; Exact names only, same rule as above. Resources\sounds\GOOD GIRL.mp3 and 00 Bimbo Drone.mp3 stay
+; (QuizWindow plays them).
+Type: files;      Name: "{app}\Resources\sounds\BAMBI CUM AND COLLAPSE.MP3"
+Type: files;      Name: "{app}\Resources\sounds\Bambi Does As Shes Told.mp3"
+Type: files;      Name: "{app}\Resources\sounds\BAMBI DOES AS SHE'S TOLD.MP3"
+Type: files;      Name: "{app}\Resources\sounds\BAMBI FREEZE.mp3"
+Type: files;      Name: "{app}\Resources\sounds\BAMBI RESET.mp3"
+Type: files;      Name: "{app}\Resources\sounds\BAMBI SLEEP.mp3"
+Type: files;      Name: "{app}\Resources\sounds\BAMBI UNIFORM LOCK.mp3"
+Type: files;      Name: "{app}\Resources\sounds\BIMBO DOLL.mp3"
+Type: files;      Name: "{app}\Resources\sounds\COCK ZOMBIE NOW.mp3"
+Type: files;      Name: "{app}\Resources\sounds\DROP FOR COCK.mp3"
+Type: files;      Name: "{app}\Resources\sounds\Giggle Time.mp3"
+Type: files;      Name: "{app}\Resources\sounds\GIGGLETIME.mp3"
+Type: files;      Name: "{app}\Resources\sounds\PRIMPED AND PAMPERED.MP3"
+Type: files;      Name: "{app}\Resources\sounds\SNAP AND FORGET.MP3"
+Type: files;      Name: "{app}\Resources\sounds\ZAP COCK DRAIN OBEY.mp3"
+
 [Icons]
 ; Start Menu shortcut
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon

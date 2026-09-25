@@ -370,7 +370,8 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Fall back to default sub_audio directory
+            // Fall back to default sub_audio directory - Bambi-voiced, so never for CCP Default.
+            if (!ModAudioPolicy.UsesSharedSubAudio(App.Mods?.ActiveModId)) return null;
             return SearchAudioDirectory(_audioPath, cleanText, textVariants, extensions, isModCache: false);
         }
 

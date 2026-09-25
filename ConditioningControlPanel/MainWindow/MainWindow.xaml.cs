@@ -2989,6 +2989,18 @@ namespace ConditioningControlPanel
             App.Settings.Current.ModChosen = true;
             App.Settings.Save();
 
+            // audio-base is fetched only for the mod that plays it, so a switch to Bambi Sleep
+            // asks for it now instead of at the next launch. No-op when stamped, full install,
+            // debugger or offline; de-duped inside RequestPackAsync.
+            if (Services.ModAudioPolicy.UsesBaselineVoicePack(App.Mods.ActiveModId) && App.ReleaseContent != null)
+            {
+                var releaseContent = App.ReleaseContent;
+                _ = System.Threading.Tasks.Task.Run(() => releaseContent.EnsureBaselineAsync());
+            }
+
+            // Themed awareness presets show only under their own mods: rebuild the card grid.
+            App.KeywordPresets?.NotifyVisibilityChanged();
+
             InitializeModSelector();
             LoadLogo();
             LoadTakeoverImage();
