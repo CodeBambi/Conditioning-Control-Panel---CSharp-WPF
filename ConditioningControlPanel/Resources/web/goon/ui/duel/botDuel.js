@@ -28,9 +28,8 @@
  * The player's controller decides; a busy answer takes the throw back.
  *
  * A SORT CARD against a player whose build picks noise (night revision 2) runs the
- * same reveal and pick the player sees: the bot picks a board at random somewhere
- * inside the pick window and says so (`sub:'noise'`), and its report lands after
- * the pre-play time as well as the clock.
+ * same VS reveal the player sees: the bot names a random board as the duel begins
+ * (`sub:'noise'`), and its report lands after the reveal as well as the clock.
  *
  * Node-import-safe: clock, timers and rng are injectable (tests run it on a
  * virtual clock).
@@ -40,7 +39,7 @@ import { GoonMatchPhase } from '../../core/contracts.js';
 import { DUEL_INTRO_MS, pickLength } from './rules.js';
 import { botResult, knownGame, normalizeGameId, pickDuelGame } from './games.js';
 import { DUEL_GAP_EXTRA_MS, DUEL_MAX_PER_MATCH } from './duelController.js';
-import { NOISE_PICK_MS, NOISE_PRE_PLAY_MS, NOISE_REVEAL_MS, rollNoiseSet } from '../../core/noiseSets.js';
+import { NOISE_PRE_PLAY_MS, rollNoiseSet } from '../../core/noiseSets.js';
 
 /** How late its score lands after the clock runs out (inside the player's grace window). */
 export const BOT_REPORT_MS = Object.freeze([300, 1400]);
@@ -81,7 +80,7 @@ export function createBotDuel({
     if (cur) cur.cancels.push(c);
   }
 
-  /** The time before the game is up on the player's side: the intro card, or the Sort reveal + pick. */
+  /** The time before the game is up on the player's side: the intro card, or the Sort VS reveal. */
   function prePlayMs(game) {
     return game === 'sort' && match && match.peerPicksNoise ? NOISE_PRE_PLAY_MS : DUEL_INTRO_MS;
   }
@@ -94,19 +93,16 @@ export function createBotDuel({
     arm();
   }
 
-  /** The report (and, on a Sort noise duel, the pick), from the start of this duel. */
+  /** The report (and, on a Sort noise duel, its board), from the start of this duel. */
   function arm() {
     // The game runs from the end of the intro to the end of the clock; the bot "finishes" it
     // at the end (nobody can see its screen) and reports a beat later, the way a person's score lands.
     at(prePlayMs(cur.game) + cur.len * 1000 + pick(BOT_REPORT_MS), report);
-    // Its noise pick: a random board, at a random moment inside the pick window.
-    if (prePlayMs(cur.game) !== DUEL_INTRO_MS) {
-      at(NOISE_REVEAL_MS + pick([600, NOISE_PICK_MS - 900]), () => {
-        if (!cur || cur.noise) return;
-        cur.noise = rollNoiseSet(rand);
-        if (match) match.sendDuel({ sub: 'noise', idx: cur.idx, set: cur.noise });
-        say('duel ' + cur.idx + ' noise: ' + cur.noise);
-      });
+    // Its noise board: a random one, named at once the way a player's pre-match pick is.
+    if (cur.game === 'sort' && match && match.peerPicksNoise) {
+      cur.noise = rollNoiseSet(rand);
+      if (match) match.sendDuel({ sub: 'noise', idx: cur.idx, set: cur.noise });
+      say('duel ' + cur.idx + ' noise: ' + cur.noise);
     }
   }
 

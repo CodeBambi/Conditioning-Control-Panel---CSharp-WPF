@@ -32,13 +32,16 @@
  * PER MATCH, NOT PER MOUNT: the counter, the gap and the recap tally live in a
  * WeakMap keyed on the match object, so a HUD remount mid-match changes nothing.
  *
- * THE SORT DUEL'S NOISE PICK (2026-09-25, night revision 2). When the card holds Sort and the
+ * THE SORT DUEL'S NOISE BOARD (2026-09-25, night revision 2). When the card holds Sort and the
  * peer's build picks noise (match.peerPicksNoise), the intro card becomes a VS reveal of both
- * players' niches (NOISE_REVEAL_MS), then each side picks a NOISE board from seven tiles
- * (NOISE_PICK_MS; no pick = the roll made when the duel began, whose board has been fetching
- * since) and sends `sub:'noise' {idx, set}` so the other screen shows it. Each side runs these
- * phases on its OWN clock from its own begin(), exactly as the intro card always ran: nothing
- * waits on the other side's pick, so nobody sits on an unsynced timer. The class then deals the
+ * players' niches and noise boards (NOISE_REVEAL_MS), then the class. The board was picked
+ * BEFORE the match (owner: "right after the select the niche, not in the sort game"), on the
+ * pre-match step ui/screens/noiseSetup.js, and reaches this controller as `chosenNoise()`. A
+ * player who never chose gets a roll made when the duel begins. Each side sends
+ * `sub:'noise' {idx, set}` at begin so the other screen names it; the wire is unchanged, and a
+ * revision 2 peer from before this change (which still picks in the duel, about 6 s) lands its
+ * pick late and its score inside the report grace. Each side runs the reveal on its OWN clock
+ * from its own begin(), exactly as the intro card always ran. The class then deals the
  * player's niche as the right pile and their noise board as the left. A peer on revision 1
  * never sees any of it: Sort plays the old way (moving vs still).
  *
@@ -54,7 +57,7 @@ import { duelGame, knownGame, normalizeGameId, pickDuelGame } from './games.js';
 import { seedToString } from '../../core/rng.js';
 import { getDuelLength } from '../screens/customize.js';
 import { finishedMatches } from '../nightProgress.js';
-import { NOISE_LOCK_MS, NOISE_PICK_MS, NOISE_REVEAL_MS, clampNoiseSet, rollNoiseSet } from '../../core/noiseSets.js';
+import { NOISE_REVEAL_MS, clampNoiseSet, rollNoiseSet } from '../../core/noiseSets.js';
 import { cleanNiches, peerNiches } from '../../core/contracts.js';
 import { nicheLabel } from './noisePick.js';
 
@@ -65,7 +68,7 @@ export const DUEL_GAP_EXTRA_MS = 30000;
 /** Duels one match may hold. */
 export const DUEL_MAX_PER_MATCH = 5;
 /** The stages before the class is up: a 'busy' answer can still take the throw back in these. */
-const PRE_PLAY = new Set(['intro', 'reveal', 'pick', 'lock']);
+const PRE_PLAY = new Set(['intro', 'reveal']);
 
 /* ---- per-match state: survives HUD remounts, read by the recap after the HUD is gone ---- */
 const perMatch = new WeakMap();
@@ -105,8 +108,10 @@ export function takeFirstCardHint() {
  * @param {Function} [o.duelLength] this player's Customize pick (tests)
  * @param {Function} [o.isPractice] true in practice: the card drops from the first match (the bot plays)
  * @param {object} [o.noise]   the noise boards' pictures: {requestNoise(id), listNoise(id) -> rows}
- *   (exec/media.js). Absent = nothing to fetch (headless tests); the pick still runs.
- * @param {Function} [o.rand]  () => [0,1): the no-pick roll
+ *   (exec/media.js). Absent = nothing to fetch (headless tests); the reveal still runs.
+ * @param {Function} [o.chosenNoise] () => set id: the board picked before the match
+ *   (ui/screens/noiseSetup.js, kept in prefs). '' = never chosen: the duel rolls one.
+ * @param {Function} [o.rand]  () => [0,1): the roll for a player who never chose
  * @param {Function} [o.runGame] ({game, seed, len, onEnd}) => handle | Promise<handle> | null, where
  *   handle = {result(): {game, score, tile?}, destroy()}. Default: the view's startGame (the real
  *   Arcademy class). Tests pass a fake.
@@ -119,13 +124,14 @@ export function createDuelController({
   duelLength = getDuelLength,
   isPractice = () => false,
   noise = null,
+  chosenNoise = () => '',
   rand = Math.random,
 } = {}) {
   const ms = stateOf(match);
   let cur = null;            // {idx, len, game, seed, run, mine, stage, by, cancels[], noise}
   let returnCard = null;     // set by the HUD once the arsenal exists
   const peerScores = new Map();
-  const peerNoise = new Map();   // idx -> their set, when their pick lands before our duel does
+  const peerNoise = new Map();   // idx -> their set, when their frame lands before our duel does
   const unsubs = [];
 
   const log = (e) => { try { if (typeof onLog === 'function') onLog(e); } catch (_e) { /* never */ } };
@@ -205,71 +211,29 @@ export function createDuelController({
     at(DUEL_INTRO_MS, startPlay);
   }
 
-  /* ---- the Sort duel's VS reveal and noise pick (see the header) ---- */
+  /** The board picked before the match, or '' (never chosen, or a junk pref). */
+  const chosen = () => { try { return clampNoiseSet(chosenNoise()); } catch (_e) { return ''; } };
+
+  /* ---- the Sort duel's VS reveal (see the header) ---- */
   function beginNoise(row) {
     const c = cur;
-    // The roll is made NOW, so its board fetches through the whole reveal and pick.
-    c.noise = { mine: '', theirs: clampNoiseSet(peerNoise.get(c.idx)), roll: rollNoiseSet(rand), rolled: false, pickEndsAt: 0 };
+    const pre = chosen();
+    const mine = pre || rollNoiseSet(rand);
+    c.noise = { mine, theirs: clampNoiseSet(peerNoise.get(c.idx)), rolled: !pre };
     peerNoise.delete(c.idx);
-    wantNoise(c.noise.roll);
+    // Already fetching since the pre-match pick (a no-op then); a roll starts fetching now.
+    wantNoise(mine);
+    if (match) match.sendDuel({ sub: 'noise', idx: c.idx, set: mine });
+    log({ t: 'duel-noise', idx: c.idx, set: mine, rolled: c.noise.rolled });
     c.stage = 'reveal';
     const you = nicheLabel(cleanNiches(match && match.localCaps && match.localCaps.niches));
     const them = practice() ? nicheLabel([], 'bot') : nicheLabel(peerNiches(match && match.remoteCaps));
-    v('reveal', { by: c.by, game: c.game, name: row ? row.name : c.game, you, them, hint: takeFirstCardHint() });
-    at(NOISE_REVEAL_MS, () => {
-      c.stage = 'pick';
-      c.noise.pickEndsAt = now() + NOISE_PICK_MS;
-      v('pick', {
-        secondsLeft: Math.ceil(NOISE_PICK_MS / 1000),
-        theirs: c.noise.theirs,
-        preview: (set) => { const r = noiseRows(set).find((x) => x && x.kind !== 'video'); return r ? r.url : ''; },
-        onPick: (set) => pickNoise(set),
-      });
-      pickTick();
+    v('reveal', {
+      by: c.by, game: c.game, name: row ? row.name : c.game, you, them,
+      youNoise: mine, themNoise: c.noise.theirs, hint: takeFirstCardHint(),
     });
-    at(NOISE_REVEAL_MS + NOISE_PICK_MS, lockNoise);
-  }
-
-  function pickTick() {
-    if (!cur || cur.stage !== 'pick') return;
-    const left = Math.max(0, Math.ceil((cur.noise.pickEndsAt - now()) / 1000));
-    // The last three seconds tick, once each, and only for a player who has not picked yet.
-    if (left !== cur.noise.lastSec) {
-      cur.noise.lastSec = left;
-      if (left > 0 && left <= 3 && !cur.noise.mine) sfx('gg-tick');
-    }
-    v('pickTimer', left);
-    at(250, pickTick);
-  }
-
-  /** This player's tap on a tile. One pick, then the tiles lock. */
-  function pickNoise(set) {
-    const id = clampNoiseSet(set);
-    if (!cur || cur.stage !== 'pick' || !cur.noise || cur.noise.mine || !id) return false;
-    cur.noise.mine = id;
-    wantNoise(id);
-    if (match) match.sendDuel({ sub: 'noise', idx: cur.idx, set: id });
-    sfx('gg-check-ok');
-    v('picked', { who: 'you', set: id, rolled: false });
-    log({ t: 'duel-noise', idx: cur.idx, set: id, rolled: false });
-    return true;
-  }
-
-  /** The pick closes on THIS side's clock: no pick = the roll. A short beat shows both, then play. */
-  function lockNoise() {
-    if (!cur || cur.stage !== 'pick' || !cur.noise) return;
-    const c = cur;
-    c.stage = 'lock';
-    if (!c.noise.mine) {
-      c.noise.mine = c.noise.roll;
-      c.noise.rolled = true;
-      if (match) match.sendDuel({ sub: 'noise', idx: c.idx, set: c.noise.mine });
-      v('picked', { who: 'you', set: c.noise.mine, rolled: true });
-      log({ t: 'duel-noise', idx: c.idx, set: c.noise.mine, rolled: true });
-    }
-    v('lock', { mine: c.noise.mine, theirs: c.noise.theirs });
     sfx('gg-go');
-    at(NOISE_LOCK_MS, startPlay);
+    at(NOISE_REVEAL_MS, startPlay);
   }
 
   function startPlay() {
@@ -277,19 +241,15 @@ export function createDuelController({
     const id = cur.game;
     cur.stage = 'play';
     cur.endsAt = now() + cur.len * 1000;
-    // A player who never picked is told, once, which board was rolled for them (owner, 2026-09-25).
-    const rolled = cur.noise && cur.noise.rolled ? cur.noise.mine : '';
-    v('play', { game: id, secondsLeft: cur.len, rolled });
+    v('play', { game: id, secondsLeft: cur.len });
     const mine = cur;
     // The class may ring its own bell first (a Deep End ceiling ends the class early): its end is
     // our end. The duel clock still wins when the class runs longer.
     const spec = { game: id, seed: cur.seed, len: cur.len, onEnd: () => { if (cur === mine) endPlay(); } };
     if (mine.noise && mine.noise.mine) {
-      // The chosen board, and the roll's board (fetching since the reveal) while the chosen one
-      // has not landed yet: the left pile is noise either way.
+      // The board, read live: pictures that land after the bell still join the left pile.
       const set = mine.noise.mine;
-      const roll = mine.noise.roll;
-      spec.noise = { set, rows: () => { const r = noiseRows(set); return r.length || set === roll ? r : noiseRows(roll); } };
+      spec.noise = { set, rows: () => noiseRows(set) };
     }
     const adopt = (h) => {
       if (!h) return;
@@ -414,7 +374,8 @@ export function createDuelController({
     if (f.sub === 'busy') onBusy(f);
   }
 
-  /** Their board for a Sort duel. Shown only: each side deals its OWN noise. */
+  /** Their board for a Sort duel. Shown only: each side deals its OWN noise. A late one (an older
+   *  revision 2 build still picks inside the duel) lands on whatever is showing, or nowhere. */
   function onNoise(f) {
     const set = clampNoiseSet(f.set);
     if (!set) return;
@@ -423,7 +384,7 @@ export function createDuelController({
       if (f.idx >= ms.nextIdx - 1) peerNoise.set(f.idx, set);
       return;
     }
-    if (cur.noise.theirs) return;   // one pick per side
+    if (cur.noise.theirs) return;   // one board per side
     cur.noise.theirs = set;
     v('picked', { who: 'them', set, rolled: false });
   }
@@ -440,6 +401,9 @@ export function createDuelController({
   if (match && typeof match.onDuelFrame === 'function') unsubs.push(match.onDuelFrame(onFrame));
   if (match && typeof match.onPhaseChanged === 'function') unsubs.push(match.onPhaseChanged(onPhase));
   if (isLive()) onPhase(GoonMatchPhase.Live);
+  // The pre-match board: ask for its pictures at the start of every match (the store forgets
+  // every board when a match ends), so the Sort pile is there when a card drops.
+  wantNoise(chosen());
   v('bind', { endNow: () => endPlay() });
 
   return {
@@ -482,11 +446,9 @@ export function createDuelController({
     get state() {
       if (!cur) return null;
       const s = { idx: cur.idx, len: cur.len, stage: cur.stage, by: cur.by, game: cur.game, seed: cur.seed };
-      if (cur.noise) s.noise = { mine: cur.noise.mine, theirs: cur.noise.theirs, roll: cur.noise.roll, rolled: cur.noise.rolled };
+      if (cur.noise) s.noise = { mine: cur.noise.mine, theirs: cur.noise.theirs, rolled: cur.noise.rolled };
       return s;
     },
-    /** The noise tile tap (the view calls it through `pick`'s onPick; a driver or test may too). */
-    pickNoise(set) { return pickNoise(set); },
     get run() { return cur ? cur.run : null; },
     get game() { return cur ? cur.game : null; },
     get nextIdx() { return ms.nextIdx; },
