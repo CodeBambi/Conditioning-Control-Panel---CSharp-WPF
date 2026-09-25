@@ -549,7 +549,9 @@ namespace ConditioningControlPanel
             // its own name instead of the Bambi roster name like "Synthetic Blowdoll"
             // (#325 — BUG-GLMA287TET). No-op for mod-agnostic modes.
             var rawCompanionName = Models.CompanionDefinition.GetById(args.Companion).Name;
-            var companionName = App.Mods?.MakeModAware(rawCompanionName) ?? rawCompanionName;
+            var companionName = App.Mods?.IsCCPDefault == true && !string.IsNullOrWhiteSpace(App.Mods.GetCompanionName())
+                ? App.Mods.GetCompanionName()
+                : App.Mods?.MakeModAware(rawCompanionName) ?? rawCompanionName;
             if (args.NewLevel == Models.CompanionProgress.MaxLevel)
             {
                 GigglePriority($"{companionName} reached MAX LEVEL! *sparkles*", aiGenerated: false);
