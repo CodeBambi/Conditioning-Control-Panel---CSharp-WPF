@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Friends;
@@ -134,6 +135,7 @@ public sealed class FriendsRailChip : UserControl
         };
         _popup.Opened += OnPopupOpened;
         _popup.Closed += OnPopupClosed;
+        _drawer.PreviewMouseDown += OnDrawerMouseDown;
 
         grid.MouseLeftButtonUp += (_, e) => { Toggle(); e.Handled = true; };
         grid.MouseEnter += (_, _) => Hover(true);
@@ -328,6 +330,39 @@ public sealed class FriendsRailChip : UserControl
                 : LogicalTreeHelper.GetParent(cur);
         }
         return false;
+    }
+
+    /// <summary>A press inside the drawer while another app has the foreground. A popup never
+    /// activates its owner on a click, so without this the code box took the caret but every
+    /// key and every paste still went to the app in front (Discord, where the code was copied).
+    /// Activating the host hands the keyboard back; the pressed text box is focused again once
+    /// the activation has settled.</summary>
+    private void OnDrawerMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        try
+        {
+            if (_host == null || _host.IsActive) return;
+            _host.Activate();
+            var box = FindTextBox(e.OriginalSource as DependencyObject);
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                if (box != null) { box.Focus(); Keyboard.Focus(box); }
+                else _drawer.Focus();
+            }));
+        }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] drawer activate failed: {E}", ex.Message); }
+    }
+
+    private static TextBox? FindTextBox(DependencyObject? d)
+    {
+        while (d != null)
+        {
+            if (d is TextBox t) return t;
+            d = d is Visual || d is System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(d)
+                : LogicalTreeHelper.GetParent(d);
+        }
+        return null;
     }
 
     private void OnHostMoved(object? sender, EventArgs e) => _popup.IsOpen = false;
