@@ -2039,6 +2039,20 @@ namespace ConditioningControlPanel.Models
         /// pack-not-downloaded-yet gap — theme/identity/subliminals/triggers so the card and a
         /// premature activation look right; barks/mantras/personalities/phrases arrive with the pack.
         /// </summary>
+        /// <summary>
+        /// The nurse's tube fit. The pack's own mod.json says 0.9 / +40, which overfills the glass
+        /// (feet past the floor, desk run 2026-09-25), so ModService prefers this code fit over the
+        /// pack's for infection-control until the pack is rebuilt with it.
+        /// </summary>
+        public static ModTubeLayout InfectionControlTubeFit() => new()
+        {
+            AvatarOffsetX = 0,
+            AvatarDetachedOffsetX = 0,
+            AvatarScale = 0.74,
+            AvatarOffsetY = 95,
+            AvatarDetachedOffsetY = 95
+        };
+
         private static ModManifest CreateInfectionControl()
         {
             return new ModManifest
@@ -2109,17 +2123,7 @@ namespace ConditioningControlPanel.Models
                     { "Spiral Overlay", "Hypnotic Resistance Overlay" }
                 },
 
-                // The nurse sits lower and smaller in her tube than the default avatar. Same five
-                // values the pack ships, so the fit does not jump when the pack finishes
-                // extracting (and is right on first activation if it never does).
-                TubeLayout = new ModTubeLayout
-                {
-                    AvatarOffsetX = 0,
-                    AvatarDetachedOffsetX = 0,
-                    AvatarScale = 0.9,
-                    AvatarOffsetY = 40,
-                    AvatarDetachedOffsetY = 40
-                },
+                TubeLayout = InfectionControlTubeFit(),
 
                 SubliminalPool = new Dictionary<string, bool>
                 {
