@@ -107,13 +107,13 @@ public class ModFeatureLabelAliasTests
     }
 
     [Fact]
-    public void The_infection_control_stub_carries_the_pack_tube_fit()
+    public void The_infection_control_stub_carries_the_code_tube_fit()
     {
         var layout = BuiltInMods.InfectionControl.TubeLayout;
 
         Assert.NotNull(layout);
-        Assert.Equal(0.9, layout!.AvatarScale ?? 0);
-        Assert.Equal(40, layout.AvatarOffsetY);
-        Assert.Equal(40, layout.AvatarDetachedOffsetY);
+        Assert.Equal(0.74, layout!.AvatarScale ?? 0);
+        Assert.Equal(95, layout.AvatarOffsetY);
+        Assert.Equal(95, layout.AvatarDetachedOffsetY);
     }
 }
