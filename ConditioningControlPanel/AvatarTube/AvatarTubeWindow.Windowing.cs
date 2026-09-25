@@ -867,10 +867,14 @@ namespace ConditioningControlPanel
                     // carry pipes well past the stock tube.png's bounds), then a few px of daylight so
                     // not one opaque pixel lands on main. Stock constants only when it cannot be read.
                     int leftInset, rightInset;
+                    int? mirroredLeftInset = null;
                     string insetSource;
-                    if (TryMeasureArtInsetsPx(tr, out var mL, out var mR))
+                    if (TryMeasureArtInsetsPx(tr, out var mL, out var mR, out var axisPx))
                     {
                         leftInset = mL; rightInset = mR; insetSource = "measured";
+                        // Docked right the art is mirrored about her centre: its painted left edge
+                        // is the old right edge reflected, 2c - (tubeW - rightInset).
+                        mirroredLeftInset = Math.Max(0, (int)Math.Round(2 * axisPx - (tubeW - mR)));
                     }
                     else
                     {
@@ -881,11 +885,12 @@ namespace ConditioningControlPanel
                     int daylight = (int)Math.Round(DockDaylight * tubeToPx);
                     leftInset = Math.Max(0, leftInset - daylight);
                     rightInset = Math.Max(0, rightInset - daylight);
+                    if (mirroredLeftInset is int mli) mirroredLeftInset = Math.Max(0, mli - daylight);
 
                     var plan = AvatarTubeLayout.TubeDockPlacement.Place(
                         AvatarTubeLayout.Box.FromEdges(pr.Left, pr.Top, pr.Right, pr.Bottom),
                         tubeW, tubeH, leftInset, rightInset,
-                        (int)Math.Round(VerticalOffset * artScale), dockWork.Value);
+                        (int)Math.Round(VerticalOffset * artScale), dockWork.Value, mirroredLeftInset);
                     var parentBox = AvatarTubeLayout.Box.FromEdges(pr.Left, pr.Top, pr.Right, pr.Bottom);
 
                     // Main moved or resized since our own make-room move? That was the user: forget
@@ -911,7 +916,7 @@ namespace ConditioningControlPanel
                                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
                             // Dock against where main is going, not where it was.
                             plan = AvatarTubeLayout.TubeDockPlacement.Place(targetBox, tubeW, tubeH, leftInset, rightInset,
-                                (int)Math.Round(VerticalOffset * artScale), dockWork.Value);
+                                (int)Math.Round(VerticalOffset * artScale), dockWork.Value, mirroredLeftInset);
                             pr = new RECT { Left = tx, Top = ty, Right = tx + tw, Bottom = ty + th };
                         }
                     }
@@ -928,7 +933,8 @@ namespace ConditioningControlPanel
                         App.Logger?.Information(
                             "AvatarTube dock: side={Side} tube=({L},{T} {W}x{H}) art=({AL}..{AR}) main=({ML},{MT},{MR},{MB}) work=({WL},{WT},{WR},{WB}) insets={IL}/{IR} ({Src})",
                             plan.Side, plan.Left, plan.Top, tubeW, tubeH,
-                            plan.Left + leftInset, plan.Left + tubeW - rightInset,
+                            plan.Left + (plan.Side == AvatarTubeLayout.DockSide.Right && mirroredLeftInset is int ml2 ? ml2 : leftInset),
+                            plan.Left + tubeW - rightInset,
                             pr.Left, pr.Top, pr.Right, pr.Bottom,
                             (int)w.X, (int)w.Y, (int)w.Right, (int)w.Bottom, leftInset, rightInset, insetSource);
                     }
@@ -1028,26 +1034,46 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Docked on main's RIGHT, the tube ART is mirrored so its cables plug into main, as they do
-        /// on the left. The flip axis is the painted art's own centre, so the glass stays where it
-        /// is and her box, the measured insets and the bubble maths do not move. Only the frame image
+        /// on the left. The flip axis is HER centre (the avatar box), not the painted art's: a mod
+        /// tube can carry its glass off-centre in the art (Circe's does), and mirroring about the
+        /// art's middle slid the glass off her (desk run 2026-09-25). About her centre the glass
+        /// stays around her; the dock uses the mirrored left inset to match. Only the frame image
         /// flips; the avatar sprite, labels, arrows and bubble keep reading normally.
         /// </summary>
         private void ApplyTubeArtFlip(bool flip)
         {
-            if (flip == _tubeArtFlipped && (!flip || ImgTubeFrame.RenderTransform is ScaleTransform)) return;
-            _tubeArtFlipped = flip;
-            if (!flip) { ImgTubeFrame.RenderTransform = Transform.Identity; return; }
-
-            double cx = ImgTubeFrame.ActualWidth / 2;
-            if (ImgTubeFrame.Source is System.Windows.Media.Imaging.BitmapSource bmp && _artMaxCol >= 0 && _artPixelWidth > 0)
+            if (!flip)
             {
-                double aw = ImgTubeFrame.ActualWidth, ah = ImgTubeFrame.ActualHeight;
-                double sc = Math.Min(aw / bmp.PixelWidth, ah / bmp.PixelHeight);
-                double offX = (aw - bmp.PixelWidth * sc) / 2;
-                double colScale = (double)bmp.PixelWidth / _artPixelWidth;
-                cx = offX + (_artMinCol + _artMaxCol + 1) / 2.0 * colScale * sc;
+                if (_tubeArtFlipped || ImgTubeFrame.RenderTransform is ScaleTransform)
+                    ImgTubeFrame.RenderTransform = Transform.Identity;
+                _tubeArtFlipped = false;
+                return;
             }
+
+            double cx = TubeFlipAxis();
+            if (_tubeArtFlipped && ImgTubeFrame.RenderTransform is ScaleTransform cur && Math.Abs(cur.CenterX - cx) < 0.5) return;
+            _tubeArtFlipped = true;
             ImgTubeFrame.RenderTransform = new ScaleTransform(-1, 1, cx, 0);
+        }
+
+        /// <summary>Her centre in ImgTubeFrame's own (untransformed) coordinates; the frame's centre
+        /// when she has no layout yet.</summary>
+        private double TubeFlipAxis()
+        {
+            try
+            {
+                if (AvatarBorder != null && AvatarBorder.ActualWidth > 0
+                    && PresentationSource.FromVisual(AvatarBorder) != null)
+                {
+                    // Both sit in the same design grid; offset by layout slots, ignoring the frame's
+                    // own RenderTransform (TranslatePoint would invert the current flip).
+                    var a = AvatarBorder.TransformToAncestor((Visual)ImgTubeFrame.Parent).Transform(new Point(AvatarBorder.ActualWidth / 2, 0));
+                    var off = (System.Windows.Vector)VisualTreeHelper.GetOffset(ImgTubeFrame);
+                    return a.X - off.X;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("AvatarTube flip axis fallback: {Error}", ex.Message); }
+            return ImgTubeFrame.ActualWidth / 2;
         }
         private string? _lastDockDecision;
         private const double DockDaylight = 3;   // DIPs between her painted art and main's frame
@@ -1061,9 +1087,10 @@ namespace ConditioningControlPanel
         /// read from the tube image's alpha and the avatar's own box. False when the image cannot be
         /// read (no source yet, not a bitmap): the caller then uses the stock tube.png constants.
         /// </summary>
-        private bool TryMeasureArtInsetsPx(RECT tr, out int leftInset, out int rightInset)
+        private bool TryMeasureArtInsetsPx(RECT tr, out int leftInset, out int rightInset, out double axisPx)
         {
             leftInset = rightInset = 0;
+            axisPx = (tr.Right - tr.Left) / 2.0;
             try
             {
                 if (ImgTubeFrame?.Source is not System.Windows.Media.Imaging.BitmapSource bmp
@@ -1102,8 +1129,12 @@ namespace ConditioningControlPanel
                 double sc = Math.Min(aw / imgW, ah / imgH);
                 double offX = (aw - imgW * sc) / 2;
                 double colScale = imgW / _artPixelWidth;
-                var a = ImgTubeFrame.PointToScreen(new Point(offX + _artMinCol * colScale * sc, ah / 2));
-                var b = ImgTubeFrame.PointToScreen(new Point(offX + (_artMaxCol + 1) * colScale * sc, ah / 2));
+                // Read the art UNflipped: PointToScreen goes through the frame's RenderTransform, and
+                // a mirror is its own inverse, so feed it the reflected x while one is on.
+                double flipC = ImgTubeFrame.RenderTransform is ScaleTransform st && st.ScaleX < 0 ? st.CenterX : double.NaN;
+                double X(double x) => double.IsNaN(flipC) ? x : 2 * flipC - x;
+                var a = ImgTubeFrame.PointToScreen(new Point(X(offX + _artMinCol * colScale * sc), ah / 2));
+                var b = ImgTubeFrame.PointToScreen(new Point(X(offX + (_artMaxCol + 1) * colScale * sc), ah / 2));
                 double artL = Math.Min(a.X, b.X), artR = Math.Max(a.X, b.X);
 
                 // Her own layer (drop shadow, emote art) can reach past the glass.
@@ -1113,6 +1144,7 @@ namespace ConditioningControlPanel
                     var ar = AvatarBorder.PointToScreen(new Point(AvatarBorder.ActualWidth, 0));
                     artL = Math.Min(artL, al.X);
                     artR = Math.Max(artR, ar.X);
+                    axisPx = (al.X + ar.X) / 2 - tr.Left;
                 }
 
                 leftInset = Math.Max(0, (int)Math.Floor(artL - tr.Left));

@@ -134,17 +134,21 @@ namespace ConditioningControlPanel.AvatarTubeLayout
         /// <param name="artRightInset">Transparent px right of her painted art.</param>
         /// <param name="verticalOffset">Nudge below main's vertical centre.</param>
         /// <param name="workArea">Work area of the monitor main is on.</param>
+        /// <param name="rightDockLeftInset">Left inset of the art as drawn on a RIGHT dock (mirrored
+        /// about her own centre, so it differs from <paramref name="artLeftInset"/> when the glass is
+        /// off-centre in the art). Null = the art is not mirrored.</param>
         public static DockPlan Place(Box parent, int tubeW, int tubeH, int artLeftInset, int artRightInset,
-            int verticalOffset, Box workArea)
+            int verticalOffset, Box workArea, int? rightDockLeftInset = null)
         {
             double painted = Math.Max(0, tubeW - artLeftInset - artRightInset);
 
             // Left dock: painted right edge on main's left edge.
             double leftDock = parent.X - tubeW + artRightInset;
             bool leftFits = leftDock + artLeftInset >= workArea.X;
-            // Right dock: painted left edge on main's right edge.
-            double rightDock = parent.Right - artLeftInset;
-            bool rightFits = rightDock + artLeftInset + painted <= workArea.Right;
+            // Right dock: painted left edge on main's right edge (the mirrored art's edge).
+            int rightLeftInset = rightDockLeftInset ?? artLeftInset;
+            double rightDock = parent.Right - rightLeftInset;
+            bool rightFits = rightDock + rightLeftInset + painted <= workArea.Right;
 
             double left;
             DockSide side;
