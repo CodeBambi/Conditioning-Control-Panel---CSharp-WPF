@@ -100,9 +100,11 @@ namespace ConditioningControlPanel.Services
             ["good_girls_dont_cum"] = new[] { "complete" },
         };
 
-        /// <summary>True when a mod reads the neutral session copy: CCP Default, or no mod.</summary>
+        /// <summary>True when a mod reads the neutral session copy. Only Bambi Sleep and Sissy Hypno
+        /// keep the authored wording; every other mod, community mods included, reads neutral.</summary>
         public static bool UsesNeutralCopy(string? modId) =>
-            string.IsNullOrEmpty(modId) || string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.Ordinal);
+            !string.Equals(modId, BuiltInMods.BambiSleepId, StringComparison.Ordinal)
+            && !string.Equals(modId, BuiltInMods.SissyHypnoId, StringComparison.Ordinal);
 
         /// <summary>Phase slug from its authored name: "GG!" -> "gg", "Empty Doll" -> "empty_doll".</summary>
         public static string PhaseSlug(string? phaseName)

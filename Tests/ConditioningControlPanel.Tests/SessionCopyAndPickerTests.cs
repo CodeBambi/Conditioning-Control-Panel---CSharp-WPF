@@ -20,9 +20,18 @@ public class SessionCopyAndPickerTests
 
     private static readonly string[] ThemedMods =
     {
-        BuiltInMods.BambiSleepId, BuiltInMods.SissyHypnoId, BuiltInMods.LockedId,
-        BuiltInMods.DronificationId, BuiltInMods.InfectionControlId, "community-some-mod",
+        BuiltInMods.BambiSleepId, BuiltInMods.SissyHypnoId,
     };
+
+    [Theory]
+    [InlineData(BuiltInMods.CCPDefaultId)]
+    [InlineData(BuiltInMods.LockedId)]
+    [InlineData(BuiltInMods.DronificationId)]
+    [InlineData(BuiltInMods.InfectionControlId)]
+    [InlineData("community-some-mod")]
+    [InlineData(null)]
+    public void EveryModButBambiAndSissy_ReadsNeutralCopy(string? modId)
+        => Assert.True(PresetNaming.UsesNeutralCopy(modId));
 
     private static readonly string[] Banned =
     {
