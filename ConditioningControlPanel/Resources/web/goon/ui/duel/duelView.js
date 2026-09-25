@@ -26,7 +26,6 @@ import { tileValue } from './rules.js';
 import { mountArcademyGame } from './arcademyHost.js';
 import { media as goonMedia } from '../../exec/media.js';
 import { createNoiseView } from './noiseView.js';
-import { noiseName } from './noisePick.js';
 
 // The prefix is gg-nduel, NOT gg-duel: the lobby's YOU vs THEM card owns .gg-duel and
 // .gg-duel-name, and this sheet's fixed full-screen .gg-duel lifted that card out of the
@@ -57,11 +56,6 @@ const CSS = `
 .gg-nduel-strip b { color: var(--gg-pink, #ff69b4); letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.8rem; }
 .gg-nduel-time { font-size: 1rem; font-weight: 800; }
 .gg-nduel-time.is-low { color: #ff6b8a; }
-/* A player who never picked a noise board: which one was rolled, said once as play starts. Opacity only. */
-.gg-nduel-rolled { position: absolute; left: 12px; top: 52px; z-index: 50; padding: 0.25rem 0.8rem; border-radius: 999px;
-  background: rgba(24, 10, 34, 0.86); border: 1px solid rgba(255, 211, 110, 0.55); color: #fff; font-size: 0.85rem;
-  font-family: var(--gg-font, system-ui, sans-serif); pointer-events: none; animation: ggDuelRolled 3200ms linear both; }
-@keyframes ggDuelRolled { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
 .gg-nduel-card { position: absolute; left: 50%; top: 50%; z-index: 60; pointer-events: auto;
   width: min(22rem, 90vw); padding: 1rem 1rem 1.1rem; border-radius: 16px;
   background: rgba(24, 10, 34, 0.96); border: 2px solid var(--gg-pink, #ff69b4);
@@ -157,7 +151,7 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
   root.appendChild(stage);
   root.appendChild(card);
   d.body.appendChild(root);
-  // The Sort duel's VS reveal + noise pick (ui/duel/noiseView.js): its own layer in this overlay.
+  // The Sort duel's VS reveal (ui/duel/noiseView.js): its own layer in this overlay.
   const noise = createNoiseView({ d, host: root });
   const noiseOut = (animate) => { try { if (noise) noise.clear(animate); } catch (_e) { /* scenery */ } };
 
@@ -219,7 +213,7 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
       if (hint) card.appendChild(mk('p', 'gg-nduel-hint', DUEL_COPY.firstHint));
       root.hidden = false;
     },
-    /** Sort duel: both niches face to face. The card and stage stay down; the layer owns the screen. */
+    /** Sort duel: both niches and both noise boards face to face. The card and stage stay down; the layer owns the screen. */
     reveal(o = {}) {
       gen++;
       killStage();
@@ -227,12 +221,9 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
       root.hidden = false;
       if (noise) noise.reveal(o);
     },
-    pick(o) { if (noise) noise.pick(o); },
-    pickTimer(left) { if (noise) noise.pickTimer(left); },
     picked(o) { if (noise) noise.picked(o); },
-    lock(o) { if (noise) noise.lock(o); },
     /** The class is about to mount: open the stage, with the duel strip over it. */
-    play({ game, secondsLeft, rolled = '' } = {}) {
+    play({ game, secondsLeft } = {}) {
       hideCard();
       noiseOut(true);
       root.hidden = false;
@@ -243,8 +234,6 @@ export function createDuelView({ media = goonMedia, mount = mountArcademyGame, o
       timeEl = mk('span', 'gg-nduel-time', secondsLeft != null ? DUEL_COPY.timeLeft(secondsLeft) : '');
       strip.appendChild(timeEl);
       stage.appendChild(strip);
-      const rolledName = rolled ? noiseName(rolled) : '';
-      if (rolledName) stage.appendChild(mk('div', 'gg-nduel-rolled', DUEL_COPY.rolledPlay(rolledName)));
       const lift = () => root.classList.add('is-play');
       if (typeof requestAnimationFrame === 'function') requestAnimationFrame(lift); else lift();
     },

@@ -23,6 +23,8 @@ import { S } from '../strings.js';
 import {
   FLAVOURS, MINE, flavourById, nichesOf, toggleNiche, addNiche, removeNiche,
 } from '../flavours.js';
+import { DUEL_COPY } from '../duel/copy.js';
+import { noiseTiles } from '../duel/noisePick.js';
 
 /** The live line's words for one online-media frame (pure, exported for the tests). */
 export function liveLine(info, picked) {
@@ -171,6 +173,29 @@ export function buildPicturesSection({ ledger, api, audio = null } = {}) {
     }
   }
 
+  /* THE NOISE BOARD (the pre-match pick, ui/screens/noiseSetup.js), changeable here. Not part
+   * of the flavour frame: one tap stores it (prefs) and starts fetching that board. */
+  const noiseRow = api && typeof api.setNoise === 'function' ? el('div', { class: 'gg-flv-pills gg-flv-noise' }) : null;
+  function paintNoise() {
+    if (!noiseRow) return;
+    noiseRow.replaceChildren();
+    const cur = typeof api.noise === 'function' ? api.noise() : '';
+    for (const t of noiseTiles()) {
+      const on = t.id === cur;
+      const b = el('button', {
+        type: 'button', class: 'gg-flv-pill' + (on ? ' is-on' : ''), 'aria-pressed': String(on),
+        style: '--flv-tint:' + t.tint, text: t.name,
+      });
+      ledger.listen(b, 'click', (e) => {
+        e?.preventDefault?.();
+        if (on) return;
+        try { api.setNoise(t.id); } catch (_e) { /* never load-bearing */ }
+        sfx('ui-select'); paintNoise();
+      });
+      noiseRow.appendChild(b);
+    }
+  }
+
   function paintLive() { live.textContent = liveLine(api?.info?.() || null, !!st.flavour); }
   function paint() { paintTabs(); paintPills(); onlineBtn.setAttribute('aria-pressed', String(st.online)); paintLive(); }
 
@@ -199,6 +224,7 @@ export function buildPicturesSection({ ledger, api, audio = null } = {}) {
   if (api && typeof api.subscribe === 'function') ledger.add(api.subscribe(paintLive));
 
   paint();
+  paintNoise();
   const node = el('div', { class: 'gg-flv-section' }, [
     el('h3', { class: 'gg-panel-subhead', text: F.section }),
     tabsRow,
@@ -208,6 +234,8 @@ export function buildPicturesSection({ ledger, api, audio = null } = {}) {
     el('div', { class: 'gg-panel-row' }, [el('span', { class: 'gg-panel-label', text: F.online }), onlineBtn]),
     el('p', { class: 'gg-panel-note', text: F.onlineNote }),
     live,
+    noiseRow ? el('h3', { class: 'gg-panel-subhead', text: DUEL_COPY.pickTitle }) : null,
+    noiseRow,
   ]);
   return { node, state: () => ({ flavour: st.flavour, custom: JSON.parse(JSON.stringify(st.custom)), online: st.online }) };
 }

@@ -881,6 +881,8 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     isPractice: () => (typeof isPractice === 'function' ? !!isPractice() : false),
     // The Sort duel's noise boards: fetched by the host, kept out of the deck (exec/media.js).
     noise: media,
+    // The board picked before the match (ui/screens/noiseSetup.js). '' = the duel rolls one.
+    chosenNoise: () => (prefs && typeof prefs.get === 'function' ? prefs.get('noiseSet') : ''),
   });
   led.add(() => { try { duel.dispose(); } catch (_e) { /* gone */ } });
   const arsenal = mountArsenal({

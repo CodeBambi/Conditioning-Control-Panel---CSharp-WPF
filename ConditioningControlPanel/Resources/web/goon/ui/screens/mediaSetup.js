@@ -47,6 +47,7 @@ import { S } from '../strings.js';
 import { DISCORD_INVITE_URL } from '../inviteLink.js';
 import { formatBytes, LOCAL_ARTIFACT_MAX_BYTES, LOCAL_MAX_BYTES, LOCAL_ZIP_MAX_ENTRIES } from '../assetsStore.js';
 import { mountFlavourCard } from './flavour.js';
+import { mountNoiseCard } from './noiseSetup.js';
 
 /** What a good first library looks like. Advisory — never a gate. See header. */
 export const SUGGESTED_ITEMS = 20;
@@ -98,10 +99,23 @@ export function mount(container, ctx) {
    * file picker below is the secondary road, "use my own files", reached with
    * `mediaFiles: true` in the router args. No host, no card: the picker as before. */
   const flavourApi = ctx?.mediaFlavour || null;
+  const done = () => { try { actions?.mediaPrepDone?.(); } catch (e) { ledger._err('flavour done', e); } };
+  /* THE NOISE BOARD COMES RIGHT AFTER (2026-09-25, owner: "the pick your noise should be right
+   * after the select the niche, not in the sort game"). Same screen, same hold: the step is done
+   * when the board is confirmed. `noiseOnly` is the road for a player whose flavour predates it. */
+  const noiseStep = () => !!(flavourApi && typeof flavourApi.noiseStepAvailable === 'function' && flavourApi.noiseStepAvailable());
+  const showNoise = () => {
+    container.replaceChildren();
+    mountNoiseCard(container, { ledger, api: flavourApi, audio, onDone: done });
+  };
+  if (ctx?.noiseOnly && noiseStep()) {
+    showNoise();
+    return { unmount() { ledger.dispose(); } };
+  }
   if (flavourApi && flavourApi.available && flavourApi.available() && !ctx?.mediaFiles) {
     mountFlavourCard(container, {
       ledger, api: flavourApi, audio,
-      onDone: () => { try { actions?.mediaPrepDone?.(); } catch (e) { ledger._err('flavour done', e); } },
+      onDone: () => { if (noiseStep()) showNoise(); else done(); },
       onOwn: () => { try { actions?.mediaOwnFiles?.(); } catch (e) { ledger._err('own files', e); } },
     });
     return { unmount() { ledger.dispose(); } };

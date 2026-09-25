@@ -1,12 +1,13 @@
-// Self-contained pass over the SORT DUEL'S VS REVEAL + NOISE PICK (2026-09-25).
+// Self-contained pass over the SORT DUEL'S VS REVEAL + the PRE-MATCH NOISE PICK (2026-09-25).
 //
 //   node Resources/web/goon/test/selftest-noise.js
 //
 // Pins: the noise table (and its C# twin), the `sub:'noise'` frame (known ids only, byte-identical
-// old frames), the night revision 2 gate, two controllers through reveal / pick / lock / play on a
-// virtual clock, the roll for a player who does not pick, the fallback against a revision 1 peer,
-// the practice bot's pick, the two tagged piles the Sort class is handed (through the class's own
-// deck.js), the media store, and the browser stand-in's noise fetch.
+// old frames), the night revision 2 gate, two controllers through reveal / play on a virtual
+// clock with the board chosen before the match (and the roll for a player who never chose), the
+// fallback against a revision 1 peer, a late pick from an older revision 2 build, the practice
+// bot's board, the two tagged piles the Sort class is handed (through the class's own deck.js),
+// the media store, the browser stand-in's noise fetch, and the pre-match step's pieces.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +19,7 @@ import {
 import { local as localCaps } from '../core/caps.js';
 import { GoonMatchService } from '../core/match.js';
 import {
-  NOISE_SETS, NOISE_SET_IDS, NOISE_REVEAL_MS, NOISE_PICK_MS, NOISE_LOCK_MS, NOISE_PRE_PLAY_MS, clampNoiseSet, rollNoiseSet, noiseSet,
+  NOISE_SETS, NOISE_SET_IDS, NOISE_REVEAL_MS, NOISE_PRE_PLAY_MS, clampNoiseSet, rollNoiseSet, noiseSet,
 } from '../core/noiseSets.js';
 import { DUEL_INTRO_MS } from '../ui/duel/rules.js';
 import { createDuelController } from '../ui/duel/duelController.js';
@@ -26,6 +27,8 @@ import { createBotDuel } from '../ui/duel/botDuel.js';
 import { createPilePool, pileRows } from '../ui/duel/piles.js';
 import { nicheLabel, noiseName, noiseTiles, flavourOfNiches } from '../ui/duel/noisePick.js';
 import { DUEL_COPY } from '../ui/duel/copy.js';
+import { initialNoise } from '../ui/screens/noiseSetup.js';
+import { PREF_DEFAULTS, createPrefs } from '../ui/prefs.js';
 import { createGoonMediaPool } from '../exec/media.js';
 import { createWebMediaHost } from '../net/webMedia.js';
 import { buildDeck, judge } from '../../arcademy/games/sort/deck.js';
@@ -54,7 +57,7 @@ globalThis.localStorage = {
   const seen = new Set();
   for (let i = 0; i < 70; i++) seen.add(rollNoiseSet(() => i / 70));
   ok(seen.size === 7 && rollNoiseSet(() => 1) && rollNoiseSet(() => NaN) && NOISE_SET_IDS.includes(rollNoiseSet(() => -3)), 'the roll reaches every board and never leaves the list');
-  ok(NOISE_PRE_PLAY_MS === NOISE_REVEAL_MS + NOISE_PICK_MS + NOISE_LOCK_MS && NOISE_REVEAL_MS === 1000 && NOISE_PICK_MS === 5000 && NOISE_PRE_PLAY_MS <= 6500, 'reveal 1 s, pick 5 s, about 6 s before play');
+  ok(NOISE_PRE_PLAY_MS === NOISE_REVEAL_MS && NOISE_REVEAL_MS === 1000, 'the duel holds only a 1 s reveal before play (the pick is before the match)');
   const cs = fs.readFileSync(path.join(here, '../../../../Services/GoonGame/GoonOnlineMedia.cs'), 'utf8');
   const csRows = [...cs.matchAll(/\["([a-z]+)"\] = "([A-Za-z0-9_]+)"/g)].map((m) => m[1] + '=' + m[2]).sort();
   const jsRows = NOISE_SETS.map((s) => s.id + '=' + s.sub).sort();
@@ -196,46 +199,36 @@ const viewLog = (arr) => new Proxy({}, { get: (_t, k) => (...a) => arr.push([k, 
   const runs = { h: [], g: [] };
   const runner = (tag) => (spec) => { const r = { spec, result: () => ({ game: spec.game, score: tag === 'h' ? 600 : 400 }), destroy() {} }; runs[tag].push(r); return r; };
   const nh = fakeNoise(); const ng = fakeNoise();
-  const H = createDuelController({ match: host, view: viewLog(vh), runGame: runner('h'), now: () => now, later, finished: () => 3, duelLength: () => 60, noise: nh, rand: () => 0.01 });
-  const G = createDuelController({ match: guest, view: viewLog(vg), runGame: runner('g'), now: () => now, later, finished: () => 3, duelLength: () => 60, noise: ng, rand: () => 0.99 });
+  const H = createDuelController({ match: host, view: viewLog(vh), runGame: runner('h'), now: () => now, later, finished: () => 3, duelLength: () => 60, noise: nh, rand: () => 0.01, chosenNoise: () => 'space' });
+  const G = createDuelController({ match: guest, view: viewLog(vg), runGame: runner('g'), now: () => now, later, finished: () => 3, duelLength: () => 60, noise: ng, rand: () => 0.99, chosenNoise: () => 'nope' });
 
+  ok(nh.asked.length === 1 && nh.asked[0] === 'space' && ng.asked.length === 0, 'the chosen board starts fetching when the match does', JSON.stringify(nh.asked));
   ok(H.arsenalHook.throwCard({ game: 'sort' }) === true, 'the host throws a Sort card');
   ok(H.state.stage === 'reveal' && G.state.stage === 'reveal', 'both sides open on the VS reveal, not the old intro');
+  ok(H.state.noise.mine === 'space' && !H.state.noise.rolled, 'the host plays the board it chose before the match');
+  ok(G.state.noise.mine && G.state.noise.rolled && NOISE_SET_IDS.includes(G.state.noise.mine), 'the guest never chose: a roll, made at begin', JSON.stringify(G.state.noise));
   const rv = vh.find(([k]) => k === 'reveal');
   ok(rv && rv[1].you.name === 'Pink' && rv[1].them.name === 'r/cats_but_not', 'both niches on both screens', JSON.stringify(rv && rv[1]));
+  ok(rv && rv[1].youNoise === 'space', 'and the own board on the reveal', JSON.stringify(rv && rv[1]));
   const rvg = vg.find(([k]) => k === 'reveal');
-  ok(rvg && rvg[1].them.name === 'Pink', 'and mirrored on the other one');
-  ok(!vh.some(([k]) => k === 'intro'), 'no intro card on a noise duel');
-  ok(nh.asked.length === 1 && nh.asked[0] === H.state.noise.roll && ng.asked[0] === G.state.noise.roll, 'each side starts fetching its roll at once');
+  ok(rvg && rvg[1].them.name === 'Pink' && rvg[1].themNoise === 'space', 'mirrored on the other one, their board included', JSON.stringify(rvg && rvg[1]));
+  ok(!vh.some(([k]) => k === 'intro') && !vh.some(([k]) => k === 'pick' || k === 'pickTimer' || k === 'lock'), 'no intro card and no pick inside the duel');
+  const hFrame = wire.find(([w, f]) => w === 'h' && f.sub === 'noise');
+  const gFrame = wire.find(([w, f]) => w === 'g' && f.sub === 'noise');
+  ok(hFrame && hFrame[1].set === 'space' && hFrame[1].idx === 0, 'each side names its board at duel start, as a set id', JSON.stringify(hFrame && hFrame[1]));
+  ok(gFrame && gFrame[1].set === G.state.noise.mine, 'the roll is told too');
+  ok(H.state.noise.theirs === G.state.noise.mine, 'so both screens know both boards');
+  ok(vh.some(([k, o]) => k === 'picked' && o.who === 'them' && o.set === G.state.noise.mine), "the late one stamps onto the thrower's reveal");
+  ok(ng.asked[0] === G.state.noise.mine, 'the roll starts fetching at once');
   ok(H.arsenalHook.blocksThrows(), 'the reveal blocks throws');
-  ok(H.pickNoise('cats') === false, 'no pick during the reveal');
-
+  ng.rows.set(G.state.noise.mine, [{ kind: 'image', url: 'https://ccp.assets/r.jpg' }]);
   advance(NOISE_REVEAL_MS + 1);
-  ok(H.state.stage === 'pick' && G.state.stage === 'pick', 'then both pick, each on its own clock');
-  ok(vh.some(([k]) => k === 'pick'), 'the tiles come up');
-  ok(H.pickNoise('hentai') === false && H.state.noise.mine === '', 'an id off the list is refused');
-  ok(H.pickNoise('space') === true, 'a tap picks a board');
-  ok(H.pickNoise('cats') === false && H.state.noise.mine === 'space', 'one pick, then the tiles lock');
-  const pickFrame = wire.find(([w, f]) => w === 'h' && f.sub === 'noise');
-  ok(pickFrame && pickFrame[1].set === 'space' && pickFrame[1].idx === 0, 'the pick crosses as a set id, nothing else', JSON.stringify(pickFrame && pickFrame[1]));
-  ok(G.state.noise.theirs === 'space' && vg.some(([k, o]) => k === 'picked' && o.who === 'them' && o.set === 'space'), 'the other screen shows it');
-  ok(nh.asked.includes('space'), 'and the picker fetches its board');
-
-  advance(NOISE_PICK_MS);
-  ok(G.state.noise.mine === G.state.noise.roll && G.state.noise.rolled, 'the guest never picked: it gets its roll', JSON.stringify(G.state.noise));
-  ok(wire.some(([w, f]) => w === 'g' && f.sub === 'noise' && f.set === G.state.noise.roll), 'and the roll is told too');
-  ok(H.state.noise.theirs === G.state.noise.roll, 'so both screens show both picks');
-  ok(H.state.stage === 'lock', 'a short beat shows both picks');
-  ng.rows.set(G.state.noise.roll, [{ kind: 'image', url: 'https://ccp.assets/r.jpg' }]);
-  advance(NOISE_LOCK_MS + 1);
-  ok(H.state.stage === 'play' && G.state.stage === 'play', 'then the class, on both sides');
+  ok(H.state.stage === 'play' && G.state.stage === 'play', 'then the class, on both sides, after only the reveal');
   const gPlay = vg.find(([k]) => k === 'play'); const hPlay = vh.find(([k]) => k === 'play');
-  ok(gPlay && gPlay[1].rolled === G.state.noise.roll, 'the guest is told at play which board was rolled for it', JSON.stringify(gPlay && gPlay[1]));
-  ok(hPlay && !hPlay[1].rolled, 'the host picked, so it is told nothing', JSON.stringify(hPlay && hPlay[1]));
-  ok(/^Too slow\. You got .+\.$/.test(DUEL_COPY.rolledPlay(noiseName(G.state.noise.roll))) && !DUEL_COPY.rolledPlay('x').includes('!'), 'the rolled line is short and plain');
+  ok(gPlay && hPlay && gPlay[1].rolled === undefined && hPlay[1].rolled === undefined, 'no "too slow" notice at play: nobody picks there any more');
+  ok(DUEL_COPY.rolledPlay === undefined && DUEL_COPY.theyPick === undefined, 'and its copy is gone');
   ok(runs.h.length === 1 && runs.h[0].spec.noise && runs.h[0].spec.noise.set === 'space', 'the class is handed the chosen board');
-  nh.rows.set(H.state.noise.roll, [{ kind: 'image', url: 'https://ccp.assets/roll.jpg' }]);
-  ok(runs.h[0].spec.noise.rows()[0].url.endsWith('roll.jpg'), 'while the chosen board has not landed the roll stands in (still noise)');
+  ok(runs.h[0].spec.noise.rows().length === 0, 'an empty pile until it lands (Sort falls back to its floor)');
   nh.rows.set('space', [{ kind: 'image', url: 'https://ccp.assets/space.jpg' }]);
   ok(runs.h[0].spec.noise.rows()[0].url.endsWith('space.jpg'), 'and once it lands, the chosen board is the pile');
   ok(runs.g[0].spec.noise.rows()[0].url.endsWith('r.jpg'), "the guest's pile is its own board");
@@ -295,17 +288,17 @@ const viewLog = (arr) => new Proxy({}, { get: (_t, k) => (...a) => arr.push([k, 
   const rand = () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
   const vh = [];
   const runGame = (spec) => ({ spec, result: () => ({ game: spec.game, score: 0 }), destroy() {} });
-  const H = createDuelController({ match: host, view: viewLog(vh), runGame, now: () => now, later, finished: () => 0, duelLength: () => 60, isPractice: () => true, noise: fakeNoise() });
+  const H = createDuelController({ match: host, view: viewLog(vh), runGame, now: () => now, later, finished: () => 0, duelLength: () => 60, isPractice: () => true, noise: fakeNoise(), chosenNoise: () => 'food' });
   const B = createBotDuel({ match: guest, rand, now: () => now, later, throws: false });
   ok(H.arsenalHook.throwCard({ game: 'sort' }), 'the player throws Sort at the bot');
   const rv = vh.find(([k]) => k === 'reveal');
   ok(rv && rv[1].them.name === 'the bot' && rv[1].you.name === 'Trance', 'the reveal names the bot', JSON.stringify(rv && rv[1]));
-  advance(NOISE_REVEAL_MS + NOISE_PICK_MS - 1);
   const botPick = log.find(([w, f]) => w === 'bot' && f.sub === 'noise');
-  ok(botPick && NOISE_SET_IDS.includes(botPick[1].set), 'the bot picks a board at random inside the pick window', JSON.stringify(botPick && botPick[1]));
+  ok(botPick && NOISE_SET_IDS.includes(botPick[1].set), 'the bot names a random board as the duel begins', JSON.stringify(botPick && botPick[1]));
   ok(H.state.noise.theirs === botPick[1].set && B.state.noise === botPick[1].set, 'and the player sees it');
-  advance(1 + NOISE_LOCK_MS + 60 * 1000 + 1);
-  ok(H.state.stage === 'wait', 'the player plays the whole clock after the pick', JSON.stringify(H.state));
+  ok(H.state.noise.mine === 'food' && !H.state.noise.rolled, 'practice plays the pre-match board too');
+  advance(NOISE_REVEAL_MS + 60 * 1000 + 1);
+  ok(H.state.stage === 'wait', 'the player plays the whole clock after the reveal', JSON.stringify(H.state));
   advance(1500);
   ok(log.some(([w, f]) => w === 'bot' && f.sub === 'score'), 'the bot reports after the pre-play time as well, inside the grace window');
   ok(H.state && H.state.stage === 'result', 'and the duel resolves');
@@ -352,6 +345,44 @@ const viewLog = (arr) => new Proxy({}, { get: (_t, k) => (...a) => arr.push([k, 
   const off = createWebMediaHost({ emit: (f) => frames.push(f), fetch, online: false });
   off.handle({ type: 'noise-want', set: 'food' });
   ok(frames.pop().state === 'declined', 'online pictures off: declined, nothing fetched');
+}
+
+// ================================================= 11. an older revision 2 build still picks in the duel
+{
+  now = 0; timers.length = 0;
+  const host = mkMatch(true, 2);
+  const guest = mkMatch(false, 2);
+  host._send = (msg) => guest._onMessageReceived(parse(serialize(msg)));
+  guest._send = () => {};   // the old guest's own frames are hand-delivered below
+  const vh = [];
+  const runGame = (spec) => ({ spec, result: () => ({ game: spec.game, score: 3 }), destroy() {} });
+  const H = createDuelController({ match: host, view: viewLog(vh), runGame, now: () => now, later, finished: () => 3, duelLength: () => 60, chosenNoise: () => 'cars' });
+  ok(H.arsenalHook.throwCard({ game: 'sort' }), 'a Sort card at an older build');
+  ok(H.state.noise.theirs === '', 'their board is not known yet');
+  advance(NOISE_REVEAL_MS + 1);
+  ok(H.state.stage === 'play', 'this side plays after its reveal, as always on its own clock');
+  host._onMessageReceived(parse(serialize(makeDuel({ sub: 'noise', idx: 0, set: 'cats' }))));
+  ok(H.state.noise.theirs === 'cats' && H.state.stage === 'play', 'their late in-duel pick is taken quietly, nothing restarts');
+  H.dispose();
+}
+
+// ================================================= 12. the pre-match step's pieces
+{
+  ok(PREF_DEFAULTS.noiseSet === '', 'the board is a pref, empty until chosen');
+  const p = createPrefs({});
+  ok(p.set('noiseSet', 'rooms') && p.get('noiseSet') === 'rooms', 'the pref stores a board');
+  await new Promise((r) => setTimeout(r, 300));
+  ok(createPrefs({}).get('noiseSet') === 'rooms', 'and it is remembered (the page store)');
+  const a = initialNoise('cats', () => 0.5);
+  ok(a.set === 'cats' && !a.rolled, 'the card opens on the board chosen before');
+  const b = initialNoise('', () => 0);
+  ok(b.set === NOISE_SET_IDS[0] && b.rolled, 'or on a roll, pre-selected');
+  ok(initialNoise('hentai', () => 0.99).rolled, 'a junk pref reads as never chosen');
+  ok(DUEL_COPY.setupGo === 'Done' && !/!/.test(DUEL_COPY.pickLine) && DUEL_COPY.pickLine.length < 70, 'short, dry copy', DUEL_COPY.pickLine);
+  const setup = fs.readFileSync(path.join(here, '../ui/screens/mediaSetup.js'), 'utf8');
+  ok(/onDone: \(\) => \{ if \(noiseStep\(\)\) showNoise\(\); else done\(\); \}/.test(setup), 'the flavour pick hands over to the noise step, not straight on');
+  const boot = fs.readFileSync(path.join(here, '../boot.js'), 'utf8');
+  ok(/noiseStepDue\(\)\) \{\s*router\.show\('mediaSetup', \{ noiseOnly: true \}\)/.test(boot), 'a flavour picked before this step gets the step once, before the title');
 }
 
 if (failures) {
