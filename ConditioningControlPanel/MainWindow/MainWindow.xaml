@@ -2106,14 +2106,26 @@
                             <!-- Tier badge (Basic gold / Prime cyan), tucked over the bottom-right rim.
                                  Painted by RefreshProfileBubble; collapsed for free accounts. The Grid
                                  does not clip, so the negative margin hangs it past the circle. -->
-                            <Image x:Name="ProfileBubbleTierBadge" Width="30" Stretch="Uniform"
+                            <Image x:Name="ProfileBubbleTierBadge" Width="33" Stretch="Uniform"
                                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                   Margin="0,0,-12,-5" Visibility="Collapsed" IsHitTestVisible="False"
-                                   RenderTransformOrigin="0.5,0.5">
+                                   Margin="0,0,-13,-6" Visibility="Collapsed"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   RenderTransformOrigin="0.5,0.5"
+                                   MouseEnter="ProfileTierBadge_MouseEnter" MouseLeave="ProfileTierBadge_MouseLeave">
                                 <Image.RenderTransform>
                                     <RotateTransform Angle="-12"/>
                                 </Image.RenderTransform>
                             </Image>
+                            <!-- Hover blows the badge up to the LEFT of the bubble: the account menu
+                                 owns the space below it. A layered popup's pixels take the mouse, so it
+                                 never sits over the badge itself (MainWindow.ProfileBubbleTierFx.cs). -->
+                            <Popup x:Name="ProfileTierBadgePopup" PlacementTarget="{Binding ElementName=ProfileBubbleTierBadge}"
+                                   Placement="Left" AllowsTransparency="True" StaysOpen="True"
+                                   IsHitTestVisible="False" Focusable="False" PopupAnimation="None">
+                                <Image x:Name="ProfileTierBadgeBig" Height="72" Margin="12"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       RenderTransformOrigin="1,0.5" IsHitTestVisible="False"/>
+                            </Popup>
                         </Grid>
                     </Button>
                     <!-- The bubble's account menu. StaysOpen + manual close-grace timers, same
