@@ -184,6 +184,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (kind == TurnKind.AssistantChat)
                 {
                     text = Services.AiTextHygiene.UnwrapSpokenSigil(text);
+                    text = Services.AiTextHygiene.StripInstructionLeak(text);
                     text = Services.AiTextHygiene.StripUnsanctionedLinks(text);
                 }
                 if (text.Length == 0) continue;
