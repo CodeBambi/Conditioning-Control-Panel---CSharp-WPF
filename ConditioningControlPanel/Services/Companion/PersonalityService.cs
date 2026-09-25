@@ -115,8 +115,15 @@ namespace ConditioningControlPanel.Services
         {
             var presets = new List<PersonalityPreset>();
 
-            // Built-in presets first (mod-supplied if the active mod defines personalities)
-            presets.AddRange(GetBuiltInPresetsForActiveMod());
+            // Built-in presets first (mod-supplied if the active mod defines personalities).
+            // On the stock set in the neutral context the niche personas stay off the list; the
+            // one the user already has selected, if any, stays so nothing vanishes under them.
+            // GetActivePreset / GetPresetById still resolve every id, so a hidden pick keeps working.
+            var builtIn = GetBuiltInPresetsForActiveMod(out var fromMod);
+            presets.AddRange(fromMod
+                ? builtIn
+                : PersonalityPresets.ForPicker(builtIn, IsNeutralContext(),
+                    App.Settings?.Current?.ActivePersonalityPresetId));
 
             // Add user-created presets
             var userPresets = App.Settings?.Current?.UserPersonalityPresets;
