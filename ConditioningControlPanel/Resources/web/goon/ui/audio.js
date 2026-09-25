@@ -227,13 +227,13 @@ export const SFX_REGISTRY = Object.freeze({
 
   /* ---- the field ---------------------------------------------------- game - */
   /** The three classic CCP pops, the same set DtRH and the desktop bubbles draw from (owner, 2026-09-25). */
-  'bubble-pop':     gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.34, minGapMs: 24 }),
+  'bubble-pop':     gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.17, minGapMs: 24 }),
   /** An EFFECT bubble pops the same set, a touch louder. */
-  'bubble-pop-fx':  gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.42, minGapMs: 24 }),
+  'bubble-pop-fx':  gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.21, minGapMs: 24 }),
   /** ...and the prism/video bubble too: every bubble sounds like a CCP bubble. */
-  'bubble-pop-video': gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.42, minGapMs: 40 }),
+  'bubble-pop-video': gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.21, minGapMs: 40 }),
   'flash':          gameCue({ files: [L('grid-tile-flicker-1.mp3'), L('grid-tile-flicker-2.mp3')], gain: 0.16, minGapMs: 260 }),
-  'flash-pop':      gameCue({ files: [D('Pop3.mp3')],              gain: 0.30, minGapMs: 24 }),
+  'flash-pop':      gameCue({ files: [D('Pop3.mp3')],              gain: 0.15, minGapMs: 24 }),
   /** Barely there on purpose — a word you half-hear is the whole point. */
   'subliminal':     gameCue({ files: [L('custody-log-tick-1.mp3'), L('custody-log-tick-2.mp3')], gain: 0.10, minGapMs: 300 }),
   /** The lock card is a match payload, so its chime and its buzz are GAME even
