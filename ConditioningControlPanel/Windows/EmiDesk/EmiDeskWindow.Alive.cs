@@ -156,7 +156,7 @@ public partial class EmiDeskWindow
     {
         try
         {
-            if (_closingForGood) return;
+            if (PresentationActive || _closingForGood) return;
             StopAlive();
 
             _aliveLastTick = DateTime.MinValue;

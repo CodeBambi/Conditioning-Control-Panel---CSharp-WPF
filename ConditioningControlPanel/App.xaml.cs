@@ -1319,8 +1319,22 @@ namespace ConditioningControlPanel
             _hangStressTimer = timer;   // root it so it isn't collected
         }
 
+#if DEBUG
+        private bool _firstShowPreview;
+#endif
         protected override void OnStartup(StartupEventArgs e)
         {
+#if DEBUG
+            if (e.Args.Contains("--first-show-preview"))
+            {
+                _firstShowPreview = true;
+                base.OnStartup(e);
+                IsUnattendedRig = true;
+                EmiDesk = new Services.EmiDesk.EmiDeskService();
+                Services.FirstShow.FirstShowService.Open(preview: true);
+                return;
+            }
+#endif
             // Dump-writer mode: spawned by UiHangWatchdog in a WEDGED sibling CCP process
             // (`--write-hang-dump <pid> <path>`). Write the minidump from this healthy process
             // and exit before touching the splash, the single-instance mutex, or any service.
@@ -5476,6 +5490,13 @@ Application State:
 
         protected override void OnExit(ExitEventArgs e)
         {
+#if DEBUG
+            if (_firstShowPreview)
+            {
+                base.OnExit(e);
+                return;
+            }
+#endif
             Logger?.Information("Application shutting down...");
 
             // EMI Desk (MOMENTS 4.B / 3.8): the wordless flinch. appClosing is a HOLD with no pool

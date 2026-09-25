@@ -37,8 +37,8 @@
         WS_EX_NOACTIVATE means this window can never hold the keyboard, so everything in here is
         mouse-driven. There is nothing to type and nothing to tab to.
 
-        NO Visibility="Hidden" HERE, and that is the one place this window must NOT copy her other
-        three. Setting a Window's Visibility in XAML does not just set a property: WPF cannot touch
+        NO Visibility="Hidden" HERE. The same rule applies to EmiDeskWindow when the welcome show
+        constructs and opens Emi in one dispatcher turn. Setting a Window's Visibility in XAML does not just set a property: WPF cannot touch
         an HWND that does not exist yet, so it QUEUES the hide as a dispatcher operation and applies
         it once the window is up. Her other panels are built at startup and opened much later, so
         that queued hide has long since drained by the time anybody calls Show. The book is built
@@ -232,6 +232,13 @@
                         <Border Grid.ColumnSpan="4" VerticalAlignment="Bottom" Height="2"
                                 Background="#FF0E0E1C"/>
                     </Grid>
+
+                    <StackPanel DockPanel.Dock="Top" Margin="8,8,8,4">
+                        <Button x:Name="BtnFirstShow" Padding="10,9" Margin="0,0,0,5"
+                                Background="#FFFF69B4" Foreground="#FF0E0E1C" FontWeight="Bold" Cursor="Hand"/>
+                        <Button x:Name="BtnCompleteGuide" Padding="8,6" Background="#FF1E1D34"
+                                Foreground="#FFF5F0E1" BorderBrush="#FF6B6890" Cursor="Hand"/>
+                    </StackPanel>
 
                     <!-- the pager -->
                     <Grid DockPanel.Dock="Bottom" Height="44" Background="#FF1E1D34">

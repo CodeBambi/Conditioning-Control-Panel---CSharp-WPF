@@ -57,7 +57,7 @@ public partial class EmiDeskWindow
 
     private Action? _summonDone;
 
-    public void RunSummon(Action? done = null)
+    public void RunSummon(Action? done = null, bool presentation = false)
     {
         try
         {
@@ -112,8 +112,8 @@ public partial class EmiDeskWindow
                     _summonDone = done;
                     _summonChainLive = true;
                     PlayChain("wake", FinishSummon);
-                });
-            });
+                }, presentation);
+            }, presentation);
         }
         catch (Exception ex)
         {
@@ -428,8 +428,9 @@ public partial class EmiDeskWindow
     /// A one-shot dispatcher delay that cannot outlive the app. Every FX step goes through here so
     /// there is exactly one place where the shutdown and dispatcher-null guards live.
     /// </summary>
-    private void After(int ms, Action act)
+    private void After(int ms, Action act, bool presentation = false)
     {
+        var epoch = _presentationEpoch;
         try
         {
             var t = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
@@ -443,6 +444,7 @@ public partial class EmiDeskWindow
                     t.Stop();
                     if (Application.Current?.Dispatcher == null) return;
                     if (Application.Current.Dispatcher.HasShutdownStarted) return;
+                    if (epoch != _presentationEpoch || (PresentationActive && !presentation)) return;
                     act();
                 }
                 catch (Exception ex)

@@ -143,7 +143,7 @@ export function createMedia(holder, lex = (k, f) => f, log = () => {}) {
      *  to paint one when the player asked for stillness. */
     gif(i, still = false) {
       const source = sources.length ? sources[i] : null;
-      if (source) { source.tick(performance.now(), !!still); return source.canvas; }
+      if (source) { source.tick(performance.now(), !!still); return source.clip && !source.frames ? null : source.canvas; }
       const img = imgs.length ? imgs[i] : null;
       return img && img.complete && img.naturalWidth > 0 && readable(img, log) ? img : null;
     },
