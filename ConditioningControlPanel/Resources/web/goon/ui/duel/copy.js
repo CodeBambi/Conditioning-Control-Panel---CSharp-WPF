@@ -39,7 +39,7 @@ export const DUEL_COPY_RAW = Object.freeze({
   /* ui/duel/games.js - the rule line under each game's name. The names are the games' own. */
   ruleDeepEnd: 'Swipe or arrow keys. Deepest tile wins.',
   ruleSort: 'Swipe right for moving, left for still.',
-  /* The Sort duel's VS reveal and noise pick (ui/duel/noiseView.js). */
+  /* The Sort duel's VS reveal (ui/duel/noiseView.js) and the pre-match noise pick (ui/screens/noiseSetup.js). */
   vs: 'VS',
   revealYou: 'you',
   revealThem: 'them',
@@ -48,13 +48,11 @@ export const DUEL_COPY_RAW = Object.freeze({
   botNiche: 'the bot',
   nicheMore: tpl('+{n} more', (n) => ({ n })),
   pickTitle: 'Pick your noise',
-  pickLine: 'The pictures you bin. Slow hands get a random one.',
+  pickLine: 'What you bin when a Sort game drops. One is picked already.',
+  setupGo: 'Done',
   pickedYou: 'your noise',
   pickedThem: 'their noise',
-  theyPick: 'they are picking',
   rolled: 'picked for you',
-  /** Play has started and the player never picked: the board was rolled for them. Said once. */
-  rolledPlay: tpl('Too slow. You got {name}.', (name) => ({ name })),
   noiseArchitecture: 'Architecture',
   noiseLandscapes: 'Landscapes',
   noiseSpace: 'Space',

@@ -1,28 +1,34 @@
 <!doctype html>
-<!-- test/noise-shot.html - a look at the Sort duel's VS reveal and noise pick with no match behind it.
-     Serve Resources/web over http and open /goon/test/noise-shot.html (?stage=reveal|pick|lock). -->
+<!-- test/noise-shot.html - a look at the Sort duel's VS reveal and the pre-match noise pick with no match behind it.
+     Serve Resources/web over http and open /goon/test/noise-shot.html (?stage=reveal|late|setup). -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <link rel="stylesheet" href="../goon.css">
-<style>html, body { margin: 0; height: 100%; background: #14142B; }</style>
+<link rel="stylesheet" href="../ui/flavours.css">
+<style>html, body { margin: 0; height: 100%; background: #14142B; } #card { display: grid; place-items: center; min-height: 100%; }</style>
 </head>
 <body>
 <div id="host" style="position:fixed;inset:0;"></div>
+<div id="card"></div>
 <script type="module">
 import { createNoiseView } from '../ui/duel/noiseView.js';
 import { nicheLabel } from '../ui/duel/noisePick.js';
-const stage = new URLSearchParams(location.search).get('stage') || 'pick';
-const v = createNoiseView({ d: document, host: document.getElementById('host') });
-v.reveal({ name: 'Sort', you: nicheLabel(['bimbofication', 'Bimbos']), them: nicheLabel(['EroticHypnosis']) });
-if (stage !== 'reveal') {
-  v.pick({ secondsLeft: 8, theirs: '', preview: () => '', onPick: (id) => v.picked({ who: 'you', set: id }) });
-  v.pickTimer(stage === 'lock' ? 0 : 5);
-  if (stage === 'lock' || stage === 'picked') {
-    v.picked({ who: 'you', set: 'space' });
-    v.picked({ who: 'them', set: 'cats' });
-  }
-  if (stage === 'lock') v.lock();
+import { mountNoiseCard } from '../ui/screens/noiseSetup.js';
+const stage = new URLSearchParams(location.search).get('stage') || 'reveal';
+if (stage === 'setup') {
+  let chosen = '';
+  const ledger = { listen: (n, e, f) => n.addEventListener(e, f), timer: (f, ms) => setTimeout(f, ms), interval: (f, ms) => setInterval(f, ms) };
+  mountNoiseCard(document.getElementById('card'), {
+    ledger,
+    api: { noise: () => chosen, wantNoise() {}, setNoise(id) { chosen = id; }, noisePreview: () => '' },
+    onDone: () => console.log('noise chosen: ' + chosen),
+  });
+} else {
+  const v = createNoiseView({ d: document, host: document.getElementById('host') });
+  v.reveal({ name: 'Sort', you: nicheLabel(['bimbofication', 'Bimbos']), them: nicheLabel(['EroticHypnosis']),
+    youNoise: 'space', themNoise: stage === 'late' ? '' : 'cats' });
+  if (stage === 'late') setTimeout(() => v.picked({ who: 'them', set: 'cats' }), 400);
 }
 </script>
 </body>

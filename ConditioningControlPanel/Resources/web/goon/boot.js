@@ -96,6 +96,7 @@ import * as joinScreen from './ui/screens/join.js';
 import * as mediaSetupScreen from './ui/screens/mediaSetup.js';
 import { needsMediaSetup } from './ui/screens/mediaSetup.js';
 import { readMediaInit, readOnlineFrame, mediaFlavourFrame, sameMediaState } from './ui/flavours.js';
+import { clampNoiseSet } from './core/noiseSets.js';
 import * as lobbyScreen from './ui/screens/lobby.js';
 import * as draftScreen from './ui/screens/draft.js';
 import * as countdownScreen from './ui/screens/countdown.js';
@@ -377,6 +378,37 @@ const mediaFlavour = (() => {
       const cur = api.get();
       if (!cur) return false;
       return api.commit(Object.assign(cur, { flavour: id, online: true }), true);
+    },
+    /* THE SORT DUEL'S NOISE BOARD (2026-09-25): picked right after the flavour, before any
+     * match (ui/screens/noiseSetup.js), kept in prefs like every other remembered pick. */
+    /** The chosen board, or '' (never chosen). */
+    noise: () => clampNoiseSet(prefs ? prefs.get('noiseSet') : ''),
+    /** Is the pre-match noise step worth showing? Online pictures on (the boards are online). */
+    noiseStepAvailable: () => !!session.media && session.media.online !== false,
+    /** Still owed: available, and never chosen. */
+    noiseStepDue: () => api.noiseStepAvailable() && !api.noise(),
+    /** Start fetching a board's pictures now (a tile tap, the pre-selected roll). */
+    wantNoise(id) {
+      const set = clampNoiseSet(id);
+      if (!set) return false;
+      try { media.requestNoise(set); } catch (_e) { /* pictures are a nicety */ }
+      return true;
+    },
+    /** Remember the board and fetch it. */
+    setNoise(id) {
+      const set = clampNoiseSet(id);
+      if (!set || !prefs) return false;
+      prefs.set('noiseSet', set);
+      api.wantNoise(set);
+      bridge.log('noise board: ' + set);
+      return true;
+    },
+    /** The board's first loaded still, for a tile preview. '' until it lands. */
+    noisePreview(id) {
+      try {
+        const r = media.listNoise(clampNoiseSet(id)).find((x) => x && x.kind !== 'video');
+        return r ? r.url : '';
+      } catch (_e) { return ''; }
     },
     /** A host frame landed: replace the online set and repaint whoever listens. */
     adopt(m) {
@@ -663,6 +695,12 @@ function openFirstScreen() {
    * and the title follows (actions.mediaPrepDone falls back to it outside a match). */
   if (mediaFlavour.firstRun()) {
     router.show('mediaSetup');
+    return;
+  }
+  /* The noise board step, for a player who picked a flavour before it existed: once, then
+   * never again (the choice is remembered; Options > Pictures changes it). */
+  if (mediaFlavour.noiseStepDue()) {
+    router.show('mediaSetup', { noiseOnly: true });
     return;
   }
   router.show('title');

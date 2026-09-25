@@ -1,17 +1,18 @@
 /* ============================================================================
- * ui/duel/noiseView.js - the Sort duel's VS reveal and noise pick. DOM only.
+ * ui/duel/noiseView.js - the Sort duel's VS reveal. DOM only.
  *
- * Driven by ui/duel/duelController.js through ui/duel/duelView.js (reveal, pick,
- * picked, pickTimer, lock), torn down by the view's play / close. One layer
- * inside the duel overlay, above its dim and under Mercy like the rest of it.
+ * Driven by ui/duel/duelController.js through ui/duel/duelView.js (reveal,
+ * picked), torn down by the view's play / close. One layer inside the duel
+ * overlay, above its dim and under Mercy like the rest of it.
  *
  *   REVEAL  two plates slam in face to face (yours from the left, theirs from
- *           the right), the VS badge drops between them with a ring and sparks.
- *   PICK    the plates slide up into a header, seven tiles rise in a wave, a
- *           ring clock counts the pick down. A tap stamps the tile gold and
- *           locks the rest; their pick lands as a violet tag on its tile.
- *   LOCK    the tiles nobody picked fall away, the picked ones pulse once.
+ *           the right), each naming its niche and its noise board, the VS badge
+ *           drops between them with a ring and sparks. Their board may land a
+ *           beat later (`picked`): it stamps onto their plate.
  *   OUT     the whole layer fades and lifts as the class comes up.
+ *
+ * The board itself is picked BEFORE the match (ui/screens/noiseSetup.js), which
+ * borrows the tile styles below (injectNoiseStyle, .gg-nz-setup).
  *
  * Every entrance has an exit, and html[data-gg-motion="reduced"],
  * prefers-reduced-motion and html[data-gg-perf="lite"] drop the motion (the
@@ -19,7 +20,7 @@
  * ==========================================================================*/
 
 import { DUEL_COPY } from './copy.js';
-import { noiseTiles, noiseName } from './noisePick.js';
+import { noiseName } from './noisePick.js';
 
 const STYLE_ID = 'gg-noise-style';
 export const NOISE_OUT_MS = 260;
@@ -56,23 +57,6 @@ const CSS = `
 .gg-nz-spark { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%;
   background: var(--gg-gold, #ffd36e); opacity: 0; pointer-events: none;
   animation: ggNzSpark 620ms 400ms cubic-bezier(.1, .8, .3, 1) both; }
-.gg-noise.is-pick .gg-nz-vs { transform: scale(0.72); }
-.gg-noise.is-pick .gg-nz-plate { padding: 0.5rem 0.8rem; }
-.gg-noise.is-pick .gg-nz-subs { opacity: 0; max-height: 0; margin: 0; }
-.gg-noise.is-pick .gg-nz-badge { width: 3rem; height: 3rem; font-size: 1.05rem; }
-.gg-nz-pickhead { display: flex; align-items: center; gap: 0.9rem; opacity: 0; transform: translateY(12px);
-  transition: opacity 260ms ease, transform 320ms cubic-bezier(.2, 1.3, .4, 1); }
-.gg-noise.is-pick .gg-nz-pickhead { opacity: 1; transform: none; }
-.gg-nz-title { font-size: 1.35rem; font-weight: 900; color: var(--gg-pink, #ff69b4); }
-.gg-nz-line { font-size: 0.85rem; opacity: 0.72; margin: 0.15rem 0 0; }
-.gg-nz-clock { position: relative; width: 3rem; height: 3rem; flex: none; }
-.gg-nz-clock svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-.gg-nz-clock circle { fill: none; stroke-width: 4; }
-.gg-nz-clock .bg { stroke: rgba(255, 255, 255, 0.12); }
-.gg-nz-clock .fg { stroke: var(--gg-gold, #ffd36e); stroke-linecap: round; transition: stroke-dashoffset 250ms linear, stroke 200ms ease; }
-.gg-nz-clock.is-low .fg { stroke: #ff6b8a; }
-.gg-nz-clock b { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 900; font-variant-numeric: tabular-nums; }
-.gg-nz-clock.is-low b { color: #ff6b8a; animation: ggNzThrob 500ms ease-in-out infinite alternate; }
 .gg-nz-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; width: min(40rem, 94vw); }
 .gg-nz-grid > .gg-nz-tile { flex: 0 0 calc((100% - 1.8rem) / 4); }
 .gg-nz-tile { position: relative; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; cursor: pointer;
@@ -80,8 +64,8 @@ const CSS = `
   background: linear-gradient(160deg, color-mix(in srgb, var(--nz-tint, #b99cff) 30%, #1c0b2a), #120718);
   font: inherit; display: grid; place-items: center; opacity: 0; transform: translateY(18px) scale(0.9);
   transition: transform 180ms cubic-bezier(.2, 1.4, .4, 1), opacity 220ms ease, border-color 160ms ease, filter 220ms ease, box-shadow 200ms ease; }
-.gg-noise.is-pick .gg-nz-tile { opacity: 1; transform: none; transition-delay: calc(var(--i, 0) * 45ms); }
-.gg-noise.is-pick .gg-nz-tile:hover:not(:disabled) { transform: translateY(-3px) scale(1.04); transition-delay: 0ms;
+.gg-nz-setup .gg-nz-tile { opacity: 1; transform: none; animation: ggNzRise 320ms calc(var(--i, 0) * 45ms) cubic-bezier(.2, 1.3, .4, 1) both; }
+.gg-nz-setup .gg-nz-tile:hover:not(:disabled) { transform: translateY(-3px) scale(1.04); transition-delay: 0ms;
   box-shadow: 0 6px 22px color-mix(in srgb, var(--nz-tint, #b99cff) 50%, transparent); }
 .gg-nz-tile:focus-visible { outline: 3px solid var(--gg-gold, #ffd36e); outline-offset: 2px; }
 .gg-nz-tile:disabled { cursor: default; }
@@ -96,16 +80,16 @@ const CSS = `
   font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; animation: ggNzTag 360ms cubic-bezier(.2, 1.8, .4, 1) both; }
 .gg-nz-tag.is-you { left: 0.35rem; background: var(--gg-gold, #ffd36e); color: #1a0a24; }
 .gg-nz-tag.is-them { right: 0.35rem; background: var(--gg-violet, #8b5cf6); color: #fff; }
-.gg-noise.is-picked .gg-nz-tile:not(.is-mine):not(.is-theirs) { filter: saturate(0.4) brightness(0.6); }
+.gg-nz-setup .gg-nz-tile:not(.is-mine) { filter: saturate(0.55) brightness(0.72); }
+.gg-nz-setup .gg-nz-tile:not(.is-mine):hover { filter: none; }
 .gg-nz-tile.is-mine { border-color: var(--gg-gold, #ffd36e); box-shadow: 0 0 24px rgba(255, 211, 110, 0.55); animation: ggNzPop 380ms cubic-bezier(.2, 1.8, .4, 1); }
-.gg-nz-tile.is-theirs { border-color: var(--gg-violet, #8b5cf6); }
-.gg-nz-tile.is-mine.is-theirs { border-image: linear-gradient(90deg, var(--gg-gold, #ffd36e), var(--gg-violet, #8b5cf6)) 1; }
-.gg-noise.is-lock .gg-nz-tile:not(.is-mine):not(.is-theirs) { opacity: 0; transform: translateY(16px) scale(0.85); transition-delay: 0ms; }
-.gg-noise.is-lock .gg-nz-tile.is-mine { animation: ggNzPop 420ms cubic-bezier(.2, 1.8, .4, 1); }
-.gg-nz-status { min-height: 1.3em; font-size: 0.9rem; display: flex; gap: 1.2rem; justify-content: center; flex-wrap: wrap; }
-.gg-nz-status span { opacity: 0.85; }
-.gg-nz-status b { color: var(--gg-gold, #ffd36e); }
-.gg-nz-status .them b { color: #c9b8ff; }
+.gg-nz-pnoise { font-size: 0.82rem; margin-top: 0.35rem; opacity: 0.9; }
+.gg-nz-pnoise b { color: var(--gg-gold, #ffd36e); }
+.gg-nz-plate.is-them .gg-nz-pnoise b { color: #c9b8ff; }
+.gg-nz-pnoise.is-new b { display: inline-block; animation: ggNzTag 360ms cubic-bezier(.2, 1.8, .4, 1) both; }
+.gg-nz-setup { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; text-align: center; }
+.gg-nz-setup .gg-nz-title { font-size: 1.35rem; font-weight: 900; color: var(--gg-pink, #ff69b4); margin: 0; }
+.gg-nz-setup .gg-nz-line { font-size: 0.9rem; opacity: 0.75; margin: 0; }
 .gg-nz-hint { font-size: 0.85rem; color: var(--gg-gold, #ffd36e); margin: 0; }
 @media (max-width: 560px) { .gg-nz-grid > .gg-nz-tile { flex-basis: calc((100% - 1.2rem) / 3); } .gg-nz-vs { gap: 0.5rem; } }
 @keyframes ggNzIn { from { opacity: 0; } to { opacity: 1; } }
@@ -116,22 +100,24 @@ const CSS = `
 @keyframes ggNzRing { 0% { transform: scale(0.6); opacity: 0.95; } 100% { transform: scale(2.6); opacity: 0; } }
 @keyframes ggNzSpark { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; } }
 @keyframes ggNzTag { 0% { transform: scale(2); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@keyframes ggNzRise { from { opacity: 0; transform: translateY(18px) scale(0.9); } to { opacity: 1; transform: none; } }
 @keyframes ggNzPop { 0% { transform: scale(1); } 45% { transform: scale(1.1); } 100% { transform: scale(1); } }
-@keyframes ggNzThrob { from { transform: scale(1); } to { transform: scale(1.15); } }
 html[data-gg-motion="reduced"] .gg-noise *, html[data-gg-perf="lite"] .gg-noise * { animation: none !important; }
 html[data-gg-motion="reduced"] .gg-nz-spark, html[data-gg-motion="reduced"] .gg-nz-ring,
 html[data-gg-perf="lite"] .gg-nz-spark, html[data-gg-perf="lite"] .gg-nz-ring { display: none; }
 html[data-gg-motion="reduced"] .gg-nz-tile, html[data-gg-motion="reduced"] .gg-nz-vs { transform: none !important; transition: opacity 200ms linear; }
+html[data-gg-motion="reduced"] .gg-nz-setup *, html[data-gg-perf="lite"] .gg-nz-setup * { animation: none !important; }
 html[data-gg-motion="reduced"] .gg-noise.is-out { animation: ggNzIn 200ms linear reverse both !important; }
 @media (prefers-reduced-motion: reduce) {
-  .gg-noise * { animation: none !important; }
+  .gg-noise *, .gg-nz-setup * { animation: none !important; }
   .gg-nz-spark, .gg-nz-ring { display: none; }
   .gg-nz-tile, .gg-nz-vs { transform: none !important; transition: opacity 200ms linear; }
   .gg-noise.is-out { animation: ggNzIn 200ms linear reverse both; }
 }
 `;
 
-function injectStyle(d) {
+/** The layer's styles, once per document. ui/screens/noiseSetup.js borrows the tiles. */
+export function injectNoiseStyle(d) {
   if (!d || !d.head || d.getElementById(STYLE_ID)) return;
   const s = d.createElement('style');
   s.id = STYLE_ID;
@@ -140,8 +126,6 @@ function injectStyle(d) {
 }
 
 const SPARKS = 10;
-const CLOCK_R = 20;
-const CLOCK_LEN = 2 * Math.PI * CLOCK_R;
 
 /**
  * @param {object} o
@@ -150,7 +134,7 @@ const CLOCK_LEN = 2 * Math.PI * CLOCK_R;
  */
 export function createNoiseView({ d, host }) {
   if (!d || !host) return null;
-  injectStyle(d);
+  injectNoiseStyle(d);
   const mk = (tag, cls, text) => {
     const n = d.createElement(tag);
     if (cls) n.className = cls;
@@ -159,16 +143,19 @@ export function createNoiseView({ d, host }) {
   };
 
   let layer = null;
-  let tiles = new Map();      // id -> {btn, img}
-  let status = null;
-  let clock = null;
-  let total = 8;
-  let preview = null;
-  let onPick = null;
-  let mine = '';
+  const boards = { you: null, them: null };   // side -> its plate's noise line
   let theirs = '';
 
-  function plate(side, label) {
+  function paintBoard(side, set, fresh) {
+    const line = boards[side];
+    if (!line) return;
+    while (line.firstChild) line.removeChild(line.firstChild);
+    line.classList.toggle('is-new', !!fresh);
+    line.appendChild(d.createTextNode((side === 'you' ? DUEL_COPY.pickedYou : DUEL_COPY.pickedThem) + ' '));
+    line.appendChild(mk('b', '', set ? noiseName(set) : '...'));
+  }
+
+  function plate(side, label, set) {
     const p = mk('div', 'gg-nz-plate is-' + side);
     p.style.setProperty('--nz-tint', (label && label.tint) || '#ff69b4');
     p.appendChild(mk('div', 'gg-nz-side', side === 'you' ? DUEL_COPY.revealYou : DUEL_COPY.revealThem));
@@ -177,62 +164,25 @@ export function createNoiseView({ d, host }) {
       ? label.subs.slice(0, 3).map((s) => 'r/' + s).join('  ') + (label.more ? '  ' + label.more : '')
       : '';
     if (subs) p.appendChild(mk('div', 'gg-nz-subs', subs));
+    boards[side] = mk('div', 'gg-nz-pnoise');
+    p.appendChild(boards[side]);
+    paintBoard(side, set, false);
     return p;
   }
 
   function drop() {
     if (layer) { try { layer.remove(); } catch (_e) { /* gone */ } }
-    layer = null; tiles = new Map(); status = null; clock = null; preview = null; onPick = null; mine = ''; theirs = '';
-  }
-
-  function paintStatus() {
-    if (!status) return;
-    while (status.firstChild) status.removeChild(status.firstChild);
-    const you = mk('span', 'you');
-    you.appendChild(d.createTextNode(DUEL_COPY.pickedYou + ' '));
-    you.appendChild(mk('b', '', mine ? noiseName(mine) : '...'));
-    const them = mk('span', 'them');
-    if (theirs) {
-      them.appendChild(d.createTextNode(DUEL_COPY.pickedThem + ' '));
-      them.appendChild(mk('b', '', noiseName(theirs)));
-    } else them.textContent = DUEL_COPY.theyPick;
-    status.appendChild(you);
-    status.appendChild(them);
-  }
-
-  function refreshPreviews() {
-    if (typeof preview !== 'function') return;
-    for (const [id, t] of tiles) {
-      if (t.img) continue;
-      let url = '';
-      try { url = preview(id) || ''; } catch (_e) { url = ''; }
-      if (!url) continue;
-      const img = mk('img', '');
-      img.alt = '';
-      img.decoding = 'async';
-      img.onload = () => { img.classList.add('is-on'); t.btn.classList.add('has-img'); };
-      img.onerror = () => { try { img.remove(); } catch (_e) { /* gone */ } t.img = null; };
-      img.src = url;
-      t.img = img;
-      t.btn.insertBefore(img, t.btn.firstChild);
-    }
-  }
-
-  function tag(id, who, rolled) {
-    const t = tiles.get(id);
-    if (!t) return;
-    t.btn.classList.add(who === 'you' ? 'is-mine' : 'is-theirs');
-    const label = who === 'you' ? (rolled ? DUEL_COPY.rolled : DUEL_COPY.revealYou) : DUEL_COPY.revealThem;
-    t.btn.appendChild(mk('span', 'gg-nz-tag is-' + who, label));
+    layer = null; boards.you = null; boards.them = null; theirs = '';
   }
 
   return {
-    reveal({ name, you, them, hint } = {}) {
+    reveal({ name, you, them, youNoise = '', themNoise = '', hint } = {}) {
       drop();
       layer = mk('div', 'gg-noise');
       layer.appendChild(mk('div', 'gg-nz-kicker', (name || '') + '  /  ' + DUEL_COPY.revealRule));
       const vs = mk('div', 'gg-nz-vs');
-      vs.appendChild(plate('you', you));
+      theirs = themNoise || '';
+      vs.appendChild(plate('you', you, youNoise));
       const badge = mk('div', 'gg-nz-badge', DUEL_COPY.vs);
       badge.appendChild(mk('span', 'gg-nz-ring'));
       for (let i = 0; i < SPARKS; i++) {
@@ -244,80 +194,16 @@ export function createNoiseView({ d, host }) {
         badge.appendChild(s);
       }
       vs.appendChild(badge);
-      vs.appendChild(plate('them', them));
+      vs.appendChild(plate('them', them, theirs));
       layer.appendChild(vs);
       if (hint) layer.appendChild(mk('p', 'gg-nz-hint', DUEL_COPY.firstHint));
       host.appendChild(layer);
     },
-    pick({ secondsLeft = 8, theirs: t0 = '', preview: pv = null, onPick: op = null } = {}) {
-      if (!layer) return;
-      total = Math.max(1, secondsLeft | 0);
-      preview = pv;
-      onPick = op;
-      theirs = t0 || '';
-      const head = mk('div', 'gg-nz-pickhead');
-      clock = mk('div', 'gg-nz-clock');
-      clock.innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true"><circle class="bg" cx="24" cy="24" r="' + CLOCK_R + '"/>'
-        + '<circle class="fg" cx="24" cy="24" r="' + CLOCK_R + '" stroke-dasharray="' + CLOCK_LEN.toFixed(2) + '" stroke-dashoffset="0"/></svg>';
-      clock.appendChild(mk('b', '', String(total)));
-      const words = mk('div', '');
-      words.appendChild(mk('div', 'gg-nz-title', DUEL_COPY.pickTitle));
-      words.appendChild(mk('p', 'gg-nz-line', DUEL_COPY.pickLine));
-      head.appendChild(clock);
-      head.appendChild(words);
-      const grid = mk('div', 'gg-nz-grid');
-      noiseTiles().forEach((t, i) => {
-        const btn = mk('button', 'gg-nz-tile');
-        btn.type = 'button';
-        btn.style.setProperty('--nz-tint', t.tint);
-        btn.style.setProperty('--i', String(i));
-        btn.setAttribute('aria-label', t.name);
-        btn.appendChild(mk('span', 'gg-nz-glyph', t.glyph));
-        btn.appendChild(mk('span', 'gg-nz-tname', t.name));
-        btn.addEventListener('click', () => { if (typeof onPick === 'function') onPick(t.id); });
-        grid.appendChild(btn);
-        tiles.set(t.id, { btn, img: null });
-      });
-      status = mk('div', 'gg-nz-status');
-      layer.appendChild(head);
-      layer.appendChild(grid);
-      layer.appendChild(status);
-      refreshPreviews();
-      if (theirs) tag(theirs, 'them', false);
-      paintStatus();
-      // Next frame, so the tiles transition in from their resting offset.
-      const lift = () => { if (layer) layer.classList.add('is-pick'); };
-      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(lift)); else lift();
-    },
-    pickTimer(left) {
-      if (!clock) return;
-      const n = Math.max(0, left | 0);
-      const b = clock.querySelector('b');
-      if (b) b.textContent = String(n);
-      const fg = clock.querySelector('.fg');
-      if (fg) fg.setAttribute('stroke-dashoffset', (CLOCK_LEN * (1 - n / total)).toFixed(2));
-      clock.classList.toggle('is-low', n <= 3 && !mine);
-      refreshPreviews();
-    },
-    picked({ who, set, rolled } = {}) {
-      if (!layer || !set) return;
-      if (who === 'you') {
-        if (mine) return;
-        mine = set;
-        for (const [, t] of tiles) t.btn.disabled = true;
-        layer.classList.add('is-picked');
-        if (clock) clock.classList.remove('is-low');
-      } else {
-        if (theirs && theirs !== set) return;
-        theirs = set;
-      }
-      tag(set, who, !!rolled);
-      paintStatus();
-    },
-    lock() {
-      if (!layer) return;
-      for (const [, t] of tiles) t.btn.disabled = true;
-      layer.classList.add('is-picked', 'is-lock');
+    /** Their board landed after the reveal opened: stamp it onto their plate. */
+    picked({ who, set } = {}) {
+      if (!layer || !set || who !== 'them' || theirs) return;
+      theirs = set;
+      paintBoard('them', set, true);
     },
     /** The class is coming up (or the duel ended): play the OUT, then remove. */
     clear(animate = true) {
@@ -327,7 +213,7 @@ export function createNoiseView({ d, host }) {
       layer = null;
       l.classList.add('is-out');
       setTimeout(() => { try { l.remove(); } catch (_e) { /* gone */ } }, NOISE_OUT_MS);
-      tiles = new Map(); status = null; clock = null; preview = null; onPick = null; mine = ''; theirs = '';
+      boards.you = null; boards.them = null; theirs = '';
     },
     get active() { return !!layer; },
   };
