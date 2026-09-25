@@ -157,6 +157,16 @@ public partial class EmiDeskWindow
             // re-dress a flick - it can never eat a pat that was going to draw a line.
             var poke = NotePoke();
 
+            // THE PET STREAK (campus widget.js pet(): three pets inside PET_WINDOW_MS earn a chime
+            // and glee). It wins over the cooldown both ways: inside it, it is the flick; past it,
+            // the streak is still the bigger beat than a plain pet.
+            if (poke == EmiPokeStep.Glee)
+            {
+                _petCooldownUntil = DateTime.UtcNow.AddMilliseconds(PetCooldownMs);
+                PlayPokeFlick(poke);
+                return true;
+            }
+
             if (DateTime.UtcNow < _petCooldownUntil)
             {
                 PlayPokeFlick(poke);
@@ -273,6 +283,7 @@ public partial class EmiDeskWindow
             _wobbleLastX = x;
 
             _wobbleVx = _wobbleVx * WobbleVelKeep + raw * (1.0 - WobbleVelKeep);
+            if (_dragMoved) NoteTossFrame(dt, _wobbleVx);
 
             // She TRAILS the hand: drag her right and her feet swing left, which about a head-high
             // pivot is a positive (clockwise) angle in WPF's y-down frame.
