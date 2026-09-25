@@ -218,12 +218,14 @@ public class WelcomeBackSheetRenderTests
     }
 
     [Fact]
-    public void TheTourIsOfferedOnlyWhenThereIsATourToRun()
+    public void TheUpgradeTourIsRetired_NeverOfferedEvenWithATourToRun()
     {
+        // The v6.8 upgrade tour was retired in 6.11.0 (owner): WhatsNewDialog.UpgradeTourOffered.
         OnStaThread(() =>
         {
+            Assert.False(WhatsNewDialog.UpgradeTourOffered);
             Assert.Equal(Visibility.Collapsed, Find<TextBlock>(Realize(Content()), "TxtTour").Visibility);
-            Assert.Equal(Visibility.Visible, Find<TextBlock>(Realize(Content(tour: () => { })), "TxtTour").Visibility);
+            Assert.Equal(Visibility.Collapsed, Find<TextBlock>(Realize(Content(tour: () => { })), "TxtTour").Visibility);
         });
     }
 

@@ -438,6 +438,8 @@ namespace ConditioningControlPanel.Services.Descent
         /// <summary>The commit path's entry: the one-shot guard, then the reveal.</summary>
         private static void BeginFirstLight()
         {
+            // Retired with the shows: the reveal was the payment for the ceremony's animation.
+            if (DescentFuseWindow.ShowsRetired) return;
             if (_firstLightPlayed) return;
             _firstLightPlayed = true;
             RunFirstLightReveal();

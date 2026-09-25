@@ -37,9 +37,14 @@ public sealed class AnimatedLogoImage : Image
         set { if (_ambientAllowed == value) return; _ambientAllowed = value; Refresh(); }
     }
 
+    /// <summary>Either BUILT-IN wordmark takes the new animated logo: the neutral logo2.png (CCP
+    /// Default, Sissy) and, since the owner's 6.11.0 desk pass ("I don't see the new logo"), the Bambi
+    /// logo.png too. A mod pack that ships its OWN logo art resolves to its own file, not these two
+    /// pack URIs, and keeps it.</summary>
     internal static bool IsBundledNeutral(ImageSource? source) =>
-        source is BitmapImage bitmap && string.Equals(bitmap.UriSource?.OriginalString,
-            "pack://application:,,,/Resources/logo2.png", StringComparison.OrdinalIgnoreCase);
+        source is BitmapImage bitmap
+        && (string.Equals(bitmap.UriSource?.OriginalString, "pack://application:,,,/Resources/logo2.png", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(bitmap.UriSource?.OriginalString, "pack://application:,,,/Resources/logo.png", StringComparison.OrdinalIgnoreCase));
 
     public void SetArtwork(ImageSource? original)
     {

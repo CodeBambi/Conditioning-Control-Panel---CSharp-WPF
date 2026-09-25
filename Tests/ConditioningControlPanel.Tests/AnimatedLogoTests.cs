@@ -40,7 +40,7 @@ public class AnimatedLogoTests
         Assert.Same(pulse, logo.RenderTransform);
         Assert.False(logo.IsAnimating);
         logo.SetArtwork(new BitmapImage(new Uri("pack://application:,,,/Resources/logo.png")));
-        Assert.False(logo.IsAnimatedArtwork);
+        Assert.True(logo.IsAnimatedArtwork);   // the built-in Bambi wordmark takes the new logo too (6.11.0)
     });
 
     [Fact]
