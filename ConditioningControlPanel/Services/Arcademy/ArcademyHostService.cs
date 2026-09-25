@@ -1389,7 +1389,7 @@ internal static class ArcademyHostService
         if (phrases == null || phrases.Length == 0) return Array.Empty<object>();
         var audible = App.Settings?.Current?.SubAudioAudible == true;
         var modDir = audible ? ModAudioRoot() : null;
-        var defaultDir = audible
+        var defaultDir = audible && ModAudioPolicy.UsesSharedSubAudio(App.Mods?.ActiveModId)
             ? Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio")
             : null;
         var rows = new List<object>(phrases.Length);

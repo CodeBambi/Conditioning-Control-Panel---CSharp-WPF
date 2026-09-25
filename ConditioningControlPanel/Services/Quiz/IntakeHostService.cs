@@ -1154,7 +1154,10 @@ namespace ConditioningControlPanel.Services.Quiz
 
                 // Resolve the two audio dirs once (both may sit outside the ccp.game/ccp.assets roots,
                 // which is exactly why clips are inlined below instead of served by URL).
-                var defaultAudioDir = Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio");
+                // The shared clips are Bambi-voiced: CCP Default never falls back to them.
+                string? defaultAudioDir = ModAudioPolicy.UsesSharedSubAudio(App.Mods?.ActiveModId)
+                    ? Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio")
+                    : null;
                 string? modAudioDir = null;
                 try
                 {
@@ -1211,7 +1214,7 @@ namespace ConditioningControlPanel.Services.Quiz
         /// <summary>Find the whisper clip for <paramref name="text"/>, mirroring
         /// <c>SubliminalService.FindLinkedAudio</c>: exact filename match against case/apostrophe
         /// variants, then a case-insensitive directory scan. Mod dir wins over the default dir.</summary>
-        private static string? ResolveSubliminalAudioFile(string text, string? modDir, string defaultDir)
+        private static string? ResolveSubliminalAudioFile(string text, string? modDir, string? defaultDir)
         {
             var clean = text.Trim();
             var variants = new[]
