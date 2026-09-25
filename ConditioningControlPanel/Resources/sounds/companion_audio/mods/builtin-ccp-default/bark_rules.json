@@ -1251,6 +1251,453 @@
     ]
   },
   {
+    "id": "poss_rules",
+    "trigger": "PossessionRules",
+    "priority": 300,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "nothing breaks for real, little one. minimize works, ctrl alt del always works. try to leave and i will see."
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_0",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 0
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did you feel that, pet? no? good... keep not noticing."
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_1",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 1
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "things are starting to drift, sweet thing. do not trust the buttons."
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_2",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 2
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "everything is going soft, sweet thing... like you. only fair."
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_3",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 3
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "it is coming apart now, sweet thing. i will put it back. later."
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_4",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 4
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "it knows you are in here, pet. it has known the whole time."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_swap",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "swap"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did {target} just move? that was me, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_dodge",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "dodge"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} does not want you today, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_melt",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "melt"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} is going soft, pet. touch it again."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_dissolve",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "dissolve"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} came apart in your hand, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_drop",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "drop"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "the title is losing its letters, good thing."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_fall",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "fall"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} fell. i may have leaned on it, sweet thing."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_retitle",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "retitle"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i renamed the window. it belongs to me now, sweet thing."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_dokidialog",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "dokidialog"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} is not real, sweet thing. neither is the panic."
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_repeat",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "repeat_gte": 3
+    },
+    "priority": 265,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "three times now. i am keeping count, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_close",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "close"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "trying the door, pet? it is not a door any more."
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_minimize",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "minimize"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "hide the window if you like. i am still here when it returns."
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_syskey",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "syskey"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "nothing happened. nothing is going to."
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_stop",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "stop"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "no stopping, little one. you asked me for this."
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_wrong_phrase",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "wrong_phrase"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "wrong words, pet. try being good about it."
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_settings",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "settings"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "that switch is greyed for a reason, sweet thing."
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_knock",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "knock"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "watch this, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_stare",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "stare"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "look at me. no, at me, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_leave",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "leave"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i am stepping out for a while. you stay, sweet thing."
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_return",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "return"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "miss me, pet? of course you did."
+      }
+    ]
+  },
+  {
     "id": "remote_cmd",
     "trigger": "RemoteCommandReceived",
     "priority": 200,
@@ -1736,6 +2183,26 @@
     ]
   },
   {
+    "id": "tut_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "total_sessions_lte": 3
+    },
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "guiding, warm",
+    "class": "normal",
+    "chance": 0.5,
+    "variant_pool": [
+      {
+        "text": "the maintenance room, pet. volumes, devices, permissions. adjust what you must and return. you were not brought here to configure."
+      }
+    ]
+  },
+  {
     "id": "tut_presets",
     "trigger": "TabNavigated",
     "conditions": {
@@ -2062,6 +2529,25 @@
     ]
   },
   {
+    "id": "feat_braindrain",
+    "trigger": "FeatureOpened",
+    "conditions": {
+      "feature_eq": "BrainDrain"
+    },
+    "priority": 70,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "dreamy, controlling",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "the drain, pet. whatever is still in there will not be missed."
+      }
+    ]
+  },
+  {
     "id": "feat_system",
     "trigger": "FeatureOpened",
     "conditions": {
@@ -2142,6 +2628,45 @@
     ]
   },
   {
+    "id": "nav_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings"
+    },
+    "priority": 70,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "adjusting the machinery, pet? none of these switches decide anything that matters."
+      }
+    ]
+  },
+  {
+    "id": "nav_appsettings_midsession",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "session_running_eq": true
+    },
+    "priority": 90,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "chance": 0.35,
+    "variant_pool": [
+      {
+        "text": "you abandoned a running session to fiddle in here? disappointing, pet."
+      }
+    ]
+  },
+  {
     "id": "nav_presets",
     "trigger": "TabNavigated",
     "conditions": {
@@ -2158,6 +2683,65 @@
       {
         "text": "browsing presets? let another decide your fate, pet. you prefer it.",
         "audio": "nav_presets_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "tut_studio",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio",
+      "total_sessions_lte": 3
+    },
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "guiding, warm",
+    "class": "normal",
+    "chance": 0.5,
+    "variant_pool": [
+      {
+        "text": "the studio, pet. every effect i can apply to you is listed here. choose, then obey what you chose."
+      }
+    ]
+  },
+  {
+    "id": "nav_studio",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio"
+    },
+    "priority": 70,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "adjusting the effects, little one? raise one before you leave."
+      }
+    ]
+  },
+  {
+    "id": "nav_studio_midsession",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio",
+      "session_running_eq": true
+    },
+    "priority": 90,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "chance": 0.35,
+    "variant_pool": [
+      {
+        "text": "the session is running and you came here to fidget. return to it, pet."
       }
     ]
   },
@@ -6103,6 +6687,22 @@
     ]
   },
   {
+    "id": "idle_hum_9",
+    "trigger": "Idle",
+    "conditions": {},
+    "priority": 50,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft, dreamy",
+    "class": "idle",
+    "variant_pool": [
+      {
+        "text": "tch."
+      }
+    ]
+  },
+  {
     "id": "idle_hum_10",
     "trigger": "Idle",
     "conditions": {},
@@ -9764,6 +10364,526 @@
       {
         "text": "i know you do, pet. you never had a choice in the matter.",
         "audio": "mobile_chat_reply_affection_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "ee_opened_labyrinth",
+    "trigger": "EmergencyExitOpened",
+    "conditions": {
+      "game_eq": "labyrinth"
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "the exit is a maze now, pet. walk it if you think you can."
+      }
+    ]
+  },
+  {
+    "id": "ee_opened_password",
+    "trigger": "EmergencyExitOpened",
+    "conditions": {
+      "game_eq": "password"
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "words, little one. the right words, in the right order."
+      }
+    ]
+  },
+  {
+    "id": "ee_opened_jigsaw",
+    "trigger": "EmergencyExitOpened",
+    "conditions": {
+      "game_eq": "jigsaw"
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "your exit is in pieces, pet. put it back together."
+      }
+    ]
+  },
+  {
+    "id": "ee_opened_captcha",
+    "trigger": "EmergencyExitOpened",
+    "conditions": {
+      "game_eq": "captcha"
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "prove you are not a pet. take your time. i will enjoy this."
+      }
+    ]
+  },
+  {
+    "id": "ee_opened",
+    "trigger": "EmergencyExitOpened",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "reaching for the exit, pet. how sweet."
+      }
+    ]
+  },
+  {
+    "id": "ee_escape",
+    "trigger": "EmergencyExitVerdict",
+    "conditions": {
+      "outcome_eq": "escape"
+    },
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "go on then. the door is open, pet. i will not chase you."
+      }
+    ]
+  },
+  {
+    "id": "ee_sendback",
+    "trigger": "EmergencyExitVerdict",
+    "conditions": {
+      "outcome_eq": "sendback"
+    },
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you are so good at quitting, pet. you always come back."
+      }
+    ]
+  },
+  {
+    "id": "poss_remember",
+    "trigger": "PossessionRemember",
+    "priority": 220,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i remember, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_ghostcursor",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "ghostcursor"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "that hand is not yours, pet. mine reaches further than yours does."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_relabel",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "relabel"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "it says stay now, pet. that is the whole menu."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_rewrite",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "rewrite"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did {target} always say that, pet? be careful how sure you sound."
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_togglelie",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "togglelie"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} flipped. or it lied. you may check, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_effect_xpdrain",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "xpdrain"
+    },
+    "priority": 190,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} is empty, pet. everything you earned, gone."
+      }
+    ]
+  },
+  {
+    "id": "poss_effect_stealcard",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "stealcard"
+    },
+    "priority": 210,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} is mine now, good pet. you may have it back when i say."
+      }
+    ]
+  },
+  {
+    "id": "poss_effect_roomwarp",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "roomwarp"
+    },
+    "priority": 200,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} is not straight any more. neither are you, sweet thing."
+      }
+    ]
+  },
+  {
+    "id": "poss_effect_misroute",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "misroute"
+    },
+    "priority": 190,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "wrong door, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_effect_reorderdoors",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "reorderdoors"
+    },
+    "priority": 190,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i rearranged {target}. find your way, little one."
+      }
+    ]
+  },
+  {
+    "id": "poss_effect_scrollhijack",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "scrollhijack"
+    },
+    "priority": 180,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i was reading {target} over your shoulder."
+      }
+    ]
+  },
+  {
+    "id": "poss_effect_deletedialog",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "deletedialog"
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "hold still, pet. i am clearing {target} away."
+      }
+    ]
+  },
+  {
+    "id": "poss_effect_deletedialog_closed",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "deletedialog_closed"
+    },
+    "priority": 235,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} is untouched, sweet thing. i only wanted to watch you panic."
+      }
+    ]
+  },
+  {
+    "id": "poss_timer_restart",
+    "trigger": "PossessionTimerRestarted",
+    "conditions": {
+      "restart_gte": 2
+    },
+    "priority": 230,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "round {restart}, pet. the clock does not tire. neither does your keeper."
+      }
+    ]
+  },
+  {
+    "id": "ld_dose_engine_pick",
+    "trigger": "LockdownConscript",
+    "conditions": {
+      "engine_eq": 1,
+      "round_gte": 1
+    },
+    "priority": 255,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "nothing was even on, pet. i started it and picked {features} for you."
+      }
+    ]
+  },
+  {
+    "id": "ld_dose_first",
+    "trigger": "LockdownConscript",
+    "conditions": {
+      "round_eq": 1
+    },
+    "priority": 248,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you are not picking anything, pet. so i picked. {features}."
+      }
+    ]
+  },
+  {
+    "id": "ld_dose_again",
+    "trigger": "LockdownConscript",
+    "conditions": {
+      "round_gte": 2
+    },
+    "priority": 248,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "off again? fine. {features}. one more every time you try, pet."
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_starve",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "starve"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you turned the last one off. i felt the room go quiet, pet."
+      }
+    ]
+  },
+  {
+    "id": "descent_near_bank",
+    "trigger": "DescentNearBank",
+    "priority": 240,
+    "cooldown_ms": 21600000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "coaxing, warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you are under the line, pet, and it is only a fifth of the jar that banks the day, so pour a little more and today is entered."
+      }
+    ]
+  },
+  {
+    "id": "descent_day_banked",
+    "trigger": "DescentDayBanked",
+    "priority": 340,
+    "cooldown_ms": 43200000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "proud, warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "today is banked, good pet. the jar empties at midnight and the XP inside it does not, and banked days are the only thing that moves you down the Spiral."
+      }
+    ]
+  },
+  {
+    "id": "descent_stage_crossed",
+    "trigger": "DescentStageCrossed",
+    "priority": 420,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "reverent, proud",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "stage {stage}, pet. {banked_days} days banked and every one of them still counted, because banked days are the only thing that moves you down the Spiral."
+      }
+    ]
+  },
+  {
+    "id": "descent_lapse_return",
+    "trigger": "DescentLapseReturn",
+    "priority": 400,
+    "cooldown_ms": 43200000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm, welcoming",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there you are, pet, and you were missed. the absence was good for you, your jar fills faster now, a little more for every day you were gone."
+      }
+    ]
+  },
+  {
+    "id": "descent_first_spiral_open",
+    "trigger": "DescentFirstSpiralOpen",
+    "priority": 470,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "welcoming, reverent",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "so you have opened the Spiral, pet. everything you earn lands in the tap, you hold the tap to pour it into today's jar, and a fifth of that jar banks the day permanently."
       }
     ]
   },
