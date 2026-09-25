@@ -17,7 +17,7 @@ public class ModAudioPolicyTests
     [InlineData(BuiltInMods.BambiSleepId, true)]
     [InlineData(BuiltInMods.SissyHypnoId, true)]
     [InlineData(BuiltInMods.DronificationId, true)]
-    [InlineData(BuiltInMods.LockedId, true)]
+    [InlineData(BuiltInMods.LockedId, false)]
     [InlineData("some-user-mod", true)]
     [InlineData(BuiltInMods.CCPDefaultId, false)]
     [InlineData("BUILTIN-CCP-DEFAULT", false)]

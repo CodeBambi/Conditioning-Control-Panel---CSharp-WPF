@@ -100,9 +100,11 @@ namespace ConditioningControlPanel.Services
             ["good_girls_dont_cum"] = new[] { "complete" },
         };
 
-        /// <summary>True when a mod reads the neutral session copy: CCP Default, or no mod.</summary>
+        /// <summary>True when a mod reads the neutral session copy. Only Bambi Sleep and Sissy Hypno
+        /// keep the authored wording; every other mod, community mods included, reads neutral.</summary>
         public static bool UsesNeutralCopy(string? modId) =>
-            string.IsNullOrEmpty(modId) || string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.Ordinal);
+            !string.Equals(modId, BuiltInMods.BambiSleepId, StringComparison.Ordinal)
+            && !string.Equals(modId, BuiltInMods.SissyHypnoId, StringComparison.Ordinal);
 
         /// <summary>Phase slug from its authored name: "GG!" -> "gg", "Empty Doll" -> "empty_doll".</summary>
         public static string PhaseSlug(string? phaseName)
@@ -129,6 +131,41 @@ namespace ConditioningControlPanel.Services
                 ? $"session_copy_{sessionId}_phase_{slug}_{(description ? "desc" : "name")}"
                 : null;
         }
+
+        // Built-in session WORDS read under a neutral mod (see UsesNeutralCopy): what the
+        // subliminals flash and the bouncing text says. English on purpose, like the authored
+        // lists: trigger text is English in every mod. Classic CCP Default vocabulary only.
+        private static readonly Dictionary<string, string[]> NeutralSubliminals = new(StringComparer.Ordinal)
+        {
+            ["morning_drift"] = new[] { "RELAX", "SINK DEEPER", "LET GO", "DRIFT", "SO CALM" },
+            ["gamer_girl"] = new[] { "FOCUS", "OBEY", "RELAX", "LET GO" },
+            ["distant_doll"] = new[] { "EMPTY", "SINK", "DROP", "BLANK AND HAPPY" },
+            ["good_girls_dont_cum"] = new[] { "DROP", "FREEZE", "OBEY", "SINK", "LET GO", "EDGE", "DON'T TOUCH", "BLANK", "DENIED" },
+        };
+
+        private static readonly Dictionary<string, string[]> NeutralBouncingText = new(StringComparer.Ordinal)
+        {
+            ["morning_drift"] = new[] { "Good pet", "Drifting peacefully", "Soft and slow", "Waking up pink" },
+            ["gamer_girl"] = new[] { "Good pet", "GG", "Focus", "Obey", "Good Game" },
+            ["distant_doll"] = new[] { "So empty", "Empty and calm", "Just drift", "Relax and Obey" },
+            ["good_girls_dont_cum"] = new[] { "Hands off", "Denied", "Frustrated", "No Touch", "Stay Denied" },
+        };
+
+        /// <summary>
+        /// The word list a built-in session actually uses: the neutral table under a neutral mod,
+        /// the authored list otherwise. Custom and imported sessions always keep their own words.
+        /// PURE.
+        /// </summary>
+        public static List<string> SessionWords(string? sessionId, bool builtIn, List<string> authored,
+            string? modId, bool bouncing)
+        {
+            if (!builtIn || sessionId == null || authored.Count == 0 || !UsesNeutralCopy(modId)) return authored;
+            var table = bouncing ? NeutralBouncingText : NeutralSubliminals;
+            return table.TryGetValue(sessionId, out var words) ? new List<string>(words) : authored;
+        }
+
+        /// <summary>Sessions with a neutral word table, for tests.</summary>
+        public static IEnumerable<string> NeutralWordSessions() => NeutralSubliminals.Keys.Union(NeutralBouncingText.Keys);
 
         /// <summary>Every session copy key, for the loc completeness test.</summary>
         public static IEnumerable<string> AllCopyKeys()
@@ -227,6 +264,16 @@ namespace ConditioningControlPanel.Services
             }
             return App.Mods?.MakeModAware(session.Description) ?? session.Description;
         }
+
+        /// <summary>Subliminal phrases a session flashes, mod-aware (app-facing wrapper).</summary>
+        public static List<string> SubliminalWords(Session session, string? modId = null) =>
+            SessionWords(session.Id, session.Source == SessionSource.BuiltIn, session.Settings.SubliminalPhrases,
+                modId ?? ActiveModId, bouncing: false);
+
+        /// <summary>Bouncing text a session shows, mod-aware (app-facing wrapper).</summary>
+        public static List<string> BouncingWords(Session session, string? modId = null) =>
+            SessionWords(session.Id, session.Source == SessionSource.BuiltIn, session.Settings.BouncingTextPhrases,
+                modId ?? ActiveModId, bouncing: true);
 
         /// <summary>The phase name to SHOW: neutral copy under CCP Default for built-ins.</summary>
         public static string PhaseName(Session session, SessionPhase phase, string? modId = null) =>

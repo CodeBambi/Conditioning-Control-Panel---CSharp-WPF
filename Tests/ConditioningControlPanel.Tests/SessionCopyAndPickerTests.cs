@@ -20,9 +20,18 @@ public class SessionCopyAndPickerTests
 
     private static readonly string[] ThemedMods =
     {
-        BuiltInMods.BambiSleepId, BuiltInMods.SissyHypnoId, BuiltInMods.LockedId,
-        BuiltInMods.DronificationId, BuiltInMods.InfectionControlId, "community-some-mod",
+        BuiltInMods.BambiSleepId, BuiltInMods.SissyHypnoId,
     };
+
+    [Theory]
+    [InlineData(BuiltInMods.CCPDefaultId)]
+    [InlineData(BuiltInMods.LockedId)]
+    [InlineData(BuiltInMods.DronificationId)]
+    [InlineData(BuiltInMods.InfectionControlId)]
+    [InlineData("community-some-mod")]
+    [InlineData(null)]
+    public void EveryModButBambiAndSissy_ReadsNeutralCopy(string? modId)
+        => Assert.True(PresetNaming.UsesNeutralCopy(modId));
 
     private static readonly string[] Banned =
     {
@@ -172,5 +181,50 @@ public class SessionCopyAndPickerTests
             Assert.NotNull(PersonalityPresets.GetBuiltInById(id));
             Assert.Contains(id, PersonalityPresets.BuiltInIds);
         }
+    }
+
+    [Theory]
+    [InlineData(BuiltInMods.CCPDefaultId)]
+    [InlineData(BuiltInMods.LockedId)]
+    [InlineData("community-some-mod")]
+    public void BuiltInSessions_FlashNeutralWordsUnderNeutralMods(string modId)
+    {
+        foreach (var session in Session.GetAllSessions())
+        {
+            var words = PresetNaming.SessionWords(session.Id, true, session.Settings.SubliminalPhrases, modId, bouncing: false)
+                .Concat(PresetNaming.SessionWords(session.Id, true, session.Settings.BouncingTextPhrases, modId, bouncing: true));
+            foreach (var word in words)
+                foreach (var banned in Banned)
+                    Assert.False(word.Contains(banned, StringComparison.OrdinalIgnoreCase),
+                        $"{session.Id} shows \"{word}\" under {modId}");
+        }
+    }
+
+    [Fact]
+    public void EverySessionWithWordsHasANeutralTable()
+    {
+        var covered = PresetNaming.NeutralWordSessions().ToHashSet();
+        foreach (var session in Session.GetAllSessions())
+            if (session.Settings.SubliminalPhrases.Count > 0 || session.Settings.BouncingTextPhrases.Count > 0)
+                Assert.Contains(session.Id, covered);
+    }
+
+    [Theory]
+    [InlineData(BuiltInMods.BambiSleepId)]
+    [InlineData(BuiltInMods.SissyHypnoId)]
+    public void ThemedModsKeepTheAuthoredWords(string modId)
+    {
+        var s = Session.MorningDrift;
+        Assert.Same(s.Settings.SubliminalPhrases,
+            PresetNaming.SessionWords(s.Id, true, s.Settings.SubliminalPhrases, modId, bouncing: false));
+        Assert.Same(s.Settings.BouncingTextPhrases,
+            PresetNaming.SessionWords(s.Id, true, s.Settings.BouncingTextPhrases, modId, bouncing: true));
+    }
+
+    [Fact]
+    public void CustomSessionsKeepTheirOwnWords()
+    {
+        var own = new List<string> { "GOOD GIRL" };
+        Assert.Same(own, PresetNaming.SessionWords("morning_drift", false, own, BuiltInMods.CCPDefaultId, bouncing: false));
     }
 }

@@ -25,7 +25,8 @@ namespace ConditioningControlPanel.Services
         public static bool UsesSharedSubAudio(string? modId)
         {
             if (string.IsNullOrWhiteSpace(modId)) return false;
-            return !string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
+            return !string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(modId, BuiltInMods.LockedId, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>True when the mod plays the baseline flash voice, so the <c>audio-base</c> pack
