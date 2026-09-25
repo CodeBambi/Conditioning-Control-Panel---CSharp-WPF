@@ -34,7 +34,7 @@ internal static class PersonalityStudio
     {
         var service = App.Personality;
         var settings = App.Settings?.Current;
-        if (service == null || settings == null || EmiPersonality.IsActive) return;
+        if (service == null || settings == null) return;
         var source = service.GetActivePreset();
         var draft = Draft(source, settings.CompanionPrompt?.UseCustomPrompt == true ? settings.CompanionPrompt : null);
         var dialog = new Window

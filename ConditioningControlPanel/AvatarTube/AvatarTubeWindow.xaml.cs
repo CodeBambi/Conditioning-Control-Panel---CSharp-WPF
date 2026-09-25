@@ -132,10 +132,9 @@ namespace ConditioningControlPanel
 
             // Load user's saved avatar selection, or use max unlocked
             _selectedAvatarSet = App.Settings?.Current?.SelectedAvatarSet ?? _maxUnlockedSet;
-            // Preserve a supported custom set; the preview maps only the house's original character.
-            _selectedAvatarSet = Services.Companion.CompanionExperience.IsV2Enabled
-                ? Services.Companion.EmiTubePreview.RestoreChoice(_selectedAvatarSet)
-                : Math.Clamp(_selectedAvatarSet, 1, _maxUnlockedSet);
+            // Preserve a supported custom set (8+); clamp the level sets to what is unlocked.
+            if (App.Mods?.GetCustomAvatarSets()?.Any(c => c.SetNumber == _selectedAvatarSet) != true)
+                _selectedAvatarSet = Math.Clamp(_selectedAvatarSet, 1, _maxUnlockedSet);
             _currentAvatarSet = _selectedAvatarSet;
 
             // Fall back if the saved set isn't supported by the active mod (e.g. a level was retired,
@@ -201,8 +200,6 @@ namespace ConditioningControlPanel
             
             // Get handles when loaded
             Loaded += OnLoaded;
-            IsVisibleChanged += (_, _) => RefreshEmiDeskVisibility();
-            Closed += (_, _) => App.EmiDesk?.SetTubeEmiVisible(false);
 
             // AllowsTransparency=True + SizeToContent=WidthAndHeight + Viewbox
             // creates a layered window whose surface is sized at Show() before

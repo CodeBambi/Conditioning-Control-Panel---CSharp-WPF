@@ -496,7 +496,7 @@ namespace ConditioningControlPanel
             try
             {
                 var settings = AllSettingsPresets();
-                FillDefaults(CmbDefaultSettings, settings.Select(p => (p.Id, p.Name)),
+                FillDefaults(CmbDefaultSettings, settings.Select(p => (p.Id, p.IsDefault ? PresetNaming.DisplayName(p, mod.Id) : p.Name)),
                     ModPresetDefaults.ResolveSettings(settings, mod.Manifest.SuggestedSettingsPreset)?.Id,
                     s?.ModDefaultSettingsPreset ?? none, mod.Id);
 

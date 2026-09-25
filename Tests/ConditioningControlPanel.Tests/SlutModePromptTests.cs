@@ -152,15 +152,49 @@ public class SlutModePromptTests : IDisposable
     [Fact]
     public void SpiceOn_KeepsTheDeflectionForPresetsWithNoSlutVariant()
     {
-        // Gentle Trainer ships no SlutModePersonality, so the toggle changes nothing about it and
-        // its [GENTLE DEFLECTION] must survive. The fix is scoped to "the user switched THIS persona
+        // Bimbo Coach ships no SlutModePersonality, so the toggle changes nothing about it and
+        // its [DITZY DEFLECTION] must survive. The fix is scoped to "the user switched THIS persona
         // into its explicit variant", not to "the toggle is on".
-        var off = Compile(PersonalityPresets.GentleTrainerId, slutMode: false);
-        var on = Compile(PersonalityPresets.GentleTrainerId, slutMode: true);
+        var off = Compile(PersonalityPresets.BimboCoachId, slutMode: false);
+        var on = Compile(PersonalityPresets.BimboCoachId, slutMode: true);
 
-        Assert.Contains("GENTLE DEFLECTION", off, StringComparison.Ordinal);
-        Assert.Contains("GENTLE DEFLECTION", on, StringComparison.Ordinal);
+        Assert.Contains("DITZY DEFLECTION", off, StringComparison.Ordinal);
+        Assert.Contains("DITZY DEFLECTION", on, StringComparison.Ordinal);
         Assert.Equal(off, on, StringComparer.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(PersonalityPresets.NeutralDefaultId, "[FLIRTY TEASE]")]
+    [InlineData(PersonalityPresets.GentleTrainerId, "[SOFT TEASE]")]
+    [InlineData(PersonalityPresets.StrictDommeId, "[CONTROLLED RESPONSE]")]
+    [InlineData(PersonalityPresets.HypnoGuideId, "[TRANCE TEASE]")]
+    public void SpiceOn_SwapsTheNeutralPresetsIntoTheirExplicitVariant(string id, string tameMarker)
+    {
+        var tame = Compile(id, slutMode: false);
+        Assert.Contains(tameMarker, tame, StringComparison.Ordinal);
+
+        var spicy = Compile(id, slutMode: true);
+        Assert.Contains("SLUT MODE", spicy, StringComparison.Ordinal);
+        Assert.DoesNotContain(tameMarker, spicy, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(PersonalityPresets.NeutralDefaultId)]
+    [InlineData(PersonalityPresets.GentleTrainerId)]
+    [InlineData(PersonalityPresets.StrictDommeId)]
+    [InlineData(PersonalityPresets.HypnoGuideId)]
+    public void TheNeutralPresets_CarryNoNicheIdentityOrGenderedAddress(string id)
+    {
+        // Owner, 2026-09-25: the CCP Default personalities keep the pushy erotic-hypno charm but
+        // name no niche and assume no gender. "good girl" / "good boy" appear only inside the
+        // rule that forbids them, so the check is on the words that must never be USED.
+        var p = PersonalityPresets.GetBuiltInById(id)!.PromptSettings!;
+        var text = string.Join(" ", p.Personality, p.ExplicitReaction, p.SlutModePersonality,
+            p.KnowledgeBase, p.ContextReactions, p.OutputRules);
+
+        foreach (var word in new[] { "Bambi", "bimbo", "sissy", "doll", "cock", "pussy", "—" })
+            Assert.DoesNotContain(word, text, StringComparison.OrdinalIgnoreCase);
+        Assert.False(string.IsNullOrWhiteSpace(p.SlutModePersonality));
     }
 
     // ---------- and the sandwich is still a sandwich ----------

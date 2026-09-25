@@ -42,12 +42,8 @@ internal sealed class ConversationPageVm : CompanionObservable
     public bool CanCompose => !Busy;
     public bool CanSend => !Busy && !string.IsNullOrWhiteSpace(Draft);
     public bool CanRetry { get => _canRetry; private set => Set(ref _canRetry, value); }
-    private bool HouseCharacter => string.IsNullOrWhiteSpace(App.Mods?.ActiveMod?.Id) ||
-        string.Equals(App.Mods.ActiveMod.Id, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
-    public string Name => HouseCharacter
-        ? IsEmi ? "EMI" : App.Companion?.ActiveCompanionDef.Name ?? _room.Hero.Name
-        : App.Mods?.GetCompanionName() ?? _room.Hero.Name;
-    public bool IsEmi => Services.Companion.EmiPersonality.IsActive;
+    // The active mod's own companion name; CCP Default's manifest says the neutral "Companion".
+    public string Name => App.Mods?.GetCompanionName() ?? _room.Hero.Name;
     public string PerkCost => App.Companion?.ActivePerk == CompanionBonusType.XPDrain ? "Leech: -3 XP/s" : string.Empty;
     public string Familiarity => App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false &&
         App.Brain?.Memory is MemoryStore memory
@@ -90,7 +86,7 @@ internal sealed class ConversationPageVm : CompanionObservable
         _room.SyncBrain();
         if (_observing) Attach(App.Brain?.Session);
         Reconcile();
-        foreach (var name in new[] { nameof(NeedsStart), nameof(NeedsSignIn), nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(IsEmi), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost) }) Raise(name);
+        foreach (var name in new[] { nameof(NeedsStart), nameof(NeedsSignIn), nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost) }) Raise(name);
     }
     public void Resume()
     {
@@ -120,7 +116,7 @@ internal sealed class ConversationPageVm : CompanionObservable
     }
     private void RoomChanged(object? sender, PropertyChangedEventArgs e)
     {
-        foreach (var name in new[] { nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(IsEmi), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost), nameof(VoiceLabel) }) Raise(name);
+        foreach (var name in new[] { nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost), nameof(VoiceLabel) }) Raise(name);
     }
     private void Attach(ChatSession? session)
     {

@@ -357,9 +357,13 @@ namespace ConditioningControlPanel.Models
             }
         }
 
-        /// <summary>Local preview migration latch. Ignored outside the companion preview.</summary>
+        // Retired with tube EMI (companion pivot, 2026-09-25). Kept only so settings files that
+        // carry these keys still load; nothing reads or writes them.
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
         public bool CompanionEmiPreviewChoiceMade { get; set; }
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
         public bool CompanionEmiFixedVoiceApplied { get; set; }
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
         public int CompanionEmiVoiceRevision { get; set; }
 
         private bool _welcomed = false;
@@ -4750,8 +4754,8 @@ namespace ConditioningControlPanel.Models
             { "EMPTY", true },
             { "MINDLESS", true },
             { "OBEDIENT", true },
-            { "PRETTY", true },
-            { "PINK", true },
+            { "RELAX", true },
+            { "SINK", true },
             { "DROP", true }
         };
         public Dictionary<string, bool> BouncingTextPool
@@ -6128,11 +6132,13 @@ namespace ConditioningControlPanel.Models
             set { _randomBubbleEnabled = value; OnPropertyChanged(); }
         }
 
-        // Fresh-install list: the neutral CCP Default triggers plus the two phrases from the old
-        // default list that carried no theme, so Trigger Mode still ships a usable spread.
+        // Fresh-install list: the neutral CCP Default triggers plus two more classic neutral phrases,
+        // so Trigger Mode still ships a usable spread. Not "SNAP AND FORGET": that is a BambiSleep
+        // trigger with its own Bambi-voiced clip in Resources\sub_audio, which Trigger Mode plays by
+        // exact name, so a fresh CCP Default install spoke in Bambi's voice (pivot audit 2026-09-25).
         private List<string> _customTriggers = new(BuiltInMods.CCPDefault.CustomTriggers ?? new List<string>())
         {
-            "SNAP AND FORGET",
+            "LET GO",
             "SAFE AND SECURE"
         };
         /// <summary>

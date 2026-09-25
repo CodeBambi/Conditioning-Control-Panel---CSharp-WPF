@@ -97,7 +97,7 @@ public class ConversationDeliveryTests
             "any video for me?", Array.Empty<CompanionTurn>());
         Assert.Equal("page.assets", Assert.Single(offered).Id);
         var raw = new PromptRequest("voice", new[] { ChatMessage.System("voice"), ChatMessage.User("any video for me?") });
-        Assert.Contains("no retrieved video link", ConversationDelivery.Apply(raw, "any video for me?", offered, true).SystemPrompt);
+        Assert.Contains("page.assets", ConversationDelivery.Apply(raw, "any video for me?", offered).SystemPrompt);
         Assert.Equal("here.", ConversationDelivery.Parse("here. [video link] [ ]", offered).Text);
     }
 
@@ -120,31 +120,29 @@ public class ConversationDeliveryTests
     [Fact]
     public void DeliverySharesOneBoundedSystemMessageWithCharacterAndSafety()
     {
-        var voice = "You are EMI. " + new string('x', 18000) + SafetyComposer.Floor;
+        var voice = "You are Luna. " + new string('x', 18000) + SafetyComposer.Floor;
         var messages = new[] { ChatMessage.System(voice), ChatMessage.System("CURRENT CONTEXT"),
-            ChatMessage.Assistant("old reply"), ChatMessage.User("hi emi") };
+            ChatMessage.Assistant("old reply"), ChatMessage.User("hi luna") };
         var activity = new CompanionActivity("game.test", new string('L', 10000), new string('D', 10000), () => true, () => false);
-        var output = ConversationDelivery.Apply(new PromptRequest(voice, messages), "hi emi", Enumerable.Repeat(activity, 20).ToArray(), true);
+        var output = ConversationDelivery.Apply(new PromptRequest(voice, messages), "hi luna", Enumerable.Repeat(activity, 20).ToArray());
         var system = Assert.Single(output.Messages.Where(m => m.Role == ChatMessage.RoleSystem));
         Assert.Equal(output.SystemPrompt, system.Content);
         Assert.True(system.Content.Length <= 10000, system.Content.Length.ToString());
-        Assert.Contains("You are EMI.", system.Content);
+        Assert.Contains("You are Luna.", system.Content);
         Assert.Contains("CURRENT CONTEXT", system.Content);
-        Assert.Contains("EMI VOICE REFERENCES", system.Content);
+        Assert.Contains("persona's own voice", system.Content);
         Assert.EndsWith(SafetyComposer.Floor, system.Content);
         Assert.Equal(messages.Skip(2), output.Messages.Skip(1));
     }
     [Fact]
-    public void CorrectiveTurnOmitsRejectedAssistantStyleWithoutChangingStoredHistory()
+    public void EveryPersonaKeepsItsOwnHistoryOnACorrectiveTurn()
     {
         var raw = new PromptRequest("voice", new[] { ChatMessage.System("voice"), ChatMessage.User("hello"),
             ChatMessage.Assistant("a long promotional game pitch"), ChatMessage.User("no games, just chat") });
-        var request = ConversationDelivery.Apply(raw, "no games, just chat", Array.Empty<CompanionActivity>(), true);
-        Assert.DoesNotContain(request.Messages, m => m.Role == ChatMessage.RoleAssistant);
+        var request = ConversationDelivery.Apply(raw, "no games, just chat", Array.Empty<CompanionActivity>());
+        Assert.Contains(request.Messages, m => m.Role == ChatMessage.RoleAssistant);
         Assert.Equal(2, request.Messages.Count(m => m.Role == ChatMessage.RoleUser));
-        Assert.Single(raw.Messages.Where(m => m.Role == ChatMessage.RoleAssistant));
-        Assert.Contains(ConversationDelivery.Apply(raw, "no games, just chat", Array.Empty<CompanionActivity>(), false).Messages,
-            m => m.Role == ChatMessage.RoleAssistant);
+        Assert.DoesNotContain("15-35 words", request.SystemPrompt);
     }
 
     [Fact]
@@ -160,17 +158,6 @@ public class ConversationDeliveryTests
         Assert.Equal(new[] { "page.assets" }, ConversationDelivery.Parse("i don't have a video link.", new[] { Activity("page.assets") }).Ids);
     }
 
-    [Fact]
-    public void NewEmiRevisionFencesOldRepliesOnceAndKeepsOtherAvatars()
-    {
-        var settings = new ConditioningControlPanel.Models.AppSettings { CompanionEmiFixedVoiceApplied = true };
-        Assert.False(EmiPersonality.FenceOldVoice(settings, false, false));
-        Assert.True(EmiPersonality.FenceOldVoice(settings, true, true));
-        Assert.Equal(EmiPersonality.VoiceRevision, settings.CompanionEmiVoiceRevision);
-        var fence = settings.PersonaVoiceFenceUtc;
-        Assert.False(EmiPersonality.FenceOldVoice(settings, true, true));
-        Assert.Equal(fence, settings.PersonaVoiceFenceUtc);
-    }
     private static CompanionActivity Activity(string id) => new(id, id, "test", () => true,
         () => throw new Exception("a reply must never open an activity"));
 }

@@ -44,10 +44,7 @@
       <Border.Background><RadialGradientBrush><GradientStop Color="#53365F" Offset="0"/><GradientStop Color="#211429" Offset="1"/></RadialGradientBrush></Border.Background>
       <Grid>
        <controls:AmbientFxCanvas x:Name="StageDust" IsHitTestVisible="False"/>
-       <Image Source="{Binding Room.Hero.Portrait}" Height="68" Stretch="Uniform" IsHitTestVisible="False">
-        <Image.Style><Style TargetType="Image"><Style.Triggers><DataTrigger Binding="{Binding IsEmi}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Image.Style>
-       </Image>
-       <v2:EmiConversationStage Height="62" Face="{Binding Face}" Visibility="{Binding IsEmi, Converter={StaticResource Visible}}"/>
+       <Image Source="{Binding Room.Hero.Portrait}" Height="68" Stretch="Uniform" IsHitTestVisible="False"/>
       </Grid>
      </Border>
      <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,18,0">
