@@ -46,17 +46,19 @@ public class CompanionBrainTests
     }
 
     [Fact]
-    public async Task MediaWithoutRetrievalIsAnAppReplyWithAButtonAndNoProviderCall()
+    public async Task MediaAskToANonEmiPersonaReachesTheModelWithTheLibraryButton()
     {
-        var transport = new FakeTransport { Respond = (_, _) => throw new Exception("no video lookup exists") };
+        // Only tube EMI short-circuits a video ask into the library reply. Every other persona
+        // recommends from its own catalog, as on the live route (owner, 2026-09-24).
+        var transport = new FakeTransport { Respond = (_, _) => new AiReplyResult("try Naughty Bambi~", IsAiGenerated: true, Refusal: null) };
         using var brain = Build(transport, new FakeStore(), preview: true);
         brain.Activities = () => new[] { new ConditioningControlPanel.Services.Companion.CompanionActivity(
             "page.assets", "Media library", "Library", () => true, () => throw new Exception("click required")) };
         var reply = await brain.ChatAsync("any video for me?");
-        Assert.True(reply.IsApplicationReply);
-        Assert.False(reply.IsAiGenerated);
-        Assert.NotEmpty(reply.Text);
-        Assert.Empty(transport.Sends);
+        Assert.False(reply.IsApplicationReply);
+        Assert.True(reply.IsAiGenerated);
+        Assert.Single(transport.Sends);
+        Assert.DoesNotContain("You have no retrieved video link", transport.Sends[0].Messages[0].Content);
         Assert.Equal(new[] { "page.assets" }, brain.Session.Turns.Last().ActivityIds);
     }
     // ---------- fakes ----------

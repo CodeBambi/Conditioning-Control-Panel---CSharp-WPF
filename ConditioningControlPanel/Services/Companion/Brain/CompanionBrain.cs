@@ -323,7 +323,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     options = ConversationDelivery.Options(options, input, effectsOn);
                     request = ConversationDelivery.Apply(request, input, offered, EmiPersonality.IsActive);
                 }
-                var result = (_preview() ? ConversationDelivery.LibraryReply(input, offered) : null) ?? await _transport
+                var result = (_preview() && EmiPersonality.IsActive ? ConversationDelivery.LibraryReply(input, offered) : null) ?? await _transport
                     .SendAsync(request.Messages, options, cancellationToken)
                     .ConfigureAwait(false);
 

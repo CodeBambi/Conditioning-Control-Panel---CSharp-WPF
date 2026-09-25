@@ -672,6 +672,11 @@ Example responses with REAL video names:
         /// </summary>
         internal static string GetConversationPrompt()
         {
+            // Only tube EMI gets the compact conversation prefix. Every other personality (mod
+            // companions, built-in presets, community and custom prompts) keeps the full prompt it
+            // has on the live route: knowledge base, media titles, links, context reactions, output
+            // rules and its Slut Mode variant (owner, 2026-09-24).
+            if (!Companion.EmiPersonality.IsActive) return GetStablePrompt();
             var app = App.Settings?.Current;
             var custom = UsesCustomPrompt(app);
             var preset = App.Personality?.GetActivePreset() ?? Models.PersonalityPresets.GetNeutralDefault();

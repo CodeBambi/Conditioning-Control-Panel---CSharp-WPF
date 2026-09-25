@@ -43,12 +43,17 @@ internal static class ConversationDelivery
     internal static AiCallOptions Options(AiCallOptions options, string input, bool effects) =>
         AiCallOptions.ForPreview(options) with { MaxTokens = effects || DetailRequest.IsMatch(input) ? 240 : 120 };
 
-    internal static string Instructions(IReadOnlyList<CompanionActivity> offered) =>
-        "DELIVERY: Answer the latest message in character. Everyday chat: one brief thought, 15-35 words. " +
-        "At most one small flourish. Stop there. No generic encouragement, sales pitch or compulsory question. " +
-        "Only explain at length when asked. Never imitate a verbose or promotional earlier reply. " +
-        "Respect a declined suggestion; return to the user's topic. Never claim to browse or to have watched/played something. " +
-        (offered.Count == 0
+    internal static string Instructions(IReadOnlyList<CompanionActivity> offered, bool emi = true) =>
+        (emi
+            ? "DELIVERY: Answer the latest message in character. Everyday chat: one brief thought, 15-35 words. " +
+              "At most one small flourish. Stop there. No generic encouragement, sales pitch or compulsory question. " +
+              "Only explain at length when asked. Never imitate a verbose or promotional earlier reply. " +
+              "Respect a declined suggestion; return to the user's topic. Never claim to browse or to have watched/played something. "
+            // Other personas keep their own voice, length and recommendations (owner, 2026-09-24).
+            : "DELIVERY: Answer the latest message fully in your persona's own voice, style and length. ") +
+        (offered.Count == 0 && !emi
+            ? "Never type raw URLs."
+            : offered.Count == 0
             ? "No suggestions this turn. Stay with the conversation. If asked for media and no catalog is supplied, admit you have no matching link; never invent a title, URL or placeholder."
             : "AVAILABLE NOW: Only these entries are offered, with current access checked. Choose one when relevant, never invent another. " +
               "Use its exact title and append <ccp-action>ID</ccp-action> for a working button (at most two). " +
@@ -58,10 +63,10 @@ internal static class ConversationDelivery
 
     internal static PromptRequest Apply(PromptRequest request, string input, IReadOnlyList<CompanionActivity> offered, bool emi)
     {
-        var extra = Instructions(offered) + (emi ? "\n" + EmiVoiceExamples.For(input) : string.Empty);
+        var extra = Instructions(offered, emi) + (emi ? "\n" + EmiVoiceExamples.For(input) : string.Empty);
         if (emi && Matches(input, @"\b(missed|skipped)\b.{0,35}\b(day|session|yesterday)\b|\bmissed yesterday\b"))
             extra += "\nRespond to a missed session as a scheduling issue: suggest a comfortable fresh start today. Keep it about their practice, with no mention of your own feelings or how their absence affected you.";
-        if (WantsMedia(input)) extra += "\nYou have no retrieved video link. The library button opens the media library, not a specific video. Say this plainly; never substitute an invented video or link.";
+        if (emi && WantsMedia(input)) extra += "\nYou have no retrieved video link. The library button opens the media library, not a specific video. Say this plainly; never substitute an invented video or link.";
         var original = string.Join("\n\n", request.Messages.Where(m => m.Role == ChatMessage.RoleSystem).Select(m => m.Content))
             .Replace(SafetyComposer.Floor, string.Empty).Trim();
         var system = AiService.MiddleCutSystemPrompt(original, 10000 - extra.Length - SafetyComposer.Floor.Length - 4)
