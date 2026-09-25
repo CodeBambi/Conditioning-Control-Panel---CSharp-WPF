@@ -4,6 +4,8 @@
 // way out (Newtonsoft NullValueHandling.Ignore parity) and overlays inbound frames onto a
 // fresh factory object so a missing member reads as its C# default.
 
+import { clampNoiseSet } from './noiseSets.js';
+
 export const PROTOCOL_VERSION = 1;
 
 export const GoonElement = Object.freeze({
@@ -370,7 +372,8 @@ export function peerNiches(caps) { return cleanNiches(caps && caps.niches); }
 
 /** The voice-note protocol revision THIS build speaks. Advertised as `caps.voice`. */
 export const VOICE_CAP_VERSION = 1;
-export const NIGHT_CAP_VERSION = 1;
+/** 2 (2026-09-25): the Sort duel's VS reveal + noise pick (`sub:'noise'`). A peer on 1 plays Sort the old way. */
+export const NIGHT_CAP_VERSION = 2;
 /** The points model revision THIS build speaks. Advertised as `caps.score`. */
 export const SCORE_CAP_VERSION = 1;
 
@@ -386,6 +389,8 @@ export function peerSpeaksVoice(caps) {
   return clampVoiceCount(caps && caps.voice) >= 1;
 }
 export function peerSpeaksNight(caps) { return clampVoiceCount(caps && caps.night) >= 1; }
+/** Their build runs the Sort duel's noise pick (night revision 2). Below that: no reveal, no pick, the old Sort. */
+export function peerPicksNoise(caps) { return clampVoiceCount(caps && caps.night) >= 2; }
 /** Their build scores with the points model. Both seats must, or neither does (legacy score). */
 export function peerScoresPoints(caps) { return clampVoiceCount(caps && caps.score) >= 1; }
 
@@ -684,10 +689,13 @@ export function makeMediaPrep(o = {}) {
  * `game` names the Arcademy class the card holds (ui/duel/games.js). An EMPTY game is a frame
  * from a build that only knew The Deep End, and means the-deep-end.
  *   {t:'duel', sub:'busy',  idx}                 the receiver could not run that start: the thrower cancels
+ *   {t:'duel', sub:'noise', idx, set}            night >= 2 only: this side's NOISE board for a Sort duel,
+ *                                                an id from core/noiseSets.js (anything else clamps to '').
+ * `set` is null (stripped) on every other sub, so those frames stay byte-identical to revision 1.
  *
  * Every number is pinned in core/wire.js CLAMPED_FIELDS, both directions.
  */
-export const DUEL_SUBS = Object.freeze(['cfg', 'start', 'score', 'busy']);
+export const DUEL_SUBS = Object.freeze(['cfg', 'start', 'score', 'busy', 'noise']);
 /** The duel lengths Customize offers. Anything else collapses to the first. */
 export const DUEL_LENGTHS_SEC = Object.freeze([60, 90, 120]);
 export function clampDuelSub(v) { return DUEL_SUBS.includes(v) ? v : ''; }
@@ -716,6 +724,9 @@ export function makeDuel(o = {}) {
     score: clampDuelNum(o.score),
     tile: clampDuelTile(o.tile),
     game: clampDuelGame(o.game),
+    // Only a noise pick carries a set. null everywhere else, so stripNulls keeps the old frames
+    // byte-identical and the inbound parse (which copies factory keys) still reads it.
+    set: o.sub === 'noise' ? clampNoiseSet(o.set) : null,
   };
 }
 

@@ -102,8 +102,8 @@ const CDN = 'https://' + SONG_HOST + '/0b7c1e2a-aaaa-bbbb-cccc-1234567890ab.mp3'
 // ============================================================ 3. caps.night
 {
   ok(makeCaps({}).night === 0, 'caps default night 0');
-  ok(makeCaps({ night: NIGHT_CAP_VERSION }).night === 1, 'NIGHT_CAP_VERSION is 1 and round-trips');
-  ok(localCaps({ night: NIGHT_CAP_VERSION }).night === 1, 'core/caps.js local() passes night through');
+  ok(makeCaps({ night: NIGHT_CAP_VERSION }).night === NIGHT_CAP_VERSION && NIGHT_CAP_VERSION >= 1, 'NIGHT_CAP_VERSION is a revision and round-trips');
+  ok(localCaps({ night: NIGHT_CAP_VERSION }).night === NIGHT_CAP_VERSION, 'core/caps.js local() passes night through');
   ok(peerSpeaksNight({ night: 1 }) && peerSpeaksNight({ night: '1' }), 'night 1 (or "1") speaks night');
   ok(!peerSpeaksNight({ night: true }) && !peerSpeaksNight({}) && !peerSpeaksNight(null), 'true/absent/null do not');
   const hello = parse(serialize({ t: 'hello', v: 1, caps: makeCaps({ night: 1 }) }), { logger: quiet });
