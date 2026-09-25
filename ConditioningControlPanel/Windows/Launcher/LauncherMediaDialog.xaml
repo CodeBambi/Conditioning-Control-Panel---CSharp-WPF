@@ -129,18 +129,20 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <!-- Foreground=Black on the box AND the rows, or the text is invisible on the theme. -->
-                            <ComboBox x:Name="PresetCombo" Foreground="Black" FontSize="13" MinHeight="32"
+                            <!-- The implicit Velvet ComboBox (Resources/Theme/Inputs.xaml) has a DARK popup,
+                                 so the rows take TextLightBrush. Foreground=Black is only for the stock
+                                 light popup; here it left every unselected row near-invisible. -->
+                            <ComboBox x:Name="PresetCombo" FontSize="13" MinHeight="32"
                                       SelectedValuePath="Id" VerticalAlignment="Center"
                                       SelectionChanged="PresetCombo_Changed">
                                 <ComboBox.ItemContainerStyle>
                                     <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
-                                        <Setter Property="Foreground" Value="Black"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
                                     </Style>
                                 </ComboBox.ItemContainerStyle>
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate>
-                                        <TextBlock Text="{Binding DisplayText}" Foreground="Black"/>
+                                        <TextBlock Text="{Binding DisplayText}"/>
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
