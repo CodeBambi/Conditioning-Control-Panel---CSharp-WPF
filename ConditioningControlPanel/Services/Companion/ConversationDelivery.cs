@@ -20,7 +20,8 @@ internal static class ConversationDelivery
     internal static bool WantsMedia(string input) => Matches(input,
         @"\b(any|suggest|recommend|pick|find|show|want|give|got|have|another)\b.{0,55}\b(video|watch|listen|audio|file|clip|media)\b|\b(video|audio|file)\b.{0,25}\b(for me|please|recommend)\b");
     internal static bool WantsActivity(string input) => Matches(input,
-        @"\b(suggest|recommend|pick|find|show|open)\b.{0,50}\b(games?|activities|activity|something|things?|options?|studio|presets?|quests?)\b|\bwhat (can|could|should) (i|we) (do|try|play)\b|\bwhat can you do\b|\b(another idea|bored|help me pick)\b");
+        @"\b(suggest|recommend|pick|find|show|open)\b.{0,50}\b(games?|activities|activity|something|things?|options?|studio|presets?|quests?)\b|\bwhat (can|could|should) (i|we) (do|try|play)\b|\bwhat can you do\b|\b(another idea|bored|help me pick)\b" +
+        @"|\bi (wanna|want to|would like to|'d like to) (play|do something|try something)\b|\bpropose\b|\bsomething to do\b|\bentertain me\b|\bwhat now\b");
 
     internal static CompanionActivity[] Select(IReadOnlyList<CompanionActivity> candidates, string input, IReadOnlyList<CompanionTurn> turns)
     {
@@ -54,9 +55,19 @@ internal static class ConversationDelivery
               "Never type URLs, [video link], or bracket action markers. For an effects envelope, keep the tag inside response text.\n" +
               string.Join("\n", offered.Take(10).Select(a => Field(a.Id, 80) + " | " + Field(a.Label, 120) + " | " + Field(a.Description, 220))));
 
+    /// <summary>True when an ask card will follow this reply: the model must not pick for it.</summary>
+    internal static bool CardFollows(string input) =>
+        App.Settings?.Current?.CompanionAsksEnabled == true && (WantsMedia(input) || WantsActivity(input));
+
+    private const string CardFollowsRule =
+        "A choice card with buttons appears under your reply. Tease them toward it in one or two lines; " +
+        "never name, link or bracket a specific video, game or session yourself.";
+
     internal static PromptRequest Apply(PromptRequest request, string input, IReadOnlyList<CompanionActivity> offered)
     {
-        var extra = Instructions(offered);
+        var follows = CardFollows(input);
+        var extra = follows ? "DELIVERY: Answer in your persona's own voice. Never type raw URLs. " + CardFollowsRule
+            : Instructions(offered);
         var original = string.Join("\n\n", request.Messages.Where(m => m.Role == ChatMessage.RoleSystem).Select(m => m.Content))
             .Replace(SafetyComposer.Floor, string.Empty).Trim();
         var system = AiService.MiddleCutSystemPrompt(original, 10000 - extra.Length - SafetyComposer.Floor.Length - 4)
