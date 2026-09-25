@@ -747,12 +747,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (!string.IsNullOrWhiteSpace(recall)) lines.Add(recall!);
 
             // Owner, 2026-09-25: she knows them by their username unless they said otherwise.
+            // Never their real name, never family (desk run 2026-09-25: "the one your mom and dad gave you").
             if (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction)
             {
                 var name = UserNameForPrompt(_memory);
-                if (name != null)
-                    lines.Insert(0, $"The user's name is {name}. Use it now and then; never ask for their name. " +
-                                    "If they tell you to call them something else, use that instead.");
+                lines.Insert(0, (name != null
+                        ? $"The user's name is {name}. Use it now and then; never ask for their name. "
+                        : "Never ask for their name. ") +
+                    "Never ask for a real or legal name, and never mention their parents or family. " +
+                    "If they tell you to call them something else, use that instead.");
             }
 
             // Anti-fixation lines FIRST: Compose sheds tail lines from the end, and the budget
