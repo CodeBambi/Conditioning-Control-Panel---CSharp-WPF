@@ -876,7 +876,7 @@ namespace ConditioningControlPanel
         /// ApplyTubeLayoutOffsets, chat history, the Loaded hop) plus the live re-placement hooks
         /// (the bubble growing, the tube window moving or resizing).
         ///
-        /// <para>The bubble is its own popup window (<c>SpeechPopup</c>), outside the tube's scaled
+        /// <para>The bubble is its own small window (<c>_bubbleWindow</c>), outside the tube's scaled
         /// design canvas: text renders at its real size and the bubble can use the whole monitor.
         /// Everything here is physical px. The maths lives in
         /// <see cref="AvatarTubeLayout.SpeechBubblePlacement"/>: inside the work area of the monitor
@@ -889,7 +889,6 @@ namespace ConditioningControlPanel
             _placingSpeechBubble = true;
             try
             {
-                SyncSpeechPopupOpen();
                 if (PresentationSource.FromVisual(this) == null || AvatarBorder.ActualWidth <= 0) return;
 
                 // Avatar box in physical px.
@@ -937,8 +936,16 @@ namespace ConditioningControlPanel
                 // The popup window is the bubble plus its 16 DIP margin (room for shadow and tail).
                 double pad = SpeechBubble.Margin.Left;
                 double hOff = plan.Bubble.X / s - pad, vOff = plan.Bubble.Y / s - pad;
-                if (Math.Abs(SpeechPopup.HorizontalOffset - hOff) > 0.5) SpeechPopup.HorizontalOffset = hOff;
-                if (Math.Abs(SpeechPopup.VerticalOffset - vOff) > 0.5) SpeechPopup.VerticalOffset = vOff;
+                if (_bubbleHandle != IntPtr.Zero)
+                {
+                    int bx = (int)Math.Round(hOff * s), by = (int)Math.Round(vOff * s);
+                    if (bx != _bubbleX || by != _bubbleY)
+                    {
+                        _bubbleX = bx; _bubbleY = by;
+                        SetWindowPos(_bubbleHandle, IntPtr.Zero, bx, by, 0, 0,
+                            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                    }
+                }
 
                 // Tail: a 14x9 wedge in the glass colour, tucked 1px into the bubble's edge.
                 const double tailW = 14, tailH = 9;
@@ -989,11 +996,69 @@ namespace ConditioningControlPanel
             return 1.0;
         }
 
-        /// <summary>The popup is open exactly while the bubble is meant to show and the tube is up.</summary>
+        /// <summary>
+        /// The bubble window is up exactly while the bubble is meant to show and the tube (and, while
+        /// attached, main) is on screen. Rule in <see cref="AvatarTubeLayout.SpeechBubbleVisibility"/>.
+        /// </summary>
         private void SyncSpeechPopupOpen()
         {
-            bool want = SpeechBubble.Visibility == Visibility.Visible && IsVisible;
-            if (SpeechPopup.IsOpen != want) SpeechPopup.IsOpen = want;
+            if (_bubbleWindow == null) return;
+            var g = _parentGeom;
+            bool want = AvatarTubeLayout.SpeechBubbleVisibility.ShouldShow(
+                SpeechBubble.Visibility == Visibility.Visible, IsVisible, WindowState == WindowState.Minimized,
+                _isAttached, g?.Visible ?? true, g?.Minimized ?? false);
+            if (want == _bubbleWindow.IsVisible) return;
+            if (want)
+            {
+                ApplySpeechBubblePlacement();   // position the hidden window first: no flash at 0,0
+                _bubbleWindow.Show();
+                ApplySpeechBubblePlacement();
+            }
+            else
+            {
+                _bubbleWindow.Hide();
+            }
+        }
+
+        // The bubble's own window: NOT a Popup (those are topmost and floated over other apps with
+        // the app hidden, owner report Sep 25). A plain non-topmost, non-activating tool window whose
+        // NATIVE owner is the tube, so it always sits directly above the tube and goes behind other
+        // apps with it, and Windows hides it with the tube's owner chain.
+        private Window? _bubbleWindow;
+        private IntPtr _bubbleHandle;
+        private int _bubbleX = int.MinValue, _bubbleY = int.MinValue;
+        private const int GWL_EXSTYLE_BUBBLE = -20;
+        private const int WS_EX_NOACTIVATE_BUBBLE = 0x08000000;
+        private const int WS_EX_TOOLWINDOW_BUBBLE = 0x00000080;
+
+        private void CreateBubbleWindow()
+        {
+            if (_bubbleWindow != null || _tubeHandle == IntPtr.Zero) return;
+            SpeechPopup.Child = null;
+            _bubbleWindow = new Window
+            {
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = Brushes.Transparent,
+                ShowActivated = false,
+                ShowInTaskbar = false,
+                Topmost = false,
+                ResizeMode = ResizeMode.NoResize,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                Focusable = false,
+                Title = "",
+                FontFamily = FontFamily,
+                Content = SpeechPopupRoot,
+            };
+            _bubbleHandle = new WindowInteropHelper(_bubbleWindow).EnsureHandle();
+            int ex = GetWindowLong(_bubbleHandle, GWL_EXSTYLE_BUBBLE);
+            SetWindowLong(_bubbleHandle, GWL_EXSTYLE_BUBBLE, ex | WS_EX_NOACTIVATE_BUBBLE | WS_EX_TOOLWINDOW_BUBBLE);
+            SetWindowLongPtr(_bubbleHandle, GWL_HWNDPARENT, _tubeHandle);
+            _bubbleWindow.SizeChanged += (_, __) =>
+            {
+                if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+            };
+            Closed += (_, __) => { try { _bubbleWindow?.Close(); } catch { } };
         }
 
         private bool _placingSpeechBubble;
@@ -1013,16 +1078,23 @@ namespace ConditioningControlPanel
             if (_speechBubblePlacementHooked) return;
             _speechBubblePlacementHooked = true;
 
-            SpeechPopup.PlacementTarget = this;
+            CreateBubbleWindow();
             System.ComponentModel.DependencyPropertyDescriptor
                 .FromProperty(VisibilityProperty, typeof(Border))
                 .AddValueChanged(SpeechBubble, (_, __) =>
                 {
+                    SyncSpeechPopupOpen();
                     if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
-                    else SyncSpeechPopupOpen();
                 });
-            IsVisibleChanged += (_, __) => SyncSpeechPopupOpen();
-            SpeechPopup.Opened += (_, __) => ApplySpeechBubblePlacement();
+            IsVisibleChanged += (_, e) =>
+            {
+                SyncSpeechPopupOpen();
+                // Tube hidden / turned off: give main back its own bounds. Shown again: re-arm.
+                if (e.NewValue is true) _makeRoom.Rearm();
+                else RestoreMadeRoom();
+            };
+            StateChanged += (_, __) => SyncSpeechPopupOpen();
+            Closed += (_, __) => RestoreMadeRoom();
 
             SpeechBubble.SizeChanged += (_, __) =>
             {

@@ -74,6 +74,15 @@ namespace ConditioningControlPanel
                     _parentWindow.ActualWidth, _parentWindow.ActualHeight,
                     _parentWindow.WindowState == WindowState.Minimized,
                     _parentWindow.IsVisible);
+                try
+                {
+                    var ps = PresentationSource.FromVisual(_parentWindow);
+                    double pdpi = ps?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                    double minW = double.IsFinite(_parentWindow.MinWidth) ? _parentWindow.MinWidth : 0;
+                    _parentMinWidthPx = Math.Max(0, minW * (pdpi > 0 ? pdpi : 1.0));
+                    _parentMaximized = _parentWindow.WindowState == WindowState.Maximized;
+                }
+                catch { }
                 // Seed the parent HWND here (on the parent's own thread) so ApplyNativeOwner
                 // never has to touch WindowInteropHelper from the avatar thread.
                 if (_parentHandle == IntPtr.Zero)

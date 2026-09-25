@@ -214,4 +214,82 @@ namespace ConditioningControlPanel.Tests
             Assert.True(p.Top >= Work.Y);
         }
     }
+
+    public class MakeRoomPlacementTests
+    {
+        private static readonly Box Work = new(0, 0, 1680, 1002);
+
+        [Fact]
+        public void OwnersDesk_PanelMovesRightAndNarrowsForALeftDock()
+        {
+            // Owner's desk (Sep 25): panel 59..1681 on a 1680 screen, art 154 wide, no side fits.
+            var main = Box.FromEdges(59, 30, 1681, 973);
+            var t = MakeRoomPlacement.Plan(main, 900, 154, Work);
+            Assert.NotNull(t);
+            Assert.Equal(154, t!.Value.X);
+            Assert.Equal(1680, t.Value.Right);
+            Assert.Equal(main.Y, t.Value.Y);
+            Assert.Equal(main.H, t.Value.H);
+        }
+
+        [Fact]
+        public void MoveAlone_WhenTheScreenHasRoom()
+        {
+            var main = new Box(40, 0, 1200, 900);
+            var t = MakeRoomPlacement.Plan(main, 900, 154, new Box(0, 0, 1350, 1000));
+            Assert.NotNull(t);
+            Assert.Equal(154, t!.Value.X);
+            Assert.Equal(1196, t.Value.W);   // right edge capped to the monitor, narrowed by the rest
+        }
+
+        [Fact]
+        public void NoMove_WhenASideAlreadyFits()
+        {
+            Assert.Null(MakeRoomPlacement.Plan(new Box(400, 0, 1000, 900), 900, 154, Work));
+            Assert.Null(MakeRoomPlacement.Plan(new Box(0, 0, 1000, 900), 900, 154, Work));
+        }
+
+        [Fact]
+        public void NeverBelowMinWidth()
+        {
+            var t = MakeRoomPlacement.Plan(new Box(0, 0, 1680, 1000), 1600, 154, Work);
+            Assert.Null(t);
+        }
+
+        [Fact]
+        public void State_RestoresOnce_AndForgetsWhenTheUserTakesOver()
+        {
+            var st = new MakeRoomState();
+            var before = new Box(59, 30, 1622, 943);
+            var target = new Box(154, 30, 1526, 943);
+            Assert.True(st.CanAdjust);
+            st.Applied(before, target);
+            Assert.False(st.CanAdjust);
+            Assert.False(st.NoteParentRect(target));             // our own move echoing back
+            Assert.Null(st.TakeRestore(parentMinimized: true));  // never restore a minimised main
+            Assert.Equal(before, st.TakeRestore(parentMinimized: false));
+            Assert.Null(st.TakeRestore(parentMinimized: false));
+
+            st.Applied(before, target);
+            Assert.True(st.NoteParentRect(new Box(300, 30, 1200, 943)));   // the user moved it
+            Assert.Null(st.TakeRestore(false));
+            Assert.False(st.CanAdjust);
+            st.Rearm();
+            Assert.True(st.CanAdjust);
+        }
+    }
+
+    public class SpeechBubbleVisibilityTests
+    {
+        [Theory]
+        [InlineData(true, true, false, true, true, false, true)]
+        [InlineData(false, true, false, true, true, false, false)]   // nothing to say
+        [InlineData(true, false, false, true, true, false, false)]   // tube hidden
+        [InlineData(true, true, true, true, true, false, false)]     // tube minimised
+        [InlineData(true, true, false, true, false, false, false)]   // attached, main hidden
+        [InlineData(true, true, false, true, true, true, false)]     // attached, main minimised
+        [InlineData(true, true, false, false, true, true, true)]     // detached ignores main
+        public void Rule(bool wanted, bool tubeVisible, bool tubeMin, bool attached, bool mainVisible, bool mainMin, bool expected)
+            => Assert.Equal(expected, SpeechBubbleVisibility.ShouldShow(wanted, tubeVisible, tubeMin, attached, mainVisible, mainMin));
+    }
 }
