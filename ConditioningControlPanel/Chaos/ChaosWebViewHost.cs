@@ -299,6 +299,11 @@ internal sealed class ChaosWebViewHost : IDisposable
         ApplyWindowMode(_opts.StartFullscreen);   // sets style / bounds / resize mode
         if (!_opts.InputEnabled)
             _window.SourceInitialized += (_, _) => ApplyPassiveExStyles(_window);
+        else if (_opts.OwnedByMainWindow)
+            // An OWNED window gets no taskbar button, and with the launcher up the owner is
+            // hidden too, so a game glued to MainWindow could only be found through the tray
+            // (owner, 2026-09-25). WS_EX_APPWINDOW forces the button and keeps the owner link.
+            _window.SourceInitialized += (_, _) => ApplyAppWindowExStyle(_window);
         _window.Show();
         _countedActive = true;
         System.Threading.Interlocked.Increment(ref _activeHostCount);
@@ -1710,7 +1715,21 @@ internal sealed class ChaosWebViewHost : IDisposable
         catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
+    // A game window keeps its own taskbar button even while owned by (a possibly hidden) MainWindow.
+    private static void ApplyAppWindowExStyle(Window w)
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(w).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            int ex = GetWindowLong(hwnd, GWL_EXSTYLE);
+            SetWindowLong(hwnd, GWL_EXSTYLE, (ex | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW);
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+    }
+
     private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_APPWINDOW = 0x00040000;
     private const int WM_SHOWWINDOW = 0x0018;
     private const int SW_PARENTCLOSING = 1;   // lParam of the owner-minimize cascade's WM_SHOWWINDOW
     private const int SW_SHOWNA = 8;          // show at current size/pos WITHOUT activating
