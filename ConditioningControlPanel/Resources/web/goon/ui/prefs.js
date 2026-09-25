@@ -133,6 +133,13 @@ export const PREF_DEFAULTS = Object.freeze({
    */
   arsenalOpen: 'auto',
   /**
+   * THE SORT DUEL'S NOISE BOARD, picked before the match on ui/screens/noiseSetup.js
+   * (right after the flavour card) and changeable in Options > Pictures. A set id from
+   * core/noiseSets.js; '' = never chosen (the step is still owed, and a duel rolls one).
+   * Readers clamp it, so a stale id from an older table reads as ''.
+   */
+  noiseSet: '',
+  /**
    * WHERE THE PLAYER PARKED THE OPPONENT'S MONITOR, and how big they made it
    * (ui/opponent.js — drag + wheel, "like the gifs"). Three plain numbers rather
    * than one blob because `coerce` below already keeps numbers honest against a
