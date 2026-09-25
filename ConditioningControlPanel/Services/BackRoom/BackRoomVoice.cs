@@ -65,9 +65,10 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     private readonly Action _stop;
     private readonly Action<string>? _log;
 
-    /// <summary>The app's live sources.</summary>
+    /// <summary>The app's live sources. No synthetic speech (owner, 2026-09-25): a word with no
+    /// recorded clip stays silent, so the chain's third rung is <see cref="NoTts"/>.</summary>
     public BackRoomVoice()
-        : this(FindPlayerClip, FindPresetClip, RenderTts, ReverseToCache, ProbeDurationMs, PlayThroughApp, StopApp,
+        : this(FindPlayerClip, FindPresetClip, NoTts, ReverseToCache, ProbeDurationMs, PlayThroughApp, StopApp,
                msg => App.Logger?.Debug("BackRoomVoice: {Msg}", msg))
     {
     }
@@ -86,6 +87,9 @@ internal sealed class BackRoomVoice : IBackRoomVoice
         _stop = stop;
         _log = log;
     }
+
+    /// <summary>The live TTS rung: never renders. Windows speech is off by owner decision.</summary>
+    internal static string? NoTts(string _) => null;
 
     // ============================ the chain ============================
 
