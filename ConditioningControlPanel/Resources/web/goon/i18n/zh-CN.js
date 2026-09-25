@@ -822,6 +822,7 @@ export default Object.freeze({
   gg_duel_pickedThem: "对方的噪音",
   gg_duel_theyPick: "对方正在选",
   gg_duel_rolled: "已为你随机选",
+  gg_duel_rolledPlay: "超时了。给你抽到了{name}。",
   gg_duel_noiseArchitecture: "建筑",
   gg_duel_noiseLandscapes: "风景",
   gg_duel_noiseSpace: "太空",

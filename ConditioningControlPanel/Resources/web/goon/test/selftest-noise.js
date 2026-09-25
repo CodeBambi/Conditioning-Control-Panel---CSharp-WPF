@@ -25,6 +25,7 @@ import { createDuelController } from '../ui/duel/duelController.js';
 import { createBotDuel } from '../ui/duel/botDuel.js';
 import { createPilePool, pileRows } from '../ui/duel/piles.js';
 import { nicheLabel, noiseName, noiseTiles, flavourOfNiches } from '../ui/duel/noisePick.js';
+import { DUEL_COPY } from '../ui/duel/copy.js';
 import { createGoonMediaPool } from '../exec/media.js';
 import { createWebMediaHost } from '../net/webMedia.js';
 import { buildDeck, judge } from '../../arcademy/games/sort/deck.js';
@@ -53,7 +54,7 @@ globalThis.localStorage = {
   const seen = new Set();
   for (let i = 0; i < 70; i++) seen.add(rollNoiseSet(() => i / 70));
   ok(seen.size === 7 && rollNoiseSet(() => 1) && rollNoiseSet(() => NaN) && NOISE_SET_IDS.includes(rollNoiseSet(() => -3)), 'the roll reaches every board and never leaves the list');
-  ok(NOISE_PRE_PLAY_MS === NOISE_REVEAL_MS + NOISE_PICK_MS + NOISE_LOCK_MS && NOISE_REVEAL_MS === 2000 && NOISE_PICK_MS === 8000, 'reveal 2 s, pick 8 s');
+  ok(NOISE_PRE_PLAY_MS === NOISE_REVEAL_MS + NOISE_PICK_MS + NOISE_LOCK_MS && NOISE_REVEAL_MS === 1000 && NOISE_PICK_MS === 5000 && NOISE_PRE_PLAY_MS <= 6500, 'reveal 1 s, pick 5 s, about 6 s before play');
   const cs = fs.readFileSync(path.join(here, '../../../../Services/GoonGame/GoonOnlineMedia.cs'), 'utf8');
   const csRows = [...cs.matchAll(/\["([a-z]+)"\] = "([A-Za-z0-9_]+)"/g)].map((m) => m[1] + '=' + m[2]).sort();
   const jsRows = NOISE_SETS.map((s) => s.id + '=' + s.sub).sort();
@@ -228,6 +229,10 @@ const viewLog = (arr) => new Proxy({}, { get: (_t, k) => (...a) => arr.push([k, 
   ng.rows.set(G.state.noise.roll, [{ kind: 'image', url: 'https://ccp.assets/r.jpg' }]);
   advance(NOISE_LOCK_MS + 1);
   ok(H.state.stage === 'play' && G.state.stage === 'play', 'then the class, on both sides');
+  const gPlay = vg.find(([k]) => k === 'play'); const hPlay = vh.find(([k]) => k === 'play');
+  ok(gPlay && gPlay[1].rolled === G.state.noise.roll, 'the guest is told at play which board was rolled for it', JSON.stringify(gPlay && gPlay[1]));
+  ok(hPlay && !hPlay[1].rolled, 'the host picked, so it is told nothing', JSON.stringify(hPlay && hPlay[1]));
+  ok(/^Too slow\. You got .+\.$/.test(DUEL_COPY.rolledPlay(noiseName(G.state.noise.roll))) && !DUEL_COPY.rolledPlay('x').includes('!'), 'the rolled line is short and plain');
   ok(runs.h.length === 1 && runs.h[0].spec.noise && runs.h[0].spec.noise.set === 'space', 'the class is handed the chosen board');
   nh.rows.set(H.state.noise.roll, [{ kind: 'image', url: 'https://ccp.assets/roll.jpg' }]);
   ok(runs.h[0].spec.noise.rows()[0].url.endsWith('roll.jpg'), 'while the chosen board has not landed the roll stands in (still noise)');

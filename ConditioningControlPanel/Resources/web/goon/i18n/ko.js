@@ -822,6 +822,7 @@ export default Object.freeze({
   gg_duel_pickedThem: "상대 노이즈",
   gg_duel_theyPick: "상대가 고르는 중",
   gg_duel_rolled: "무작위로 선택됨",
+  gg_duel_rolledPlay: "시간 초과. {name}(으)로 정해짐.",
   gg_duel_noiseArchitecture: "건축",
   gg_duel_noiseLandscapes: "풍경",
   gg_duel_noiseSpace: "우주",

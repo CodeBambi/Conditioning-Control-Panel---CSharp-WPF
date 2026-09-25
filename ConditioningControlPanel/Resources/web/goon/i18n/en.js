@@ -823,6 +823,7 @@ export default Object.freeze({
   gg_duel_pickedThem: "their noise",
   gg_duel_theyPick: "they are picking",
   gg_duel_rolled: "picked for you",
+  gg_duel_rolledPlay: "Too slow. You got {name}.",
   gg_duel_noiseArchitecture: "Architecture",
   gg_duel_noiseLandscapes: "Landscapes",
   gg_duel_noiseSpace: "Space",
