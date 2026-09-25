@@ -73,6 +73,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         public bool IsApplicationReply { get; init; }
 
+        /// <summary>The ask card this app line carries (answer buttons). Session-only, never persisted.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? AskCardId { get; init; }
+
         public const string EventOpen = "«event: ";
         /// <summary>Closing sigil of an <see cref="TurnKind.AmbientEvent"/> line.</summary>
         public const string EventClose = "»";

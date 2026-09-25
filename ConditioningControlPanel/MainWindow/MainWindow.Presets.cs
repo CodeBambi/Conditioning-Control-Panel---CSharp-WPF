@@ -1641,6 +1641,7 @@ namespace ConditioningControlPanel
             // Release the controller-owned-run marker (MainWindow.RemoteControl.cs). Hygiene only —
             // IsSessionRemoteStarted already reads false once the engine stops.
             _remoteStartedSession = null;
+            try { Services.Companion.Asks.CompanionAskService.Instance.NoteFinished(e.Session.GetModeAwareName()); } catch { }
             Dispatcher.Invoke(() =>
             {
                 // Award XP. The completion dialog is shown from OnSessionLogReady,

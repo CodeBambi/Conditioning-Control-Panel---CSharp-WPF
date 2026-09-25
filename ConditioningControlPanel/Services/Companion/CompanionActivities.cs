@@ -33,9 +33,22 @@ internal static class CompanionActivities
         {
             var entry = SettingsPaletteIndex.All.First(e => e.Id == "tab." + tab);
             result.Add(new("page." + tab, entry.Label, description,
-                () => entry.Available && App.MainWindowRef != null,
+                () => entry.Available && !PageLocked(tab) && App.MainWindowRef != null,
                 () => { if (App.MainWindowRef is not { } window) return false; window.OpenDestination(entry); return true; }));
         }
+    }
+
+    /// <summary>A page behind a tier or pass (an ExclusiveFeature roster row) is never offered while it is shut.
+    /// Same three questions the rail's premium star asks: roster row, gate state, daily free rotation.</summary>
+    internal static bool PageLocked(string tab)
+    {
+        try
+        {
+            var feature = Models.ExclusiveFeature.All.FirstOrDefault(f => string.Equals(f.Key, tab, StringComparison.Ordinal));
+            if (feature == null || feature.GateState() != Models.ExclusiveGateState.Locked) return false;
+            return !(feature.DailyFreeKey != null && App.DailyFree?.IsFreeToday(feature.DailyFreeKey) == true);
+        }
+        catch { return true; }
     }
 
     internal static bool CanOffer(LauncherEntry game, bool needsAccount, bool audioOnly) =>

@@ -9035,6 +9035,27 @@ namespace ConditioningControlPanel.Models
             set { _deeperPlayerWindowHeight = value; OnPropertyChanged(); }
         }
 
+        private bool _companionAsksEnabled = true;
+        /// <summary>The companion now and then asks a question with a few answer buttons.</summary>
+        [JsonProperty]
+        public bool CompanionAsksEnabled
+        {
+            get => _companionAsksEnabled;
+            set { _companionAsksEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>Video titles the user said they loved on an ask card (offered first).</summary>
+        [JsonProperty]
+        public List<string> CompanionAskLovedVideos { get; set; } = new();
+
+        /// <summary>Video titles the user called "meh" on an ask card (never offered again).</summary>
+        [JsonProperty]
+        public List<string> CompanionAskMehVideos { get; set; } = new();
+
+        /// <summary>Get-to-know topics already answered (colour, time, drop).</summary>
+        [JsonProperty]
+        public List<string> CompanionAskKnownTopics { get; set; } = new();
+
         #endregion
     }
 }
