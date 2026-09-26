@@ -118,7 +118,7 @@ namespace ConditioningControlPanel.Services;
             // Cut leash: one click, only while someone holds this account's leash. Never gated,
             // never priced, never greyed (Controls/Leash/LeashSurfaces.Cut).
             var cutLeashItem = new ToolStripMenuItem(Loc.Get("leash_cut"));
-            cutLeashItem.Name = "leash_cut";   // LeashTrayRule.CutActionId once the cutsafety lane merges; enabled in every lock state
+            cutLeashItem.Name = Services.Leash.LeashTrayRule.CutActionId;   // LeashTrayRule.CutActionId once the cutsafety lane merges; enabled in every lock state
             cutLeashItem.Click += (s, e) => Controls.Leash.LeashSurfaces.Cut();
             contextMenu.Items.Add(cutLeashItem);
             contextMenu.Opening += (s, e) => cutLeashItem.Visible = Controls.Leash.LeashSurfaces.IsLeashed;

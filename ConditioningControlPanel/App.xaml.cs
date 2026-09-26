@@ -2357,8 +2357,12 @@ namespace ConditioningControlPanel
                     _leashTaskHost = new Services.Leash.AppLeashTaskHost();
                     LeashRunner = new Services.Leash.LeashTaskRunner(_leashTaskHost);
                     LeashRunner.AssignmentWatched += aid => _leashService?.NoteAssignmentWatched(aid);
-                    // MERGE SEAM (UI lane): Controls.Leash.LeashLocator.Service = () => App.Leash;
-                    // Controls.Leash.LeashLocator.Runner = () => App.LeashRunner;
+                    Controls.Leash.LeashLocator.Service = () => App.Leash;
+                    Controls.Leash.LeashLocator.Runner = () => App.LeashRunner;
+                    Controls.Leash.LeashLocator.LocalReport = () => _leashService?.LastReport;
+                    Controls.Leash.LeashExplainHost.Presenter = role =>
+                        Controls.Leash.Explain.LeashExplainer.Show(null,
+                            Controls.Leash.Explain.LeashExplainer.SideFor(role.ToString()));
                 }
             }
             catch (Exception ex) { Logger?.Warning("Leash service failed to start: {E}", ex.Message); }

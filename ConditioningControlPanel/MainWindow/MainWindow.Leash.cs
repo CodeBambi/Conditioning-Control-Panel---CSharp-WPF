@@ -30,6 +30,7 @@ namespace ConditioningControlPanel
         {
             try
             {
+                App.LeashedChanged += _ => Dispatcher.BeginInvoke(() => _trayIcon?.SyncLeashIcon());
                 if (RemoteControlOverlay.Parent is Grid host)
                 {
                     _leashGate = new LeashGateCard();
@@ -84,14 +85,14 @@ namespace ConditioningControlPanel
                 var svc = LeashLocator.Service();
                 BindLeashRunner();
                 var due = svc?.GateDue;
-                if (due != null && LeashUiRules.ShouldShow(ReadLeashWorld(true)))
+                if (due != null && Services.Leash.LeashGateRule.ShouldShow(ReadLeashWorld(true)))
                     ShowLeashGate(due, svc!.Snapshot.Me?.Pardons ?? 0);
                 else HideLeashGate();
             }
             catch (Exception ex) { App.Logger?.Debug("Leash gate check failed: {E}", ex.Message); }
         }
 
-        private LeashGateWorld ReadLeashWorld(bool due) => new(
+        private Services.Leash.LeashGateInputs ReadLeashWorld(bool due) => new(
             Due: due,
             SessionRunning: App.IsSessionRunning || App.IsEngineRunning,
             GameUp: ChaosWebViewHost.AnyGameActive,
@@ -100,7 +101,7 @@ namespace ConditioningControlPanel
             ModalUp: App.StartupLadder?.IsModalUp == true || App.Tutorial?.IsActive == true
                      || App.Lockdown?.IsActive == true || RemoteControlOverlay.Visibility == Visibility.Visible,
             PanelAway: !IsVisible || WindowState == WindowState.Minimized || App.StartupLadder?.Held == true,
-            Snoozed: DateTime.UtcNow < _leashSnoozeUntilUtc);
+            Watching: _leashRunner?.IsRunning == true || DateTime.UtcNow < _leashSnoozeUntilUtc);
 
         private void ShowLeashGate(Punishment p, int pardons)
         {

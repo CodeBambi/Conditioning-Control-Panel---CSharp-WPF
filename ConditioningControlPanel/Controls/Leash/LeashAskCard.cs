@@ -90,7 +90,8 @@ public sealed class LeashAskCard : Border
         _body.Children.Add(head);
 
         ExplainerSlot.Margin = new Thickness(0, 14, 0, 0);
-        ExplainerSlot.Child = ExplainerFactory?.Invoke(_offer) ?? PlainExplainer();
+        ExplainerSlot.Child = ExplainerFactory?.Invoke(_offer)
+            ?? new Explain.LeashExplainCard(LeashIntroSide.Leashed, _offer.From.Name, Explain.LeashExplainLayout.Grid);
         _body.Children.Add(ExplainerSlot);
 
         var cap = LeashLook.Caption(Loc.Get("leash_ask_level"));
@@ -114,6 +115,14 @@ public sealed class LeashAskCard : Border
         yes.Margin = new Thickness(5, 0, 0, 0);
         yes.Click += async (_, _) => await AnswerAsync(true);
         PutItOnButton = yes;
+        if (ExplainerSlot.Child is Explain.LeashExplainCard intro
+            && LeashIntroRule.ShouldExplain(App.Settings?.Current, LeashIntroSide.Leashed))
+        {
+            yes.IsEnabled = false;
+            yes.ToolTip = Loc.Get("leash_explain_read_first");
+            intro.ReadyForAnswer += () => { yes.IsEnabled = true; yes.ToolTip = null; };
+            intro.StartReadClock(alreadySeen: false);
+        }
         Grid.SetColumn(yes, 1);
         acts.Children.Add(no);
         acts.Children.Add(yes);
@@ -215,6 +224,7 @@ public sealed class LeashAskCard : Border
         catch (Exception ex) { App.Logger?.Debug("[Leash] answer failed: {E}", ex.Message); }
         _busy = false;
         if (PutItOnButton != null) PutItOnButton.IsEnabled = wasEnabled;
+        if (ok) Explain.LeashAskIntro.Answered();
         Answered?.Invoke(_offer, accept && ok, _level);
     }
 

@@ -52,7 +52,7 @@ public interface ILeashTaskHost
 /// <para>Merge seam: the UI lane's <c>Controls.Leash.ILeashTaskRunner</c> has exactly this public
 /// shape; this class implements it once both lanes merge (one line on the declaration).</para>
 /// </summary>
-public sealed class LeashTaskRunner
+public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.ILeashTaskRunner
 {
     /// <summary>A session counts as done this close to its full length (start-up takes a moment).</summary>
     public static int SessionSlackSeconds(int totalSeconds) => Math.Max(15, totalSeconds * 3 / 100);

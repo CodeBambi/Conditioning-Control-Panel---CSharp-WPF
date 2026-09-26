@@ -152,7 +152,7 @@ public sealed class LeashGateCard : Grid
 
         if (_pardons > 0)
         {
-            var pardon = LeashLook.Chunky(Loc.GetF("leash_gate_pardon", _pardons), LeashLook.Tone.Ghost, "scissors", size: 12.5);
+            var pardon = LeashLook.Chunky(Loc.GetF("leash_gate_pardon", _pardons), LeashLook.Tone.Ghost, "star", size: 12.5);
             pardon.Margin = new Thickness(0, 8, 0, 0);
             pardon.Tag = "leash-gate-pardon";
             pardon.Click += (_, _) => { if (_p != null) PardonRequested?.Invoke(_p); };

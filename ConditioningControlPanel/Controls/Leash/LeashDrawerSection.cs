@@ -199,13 +199,17 @@ public sealed class LeashDrawerSection : StackPanel
         chip.Click += async (_, _) =>
         {
             LeashFx.Pop(chip);
-            var r = await OfferAsync(f.Id, f.Name);
-            if (LeashUiRules.IsGood(r)) label.Text = Loc.Get("leash_offer_sent");
-            else
+            Explain.LeashExplainer.BeforeOffer(Window.GetWindow(chip), f.Name, async () =>
             {
-                label.Text = Loc.Get(LeashUiRules.ResultKey(r));
-                chip.IsEnabled = false;
-            }
+                var r = await OfferAsync(f.Id, f.Name);
+                if (LeashUiRules.IsGood(r)) label.Text = Loc.Get("leash_offer_sent");
+                else
+                {
+                    label.Text = Loc.Get(LeashUiRules.ResultKey(r));
+                    chip.IsEnabled = false;
+                }
+            });
+            await System.Threading.Tasks.Task.CompletedTask;
         };
         row.Children.Add(chip);
         var help = LeashLook.Help(LeashExplainRole.Offer);

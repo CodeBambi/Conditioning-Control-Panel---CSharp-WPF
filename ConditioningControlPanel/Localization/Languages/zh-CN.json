@@ -6743,6 +6743,8 @@
   "leash_self_holds": "holds your leash",
   "leash_self_day": "day {0}",
   "leash_cut": "Cut leash",
+  "session_leash_pink_name": "Pink session",
+  "session_leash_detention_name": "Detention",
   "leash_cut_tip": "One click. Nothing lost, your stickers stay.",
   "leash_cut_done": "Cut. You are off the leash.",
   "leash_self_pending": "{0} waiting at your gate",
