@@ -26,6 +26,9 @@ public sealed class LeashHoldToCut
     /// <summary>True while a hold is being timed.</summary>
     public bool Held => _since != null;
 
+    /// <summary>How long the current hold has run, or null when none is timed.</summary>
+    public TimeSpan? HeldFor(DateTime now) => _since is { } s ? now - s : null;
+
     /// <summary>A key-down of the panic key. <c>Repeat</c> = swallow it (not a new press);
     /// <c>Due</c> = the hold just reached five seconds, ask now (true once per hold).</summary>
     public (bool Repeat, bool Due) Down(DateTime now, bool leashed)

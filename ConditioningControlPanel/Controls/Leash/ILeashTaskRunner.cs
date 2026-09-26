@@ -33,4 +33,7 @@ public interface ILeashTaskRunner
 
     /// <summary>pid. The task is done; the gate host posts <c>complete</c>.</summary>
     event Action<string>? Completed;
+
+    /// <summary>True when the last <see cref="Completed"/> was a video stopped by its time cap.</summary>
+    bool LastCompletionCapped => false;
 }

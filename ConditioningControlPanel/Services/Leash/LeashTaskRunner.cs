@@ -95,6 +95,9 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
     /// <summary>The task is done; the gate host posts <c>complete</c>.</summary>
     public event Action<string>? Completed;
 
+    /// <inheritdoc />
+    public bool LastCompletionCapped { get; private set; }
+
     /// <summary>A video assignment's verified watch finished (aid). The app hands it to
     /// <c>LeashService.NoteAssignmentWatched</c>.</summary>
     public event Action<string>? AssignmentWatched;
@@ -263,6 +266,7 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
         if (done >= total)
         {
             var pid = p.Pid;
+            LastCompletionCapped = p.Kind == PunishKind.Video && _meter?.CapReached == true;
             Reset();
             Completed?.Invoke(pid);
         }

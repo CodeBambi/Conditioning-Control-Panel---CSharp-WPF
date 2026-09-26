@@ -291,6 +291,7 @@ internal sealed class LeashPunishWindow : Window
             _title.Foreground = FriendsLook.TextBrush;
         };
         _refuseTimer.Start();
+        LeashFx.Denied();
         if (MotionFx.AllowTransitions) Shake();
     }
 

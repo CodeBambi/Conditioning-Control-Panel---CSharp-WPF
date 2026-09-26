@@ -8,6 +8,7 @@ using System.Windows.Shapes;
 using ConditioningControlPanel.Controls.Friends;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Leash;
 
 namespace ConditioningControlPanel.Controls.Leash;
 
@@ -185,26 +186,64 @@ internal static class LeashFx
 
     // ---- sound ------------------------------------------------------------------------
 
+    private static readonly LeashSfxRules Rules = new();
+
     /// <summary>The chain jingle under a tug.</summary>
-    public static void Jingle() => Play("chaos/chain_pop.mp3", 0.22f, "leash-tug");
+    public static void Jingle() => Play(LeashCue.Jingle, "chaos/chain_pop.mp3", 0.22f);
 
     /// <summary>The snap: the collar clicks shut.</summary>
-    public static void Snap() => Play("chaos/collar_save.mp3", 0.28f, "leash-snap");
+    public static void Snap() => Play(LeashCue.Snap, "chaos/collar_save.mp3", 0.28f);
 
     /// <summary>A soft click for a sent preset.</summary>
-    public static void Sent() => Play("chaos/chip_pop.mp3", 0.16f, "leash-sent");
+    public static void Sent() => Play(LeashCue.Sent, "chaos/chip_pop.mp3", 0.16f);
 
     /// <summary>The gate's stamp landing.</summary>
-    public static void Stamp() => Play("chaos/shield_thunk.mp3", 0.2f, "leash-stamp");
+    public static void Stamp() => Play(LeashCue.Stamp, "chaos/shield_thunk.mp3", 0.2f);
 
-    private static void Play(string rel, float scale, string tag)
+    /// <summary>The ask card lands for the one being asked.</summary>
+    public static void Ask() => Play(LeashCue.Ask, "chaos/reveal_chime.mp3", 0.18f);
+
+    /// <summary>The holder hears a no.</summary>
+    public static void Refused() => Play(LeashCue.Refused, "chaos/ui_unequip.mp3", 0.14f);
+
+    /// <summary>A reward arrives (sticker, credit, pardon, praise).</summary>
+    public static void Gift() => Play(LeashCue.Gift, "chaos/ui_unlock.mp3", 0.18f);
+
+    /// <summary>A punishment or a missed assignment arrives.</summary>
+    public static void Scold() => Play(LeashCue.Scold, "chaos/thud.mp3", 0.2f);
+
+    /// <summary>An assignment arrives.</summary>
+    public static void Assigned() => Play(LeashCue.Assigned, "chaos/cards_in.mp3", 0.16f);
+
+    /// <summary>A task done or pardoned, on either side.</summary>
+    public static void Done() => Play(LeashCue.Done, "chaos/sin_accept.mp3", 0.18f);
+
+    /// <summary>A refused send, or a refused close of the punishment window.</summary>
+    public static void Denied() => Play(LeashCue.Denied, "chaos/ui_denied.mp3", 0.16f);
+
+    /// <summary>One whole second of the hold-to-cut.</summary>
+    public static void Tick() => Play(LeashCue.Tick, "chaos/countdown_tick.mp3", 0.10f);
+
+    /// <summary>The leash is off. Plays once per cut, whichever side hears it first.</summary>
+    public static void Cut() => Play(LeashCue.Cut, "chaos/snap.mp3", 0.22f);
+
+    /// <summary>A punishment video reached its time cap.</summary>
+    public static void CapReached() => Play(LeashCue.CapReached, "chaos/sink.mp3", 0.14f);
+
+    /// <summary>Plays a cue on the app's one-shot player. Never blocks (the player queues its
+    /// own work) and never throws.</summary>
+    private static void Play(LeashCue cue, string rel, float scale)
     {
+        var tag = "leash-" + cue.ToString().ToLowerInvariant();
         try
         {
             var audio = App.Audio;
             if (audio == null || audio.IsOutputSuppressed) return;
             int level = App.Settings?.Current?.MasterVolume ?? 0;
             if (level <= 0) return;
+            bool video = App.Video?.IsPlaying == true;
+            bool punish = LeashPunishWindow.Current != null;
+            if (!Rules.TryPlay(cue, DateTime.UtcNow, punish, video)) return;
             var path = ModResourceResolver.ResolveAudioPath(rel);
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
             audio.PlayOneShot(path, Math.Clamp(level / 100f * scale, 0f, 1f), tag);

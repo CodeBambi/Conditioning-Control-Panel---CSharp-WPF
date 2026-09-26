@@ -227,6 +227,7 @@ public sealed class LeashDrawerSection : StackPanel
         try { s = _svc == null ? LeashSendStatus.Off : (await _svc.OfferAsync(friendId)).Status; }
         catch { s = LeashSendStatus.Failed; }
         if (LeashUiRules.IsGood(s)) { LeashSurfaces.SentOffers.Add(friendId); LeashFx.Sent(); }
+        else if (s is LeashSendStatus.TooFast or LeashSendStatus.Dnd or LeashSendStatus.Failed) LeashFx.Denied();
         return s;
     }
 }
