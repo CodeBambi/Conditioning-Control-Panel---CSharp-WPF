@@ -118,10 +118,10 @@ namespace ConditioningControlPanel
 
         private void BtnHelp_Click(object sender, RoutedEventArgs e)
         {
-            // Prefer the tutorial video when the topic ships a clip; otherwise fall
+            // Prefer the help loop (or a clip) when the topic has one; otherwise fall
             // back to the existing coach-mark overlay.
             var content = Services.HelpContentService.GetContent("SessionEditor");
-            if (content.HasClip)
+            if (content.HasClip || Controls.HelpLoops.HelpLoopRegistry.Has(content.SectionId))
             {
                 HelpVideoWindow.Show(content, this);
                 return;

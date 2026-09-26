@@ -9,8 +9,8 @@ using ConditioningControlPanel.Services;
 namespace ConditioningControlPanel.Controls.HelpLoops
 {
     /// <summary>
-    /// Plays a <see cref="HelpLoopScene"/>: two DrawingVisuals (the desktop layer, which can blur, and
-    /// the front layer) in the 480x270 stage space, scaled uniformly to the element's width (16:9)
+    /// Plays a <see cref="HelpLoopScene"/>: three DrawingVisuals (the stage ground, the desktop layer,
+    /// which alone can blur, and the front layer) in the 480x270 stage space, scaled uniformly to the element's width (16:9)
     /// and clipped to an 8px rounded rect. Native drawing on purpose: the ? popover is a layered
     /// window (AllowsTransparency) and WebView2 cannot paint in one.
     ///
@@ -24,6 +24,7 @@ namespace ConditioningControlPanel.Controls.HelpLoops
             new PropertyMetadata(null, (d, _) => ((HelpLoopView)d).OnSceneIdChanged()));
 
         private readonly ContainerVisual _root = new();
+        private readonly DrawingVisual _ground = new();   // never blurred
         private readonly DrawingVisual _back = new();
         private readonly DrawingVisual _front = new();
         private readonly BlurEffect _blur = new() { Radius = 0, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Performance };
@@ -39,6 +40,7 @@ namespace ConditioningControlPanel.Controls.HelpLoops
 
         public HelpLoopView()
         {
+            _root.Children.Add(_ground);
             _root.Children.Add(_back);
             _root.Children.Add(_front);
             AddVisualChild(_root);
@@ -62,6 +64,9 @@ namespace ConditioningControlPanel.Controls.HelpLoops
         }
 
         public HelpLoopScene? Scene => _scene;
+
+        /// <summary>True once the scene threw; the view stopped and keeps its last frame.</summary>
+        public bool Failed => _failed;
 
         /// <summary>The loop time of the frame last drawn.</summary>
         public double CurrentTime { get; private set; }
@@ -178,10 +183,11 @@ namespace ConditioningControlPanel.Controls.HelpLoops
                 try { ppd = VisualTreeHelper.GetDpi(this).PixelsPerDip; } catch { }
 
                 LoopFrame f;
+                using (var ground = _ground.RenderOpen())
                 using (var back = _back.RenderOpen())
                 using (var front = _front.RenderOpen())
                 {
-                    f = new LoopFrame(back, front, _palette, ppd);
+                    f = new LoopFrame(ground, back, front, _palette, ppd);
                     f.Ground();
                     _scene.Draw(f, t);
                 }
@@ -212,6 +218,7 @@ namespace ConditioningControlPanel.Controls.HelpLoops
 
         private void ClearVisuals()
         {
+            using (_ground.RenderOpen()) { }
             using (_back.RenderOpen()) { }
             using (_front.RenderOpen()) { }
         }
