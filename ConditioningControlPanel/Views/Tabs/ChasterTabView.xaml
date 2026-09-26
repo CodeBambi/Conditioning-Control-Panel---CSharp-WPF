@@ -617,8 +617,62 @@
                         <!-- ================= THE HEADS-UP CLOCK: what CCP added, and the raffle card =================
                              Added only, lifetime, as this PC counted it. Hover the clock (or click to pin) and the
                              player's own Locktober raffle card unrolls under it; its days and total are read off
-                             Chaster by the server, never off this number. All the code is in ChasterTabView.Ladder.cs. -->
-                        <Border x:Name="AddedCard" Style="{StaticResource CirceCard}" Margin="0,0,0,14">
+                             Chaster by the server, never off this number. All the code is in ChasterTabView.Ladder.cs.
+                             Beside it, pinned: the month's top ten on a torn scrap (owner, 2026-09-26: "the raffle
+                             AND the ladder", "brag rights only"), always in view, drawn in ChasterTabView.Scrap.cs. -->
+                        <Grid x:Name="AddedRow" Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                        <!-- the scrap: the calendar's paper, torn top, a red pin through a punched hole, tilted the other way -->
+                        <Grid x:Name="LadderScrap" Grid.Column="1" Width="236" Margin="18,2,6,4" VerticalAlignment="Top"
+                              RenderTransformOrigin="0.5,0" MouseEnter="LadderScrap_MouseEnter">
+                            <Grid.RenderTransform>
+                                <TransformGroup>
+                                    <RotateTransform x:Name="LadderScrapTilt" Angle="2.5"/>
+                                    <TranslateTransform x:Name="LadderScrapDrop"/>
+                                </TransformGroup>
+                            </Grid.RenderTransform>
+                            <StackPanel>
+                                <StackPanel.Effect>
+                                    <DropShadowEffect Color="#000000" BlurRadius="14" ShadowDepth="4" Opacity="0.45"/>
+                                </StackPanel.Effect>
+                                <Path Fill="#FFF3EAD9" Stretch="Fill" Height="9" Margin="0,0,0,-1"
+                                      Data="M 0,9 L 0,4 L 7,1 L 13,5 L 20,2 L 26,6 L 33,1 L 39,4 L 46,0 L 52,5 L 59,2 L 66,6 L 72,2 L 79,5 L 85,1 L 92,5 L 100,3 L 100,9 Z"/>
+                                <Border Background="#FFF3EAD9" Padding="12,14,12,10">
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str chaster_ladder_title}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="15"
+                                                   FontWeight="SemiBold" Foreground="#FF241A2E"/>
+                                        <!-- a rubber stamp in red ink, a little crooked -->
+                                        <Border BorderBrush="#CCC8244A" BorderThickness="1.5" CornerRadius="3" Padding="6,1,6,1"
+                                                HorizontalAlignment="Left" Margin="1,4,0,8" RenderTransformOrigin="0.5,0.5">
+                                            <Border.RenderTransform>
+                                                <RotateTransform Angle="-4"/>
+                                            </Border.RenderTransform>
+                                            <TextBlock Text="{loc:Str chaster_ladder_brag}" FontFamily="Consolas, Courier New" FontSize="10"
+                                                       FontWeight="Bold" Foreground="#CCC8244A"/>
+                                        </Border>
+                                        <StackPanel x:Name="LadderScrapRows"/>
+                                        <TextBlock x:Name="TxtLadderScrapState" FontSize="12" FontStyle="Italic" Foreground="#99241A2E"
+                                                   TextWrapping="Wrap" Margin="0,2,0,2" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            <!-- the punched hole, and the pin through it -->
+                            <Ellipse Width="9" Height="9" Fill="#FF1A1230" Stroke="#66241A2E" StrokeThickness="1"
+                                     HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0"/>
+                            <Ellipse Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="2,3,0,0"
+                                     Stroke="#FF8A1830" StrokeThickness="1">
+                                <Ellipse.Fill>
+                                    <RadialGradientBrush GradientOrigin="0.35,0.3">
+                                        <GradientStop Color="#FFFF8FA8" Offset="0"/>
+                                        <GradientStop Color="#FFC8244A" Offset="1"/>
+                                    </RadialGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                        </Grid>
+                        <Border x:Name="AddedCard" Grid.Column="0" Style="{StaticResource CirceCard}" VerticalAlignment="Top">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -657,15 +711,31 @@
                                                Foreground="{DynamicResource TextLightBrush}" Margin="0,2,0,0"/>
                                     <TextBlock Text="{loc:Str chaster_added_note}" Style="{StaticResource CirceSub}" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Grid Grid.Column="2" VerticalAlignment="Center">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
                                     <TextBlock Text="{loc:Str chaster_raffle_post_days}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"
-                                               Foreground="{DynamicResource TextSecondaryBrush}" ToolTip="{loc:Str chaster_raffle_post_days_tip}"/>
-                                    <CheckBox x:Name="ChkRafflePost" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                               HorizontalAlignment="Right" Foreground="{DynamicResource TextSecondaryBrush}"
+                                               ToolTip="{loc:Str chaster_raffle_post_days_tip}"/>
+                                    <CheckBox x:Name="ChkRafflePost" Grid.Column="1" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                               ToolTip="{loc:Str chaster_raffle_post_days_tip}"
                                               Checked="ChkRafflePost_Changed" Unchecked="ChkRafflePost_Changed"/>
-                                </StackPanel>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str chaster_ladder_show_name}" FontSize="12" VerticalAlignment="Center"
+                                               Margin="0,8,8,0" HorizontalAlignment="Right" Foreground="{DynamicResource TextSecondaryBrush}"
+                                               ToolTip="{loc:Str chaster_ladder_show_name_tip}"/>
+                                    <CheckBox x:Name="ChkLadderName" Grid.Row="1" Grid.Column="1" Style="{StaticResource ToggleStyle}"
+                                              VerticalAlignment="Center" Margin="0,8,0,0" ToolTip="{loc:Str chaster_ladder_show_name_tip}"
+                                              Checked="ChkLadderName_Changed" Unchecked="ChkLadderName_Changed"/>
+                                </Grid>
                             </Grid>
                         </Border>
+                        </Grid>
 
                         <!-- The first switch-on, and only the first: four facts, one button. -->
                         <Border x:Name="ConsentCard" Visibility="Collapsed" Style="{StaticResource CirceCard}"
