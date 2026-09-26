@@ -1920,6 +1920,12 @@ namespace ConditioningControlPanel
             // Don't fight with pop quiz for topmost z-order
             if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
 
+            // The speech bubble is its own non-topmost window owned by the tube. A non-topmost window
+            // can never sit above a topmost one, and SWP_NOOWNERZORDER moves the tube alone, so this
+            // raise used to bury the bubble under the widget twice a second (ccp-bugs #1296). While
+            // the bubble is up it rides in the topmost band too, directly above the tube.
+            bool bubbleUp = _bubbleHandle != IntPtr.Zero && _bubbleWindow?.IsVisible == true;
+
             var insertAfter = HWND_TOPMOST;
             if (Services.OverlayService.ResolveZOrderAction(
                     hasVideo: false, isVideoWindow: false, aboveVideo: false, needsPin: true, force: true,
@@ -1929,14 +1935,37 @@ namespace ConditioningControlPanel
                 // Already sitting directly under the host? Then the invariant holds and we skip the
                 // call entirely — this is a layered window, and poking WM_WINDOWPOSCHANGING twice a
                 // second for nothing is exactly the kind of churn that perturbs the emote crossfades.
-                if (GetWindow(hostHwnd, GW_HWNDNEXT) == _tubeHandle) return;
+                if (bubbleUp
+                        ? GetWindow(hostHwnd, GW_HWNDNEXT) == _bubbleHandle
+                          && GetWindow(_bubbleHandle, GW_HWNDNEXT) == _tubeHandle
+                        : GetWindow(hostHwnd, GW_HWNDNEXT) == _tubeHandle)
+                    return;
                 insertAfter = hostHwnd;
             }
 
             // Use Win32 SetWindowPos to force the z-order slot. More reliable than WPF's Topmost
             // property across monitor/focus changes; inserting after a topmost host keeps our own
             // WS_EX_TOPMOST set, so the tube never drops out of the widget band.
-            SetWindowPos(_tubeHandle, insertAfter, 0, 0, 0, 0,
+            const uint flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+            if (bubbleUp)
+            {
+                SetWindowPos(_bubbleHandle, insertAfter, 0, 0, 0, 0, flags);
+                SetWindowPos(_tubeHandle, _bubbleHandle, 0, 0, 0, 0, flags);
+            }
+            else
+            {
+                SetWindowPos(_tubeHandle, insertAfter, 0, 0, 0, 0, flags);
+            }
+        }
+
+        /// <summary>
+        /// Drops the speech bubble out of the topmost band when the tube docks again, so an attached
+        /// bubble goes behind other apps with the panel (the point of the bubble's own window).
+        /// </summary>
+        private void DemoteSpeechBubble()
+        {
+            if (_bubbleHandle == IntPtr.Zero) return;
+            SetWindowPos(_bubbleHandle, HWND_NOTOPMOST, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
         }
 
@@ -2241,6 +2270,7 @@ namespace ConditioningControlPanel
 
             // No longer topmost when attached
             Topmost = false;
+            DemoteSpeechBubble();
 
             // Disable dragging
             Cursor = Cursors.Arrow;
