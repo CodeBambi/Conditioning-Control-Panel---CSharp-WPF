@@ -605,6 +605,7 @@ public sealed partial class FriendsDrawer : Border
         more.Tag = "friends-action:more";
         more.Click += (_, _) =>
         {
+            FriendsSfx.Click();
             var menu = BuildMenu(f);
             menu.PlacementTarget = more;
             menu.Placement = PlacementMode.Bottom;
@@ -630,7 +631,7 @@ public sealed partial class FriendsDrawer : Border
             lit ? FriendsLook.ButtonHoverBrush : FriendsLook.ButtonBrush, FriendsLook.TextBrush,
             lit ? FriendsLook.LilacBrush : FriendsLook.Line2Brush, 10, new Thickness(10, 8, 10, 8));
         b.Tag = "friends-action:" + act;
-        b.Click += (_, _) => { _picker = _picker == act ? null : act; Render(); };
+        b.Click += (_, _) => { FriendsSfx.Click(); _picker = _picker == act ? null : act; Render(); };
         return b;
     }
 
@@ -698,6 +699,7 @@ public sealed partial class FriendsDrawer : Border
             add.Click += async (_, _) =>
             {
                 Shockwave(add, FriendsLook.Mint);
+                FriendsSfx.Accepted();
                 try { if (_svc != null) await _svc.AcceptAsync(r.Id); } catch { }
                 await SafeRefreshAsync();
             };
@@ -708,6 +710,7 @@ public sealed partial class FriendsDrawer : Border
             no.Tag = "friends-decline";
             no.Click += async (_, _) =>
             {
+                FriendsSfx.Dismiss();
                 try { if (_svc != null) await _svc.DeclineAsync(r.Id); } catch { }
                 await SafeRefreshAsync();
             };
@@ -722,6 +725,7 @@ public sealed partial class FriendsDrawer : Border
             cancel.Tag = "friends-cancel";
             cancel.Click += async (_, _) =>
             {
+                FriendsSfx.Dismiss();
                 try { if (_svc != null) await _svc.CancelRequestAsync(r.Id); } catch { }
                 await SafeRefreshAsync();
             };
@@ -812,6 +816,7 @@ public sealed partial class FriendsDrawer : Border
     private void CopyCode(string code, FrameworkElement from)
     {
         try { Clipboard.SetText(code); } catch { return; }
+        FriendsSfx.Click();
         if (_copied != null)
         {
             _copied.Text = Loc.Get("friends_copied");
@@ -910,10 +915,15 @@ public sealed partial class FriendsDrawer : Border
         if (good)
         {
             if (_addGo != null) Shockwave(_addGo, FriendsLook.Mint);
+            FriendsSfx.Accepted();
             if (_codeBox != null) _codeBox.Text = "";
             _ = SafeRefreshAsync();
         }
-        else if (_addGo != null) _addGo.IsEnabled = true;
+        else
+        {
+            FriendsSfx.Denied();
+            if (_addGo != null) _addGo.IsEnabled = true;
+        }
         return r;
     }
 
@@ -924,6 +934,12 @@ public sealed partial class FriendsDrawer : Border
 
     /// <summary>Words a send in the friend's row for two seconds.</summary>
     internal void ShowResult(string friendId, SendResult r)
+    {
+        if (FriendsDrawerRules.IsGood(r)) FriendsSfx.Sent(); else FriendsSfx.Denied();
+        ShowResultQuiet(friendId, r);
+    }
+
+    private void ShowResultQuiet(string friendId, SendResult r)
         => ShowTimed(friendId, Loc.Get(FriendsDrawerRules.SendResultKey(r)), FriendsDrawerRules.IsGood(r),
             TimeSpan.FromSeconds(2));
 

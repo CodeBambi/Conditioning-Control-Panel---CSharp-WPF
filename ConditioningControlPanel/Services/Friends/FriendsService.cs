@@ -100,6 +100,10 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     public event Action<FriendsSnapshot>? SnapshotChanged;
     public event Action<InboxItem>? Delivered;
     public event Action<SendKind, Friend>? Sent;
+    public event Action<FriendRequest>? RequestArrived;
+    public event Action<string>? RequestGone;
+
+    private readonly FriendRequestWatch _requests = new();
 
     // ---- the leash piggyback (Leash CONTRACT "The poll piggyback") ----
 
@@ -143,6 +147,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
         if (state == null || _account() != sentFor) return;
         _online = new HashSet<string>(state.Friends.Where(f => f.Online).Select(f => f.Id), StringComparer.Ordinal);
         Publish(state);
+        NoteRequests(state);
     }
 
     // ---- the poll ----
@@ -243,6 +248,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
                     // The poll's online list is newer than nothing but older than this; keep the state's.
                     _online = new HashSet<string>(state.Friends.Where(f => f.Online).Select(f => f.Id), StringComparer.Ordinal);
                     Publish(state);
+                    NoteRequests(state);
                 }
             }
         }
@@ -262,6 +268,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             _seen.Clear();
             _seenOrder.Clear();
             _lastPoke.Clear();
+            _requests.Reset();
             Publish(FriendsSnapshot.Empty);
         }
         return now != null;
@@ -299,6 +306,23 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             while (_seenOrder.Count > SeenCap) _seen.Remove(_seenOrder.Dequeue());
             try { Delivered?.Invoke(item); }
             catch (Exception ex) { App.Logger?.Debug("Friends delivery handler failed: {E}", ex.Message); }
+        }
+    }
+
+    /// <summary>Diffs a fresh server list against the last one: a new incoming request is raised
+    /// once, a vanished one once. The first list after a start or an account change is the baseline.</summary>
+    internal void NoteRequests(FriendsSnapshot state)
+    {
+        var (arrived, gone) = _requests.Update(state.Incoming);
+        foreach (var r in arrived)
+        {
+            try { RequestArrived?.Invoke(r); }
+            catch (Exception ex) { App.Logger?.Debug("Friends request handler failed: {E}", ex.Message); }
+        }
+        foreach (var id in gone)
+        {
+            try { RequestGone?.Invoke(id); }
+            catch (Exception ex) { App.Logger?.Debug("Friends request-gone handler failed: {E}", ex.Message); }
         }
     }
 

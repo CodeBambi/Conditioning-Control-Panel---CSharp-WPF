@@ -403,6 +403,8 @@ public partial class FriendsDrawerTests
         public event Action<FriendsSnapshot>? SnapshotChanged;
         public event Action<InboxItem>? Delivered { add { } remove { } }
         public event Action<SendKind, Friend>? Sent { add { } remove { } }
+        public event Action<FriendRequest>? RequestArrived { add { } remove { } }
+        public event Action<string>? RequestGone { add { } remove { } }
         public Task RefreshAsync() => Task.CompletedTask;
         public Task<SendResult> PokeAsync(string friendId, string pokeId) { Pokes.Add((friendId, pokeId)); return Task.FromResult(NextSend); }
         public List<(string, string, string?)> Invites { get; } = new();
