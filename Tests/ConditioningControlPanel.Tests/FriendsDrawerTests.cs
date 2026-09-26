@@ -198,22 +198,106 @@ public partial class FriendsDrawerTests
         {
             var goon = InviteCodes.GoonCode;
             var remote = InviteCodes.RemoteCode;
+            var canHost = InviteCodes.CanHostGoon;
             try
             {
                 InviteCodes.GoonCode = () => null;
-                InviteCodes.RemoteCode = () => "RC-1234";
+                InviteCodes.RemoteCode = () => null;
+                InviteCodes.CanHostGoon = () => true;
                 var d = NewDrawer(new FakeFriends(Sample()));
                 d.OpenPickerFor("sam", "invite");
                 var row = d.RowFor("sam")!;
-                Assert.False(((Button)Find(row, "friends-invite:goon")!).IsEnabled);
-                Assert.True(((Button)Find(row, "friends-invite:remote")!).IsEnabled);
+                // No room yet, but a host can open one from the tile itself.
+                Assert.True(((Button)Find(row, "friends-invite:goon")!).IsEnabled);
+                Assert.False(((Button)Find(row, "friends-invite:remote")!).IsEnabled);
                 Assert.True(((Button)Find(row, "friends-invite:backroom")!).IsEnabled);
                 Assert.True(((Button)Find(row, "friends-invite:ramp")!).IsEnabled);
+
+                // An account that cannot host gets the tile disabled with the reason.
+                InviteCodes.CanHostGoon = () => false;
+                var d2 = NewDrawer(new FakeFriends(Sample()));
+                d2.OpenPickerFor("sam", "invite");
+                var tile = (Button)Find(d2.RowFor("sam")!, "friends-invite:goon")!;
+                Assert.False(tile.IsEnabled);
+                Assert.Equal(Loc.Get("friends_invite_goon_prime"), tile.ToolTip);
             }
             finally
             {
                 InviteCodes.GoonCode = goon;
                 InviteCodes.RemoteCode = remote;
+                InviteCodes.CanHostGoon = canHost;
+            }
+        });
+    }
+
+    [Fact]
+    public void Goon_invite_opens_a_room_then_sends_its_code()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var goon = InviteCodes.GoonCode;
+            var canHost = InviteCodes.CanHostGoon;
+            var open = InviteCodes.OpenGoonRoom;
+            try
+            {
+                int opens = 0;
+                InviteCodes.GoonCode = () => null;
+                InviteCodes.CanHostGoon = () => true;
+                InviteCodes.OpenGoonRoom = _ => { opens++; return Task.FromResult<(string?, bool)>(("7QK4RM", false)); };
+                var svc = new FakeFriends(Sample()) { NextSend = SendResult.Sent };
+                var d = NewDrawer(svc);
+                var r = d.InviteToGoonAsync("sam").GetAwaiter().GetResult();
+                Assert.Equal(SendResult.Sent, r);
+                Assert.Equal(1, opens);
+                Assert.Equal(("sam", "goon", "7QK4RM"), svc.Invites.Single());
+
+                // A room already waiting is sent as is, no second room.
+                InviteCodes.GoonCode = () => "ABC123";
+                d.InviteToGoonAsync("kit").GetAwaiter().GetResult();
+                Assert.Equal(1, opens);
+                Assert.Equal(("kit", "goon", "ABC123"), svc.Invites.Last());
+            }
+            finally
+            {
+                InviteCodes.GoonCode = goon;
+                InviteCodes.CanHostGoon = canHost;
+                InviteCodes.OpenGoonRoom = open;
+            }
+        });
+    }
+
+    [Fact]
+    public void Goon_invite_mid_match_or_failed_open_sends_nothing_and_says_why()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var goon = InviteCodes.GoonCode;
+            var canHost = InviteCodes.CanHostGoon;
+            var open = InviteCodes.OpenGoonRoom;
+            try
+            {
+                InviteCodes.GoonCode = () => null;
+                InviteCodes.CanHostGoon = () => true;
+                InviteCodes.OpenGoonRoom = _ => Task.FromResult<(string?, bool)>((null, true));
+                var svc = new FakeFriends(Sample());
+                var d = NewDrawer(svc);
+                Assert.Null(d.InviteToGoonAsync("sam").GetAwaiter().GetResult());
+                Assert.Equal(Loc.Get("friends_invite_goon_busy"), d.ResultTextFor("sam"));
+
+                InviteCodes.OpenGoonRoom = _ => Task.FromResult<(string?, bool)>((null, false));
+                Assert.Null(d.InviteToGoonAsync("sam").GetAwaiter().GetResult());
+                Assert.Equal(Loc.Get("friends_invite_goon_failed"), d.ResultTextFor("sam"));
+
+                InviteCodes.CanHostGoon = () => false;
+                Assert.Null(d.InviteToGoonAsync("sam").GetAwaiter().GetResult());
+                Assert.Equal(Loc.Get("friends_invite_goon_prime"), d.ResultTextFor("sam"));
+                Assert.Empty(svc.Invites);
+            }
+            finally
+            {
+                InviteCodes.GoonCode = goon;
+                InviteCodes.CanHostGoon = canHost;
+                InviteCodes.OpenGoonRoom = open;
             }
         });
     }
@@ -321,7 +405,12 @@ public partial class FriendsDrawerTests
         public event Action<SendKind, Friend>? Sent { add { } remove { } }
         public Task RefreshAsync() => Task.CompletedTask;
         public Task<SendResult> PokeAsync(string friendId, string pokeId) { Pokes.Add((friendId, pokeId)); return Task.FromResult(NextSend); }
-        public Task<SendResult> InviteAsync(string friendId, string destination, string? code) => Task.FromResult(NextSend);
+        public List<(string, string, string?)> Invites { get; } = new();
+        public Task<SendResult> InviteAsync(string friendId, string destination, string? code)
+        {
+            Invites.Add((friendId, destination, code));
+            return Task.FromResult(NextSend);
+        }
         public Task<SendResult> SendWatchAsync(string friendId, WatchRef watch) { Watches.Add(watch); return Task.FromResult(NextSend); }
         public Task<AddResult> AddByCodeAsync(string code) { Adds.Add(code); return Task.FromResult(NextAdd); }
         public Task AcceptAsync(string requesterId) => Task.CompletedTask;

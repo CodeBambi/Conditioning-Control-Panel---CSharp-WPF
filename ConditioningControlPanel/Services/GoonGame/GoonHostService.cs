@@ -94,6 +94,8 @@ namespace ConditioningControlPanel.Services.GoonGame
         private static bool _recoveryWindowed;   // this relaunch is a recovery: ignore the remembered fullscreen
         private static bool _duckPreference = true;
         private static string? _pendingJoinCode;  // open tables: handed to the NEXT init, then spent
+        private static bool _pendingAutoHost;      // friends invite: the NEXT init opens the host screen
+        private static string? _roomCode;          // the room this page hosts and still waits in
         private static bool _duckedMainWindow;   // WE minimized main at launch, so WE owe a restore
         /// <summary>The CoreWebView2 whose <c>PermissionRequested</c> we have already subscribed to.
         /// The page's "ready" handshake fires again on every reload (and a recovery relaunch builds a
@@ -108,6 +110,70 @@ namespace ConditioningControlPanel.Services.GoonGame
         private static readonly HttpClient Http = BuildHttpClient();
 
         public static bool IsActive => _host != null;
+
+        /// <summary>The join code of the room this window is hosting while nobody has sat down
+        /// yet, else null. The page reports it (<c>room-code</c>); the friends drawer sends it.</summary>
+        public static string? RoomCode => _roomCode;
+
+        /// <summary>Raised when <see cref="RoomCode"/> changes, and again when the page re-tells
+        /// the same code on a <c>host-now</c> ask.</summary>
+        public static event Action? RoomCodeChanged;
+
+        /// <summary>The page refused a <c>host-now</c> ask: a match or practice is under way.</summary>
+        public static event Action? HostBusy;
+
+        /// <summary>May this account host? Same read the page's <c>caps.canHost</c> gets.</summary>
+        public static bool CanHost => HostingAllowed();
+
+        /// <summary>Open the game on the host screen (friends drawer invite). A window already
+        /// up gets a <c>host-now</c> frame: it opens a room, re-tells one it already has, or
+        /// answers <c>host-busy</c> mid-match.</summary>
+        public static void LaunchToHost()
+        {
+            if (_host != null)
+            {
+                try { _host.Post(new { type = "host-now" }); }
+                catch (Exception ex) { App.Logger?.Debug("GoonHostService: host-now post: {E}", ex.Message); }
+                _host.BringToFront();
+                return;
+            }
+            _pendingAutoHost = true;
+            Launch(duckMainWindow: true, joinCode: null);
+            if (_host == null) _pendingAutoHost = false;   // launch failed: do not carry it to a later open
+        }
+
+        /// <summary>Opens (or reuses) a room and returns its code once the page reports it; null on
+        /// a busy page, a refusal or <paramref name="timeout"/>. Call on the UI thread.</summary>
+        public static async Task<(string? Code, bool Busy)> OpenRoomForInviteAsync(TimeSpan timeout)
+        {
+            var existing = _roomCode;
+            if (!string.IsNullOrEmpty(existing)) return (existing, false);
+
+            var tcs = new TaskCompletionSource<(string?, bool)>(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnCode() { var c = _roomCode; if (!string.IsNullOrEmpty(c)) tcs.TrySetResult((c, false)); }
+            void OnBusy() => tcs.TrySetResult((null, true));
+            RoomCodeChanged += OnCode;
+            HostBusy += OnBusy;
+            try
+            {
+                LaunchToHost();
+                var done = await Task.WhenAny(tcs.Task, Task.Delay(timeout)).ConfigureAwait(true);
+                return done == tcs.Task ? tcs.Task.Result : (null, false);
+            }
+            finally
+            {
+                RoomCodeChanged -= OnCode;
+                HostBusy -= OnBusy;
+            }
+        }
+
+        private static void SetRoomCode(string? code, bool again)
+        {
+            if (code == _roomCode && !again) return;
+            _roomCode = code;
+            try { RoomCodeChanged?.Invoke(); }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService: RoomCodeChanged: {E}", ex.Message); }
+        }
 
         /// <summary>The page reported boot-error this app session (a genuine load/init failure).
         /// A caller can check this to route back to the C# cockpit instead.</summary>
@@ -330,6 +396,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // rather than compare across two documents.
                 _lastPaint = null;
                 _lastPaintMoveUtc = DateTime.UtcNow;
+                // ...and the old page's room: a fresh document hosts nothing until it says so.
+                SetRoomCode(null, again: false);
                 _paintStallHandled = false;
                 _host?.FocusWeb();
                 HookMicPermission();
@@ -374,6 +442,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                     // Open tables: a Join pressed in the friends drawer lands here. Spent on the
                     // first init so a reload (heartbeat recovery) does not rejoin a finished room.
                     joinCode = TakePendingJoinCode() ?? "",
+                    // Friends invite: straight to the host screen. Spent on the first init.
+                    autoHost = TakePendingAutoHost(),
                     consent = new
                     {
                         liveDurationSec = consent.LiveDurationSec,
@@ -681,6 +751,16 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "peer-niches":      // the opponent's hello named their niches; fill a pool from them
                     OnPeerNiches(o);
                     break;
+                case "room-code":        // the hosted room's code while it waits ('' = none): friends invite
+                {
+                    var raw = (string?)o["code"];
+                    var code = string.IsNullOrEmpty(raw) ? null : GoonJoinCode.Normalize(raw);
+                    SetRoomCode(code, again: code != null);
+                    break;
+                }
+                case "host-busy":        // a host-now ask landed mid-match
+                    try { HostBusy?.Invoke(); } catch { }
+                    break;
                 case "noise-want":       // a Sort duel's noise board, by set id ('' = release them all)
                     OnNoiseWant(o);
                     break;
@@ -981,6 +1061,13 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// free included. The server's <c>/v2/goon/join</c> answers 401 <c>signin</c> without an
         /// account; this is only the local read of "is there one". Practice never asks.</summary>
         internal static bool JoiningAllowed() => !string.IsNullOrEmpty(App.UnifiedUserId);
+
+        private static bool TakePendingAutoHost()
+        {
+            var a = _pendingAutoHost;
+            _pendingAutoHost = false;
+            return a;
+        }
 
         private static string? TakePendingJoinCode()
         {
@@ -1962,6 +2049,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                 try { ReleaseNoiseMedia(); } catch { }
                 try { _host?.Dispose(); } catch { }
                 _host = null;
+                _pendingAutoHost = false;
+                SetRoomCode(null, again: false);
                 // The handler dies with the core it was attached to; forgetting the reference is
                 // what lets the NEXT launch (a relaunch, a recovery) hook its own fresh core.
                 _micPermissionCore = null;
