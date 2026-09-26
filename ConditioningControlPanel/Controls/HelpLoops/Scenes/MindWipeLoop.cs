@@ -16,6 +16,17 @@ internal sealed class MindWipeLoop : HelpLoopScene
     private static readonly Rect Win = new(60, 22, 320, 170);
     private static readonly double[] Events = { 800, 2900, 4400, 5400, 6050, 6500 };
 
+    // The mockup's box-shadow (12px white, 22px lilac) as a vertical fade around the 3px line.
+    private static readonly Brush ScanGlow = LoopPalette.Freeze(new LinearGradientBrush(
+        new GradientStopCollection
+        {
+            new(LoopPalette.Css("#b99cff00"), 0),
+            new(LoopPalette.Css("#b99cff40"), .25),
+            new(LoopPalette.Css("#ffffffa0"), .5),
+            new(LoopPalette.Css("#b99cff40"), .75),
+            new(LoopPalette.Css("#b99cff00"), 1),
+        }, 90));
+
     private static readonly IReadOnlyList<HelpLoopStep> StepList = new[]
     {
         new HelpLoopStep("help_loop_mindwipe_1", 0, 2600),
@@ -56,8 +67,7 @@ internal sealed class MindWipeLoop : HelpLoopScene
             double y = w.Y + 18 + pk * (Win.Height - 18);
             using (f.ClipTo(dc, new RectangleGeometry(w, 8, 8)))
             {
-                using (f.Fade(dc, .18)) dc.DrawRectangle(p.Lilac, null, new Rect(w.X, y - 10, w.Width, 23));
-                using (f.Fade(dc, .45)) dc.DrawRectangle(p.White, null, new Rect(w.X, y - 4, w.Width, 11));
+                dc.DrawRectangle(ScanGlow, null, new Rect(w.X, y - 21, w.Width, 45));
                 dc.DrawRectangle(p.White, null, new Rect(w.X, y, w.Width, 3));
             }
         }
