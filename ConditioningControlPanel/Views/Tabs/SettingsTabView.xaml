@@ -449,7 +449,7 @@
                                   DimWhenInactive="True"
                                   ToggleRequested="CardFlash_Toggle"/>
             <features:SplitFeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" x:FieldModifier="internal"
-                                       TitleA="Mandatory Video" TitleB="Bubble Count"
+                                       TitleA="Mandatory Video" TitleB="Bubble Count" HelpSectionIdA="Video" HelpSectionIdB="BubbleCount"
                                        IconA="pack://application:,,,/Resources/features/mandatory_videos.png"
                                        IconB="pack://application:,,,/Resources/features/Bubble_count.png"
                                        ClickA="ComboVideoBubble_ClickA" ClickB="ComboVideoBubble_ClickB"
@@ -757,7 +757,7 @@
             </Border>
     
             <features:SplitFeatureCard DashboardDepth="True" Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" x:FieldModifier="internal"
-                                       TitleA="Spiral Overlay" TitleB="Pink Filter"
+                                       TitleA="Spiral Overlay" TitleB="Pink Filter" HelpSectionIdA="SpiralOverlay" HelpSectionIdB="PinkFilter"
                                        IconA="pack://application:,,,/Resources/features/spiral_overlay.png"
                                        IconB="pack://application:,,,/Resources/features/Pink_filter.png"
                                        ClickA="ComboSpiralPink_ClickA" ClickB="ComboSpiralPink_ClickB"
@@ -886,7 +886,7 @@
                            Foreground="#3A2A00" FontSize="10" FontWeight="Black"/>
             </Border>
             <features:SplitFeatureCard DashboardDepth="True" Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" x:FieldModifier="internal"
-                                       TitleA="Mind Wipe" TitleB="Brain Drain"
+                                       TitleA="Mind Wipe" TitleB="Brain Drain" HelpSectionIdA="MindWipe" HelpSectionIdB="BrainDrain"
                                        IconA="pack://application:,,,/Resources/features/Mind_Wipers.png"
                                        IconB="pack://application:,,,/Resources/features/brain_drain.png"
                                        ClickA="ComboMindDrain_ClickA" ClickB="ComboMindDrain_ClickB"

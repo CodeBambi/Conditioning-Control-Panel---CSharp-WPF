@@ -158,6 +158,18 @@
                     CornerRadius="12"
                     IsHitTestVisible="False"
                     Opacity="0"/>
+
+            <!-- One "?" per half, each tucked under its own title pill, same button and popover as
+                 FeatureCard's. Collapsed until the half has a HelpSectionId with content; the
+                 opposing half's "?" steps aside while the other half is filled. -->
+            <Button x:Name="BtnHelpA"
+                    Style="{DynamicResource HelpButtonStyle}"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="8,32,0,0" Panel.ZIndex="10" Visibility="Collapsed"/>
+            <Button x:Name="BtnHelpB"
+                    Style="{DynamicResource HelpButtonStyle}"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,8,32" Panel.ZIndex="10" Visibility="Collapsed"/>
         </Grid>
     </Border>
 </UserControl>

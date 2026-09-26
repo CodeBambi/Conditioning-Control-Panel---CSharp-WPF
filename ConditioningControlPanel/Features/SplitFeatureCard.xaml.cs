@@ -112,6 +112,28 @@ namespace ConditioningControlPanel.Features
             DependencyProperty.Register(nameof(IconB), typeof(ImageSource), typeof(SplitFeatureCard),
                 new PropertyMetadata(null, (d, e) => ((SplitFeatureCard)d).ApplyIcon(((SplitFeatureCard)d).HalfHostB, ((SplitFeatureCard)d).HalfMuteB, e.NewValue as ImageSource)));
 
+        public static readonly DependencyProperty HelpSectionIdAProperty =
+            DependencyProperty.Register(nameof(HelpSectionIdA), typeof(string), typeof(SplitFeatureCard),
+                new PropertyMetadata(null, (d, _) => ((SplitFeatureCard)d).RefreshHelp()));
+
+        public static readonly DependencyProperty HelpSectionIdBProperty =
+            DependencyProperty.Register(nameof(HelpSectionIdB), typeof(string), typeof(SplitFeatureCard),
+                new PropertyMetadata(null, (d, _) => ((SplitFeatureCard)d).RefreshHelp()));
+
+        /// <summary>HelpContentService section for half A's "?"; no button when it has no content.</summary>
+        public string? HelpSectionIdA
+        {
+            get => (string?)GetValue(HelpSectionIdAProperty);
+            set => SetValue(HelpSectionIdAProperty, value);
+        }
+
+        /// <summary>HelpContentService section for half B's "?"; no button when it has no content.</summary>
+        public string? HelpSectionIdB
+        {
+            get => (string?)GetValue(HelpSectionIdBProperty);
+            set => SetValue(HelpSectionIdBProperty, value);
+        }
+
         public static readonly DependencyProperty IsActiveAProperty =
             DependencyProperty.Register(nameof(IsActiveA), typeof(bool), typeof(SplitFeatureCard),
                 new PropertyMetadata(false, (d, _) => ((SplitFeatureCard)d).ApplyActiveState()));
@@ -165,6 +187,7 @@ namespace ConditioningControlPanel.Features
             ApplyHalfRestOpacity();
             ApplyHalfMute(0);
             Loaded += OnCardLoaded;
+            Loaded += (_, _) => RefreshHelp();
             Unloaded += OnCardUnloaded;
             // A tile hidden mid-hover (tab switch out of the dashboard) can be denied its
             // MouseLeave, and would come back still filled - so drop the fill on the way out.
@@ -398,8 +421,57 @@ namespace ConditioningControlPanel.Features
 
         private void OnRightClick(object sender, MouseButtonEventArgs e) => RouteClick(e, right: true);
 
+        // Same carve-out FeatureCard keeps for its "?": a press on a help button never opens or
+        // toggles the half under it.
+        private bool FromHelpButton(RoutedEventArgs e) =>
+            e.OriginalSource is DependencyObject src && (IsWithin(src, BtnHelpA) || IsWithin(src, BtnHelpB));
+
+        private static bool IsWithin(DependencyObject? node, DependencyObject target)
+        {
+            while (node != null)
+            {
+                if (ReferenceEquals(node, target)) return true;
+                node = node is Visual or System.Windows.Media.Media3D.Visual3D
+                    ? VisualTreeHelper.GetParent(node)
+                    : LogicalTreeHelper.GetParent(node);
+            }
+            return false;
+        }
+
+        private void RefreshHelp()
+        {
+            ApplyHelp(BtnHelpA, HelpSectionIdA);
+            ApplyHelp(BtnHelpB, HelpSectionIdB);
+            ApplyHelpForHover();
+        }
+
+        private void ApplyHelp(Button button, string? id)
+        {
+            if (string.IsNullOrWhiteSpace(id) || !Services.HelpContentService.HasContent(id))
+            {
+                button.Visibility = Visibility.Collapsed;
+                Controls.HelpPopover.Clear(button);
+                return;
+            }
+            button.Visibility = Visibility.Visible;
+            // Resource lookups fail before the card is in the tree; Loaded runs this again.
+            if (!IsLoaded) return;
+            button.ToolTip = null;
+            Controls.HelpPopover.Attach(button, Services.HelpContentService.GetContent(id));
+        }
+
+        /// <summary>While one half fills the tile, the other half's "?" steps aside with its title.</summary>
+        private void ApplyHelpForHover()
+        {
+            BtnHelpA.Opacity = _halfHover == false ? 0 : 1;
+            BtnHelpA.IsHitTestVisible = _halfHover != false;
+            BtnHelpB.Opacity = _halfHover == true ? 0 : 1;
+            BtnHelpB.IsHitTestVisible = _halfHover != true;
+        }
+
         private void RouteClick(MouseButtonEventArgs e, bool right)
         {
+            if (FromHelpButton(e)) return;
             bool invert = DashboardDepth && App.Settings?.Current?.DashboardInvertClicks == true;
             bool toggle = right != invert;
             bool halfA = ResolveHalfA(e.GetPosition(ContentRoot));
@@ -427,6 +499,7 @@ namespace ConditioningControlPanel.Features
         {
             if (_halfHover == halfA) return;
             _halfHover = halfA;
+            ApplyHelpForHover();
 
             // The committed half is about to fill the tile, so it gets its full art back - colour
             // and all - even while its feature is off; the reveal is the point of the sweep.
