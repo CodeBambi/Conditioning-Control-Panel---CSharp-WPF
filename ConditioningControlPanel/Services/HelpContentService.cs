@@ -280,7 +280,6 @@ namespace ConditioningControlPanel.Services
             ["SessionEditor"] = new HelpContent
             {
                 SectionId = "SessionEditor",
-                ClipFile = "sessioneditor.mov",
                 CaptionKey = "help_caption_timeline_editor",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "🎚", // 🎚 level slider - connotes timeline tracks
@@ -865,7 +864,6 @@ namespace ConditioningControlPanel.Services
             ["KeywordTriggers"] = new HelpContent
             {
                 SectionId = "KeywordTriggers",
-                ClipFile = "keyword_triggers.mp4",
                 CaptionKey = "help_caption_keyword_triggers",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\u2328",
@@ -1157,7 +1155,6 @@ namespace ConditioningControlPanel.Services
             ["Modding"] = new HelpContent
             {
                 SectionId = "Modding",
-                ClipFile = "mod_creator.mp4",
                 CaptionKey = "help_caption_mod_creator",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDD27",
@@ -1212,7 +1209,6 @@ namespace ConditioningControlPanel.Services
             ["WebcamCalibration"] = new HelpContent
             {
                 SectionId = "WebcamCalibration",
-                ClipFile = "calibration.mp4",
                 CaptionKey = "help_caption_calibration",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\ud83c\udfaf", // \ud83c\udfaf target - "look at the dot"
