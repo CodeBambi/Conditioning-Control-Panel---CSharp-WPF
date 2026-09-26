@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Controls.HelpLoops
     /// the mockup's DOM furniture (cursor, ripple, chips, slider, bubble...) and draw on Front
     /// unless noted.
     /// </summary>
-    public sealed class LoopFrame
+    public sealed partial class LoopFrame
     {
         public const double StageWidth = 480;
         public const double StageHeight = 270;
