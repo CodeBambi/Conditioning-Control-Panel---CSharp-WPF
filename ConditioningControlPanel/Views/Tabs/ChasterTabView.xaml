@@ -672,7 +672,8 @@
                                 </Ellipse.Fill>
                             </Ellipse>
                         </Grid>
-                        <Border x:Name="AddedCard" Grid.Column="0" Style="{StaticResource CirceCard}" VerticalAlignment="Top">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Top">
+                        <Border x:Name="AddedCard" Style="{StaticResource CirceCard}" VerticalAlignment="Top">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -735,6 +736,44 @@
                                 </Grid>
                             </Grid>
                         </Border>
+                            <!-- ================= 4. THE KEYS: a 2x2 under the heads-up clock, beside the ladder scrap (owner, 2026-09-26) ================= -->
+                            <TextBlock x:Name="PricesHeader" Text="{loc:Str chaster_keys_eyebrow}" Style="{StaticResource CirceEyebrow}" Margin="4,14,0,8"/>
+                            <UniformGrid x:Name="PresetRow" Columns="2" Rows="2" Margin="0,0,-12,-12">
+                                <ToggleButton x:Name="BtnPresetGentle" Style="{StaticResource CirceKey}" Tag="gentle" Click="Preset_Click" Margin="0,0,12,12"
+                                              ToolTip="{loc:Str chaster_preset_gentle_hint}">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="{loc:Str chaster_preset_gentle}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtStakesGentle" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" Opacity="0.7"
+                                                   HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </ToggleButton>
+                                <ToggleButton x:Name="BtnPresetStrict" Style="{StaticResource CirceKey}" Tag="strict" Click="Preset_Click" Margin="0,0,12,12"
+                                              ToolTip="{loc:Str chaster_preset_strict_hint}">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="{loc:Str chaster_preset_strict}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtStakesStrict" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" Opacity="0.7"
+                                                   HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </ToggleButton>
+                                <ToggleButton x:Name="BtnPresetCirce" Style="{StaticResource CirceKey}" Tag="circe" Click="Preset_Click" Margin="0,0,12,12"
+                                              ToolTip="{loc:Str chaster_preset_circe_hint}">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="{loc:Str chaster_preset_circe}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtStakesCirce" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" Opacity="0.7"
+                                                   HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </ToggleButton>
+                                <!-- The fourth key is the player's own mix: it lights whenever the boards match no
+                                     preset, and pressing it changes nothing. -->
+                                <ToggleButton x:Name="BtnPresetCustom" Style="{StaticResource CirceKey}" Tag="custom" Click="Preset_Click" Margin="0,0,12,12"
+                                              ToolTip="{loc:Str chaster_key_custom_hint}">
+                                    <TextBlock Text="{loc:Str chaster_preset_custom}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"/>
+                                </ToggleButton>
+                            </UniformGrid>
+                        </StackPanel>
                         </Grid>
 
                         <!-- The first switch-on, and only the first: four facts, one button. -->
@@ -774,43 +813,6 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- ================= 4. THE KEYS ================= -->
-                        <TextBlock x:Name="PricesHeader" Text="{loc:Str chaster_keys_eyebrow}" Style="{StaticResource CirceEyebrow}" Margin="4,4,0,8"/>
-                        <UniformGrid x:Name="PresetRow" Columns="4" Margin="0,0,-12,0">
-                            <ToggleButton x:Name="BtnPresetGentle" Style="{StaticResource CirceKey}" Tag="gentle" Click="Preset_Click"
-                                          ToolTip="{loc:Str chaster_preset_gentle_hint}">
-                                <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="{loc:Str chaster_preset_gentle}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
-                                               HorizontalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtStakesGentle" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" Opacity="0.7"
-                                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
-                                </StackPanel>
-                            </ToggleButton>
-                            <ToggleButton x:Name="BtnPresetStrict" Style="{StaticResource CirceKey}" Tag="strict" Click="Preset_Click"
-                                          ToolTip="{loc:Str chaster_preset_strict_hint}">
-                                <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="{loc:Str chaster_preset_strict}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
-                                               HorizontalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtStakesStrict" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" Opacity="0.7"
-                                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
-                                </StackPanel>
-                            </ToggleButton>
-                            <ToggleButton x:Name="BtnPresetCirce" Style="{StaticResource CirceKey}" Tag="circe" Click="Preset_Click"
-                                          ToolTip="{loc:Str chaster_preset_circe_hint}">
-                                <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="{loc:Str chaster_preset_circe}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
-                                               HorizontalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtStakesCirce" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" Opacity="0.7"
-                                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
-                                </StackPanel>
-                            </ToggleButton>
-                            <!-- The fourth key is the player's own mix: it lights whenever the boards match no
-                                 preset, and pressing it changes nothing. -->
-                            <ToggleButton x:Name="BtnPresetCustom" Style="{StaticResource CirceKey}" Tag="custom" Click="Preset_Click"
-                                          ToolTip="{loc:Str chaster_key_custom_hint}">
-                                <TextBlock Text="{loc:Str chaster_preset_custom}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"/>
-                            </ToggleButton>
-                        </UniformGrid>
 
                         <!-- ================= 5. THE MENU: two boards, always in view ================= -->
                         <TextBlock Text="{loc:Str chaster_menu_eyebrow}" Style="{StaticResource CirceEyebrow}" Margin="4,18,0,8"/>
