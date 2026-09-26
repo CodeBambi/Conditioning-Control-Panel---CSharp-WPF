@@ -61,12 +61,20 @@ namespace ConditioningControlPanel.Controls.HelpLoops
         private static readonly Pen BubbleGlow = LoopPalette.Freeze(new Pen(LoopPalette.Solid("#ff6fb526"), 4));
 
         public LoopFrame(DrawingContext back, DrawingContext front, LoopPalette palette, double pixelsPerDip = 1.0)
+            : this(null, back, front, palette, pixelsPerDip) { }
+
+        /// <summary>With a separate ground layer under Back, so <see cref="BackBlur"/> never smears
+        /// the stage edges (the view passes one; a bare two-layer frame paints ground on Back).</summary>
+        public LoopFrame(DrawingContext? ground, DrawingContext back, DrawingContext front, LoopPalette palette, double pixelsPerDip = 1.0)
         {
+            _groundDc = ground;
             Back = back;
             Front = front;
             P = palette;
             PixelsPerDip = pixelsPerDip <= 0 ? 1.0 : pixelsPerDip;
         }
+
+        private readonly DrawingContext? _groundDc;
 
         /// <summary>The desktop layer.</summary>
         public DrawingContext Back { get; }
@@ -148,7 +156,7 @@ namespace ConditioningControlPanel.Controls.HelpLoops
         /// <summary>The stage ground (the engine paints it before every frame).</summary>
         public void Ground()
         {
-            Back.DrawRectangle(GroundBrush, null, new Rect(0, 0, StageWidth, StageHeight));
+            (_groundDc ?? Back).DrawRectangle(GroundBrush, null, new Rect(0, 0, StageWidth, StageHeight));
         }
 
         private static readonly Brush GroundBrush = LoopPalette.Freeze(new RadialGradientBrush
