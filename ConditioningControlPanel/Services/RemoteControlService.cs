@@ -320,6 +320,32 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Debug("[RemoteControl] Session stopped");
         }
 
+        /// <summary>
+        /// Ends the session HERE first and tells the server after, without waiting on it. The leash
+        /// cut (Services/Leash/LeashCutSafety.cs) needs the controller gone the instant the user
+        /// cuts, not after a 15 s network timeout. Safe to call when no session runs. UI thread.
+        /// </summary>
+        public void EndSessionNow()
+        {
+            if (!IsActive) return;
+            var unifiedId = App.UnifiedUserId;
+            CleanupSession();
+            App.Logger?.Information("[RemoteControl] Session ended locally (leash cut)");
+            if (string.IsNullOrEmpty(unifiedId)) return;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var body = JsonConvert.SerializeObject(new { unified_id = unifiedId });
+                    using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/stop", body);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "[RemoteControl] Stop request after a local end failed");
+                }
+            });
+        }
+
         private void CleanupSession()
         {
             _pollTimer?.Stop();
@@ -1119,6 +1145,19 @@ namespace ConditioningControlPanel.Services
         {
             _lastCommandStatus = "ok";
             _lastCommandReason = null;
+
+            // The Leash (owner, 2026-09-26): a leashed account keeps its way out. From ANY remote
+            // session, Strict Lock never goes on, the panic key never goes off, and a session start
+            // loses its strict_lock flag. See Services/Leash/LeashGuard.cs (LeashRemoteRule).
+            var leashVerdict = Leash.LeashRemoteRule.Screen(
+                action, Leash.LeashRemoteRule.AsksStrictLock(parameters), Leash.LeashGuard.Check());
+            if (leashVerdict == Leash.LeashRemoteVerdict.Refuse)
+            {
+                ReportCommandRefused(action, "not while on a leash");
+                return;
+            }
+            if (leashVerdict == Leash.LeashRemoteVerdict.StripStrict)
+                App.Logger?.Information("[RemoteControl] start_session asked for strict lock; dropped, the account is leashed");
             DispatcherHelper.RunOnUISync(() =>
             {
                 try
@@ -1378,7 +1417,8 @@ namespace ConditioningControlPanel.Services
                             {
                                 MainWindowRef.StartSessionFromRemote(session);
                             }
-                            if (parameters?["strict_lock"]?.Value<bool>() == true)
+                            if (leashVerdict != Leash.LeashRemoteVerdict.StripStrict
+                                && parameters?["strict_lock"]?.Value<bool>() == true)
                             {
                                 if (App.Settings?.Current != null)
                                 {
