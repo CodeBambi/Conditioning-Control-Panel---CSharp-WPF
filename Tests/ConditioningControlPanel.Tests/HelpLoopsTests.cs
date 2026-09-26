@@ -113,6 +113,28 @@ public sealed class HelpLoopsTests
         Assert.True(still.Count == 0, "still on a clip: " + string.Join(", ", still));
     }
 
+    [Fact]
+    public void TopicsWithALoop_NoLongerShipAClip()
+    {
+        var still = HelpLoopRegistry.Ids.Where(HelpContentService.HasContent)
+            .Select(HelpContentService.GetContent)
+            .Where(c => c.HasClip)
+            .Select(c => c.SectionId)
+            .ToList();
+        Assert.True(still.Count == 0, "has a loop and still names a clip: " + string.Join(", ", still));
+    }
+
+    [Theory]
+    [InlineData("KeywordTriggers")]
+    [InlineData("WebcamCalibration")]
+    [InlineData("Modding")]
+    [InlineData("SessionEditor")]
+    public void RetiredPlaceholderClips_AreGone(string id)
+    {
+        Assert.True(HelpContentService.HasContent(id), id + " lost its help topic");
+        Assert.False(HelpContentService.GetContent(id).HasClip, id + " still names a clip");
+    }
+
     [Theory]
     [MemberData(nameof(Ids))]
     public void Scene_DrawsEvery50msOfItsLoop(string id)
