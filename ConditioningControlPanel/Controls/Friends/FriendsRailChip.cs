@@ -1,10 +1,13 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Friends;
@@ -134,6 +137,7 @@ public sealed class FriendsRailChip : UserControl
         };
         _popup.Opened += OnPopupOpened;
         _popup.Closed += OnPopupClosed;
+        _drawer.PreviewMouseDown += OnDrawerMouseDown;
 
         grid.MouseLeftButtonUp += (_, e) => { Toggle(); e.Handled = true; };
         grid.MouseEnter += (_, _) => Hover(true);
@@ -184,7 +188,28 @@ public sealed class FriendsRailChip : UserControl
     {
         Rebind();
         RefreshFace();
+        if (_popup.IsOpen) DropTopmost();
     }
+
+    /// <summary>A WPF popup is a TOPMOST window, so a drawer left open floated over every other
+    /// app (a player's browser, bug report 6.11). The popup is owned by the host window, so
+    /// without topmost it still sits above the panel or launcher, and goes behind other apps with
+    /// them. Re-applied on open and on every activation, in case WPF restores the flag.</summary>
+    private void DropTopmost()
+    {
+        try
+        {
+            if (PresentationSource.FromVisual(_drawer) is HwndSource src && src.Handle != IntPtr.Zero)
+                SetWindowPos(src.Handle, HwndNoTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+        }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] drawer topmost drop failed: {E}", ex.Message); }
+    }
+
+    private static readonly IntPtr HwndNoTopmost = new(-2);
+    private const uint SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoActivate = 0x0010;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
     internal void Rebind()
     {
@@ -284,6 +309,7 @@ public sealed class FriendsRailChip : UserControl
             }
             _face.Background = FriendsLook.RaisedBrush;
             _face.BorderBrush = FriendsLook.Line2Brush;
+            DropTopmost();
             _drawer.OnOpened();
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] drawer open failed: {E}", ex.Message); }
@@ -328,6 +354,39 @@ public sealed class FriendsRailChip : UserControl
                 : LogicalTreeHelper.GetParent(cur);
         }
         return false;
+    }
+
+    /// <summary>A press inside the drawer while another app has the foreground. A popup never
+    /// activates its owner on a click, so without this the code box took the caret but every
+    /// key and every paste still went to the app in front (Discord, where the code was copied).
+    /// Activating the host hands the keyboard back; the pressed text box is focused again once
+    /// the activation has settled.</summary>
+    private void OnDrawerMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        try
+        {
+            if (_host == null || _host.IsActive) return;
+            _host.Activate();
+            var box = FindTextBox(e.OriginalSource as DependencyObject);
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                if (box != null) { box.Focus(); Keyboard.Focus(box); }
+                else _drawer.Focus();
+            }));
+        }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] drawer activate failed: {E}", ex.Message); }
+    }
+
+    private static TextBox? FindTextBox(DependencyObject? d)
+    {
+        while (d != null)
+        {
+            if (d is TextBox t) return t;
+            d = d is Visual || d is System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(d)
+                : LogicalTreeHelper.GetParent(d);
+        }
+        return null;
     }
 
     private void OnHostMoved(object? sender, EventArgs e) => _popup.IsOpen = false;
