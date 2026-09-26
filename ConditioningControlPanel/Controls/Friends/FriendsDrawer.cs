@@ -45,6 +45,9 @@ public sealed partial class FriendsDrawer : Border
     private readonly Border _foot = new();
     private readonly Canvas _fx = new() { IsHitTestVisible = false };
 
+    /// <summary>The leash, pinned above the list (Controls/Leash). Kept between repaints.</summary>
+    private readonly Leash.LeashDrawerSection _leash = new();
+
     private TextBox? _codeBox;
     private TextBlock? _addResult;
     private Button? _addGo;
@@ -359,6 +362,7 @@ public sealed partial class FriendsDrawer : Border
             return;
         }
 
+        _list.Children.Add(_leash);
         var (online, offline) = FriendsDrawerRules.Split(snap);
         if (_openId != null && !ContainsFriend(snap, _openId)) { _openId = null; _picker = null; }
 
@@ -581,6 +585,7 @@ public sealed partial class FriendsDrawer : Border
             grid.Children.Add(b);
         }
         card.Children.Add(grid);
+        if (_leash.OfferChipFor(f) is { } leashChip) card.Children.Add(leashChip);
 
         var more = FriendsLook.Pill(ButtonContent("", Loc.Get("friends_action_more"), center: true),
             Brushes.Transparent, FriendsLook.MutedBrush, FriendsLook.Line2Brush, 10, new Thickness(10, 6, 10, 6));
