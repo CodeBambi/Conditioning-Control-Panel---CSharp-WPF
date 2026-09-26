@@ -327,6 +327,15 @@ public static partial class LauncherHost
             return false;
         }
 
+        // A leash punishment pending: every game tile leads to the gate first. The panel comes
+        // up and the gate lands there (MainWindow.Leash.cs); Panic and Cut leash are on it.
+        if (App.MainWindowRef?.LeashBlocksGames == true)
+        {
+            Log.Information("[Launcher] {Id} waits: a leash punishment is pending", entry.Id);
+            OpenPanel(null, () => App.MainWindowRef?.PresentLeashGateFromLauncher());
+            return true;
+        }
+
         _panelRequested = false;
         if (!LauncherCatalogue.TryLaunch(entry.Id)) return false;
 
