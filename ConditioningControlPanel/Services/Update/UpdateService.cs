@@ -20,13 +20,53 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.11.0";
+        public const string AppVersion = "6.11.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.11.0 - Locktober
+        public const string CurrentPatchNotes = @"v6.11.1 - Locktober
+
+NEW IN 6.11.1
+
+THE LOCKTOBER RAFFLE
+- hover the new clock on Circe's Tab: your raffle card. every day CCP adds time to your lock counts, and 25 days plus 31 hours of added time put you in the draw.
+- the winner is drawn live on stream. post my days in Discord is yours to switch on. rules at cclabs.app/locktober-rules.
+- beside it, pinned: the month's top 10. brag rights only. your name shows only if you say so.
+
+CIRCE'S TAB, DEEPER
+- prices hit harder, about two to three times.
+- new rows: a day with CCP open but no real conditioning, dailies left undone, and a credit for every 7-day streak.
+- heat: the same slip-up twice in a day costs more each time, up to three times the price.
+- a clock of everything CCP has added to your lock, all time and this month.
+- the four keys sit in a square under the clock.
+- safer: a cloud restore keeps this PC's Chaster settings, and a relock catch-up never passes your daily limit.
+
+THE LEASH
+- on the friend list, one friend can hold the other's leash: send a task, a reward or a punishment, from a set list. no free text.
+- a punishment video plays in its own window and stays up until it ends. the holder picks how long, up to the most the leashed side allows.
+- whoever is leashed can cut it at any time: from the card, the tray, or by holding the panic key for 5 seconds. cutting turns Strict Lock off and panic on, and costs nothing.
+- panic always works. while leashed, nobody can turn on Strict Lock or turn off panic for you.
+- a short explainer shows the first time, to both of you, before anyone offers or accepts.
+
+FRIENDS
+- sounds for pokes, invites, requests and the drawer.
+- a friend request lands in your inbox.
+- a Goon Game invite takes one tap: it opens a room and sends it.
+- the drawer takes focus when you click it from another app, and no longer floats over everything.
+
+HELP, DRAWN
+- 23 ? buttons now play a short drawn animation instead of a video: every tile on Home, plus keyword triggers, calibration, intensity ramp, scheduler, focus gaze, blink trainer, audio ducking, remote, screen reading, the gaze game, presets and the session editor.
+- every tutorial video is gone, so the installer is about 87 MB lighter.
+- split tiles on Home get a ? for each half, and their pink border sits on the edge.
+
+FIXES
+- the new companion page really ships this time. 6.11.0 still showed the old room.
+- the companion's speech bubble stays above it when it pops out of the tube.
+- emoji show in colour: preset chips, the Ctrl+K palette and about 80 more spots that drew them flat and black.
+- the big tier badge shows above the account menu when you hover it.
+- Mod Creator's ? opens its step-by-step tour instead of a test pattern.
 
 LOCKTOBER: CHASTER
 - link your Chaster lock and CCP keeps a tab. slip-ups you choose to price add time, good behaviour takes it off.
@@ -62,7 +102,7 @@ FIXES
 - Racing Thoughts: Esc pauses instead of closing the game, and a BambiCloud level opens behind the game and starts when you press play.
 - the log says why Lovense or the local AI failed.
 
-full nerd changelog in pull requests 1501 through 1699.";
+full nerd changelog in pull requests 1501 through 1729.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
