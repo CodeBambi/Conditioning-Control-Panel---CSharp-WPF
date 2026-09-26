@@ -105,6 +105,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="{Binding Glyph}" FontSize="15"
+                                       Foreground="{DynamicResource TextLightBrush}"
                                        VerticalAlignment="Center" Margin="0,0,11,0"/>
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="{Binding Label}" FontSize="13"
