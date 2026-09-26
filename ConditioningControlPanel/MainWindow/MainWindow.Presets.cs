@@ -143,7 +143,7 @@ namespace ConditioningControlPanel
                 string.IsNullOrWhiteSpace(sectionId))
                 return;
             var content = Services.HelpContentService.GetContent(sectionId);
-            if (content.HasClip)
+            if (content.HasClip || Controls.HelpLoops.HelpLoopRegistry.Has(content.SectionId))
             {
                 HelpVideoWindow.Show(content, this);
             }
