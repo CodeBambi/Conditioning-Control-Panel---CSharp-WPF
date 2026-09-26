@@ -229,6 +229,36 @@ public class TabDeeperTests : IDisposable
     }
 
     [Fact]
+    public void Each_preset_sets_its_own_stakes()
+    {
+        var gentle = TabPresets.Find(TabPresets.Gentle)!;
+        var strict = TabPresets.Find(TabPresets.Strict)!;
+        var circe = TabPresets.Find(TabPresets.Circe)!;
+        Assert.True(gentle.DayMinutes < strict.DayMinutes && strict.DayMinutes < circe.DayMinutes);
+        Assert.Equal(TabLimits.Default.DailySeconds / 60, strict.DayMinutes);
+        // A whole month of Gentle at its limit is under a day late; Strict about four days, Circe eight.
+        Assert.Equal((16, false), TabPresets.WorstMonth(gentle));
+        Assert.Equal((4, true), TabPresets.WorstMonth(strict));
+        Assert.Equal((8, true), TabPresets.WorstMonth(circe));
+    }
+
+    [Fact]
+    public void A_preset_lowers_limits_at_once_and_raises_them_a_day_later()
+    {
+        var now = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+        var day = new LimitSetting(180, 0, null);
+        var backlog = new LimitSetting(720, 0, null);
+
+        var (d1, b1) = TabPresets.RequestLimits(TabPresets.Find(TabPresets.Gentle)!, day, backlog, now);
+        Assert.Equal(30, LimitChange.Effective(d1, now));
+        Assert.Equal(120, LimitChange.Effective(b1, now));
+
+        var (d2, _) = TabPresets.RequestLimits(TabPresets.Find(TabPresets.Circe)!, d1, b1, now);
+        Assert.Equal(30, LimitChange.Effective(d2, now));
+        Assert.Equal(360, LimitChange.Effective(d2, now + LimitChange.RaiseDelay));
+    }
+
+    [Fact]
     public void Presets_carry_the_new_rows()
     {
         Assert.Contains(TabDayEnd.HeatId, TabPresets.Apply(TabPresets.Strict));

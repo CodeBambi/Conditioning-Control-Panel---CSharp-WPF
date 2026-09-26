@@ -204,6 +204,8 @@
   "chaster_preset_strict_hint": "전부 비용이에요. 줄이는 길은 하나, 세션을 끝내기.",
   "chaster_preset_circe_hint": "일상 항목을 양방향으로. 티어 필요 없음.",
   "chaster_preset_custom_hint": "나만의 세트.",
+  "chaster_preset_stakes_hours": "Worst month +{0} h",
+  "chaster_preset_stakes_days": "Worst month +{0} days",
   "chaster_bill_added": "추가됨",
   "chaster_bill_earned": "되찾음",
   "chaster_bill_pushed_label": "잠금으로 보냄",

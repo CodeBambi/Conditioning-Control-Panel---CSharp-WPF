@@ -204,6 +204,8 @@
   "chaster_preset_strict_hint": "Alles kostet. Ein Weg nach unten: eine Sitzung beenden.",
   "chaster_preset_circe_hint": "Die alltäglichen Zeilen, in beide Richtungen, ohne Stufe.",
   "chaster_preset_custom_hint": "Dein eigenes Set.",
+  "chaster_preset_stakes_hours": "Worst month +{0} h",
+  "chaster_preset_stakes_days": "Worst month +{0} days",
   "chaster_bill_added": "Hinzugefügt",
   "chaster_bill_earned": "Zurückverdient",
   "chaster_bill_pushed_label": "Ans Schloss geschickt",

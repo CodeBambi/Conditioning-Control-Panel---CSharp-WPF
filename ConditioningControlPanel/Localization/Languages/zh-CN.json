@@ -209,6 +209,8 @@
   "chaster_preset_strict_hint": "样样都加时。唯一的减法：完成一次会话。",
   "chaster_preset_circe_hint": "日常项目，双向都有，不需要等级。",
   "chaster_preset_custom_hint": "你自己的一套。",
+  "chaster_preset_stakes_hours": "Worst month +{0} h",
+  "chaster_preset_stakes_days": "Worst month +{0} days",
   "chaster_bill_added": "已加",
   "chaster_bill_earned": "已赚回",
   "chaster_bill_pushed_label": "已发到锁上",

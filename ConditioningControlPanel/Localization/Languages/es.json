@@ -204,6 +204,8 @@
   "chaster_preset_strict_hint": "Todo cuesta. Una forma de bajar: terminar una sesión.",
   "chaster_preset_circe_hint": "Las filas de cada día, en los dos sentidos, sin nivel.",
   "chaster_preset_custom_hint": "Tu propio conjunto.",
+  "chaster_preset_stakes_hours": "Worst month +{0} h",
+  "chaster_preset_stakes_days": "Worst month +{0} days",
   "chaster_bill_added": "Añadido",
   "chaster_bill_earned": "Recuperado",
   "chaster_bill_pushed_label": "Enviado al candado",

@@ -204,6 +204,8 @@
   "chaster_preset_strict_hint": "Платишь за всё. Один путь вниз: закончить сессию.",
   "chaster_preset_circe_hint": "Повседневные строки, в обе стороны, без уровня подписки.",
   "chaster_preset_custom_hint": "Твой собственный набор.",
+  "chaster_preset_stakes_hours": "Worst month +{0} h",
+  "chaster_preset_stakes_days": "Worst month +{0} days",
   "chaster_bill_added": "Добавлено",
   "chaster_bill_earned": "Отыграно",
   "chaster_bill_pushed_label": "Отправлено на замок",
