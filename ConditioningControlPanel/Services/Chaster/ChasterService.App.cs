@@ -47,6 +47,7 @@ public sealed partial class ChasterService
             MinutesOn = MinutesFromDayLog,
             LadderApi = new ChasterLadderApi(),
             RafflePostDays = () => App.Settings?.Current?.ChasterRafflePostDays == true,
+            LadderShowName = () => App.Settings?.Current?.ChasterLadderShowName == true,
         };
     }
 
@@ -79,6 +80,7 @@ public sealed partial class ChasterService
         {
             LadderApi = new DemoRaffle(Environment.GetEnvironmentVariable(DemoEnvVar)),
             RafflePostDays = () => App.Settings?.Current?.ChasterRafflePostDays == true,
+            LadderShowName = () => App.Settings?.Current?.ChasterLadderShowName == true,
         };
         svc.Note("typo", 3);
         svc.Note("attention");
@@ -93,8 +95,8 @@ public sealed partial class ChasterService
     /// routes are live. The variable's value picks the state: <c>in</c> (in the draw),
     /// <c>time</c> (days met, time short), <c>out</c> (days out of reach), <c>ticket</c> (list
     /// frozen, holds a ticket), <c>missed</c> (frozen, no ticket); anything else is mid-month
-    /// and a few days short.</summary>
-    private sealed class DemoRaffle : IChasterLadderApi
+    /// and a few days short. <c>noboard</c> keeps that card and gives the pinned top ten no board.</summary>
+    internal sealed class DemoRaffle : IChasterLadderApi
     {
         private readonly string _state;
         private bool _post;
@@ -130,6 +132,43 @@ public sealed partial class ChasterService
         }
 
         public Task<RaffleCard?> MeAsync(CancellationToken ct = default) => Task.FromResult<RaffleCard?>(Card());
+
+        // The pinned scrap: a mix of named and unnamed rows, the player at #23 below the ten.
+        // "Show my name" flips the own row from a made-up label to a name.
+        private bool _showName;
+
+        private static readonly (string Name, bool Named, int Seconds)[] Top =
+        {
+            ("kittenlocked", true, 61 * 3600 + 15 * 60),
+            ("Locked 7F3A9C", false, 54 * 3600 + 30 * 60),
+            ("Mx. Keyholder", true, 47 * 3600),
+            ("Locked 0B41DE", false, 41 * 3600 + 45 * 60),
+            ("pinkpadlock", true, 38 * 3600 + 15 * 60),
+            ("Locked C2E871", false, 33 * 3600),
+            ("Locked 9D05AA", false, 29 * 3600 + 30 * 60),
+            ("obedient_otter", true, 26 * 3600 + 45 * 60),
+            ("Locked 5512F0", false, 24 * 3600),
+            ("cage_and_crown", true, 21 * 3600 + 15 * 60),
+        };
+
+        public Task<LadderBoard?> TopAsync(CancellationToken ct = default) =>
+            Task.FromResult<LadderBoard?>(_state == "noboard" ? null : Board(_showName));
+
+        /// <summary>The demo board, also what the render test pins to the page.</summary>
+        internal static LadderBoard Board(bool showName)
+        {
+            var rows = new List<LadderRow>();
+            for (var i = 0; i < Top.Length; i++) rows.Add(new LadderRow(i + 1, Top[i].Name, Top[i].Named, Top[i].Seconds, false));
+            var you = showName ? new LadderRow(23, "You", true, 14 * 3600 + 30 * 60, true)
+                                : new LadderRow(23, "Locked 3E0B21", false, 14 * 3600 + 30 * 60, true);
+            return new LadderBoard("2026-10", rows, you, showName);
+        }
+
+        public Task<bool> ShowNameAsync(bool showName, CancellationToken ct = default)
+        {
+            _showName = showName;
+            return Task.FromResult(true);
+        }
     }
 
     private sealed class DemoTokens : IChasterTokenStore

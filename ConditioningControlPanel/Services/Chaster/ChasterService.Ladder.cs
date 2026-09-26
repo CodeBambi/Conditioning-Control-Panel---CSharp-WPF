@@ -20,6 +20,9 @@ public sealed partial class ChasterService
     /// <summary>The player's "post my days in Discord" switch, read at each refresh.</summary>
     public Func<bool>? RafflePostDays { get; init; }
 
+    /// <summary>The player's "show my name on the ladder" switch, read at each board read.</summary>
+    public Func<bool>? LadderShowName { get; init; }
+
     /// <summary>What the server last read off Chaster for this month, or null when it has not.</summary>
     public LadderVerify? LastLadderVerify { get; private set; }
 
@@ -69,6 +72,23 @@ public sealed partial class ChasterService
             card = card with { PostDays = want };
         return card;
     }
+
+    /// <summary>The month's top ten for the pinned scrap. The raffle read verifies first, so this
+    /// one does not. The server's copy of the name switch is brought back in line with the
+    /// player's when they differ.</summary>
+    public async Task<LadderBoard?> LadderAsync(CancellationToken ct = default)
+    {
+        if (LadderApi == null) return null;
+        var board = await LadderApi.TopAsync(ct).ConfigureAwait(false);
+        var want = LadderShowName?.Invoke() == true;
+        if (board != null && board.ShowName != want && await LadderApi.ShowNameAsync(want, ct).ConfigureAwait(false))
+            board = await LadderApi.TopAsync(ct).ConfigureAwait(false) ?? board;
+        return board;
+    }
+
+    /// <summary>The "show my name" toggle. True when the server took it.</summary>
+    public Task<bool> SetLadderShowNameAsync(bool show, CancellationToken ct = default) =>
+        LadderApi == null ? Task.FromResult(false) : LadderApi.ShowNameAsync(show, ct);
 
     /// <summary>The page's toggle. True when the server took it.</summary>
     public Task<bool> SetRafflePostDaysAsync(bool post, CancellationToken ct = default) =>

@@ -172,6 +172,67 @@ public class ChasterLadderTests : IDisposable
         Assert.Equal(ChasterRaffle.DefaultNeedSeconds, odd.NeedSeconds);
     }
 
+    // ---- the pinned top ten ----
+
+    [Fact]
+    public void The_board_parses_and_keeps_ten()
+    {
+        var rows = new JArray();
+        for (var i = 1; i <= 12; i++) rows.Add(new JObject { ["rank"] = i, ["name"] = $"Locked {i:X6}", ["named"] = false, ["added_seconds"] = 900 * (13 - i), ["you"] = false });
+        var o = new JObject { ["ok"] = true, ["month"] = "2026-10", ["show_name"] = true, ["rows"] = rows, ["you"] = new JObject { ["rank"] = 17, ["name"] = "Me", ["named"] = true, ["added_seconds"] = 61 } };
+        var board = ChasterLadderApi.ParseBoard(o)!;
+
+        Assert.Equal(10, board.Rows.Count);
+        Assert.Equal("2026-10", board.Month);
+        Assert.True(board.ShowName);
+        Assert.Equal(17, board.You!.Rank);
+        Assert.True(board.You.You);
+        Assert.Same(board.You, ChasterLadder.OwnRowBelow(board));
+    }
+
+    [Fact]
+    public void The_own_row_is_not_repeated_when_it_is_in_the_ten()
+    {
+        var mine = new LadderRow(2, "Me", true, 60, true);
+        var board = new LadderBoard("2026-10", new[] { new LadderRow(1, "Locked A1B2C3", false, 900, false), mine }, mine, true);
+        Assert.Null(ChasterLadder.OwnRowBelow(board));
+    }
+
+    [Fact]
+    public void An_unranked_player_has_no_own_row()
+    {
+        var board = new LadderBoard("2026-10", new[] { new LadderRow(1, "Locked A1B2C3", false, 900, false) }, null, false);
+        Assert.Null(ChasterLadder.OwnRowBelow(board));
+    }
+
+    [Fact]
+    public void A_bad_reply_is_no_board_and_junk_rows_are_dropped()
+    {
+        Assert.Null(ChasterLadderApi.ParseBoard(null));
+        Assert.Null(ChasterLadderApi.ParseBoard(new JObject { ["ok"] = false, ["reason"] = "too_fast" }));
+        var o = new JObject { ["ok"] = true, ["rows"] = new JArray(new JObject { ["rank"] = 0, ["name"] = "x" }, new JObject { ["rank"] = 1, ["name"] = "" }, new JObject { ["rank"] = 2, ["name"] = new string('n', 60), ["added_seconds"] = -5 }) };
+        var board = ChasterLadderApi.ParseBoard(o)!;
+        var row = Assert.Single(board.Rows);
+        Assert.Equal(32, row.Name.Length);
+        Assert.Equal(0, row.AddedSeconds);
+        Assert.Null(board.You);
+    }
+
+    [Fact]
+    public void The_demo_board_is_ten_mixed_rows_and_the_player_at_twenty_three()
+    {
+        var off = ChasterService.DemoRaffle.Board(false);
+        Assert.Equal(10, off.Rows.Count);
+        Assert.Contains(off.Rows, r => r.Named);
+        Assert.Contains(off.Rows, r => !r.Named);
+        var mine = ChasterLadder.OwnRowBelow(off)!;
+        Assert.Equal(23, mine.Rank);
+        Assert.False(mine.Named);
+        var on = ChasterLadder.OwnRowBelow(ChasterService.DemoRaffle.Board(true))!;
+        Assert.Equal("You", on.Name);
+        Assert.True(on.Named);
+    }
+
     [Fact]
     public void A_verify_reply_is_worded()
     {
@@ -250,6 +311,20 @@ public class ChasterLadderTests : IDisposable
             ServerPostDays = postDays;
             return Task.FromResult(true);
         }
+        public readonly List<bool> NameOptIns = new();
+        public bool ServerShowName;
+        public int Tops;
+        public Task<LadderBoard?> TopAsync(CancellationToken ct = default)
+        {
+            Tops++;
+            return Task.FromResult<LadderBoard?>(new LadderBoard("2026-10", Array.Empty<LadderRow>(), null, ServerShowName));
+        }
+        public Task<bool> ShowNameAsync(bool showName, CancellationToken ct = default)
+        {
+            NameOptIns.Add(showName);
+            ServerShowName = showName;
+            return Task.FromResult(true);
+        }
         public Task<RaffleCard?> MeAsync(CancellationToken ct = default)
         {
             Mes++;
@@ -262,6 +337,7 @@ public class ChasterLadderTests : IDisposable
     private DateTime _utc = Utc;
     private ChasterOptions _options = new(true, "lock1", new HashSet<string> { "typo" });
     private bool _postDays;
+    private bool _showName;
 
     public ChasterLadderTests()
     {
@@ -279,6 +355,7 @@ public class ChasterLadderTests : IDisposable
         {
             LadderApi = ladder,
             RafflePostDays = () => _postDays,
+            LadderShowName = () => _showName,
         };
 
     [Fact]
@@ -333,5 +410,24 @@ public class ChasterLadderTests : IDisposable
         using var service = new ChasterService(new ChasterClient(new Handler()), _store, Path.Combine(_dir, "tab2.json"), () => _options, () => _utc, () => _utc.ToLocalTime());
         Assert.Null(await service.RaffleAsync());
         Assert.False(await service.SetRafflePostDaysAsync(true));
+        Assert.Null(await service.LadderAsync());
+        Assert.False(await service.SetLadderShowNameAsync(true));
+    }
+
+    [Fact]
+    public async Task The_board_brings_the_server_name_switch_in_line_and_never_touches_the_post_switch()
+    {
+        var ladder = new FakeLadder();
+        _showName = true;
+        using var service = Make(ladder);
+
+        var board = await service.LadderAsync();
+
+        Assert.Equal(new[] { true }, ladder.NameOptIns);
+        Assert.Empty(ladder.OptIns);
+        Assert.True(board!.ShowName);
+        await service.LadderAsync();
+        Assert.Single(ladder.NameOptIns);
+        Assert.Empty(ladder.Verifies); // the raffle read verifies, the board read does not
     }
 }

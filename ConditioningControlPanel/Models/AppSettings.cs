@@ -5275,6 +5275,18 @@ namespace ConditioningControlPanel.Models
             set { _chasterRafflePostDays = value; OnPropertyChanged(); }
         }
 
+        private bool _chasterLadderShowName;
+
+        /// <summary>Opt-in (owner, 2026-09-26): show the account's display name on the month's top
+        /// ten, the pinned scrap beside the raffle (brag rights only). Off = the server shows a label
+        /// it makes up per month. Off by default; separate from <see cref="ChasterRafflePostDays"/>.</summary>
+        [JsonProperty]
+        public bool ChasterLadderShowName
+        {
+            get => _chasterLadderShowName;
+            set { _chasterLadderShowName = value; OnPropertyChanged(); }
+        }
+
         // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----
         // These are the room's own switches, shown in the room's Options and not in Settings, the same
         // way BackRoomTunnel and BackRoomMelt are. They are deliberately NOT the app-wide MediaSource /
