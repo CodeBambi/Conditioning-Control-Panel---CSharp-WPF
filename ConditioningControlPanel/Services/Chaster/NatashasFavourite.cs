@@ -53,8 +53,9 @@ public static class NatashasFavourite
         return Math.Max(a, b);
     }
 
-    /// <summary>A persistent bubble tint survives disabled glow and other variant halos.</summary>
-    public const double BubbleWashBase = 0.18;
+    /// <summary>A persistent bubble tint survives disabled glow and other variant halos. Kept
+    /// faint (owner, 2026-09-26: make the red less noticeable): a hint, not a warning.</summary>
+    public const double BubbleWashBase = 0.06;
     public static double BubbleWashAt(double aliveSec, bool animate) =>
         BubbleWashBase + (animate ? WashAlphaAt(aliveSec) : 0);
 
