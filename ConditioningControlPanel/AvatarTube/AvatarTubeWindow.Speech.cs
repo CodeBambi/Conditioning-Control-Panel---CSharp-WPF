@@ -1015,6 +1015,8 @@ namespace ConditioningControlPanel
                 ApplySpeechBubblePlacement();   // position the hidden window first: no flash at 0,0
                 _bubbleWindow.Show();
                 ApplySpeechBubblePlacement();
+                // A popped-out tube is topmost; lift the bubble into that band above it (#1296).
+                if (!_isAttached) ReassertTopmost();
             }
             else
             {
