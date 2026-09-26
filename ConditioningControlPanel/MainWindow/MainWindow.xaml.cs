@@ -439,6 +439,10 @@ namespace ConditioningControlPanel
             // an account with neither, which is every install today.
             InitializeSpiralRoom();
 
+            // The leash: the punishment gate, the ask card, the snap and the tug wobble.
+            // MainWindow.Leash.cs. Quiet until a leash service is wired and has something to say.
+            InitializeLeash();
+
             // Subscribe to quest events
             if (App.Quests != null)
             {
