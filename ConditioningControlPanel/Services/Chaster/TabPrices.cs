@@ -57,12 +57,17 @@ public static class TabPrices
         new TabPrice("wall", -120, TabPriceGate.Tier2),
         new TabPrice("padlock", 30, TabPriceGate.Sparkles),
         new TabPrice("crash", 5, TabPriceGate.Sparkles),
+        // The leash (Leash CONTRACT). The friend who holds it picks the size (15:00 / 30:00 /
+        // 60:00 punishments at Strict, 15:00 / 30:00 credits); the figure here is the smallest.
+        // Both book through NoteSeconds, so the player's own switches and limits still decide.
+        new TabPrice("leash", 900, TabPriceGate.Free),
+        new TabPrice("leash_credit", -900, TabPriceGate.Free),
     };
 
     /// <summary>The way out never costs. These ids are refused even if a settings file names
     /// them, so no preset, mod or hand edit can put a price on leaving.</summary>
     public static readonly IReadOnlySet<string> NeverPriced =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "panic", "emergency_exit", "safeword", "unlink" };
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "panic", "emergency_exit", "safeword", "unlink", "leash_cut" };
 
     /// <summary>Rows that may book only so many times in one local day (security pass 2,
     /// 2026-09-24). A Lockdown escape attempt is 3:00, and the player trying to get out is the

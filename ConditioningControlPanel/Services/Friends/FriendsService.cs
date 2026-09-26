@@ -101,6 +101,17 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     public event Action<InboxItem>? Delivered;
     public event Action<SendKind, Friend>? Sent;
 
+    // ---- the leash piggyback (Leash CONTRACT "The poll piggyback") ----
+
+    /// <summary>R for the next poll, or null. Set by the app to the leash service.</summary>
+    public Func<JObject?>? LeashReportProvider { get; set; }
+
+    /// <summary>After every answered poll: its <c>leash</c> block, null when the key was absent.</summary>
+    public event Action<JObject?>? LeashBlockArrived;
+
+    /// <summary>True while the leash wants the 20 s cadence (leashed or holding anyone).</summary>
+    public Func<bool>? LeashActive { get; set; }
+
     /// <summary>The activity this app would publish. Read by tests and the drawer's own row.</summary>
     public PresenceActivity Activity => _activity;
 
@@ -191,7 +202,10 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     {
         bool fg;
         try { fg = _foreground(); } catch { fg = false; }
-        return FriendsPollRule.NextIntervalSeconds(Available, _drawerOpen, _online.Count > 0, fg);
+        var friends = FriendsPollRule.NextIntervalSeconds(Available, _drawerOpen, _online.Count > 0, fg);
+        bool leash;
+        try { leash = LeashActive?.Invoke() == true; } catch { leash = false; }
+        return Leash.LeashPollRule.NextIntervalSeconds(friends, leash);
     }
 
     /// <summary>One poll cycle: presence out, inbox and online in, the full list every fifth time.</summary>
@@ -208,12 +222,17 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             _pollIndex++;
 
             bool shared = _readShared();
-            var reply = await _api.PollAsync(shared ? _activity : null, shared ? _lockDay() : null, shared);
+            JObject? report = null;
+            try { report = LeashReportProvider?.Invoke(); }
+            catch (Exception ex) { App.Logger?.Debug("Leash report failed: {E}", ex.Message); }
+            var reply = await _api.PollAsync(shared ? _activity : null, shared ? _lockDay() : null, shared, report);
             if (_account() != sentFor) return;
             if (reply != null)
             {
                 ApplyOnline(reply.Online);
                 Deliver(reply.Inbox);
+                try { LeashBlockArrived?.Invoke(reply.Leash); }
+                catch (Exception ex) { App.Logger?.Debug("Leash block handler failed: {E}", ex.Message); }
             }
 
             if (wantState)
