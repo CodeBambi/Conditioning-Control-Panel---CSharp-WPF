@@ -5262,15 +5262,17 @@ namespace ConditioningControlPanel.Models
             set { _chasterRelockPastEnd = value; OnPropertyChanged(); }
         }
 
-        private bool _chasterLadderShowName;
+        private bool _chasterRafflePostDays;
 
-        /// <summary>Opt-in (owner, 2026-09-26): show the account's display name on the month's
-        /// Chaster ladder. Off = the server shows a label it makes up per month. Off by default.</summary>
+        /// <summary>Opt-in (owner, 2026-09-26): "Post my days in Discord" for the Locktober raffle.
+        /// On = the bot's daily digest lists this account's display name, yesterday's CCP-added
+        /// time, the month's total and days counted, and the ticket list shows the name. Off = never
+        /// in the digest, and only a per-month label on the ticket list. Off by default.</summary>
         [JsonProperty]
-        public bool ChasterLadderShowName
+        public bool ChasterRafflePostDays
         {
-            get => _chasterLadderShowName;
-            set { _chasterLadderShowName = value; OnPropertyChanged(); }
+            get => _chasterRafflePostDays;
+            set { _chasterRafflePostDays = value; OnPropertyChanged(); }
         }
 
         // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----

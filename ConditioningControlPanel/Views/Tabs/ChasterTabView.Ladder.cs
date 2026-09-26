@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -15,9 +16,10 @@ using ConditioningControlPanel.Services.Chaster;
 namespace ConditioningControlPanel.Views.Tabs
 {
     /// <summary>
-    /// The heads-up clock (time CCP added, all time, added only) and the month's ladder that
-    /// unrolls under it. The clock is this PC's own count; the ladder is the server's reading of
-    /// the lock's Chaster history, so the two can differ and the ladder is the one that counts.
+    /// The heads-up clock (time CCP added, all time, added only) and the player's own Locktober
+    /// raffle card that unrolls under it. The clock is this PC's own count; the card is the
+    /// server's reading of the lock's Chaster history, so the two can differ and the card is the
+    /// one that counts. No one else's numbers are ever on it.
     ///
     /// <para>Popup rules (AGENTS.md): hover opens with StaysOpen and no capture; a click on the
     /// clock pins; while pinned, a click anywhere outside or the app losing focus closes it. A
@@ -33,7 +35,7 @@ namespace ConditioningControlPanel.Views.Tabs
         private bool _ladderPinned;
         private bool _overLadder;
         private bool _ladderLoading;
-        private LadderBoard? _ladderBoard;
+        private RaffleCard? _raffleCard;
         private DateTime _ladderFetchedUtc = DateTime.MinValue;
         private long _addedShown = -1;
         private Window? _ladderHostWindow;
@@ -48,7 +50,7 @@ namespace ConditioningControlPanel.Views.Tabs
             };
             IsVisibleChanged += (_, _) => { if (!IsVisible) HideLadder(); };
             _loading = true;
-            try { ChkLadderName.IsChecked = App.Settings?.Current?.ChasterLadderShowName == true; }
+            try { ChkRafflePost.IsChecked = App.Settings?.Current?.ChasterRafflePostDays == true; }
             finally { _loading = false; }
         }
 
@@ -249,7 +251,7 @@ namespace ConditioningControlPanel.Views.Tabs
             }
         }
 
-        // ============================== the board ==============================
+        // ============================== the card ==============================
 
         private async Task FetchLadderAsync(bool force)
         {
@@ -259,8 +261,8 @@ namespace ConditioningControlPanel.Views.Tabs
             _ladderLoading = true;
             try
             {
-                var board = await Task.Run(() => chaster.LadderAsync());
-                _ladderBoard = board;
+                var card = await Task.Run(() => chaster.RaffleAsync());
+                _raffleCard = card;
                 _ladderFetchedUtc = DateTime.UtcNow;
                 await Dispatcher.InvokeAsync(() =>
                 {
@@ -268,31 +270,92 @@ namespace ConditioningControlPanel.Views.Tabs
                     if (LadderPopup.IsOpen) UnrollLadder();
                 });
             }
-            catch (Exception ex) { Diag.Swallowed(ex, "chaster ladder fetch"); }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster raffle fetch"); }
             finally { _ladderLoading = false; }
         }
 
+        private static readonly Brush PipCounted = Frozen(Color.FromRgb(0xFF, 0x6B, 0x8A));
+        private static readonly Brush PipToday = Frozen(Color.FromArgb(0x00, 0, 0, 0));
+        private static readonly Brush PipMissed = Frozen(Color.FromArgb(0x33, 0xA8, 0x98, 0xB8));
+        private static readonly Brush PipAhead = Frozen(Color.FromArgb(0x66, 0x3A, 0x2C, 0x52));
+        private static readonly Brush PipRing = Frozen(Color.FromRgb(0xFF, 0xC0, 0xCB));
+        private static readonly Brush ChipIn = Frozen(Color.FromArgb(0x55, 0x5F, 0xFF, 0xD0));
+        private static readonly Brush ChipInText = Frozen(Color.FromRgb(0x5F, 0xFF, 0xD0));
+        private static readonly Brush ChipWait = Frozen(Color.FromArgb(0x44, 0xFF, 0x6B, 0x8A));
+        private static readonly Brush ChipWaitText = Frozen(Color.FromRgb(0xFF, 0xC0, 0xCB));
+        private static readonly Brush ChipOut = Frozen(Color.FromArgb(0x33, 0xA8, 0x98, 0xB8));
+        private static readonly Brush ChipOutText = Frozen(Color.FromRgb(0xC9, 0xB8, 0xD8));
+
         private void PaintLadder()
         {
-            LadderRows.Children.Clear();
-            var board = _ladderBoard;
+            var card = _raffleCard;
+            RafflePips.Children.Clear();
             string? state = null;
-            if (board == null) state = Loc.Get("chaster_ladder_off");
+            if (card == null)
+            {
+                state = Loc.Get("chaster_raffle_off");
+                LadderRows.Visibility = Visibility.Collapsed;
+                TxtRaffleDay.Text = "";
+            }
             else
             {
-                foreach (var row in board.Rows) LadderRows.Children.Add(BuildLadderRow(row));
-                if (ChasterLadder.OwnRowBelow(board) is { } mine)
-                {
-                    LadderRows.Children.Add(new TextBlock { Text = "...", Foreground = new SolidColorBrush(Color.FromRgb(0xA8, 0x98, 0xB8)), Margin = new Thickness(12, 0, 0, 0) });
-                    LadderRows.Children.Add(BuildLadderRow(mine));
-                }
-                if (board.Rows.Count == 0) state = Loc.Get("chaster_ladder_empty");
+                LadderRows.Visibility = Visibility.Visible;
+                PaintRaffle(card);
             }
-            // Why this lock is not on it, when the server said so.
+            // Why this lock is not counted, when the server said so.
             if (App.Chaster?.LastLadderVerify is { Ok: false, Reason: { } reason })
                 state = (state == null ? "" : state + " ") + Loc.Get(WhyKey(reason));
             TxtLadderState.Text = state ?? "";
             TxtLadderState.Visibility = state == null ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void PaintRaffle(RaffleCard card)
+        {
+            var day = ChasterRaffle.DayShown(card);
+            TxtRaffleDay.Text = day > 0 ? string.Format(Loc.Get("chaster_raffle_day"), day, card.DaysInMonth) : "";
+
+            // The month as a strip of pips, lit = counted. 16 px dots wrap 31 days onto two lines.
+            var pips = ChasterRaffle.Pips(card);
+            for (var i = 0; i < pips.Count; i++)
+            {
+                var pip = pips[i];
+                RafflePips.Children.Add(new Border
+                {
+                    Width = 16, Height = 16, Margin = new Thickness(0, 0, 4, 4), CornerRadius = new CornerRadius(8),
+                    Background = pip switch
+                    {
+                        RafflePip.Counted => PipCounted,
+                        RafflePip.Today => PipToday,
+                        RafflePip.Missed => PipMissed,
+                        _ => PipAhead,
+                    },
+                    BorderBrush = PipRing,
+                    BorderThickness = new Thickness(pip == RafflePip.Today ? 1.5 : 0),
+                    ToolTip = (i + 1).ToString(),
+                });
+            }
+
+            TxtRaffleDays.Text = string.Format(Loc.Get("chaster_raffle_days"), ChasterRaffle.DaysCounted(card), card.NeedDays);
+            TxtRaffleTotal.Text = string.Format(Loc.Get("chaster_raffle_total"),
+                ChasterLadder.FormatClock(card.TotalSeconds), ChasterLadder.FormatClock(card.NeedSeconds));
+
+            var (key, arg) = ChasterRaffle.StatusText(card);
+            TxtRaffleStatus.Text = arg == null ? Loc.Get(key) : string.Format(Loc.Get(key), arg);
+            var (bg, fg) = ChasterRaffle.Status(card) switch
+            {
+                RaffleStatus.InTheDraw or RaffleStatus.Ticket => (ChipIn, ChipInText),
+                RaffleStatus.Out or RaffleStatus.Missed => (ChipOut, ChipOutText),
+                _ => (ChipWait, ChipWaitText),
+            };
+            RaffleStatusChip.Background = bg;
+            TxtRaffleStatus.Foreground = fg;
+
+            if (ChasterRaffle.TicketDue(card) is { } due)
+            {
+                TxtRaffleTicketOn.Text = string.Format(Loc.Get("chaster_raffle_ticket_on"), due.ToString("MMM d", CultureInfo.CurrentUICulture));
+                TxtRaffleTicketOn.Visibility = Visibility.Visible;
+            }
+            else TxtRaffleTicketOn.Visibility = Visibility.Collapsed;
         }
 
         internal static string WhyKey(string reason) => reason switch
@@ -305,71 +368,31 @@ namespace ConditioningControlPanel.Views.Tabs
             _ => "chaster_ladder_why_other",
         };
 
-        private static readonly Brush[] PodiumBrushes =
-        {
-            Frozen(Color.FromRgb(0xE0, 0xB0, 0x52)),
-            Frozen(Color.FromRgb(0xC8, 0xC8, 0xD8)),
-            Frozen(Color.FromRgb(0xCD, 0x8A, 0x5A)),
-        };
-
-        private FrameworkElement BuildLadderRow(LadderRow row)
-        {
-            var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var rankBrush = row.Rank <= 3 ? PodiumBrushes[row.Rank - 1] : Frozen(Color.FromRgb(0xA8, 0x98, 0xB8));
-            var rank = new TextBlock { Text = row.Rank.ToString(), FontFamily = new FontFamily("/Fonts/#Fredoka, Segoe UI"), FontSize = 15, FontWeight = FontWeights.Bold, Foreground = rankBrush, VerticalAlignment = VerticalAlignment.Center };
-            grid.Children.Add(rank);
-
-            var name = new TextBlock
-            {
-                Text = row.You ? $"{row.Name} ({Loc.Get("chaster_ladder_you")})" : row.Name,
-                FontSize = 13, FontWeight = row.You ? FontWeights.Bold : FontWeights.Normal,
-                FontStyle = row.Named ? FontStyles.Normal : FontStyles.Italic,
-                Foreground = row.Named || row.You ? Frozen(Color.FromRgb(0xF3, 0xEA, 0xF7)) : Frozen(Color.FromRgb(0xB9, 0xA9, 0xC9)),
-                TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
-            };
-            Grid.SetColumn(name, 1);
-            grid.Children.Add(name);
-
-            var figure = new TextBlock { Text = ChasterLadder.FormatClock(row.AddedSeconds), FontFamily = Mono, FontSize = 13, FontWeight = FontWeights.Bold, Foreground = CostBrush, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
-            Grid.SetColumn(figure, 2);
-            grid.Children.Add(figure);
-
-            return new Border
-            {
-                Child = grid,
-                Padding = new Thickness(10, 5, 10, 5),
-                CornerRadius = new CornerRadius(10),
-                Background = row.You ? Frozen(Color.FromArgb(0x44, 0xFF, 0x6B, 0x8A)) : Brushes.Transparent,
-                BorderBrush = row.You ? Frozen(Color.FromArgb(0xAA, 0xFF, 0x6B, 0x8A)) : Brushes.Transparent,
-                BorderThickness = new Thickness(row.You ? 1.2 : 0),
-            };
-        }
+        // PLACEHOLDER target until the owner publishes the final rules (ChasterRaffle.RulesUrl).
+        private void LnkRaffleRules_Click(object sender, RoutedEventArgs e) =>
+            Helpers.BrowserLauncher.OpenUrlOrPrompt(ChasterRaffle.RulesUrl, Loc.Get("chaster_raffle_rules"));
 
         // ============================== the opt-in ==============================
 
-        private void ChkLadderName_Changed(object sender, RoutedEventArgs e)
+        private void ChkRafflePost_Changed(object sender, RoutedEventArgs e)
         {
             if (_loading || App.Settings?.Current is not { } settings) return;
-            var show = ChkLadderName.IsChecked == true;
-            settings.ChasterLadderShowName = show;
+            var post = ChkRafflePost.IsChecked == true;
+            settings.ChasterRafflePostDays = post;
             App.Settings?.Save();
-            _ = SendLadderNameAsync(show);
+            _ = SendRafflePostAsync(post);
         }
 
-        // Best effort: if the server misses it, the next board read sends it again.
-        private async Task SendLadderNameAsync(bool show)
+        // Best effort: if the server misses it, the next card read sends it again.
+        private async Task SendRafflePostAsync(bool post)
         {
             var chaster = App.Chaster;
             if (chaster == null) return;
             try
             {
-                if (await Task.Run(() => chaster.SetLadderShowNameAsync(show))) await FetchLadderAsync(force: true);
+                if (await Task.Run(() => chaster.SetRafflePostDaysAsync(post))) await FetchLadderAsync(force: true);
             }
-            catch (Exception ex) { Diag.Swallowed(ex, "chaster ladder name"); }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster raffle post days"); }
         }
     }
 }

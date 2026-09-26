@@ -4,10 +4,10 @@ using System.Threading.Tasks;
 
 namespace ConditioningControlPanel.Services.Chaster;
 
-/// <summary>The ladder on Circe's Tab. The "time CCP added" totals shown on the page are this
-/// machine's own count (display only); the ladder's number is the one the server reads off the
-/// lock's Chaster history after a push lands and when the page opens (<see cref="ChasterLadder"/>).
-/// Every failure is quiet: no ladder is a page with no ladder.</summary>
+/// <summary>The Locktober raffle on Circe's Tab. The "time CCP added" totals shown on the page are
+/// this machine's own count (display only); the raffle's days and total are the ones the server
+/// reads off the lock's Chaster history after a push lands and when the page opens
+/// (<see cref="ChasterRaffle"/>). Every failure is quiet: no raffle is a page with no card.</summary>
 public sealed partial class ChasterService
 {
     private readonly SemaphoreSlim _ladderGate = new(1, 1);
@@ -17,8 +17,8 @@ public sealed partial class ChasterService
     /// <summary>Null = no ladder (tests, the DEBUG demo).</summary>
     public IChasterLadderApi? LadderApi { get; init; }
 
-    /// <summary>The player's "show my name" switch, read at each refresh.</summary>
-    public Func<bool>? LadderShowName { get; init; }
+    /// <summary>The player's "post my days in Discord" switch, read at each refresh.</summary>
+    public Func<bool>? RafflePostDays { get; init; }
 
     /// <summary>What the server last read off Chaster for this month, or null when it has not.</summary>
     public LadderVerify? LastLadderVerify { get; private set; }
@@ -57,22 +57,22 @@ public sealed partial class ChasterService
         finally { _ladderGate.Release(); }
     }
 
-    /// <summary>The month's board for the page, after a due verify. The server's copy of the
-    /// name switch is brought back in line with the player's when they differ.</summary>
-    public async Task<LadderBoard?> LadderAsync(CancellationToken ct = default)
+    /// <summary>The player's raffle card for the page, after a due verify. The server's copy of
+    /// the "post my days" switch is brought back in line with the player's when they differ.</summary>
+    public async Task<RaffleCard?> RaffleAsync(CancellationToken ct = default)
     {
         if (LadderApi == null) return null;
         await VerifyLadderAsync(ct).ConfigureAwait(false);
-        var board = await LadderApi.TopAsync(ct).ConfigureAwait(false);
-        var want = LadderShowName?.Invoke() == true;
-        if (board != null && board.ShowName != want && await LadderApi.OptInAsync(want, ct).ConfigureAwait(false))
-            board = await LadderApi.TopAsync(ct).ConfigureAwait(false) ?? board;
-        return board;
+        var card = await LadderApi.MeAsync(ct).ConfigureAwait(false);
+        var want = RafflePostDays?.Invoke() == true;
+        if (card != null && card.PostDays != want && await LadderApi.OptInAsync(want, ct).ConfigureAwait(false))
+            card = card with { PostDays = want };
+        return card;
     }
 
     /// <summary>The page's toggle. True when the server took it.</summary>
-    public Task<bool> SetLadderShowNameAsync(bool show, CancellationToken ct = default) =>
-        LadderApi == null ? Task.FromResult(false) : LadderApi.OptInAsync(show, ct);
+    public Task<bool> SetRafflePostDaysAsync(bool post, CancellationToken ct = default) =>
+        LadderApi == null ? Task.FromResult(false) : LadderApi.OptInAsync(post, ct);
 
     // A push that landed inside the 15 minutes is verified when they are up, not dropped.
     private void ArmLadderRetry(DateTime? at, DateTime now)
