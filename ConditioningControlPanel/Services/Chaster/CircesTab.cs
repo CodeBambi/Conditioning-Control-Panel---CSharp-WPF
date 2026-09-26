@@ -73,6 +73,14 @@ public sealed class TabState
     /// <summary>Days in a row with a finished session, and the last such day.</summary>
     [JsonProperty("streak_day")] public string? StreakDay { get; set; }
     [JsonProperty("streak")] public int Streak { get; set; }
+
+    /// <summary>Lifetime seconds CCP ADDED to the lock: every add that landed or is counted as
+    /// landed. Gross, never net: nothing taken off ever lowers it. See <see cref="ChasterLadder"/>.</summary>
+    [JsonProperty("added_total")] public long AddedTotalSeconds { get; set; }
+
+    /// <summary>The same adds, for one UTC month ("yyyy-MM"). The ladder reads this.</summary>
+    [JsonProperty("added_month")] public string? AddedMonth { get; set; }
+    [JsonProperty("added_month_s")] public int AddedMonthSeconds { get; set; }
 }
 
 public enum TabRefusal
@@ -216,7 +224,7 @@ public static class CircesTab
 
     /// <summary>Call only after Chaster said yes. A failed push changes nothing, so the balance
     /// simply waits for the next chance.</summary>
-    public static void ApplyPush(TabState state, TabPush push, DateTime localNow)
+    public static void ApplyPush(TabState state, TabPush push, DateTime localNow, DateTime? nowUtc = null)
     {
         if (push.Kind == TabPushKind.None || push.Seconds <= 0) return;
         if (push.Kind == TabPushKind.Add)
@@ -224,6 +232,7 @@ public static class CircesTab
             state.BalanceSeconds -= push.Seconds;
             state.PushedNetSeconds += push.Seconds;
             NotePushed(state, DayKey(localNow), push.Seconds);
+            ChasterLadder.NoteAdded(state, push.Seconds, nowUtc ?? localNow.ToUniversalTime());
         }
         else
         {
@@ -253,7 +262,7 @@ public static class CircesTab
     /// again, and a lock that gains an hour nobody owed is the one mistake the tab must never
     /// make. The doubt goes the player's way twice: the seconds leave the tab, and they do not
     /// widen the floor, since CCP cannot prove it put them on the lock. Returns what it settled.</summary>
-    public static int ResolvePending(TabState state)
+    public static int ResolvePending(TabState state, DateTime? nowUtc = null)
     {
         var seconds = state.PendingSeconds;
         if (seconds <= 0) { ClearPending(state); return 0; }
@@ -261,6 +270,8 @@ public static class CircesTab
         state.LastPushDay = state.PendingDay ?? state.LastPushDay;
         // In doubt counts against the day's push ceiling too: it may well be on the lock.
         if (state.PendingDay != null) NotePushed(state, state.PendingDay, seconds);
+        // Counted as landed, so counted as added: the total never goes the player's way by hiding it.
+        ChasterLadder.NoteAdded(state, seconds, nowUtc ?? DateTime.UtcNow);
         ClearPending(state);
         return seconds;
     }
