@@ -45,12 +45,10 @@ public sealed partial class ChasterService
         if (!IsLinked || Interlocked.Exchange(ref _profileBusy, 1) == 1) return;
         try
         {
-            var access = await AccessTokenAsync(ct).ConfigureAwait(false);
-            if (access == null) return;
+            if (await AccessTokenAsync(ct).ConfigureAwait(false) == null) return;
             lock (_gate) _profileTriesLeft--;
-            var result = await _client.GetProfileAsync(access, ct).ConfigureAwait(false);
-            if (result.Status == ChasterStatus.LinkExpired) { DropLink(); return; }
-            if (!result.Ok || result.Value == null) return;
+            var answer = await CallWithAccessAsync(a => _client.GetProfileAsync(a, ct), ct).ConfigureAwait(false);
+            if (answer is not { Ok: true } result || result.Value == null) return;
 
             lock (_gate)
             {

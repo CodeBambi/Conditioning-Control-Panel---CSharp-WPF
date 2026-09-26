@@ -29,7 +29,8 @@ public sealed partial class ChasterService
                     // A raise only counts once its day is up (LimitChange); a lowering was applied at once.
                     TabLimits.FromMinutes(LimitChange.Effective(s.ChasterDayLimit, DateTime.UtcNow),
                         LimitChange.Effective(s.ChasterBacklogLimit, DateTime.UtcNow)),
-                    RemoteOpen: App.RemoteControl?.IsActive == true,
+                    // A Remote session still counts for a short grace after it ends (security pass 3).
+                    RemoteOpen: RemoteCounts(App.RemoteControl?.IsActive == true, App.RemoteControl?.LastEndedUtc, DateTime.UtcNow),
                     PanicArmed: s.PanicKeyEnabled,
                     RelockPastEnd: s.ChasterRelockPastEnd,
                     Paused: s.ChasterPaused);
@@ -42,7 +43,11 @@ public sealed partial class ChasterService
             new DpapiChasterTokenStore(),
             Path.Combine(App.UserDataPath, "chaster_tab.json"),
             options)
-        { MinutesOn = MinutesFromDayLog };
+        {
+            MinutesOn = MinutesFromDayLog,
+            LadderApi = new ChasterLadderApi(),
+            RafflePostDays = () => App.Settings?.Current?.ChasterRafflePostDays == true,
+        };
     }
 
     /// <summary>The idle-day row's eyes: conditioning minutes the feature day log booked on a

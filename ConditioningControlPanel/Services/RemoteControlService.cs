@@ -64,6 +64,14 @@ namespace ConditioningControlPanel.Services
         private static readonly Random _pinRng = new();
 
         public bool IsActive { get; private set; }
+
+        /// <summary>When the last Remote session ended (UTC). Circe's tab keeps counting bookings
+        /// toward the Remote cap for a short grace after it (ChasterService.RemoteGrace).</summary>
+        public DateTime? LastEndedUtc { get; private set; }
+
+        // The controller switched the panic key off during this session. Restored (and saved) when
+        // the session ends, so a crash or a quit after the session cannot leave it off on disk.
+        private bool _remoteDisabledPanic;
         public string? SessionCode { get; private set; }
         public string? ConnectPin { get; private set; }
         public string? Tier { get; private set; }
@@ -360,6 +368,7 @@ namespace ConditioningControlPanel.Services
             _lastOptInTags = null;
             _lastOptInStatus = null;
             IsActive = false;
+            LastEndedUtc = DateTime.UtcNow;
             SessionCode = null;
             ConnectPin = null;
             Tier = null;
@@ -388,6 +397,19 @@ namespace ConditioningControlPanel.Services
             {
                 ControllerConnected = false;
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            // StopAllRemoteEffects turns the key back on in memory; if the controller had turned it
+            // off, that off was saved, so save the restored value too.
+            if (_remoteDisabledPanic)
+            {
+                _remoteDisabledPanic = false;
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.PanicKeyEnabled = true;
+                    App.Settings.Save();
+                    SyncPanicKeyUi();
+                }
             }
 
             App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
@@ -1462,6 +1484,7 @@ namespace ConditioningControlPanel.Services
                         case "disable_panic":
                             if (App.Settings?.Current != null)
                             {
+                                if (App.Settings.Current.PanicKeyEnabled) _remoteDisabledPanic = true;
                                 App.Settings.Current.PanicKeyEnabled = false;
                                 App.Settings.Save();
                                 SyncPanicKeyUi();
