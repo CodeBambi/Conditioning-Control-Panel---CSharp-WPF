@@ -7,6 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Friends;
+using ConditioningControlPanel.Services.GoonGame;
 
 namespace ConditioningControlPanel.Controls.Friends;
 
@@ -83,10 +84,15 @@ public sealed partial class FriendsDrawer
                 ToolTipService.SetShowOnDisabled(tile, true);
                 tile.ToolTip = Loc.Get(blockedKey);
             }
+            else if (id == InviteDestination.Goon && string.IsNullOrEmpty(code))
+            {
+                tile.ToolTip = Loc.Get("friends_invite_goon_tip");
+            }
             tile.Click += async (_, _) =>
             {
                 Pop(tile, FriendsLook.Lilac);
-                await InviteAsync(f.Id, id, code);
+                if (id == InviteDestination.Goon) await InviteToGoonAsync(f.Id);
+                else await InviteAsync(f.Id, id, code);
             };
             grid.Children.Add(tile);
         }
@@ -113,6 +119,38 @@ public sealed partial class FriendsDrawer
         b.MouseEnter += (_, _) => { if (b.IsEnabled) b.BorderBrush = FriendsLook.LilacBrush; };
         b.MouseLeave += (_, _) => b.BorderBrush = FriendsLook.Line2Brush;
         return b;
+    }
+
+    private bool _openingGoonRoom;
+
+    /// <summary>The Goon tile: send the live room code, or open a room first and send its code
+    /// the moment the game reports it. One tap either way. Internal for the suite.</summary>
+    internal async Task<SendResult?> InviteToGoonAsync(string friendId)
+    {
+        var code = InviteCodes.GoonCode();
+        if (string.IsNullOrEmpty(code))
+        {
+            if (!InviteCodes.CanHostGoon())
+            {
+                ShowNote(friendId, "friends_invite_goon_prime", good: false, timed: true);
+                return null;
+            }
+            if (_openingGoonRoom) return null;   // a second tap while the room opens costs nothing
+            _openingGoonRoom = true;
+            ShowNote(friendId, "friends_invite_goon_opening");
+            (string? Code, bool Busy) opened;
+            try { opened = await InviteCodes.OpenGoonRoom(TimeSpan.FromSeconds(45)); }
+            catch { opened = (null, false); }
+            finally { _openingGoonRoom = false; }
+            if (string.IsNullOrEmpty(opened.Code))
+            {
+                ShowNote(friendId, opened.Busy ? "friends_invite_goon_busy" : "friends_invite_goon_failed",
+                    good: false, timed: true);
+                return null;
+            }
+            code = opened.Code;
+        }
+        return await InviteAsync(friendId, InviteDestination.Goon, code);
     }
 
     internal async Task<SendResult> InviteAsync(string friendId, string destination, string? code)
@@ -332,23 +370,33 @@ public sealed partial class FriendsDrawer
     }
 
     /// <summary>A worded note in the row that is not a send result (a report went through).</summary>
-    private void ShowNote(string friendId, string key)
+    private void ShowNote(string friendId, string key, bool good = true, bool timed = false)
     {
-        _results[friendId] = (Loc.Get(key), true);
+        if (timed) { ShowTimed(friendId, Loc.Get(key), good, TimeSpan.FromSeconds(4)); return; }
+        if (_resultTimers.TryGetValue(friendId, out var old)) { old.Stop(); _resultTimers.Remove(friendId); }
+        _results[friendId] = (Loc.Get(key), good);
         Render();
     }
 }
 
 /// <summary>
 /// Where the Goon and Remote invite tiles get their live join code. Remote reads the running
-/// session; the Goon Game mints its code inside the game's own page, which the host never
-/// sees, so the Goon tile stays disabled until something sets <see cref="GoonCode"/> (the
-/// Goon host can hand its code over when it gets one). Backroom and Ramp carry no code.
+/// session; the Goon Game page reports the room it is hosting (<c>room-code</c>) and
+/// <see cref="GoonHostService.RoomCode"/> holds it. With no room yet the Goon tile opens one
+/// (<see cref="OpenGoonRoom"/>) and sends its code, so it is only disabled for an account
+/// that cannot host. Backroom and Ramp carry no code.
 /// </summary>
 public static class InviteCodes
 {
     /// <summary>The live Goon Game join code while this account is hosting, else null.</summary>
-    public static Func<string?> GoonCode { get; set; } = () => null;
+    public static Func<string?> GoonCode { get; set; } = () => GoonHostService.RoomCode;
+
+    /// <summary>May this account host a Goon room (Prime)? Joining is free, hosting is not.</summary>
+    public static Func<bool> CanHostGoon { get; set; } = () => GoonHostService.CanHost;
+
+    /// <summary>Opens (or reuses) a Goon room and returns its code; Busy = a match is on.</summary>
+    public static Func<TimeSpan, Task<(string? Code, bool Busy)>> OpenGoonRoom { get; set; }
+        = GoonHostService.OpenRoomForInviteAsync;
 
     /// <summary>The live Remote Control session code, else null.</summary>
     public static Func<string?> RemoteCode { get; set; } = () =>
@@ -369,7 +417,9 @@ public static class InviteCodes
         {
             case InviteDestination.Goon:
                 var g = GoonCode();
-                return string.IsNullOrEmpty(g) ? (null, "friends_invite_needs_goon") : (g, null);
+                if (!string.IsNullOrEmpty(g)) return (g, null);
+                // No room yet: the tile opens one, unless this account cannot host at all.
+                return CanHostGoon() ? (null, null) : (null, "friends_invite_goon_prime");
             case InviteDestination.Remote:
                 var r = RemoteCode();
                 return string.IsNullOrEmpty(r) ? (null, "friends_invite_needs_remote") : (r, null);

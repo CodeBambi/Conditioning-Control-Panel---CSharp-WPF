@@ -281,6 +281,12 @@ const quiet = { info() {}, warn() {}, error() {}, debug() {} };
   ok(/sheets\.setPrimeActions\(/.test(boot), 'boot wires the Prime sheet actions');
   ok(/practice: \(\) => \{ void actions\.goPractice\(\); \}/.test(boot), 'practice is always one tap from the sheet');
   ok(/m\.joinCode/.test(boot) && /bridge\.on\('join-code'/.test(boot), 'boot reads init.joinCode and the join-code frame (desk seam)');
+  // Friends invite (2026-09-26): the drawer's Goon tile opens a room and sends its code.
+  ok(/m\.autoHost === true/.test(boot) && /bridge\.on\('host-now'/.test(boot), 'boot reads init.autoHost and the host-now frame (desk seam)');
+  ok(/type: 'room-code', code: c/.test(boot) && /tellDeskRoom\(code\)/.test(boot), 'hostStart tells the desk the room code');
+  ok(/tellDeskRoom\(''\)/.test(boot.slice(boot.indexOf('async function teardownEverything'))), 'teardown clears the desk room code');
+  ok(/phase > GoonMatchPhase\.Lobby\) tellDeskRoom\(''\)/.test(boot), 'a seated room is no longer offered to friends');
+  ok(/type: 'host-busy'/.test(boot), 'host-now mid-match answers host-busy');
   ok(/stampSeated\(\);/.test(boot), 'a landed join stamps SEATED');
   const host = read('ui/screens/host.js');
   ok(/if \(answer === 'practice'\) return;/.test(host), 'host.js does not route over a practice pick');

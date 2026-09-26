@@ -528,6 +528,10 @@ bridge.on('init', (m) => {
   /* OPEN TABLES (desk seam, 2026-09-23): the friends drawer's Join opens the game with a
    * TOP-LEVEL `joinCode`. Absent or "" = nothing to join. Tolerated missing on older hosts. */
   session.joinCode = typeof m.joinCode === 'string' && m.joinCode ? normalizeCode(m.joinCode) : (session.joinCode || '');
+  /* FRIENDS INVITE (desk seam, 2026-09-26): the drawer's Goon tile opens the game
+   * straight onto the host screen so the room code exists to send. `=== true` so an
+   * older host never trips it. */
+  session.autoHost = m.autoHost === true || session.autoHost === true;
   session.consent = m.consent || null;
   session.match = m.match || null;
   session.prefs = m.prefs || null;
@@ -582,6 +586,35 @@ bridge.on('join-code', (m) => {
   if (state === 'early') { session.joinCode = code; return; }
   if (state === 'busy') return;
   router.show('join', { autoCode: code });
+});
+
+/* The code of the room this page is hosting and still waiting in, told to the desk so the
+ * friends drawer can send it. '' = no joinable room (none, torn down, or someone sat down). */
+let deskRoomCode = '';
+function tellDeskRoom(code, again) {
+  const c = String(code || '');
+  if (c === deskRoomCode && !again) return;
+  deskRoomCode = c;
+  if (!session.hosted) return;
+  try { bridge.send({ type: 'room-code', code: c }); } catch (_e) { /* the invite tile just stays a tap away */ }
+}
+
+/* FRIENDS INVITE (desk seam, 2026-09-26): the friends drawer's Goon tile, pressed while
+ * this window is already open. A room already waiting on the host screen just hands its
+ * code over again; a player mid-match is never pulled out of it (the desk says so). */
+bridge.on('host-now', () => {
+  let state = 'early';
+  try {
+    if (!router) state = 'early';
+    else if (soloPair) state = 'busy';
+    else if (currentMatch && currentMatch.phase > GoonMatchPhase.Lobby) state = 'busy';
+    else if (deskRoomCode) state = 'waiting';
+    else state = 'ready';
+  } catch (_e) { state = 'early'; }
+  if (state === 'early') { session.autoHost = true; return; }
+  if (state === 'busy') { try { bridge.send({ type: 'host-busy' }); } catch (_e) { /* ignore */ } return; }
+  if (state === 'waiting') { tellDeskRoom(deskRoomCode, true); return; }
+  router.show('host');
 });
 
 bridge.on('end-run', () => finishExit('end-run'));
@@ -689,6 +722,14 @@ function openFirstScreen() {
   if (code) {
     bridge.log('invite link: joining ' + code);
     router.show('join', { autoCode: code });
+    return;
+  }
+  /* The friends drawer's Goon tile: straight to the host screen, whose code goes back to
+   * the desk and out as the invite. Ahead of the flavour card, which will still come. */
+  if (session.autoHost) {
+    session.autoHost = false;
+    bridge.log('desk invite: hosting a room');
+    router.show('host');
     return;
   }
   /* FIRST RUN: the flavour card before the title, once. It holds nothing - one tap picks
@@ -1938,6 +1979,8 @@ function onPhase(phase) {
    * their media…" line comes down) makes "past Consent" the one exit that needs
    * no cooperation from the screen. */
   if (mediaPrepPending && phase >= GoonMatchPhase.Draft) clearMediaPrep(true);
+  // Somebody sat down: the room is no longer one a friend can be invited into.
+  if (phase > GoonMatchPhase.Lobby) tellDeskRoom('');
 
   switch (phase) {
     case GoonMatchPhase.Lobby:
@@ -2148,6 +2191,7 @@ function errorInfo(reason) {
 
 async function teardownEverything() {
   detachMatch();
+  tellDeskRoom('');
   /* RICH PRESENCE CANNOT BE ALLOWED TO STRAND. Every road out of a match runs
    * through here (leave, quit, host/join restart, connect failure, the exit
    * handshake below) and `off` is idempotent inside ui/discord.js, so posting it
@@ -2272,6 +2316,7 @@ const actions = {
     // ran (inside the await, before the POST) and read null — see
     // adoptServerSendVerdict. This is the first moment there is a verdict to fold.
     adoptServerSendVerdict();
+    if (code) tellDeskRoom(code);
     if (code) return { ok: true, code };
     return { ok: false, error: errorInfo(lastConnectFailed) };
   },

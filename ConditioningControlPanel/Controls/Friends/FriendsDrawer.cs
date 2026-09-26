@@ -919,10 +919,15 @@ public sealed partial class FriendsDrawer : Border
 
     /// <summary>Words a send in the friend's row for two seconds.</summary>
     internal void ShowResult(string friendId, SendResult r)
+        => ShowTimed(friendId, Loc.Get(FriendsDrawerRules.SendResultKey(r)), FriendsDrawerRules.IsGood(r),
+            TimeSpan.FromSeconds(2));
+
+    /// <summary>Words a line in the friend's row for <paramref name="hold"/>.</summary>
+    private void ShowTimed(string friendId, string text, bool good, TimeSpan hold)
     {
-        _results[friendId] = (Loc.Get(FriendsDrawerRules.SendResultKey(r)), FriendsDrawerRules.IsGood(r));
+        _results[friendId] = (text, good);
         if (_resultTimers.TryGetValue(friendId, out var old)) old.Stop();
-        var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        var t = new DispatcherTimer { Interval = hold };
         t.Tick += (_, _) =>
         {
             t.Stop();
