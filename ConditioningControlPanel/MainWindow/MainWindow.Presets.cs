@@ -375,11 +375,11 @@ namespace ConditioningControlPanel
 
             // Feature glyphs, ahead of the name. Still emoji - they are the same five the detail
             // pane uses, and a chip has no room for words.
-            if (preset.FlashEnabled) AddStatIcon(line, "⚡", 10);
-            if (preset.MandatoryVideosEnabled) AddStatIcon(line, "🎬", 10);
-            if (preset.SubliminalEnabled) AddStatIcon(line, "💭", 10);
-            if (preset.SpiralEnabled) AddStatIcon(line, "🌀", 10);
-            if (preset.LockCardEnabled) AddStatIcon(line, "🔒", 10);
+            if (preset.FlashEnabled) AddStatIcon(line, "⚡", 13);
+            if (preset.MandatoryVideosEnabled) AddStatIcon(line, "🎬", 13);
+            if (preset.SubliminalEnabled) AddStatIcon(line, "💭", 13);
+            if (preset.SpiralEnabled) AddStatIcon(line, "🌀", 13);
+            if (preset.LockCardEnabled) AddStatIcon(line, "🔒", 13);
 
             var nameText = new TextBlock
             {
@@ -440,13 +440,9 @@ namespace ConditioningControlPanel
         /// WrapPanel it used to: the chip's content is a one-line horizontal StackPanel now.</summary>
         private void AddStatIcon(Panel panel, string icon, int size = 12)
         {
-            panel.Children.Add(new TextBlock
-            {
-                Text = icon,
-                FontSize = size,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 3, 0)
-            });
+            // Colour Twemoji: a plain TextBlock draws the emoji as a monochrome glyph in its
+            // Foreground, which defaults to black and vanishes on the dark chip.
+            panel.Children.Add(Helpers.EmojiIcon.Create(icon, size, new Thickness(0, 0, 4, 0)));
         }
 
         private string GetPresetQuickStats(Models.Preset preset)

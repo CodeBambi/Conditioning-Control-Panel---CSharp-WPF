@@ -226,6 +226,7 @@ public class TabDeeperTests : IDisposable
         Assert.Equal(300, NatashasFavourite.Seconds);
         Assert.True(NatashasFavourite.HaloOpacity <= 0.2);
         Assert.True(NatashasFavourite.WashPeak <= 0.12);
+        Assert.True(NatashasFavourite.BubbleWashBase <= 0.06);
     }
 
     [Fact]

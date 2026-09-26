@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.ChaosHudWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
         Title="Rabbit Hole HUD"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ShowActivated="False"
@@ -149,7 +150,7 @@
                 CornerRadius="0,0,18,0" MouseEnter="Hud_MouseEnter" MouseLeave="Strip_MouseLeave"
                 MouseLeftButtonDown="Strip_Click">
             <StackPanel VerticalAlignment="Top" Margin="0,20,0,0" HorizontalAlignment="Center">
-                <TextBlock Text="🐇" Foreground="{StaticResource Pink}" FontSize="30" HorizontalAlignment="Center"/>
+                <helpers:EmojiTextBlock Text="🐇" Foreground="{StaticResource Pink}" FontSize="30" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="TxtStripClock" Text="{Binding ClockText}" Foreground="White" FontFamily="Consolas, Courier New" FontSize="17"
                            HorizontalAlignment="Center" Margin="0,12,0,0"/>
 
@@ -286,7 +287,7 @@
                         </Border>
                         <StackPanel VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="🐇 THE HOLE" Foreground="{StaticResource Pink}" FontWeight="Bold" FontSize="22"/>
+                                <helpers:EmojiTextBlock Text="🐇 THE HOLE" Foreground="{StaticResource Pink}" FontWeight="Bold" FontSize="22"/>
                                 <TextBlock x:Name="TxtActWave" Text="{Binding ActWaveText}" Foreground="White" FontSize="13" VerticalAlignment="Bottom" Margin="8,0,0,3"/>
                             </StackPanel>
                             <!-- Run clock + fill bar: Pocket Watch perks only (SetClockVisible) — time stays a mystery otherwise. -->

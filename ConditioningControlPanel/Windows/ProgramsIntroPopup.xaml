@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.ProgramsIntroPopup"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
         Title="Training Programs"
         Width="620" SizeToContent="Height" MaxHeight="640"
         WindowStyle="None"
@@ -102,7 +103,7 @@
             </Button>
 
             <StackPanel Grid.Column="1" Margin="24,22,24,20" VerticalAlignment="Center">
-                <TextBlock Text="📅  Training Programs"
+                <helpers:EmojiTextBlock Text="📅  Training Programs"
                            Foreground="{DynamicResource PinkBrush}"
                            FontWeight="Bold" FontSize="23"
                            TextWrapping="Wrap"

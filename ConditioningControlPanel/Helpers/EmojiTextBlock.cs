@@ -23,6 +23,8 @@ namespace ConditioningControlPanel.Helpers
     public class EmojiTextBlock : TextBlock
     {
         private bool _rebuilding;
+        // The source string, kept because Text reads back from the rebuilt inlines (images drop out).
+        private string _source = string.Empty;
 
         static EmojiTextBlock()
         {
@@ -30,6 +32,12 @@ namespace ConditioningControlPanel.Helpers
                 new FrameworkPropertyMetadata(string.Empty,
                     FrameworkPropertyMetadataOptions.AffectsRender,
                     OnTextChanged));
+            FontSizeProperty.OverrideMetadata(typeof(EmojiTextBlock),
+                new FrameworkPropertyMetadata(SystemFonts.MessageFontSize,
+                    FrameworkPropertyMetadataOptions.Inherits
+                    | FrameworkPropertyMetadataOptions.AffectsMeasure
+                    | FrameworkPropertyMetadataOptions.AffectsRender,
+                    OnFontSizeChanged));
         }
 
         private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -39,8 +47,18 @@ namespace ConditioningControlPanel.Helpers
             self.RebuildInlines((string?)e.NewValue ?? string.Empty);
         }
 
+        private static void OnFontSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            // XAML sets attributes in source order, so Text="..." ahead of FontSize="..." built
+            // the images at the default size. Rebuild when the size lands.
+            var self = (EmojiTextBlock)d;
+            if (!self._rebuilding && self._source.Length > 0)
+                self.RebuildInlines(self._source);
+        }
+
         private void RebuildInlines(string text)
         {
+            _source = text;
             _rebuilding = true;
             try
             {

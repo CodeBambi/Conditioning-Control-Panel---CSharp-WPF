@@ -601,7 +601,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Tag="navrailstatic" Text="🔍" FontSize="13"
+                        <helpers:EmojiTextBlock Grid.Column="0" Tag="navrailstatic" Text="🔍" FontSize="13"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <TextBlock x:Name="TxtNavSearchLabel" Grid.Column="1" Opacity="0"
                                    Text="{loc:Str nav_search_label}" FontSize="13" FontWeight="SemiBold"
@@ -1687,7 +1687,7 @@
                                 </ControlTemplate>
                             </Button.Template>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock x:Name="TxtAccountChipBadge" Text="🔒" FontSize="10"
+                                <helpers:EmojiTextBlock x:Name="TxtAccountChipBadge" Text="🔒" FontSize="10"
                                            Margin="0,0,5,0" VerticalAlignment="Center"
                                            Visibility="Collapsed"/>
                                 <TextBlock x:Name="TxtAccountChipName" Text="{loc:Str account_chip_sign_in}"
@@ -2199,7 +2199,7 @@
                                     <!-- Identity: display name + tier badge (🧪 Lab / 🔒 Premium),
                                          same truth RefreshAccountChip paints. -->
                                     <DockPanel>
-                                        <TextBlock x:Name="ProfileMenuBadge" DockPanel.Dock="Right" Text=""
+                                        <helpers:EmojiTextBlock x:Name="ProfileMenuBadge" DockPanel.Dock="Right" Text=""
                                                    FontSize="12" VerticalAlignment="Center" Margin="6,0,0,0"
                                                    Visibility="Collapsed"/>
                                         <TextBlock x:Name="ProfileMenuName" FontSize="14" FontWeight="Bold"
@@ -3061,7 +3061,7 @@
                     MaxWidth="450" MaxHeight="220" VerticalAlignment="Center" HorizontalAlignment="Center"
                     Padding="40,30">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock x:Name="DropOverlayIcon" Text="📂" FontSize="48" HorizontalAlignment="Center"/>
+                    <helpers:EmojiTextBlock x:Name="DropOverlayIcon" Text="📂" FontSize="48" HorizontalAlignment="Center"/>
                     <TextBlock x:Name="DropOverlayTitle" Text="{loc:Str label_drop_to_import}" Foreground="{DynamicResource PinkBrush}" FontSize="20" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,15,0,5"/>
                     <TextBlock x:Name="DropOverlaySubtitle" Text="{loc:Str label_images_videos_zips_folders}" Foreground="#909090" FontSize="14"

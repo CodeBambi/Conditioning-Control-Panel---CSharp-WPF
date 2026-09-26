@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.LayeredAudioWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
         Title="Audio Layers"
         Width="480" Height="660"
         WindowStartupLocation="CenterOwner"
@@ -18,7 +19,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0"
+        <helpers:EmojiTextBlock Grid.Row="0"
                    Text="🎧 Audio Layers"
                    Foreground="{DynamicResource PinkBrush}"
                    FontSize="20"

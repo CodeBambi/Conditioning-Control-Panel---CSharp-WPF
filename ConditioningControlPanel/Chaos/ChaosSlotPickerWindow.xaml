@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.ChaosSlotPickerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Down the Rabbit Hole"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
@@ -96,7 +97,7 @@
             <!-- Header (also the drag handle) -->
             <Grid Grid.Row="0" x:Name="HeaderBar" Background="Transparent">
                 <StackPanel HorizontalAlignment="Left">
-                    <TextBlock Text="🐇 Down the Rabbit Hole" FontSize="13" Foreground="{StaticResource Pink}"
+                    <helpers:EmojiTextBlock Text="🐇 Down the Rabbit Hole" FontSize="13" Foreground="{StaticResource Pink}"
                                FontWeight="SemiBold" Opacity="0.85"/>
                     <TextBlock Text="Choose your save" FontSize="26" FontWeight="Bold" Foreground="White" Margin="0,2,0,0"/>
                     <TextBlock Text="Pick a slot to descend into. Each keeps its own progress." FontSize="13"
@@ -114,7 +115,7 @@
             <!-- Local-storage note -->
             <Border Grid.Row="2" Background="#1AFFFFFF" CornerRadius="9" Padding="14,10" Margin="0,4,0,14">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="🔒" FontSize="14" VerticalAlignment="Center" Margin="0,0,9,0"/>
+                    <helpers:EmojiTextBlock Text="🔒" FontSize="14" VerticalAlignment="Center" Margin="0,0,9,0"/>
                     <StackPanel>
                         <TextBlock Text="All saves are stored locally on this PC" FontSize="12.5"
                                    Foreground="{StaticResource TextDim}" FontWeight="SemiBold"/>

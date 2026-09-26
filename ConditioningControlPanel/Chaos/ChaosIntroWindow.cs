@@ -56,7 +56,7 @@ public sealed class ChaosIntroWindow : Window
         }
 
         // ---- title ----
-        var title = new TextBlock
+        var title = new ConditioningControlPanel.Helpers.EmojiTextBlock
         {
             Text = "🐇 DOWN THE RABBIT HOLE",
             Foreground = Brushes.White,
