@@ -1139,6 +1139,26 @@ namespace ConditioningControlPanel.Services
                              "looping track playing in the background."
             },
 
+            ["BrainDrain"] = new HelpContent
+            {
+                SectionId = "BrainDrain",
+                Icon = "💧",
+                Title = "Brain Drain",
+                WhatItDoes = "**Blurs the whole screen into a haze** and plays **brain-drain audio clips** at " +
+                             "random while it runs. The picture and the sound have **separate dials**.",
+                Tips = new List<string>
+                {
+                    "**Blur strength** sets the haze; **0 turns the picture off** and keeps the audio",
+                    "**Audio rate** sets how often a clip plays, separately from the blur",
+                    "**Melting mode** adds a slow warp on top of the blur, like melting glass",
+                    "Drop your own clips into the **Brain Drain folder** to replace the stock ones",
+                    "**High refresh** smooths the blur at a small CPU cost"
+                },
+                HowItWorks = "The blur is drawn on the **overlay layer** over your screen at the chosen strength. " +
+                             "A separate timer rolls the **audio rate** each minute to decide whether a clip " +
+                             "plays. Popping a **Brain Drain bubble** can also trigger a short melt."
+            },
+
             ["BubbleCount"] = new HelpContent
             {
                 SectionId = "BubbleCount",
