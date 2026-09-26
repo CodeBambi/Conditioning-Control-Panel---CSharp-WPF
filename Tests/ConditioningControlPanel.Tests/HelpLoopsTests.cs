@@ -33,7 +33,8 @@ public sealed class HelpLoopsTests
     public static TheoryData<string> Ids()
     {
         var d = new TheoryData<string>();
-        foreach (var id in DashboardIds) d.Add(id);
+        // Every registered scene, not only the dashboard ones: wave 2 scenes get the same checks.
+        foreach (var id in HelpLoopRegistry.Ids) d.Add(id);
         return d;
     }
 

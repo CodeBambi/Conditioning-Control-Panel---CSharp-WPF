@@ -48,7 +48,7 @@ namespace ConditioningControlPanel.Controls.HelpLoops
             var dc = f.Front;
 
             // The picture changes at the bottom of each blink: a cut, never a fade.
-            int look = 0;
+            int look = 0; // Pink, Stripes, Sea
             foreach (var b in Blinks) if (t >= b) look++;
             look %= 3;
 
@@ -60,18 +60,19 @@ namespace ConditioningControlPanel.Controls.HelpLoops
                     f.Back.DrawRoundedRectangle(f.P.Mint, null, LoopFrame.Inset(line, -1), 4, 4);
 
             using (f.Fade(dc, .5))
-                WebcamKit.Photo(f, dc, Overlay, look);
+                f.Photo(dc, Overlay, (PhotoLook)look);
 
             // Eye in a small glass card, top left over the picture.
             f.Card(new Rect(14, 10, 72, 40), f.P.Border);
-            WebcamKit.Eye(f, 50, 30, 1 - Lid(t), 0, 0, .9);
+            f.Eye(50, 30, 1 - Lid(t), 0, 0, .9);
 
             // A blink ticks a small mark by the eye.
             foreach (var b in Blinks)
             {
                 var k = Seg(t, b, b + 700);
                 if (k > 0 && k < 1)
-                    f.Text("blink", 94, 20 - 6 * EaseOut(k), 11, f.P.Accent, bold: true, opacity: 1 - k);
+                    using (f.At(dc, 118, 21, Lerp(.8, 1, Back(Seg(k, 0, .25)))))
+                        f.Chip(92, 10, "blink", hot: true, opacity: 1 - Seg(k, .6, 1));
             }
 
             f.Chip(356, 20, "click-through", hot: true, opacity: Seg(t, ClickT, ClickT + 200) * (1 - Seg(t, 5600, 5900)));

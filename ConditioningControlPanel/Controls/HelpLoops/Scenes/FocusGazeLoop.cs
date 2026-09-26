@@ -66,6 +66,20 @@ namespace ConditioningControlPanel.Controls.HelpLoops
         /// <summary>A sine with a whole number of periods per loop, so the wrap is seamless.</summary>
         private static double Wave(double t, int periods) => Math.Sin(2 * Math.PI * periods * t / Dur);
 
+        /// <summary>Pop droplets around (x,y), k 0..1 over the burst (as in Bubble Pop).</summary>
+        private static void Burst(LoopFrame f, double x, double y, double k)
+        {
+            if (k <= 0 || k >= 1) return;
+            var dc = f.Front;
+            using (f.Fade(dc, 1 - k))
+                for (int m = 0; m < 6; m++)
+                {
+                    var a = m / 6.0 * Math.PI * 2;
+                    var d = 26 * EaseOut(k);
+                    dc.DrawEllipse(Droplet, null, new Point(x + Math.Cos(a) * d, y + Math.Sin(a) * d), 3, 3);
+                }
+        }
+
         public override void Draw(LoopFrame f, double t)
         {
             f.Desktop();
@@ -80,24 +94,25 @@ namespace ConditioningControlPanel.Controls.HelpLoops
             var a = Target(t);
             if (t < PopT) f.Bubble(a.X, a.Y, 1 + .04 * Math.Sin(t / 300) + .08 * Seg(t, 3450, PopT));
             var at = Target(PopT);
-            WebcamKit.Burst(f, at.X, at.Y, Seg(t, PopT, PopT + 450), Droplet);
+            Burst(f, at.X, at.Y, Seg(t, PopT, PopT + 450));
             f.Floater(at.X - 10, at.Y - 26, Seg(t, PopT, PopT + 1300), "+XP");
 
             // Rings: the first fills to a pop, the second fills part way and empties when the look leaves.
             var ringA = Seg(t, 2650, PopT);
-            if (t < PopT) WebcamKit.Ring(f, a.X, a.Y, 27, ringA, f.P.Mint, Seg(t, 2300, 2650));
+            if (t < PopT) using (f.Fade(dc, Seg(t, 2300, 2650))) f.DwellRing(a.X, a.Y, 27, ringA);
             var b = Drifter(Second, t);
             var ringB = .6 * Seg(t, 4800, 5250) * (1 - Seg(t, 5250, 5650));
-            WebcamKit.Ring(f, b.X, b.Y, 27, ringB, f.P.Mint, Seg(t, 4650, 4800) * (1 - Seg(t, 5650, 5800)));
+            var ringBo = Seg(t, 4650, 4800) * (1 - Seg(t, 5650, 5800));
+            if (ringBo > 0) using (f.Fade(dc, ringBo)) f.DwellRing(b.X, b.Y, 27, ringB);
 
             var g = Gaze(t);
-            WebcamKit.GazeDot(f, g.X, g.Y, 1, f.P.Accent);
+            f.GazeDot(g.X, g.Y);
 
             // A small eye in the corner, looking where the dot is.
             var dx = Clamp((g.X - 240) / 200, -1, 1);
             var dy = Clamp((g.Y - 120) / 110, -1, 1);
             f.Card(new Rect(404, 10, 64, 34), f.P.Border);
-            WebcamKit.Eye(f, 436, 27, 1 - Tri(Seg(t, 4300, 4520) * 2), dx, dy, .7);
+            f.Eye(436, 27, 1 - Tri(Seg(t, 4300, 4520) * 2), dx, dy, .7);
 
             f.Chip(14, 12, "hold 1s", hot: t > 2650 && t < PopT + 300);
         }

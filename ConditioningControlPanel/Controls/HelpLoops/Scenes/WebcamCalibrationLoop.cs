@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Controls.HelpLoops
 
         public override string Id => "WebcamCalibration";
         public override double DurationMs => Dur;
-        public override double StillMs => 2400;
+        public override double StillMs => 1700;
 
         public override IReadOnlyList<HelpLoopStep> Steps { get; } = new[]
         {
@@ -101,8 +101,8 @@ namespace ConditioningControlPanel.Controls.HelpLoops
                     var hold = hop == 0 ? 2100 : HopMs - Glide;
                     var read01 = Seg(t, land, land + hold);
                     var size = grow * (1 - .35 * read01);
-                    WebcamKit.GazeDot(f, at.X, at.Y, 1.6 * size, f.P.Accent);
-                    if (hop == 0) WebcamKit.Ring(f, at.X, at.Y, 15, Seg(t, 800, 2250), f.P.Accent);
+                    if (size > .01) using (f.At(dc, at.X, at.Y, 1.4 * size)) f.GazeDot(at.X, at.Y);
+                    if (hop == 0 && t > 800) f.DwellRing(at.X, at.Y, 16, Seg(t, 800, 2250), f.P.Accent, 2.5);
                 }
 
                 // The eye follows the dot, a beat late.
@@ -111,7 +111,7 @@ namespace ConditioningControlPanel.Controls.HelpLoops
                 var dx = Clamp((look.X - 240) / 180, -1, 1);
                 var dy = Clamp((look.Y - 118) / 72, -1, 1);
                 var blink = Tri(Seg(t, 5900, 6140) * 2);
-                WebcamKit.Eye(f, EyeAt.X, EyeAt.Y, 1 - blink, dx, dy, 1.1);
+                f.Eye(EyeAt.X, EyeAt.Y, 1 - blink, dx, dy, 1.1);
 
                 int count = Count(t, hop);
                 var label = count >= 16 ? "16 / 16  done" : count.ToString(CultureInfo.InvariantCulture) + " / 16";

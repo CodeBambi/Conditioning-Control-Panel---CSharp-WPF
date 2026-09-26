@@ -38,6 +38,12 @@ namespace ConditioningControlPanel.Controls.HelpLoops
 
         private static double Wave(double t, int periods) => Math.Sin(2 * Math.PI * periods * t / Dur);
 
+        private static void Rim(LoopFrame f, Rect r, Brush brush, double opacity)
+        {
+            using (f.Fade(f.Front, opacity))
+                f.Front.DrawRoundedRectangle(null, new Pen(brush, 2.5), LoopFrame.Inset(r, -3), 6, 6);
+        }
+
         public override void Draw(LoopFrame f, double t)
         {
             f.Desktop();
@@ -53,36 +59,40 @@ namespace ConditioningControlPanel.Controls.HelpLoops
                 : EaseInOut(Seg(t, 4400, Scores[1])) * (1 - Seg(t, Scores[1], Scores[1] + 250));
             var bad = .55 * Seg(t, 2900, 3950) * (1 - Seg(t, 4250, 4900));
 
-            using (f.Fade(dc, show))
-            {
-                var onTarget = t > 700 && t < 2650 || t > 4300 && t < 6600;
-                var onOther = t > 2900 && t < 3950;
+            var onTarget = t > 700 && t < 2650 || t > 4300 && t < 6600;
+            var onOther = t > 2900 && t < 3950;
 
-                f.Card(LoopFrame.Inset(TargetCard, -4), onTarget ? f.P.Mint : f.P.Border);
-                WebcamKit.Photo(f, dc, TargetCard, 2);
-                f.Card(LoopFrame.Inset(OtherCard, -4), onOther ? f.P.Red : f.P.Border);
-                WebcamKit.Photo(f, dc, OtherCard, 1);
+            // The target always wears mint and the distractor lilac; a look lights the rim, and a
+            // look at the distractor turns its rim red.
+            f.Card(LoopFrame.Inset(TargetCard, -4), f.P.Border);
+            f.Photo(dc, TargetCard, PhotoLook.Sea, shadow: false);
+            Rim(f, TargetCard, f.P.Mint, onTarget ? 1 : .45);
+            f.Card(LoopFrame.Inset(OtherCard, -4), f.P.Border);
+            f.Photo(dc, OtherCard, PhotoLook.Stripes, shadow: false);
+            Rim(f, OtherCard, onOther ? f.P.Red : f.P.Lilac, onOther ? 1 : .45);
 
-                f.Chip(TargetCard.X, TargetCard.Bottom + 10, "target", hot: onTarget);
-                f.Chip(OtherCard.X, OtherCard.Bottom + 10, "ignore", hot: onOther);
-                WebcamKit.Meter(f, new Rect(TargetCard.X + 70, TargetCard.Bottom + 18, 80, 7), good, f.P.Mint);
-                WebcamKit.Meter(f, new Rect(OtherCard.X + 70, OtherCard.Bottom + 18, 80, 7), bad, f.P.Red);
+            f.Chip(TargetCard.X, TargetCard.Bottom + 10, "target", hot: onTarget);
+            f.Chip(OtherCard.X, OtherCard.Bottom + 10, "ignore", hot: onOther);
+            f.Meter(new Rect(TargetCard.X + 70, TargetCard.Bottom + 18, 80, 7), good, f.P.Mint);
+            f.Meter(new Rect(OtherCard.X + 70, OtherCard.Bottom + 18, 80, 7), bad, f.P.Red);
 
-                int score = 3;
-                foreach (var s in Scores) if (t >= s) score++;
-                f.Chip(207, 12, "score " + score.ToString(CultureInfo.InvariantCulture), hot: t >= Scores[0] && t < Scores[0] + 500 || t >= Scores[1] && t < Scores[1] + 500);
+            // The score resets out of sight: its chip fades across the wrap.
+            int score = 3;
+            foreach (var s in Scores) if (t >= s) score++;
+            f.Chip(207, 12, "score " + score.ToString(CultureInfo.InvariantCulture),
+                hot: t >= Scores[0] && t < Scores[0] + 500 || t >= Scores[1] && t < Scores[1] + 500, opacity: show);
 
-                foreach (var s in Scores)
-                    f.Floater(TargetMid.X - 8, TargetCard.Y + 6, Seg(t, s, s + 1300), "+1");
+            foreach (var s in Scores)
+                f.Floater(TargetMid.X - 8, TargetMid.Y - 8, Seg(t, s, s + 1300), "+1", f.P.Gold);
 
-                var g = Path(Look, t);
-                var gx = g.X + 1.4 * Wave(t, 71);
-                var gy = g.Y + 1.2 * Wave(t + 500, 53);
-                WebcamKit.GazeDot(f, gx, gy, 1, f.P.Accent);
+            var g = Path(Look, t);
+            var gx = g.X + 1.4 * Wave(t, 71);
+            var gy = g.Y + 1.2 * Wave(t + 500, 53);
+            dc.DrawEllipse(f.P.Glass, null, new Point(gx, gy), 10, 10);
+            f.GazeDot(gx, gy);
 
-                WebcamKit.Eye(f, 240, 240, 1 - Tri(Seg(t, 4950, 5170) * 2),
-                    Clamp((gx - 240) / 120, -1, 1), Clamp((gy - 128) / 90, -1, 1), .9);
-            }
+            f.Eye(240, 240, 1 - Tri(Seg(t, 4950, 5170) * 2),
+                Clamp((gx - 240) / 120, -1, 1), Clamp((gy - 128) / 90, -1, 1), .9);
         }
     }
 }
