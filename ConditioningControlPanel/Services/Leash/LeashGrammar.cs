@@ -25,7 +25,7 @@ public static class LeashGrammar
         PunishKind.Pink => new[] { 10, 15, 20 },
         PunishKind.Bubbles => new[] { 50, 100, 200 },
         PunishKind.Detention => new[] { 10, 20, 30 },
-        PunishKind.Video => new[] { 1 },
+        PunishKind.Video => new[] { LeashVideoCap.Default },   // any minute 1..90 is valid, see ValidPunish
         PunishKind.Chaster => new[] { 900, 1800, 3600 },
         _ => Array.Empty<int>(),
     };
@@ -51,7 +51,8 @@ public static class LeashGrammar
     public static bool Allowed(PunishKind kind, LeashIntensity intensity) => intensity >= LowestIntensity(kind);
 
     public static bool ValidPunish(PunishKind kind, int size, LeashWatch? watch) =>
-        Contains(PunishSizes(kind), size) && (kind == PunishKind.Video) == (watch != null) && (watch == null || ValidWatch(watch));
+        (kind == PunishKind.Video ? size >= LeashVideoCap.Min && size <= LeashVideoCap.Max : Contains(PunishSizes(kind), size))
+        && (kind == PunishKind.Video) == (watch != null) && (watch == null || ValidWatch(watch));
 
     public static bool ValidAssign(AssignKind kind, int size, LeashWatch? watch) =>
         Contains(AssignSizes(kind), size) && (kind == AssignKind.Video) == (watch != null) && (watch == null || ValidWatch(watch));

@@ -25,7 +25,7 @@ public enum AssignStatus { Open, Done, Missed }
 /// <summary>One cell of the 7-day strip.</summary>
 public enum WeekMark { Did, Idle, Punished, Today }
 
-public enum LeashEventKind { Tug, Reward, Punish, Assign, Answered, Ended, AssignDone, AssignMissed }
+public enum LeashEventKind { Tug, Reward, Punish, Assign, Answered, Ended, AssignDone, AssignMissed, PunishDone }
 
 /// <summary>DND lengths the leashed side can pick. <see cref="Off"/> ends a pause.</summary>
 public enum LeashDnd { Off, OneHour, FourHours, Today }
@@ -57,13 +57,21 @@ public sealed record MyLeash(
     LeashPerson Holder, LeashIntensity Intensity, DateTimeOffset Since, int Day,
     DateTimeOffset? DndUntil, LeashRemoteMode RemoteMode,
     IReadOnlyList<Punishment> Pending, Assignment? Assignment, int Pardons,
-    IReadOnlyList<Sticker> Stickers);
+    IReadOnlyList<Sticker> Stickers)
+{
+    /// <summary>The longest a leash video may run for me, minutes (<see cref="LeashVideoCap"/>).</summary>
+    public int VideoMax { get; init; } = LeashVideoCap.Default;
+}
 
 /// <summary>One account I hold, seen from the holder side (CONTRACT H).</summary>
 public sealed record HeldLeash(
     LeashPerson Who, bool Online, LeashIntensity Intensity, DateTimeOffset Since, int Day,
     DateTimeOffset? DndUntil, DayReport? Report, IReadOnlyList<WeekDay> Week,
-    IReadOnlyList<Punishment> Pending, Assignment? Assignment, int PunishedToday);
+    IReadOnlyList<Punishment> Pending, Assignment? Assignment, int PunishedToday)
+{
+    /// <summary>Their longest video, minutes: the holder's cap slider stops here.</summary>
+    public int VideoMax { get; init; } = LeashVideoCap.Default;
+}
 
 public sealed record LeashOffer(LeashPerson From, DateTimeOffset At, DateTimeOffset ExpiresAt);
 

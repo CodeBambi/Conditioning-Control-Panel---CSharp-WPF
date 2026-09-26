@@ -180,7 +180,7 @@ public class LeashIntroRuleTests
     {
         var v = CompanionLocMasters.English["leash_explain_leashed_cut"];
         Assert.Contains("any time", v);
-        Assert.Contains("one click", v);
+        Assert.Contains("hold {0} for 5 seconds", v);
         Assert.Contains("Strict Lock off", v);
         Assert.Contains("panic key back on", v);
     }

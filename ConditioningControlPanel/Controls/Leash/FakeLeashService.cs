@@ -205,6 +205,13 @@ public sealed class FakeLeashService : ILeashService
         return Task.CompletedTask;
     }
 
+    public Task SetVideoMaxAsync(int minutes)
+    {
+        Calls.Add("video_max:" + minutes);
+        if (_snap.Me is { } me) Snapshot = _snap with { Me = me with { VideoMax = LeashVideoCap.Clamp(minutes) } };
+        return Task.CompletedTask;
+    }
+
     public Task SetRemoteModeAsync(LeashRemoteMode mode)
     {
         Calls.Add("remote:" + mode);

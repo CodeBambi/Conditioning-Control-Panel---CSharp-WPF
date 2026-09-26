@@ -25,12 +25,19 @@ namespace ConditioningControlPanel
         private bool _leashHidBrowser;
         private DateTime _leashSnoozeUntilUtc = DateTime.MinValue;
         private ILeashTaskRunner? _leashRunner;
+        private readonly LeashHoldToCut _leashHold = new();
 
         private void InitializeLeash()
         {
             try
             {
-                App.LeashedChanged += _ => Dispatcher.BeginInvoke(() => _trayIcon?.SyncLeashIcon());
+                App.LeashedChanged += on => Dispatcher.BeginInvoke(() =>
+                {
+                    _trayIcon?.SyncLeashIcon();
+                    // Hold-to-cut must work even with the panic key switched off.
+                    if (on) _keyboardHook?.Start();
+                    else _leashHold.Up();
+                });
                 if (RemoteControlOverlay.Parent is Grid host)
                 {
                     _leashGate = new LeashGateCard();
@@ -193,6 +200,46 @@ namespace ConditioningControlPanel
             try { _leashRunner?.Cancel(); } catch { }
             HideLeashGate();
             HandlePanicKeyPress();
+        }
+
+        /// <summary>A key-down of the panic key while leashed: true = a repeat of a held key,
+        /// swallow it. Five seconds of holding asks "Cut the leash?".</summary>
+        private bool LeashHoldSwallows(System.Windows.Input.Key key)
+        {
+            var s = App.Settings?.Current;
+            if (s == null || key.ToString() != s.PanicKey) return false;
+            var (repeat, due) = _leashHold.Down(DateTime.UtcNow, LeashSurfaces.IsLeashed);
+            if (due) Dispatcher.BeginInvoke(AskToCutFromHold);
+            return repeat;
+        }
+
+        private void OnLeashKeyReleased(System.Windows.Input.Key key)
+        {
+            if (key.ToString() == App.Settings?.Current?.PanicKey) _leashHold.Up();
+        }
+
+        private void AskToCutFromHold()
+        {
+            if (!LeashSurfaces.IsLeashed) return;
+            string? holder = null;
+            try { holder = LeashLocator.Service()?.Snapshot.Me?.Holder.Name; } catch { }
+            App.Logger?.Information("Leash: panic key held 5 s, asking to cut");
+            LeashCutConfirmWindow.Ask(holder, () =>
+            {
+                HideLeashGate();
+                LeashPunishWindow.CloseNow();
+                LeashSurfaces.Cut();
+            });
+        }
+
+        /// <summary>First thing a panic press does: a leash video window closes, the task stops,
+        /// the gate stands back. The punishment itself stays pending.</summary>
+        private void LeashOnPanicPress()
+        {
+            if (LeashPunishWindow.Current == null) return;
+            _leashSnoozeUntilUtc = DateTime.UtcNow + LeashUiRules.PanicSnooze;
+            try { _leashRunner?.Cancel(); } catch { }
+            LeashPunishWindow.CloseNow();
         }
 
         /// <summary>A tug from the holder: the window gives a small wobble (the chain jingle has

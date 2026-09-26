@@ -40,6 +40,8 @@ public interface ILeashService
     Task SetIntensityAsync(LeashIntensity intensity);
     Task SetDndAsync(LeashDnd dnd);
     Task SetRemoteModeAsync(LeashRemoteMode mode);
+    /// <summary>The longest a leash video may run, minutes 1..90.</summary>
+    Task SetVideoMaxAsync(int minutes);
     Task CompleteAsync(string pid);
     Task<bool> PardonAsync(string pid);
 }

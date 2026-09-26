@@ -175,7 +175,28 @@ public sealed class LeashSelfCard : Border
             dnd ? -1 : 0,
             i => _ = SetDndAsync(i switch { 1 => LeashDnd.OneHour, 2 => LeashDnd.FourHours, 3 => LeashDnd.Today, _ => LeashDnd.Off }),
             "leash-dnd", 11.5));
+
+        var cap = new LeashCapSlider(Loc.Get("leash_video_max"), _me.VideoMax, "leash-video-max")
+        {
+            Margin = new Thickness(2, 10, 2, 0),
+            ToolTip = Loc.Get("leash_video_max_hint"),
+        };
+        cap.Committed += m => _ = SetVideoMaxAsync(m);
+        sp.Children.Add(cap);
+
+        var hold = LeashLook.Caption(Loc.GetF("leash_self_hold_hint", LeashHoldToCut.KeyLabel(App.Settings?.Current?.PanicKey)), FriendsLook.MutedBrush);
+        hold.Margin = new Thickness(2, 10, 0, 0);
+        hold.TextWrapping = TextWrapping.Wrap;
+        hold.Tag = "leash-self-hold";
+        sp.Children.Add(hold);
         return sp;
+    }
+
+    internal async Task SetVideoMaxAsync(int minutes)
+    {
+        if (minutes == _me.VideoMax) return;
+        _me = _me with { VideoMax = minutes };
+        try { if (_svc() is { } s) await s.SetVideoMaxAsync(minutes); } catch { }
     }
 
     internal async Task SetLevelAsync(LeashIntensity level)
