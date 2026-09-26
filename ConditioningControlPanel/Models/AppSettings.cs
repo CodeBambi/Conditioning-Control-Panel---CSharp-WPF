@@ -9205,5 +9205,29 @@ namespace ConditioningControlPanel.Models
         public List<string> CompanionAskKnownTopics { get; set; } = new();
 
         #endregion
+
+        #region Leash intro
+
+        private bool _leashIntroSeenHolder;
+        /// <summary>The leash explainer has been shown before a first offer and the offer went out.
+        /// Until then an offer opens the explainer first (LeashIntroRule).</summary>
+        [JsonProperty]
+        public bool LeashIntroSeenHolder
+        {
+            get => _leashIntroSeenHolder;
+            set { _leashIntroSeenHolder = value; OnPropertyChanged(); }
+        }
+
+        private bool _leashIntroSeenLeashed;
+        /// <summary>The leash explainer has been shown inside an ask card and the ask was answered.
+        /// Until then the ask card carries the explainer and holds "Put it on" for a moment.</summary>
+        [JsonProperty]
+        public bool LeashIntroSeenLeashed
+        {
+            get => _leashIntroSeenLeashed;
+            set { _leashIntroSeenLeashed = value; OnPropertyChanged(); }
+        }
+
+        #endregion
     }
 }

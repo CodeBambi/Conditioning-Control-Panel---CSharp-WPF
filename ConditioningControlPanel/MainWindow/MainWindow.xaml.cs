@@ -356,6 +356,7 @@ namespace ConditioningControlPanel
             _keyboardHook = new GlobalKeyboardHook();
             App.PanicHook = _keyboardHook;   // #875: lock cards ask this whether a panic escape really exists
             _keyboardHook.KeyPressed += OnGlobalKeyPressed;
+            _keyboardHook.KeyReleased += OnLeashKeyReleased;
             _keyboardHook.KeyPressedWithVkCode += (key, vkCode) => App.KeywordTriggers?.OnKeyPressed(key, vkCode);
             App.KeywordTriggers?.SetSessionActiveCallback(() => _sessionEngine?.IsRunning == true);
             if (App.Settings.Current.KeywordTriggersEnabled && KeywordTriggerService.HasAccess())
@@ -438,6 +439,10 @@ namespace ConditioningControlPanel
             // open spiral. MainWindow.SpiralRoom.cs. Three subscriptions and one Collapsed write on
             // an account with neither, which is every install today.
             InitializeSpiralRoom();
+
+            // The leash: the punishment gate, the ask card, the snap and the tug wobble.
+            // MainWindow.Leash.cs. Quiet until a leash service is wired and has something to say.
+            InitializeLeash();
 
             // Subscribe to quest events
             if (App.Quests != null)
@@ -922,6 +927,9 @@ namespace ConditioningControlPanel
             
             // Check if panic key is enabled and pressed
             var settings = App.Settings.Current;
+            // The leash's hold-to-cut: while leashed, a held panic key is ONE press (its repeats are
+            // swallowed here, or two of them would quit the app) and five seconds of it asks to cut.
+            if (LeashHoldSwallows(key)) return;
             if (settings.PanicKeyEnabled)
             {
                 var panicKey = settings.PanicKey;
@@ -1483,6 +1491,10 @@ namespace ConditioningControlPanel
             // returns early into a game's own panic rung, and the hold has to cover those too.
             try { App.Chaster?.NoteSafetyExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
+            // A leash video window goes down with a panic like everything else (panic always works);
+            // the punishment stays pending and the gate stands back for ten minutes.
+            try { LeashOnPanicPress(); } catch (Exception ex) { Diag.Swallowed(ex); }
+
             VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
 
             // #875: an open lock card outranks every hand-off below, so it is answered FIRST. A lock
@@ -1807,6 +1819,7 @@ namespace ConditioningControlPanel
                 App.Video?.ForceCleanup(synchronous: true);
                 BubbleCountWindow.ForceCloseAll();
                 BubbleCountResultWindow.ForceCloseAll();
+                Controls.Leash.LeashPunishWindow.CloseNow();
 
                 // Give LibVLC a moment to release native resources
                 Thread.Sleep(100);
