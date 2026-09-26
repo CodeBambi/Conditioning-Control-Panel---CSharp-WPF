@@ -37,6 +37,7 @@ public sealed class LeashHolderCard : Border
 
     /// <summary>The punishment or assignment waiting for a video id, or null.</summary>
     private string? _videoFor;
+    private int _videoCap = LeashVideoCap.Default;
 
     private (string Text, bool Good)? _result;
     private DispatcherTimer? _resultTimer;
@@ -402,7 +403,19 @@ public sealed class LeashHolderCard : Border
                 $"leash-punish:{k.ToString().ToLowerInvariant()}:{sz}",
                 (Func<Task>)(() => k == PunishKind.Video ? OpenVideo("punish") : SendPunishAsync(kind, sz, null))));
             rows.Children.Add(SizeRow(Loc.Get(LeashUiRules.Key(k)), PunishIcon(k), FriendsLook.RedBrush, chips));
-            if (k == PunishKind.Video && _videoFor == "punish") rows.Children.Add(VideoPicker(w => SendPunishAsync(PunishKind.Video, 1, w)));
+            if (k == PunishKind.Video && _videoFor == "punish")
+            {
+                _videoCap = Math.Min(_videoCap, _h.VideoMax);
+                var cap = new LeashCapSlider(Loc.Get("leash_video_cap_label"), _videoCap, "leash-video-cap")
+                {
+                    Ceiling = _h.VideoMax,
+                    Margin = new Thickness(20, 2, 0, 6),
+                    ToolTip = Loc.Get("leash_video_max_hint"),
+                };
+                cap.Committed += v => _videoCap = v;
+                rows.Children.Add(cap);
+                rows.Children.Add(VideoPicker(w => SendPunishAsync(PunishKind.Video, _videoCap, w)));
+            }
         }
         return sheet;
     }

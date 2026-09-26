@@ -126,7 +126,7 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
                 ok = true;
                 break;
             case PunishKind.Video:
-                ok = p.Watch != null && OpenWatch(p.Watch, resume);
+                ok = p.Watch != null && OpenWatch(p.Watch, resume, LeashVideoCap.Clamp(p.Size));
                 break;
             default:
                 ok = false;
@@ -202,12 +202,12 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
         return _host.ShowLockCard();
     }
 
-    private bool OpenWatch(LeashWatch w, bool resume)
+    private bool OpenWatch(LeashWatch w, bool resume, int capMinutes = 0)
     {
         if (!resume || _meter == null)
         {
             _watch = w;
-            _meter = new LeashWatchMeter();
+            _meter = new LeashWatchMeter { CapSeconds = capMinutes > 0 ? capMinutes * 60 : null };
             _watchFinished = false;
         }
         return _host.OpenWatch(w);

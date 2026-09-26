@@ -195,6 +195,7 @@ public static class LeashUiRules
         LeashEventKind.Ended => "leash_evt_ended",
         LeashEventKind.AssignDone => "leash_evt_assign_done",
         LeashEventKind.AssignMissed => "leash_evt_assign_missed",
+        LeashEventKind.PunishDone => "leash_evt_punish_done",
         _ => null,
     };
 

@@ -25,13 +25,25 @@ public sealed class LeashWatchMeter
     public double WatchedSeconds { get; private set; }
     public double DurationSeconds { get; private set; }
 
+    /// <summary>A leash punishment's time cap: done once this much was really watched, even
+    /// if the video is longer. Null = watch it through.</summary>
+    public double? CapSeconds { get; init; }
+
     public bool IsComplete =>
-        DurationSeconds >= MinDurationSeconds && DurationSeconds <= MaxDurationSeconds
-        && WatchedSeconds >= CompleteShare * DurationSeconds;
+        (CapSeconds is double cap && cap > 0 && WatchedSeconds >= cap)
+        || (DurationSeconds >= MinDurationSeconds && DurationSeconds <= MaxDurationSeconds
+            && WatchedSeconds >= CompleteShare * DurationSeconds);
 
     /// <summary>0..100 toward done.</summary>
-    public int Percent => DurationSeconds <= 0 ? 0
-        : (int)Math.Clamp(Math.Floor(100 * WatchedSeconds / (CompleteShare * DurationSeconds)), 0, 100);
+    public int Percent
+    {
+        get
+        {
+            var byVideo = DurationSeconds <= 0 ? 0 : 100 * WatchedSeconds / (CompleteShare * DurationSeconds);
+            var byCap = CapSeconds is double cap && cap > 0 ? 100 * WatchedSeconds / cap : 0;
+            return (int)Math.Clamp(Math.Floor(Math.Max(byVideo, byCap)), 0, 100);
+        }
+    }
 
     public void Sample(double currentTime, double duration, bool visible)
     {

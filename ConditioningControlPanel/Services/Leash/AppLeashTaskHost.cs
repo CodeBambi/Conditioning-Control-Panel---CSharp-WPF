@@ -8,8 +8,9 @@ namespace ConditioningControlPanel.Services.Leash;
 /// <summary>
 /// The real features a gate task drives. Every entry point is one the app already has: lock cards
 /// through <c>App.LockCard.ShowLockCard</c>, sessions through the same start path the remote and
-/// the Programs tab use, bubbles through <c>App.Bubbles</c>, a Hypnotube video in the panel's
-/// browser, a catalogue enhancement in the Deeper player. Nothing here enables Strict Lock,
+/// the Programs tab use, bubbles through <c>App.Bubbles</c>. A video (Hypnotube, or a catalogue
+/// entry whose media is a local file) plays caged in <c>LeashPunishWindow</c>; a catalogue entry
+/// with no local file of its own still opens in the Deeper player. Nothing here enables Strict Lock,
 /// touches the panic key or asks for a strict lock card.
 /// </summary>
 public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
@@ -20,6 +21,7 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
     private BrowserVideoTimeSource? _source;
     private object? _sourceView;
     private string? _watchPath;
+    private bool _windowed;
     private bool _hooked;
     private bool _hookedDeeper;
 
@@ -27,7 +29,16 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
     public event Action<LeashWatch>? WatchFinished;
     private LeashWatch? _watching;
 
-    public AppLeashTaskHost() => Hook();
+    public AppLeashTaskHost()
+    {
+        Hook();
+        Controls.Leash.LeashPunishWindow.VideoEnded += OnWindowVideoEnded;
+    }
+
+    private void OnWindowVideoEnded()
+    {
+        if (_watching is { } w) WatchFinished?.Invoke(w);
+    }
 
     private void Hook()
     {
@@ -153,17 +164,20 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
         _watching = watch;
         try
         {
+            var (holder, locked) = WhoAndWhy(watch);
             if (watch.Kind == "ht")
             {
                 var url = Friends.LandingRules.HtUrl(watch.Id);
-                var mw = App.MainWindowRef;
-                if (url == null || mw == null) return false;
-                Launcher.LauncherHost.OpenPanel();
-                return mw.NavigateToUrlInBrowser(url, autoPlayFullscreen: true, userInitiated: true);
+                return url != null && Controls.Leash.LeashPunishWindow.OpenUrl(url, holder, locked);
             }
             var path = CataloguePath(watch.Id);
             if (path == null) return false;
             _watchPath = path;
+            if (LocalMediaFor(path) is { } media)
+            {
+                _windowed = true;
+                return Controls.Leash.LeashPunishWindow.OpenFile(media, holder, locked);
+            }
             Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(App.MainWindowRef, w => w.LoadEnhancementFile(path));
             return true;
         }
@@ -173,6 +187,55 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
             return false;
         }
     }
+
+    /// <summary>The holder's name for the window's head, and whether this watch is a pending
+    /// punishment (locked: the window will not close) or a task (it closes normally).</summary>
+    private static (string Holder, bool Locked) WhoAndWhy(LeashWatch watch)
+    {
+        try
+        {
+            var me = Controls.Leash.LeashLocator.Service()?.Snapshot.Me;
+            if (me == null) return ("", false);
+            foreach (var p in me.Pending)
+                if (p.Kind == PunishKind.Video && p.Watch != null && p.Watch.Kind == watch.Kind && p.Watch.Id == watch.Id)
+                    return (me.Holder.Name, true);
+            return (me.Holder.Name, false);
+        }
+        catch { return ("", false); }
+    }
+
+    private static readonly string[] VideoExtensions = { ".mp4", ".webm", ".m4v", ".mov", ".mkv" };
+
+    /// <summary>The video a catalogue enhancement plays when it is a local file: its
+    /// <c>mediaSource</c> when that names one, else a video beside it with the same base name.
+    /// Null = let the Deeper player handle it.</summary>
+    internal static string? LocalMediaFor(string enhancementPath)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(enhancementPath) ?? "";
+            var json = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(enhancementPath));
+            var src = (string?)(json["mediaSource"] ?? json["MediaSource"]);
+            if (!string.IsNullOrWhiteSpace(src) && src != "*")
+            {
+                var full = Path.IsPathRooted(src) ? src : Path.Combine(dir, src);
+                if (IsVideo(full) && File.Exists(full)) return full;
+            }
+            var stem = Path.GetFileName(enhancementPath);
+            var cut = stem.IndexOf('.');
+            if (cut > 0) stem = stem[..cut];
+            foreach (var ext in VideoExtensions)
+            {
+                var sibling = Path.Combine(dir, stem + ext);
+                if (File.Exists(sibling)) return sibling;
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("Leash local media lookup failed: {E}", ex.Message); }
+        return null;
+    }
+
+    private static bool IsVideo(string path) =>
+        Array.IndexOf(VideoExtensions, Path.GetExtension(path).ToLowerInvariant()) >= 0;
 
     /// <summary>The local file for a catalogue id, the same lookup a friend's watch uses.</summary>
     private static string? CataloguePath(string catalogueId)
@@ -187,14 +250,14 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
 
     public LeashWatchSample? SampleWatch(LeashWatch watch)
     {
-        if (watch.Kind != "ht") return null;   // catalogue finishes by its own event
+        // A catalogue entry in the Deeper player finishes by its own event.
+        if (watch.Kind != "ht" && !_windowed) return null;
         try
         {
-            var mw = App.MainWindowRef;
-            var view = mw?.GetBrowserWebView();
+            var view = Controls.Leash.LeashPunishWindow.Current?.View;
             var core = view?.CoreWebView2;
-            var url = Friends.LandingRules.HtUrl(watch.Id);
-            if (view == null || core == null || url == null || !SamePage(core.Source, url)) return null;
+            if (view == null || core == null) return null;
+            if (watch.Kind == "ht" && (Friends.LandingRules.HtUrl(watch.Id) is not { } url || !SamePage(core.Source, url))) return null;
             if (!ReferenceEquals(view, _sourceView))
             {
                 _source?.Dispose();
@@ -202,8 +265,7 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
                 _source.Attach();
                 _sourceView = view;
             }
-            var window = Window.GetWindow(view);
-            var visible = view.IsVisible && window is { IsVisible: true } && window.WindowState != WindowState.Minimized;
+            var visible = Controls.Leash.LeashPunishWindow.Watchable;
             return new LeashWatchSample(_source!.GetCurrentTimeSeconds(), _source.GetDurationSeconds(), visible);
         }
         catch (Exception ex)
@@ -227,6 +289,8 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
     {
         _watching = null;
         _watchPath = null;
+        _windowed = false;
+        try { Controls.Leash.LeashPunishWindow.CloseNow(); } catch { }
         try { _source?.Dispose(); } catch { }
         _source = null;
         _sourceView = null;
@@ -235,6 +299,7 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
     public void Dispose()
     {
         EndWatch();
+        Controls.Leash.LeashPunishWindow.VideoEnded -= OnWindowVideoEnded;
         try
         {
             if (_hooked && App.Bubbles != null) App.Bubbles.OnBubblePopped -= OnPopped;

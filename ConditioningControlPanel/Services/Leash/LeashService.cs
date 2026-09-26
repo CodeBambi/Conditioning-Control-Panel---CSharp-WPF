@@ -253,6 +253,9 @@ public sealed class LeashService : ILeashService
     public Task SetRemoteModeAsync(LeashRemoteMode mode) =>
         SettingsAsync(new JObject { ["remote_mode"] = LeashParse.RemoteModeToWire(mode) });
 
+    public Task SetVideoMaxAsync(int minutes) =>
+        SettingsAsync(new JObject { ["video_max"] = LeashVideoCap.Clamp(minutes) });
+
     public async Task CompleteAsync(string pid)
     {
         if (string.IsNullOrEmpty(pid)) return;

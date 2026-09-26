@@ -88,7 +88,7 @@ public sealed class LeashExplainCard : Border
         var see = string.IsNullOrWhiteSpace(name)
             ? Loc.Get("leash_explain_leashed_see_anon")
             : Loc.GetF("leash_explain_leashed_see", name.Trim());
-        return (see, Loc.Get("leash_explain_leashed_cut"));
+        return (see, Loc.GetF("leash_explain_leashed_cut", LeashHoldToCut.KeyLabel(App.Settings?.Current?.PanicKey)));
     }
 
     // ---- build -------------------------------------------------------------------------------

@@ -94,6 +94,7 @@ public static class LeashParse
         "ended" => LeashEventKind.Ended,
         "assign_done" => LeashEventKind.AssignDone,
         "assign_missed" => LeashEventKind.AssignMissed,
+        "punish_done" => LeashEventKind.PunishDone,
         _ => null,
     };
 
@@ -241,6 +242,9 @@ public static class LeashParse
         return list;
     }
 
+    private static int VideoMaxOf(JObject o) =>
+        Int(o["video_max"]) is int v && v >= LeashVideoCap.Min && v <= LeashVideoCap.Max ? v : LeashVideoCap.Default;
+
     public static MyLeash? Me(JToken? t)
     {
         if (t is not JObject o) return null;
@@ -256,7 +260,7 @@ public static class LeashParse
             PunishList(o["pending"], holder),
             Assignment(o["assignment"]),
             Math.Clamp(Int(o["pardons"]) ?? 0, 0, LeashGrammar.MaxPardons),
-            Stickers(o["stickers"]));
+            Stickers(o["stickers"])) { VideoMax = VideoMaxOf(o) };
     }
 
     public static HeldLeash? Held(JToken? t)
@@ -275,7 +279,7 @@ public static class LeashParse
             // PUN.from is the holder (this account); a block that leaves it out still lists the punishment.
             PunishList(o["pending"], new LeashPerson("", "", null)),
             Assignment(o["assignment"]),
-            Math.Max(0, Int(o["punished_today"]) ?? 0));
+            Math.Max(0, Int(o["punished_today"]) ?? 0)) { VideoMax = VideoMaxOf(o) };
     }
 
     public static LeashOffer? Offer(JToken? t)

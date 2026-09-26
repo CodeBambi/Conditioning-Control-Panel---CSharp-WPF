@@ -34,15 +34,15 @@ app is open (the friends 120 s idle cadence is too slow).
 B = { me: L | null, holding: [H], offers: [O], events: [E] }
 
 L (me, the leashed side) = {
-  holder: P, intensity, since, day, dnd_until, remote_mode,
+  holder: P, intensity, since, day, dnd_until, remote_mode, video_max,
   pending: [PUN], assignment: A | null, pardons, stickers: [STK] }
 H (one leashed friend, the holder side) = {
-  who: P, online, intensity, since, day, dnd_until,
+  who: P, online, intensity, since, day, dnd_until, video_max,
   report: R | null, week: [W x7], pending: [PUN], assignment: A | null, punished_today }
 O (an offer to me) = { from: P, at, expires_at }
 P = { id, name, avatar }                       (resolved like friends F; never client-sent)
 E = { id, kind, from: P, at, ... }            (delivered once, then dropped)
-  kind: tug | reward | punish | assign | answered | ended | assign_done | assign_missed
+  kind: tug | reward | punish | assign | answered | ended | assign_done | assign_missed | punish_done
 R = { day:"yyyymmdd", minutes, quests_done, quests_total, streak,
       chaster_linked, lock_left_s | null, tab_s | null, assign_done, at }
 W = { day:"yyyymmdd", c }   c: g (did the work) | x (idle) | r (punished) | t (today)
@@ -59,6 +59,8 @@ reads it. The server keeps the last R in `leash_report:<leashed>` (EX 3 days), n
 
 - `intensity`: `soft` `standard` `strict`
 - `remote_mode`: `ask` (default: 5 s countdown card with Not now) `take` (starts at once). v2 uses it.
+- `video_max`: an integer 1..90, minutes (default 30): the longest a leash video may run for the
+  leashed side. Only the leashed side sets it. Anything else -> `bad_input`.
 - `dnd`: `1h` `4h` `today` `off`   (`today` = until the leashed client's local midnight; the client
   sends `dnd_until` ISO with it and the server clamps it to at most 24 h out)
 - punishment `kind` / `size`, and the lowest intensity that allows it:
@@ -69,7 +71,7 @@ reads it. The server keeps the last R in `leash_report:<leashed>` (EX 3 days), n
 | `pink` | 10, 15, 20 | a session of N minutes with the pink filter | yes | yes | yes |
 | `bubbles` | 50, 100, 200 | pop N bubbles | | yes | yes |
 | `detention` | 10, 20, 30 | a session of N minutes before anything else | | yes | yes |
-| `video` | 1 + `watch` | watch it through (friends `watch` grammar: `catalogue` or `ht`) | | yes | yes |
+| `video` | 1..90 (minutes) + `watch` | watch it until it ends or `size` minutes of real watching, whichever is first (friends `watch` grammar: `catalogue` or `ht`); the server lowers `size` to the leashed side's `video_max`, never refuses for it | | yes | yes |
 | `chaster` | 900, 1800, 3600 | seconds booked on the leashed player's tab, no gate | | | yes |
 
 - reward `kind`: `sticker` (`sticker` in `good star pet heart wow`), `credit` (size 900 or 1800,
@@ -89,12 +91,12 @@ client hides those rows on the holder side (never greyed).
 | `answer` | leashed | `{ from, accept, intensity? }` | `{ ok, status }` `on` `declined` `gone` |
 | `cut` | leashed | `{}` | `{ ok }` (always ok, even with nothing to cut) |
 | `release` | holder | `{ who }` | `{ ok }` (the holder lets go) |
-| `settings` | leashed | `{ intensity?, dnd?, dnd_until?, remote_mode? }` | `{ ok, me: L }` |
+| `settings` | leashed | `{ intensity?, dnd?, dnd_until?, remote_mode?, video_max? }` | `{ ok, me: L }` |
 | `assign` | holder | `{ who, kind, size, watch? }` | `{ ok, status }` `sent` `replaced` `dnd` `refused` |
 | `punish` | holder | `{ who, kind, size, watch? }` | `{ ok, status }` `sent` `queued` `not_allowed` `cap` `dnd` `refused` |
 | `reward` | holder | `{ who, kind, sticker?, size?, poke? }` | `{ ok, status }` `sent` `full` `refused` |
 | `tug` | holder | `{ who }` | `{ ok, status }` `sent` `too_fast` `dnd` |
-| `complete` | leashed | `{ pid }` | `{ ok }` (the gate is done) |
+| `complete` | leashed | `{ pid }` | `{ ok }` (the gate is done; the holder gets `punish_done` with `punishment: { pid, kind, size }` when it was really pending) |
 | `pardon` | leashed | `{ pid }` | `{ ok, status }` `pardoned` `none_left` |
 
 `who` / `to` / `from` are unified ids. `dnd` replies carry `dnd_until` so the holder's card can
@@ -166,6 +168,14 @@ Nothing here goes through the profile sync body, the anticheat clamp or the lead
   the leash gate goes first.
 - Local limits the client adds: none of the effects a leash triggers may enable Strict Lock or
   touch the panic key.
+- A video (Hypnotube, or a catalogue entry whose media is a local file) plays in its own window:
+  92% of the screen, resizable, F11 fullscreen. The video fills the page and cannot be clicked,
+  paused, sought or put in the page's own fullscreen. A punishment window will not close: a close
+  shakes it and names the holder. It ends when the video ends, at its cap, on a cut, or on a panic
+  press (which always works; the punishment stays pending). A video task (assignment) closes normally.
+- Hold to cut: while leashed, holding the panic key (Escape by default) for 5 s anywhere asks
+  "Cut the leash?". A held key is one panic press; its repeats are swallowed. It works with the
+  panic key switched off. The explainer and the leashed card say so; there is no cut button on the video.
 
 ## v2 remote (NOT in v1, recorded so v1 does not paint it into a corner)
 
