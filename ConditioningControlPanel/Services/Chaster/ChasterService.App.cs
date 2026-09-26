@@ -75,7 +75,11 @@ public sealed partial class ChasterService
         var tabPath = Path.Combine(App.UserDataPath, "chaster_tab.demo.json");
         try { File.Delete(tabPath); } catch (Exception ex) { Diag.Swallowed(ex); }
         var svc = new ChasterService(new ChasterClient(new DemoChaster()), new DemoTokens(), tabPath,
-            () => options() with { LockId = "demo-lock" });
+            () => options() with { LockId = "demo-lock" })
+        {
+            LadderApi = new DemoRaffle(Environment.GetEnvironmentVariable(DemoEnvVar)),
+            RafflePostDays = () => App.Settings?.Current?.ChasterRafflePostDays == true,
+        };
         svc.Note("typo", 3);
         svc.Note("attention");
         svc.Note("escape");
@@ -83,6 +87,49 @@ public sealed partial class ChasterService
         svc.Note("quest");
         App.Logger?.Warning("[Chaster] DEMO mode: fake account, fake lock, nothing reaches Chaster");
         return svc;
+    }
+
+    /// <summary>A fake raffle card so the page can be looked at before the server's raffle
+    /// routes are live. The variable's value picks the state: <c>in</c> (in the draw),
+    /// <c>time</c> (days met, time short), <c>out</c> (days out of reach), <c>ticket</c> (list
+    /// frozen, holds a ticket), <c>missed</c> (frozen, no ticket); anything else is mid-month
+    /// and a few days short.</summary>
+    private sealed class DemoRaffle : IChasterLadderApi
+    {
+        private readonly string _state;
+        private bool _post;
+        public DemoRaffle(string? state) => _state = (state ?? "").Trim().ToLowerInvariant();
+
+        private static List<int> Span(int from, int to, params int[] skip)
+        {
+            var days = new List<int>();
+            for (var d = from; d <= to; d++) if (Array.IndexOf(skip, d) < 0) days.Add(d);
+            return days;
+        }
+
+        private RaffleCard Card() => _state switch
+        {
+            "in" => new("2026-10", 31, 28, Span(1, 28, 3), 33 * 3600 + 20 * 60, 25, 31 * 3600, _post, false, null),
+            "time" => new("2026-10", 31, 27, Span(1, 27, 9), 22 * 3600 + 5 * 60, 25, 31 * 3600, _post, false, null),
+            "out" => new("2026-10", 31, 20, Span(1, 4), 2 * 3600 + 40 * 60, 25, 31 * 3600, _post, false, null),
+            "ticket" => new("2026-10", 31, 32, Span(1, 31, 7, 19), 36 * 3600, 25, 31 * 3600, _post, true, 17),
+            "missed" => new("2026-10", 31, 32, Span(1, 20), 12 * 3600, 25, 31 * 3600, _post, true, null),
+            _ => new("2026-10", 31, 12, Span(1, 12, 5), 14 * 3600 + 30 * 60, 25, 31 * 3600, _post, false, null),
+        };
+
+        public Task<LadderVerify?> VerifyAsync(string lockId, string accessToken, CancellationToken ct = default)
+        {
+            var c = Card();
+            return Task.FromResult<LadderVerify?>(new LadderVerify(true, (int)c.TotalSeconds, null, ChasterRaffle.DaysCounted(c)));
+        }
+
+        public Task<bool> OptInAsync(bool postDays, CancellationToken ct = default)
+        {
+            _post = postDays;
+            return Task.FromResult(true);
+        }
+
+        public Task<RaffleCard?> MeAsync(CancellationToken ct = default) => Task.FromResult<RaffleCard?>(Card());
     }
 
     private sealed class DemoTokens : IChasterTokenStore
