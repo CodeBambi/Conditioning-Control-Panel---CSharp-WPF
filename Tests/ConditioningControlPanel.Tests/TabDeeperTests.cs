@@ -213,6 +213,22 @@ public class TabDeeperTests : IDisposable
     }
 
     [Fact]
+    public void The_pop_names_its_source_and_the_badge_stays_faded()
+    {
+        Assert.Equal(NatashasFavourite.EventId, BookedFlashPlan.For(NatashasFavourite.EventId, NatashasFavourite.Seconds, ConditioningControlPanel.Models.MotionLevel.Full)!.Value.Source);
+        Assert.Null(BookedFlashPlan.For("", 30, ConditioningControlPanel.Models.MotionLevel.Off)!.Value.Source);
+        Assert.InRange(BookedFlashPlan.SourceOpacity, 0.6, 0.8);
+    }
+
+    [Fact]
+    public void Natasha_costs_more_and_whispers_quieter()
+    {
+        Assert.Equal(300, NatashasFavourite.Seconds);
+        Assert.True(NatashasFavourite.HaloOpacity <= 0.2);
+        Assert.True(NatashasFavourite.WashPeak <= 0.12);
+    }
+
+    [Fact]
     public void Presets_carry_the_new_rows()
     {
         Assert.Contains(TabDayEnd.HeatId, TabPresets.Apply(TabPresets.Strict));
