@@ -4596,6 +4596,24 @@ namespace ConditioningControlPanel.Services
         };
 
         /// <summary>
+        /// Every Chaster setting (the master switch, the prices, the lock, both limits and their
+        /// waiting raises, pause, relock, consent, the ladder name). Device-local like the link itself:
+        /// a cloud restore must never switch the tab on, add prices, or land a limit raise without its
+        /// 24 hour wait. Found by name so a new Chaster* setting is covered the day it is added.
+        /// </summary>
+        internal static readonly System.Reflection.PropertyInfo[] ChasterLocalProperties =
+            typeof(AppSettings).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                .Where(p => p.Name.StartsWith("Chaster", StringComparison.Ordinal)
+                            && p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0
+                            && !Attribute.IsDefined(p, typeof(JsonIgnoreAttribute)))
+                .ToArray();
+
+        /// <summary>True when a backup must not carry this property.</summary>
+        internal static bool IsExcludedFromBackup(string name) =>
+            ExcludedBackupProperties.Contains(name)
+            || (name != null && name.StartsWith("Chaster", StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
         /// The other half of <see cref="ExcludedBackupProperties"/>. A backup never carries these,
         /// so a restored settings object arrives with them at their defaults - and until 6.9.4
         /// both restore paths (the startup welcome-back sheet and the manual button on the
@@ -4611,6 +4629,12 @@ namespace ConditioningControlPanel.Services
             restored.CustomAssetsPath = current.CustomAssetsPath;
             restored.DiscordWebhookUrl = current.DiscordWebhookUrl;
             restored.LastSeenUtc = current.LastSeenUtc;
+            foreach (var p in ChasterLocalProperties)
+            {
+                var v = p.GetValue(current);
+                if (v is List<string> list) v = new List<string>(list);
+                p.SetValue(restored, v);
+            }
         }
 
         /// <summary>
@@ -4677,13 +4701,10 @@ namespace ConditioningControlPanel.Services
                 var fullJson = JsonConvert.SerializeObject(settings, Formatting.None);
                 var obj = Newtonsoft.Json.Linq.JObject.Parse(fullJson);
 
-                foreach (var prop in ExcludedBackupProperties)
+                foreach (var key in obj.Properties().Select(p => p.Name).ToList())
                 {
-                    // Remove by JSON property name (which may differ from C# property name)
-                    // Find the matching key case-insensitively
-                    var key = obj.Properties()
-                        .FirstOrDefault(p => string.Equals(p.Name, prop, StringComparison.OrdinalIgnoreCase))?.Name;
-                    if (key != null) obj.Remove(key);
+                    // JSON names may differ in case from the C# names; match case-insensitively.
+                    if (IsExcludedFromBackup(key)) obj.Remove(key);
                 }
 
                 var strippedJson = obj.ToString(Formatting.None);

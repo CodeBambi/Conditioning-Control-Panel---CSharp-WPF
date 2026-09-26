@@ -29,7 +29,8 @@ public sealed partial class ChasterService
                     // A raise only counts once its day is up (LimitChange); a lowering was applied at once.
                     TabLimits.FromMinutes(LimitChange.Effective(s.ChasterDayLimit, DateTime.UtcNow),
                         LimitChange.Effective(s.ChasterBacklogLimit, DateTime.UtcNow)),
-                    RemoteOpen: App.RemoteControl?.IsActive == true,
+                    // A Remote session still counts for a short grace after it ends (security pass 3).
+                    RemoteOpen: RemoteCounts(App.RemoteControl?.IsActive == true, App.RemoteControl?.LastEndedUtc, DateTime.UtcNow),
                     PanicArmed: s.PanicKeyEnabled,
                     RelockPastEnd: s.ChasterRelockPastEnd,
                     Paused: s.ChasterPaused);

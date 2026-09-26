@@ -99,7 +99,7 @@ public class ChasterProfileTests
     }
 
     [Theory]
-    [InlineData(401, ChasterStatus.LinkExpired)]
+    [InlineData(401, ChasterStatus.Unauthorized)]
     [InlineData(503, ChasterStatus.Unavailable)]
     public async Task A_failed_profile_maps_like_every_other_call(int code, ChasterStatus expected)
     {
