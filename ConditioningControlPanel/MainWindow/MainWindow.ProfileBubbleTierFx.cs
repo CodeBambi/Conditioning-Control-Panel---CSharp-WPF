@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -14,12 +15,21 @@ namespace ConditioningControlPanel
     /// resting -12 degree tilt, and a hover shows it big in a popup to the LEFT of the bubble,
     /// because the account menu opens below it. Never over the badge: a layered popup's pixels take
     /// the mouse and would flicker it shut. Motion follows <see cref="MotionFx"/>.
+    ///
+    /// <para>The hover also opens the account menu a beat later, and a popup opened later sits on top,
+    /// so the big badge used to vanish under the menu (owner, 2026-09-26). It now rides
+    /// <see cref="ProfileTierLift"/> px higher, so only the menu's empty top edge sits under it, and it
+    /// is raised back over the menu whenever the menu opens.</para>
     /// </summary>
     public partial class MainWindow
     {
         private const double ProfileTierRestAngle = -12;
         private const double ProfileTierWobbleDegrees = 9;
         private const double ProfileTierHoverStartScale = 0.35;
+        /// <summary>How far above the badge's own line the big copy sits: clear of the menu's name row.</summary>
+        private const double ProfileTierLift = 46;
+
+        private static readonly IntPtr HwndTopmostForTierBadge = new(-1);
 
         private DispatcherTimer? _profileTierWobbleTimer;
         private RotateTransform? _profileTierTilt;
@@ -38,6 +48,8 @@ namespace ConditioningControlPanel
                 Interval = TimeSpan.FromSeconds(8),
             };
             _profileTierWobbleTimer.Tick += (_, _) => ProfileTierWobble();
+            // The account menu opens after the badge on the same hover; put the badge back on top.
+            ProfileBubblePopup.Opened += (_, _) => RaiseProfileTierPopup();
             _profileTierWobbleTimer.Start();
         }
 
@@ -71,8 +83,9 @@ namespace ConditioningControlPanel
                 EnsureProfileTierFx();
                 ProfileTierBadgeBig.Source = ProfileBubbleTierBadge.Source;
                 ProfileTierBadgePopup.HorizontalOffset = -4;
-                ProfileTierBadgePopup.VerticalOffset = 0;
+                ProfileTierBadgePopup.VerticalOffset = -ProfileTierLift;
                 ProfileTierBadgePopup.IsOpen = true;
+                RaiseProfileTierPopup();
 
                 if (_profileTierBigScale == null) return;
                 if (!MotionFx.AllowTransitions)
@@ -90,6 +103,24 @@ namespace ConditioningControlPanel
                 _profileTierBigScale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
             }
             catch (Exception ex) { App.Logger?.Debug("profile tier badge hover failed: {E}", ex.Message); }
+        }
+
+        /// <summary>Re-stacks the big badge above every other topmost popup (the account menu).
+        /// Deferred to Loaded priority so a popup that is opening this turn has its window.</summary>
+        private void RaiseProfileTierPopup()
+        {
+            if (!ProfileTierBadgePopup.IsOpen) return;
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                try
+                {
+                    if (!ProfileTierBadgePopup.IsOpen || ProfileTierBadgePopup.Child == null) return;
+                    if (PresentationSource.FromVisual(ProfileTierBadgePopup.Child) is not HwndSource src) return;
+                    const uint NoSizeNoMoveNoActivate = 0x0001 | 0x0002 | 0x0010;
+                    SetWindowPos(src.Handle, HwndTopmostForTierBadge, 0, 0, 0, 0, NoSizeNoMoveNoActivate);
+                }
+                catch (Exception ex) { App.Logger?.Debug("profile tier badge raise failed: {E}", ex.Message); }
+            }));
         }
 
         private void ProfileTierBadge_MouseLeave(object sender, MouseEventArgs e)
