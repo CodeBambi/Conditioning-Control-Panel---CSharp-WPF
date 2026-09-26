@@ -39,6 +39,10 @@ public sealed class TabState
     [JsonProperty("pending")] public int PendingSeconds { get; set; }
     [JsonProperty("pending_day")] public string? PendingDay { get; set; }
 
+    /// <summary>The part of <see cref="PendingSeconds"/> that was a relock catch-up, not a price.
+    /// It never came off the tab, so it never goes back on or off it.</summary>
+    [JsonProperty("pending_catch")] public int PendingCatchUpSeconds { get; set; }
+
     /// <summary>The last local day CCP ran with an account linked. "Circe misses you" counts
     /// from here. Null until the first linked run, so linking never charges for the past.</summary>
     [JsonProperty("last_seen_day")] public string? LastSeenDay { get; set; }
@@ -114,7 +118,14 @@ public readonly record struct TabBooking(int AppliedSeconds, TabRefusal Refusal)
 
 public enum TabPushKind { None, Add, Remove }
 
-public readonly record struct TabPush(TabPushKind Kind, int Seconds);
+/// <summary>What one settle sends. <paramref name="Seconds"/> is the priced part, off the tab.
+/// <paramref name="CatchUp"/> is a relock catch-up riding the SAME write (never on the tab, never
+/// widens the floor, but counts against the day's push ceiling and the ladder like any add).</summary>
+public readonly record struct TabPush(TabPushKind Kind, int Seconds, int CatchUp = 0)
+{
+    /// <summary>What goes on the wire: the price plus the catch-up.</summary>
+    public int Total => Seconds + Math.Max(0, CatchUp);
+}
 
 /// <summary>
 /// Circe's tab: the rules between "something happened in CCP" and "time moved on a Chaster lock".
@@ -222,6 +233,24 @@ public static class CircesTab
         return new(TabPushKind.None, 0);
     }
 
+    /// <summary>
+    /// Fold a relock catch-up into a planned add (security pass 3, 2026-09-26). The catch-up rides
+    /// the priced write, so it only ever reaches the lock when the price does, and a run of failed
+    /// pushes can never stack catch-ups. It counts against the day's push ceiling: the catch-up and
+    /// the price together never pass what is left of the daily limit today. When the catch-up alone
+    /// would leave no room for a price, it is dropped (a partial catch-up still lands in the past,
+    /// so it would buy nothing but lock time).
+    /// </summary>
+    public static TabPush WithCatchUp(TabPush plan, int catchUpSeconds, TabState state, TabLimits limits, DateTime localNow)
+    {
+        if (plan.Kind != TabPushKind.Add || plan.Seconds <= 0) return plan;
+        var catchUp = Math.Min(Math.Max(0, catchUpSeconds), LockRelock.MaxCatchUpSeconds + LockRelock.MarginSeconds);
+        if (catchUp == 0) return plan with { CatchUp = 0 };
+        var room = Math.Max(0, limits.DailySeconds - PushedToday(state, localNow));
+        if (catchUp >= room) return plan with { CatchUp = 0 };
+        return new TabPush(TabPushKind.Add, Math.Min(plan.Seconds, room - catchUp), catchUp);
+    }
+
     /// <summary>Call only after Chaster said yes. A failed push changes nothing, so the balance
     /// simply waits for the next chance.</summary>
     public static void ApplyPush(TabState state, TabPush push, DateTime localNow, DateTime? nowUtc = null)
@@ -231,8 +260,9 @@ public static class CircesTab
         {
             state.BalanceSeconds -= push.Seconds;
             state.PushedNetSeconds += push.Seconds;
-            NotePushed(state, DayKey(localNow), push.Seconds);
-            ChasterLadder.NoteAdded(state, push.Seconds, nowUtc ?? localNow.ToUniversalTime());
+            // The catch-up is on the lock too: the push ceiling and the ladder count all of it.
+            NotePushed(state, DayKey(localNow), push.Total);
+            ChasterLadder.NoteAdded(state, push.Total, nowUtc ?? localNow.ToUniversalTime());
         }
         else
         {
@@ -247,7 +277,8 @@ public static class CircesTab
     public static void MarkPending(TabState state, TabPush push, DateTime localNow)
     {
         if (push.Kind != TabPushKind.Add || push.Seconds <= 0) return;
-        state.PendingSeconds = push.Seconds;
+        state.PendingSeconds = push.Total;
+        state.PendingCatchUpSeconds = Math.Max(0, push.CatchUp);
         state.PendingDay = DayKey(localNow);
     }
 
@@ -255,6 +286,7 @@ public static class CircesTab
     public static void ClearPending(TabState state)
     {
         state.PendingSeconds = 0;
+        state.PendingCatchUpSeconds = 0;
         state.PendingDay = null;
     }
 
@@ -266,7 +298,9 @@ public static class CircesTab
     {
         var seconds = state.PendingSeconds;
         if (seconds <= 0) { ClearPending(state); return 0; }
-        state.BalanceSeconds -= Math.Min(seconds, Math.Max(0, state.BalanceSeconds));
+        // Only the priced part came off the tab; a catch-up riding the same write never was on it.
+        var priced = Math.Max(0, seconds - Math.Clamp(state.PendingCatchUpSeconds, 0, seconds));
+        state.BalanceSeconds -= Math.Min(priced, Math.Max(0, state.BalanceSeconds));
         state.LastPushDay = state.PendingDay ?? state.LastPushDay;
         // In doubt counts against the day's push ceiling too: it may well be on the lock.
         if (state.PendingDay != null) NotePushed(state, state.PendingDay, seconds);
@@ -315,6 +349,7 @@ public static class CircesTab
         state.BalanceSeconds = Math.Min(state.BalanceSeconds, limits.BacklogSeconds);
         state.BalanceSeconds = Math.Max(state.BalanceSeconds, -Math.Max(0, state.PushedNetSeconds));
         state.PendingSeconds = Math.Clamp(state.PendingSeconds, 0, TabLimits.MaxDailySeconds);
+        state.PendingCatchUpSeconds = Math.Clamp(state.PendingCatchUpSeconds, 0, state.PendingSeconds);
         state.PushedNetSeconds = Math.Max(0, state.PushedNetSeconds);
         // Counters that only ever hold time back may read high, never low.
         state.DayAddedSeconds = Math.Max(0, state.DayAddedSeconds);
