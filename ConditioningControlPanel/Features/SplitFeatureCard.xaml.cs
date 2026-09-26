@@ -67,7 +67,10 @@ namespace ConditioningControlPanel.Features
         /// which defeats the recognise-the-art point of the peek.</summary>
         private const double PeekScrimOpacity = 0.20;
         private const double TitleExpandedScale = 1.35;
-        private const double RingInset = 2.0;
+        /// <summary>Half the ring's 3px stroke, so its OUTER edge lands on the card edge.</summary>
+        private const double RingInset = 1.5;
+        /// <summary>ContentRoot's clip radius (RootBorder 12 minus its 1px border).</summary>
+        private const double ContentCornerRadius = 11;
         /// <summary>Pill margin + padding, taken off before capping the grown title's width.</summary>
         private const double TitlePillChrome = 34;
         private const int SplitExpandMs = 260;
@@ -314,9 +317,9 @@ namespace ConditioningControlPanel.Features
             // in half by ContentRoot's bounds. ApplyActiveState re-enters here after flipping the
             // Visibility, so a ring that just came on still gets its geometry.
             if (ActiveRingA.Visibility == Visibility.Visible)
-                ActiveRingA.Data = RegionGeometry(true, k, w, h, RingInset);
+                ActiveRingA.Data = RingGeometry(true, k, w, h);
             if (ActiveRingB.Visibility == Visibility.Visible)
-                ActiveRingB.Data = RegionGeometry(false, k, w, h, RingInset);
+                ActiveRingB.Data = RingGeometry(false, k, w, h);
 
             var (s1, s2) = SeamPoints(k, w, h);
             var seam = new LineGeometry(s1, s2);
@@ -396,6 +399,23 @@ namespace ConditioningControlPanel.Features
             var segments = new PathSegment[kept.Count - 1];
             for (int i = 1; i < kept.Count; i++) segments[i - 1] = new LineSegment(kept[i], isStroked: true);
             var geo = new PathGeometry(new[] { new PathFigure(kept[0], segments, closed: true) });
+            geo.Freeze();
+            return geo;
+        }
+
+        /// <summary>
+        /// One half's active ring: the region inset by half the stroke, with its card corners
+        /// rounded to the content clip's arc (radius minus the inset). A square-cornered polygon
+        /// under the rounded clip loses its corner to the arc and bares the dark card body there,
+        /// and a stroke centred any deeper than half its width leaves a sliver along each edge.
+        /// </summary>
+        private static Geometry RingGeometry(bool halfA, double k, double w, double h)
+        {
+            var region = RegionGeometry(halfA, k, w, h, RingInset);
+            if (region.IsEmpty() || w <= 2 * RingInset || h <= 2 * RingInset) return EmptyGeometry;
+            double r = ContentCornerRadius - RingInset;
+            var rounded = new RectangleGeometry(new Rect(RingInset, RingInset, w - 2 * RingInset, h - 2 * RingInset), r, r);
+            var geo = Geometry.Combine(rounded, region, GeometryCombineMode.Intersect, null);
             geo.Freeze();
             return geo;
         }
