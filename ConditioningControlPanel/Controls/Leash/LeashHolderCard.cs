@@ -190,6 +190,7 @@ public sealed class LeashHolderCard : Border
         release.Click += async (_, _) =>
         {
             try { if (_svc() is { } s) await s.ReleaseAsync(_h.Who.Id); } catch { }
+            LeashFx.Cut();
         };
         m.Items.Add(release);
         return m;
@@ -575,28 +576,40 @@ public sealed class LeashHolderCard : Border
         return r.Status;
     }
 
+    /// <summary>One tug per friend every ten seconds, answered here before the wire.</summary>
+    private static readonly LeashTugThrottle TugThrottle = new();
+
     internal async Task<LeashSendStatus> TugAsync()
     {
+        if (!TugThrottle.TryTug(_h.Who.Id, DateTime.UtcNow))
+        {
+            var slow = new LeashSendResult(LeashSendStatus.TooFast);
+            LeashFx.Denied();
+            Word(slow, Loc.GetF("leash_done_tug", _h.Who.Name));
+            return slow.Status;
+        }
         LeashFx.Tug(this);
         LeashFx.Jingle();
-        var r = await Guarded(s => s.TugAsync(_h.Who.Id));
+        var r = await Guarded(s => s.TugAsync(_h.Who.Id), sentCue: false);
         Word(r, Loc.GetF("leash_done_tug", _h.Who.Name));
         return r.Status;
     }
 
-    private async Task<LeashSendResult> Guarded(Func<ILeashService, Task<LeashSendResult>> call)
+    private async Task<LeashSendResult> Guarded(Func<ILeashService, Task<LeashSendResult>> call, bool sentCue = true)
     {
         try
         {
             var s = _svc();
             if (s == null) return new LeashSendResult(LeashSendStatus.Off);
             var r = await call(s);
-            if (LeashUiRules.IsGood(r.Status)) LeashFx.Sent();
+            if (LeashUiRules.IsGood(r.Status)) { if (sentCue) LeashFx.Sent(); }
+            else if (r.Status is LeashSendStatus.TooFast or LeashSendStatus.Dnd or LeashSendStatus.Failed) LeashFx.Denied();
             return r;
         }
         catch (Exception ex)
         {
             App.Logger?.Debug("[Leash] send failed: {E}", ex.Message);
+            LeashFx.Denied();
             return new LeashSendResult(LeashSendStatus.Failed);
         }
     }

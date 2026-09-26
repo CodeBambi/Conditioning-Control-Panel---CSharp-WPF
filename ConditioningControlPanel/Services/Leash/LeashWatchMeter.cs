@@ -29,6 +29,9 @@ public sealed class LeashWatchMeter
     /// if the video is longer. Null = watch it through.</summary>
     public double? CapSeconds { get; init; }
 
+    /// <summary>True once the time cap (not the video's own end) has been watched.</summary>
+    public bool CapReached => CapSeconds is double cap && cap > 0 && WatchedSeconds >= cap;
+
     public bool IsComplete =>
         (CapSeconds is double cap && cap > 0 && WatchedSeconds >= cap)
         || (DurationSeconds >= MinDurationSeconds && DurationSeconds <= MaxDurationSeconds

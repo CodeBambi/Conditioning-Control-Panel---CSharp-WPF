@@ -107,10 +107,29 @@ public static class LeashSurfaces
                     return;
                 case LeashEventKind.Answered:
                     SentOffers.Remove(e.From.Id);
+                    LeashFx.Refused();
                     break;
                 case LeashEventKind.Ended when _iCut:
                     _iCut = false;
                     return;
+                case LeashEventKind.Ended:
+                    // A cut this side pressed already sounded; LeashSfxRules plays a cut once.
+                    LeashFx.Cut();
+                    break;
+                case LeashEventKind.Reward:
+                    LeashFx.Gift();
+                    break;
+                case LeashEventKind.Punish:
+                case LeashEventKind.AssignMissed:
+                    LeashFx.Scold();
+                    break;
+                case LeashEventKind.Assign:
+                    LeashFx.Assigned();
+                    break;
+                case LeashEventKind.AssignDone:
+                case LeashEventKind.PunishDone:
+                    LeashFx.Done();
+                    break;
             }
             var key = LeashUiRules.EventKey(e);
             if (key != null) Toast(Loc.GetF(key, e.From.Name), e.Kind is LeashEventKind.Punish or LeashEventKind.AssignMissed ? NotificationType.Warning : NotificationType.Info);
@@ -143,6 +162,7 @@ public static class LeashSurfaces
         };
         card.Dismissed += CloseOverlay;
         Open(card, () => card.Dismiss());
+        LeashFx.Ask();
     }
 
     public static void ShowSnap(LeashPerson holder, LeashPerson leashed)
@@ -195,6 +215,7 @@ public static class LeashSurfaces
         _iCut = true;
         try { CutDone?.Invoke(); } catch { }
         Toast(Loc.Get("leash_cut_done"), NotificationType.Success);
+        LeashFx.Cut();
     }
 
     /// <summary>True while this account is on someone's leash (the tray shows Cut leash).</summary>

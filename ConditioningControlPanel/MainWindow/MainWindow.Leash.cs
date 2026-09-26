@@ -26,6 +26,7 @@ namespace ConditioningControlPanel
         private DateTime _leashSnoozeUntilUtc = DateTime.MinValue;
         private ILeashTaskRunner? _leashRunner;
         private readonly LeashHoldToCut _leashHold = new();
+        private int _leashHoldTicked;
 
         private void InitializeLeash()
         {
@@ -176,6 +177,8 @@ namespace ConditioningControlPanel
             try
             {
                 App.Logger?.Information("Leash: task {Pid} done", pid);
+                if (_leashRunner?.LastCompletionCapped == true) LeashFx.CapReached();
+                else LeashFx.Done();
                 if (LeashLocator.Service() is { } s) await s.CompleteAsync(pid);
                 App.Notifications?.Show(Loc.Get("leash_gate_done"), NotificationType.Success);
             }
@@ -188,6 +191,7 @@ namespace ConditioningControlPanel
             bool ok = false;
             try { if (LeashLocator.Service() is { } s) ok = await s.PardonAsync(p.Pid); }
             catch (Exception ex) { App.Logger?.Debug("Leash pardon failed: {E}", ex.Message); }
+            if (ok) LeashFx.Done();
             App.Notifications?.Show(Loc.Get(ok ? "leash_gate_pardoned" : "leash_gate_no_pardon"), ok ? NotificationType.Success : NotificationType.Info);
             CheckLeashGate();
         }
@@ -208,8 +212,17 @@ namespace ConditioningControlPanel
         {
             var s = App.Settings?.Current;
             if (s == null || key.ToString() != s.PanicKey) return false;
-            var (repeat, due) = _leashHold.Down(DateTime.UtcNow, LeashSurfaces.IsLeashed);
+            var now = DateTime.UtcNow;
+            var (repeat, due) = _leashHold.Down(now, LeashSurfaces.IsLeashed);
+            if (!repeat) _leashHoldTicked = 0;
             if (due) Dispatcher.BeginInvoke(AskToCutFromHold);
+            // The tick only ever rides a swallowed repeat (never the first down, which is the
+            // real panic press) and is posted, so the hook returns at once.
+            else if (repeat && _leashHold.HeldFor(now) is { } held && LeashHoldTick.Due(held, _leashHoldTicked) is int sec)
+            {
+                _leashHoldTicked = sec;
+                Dispatcher.BeginInvoke(LeashFx.Tick);
+            }
             return repeat;
         }
 
