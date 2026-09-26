@@ -103,6 +103,7 @@ namespace ConditioningControlPanel.Views.Tabs
             // No runtime, dead process, bad page: the still picture under the browser is the trailer.
             TrailerWeb.Failed += (_, _) => TrailerWeb.Visibility = Visibility.Collapsed;
             FxInit();
+            LadderInit();
         }
 
         private static Brush Frozen(Color c)
@@ -121,6 +122,7 @@ namespace ConditioningControlPanel.Views.Tabs
             _ = App.Chaster?.RefreshLockAsync();
             _leadHeldUntilUtc = DateTime.UtcNow.AddSeconds(1.2); // the count-up owns the lead number
             FxOnShown();
+            LadderOnShown();
         }
 
         private void Subscribe(bool on)
@@ -209,6 +211,7 @@ namespace ConditioningControlPanel.Views.Tabs
             if (chaster.IsLinked) PaintHeroEnds(chaster.Lock, balance);
             RefreshDay(animate);
             RefreshRun();
+            RefreshAdded();
             if (_billOpen) BuildBill();
         }
 

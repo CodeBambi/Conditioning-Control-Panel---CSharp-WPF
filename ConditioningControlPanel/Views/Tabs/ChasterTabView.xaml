@@ -611,6 +611,58 @@
                             <ctrl:ChasterReceiptView x:Name="Receipt" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                         </Border>
 
+                        <!-- ================= THE HEADS-UP CLOCK: what CCP added, and the month's ladder =================
+                             Added only, lifetime, as this PC counted it. Hover the clock (or click to pin) and the
+                             month's top 10 unrolls under it; that board is read off Chaster by the server, never
+                             off this number. All the code is in ChasterTabView.Ladder.cs. -->
+                        <Border x:Name="AddedCard" Style="{StaticResource CirceCard}" Margin="0,0,0,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="AddedClock" Grid.Column="0" Cursor="Hand" Background="#22FF6B8A" BorderBrush="#88FF6B8A"
+                                        BorderThickness="1.5" CornerRadius="14" Padding="14,6,12,6" RenderTransformOrigin="0.5,0.5"
+                                        VerticalAlignment="Center" ToolTip="{loc:Str chaster_added_hint}"
+                                        MouseEnter="AddedClock_MouseEnter" MouseLeave="AddedClock_MouseLeave"
+                                        MouseLeftButtonUp="AddedClock_Click">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="AddedClockScale"/>
+                                    </Border.RenderTransform>
+                                    <StackPanel Orientation="Horizontal">
+                                        <!-- a stopwatch: ring, crown, one hand the code turns -->
+                                        <Grid Width="26" Height="30" VerticalAlignment="Center" Margin="0,0,10,0">
+                                            <Rectangle Width="8" Height="4" RadiusX="1.5" RadiusY="1.5" Fill="#FFFF6B8A" VerticalAlignment="Top" HorizontalAlignment="Center"/>
+                                            <Ellipse Width="24" Height="24" Stroke="#FFFF6B8A" StrokeThickness="2.5" VerticalAlignment="Bottom"/>
+                                            <Rectangle Width="2.5" Height="9" RadiusX="1" RadiusY="1" Fill="#FFFFC0CB" VerticalAlignment="Bottom"
+                                                       HorizontalAlignment="Center" Margin="0,0,0,12" RenderTransformOrigin="0.5,1">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform x:Name="AddedClockHand"/>
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                        </Grid>
+                                        <TextBlock x:Name="TxtAddedClock" Text="0:00:00" FontFamily="Consolas, Courier New" FontSize="30"
+                                                   FontWeight="Bold" Foreground="#FFFF6B8A" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtAddedChevron" Text="&#x25BE;" FontSize="14" Margin="10,0,0,0" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextMutedBrush}" RenderTransformOrigin="0.5,0.5"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="16,0,12,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str chaster_added_title}" Style="{StaticResource CirceEyebrow}"/>
+                                    <TextBlock x:Name="TxtAddedMonth" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="15" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextLightBrush}" Margin="0,2,0,0"/>
+                                    <TextBlock Text="{loc:Str chaster_added_note}" Style="{StaticResource CirceSub}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str chaster_ladder_show_name}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <CheckBox x:Name="ChkLadderName" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkLadderName_Changed" Unchecked="ChkLadderName_Changed"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
                         <!-- The first switch-on, and only the first: four facts, one button. -->
                         <Border x:Name="ConsentCard" Visibility="Collapsed" Style="{StaticResource CirceCard}"
                                 BorderBrush="#FF6B8A" BorderThickness="1.5" Margin="0,0,0,14">
@@ -862,6 +914,26 @@
                         </Grid>
                     </StackPanel>
                 </AdornerDecorator>
+            </Border>
+        </Popup>
+
+        <!-- ================= THE LADDER: unrolls under the heads-up clock =================
+             Hover opens it (StaysOpen, no mouse capture), a click on the clock pins it, a click
+             anywhere else or the app losing focus closes a pinned one. Drawn in ChasterTabView.Ladder.cs. -->
+        <Popup x:Name="LadderPopup" AllowsTransparency="True" Placement="Bottom" VerticalOffset="8" PopupAnimation="None"
+               StaysOpen="True" MouseEnter="LadderPopup_MouseEnter" MouseLeave="LadderPopup_MouseLeave" Opened="LadderPopup_Opened">
+            <Border x:Name="LadderCard" Width="360" Background="#F7201636" BorderBrush="#88FF6B8A" BorderThickness="1.5"
+                    CornerRadius="16" Padding="14,12,14,12" RenderTransformOrigin="0.5,0">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="LadderUnroll"/>
+                </Border.RenderTransform>
+                <StackPanel>
+                    <TextBlock Text="{loc:Str chaster_ladder_title}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
+                               Foreground="#FFF3EAF7" Margin="2,0,0,8"/>
+                    <StackPanel x:Name="LadderRows"/>
+                    <TextBlock x:Name="TxtLadderState" FontSize="12" Foreground="#FFC9B8D8" Margin="2,6,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+                    <TextBlock Text="{loc:Str chaster_ladder_foot}" FontSize="11" Foreground="#FFA898B8" Margin="2,10,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
             </Border>
         </Popup>
 
