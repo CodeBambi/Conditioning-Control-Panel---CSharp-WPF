@@ -32,13 +32,13 @@ namespace ConditioningControlPanel.Views.Tabs
             // parsed into MainWindow's tree, where Window.GetWindow(this) is null.
             _vm = new CompanionRoomRuntimeVm(() => Window.GetWindow(this) as MainWindow);
             Room.ViewModel = _vm;
-#if DEBUG
+            // Mounted in every build: v2 is on for everyone (owner, 2026-09-24). This sat under
+            // #if DEBUG from the preview days, so 6.11.0 Release shipped the old room instead.
             if (Services.Companion.CompanionExperience.IsV2Enabled)
             {
                 Room.Visibility = Visibility.Collapsed;
                 PageHost.Children.Add(new Views.Controls.Companion.V2.ConversationPage(_vm, Room) { PersonalityEditor = Services.Companion.PersonalityStudio.Show });
             }
-#endif
 
             // FX lifecycle. Hooked here rather than in ShowTab so the tab owns its own decoration;
             // the room parks its own clocks off the same visibility change.
