@@ -246,6 +246,48 @@ namespace ConditioningControlPanel
             }
             mainStack.Children.Add(titleStack);
 
+            // Active Bonuses, straight under the title. They used to sit at the very bottom of
+            // this column, below the stats and the analytics card, and the column is capped
+            // (MaxHeight 430 on a fixed-height canvas), so with five bonuses up at the default
+            // window size the chips fell off the bottom edge and only showed if you knew to
+            // scroll inside the card (ticket 2026-09-24). Up here the WrapPanel always has
+            // room to wrap every chip onto its own row before anything else is drawn.
+            var breakdown = App.SkillTree?.GetMultiplierBreakdown() ?? new List<(string, double)>();
+            if (breakdown.Count > 1) // Only show if there are bonuses beyond base
+            {
+                mainStack.Children.Add(new TextBlock
+                {
+                    Text = Loc.Get("label_active_bonuses"),
+                    Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                    FontSize = 11,
+                    Margin = new Thickness(0, 0, 0, 6)
+                });
+
+                var bonusesWrap = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 9) };
+                foreach (var (source, value) in breakdown)
+                {
+                    if (source == "Base") continue; // Don't show base multiplier
+
+                    var chip = new Border
+                    {
+                        Background = new SolidColorBrush(Color.FromRgb(60, 40, 80)),
+                        CornerRadius = new CornerRadius(12),
+                        Padding = new Thickness(8, 3, 8, 3),
+                        Margin = new Thickness(0, 0, 6, 6)
+                    };
+
+                    chip.Child = new TextBlock
+                    {
+                        Text = $"{App.Mods?.MakeModAware(source) ?? source}: +{value:P0}",
+                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
+                        FontSize = 11
+                    };
+
+                    bonusesWrap.Children.Add(chip);
+                }
+                mainStack.Children.Add(bonusesWrap);
+            }
+
             // Sparkle Points display
             var pointsBorder = new Border
             {
@@ -575,44 +617,6 @@ namespace ConditioningControlPanel
 
             statsBorder.Child = statsStack;
             mainStack.Children.Add(statsBorder);
-
-            // Active Bonuses Section
-            var breakdown = App.SkillTree?.GetMultiplierBreakdown() ?? new List<(string, double)>();
-            if (breakdown.Count > 1) // Only show if there are bonuses beyond base
-            {
-                var bonusesTitle = new TextBlock
-                {
-                    Text = "Active Bonuses:",
-                    Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
-                    FontSize = 11,
-                    Margin = new Thickness(0, 15, 0, 8)
-                };
-                mainStack.Children.Add(bonusesTitle);
-
-                var bonusesWrap = new WrapPanel { Orientation = Orientation.Horizontal };
-                foreach (var (source, value) in breakdown)
-                {
-                    if (source == "Base") continue; // Don't show base multiplier
-
-                    var chip = new Border
-                    {
-                        Background = new SolidColorBrush(Color.FromRgb(60, 40, 80)),
-                        CornerRadius = new CornerRadius(12),
-                        Padding = new Thickness(10, 5, 10, 5),
-                        Margin = new Thickness(0, 0, 8, 8)
-                    };
-
-                    chip.Child = new TextBlock
-                    {
-                        Text = $"{source}: +{value:P0}",
-                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
-                        FontSize = 11
-                    };
-
-                    bonusesWrap.Children.Add(chip);
-                }
-                mainStack.Children.Add(bonusesWrap);
-            }
 
             // The header column can outgrow the fixed-height canvas (stats + analytics
             // expanders), and the tree only scrolls horizontally — so the header scrolls

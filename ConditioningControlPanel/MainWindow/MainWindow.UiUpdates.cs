@@ -184,6 +184,10 @@ namespace ConditioningControlPanel
             // Refresh bonus chips with updated names
             RefreshXPBarBonuses();
 
+            // The side rail's labels, which are plain {loc:Str} bindings and never saw a mod.
+            try { ApplyModToNavRailLabels(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Nav rail mod labels failed"); }
+
             // Also refresh rank title
             UpdateLevelDisplay();
 
@@ -1249,6 +1253,8 @@ namespace ConditioningControlPanel
                     }
                 }
             }
+
+            if (!MotionFx.AllowTransitions) return;
 
             // Visual feedback - quick pulse effect
             if (SettingsTab.ImgLogo != null)

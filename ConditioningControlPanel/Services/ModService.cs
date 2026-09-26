@@ -1437,6 +1437,11 @@ namespace ConditioningControlPanel.Services
                 && userLayout != null)
                 return userLayout;
 
+            // The shipped Infection pack's fit overfills the glass; the code fit wins (see
+            // BuiltInMods.InfectionControlTubeFit). A player's own Tube Fit above still wins.
+            if (string.Equals(ActiveModId, BuiltInMods.InfectionControlId, StringComparison.OrdinalIgnoreCase))
+                return BuiltInMods.InfectionControlTubeFit();
+
             return _activeMod?.Manifest?.TubeLayout;
         }
 

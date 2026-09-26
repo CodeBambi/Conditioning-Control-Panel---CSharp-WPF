@@ -415,6 +415,8 @@ namespace ConditioningControlPanel
             // An uninterruptible recorded clip owns the bubble — only its own (bypassing) call may render.
             if (_isPlayingUninterruptibleClip && !bypassClipLock) return;
 
+            SyncAskButtonsFor(text);
+
             // EMI Desk hears every line the tube is about to say, muted or not, so she can keep out
             // of the avatar's way. Cheap by contract: this runs on every bubble.
             App.EmiDesk?.NoteAvatarSpeaking();
@@ -447,7 +449,7 @@ namespace ConditioningControlPanel
                 _isShowingChatHistory = false;
                 ChatHistoryView.Visibility = Visibility.Collapsed;
                 SpeechScroller.Visibility = Visibility.Visible;
-                SpeechBubble.MaxWidth = 380;
+                SpeechBubble.MaxWidth = SpeechBubbleMaxWidth;
             }
 
             // Skip only when the avatar isn't on screen. Mute silences her VOICE (audio is gated
@@ -655,6 +657,8 @@ namespace ConditioningControlPanel
             return b;
         }
 
+        private static readonly Brush GlassBubbleBrush = FreezeBrush(Color.FromArgb(0xEB, 0x15, 0x0F, 0x1E));
+        private static readonly Brush GlassTextBrush = FreezeBrush(Color.FromRgb(0xF4, 0xEE, 0xF8));
         private static Brush? _defaultBubbleBrush;
         private static Brush? _sissyBubbleBrush;
 
@@ -672,27 +676,17 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Applies per-mod speech-bubble styling. In sissy mod the fill is the more-transparent variant
-        /// and the text uses a brighter high-contrast color so it pops; other mods keep the opaque fill
-        /// and their accent (PinkBrush) text. Cheap and idempotent — called every time the bubble is
-        /// shown, so it always reflects the current mod without mod-change wiring.
+        /// Applies the speech-bubble skin: one dark glass card with white text for every mod. Cheap and
+        /// idempotent, called every time the bubble is shown.
         /// </summary>
         private void ApplyBubbleBackgroundForMod()
         {
             try
             {
-                _defaultBubbleBrush ??= BuildBubbleBrush(0xFF);
-                _sissyBubbleBrush ??= BuildBubbleBrush((byte)Math.Round(SissyBubbleAlpha * 255));
-
-                var id = App.Mods?.ActiveModId ?? "";
-                bool isSissy = id.IndexOf("sissy", StringComparison.OrdinalIgnoreCase) >= 0;
-                SpeechBubble.Background = isSissy ? _sissyBubbleBrush : _defaultBubbleBrush;
-
-                // Sissy → brighter text; otherwise restore the mod-accent dynamic resource (PinkBrush).
-                if (isSissy)
-                    TxtSpeech.Foreground = SissyTextBrush;
-                else
-                    TxtSpeech.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "PinkBrush");
+                // One glass card for every mod: near-black violet at ~92%, white text, the mod's accent
+                // only on the thin border and links. Pink-on-pink was unreadable (owner, Sep 25).
+                SpeechBubble.Background = GlassBubbleBrush;
+                TxtSpeech.Foreground = GlassTextBrush;
             }
             catch { /* non-fatal — keep whatever brush is set */ }
         }
@@ -750,7 +744,7 @@ namespace ConditioningControlPanel
                         _isShowingChatHistory = false;
                         ChatHistoryView.Visibility = Visibility.Collapsed;
                         SpeechScroller.Visibility = Visibility.Visible;
-                        SpeechBubble.MaxWidth = 380;
+                        SpeechBubble.MaxWidth = SpeechBubbleMaxWidth;
                     }
 
                     var baseText = text ?? "";
@@ -828,7 +822,7 @@ namespace ConditioningControlPanel
                 Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(180, 180, 200))
             });
-            TxtSpeech.FontSize = 20;
+            TxtSpeech.FontSize = 15;
 
             SpeechBubble.Visibility = Visibility.Visible;
 
@@ -855,19 +849,19 @@ namespace ConditioningControlPanel
             double fontSize;
             if (charCount <= 50)
             {
-                fontSize = 22; // Normal size for short messages
+                fontSize = 15; // real DIPs now (the bubble left the scaled canvas)
             }
             else if (charCount <= 120)
             {
-                fontSize = 20; // Slightly smaller for medium messages
+                fontSize = 15;
             }
             else if (charCount <= 250)
             {
-                fontSize = 18; // Smaller for longer messages
+                fontSize = 15;
             }
             else
             {
-                fontSize = 16; // Smallest for very long AI responses
+                fontSize = 14; // long replies
             }
 
             TxtSpeech.FontSize = fontSize;
@@ -880,49 +874,257 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Where the speech bubble sits. One method for all three callers (this file's
-        /// <see cref="AdjustBubbleSize"/>, ApplyTubeLayoutOffsets, and the deferred placement reset
-        /// on the Loaded hop), which each carried their own copy of this arithmetic.
+        /// Where the speech bubble sits. One method for every caller (AdjustBubbleSize,
+        /// ApplyTubeLayoutOffsets, chat history, the Loaded hop) plus the live re-placement hooks
+        /// (the bubble growing, the tube window moving or resizing).
         ///
-        /// <para><b>Attached, the bubble is right-anchored on the seam</b> - see
-        /// <c>AttachedBubbleRightMargin</c> in AvatarTubeWindow.Windowing.cs for why an opaque
-        /// pixel past that line goes on to eat every click aimed at main's nav rail underneath.
-        /// Right-anchored rather than re-centred: the bubble's right edge is the edge that has to
-        /// hold, so a short line barely moves from where it has always sat beside her and only a
-        /// long one grows further left, instead of every bubble sliding 90px off her mouth.</para>
-        ///
-        /// <para>A mod's avatar offset may pull the bubble LEFT with the art it belongs to, never
-        /// right - the seam is main's, not the mod's. And a bubble too wide to fit left of the
-        /// seam (chat-history mode widens MaxWidth to 600) gives the seam up rather than hang off
-        /// the canvas and get clipped by the window: an unreadable bubble is the worse bug, and
-        /// chat history is a panel the user opened and can close.</para>
-        ///
-        /// <para>Detached there is nothing underneath to protect, so that mode keeps the centred
-        /// placement it has always had, untouched.</para>
+        /// <para>The bubble is its own small window (<c>_bubbleWindow</c>), outside the tube's scaled
+        /// design canvas: text renders at its real size and the bubble can use the whole monitor.
+        /// Everything here is physical px. The maths lives in
+        /// <see cref="AvatarTubeLayout.SpeechBubblePlacement"/>: inside the work area of the monitor
+        /// she is on, never over main's window while attached (an opaque pixel over main swallows
+        /// main's clicks), above her head on the roomier side, tail aimed at her.</para>
         /// </summary>
         private void ApplySpeechBubblePlacement()
         {
-            var useAttached = _isAttached || ModOverridesAttachedTubeOnly();
-            var dx = useAttached ? EffAvatarOffsetX() : EffAvatarDetachedOffsetX();
-
-            double right;
-            if (useAttached)
+            if (_placingSpeechBubble) return;
+            _placingSpeechBubble = true;
+            try
             {
-                right = Math.Max(AttachedBubbleRightMargin, AttachedBubbleRightMargin - dx);
+                if (PresentationSource.FromVisual(this) == null || AvatarBorder.ActualWidth <= 0) return;
 
-                var maxWidth = SpeechBubble.MaxWidth;
-                if (double.IsFinite(maxWidth) && maxWidth > 0)
-                    right = Math.Min(right, Math.Max(0, DesignWidth - maxWidth));
+                // Avatar box in physical px.
+                var a0 = AvatarBorder.PointToScreen(new Point(0, 0));
+                var a1 = AvatarBorder.PointToScreen(new Point(AvatarBorder.ActualWidth, AvatarBorder.ActualHeight));
+                var avatar = AvatarTubeLayout.Box.FromEdges(Math.Min(a0.X, a1.X), Math.Min(a0.Y, a1.Y),
+                    Math.Max(a0.X, a1.X), Math.Max(a0.Y, a1.Y));
+
+                var screen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(
+                    (int)Math.Round(avatar.X + avatar.W / 2), (int)Math.Round(avatar.Y + avatar.H / 2)));
+                if (screen == null) return;
+                var wa = screen.WorkingArea;
+                var work = AvatarTubeLayout.Box.FromEdges(wa.Left, wa.Top, wa.Right, wa.Bottom);
+
+                AvatarTubeLayout.Box? obstacle = null;
+                if (_isAttached && _parentHandle != IntPtr.Zero && GetWindowRect(_parentHandle, out var pr))
+                    obstacle = AvatarTubeLayout.Box.FromEdges(pr.Left, pr.Top, pr.Right, pr.Bottom);
+
+                // DIP -> px of the popup's own window when it is up, else of the monitor she is on.
+                double s = SpeechPopupScale();
+
+                var content = SpeechBubble.Child as FrameworkElement;
+                double chromeW = SpeechBubble.Padding.Left + SpeechBubble.Padding.Right
+                    + SpeechBubble.BorderThickness.Left + SpeechBubble.BorderThickness.Right;
+                double chromeH = SpeechBubble.Padding.Top + SpeechBubble.Padding.Bottom
+                    + SpeechBubble.BorderThickness.Top + SpeechBubble.BorderThickness.Bottom;
+                double configured = double.IsFinite(SpeechBubble.MaxWidth) && SpeechBubble.MaxWidth > 0
+                    ? SpeechBubble.MaxWidth : SpeechBubbleMaxWidth;
+
+                var plan = AvatarTubeLayout.SpeechBubblePlacement.Place(work, work, obstacle, avatar,
+                    configured * s, chromeW * s, outerMaxPx =>
+                    {
+                        double outerMax = outerMaxPx / s;
+                        if (content == null) return (outerMaxPx, 80 * s);
+                        double inner = Math.Max(0, outerMax - chromeW);
+                        content.MaxWidth = inner;
+                        content.Measure(new Size(inner, double.PositiveInfinity));
+                        double w = Math.Max(SpeechBubble.MinWidth, content.DesiredSize.Width + chromeW);
+                        return (Math.Min(outerMax, w) * s, (content.DesiredSize.Height + chromeH) * s);
+                    },
+                    edgeGap: Math.Max(AvatarTubeLayout.SpeechBubblePlacement.Gap, SpeechBubble.Margin.Left * s + 2));
+
+                if (content != null) content.MaxWidth = plan.ContentMaxWidth / s;
+
+                // The popup window is the bubble plus its 16 DIP margin (room for shadow and tail).
+                double pad = SpeechBubble.Margin.Left;
+                double hOff = plan.Bubble.X / s - pad, vOff = plan.Bubble.Y / s - pad;
+                if (_bubbleHandle != IntPtr.Zero)
+                {
+                    int bx = (int)Math.Round(hOff * s), by = (int)Math.Round(vOff * s);
+                    if (bx != _bubbleX || by != _bubbleY)
+                    {
+                        _bubbleX = bx; _bubbleY = by;
+                        SetWindowPos(_bubbleHandle, IntPtr.Zero, bx, by, 0, 0,
+                            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                    }
+                }
+
+                // Tail: a 14x9 wedge in the glass colour, tucked 1px into the bubble's edge.
+                const double tailW = 14, tailH = 9;
+                double bubbleH = plan.Bubble.H / s;
+                double tailLeft = plan.TailX / s - plan.Bubble.X / s + pad - tailW / 2;
+                double tailTop = plan.Tail == AvatarTubeLayout.TailEdge.Bottom ? pad + bubbleH - 1 : pad - tailH + 1;
+                SpeechTail.Margin = new Thickness(tailLeft, tailTop, 0, 0);
+                SpeechTailFlip.ScaleY = plan.Tail == AvatarTubeLayout.TailEdge.Bottom ? 1 : -1;
+
+                string decision = $"{(int)plan.Bubble.X},{(int)plan.Bubble.Y},{(int)plan.Bubble.W}x{(int)plan.Bubble.H}|{plan.Tail}|{plan.GrowsLeft}";
+                if (decision != _lastBubbleDecision)
+                {
+                    _lastBubbleDecision = decision;
+                    App.Logger?.Debug(
+                        "Speech bubble: rect=({X},{Y} {W}x{H}) tail={Tail} growsLeft={Left} avatar=({AX},{AY} {AW}x{AH}) work=({WL},{WT},{WR},{WB}) main={Main} scale={S:F2}",
+                        (int)plan.Bubble.X, (int)plan.Bubble.Y, (int)plan.Bubble.W, (int)plan.Bubble.H, plan.Tail, plan.GrowsLeft,
+                        (int)avatar.X, (int)avatar.Y, (int)avatar.W, (int)avatar.H,
+                        wa.Left, wa.Top, wa.Right, wa.Bottom,
+                        obstacle is AvatarTubeLayout.Box m ? $"{(int)m.X},{(int)m.Y},{(int)m.Right},{(int)m.Bottom}" : "-", s);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ApplySpeechBubblePlacement failed: {Error}", ex.Message);
+            }
+            finally
+            {
+                _placingSpeechBubble = false;
+            }
+        }
+
+        private double SpeechPopupScale()
+        {
+            try
+            {
+                if (PresentationSource.FromVisual(SpeechBubble) is PresentationSource ps && ps.CompositionTarget != null)
+                {
+                    double m = ps.CompositionTarget.TransformToDevice.M11;
+                    if (m > 0) return m;
+                }
+                if (_tubeHandle != IntPtr.Zero)
+                {
+                    double d = GetDpiForWindow(_tubeHandle) / 96.0;
+                    if (d > 0) return d;
+                }
+            }
+            catch { }
+            return 1.0;
+        }
+
+        /// <summary>
+        /// The bubble window is up exactly while the bubble is meant to show and the tube (and, while
+        /// attached, main) is on screen. Rule in <see cref="AvatarTubeLayout.SpeechBubbleVisibility"/>.
+        /// </summary>
+        private void SyncSpeechPopupOpen()
+        {
+            if (_bubbleWindow == null) return;
+            var g = _parentGeom;
+            bool want = AvatarTubeLayout.SpeechBubbleVisibility.ShouldShow(
+                SpeechBubble.Visibility == Visibility.Visible, IsVisible, WindowState == WindowState.Minimized,
+                _isAttached, g?.Visible ?? true, g?.Minimized ?? false);
+            if (want == _bubbleWindow.IsVisible) return;
+            if (want)
+            {
+                ApplySpeechBubblePlacement();   // position the hidden window first: no flash at 0,0
+                _bubbleWindow.Show();
+                ApplySpeechBubblePlacement();
             }
             else
             {
-                right = 425 - dx;
+                _bubbleWindow.Hide();
             }
+        }
 
-            SpeechBubble.HorizontalAlignment = useAttached
-                ? HorizontalAlignment.Right
-                : HorizontalAlignment.Center;
-            SpeechBubble.Margin = new Thickness(0, 0, right, 550);
+        // The bubble's own window: NOT a Popup (those are topmost and floated over other apps with
+        // the app hidden, owner report Sep 25). A plain non-topmost, non-activating tool window whose
+        // NATIVE owner is the tube, so it always sits directly above the tube and goes behind other
+        // apps with it, and Windows hides it with the tube's owner chain.
+        private Window? _bubbleWindow;
+        private IntPtr _bubbleHandle;
+        private int _bubbleX = int.MinValue, _bubbleY = int.MinValue;
+        private const int GWL_EXSTYLE_BUBBLE = -20;
+        private const int WS_EX_NOACTIVATE_BUBBLE = 0x08000000;
+        private const int WS_EX_TOOLWINDOW_BUBBLE = 0x00000080;
+
+        private void CreateBubbleWindow()
+        {
+            if (_bubbleWindow != null || _tubeHandle == IntPtr.Zero) return;
+            SpeechPopup.Child = null;
+            _bubbleWindow = new Window
+            {
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = Brushes.Transparent,
+                ShowActivated = false,
+                ShowInTaskbar = false,
+                Topmost = false,
+                ResizeMode = ResizeMode.NoResize,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                Focusable = false,
+                Title = "",
+                FontFamily = FontFamily,
+                Content = SpeechPopupRoot,
+            };
+            _bubbleHandle = new WindowInteropHelper(_bubbleWindow).EnsureHandle();
+            int ex = GetWindowLong(_bubbleHandle, GWL_EXSTYLE_BUBBLE);
+            SetWindowLong(_bubbleHandle, GWL_EXSTYLE_BUBBLE, ex | WS_EX_NOACTIVATE_BUBBLE | WS_EX_TOOLWINDOW_BUBBLE);
+            SetWindowLongPtr(_bubbleHandle, GWL_HWNDPARENT, _tubeHandle);
+            _bubbleWindow.SizeChanged += (_, __) =>
+            {
+                if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+            };
+            Closed += (_, __) => { try { _bubbleWindow?.Close(); } catch { } };
+        }
+
+        private bool _placingSpeechBubble;
+        private bool _speechBubblePlacementHooked;
+        private string? _lastBubbleDecision;
+        internal const double SpeechBubbleMaxWidth = 340;       // outer DIPs; text column about 300
+        internal const double SpeechBubbleHistoryWidth = 460;   // chat history panel
+
+        /// <summary>
+        /// Re-place the bubble whenever something that decides its spot changes while it is up:
+        /// its own size (typewriter text growing), the tube window moving or resizing. Opens and
+        /// closes its popup with the bubble's Visibility, and fades it in when it appears, motion
+        /// permitting. Idempotent; called from OnLoaded.
+        /// </summary>
+        private void HookSpeechBubblePlacement()
+        {
+            if (_speechBubblePlacementHooked) return;
+            _speechBubblePlacementHooked = true;
+
+            CreateBubbleWindow();
+            System.ComponentModel.DependencyPropertyDescriptor
+                .FromProperty(VisibilityProperty, typeof(Border))
+                .AddValueChanged(SpeechBubble, (_, __) =>
+                {
+                    SyncSpeechPopupOpen();
+                    if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+                });
+            IsVisibleChanged += (_, e) =>
+            {
+                SyncSpeechPopupOpen();
+                // Tube hidden / turned off: give main back its own bounds. Shown again: re-arm.
+                if (e.NewValue is true) _makeRoom.Rearm();
+                else RestoreMadeRoom();
+            };
+            StateChanged += (_, __) => SyncSpeechPopupOpen();
+            Closed += (_, __) => RestoreMadeRoom();
+
+            SpeechBubble.SizeChanged += (_, __) =>
+            {
+                if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+            };
+            LocationChanged += (_, __) =>
+            {
+                if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+            };
+            SizeChanged += (_, __) =>
+            {
+                if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
+            };
+            SpeechBubble.IsVisibleChanged += (_, e) =>
+            {
+                if (e.NewValue is not true) return;
+                if (!Services.MotionFx.AllowTransitions)
+                {
+                    SpeechPopupRoot.BeginAnimation(OpacityProperty, null);
+                    return;
+                }
+                var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.Stop,
+                };
+                SpeechPopupRoot.BeginAnimation(OpacityProperty, fade);
+            };
         }
 
         /// <summary>
@@ -2326,7 +2528,7 @@ namespace ConditioningControlPanel
             {
                 // Bambi Sleep mode: suppress the canned "hehehe" giggle SFX entirely — it sounds cheap
                 // next to that mod's real voiceline barks, so a clip-less bubble just stays silent.
-                if (IsBambiSleepMod()) return;
+                if (SuppressGiggleSfx()) return;
 
                 // Use giggle sounds 5-8 for AI responses (reserved for special interactions)
                 var giggleFiles = new[] {

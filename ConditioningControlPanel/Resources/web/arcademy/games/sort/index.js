@@ -2500,7 +2500,12 @@ export default {
         /* No door ran (a shell with no setup hook) - claim the floor ourselves
          * and open when it lands. The ring never starts before a card does. */
         note(t('sort_dealing', 'Dealing your deck'));
-        claimPool({ sources: [], quick: true }).then((got) => {
+        /* ADDITIVE (Goon duel, 2026-09-25): a host that skips the door may name the piles in the
+         * class spec (`sources`), and the tagged claim runs as if the door had resolved them. No
+         * shell passes it, so the Arcademy's own start is untouched: no sources, QUICK SORT floor. */
+        const specSources = Array.isArray(spec.sources)
+          ? spec.sources.filter((s) => typeof s === 'string' && s).slice(0, 8) : [];
+        claimPool(specSources.length ? { sources: specSources, quick: false } : { sources: [], quick: true }).then((got) => {
           if (!S || destroyed) return;
           S.pool = got.pool;
           S.quick = !!got.quick;

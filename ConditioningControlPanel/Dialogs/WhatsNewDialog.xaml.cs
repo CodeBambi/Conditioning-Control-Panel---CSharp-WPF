@@ -19,6 +19,11 @@ namespace ConditioningControlPanel
     {
         private readonly Action? _tourAction;
 
+        /// <summary>The v6.8 upgrade tour ("things moved, show me around") is retired from every
+        /// offer (owner, 6.11.0 desk pass). One switch for this dialog and the welcome-back sheet,
+        /// so the callers keep their wiring and turning it back on is one line.</summary>
+        internal const bool UpgradeTourOffered = false;
+
         public WhatsNewDialog(string title, string notes,
                               Action? tourAction = null, string? tourButtonText = null)
         {
@@ -26,8 +31,8 @@ namespace ConditioningControlPanel
             TxtTitle.Text = title;
             TxtNotes.Text = notes;
 
-            _tourAction = tourAction;
-            if (tourAction != null)
+            _tourAction = UpgradeTourOffered ? tourAction : null;
+            if (_tourAction != null)
             {
                 BtnTour.Content = string.IsNullOrWhiteSpace(tourButtonText)
                     ? TourLabel()

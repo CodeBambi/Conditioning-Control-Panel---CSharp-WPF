@@ -22,6 +22,11 @@ import { createLedger, el, button } from '../router.js';
 import { S, minutes } from '../strings.js';
 import { buildDiscordSection, askSharePrompt } from '../discord.js';
 import { GoonMatchPhase, GoonTransportState } from '../../core/contracts.js';
+import { formatRecord } from '../rivalry.js';
+import { buildSongRow } from './songRow.js';
+import { songClock } from '../../core/song.js';
+import { customizeSection } from './customize.js';
+import { finishedMatches } from '../nightProgress.js';
 
 const DUR_MIN_SEC = 60;
 const DUR_MAX_SEC = 3600;
@@ -66,9 +71,13 @@ export function mount(container, ctx) {
   const them = mkSide('them');
   const duel = el('div', { class: 'gg-duel' }, [
     you.side,
-    el('span', { class: 'gg-duel-vs', text: 'vs', 'aria-hidden': 'true' }),
+    el('span', { class: 'gg-duel-vs', text: S.aria.vs, 'aria-hidden': 'true' }),
     them.side,
   ]);
+
+  /* Game Night: "you 3 - 2 them" under the duel card once we know who they are
+   * and have met before (ui/rivalry.js). Empty for a stranger, practice included. */
+  const rivalLine = el('p', { class: 'gg-rival-line', text: '' });
 
   const connLine = el('p', { class: 'gg-conn', text: S.lobby.connecting });
 
@@ -168,7 +177,25 @@ export function mount(container, ctx) {
     durRow.row, toyRow.row, gapRow.row, xferRow.row, xferRow.sub, voiceRow.row, voiceRow.sub,
   ]);
 
+  /* GAME NIGHT: "Pick a song". Outside the consent box, which is inert until the
+   * opponent arrives; picking a song is what a host does while waiting. */
+  const songRow = buildSongRow({
+    ledger, match, audio, prefs,
+    origin: (typeof location !== 'undefined' && location && location.origin) || null,
+  });
+
   /* ---------------------------------------------------------- confirm UI */
+
+  /* GAME NIGHT: the Customize expander holds only the duel length, so it shows only when the
+   * opponent's build speaks night and this is the player's second match or later. Polled: the
+   * cap arrives with their hello, which has no edge of its own on this screen. */
+  const customBox = customizeSection({ isHost: match.isHost });
+  function paintCustomize() {
+    if (!customBox) return;
+    customBox.hidden = !(match.peerSupportsNight && finishedMatches() >= 1);
+  }
+  paintCustomize();
+  ledger.interval(paintCustomize, 1000);
 
   const lampYou = el('span', { class: 'gg-lamp' }, [el('i'), el('span', { text: S.lobby.lampYou })]);
   const lampThem = el('span', { class: 'gg-lamp' }, [el('i'), el('span', { text: S.lobby.lampThem })]);
@@ -183,7 +210,7 @@ export function mount(container, ctx) {
   const eyebrow = el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.lobby.eyebrowWaiting })]);
 
   container.appendChild(el('div', { class: 'gg-card gg-lobby' }, [
-    eyebrow, duel, connLine, prepLine, sheetBox, lamps, changedLine,
+    eyebrow, duel, rivalLine, connLine, prepLine, songRow.node, sheetBox, customBox, lamps, changedLine,
     el('div', { class: 'gg-lobby-actions' }, [leaveBtn, confirmBtn]),
   ]));
 
@@ -226,6 +253,11 @@ export function mount(container, ctx) {
       ? el('span', { class: 'gg-badge', text: opp.attentionMode === 0 ? S.lobby.cam : S.lobby.noCam })
       : el('span', { class: 'gg-badge is-ghost', text: '…' }));
     them.version.textContent = known && opp.appVersion ? 'v' + opp.appVersion : '';
+    try {
+      const practice = typeof ctx.isPractice === 'function' && ctx.isPractice();
+      rivalLine.textContent = (known && !practice && ctx.rivalry)
+        ? formatRecord(ctx.rivalry.recordFor(opp.displayName), opp.displayName) : '';
+    } catch (_e) { rivalLine.textContent = ''; }
 
     // THEY ARE HERE, THEY ARE JUST BUSY. `remoteMediaPrep` outranks the plain
     // "waiting for them" eyebrow because it answers a different question: not
@@ -262,12 +294,13 @@ export function mount(container, ctx) {
     const gapSec = Math.round(s.payload_min_gap_ms / 1000);
 
     if (document.activeElement !== durRow.input) durRow.input.value = String(durSec);
-    durRow.value.textContent = minutes(durSec);
+    durRow.value.textContent = match.song ? songClock(durSec) : minutes(durSec);
     if (document.activeElement !== gapRow.input) gapRow.input.value = String(gapSec);
     gapRow.value.textContent = S.lobby.gapValue(gapSec);
 
     const editable = match.phase === GoonMatchPhase.Consent;
-    durRow.input.disabled = !editable;
+    // A picked song owns the length: the slider would only fight it.
+    durRow.input.disabled = !editable || !!match.song;
     gapRow.input.disabled = !editable;
   }
 
@@ -298,7 +331,7 @@ export function mount(container, ctx) {
       : S.lobby.confirm;
     confirmBtn.classList.toggle('is-ready', localOk);
     confirmBtn.disabled = match.phase !== GoonMatchPhase.Consent;
-    confirmBtn.title = localOk ? 'click to withdraw' : '';
+    confirmBtn.title = localOk ? S.aria.withdraw : '';
   }
 
   /**
@@ -331,6 +364,13 @@ export function mount(container, ctx) {
     const stillDeciding = !!(t && (t.state === GoonTransportState.Signaling
       || t.state === GoonTransportState.ConnectingP2P));
     const editable = match.phase === GoonMatchPhase.Consent || match.phase === GoonMatchPhase.Lobby;
+
+    /* SENDING IS A PATRON OPTION (owner, 2026-09-23): a free player never sees the
+     * row at all - a greyed box in the match path read as an upsell. */
+    const entitled = caps.mediaTransfer === true;
+    xferRow.row.hidden = !entitled;
+    xferRow.sub.hidden = !entitled;
+    if (!entitled) return;
 
     let why = '';
     if (caps.mediaTransfer !== true) why = S.lobby.transferOff;
@@ -615,6 +655,7 @@ export function mount(container, ctx) {
     ledger.sub(match.onMediaPrepChanged(() => paintIdentity()));
   }
   ledger.sub(match.onPhaseChanged(() => { paintAll(); }));
+  if (typeof match.onSongChanged === 'function') ledger.sub(match.onSongChanged(() => paintSheet()));
   /* The pref is the truth and this screen is one of its readers — ui/screens/
    * voice.js and the options drawer's Reset can both move it out from under us,
    * and a checkbox that disagrees with the thing it controls is worse than no
@@ -647,7 +688,7 @@ export function mount(container, ctx) {
   // as the proposer. The engine's host-authored opening proposal has already
   // fired by then; this only replaces it when the player has a remembered
   // preference that differs, so a guest never sees two proposals for nothing.
-  if (match.isHost && match.phase === GoonMatchPhase.Consent && prefs) {
+  if (match.isHost && match.phase === GoonMatchPhase.Consent && prefs && !match.song) {
     const wantDur = clampNum(prefs.get('matchLengthSec'), DUR_MIN_SEC, DUR_MAX_SEC);
     const wantGap = clampNum(prefs.get('payloadGapSec'), GAP_MIN_SEC, GAP_MAX_SEC);
     const s = match.consentSheet;

@@ -17,6 +17,7 @@
  * ==========================================================================*/
 
 import { el } from './router.js';
+import { isCalm, play, popIn } from './juiceDom.js';
 
 const MAX_VISIBLE = 4;
 const DEFAULT_MS = 2600;
@@ -49,7 +50,25 @@ export function createToasts({ root = null, prefs = null } = {}) {
 
     const finish = () => {
       live.delete(node);
+      // FLIP: the toasts below slide up into the gap instead of jumping.
+      const below = [];
+      try {
+        const parent = node.parentNode;
+        if (parent && !isCalm()) {
+          let sib = node.nextElementSibling;
+          while (sib) { below.push([sib, sib.getBoundingClientRect().top]); sib = sib.nextElementSibling; }
+        }
+      } catch (_e) { /* stub DOM */ }
       try { node.remove(); } catch (_e) { /* ignore */ }
+      for (const [sib, before] of below) {
+        try {
+          const dy = before - sib.getBoundingClientRect().top;
+          if (Math.abs(dy) > 0.5) {
+            play(sib, [{ transform: 'translateY(' + dy + 'px)' }, { transform: 'none' }],
+              { duration: 220, easing: 'cubic-bezier(.2, .8, .3, 1)', composite: 'add' });
+          }
+        } catch (_e) { /* ignore */ }
+      }
     };
     if (immediate || (prefs && prefs.get('reduceMotion'))) { finish(); return; }
     node.classList.add('is-leaving');
@@ -75,6 +94,8 @@ export function createToasts({ root = null, prefs = null } = {}) {
       ]);
       parent.appendChild(node);
       live.set(node, { timer: 0, removing: false });
+      // The glyph lands a beat after the pill does, with its own overshoot.
+      if (icon && node.firstChild) popIn(node.firstChild, { delay: 120, from: 0.3, over: 1.3, ms: 300 });
 
       // Shed the oldest before the newest can push the stack off-screen.
       while (parent.children.length > MAX_VISIBLE) drop(parent.children[0], true);

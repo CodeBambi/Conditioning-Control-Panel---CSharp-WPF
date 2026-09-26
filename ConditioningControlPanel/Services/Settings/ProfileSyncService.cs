@@ -4596,6 +4596,24 @@ namespace ConditioningControlPanel.Services
         };
 
         /// <summary>
+        /// Every Chaster setting (the master switch, the prices, the lock, both limits and their
+        /// waiting raises, pause, relock, consent, the ladder name). Device-local like the link itself:
+        /// a cloud restore must never switch the tab on, add prices, or land a limit raise without its
+        /// 24 hour wait. Found by name so a new Chaster* setting is covered the day it is added.
+        /// </summary>
+        internal static readonly System.Reflection.PropertyInfo[] ChasterLocalProperties =
+            typeof(AppSettings).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                .Where(p => p.Name.StartsWith("Chaster", StringComparison.Ordinal)
+                            && p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0
+                            && !Attribute.IsDefined(p, typeof(JsonIgnoreAttribute)))
+                .ToArray();
+
+        /// <summary>True when a backup must not carry this property.</summary>
+        internal static bool IsExcludedFromBackup(string name) =>
+            ExcludedBackupProperties.Contains(name)
+            || (name != null && name.StartsWith("Chaster", StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
         /// The other half of <see cref="ExcludedBackupProperties"/>. A backup never carries these,
         /// so a restored settings object arrives with them at their defaults - and until 6.9.4
         /// both restore paths (the startup welcome-back sheet and the manual button on the
@@ -4611,6 +4629,12 @@ namespace ConditioningControlPanel.Services
             restored.CustomAssetsPath = current.CustomAssetsPath;
             restored.DiscordWebhookUrl = current.DiscordWebhookUrl;
             restored.LastSeenUtc = current.LastSeenUtc;
+            foreach (var p in ChasterLocalProperties)
+            {
+                var v = p.GetValue(current);
+                if (v is List<string> list) v = new List<string>(list);
+                p.SetValue(restored, v);
+            }
         }
 
         /// <summary>
@@ -4677,13 +4701,10 @@ namespace ConditioningControlPanel.Services
                 var fullJson = JsonConvert.SerializeObject(settings, Formatting.None);
                 var obj = Newtonsoft.Json.Linq.JObject.Parse(fullJson);
 
-                foreach (var prop in ExcludedBackupProperties)
+                foreach (var key in obj.Properties().Select(p => p.Name).ToList())
                 {
-                    // Remove by JSON property name (which may differ from C# property name)
-                    // Find the matching key case-insensitively
-                    var key = obj.Properties()
-                        .FirstOrDefault(p => string.Equals(p.Name, prop, StringComparison.OrdinalIgnoreCase))?.Name;
-                    if (key != null) obj.Remove(key);
+                    // JSON names may differ in case from the C# names; match case-insensitively.
+                    if (IsExcludedFromBackup(key)) obj.Remove(key);
                 }
 
                 var strippedJson = obj.ToString(Formatting.None);
@@ -5008,9 +5029,34 @@ namespace ConditioningControlPanel.Services
         /// no-op. Nothing is lost in any ordering, because both choices are pure functions of a
         /// lifetime XP total that never moves.</para>
         /// </summary>
+        /// <summary>A server-recorded Cycle choice owes Cycle I and the lasting XP bonus. Only ever
+        /// raises (a Restore echo or a missing choice changes nothing). True when it wrote.</summary>
+        internal static bool EnsureCycleBonus(AppSettings settings, string? serverChoice)
+        {
+            if (serverChoice != DescentMigrationChoices.Cycle) return false;
+            var changed = false;
+            if (settings.DescentCycle < 1) { settings.DescentCycle = 1; changed = true; }
+            if (settings.DescentCycleXpBonus < DescentMigration.CycleXpBonus)
+            {
+                settings.DescentCycleXpBonus = DescentMigration.CycleXpBonus;
+                changed = true;
+            }
+            if (changed)
+                App.Logger?.Information("[Descent] Restored the Cycle bonus from the server's record of the choice.");
+            return changed;
+        }
+
         private static void HandleDescentMigrationAck(AppSettings settings, V2DescentMigration? block)
         {
             if (block?.Completed != true) return;
+
+            // THE CYCLE BONUS FOLLOWS THE ACCOUNT, NOT THE PC. ApplyChoice writes it on the machine
+            // that took the ceremony, and nothing else ever did: a second PC, a reinstall, or a
+            // settings file replaced by another account (support ticket, 2026-09-24) kept the
+            // choice on the server and lost the permanent +10% XP. The ack rides every sync, so
+            // it heals here, before the "already settled" return.
+            if (EnsureCycleBonus(settings, block.Choice)) App.Settings?.Save();
+
             if (settings.DescentMigrationCompleted) return;   // already settled; idempotent
 
             // Prefer the server's echo of the choice; fall back to what we submitted. They can

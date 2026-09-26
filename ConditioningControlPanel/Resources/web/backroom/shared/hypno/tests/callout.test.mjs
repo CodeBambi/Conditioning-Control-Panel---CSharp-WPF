@@ -157,15 +157,14 @@ test('word: clicker, speech (rate 0.85, pitch 0.8, previous cancelled), word cue
     assert.equal(words[0].anims[0].opts.duration, WORD_MS);
     assert.deepEqual(cues.map((x) => x.cue), ['clicker', 'word']);
     assert.equal(cues[1].index, 0);
-    assert.deepEqual(sp.spoken, [{ text: 'DROP', rate: 0.85, pitch: 0.8 }]);
-    assert.ok(sp.cancels >= 1, 'any previous utterance is cancelled first');
+    assert.deepEqual(sp.spoken, [], 'no browser voice: synthetic speech is off');
     mock.timers.tick(WORD_GAP_MS);
     words = all(layer, 'br-callout-word');
     assert.equal(words.length, 2, 'the second word overlaps the first one fading');
     assert.equal(words[1].textContent, 'XALER');
     assert.equal(words[1].getAttribute('data-reversed'), '');
     assert.match(words[1].anims[0].frames[0].transform, /scaleX\(-1\)/, 'mirrored');
-    assert.deepEqual(sp.spoken[1], { text: 'xaler', rate: 0.7, pitch: 0.8 });
+    assert.equal(sp.spoken.length, 0, 'the reversed word is not synthesised either');
     assert.equal(cues.filter((x) => x.cue === 'word').at(-1).index, 1);
     mock.timers.tick(WORD_MS - WORD_GAP_MS);
     assert.equal(all(layer, 'br-callout-word').length, 1, 'the first word is gone at 980 ms');

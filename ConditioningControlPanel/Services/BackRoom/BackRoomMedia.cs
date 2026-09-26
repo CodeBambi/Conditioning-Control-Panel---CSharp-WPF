@@ -494,19 +494,27 @@ internal sealed class BackRoomMedia : IBackRoomMedia
     /// </summary>
     internal static IReadOnlyList<string> ActiveWords()
     {
-        var words = new List<string>();
         var settings = App.Settings?.Current;
-        if (settings == null) return words;
+        if (settings == null) return new List<string>();
+        return WordsFrom(settings.SubliminalPool, settings.KeywordTriggers);
+    }
 
-        var pool = settings.SubliminalPool;
+    /// <summary>The pure half of <see cref="ActiveWords"/>. A keyword whose match type is
+    /// Regex is a PATTERN, not a word: dealt to a reel it reads as <c>\bORGASM\w*\b</c>. Those stay
+    /// out; the plain-text keywords and the enabled pool are the words.</summary>
+    internal static List<string> WordsFrom(
+        IDictionary<string, bool>? pool,
+        IEnumerable<ConditioningControlPanel.Models.KeywordTrigger>? triggers)
+    {
+        var words = new List<string>();
         if (pool != null)
             foreach (var kv in pool)
                 if (kv.Value && !string.IsNullOrWhiteSpace(kv.Key)) words.Add(kv.Key);
 
-        var triggers = settings.KeywordTriggers;
         if (triggers != null)
             foreach (var t in triggers)
-                if (t is { Enabled: true } && !string.IsNullOrWhiteSpace(t.Keyword)) words.Add(t.Keyword);
+                if (t is { Enabled: true } && t.MatchType != ConditioningControlPanel.Models.KeywordMatchType.Regex
+                    && !string.IsNullOrWhiteSpace(t.Keyword)) words.Add(t.Keyword);
 
         return words;
     }

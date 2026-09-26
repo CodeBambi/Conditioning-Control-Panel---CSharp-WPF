@@ -538,16 +538,7 @@ namespace ConditioningControlPanel
             // picker - is reached by exactly the same population as before. The wizard itself
             // owns what used to be four separate modals: the age check, the welcome card, the first-run mod
             // picker (ModPickerDialog.ShowIfNeeded's one-shot + offline guards included) and the
-            // "choose a content folder" MessageBox. No tour starts from it: EMI offers the walk once, later.
-            // ASK EMI WAVE 1: read LastSeenVersion HERE, before anything on this launch stamps it.
-            // ShowWhatsNewIfNeeded (the first statement of the else branch, a few lines down) writes
-            // the current version into that setting synchronously, minutes before the knock's own
-            // dispatcher item runs. A late read would therefore see this build's own stamp and
-            // classify every single upgrader as somebody who is owed nothing - which is the same
-            // shape as the bug that showed every fresh install a migration notice for a move it
-            // never witnessed. One string, captured once, handed to the knock at the far end.
-            var knockSeenVersion = App.Settings?.Current?.LastSeenVersion ?? string.Empty;
-
+            // "choose a content folder" MessageBox. The narrated show follows the wizard.
             if (FirstRunWizard.ShouldRunAndClaim())
             {
                 // EMI Desk (MOMENTS 4.B): a HOLD, never a line. The wizard owns the screen on a
@@ -564,6 +555,12 @@ namespace ConditioningControlPanel
                         try
                         {
                             FirstRunWizard.Run(owner as MainWindow ?? this);
+                            if (App.Settings?.Current?.HasAcceptedAgeVerification == true
+                                && !Dispatcher.HasShutdownStarted)
+                            {
+                                EnqueueStartupModal("first-show", 25,
+                                    _ => Services.FirstShow.FirstShowService.Open(this));
+                            }
                         }
                         finally
                         {
@@ -593,13 +590,7 @@ namespace ConditioningControlPanel
                         FirstRunWizard.AbortUngatedLaunch("the ladder gave up on the wizard", handBack: false);
                     });
 
-                // THE KNOCK (Ask EMI wave 1). The far side of the wizard, on both paths: the
-                // population this is FOR is the one that pressed "explore on my own", and the
-                // hand-back path is a launch where nothing was ever shown and she is exactly as
-                // welcome. Every remaining gate - the wizard, an update dialog, a session, a
-                // tutorial overlay, a minimised window, the setting, whether she is already out
-                // - lives in EmiKnockMachine.MayKnock, so this is one call and no policy.
-                QueueEmiKnock(knockSeenVersion);
+                // The narrated show replaces the automatic tab walkthrough offer.
             }
             else
             {
@@ -610,29 +601,8 @@ namespace ConditioningControlPanel
                 ShowWhatsNewIfNeeded();
                 TryPresentSeasonRecap();
 
-                // Upgraders into the modular build get the SAME picker, once, at priority 50 -
-                // behind What's New and the recap by construction rather than by a 1500 ms delay
-                // followed by a 600-iteration poll over three flags. ModPickerDialog.ShowIfNeeded
-                // keeps every one of its own guards (ModPickerShown / offline offers / full
-                // install), so the population offered the picker has not changed.
-                EnqueueStartupModal("mod-picker", 50, owner =>
-                {
-                    try
-                    {
-                        // Pre-ticks the card for the mod they were already running, so one press
-                        // restores what the installer removed.
-                        ModPickerDialog.ShowIfNeeded(owner as MainWindow ?? this, preselectActiveMod: true);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning(ex, "Failed to offer the mod picker to an upgrading install");
-                    }
-                });
-
-                // THE KNOCK (Ask EMI wave 1), the upgrader's half. Same call, same gates; the
-                // snapshot taken before ShowWhatsNewIfNeeded ran is what makes this population
-                // legible at all by the time we get here.
-                QueueEmiKnock(knockSeenVersion);
+                // Mod selection stays in the first-run wizard and the Mod Manager.
+                // Returning users no longer receive the standalone mod popup or tab tour offer.
             }
 
             // The title bar's Inbox glyph. Nothing to show yet - it stays collapsed until the
@@ -1455,8 +1425,55 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnFirstShowReplay_Click(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (SettingsTab.BrowserContainer != null)
+                SettingsTab.BrowserContainer.Visibility = Visibility.Visible;
+            Services.FirstShow.FirstShowService.Open(this);
+        }
+
+        /// <summary>When Racing Thoughts last kept an Escape as its pause; see <see cref="TryRacePauseOnEscape"/>.</summary>
+        private DateTime? _lastRaceEscapeClaimUtc;
+
+        /// <summary>
+        /// Escape in front of Racing Thoughts is its pause, not a panic (owner, 2026-09-25). The race
+        /// page hears the same key and brakes on its own; this only keeps the panic pass from closing
+        /// the game under it. Every condition is in <see cref="Services.Safety.PanicPolicy.GameClaimsEscapeAsPause"/>,
+        /// including the one that matters most: a second Escape within 2 s is a full panic.
+        /// </summary>
+        private bool TryRacePauseOnEscape()
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                bool claim = Services.Safety.PanicPolicy.GameClaimsEscapeAsPause(
+                    App.Settings?.Current?.PanicKey,
+                    gameInFront: Services.Chaos.CaucusHostService.IsInFront,
+                    engineRunning: _isRunning,
+                    lockCardOpen: LockCardWindow.IsAnyOpen(),
+                    lastClaimUtc: _lastRaceEscapeClaimUtc,
+                    nowUtc: now);
+                if (!claim) { _lastRaceEscapeClaimUtc = null; return false; }
+                _lastRaceEscapeClaimUtc = now;
+                VideoDiag.Log("PANIC", "Escape kept by Racing Thoughts as its pause (again within 2 s = full panic)");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // A probe that throws must never eat a panic press.
+                App.Logger?.Warning("PANIC: race pause probe failed: {Error}", ex.Message);
+                return false;
+            }
+        }
+
         private void HandlePanicKeyPress()
         {
+            // Racing Thoughts' pause, BEFORE everything below: a pause is not a panic, so it must not
+            // arm EMI's silence, the Chaster safety hold or the stop pass.
+            if (TryRacePauseOnEscape()) return;
+            Services.FirstShow.FirstShowService.Stop();
+
             // EMI Desk (MOMENTS 4.B): FIRST LINE, before any of the ladder below. panicPressed is a
             // HOLD with a five-minute silence tail, and it has to be armed even if something further
             // down this method throws - the whole point is that she says nothing after a panic.
@@ -2181,8 +2198,9 @@ namespace ConditioningControlPanel
                                      || App.Settings?.Current?.IsSissyMode == true;
                 var logoFile = useNeutralLogo ? "logo2.png" : "logo.png";
                 var image = Services.ModResourceResolver.ResolveImage(logoFile);
-                if (image != null)
-                    SettingsTab.ImgLogo.Source = image;
+                SettingsTab.ImgLogo.SetArtwork(image);
+                ApplyLogoDrift();
+                ApplyLogoSheenTimer();
                 App.Logger?.Debug("Logo loaded: {Logo}", logoFile);
             }
             catch (Exception ex)
@@ -3008,6 +3026,18 @@ namespace ConditioningControlPanel
             App.Settings.Current.ModChosen = true;
             App.Settings.Save();
 
+            // audio-base is fetched only for the mod that plays it, so a switch to Bambi Sleep
+            // asks for it now instead of at the next launch. No-op when stamped, full install,
+            // debugger or offline; de-duped inside RequestPackAsync.
+            if (Services.ModAudioPolicy.UsesBaselineVoicePack(App.Mods.ActiveModId) && App.ReleaseContent != null)
+            {
+                var releaseContent = App.ReleaseContent;
+                _ = System.Threading.Tasks.Task.Run(() => releaseContent.EnsureBaselineAsync());
+            }
+
+            // Themed awareness presets show only under their own mods: rebuild the card grid.
+            App.KeywordPresets?.NotifyVisibilityChanged();
+
             InitializeModSelector();
             LoadLogo();
             LoadTakeoverImage();
@@ -3042,6 +3072,9 @@ namespace ConditioningControlPanel
 
             RefreshHypnotubeLinksUI();
             _avatarTubeWindow?.UpdateQuickMenuState();
+
+            // Last: the user's per-mod default presets (Customise window), if they picked any.
+            ApplyModDefaultPresets(App.Mods.ActiveModId);
 
             App.Logger?.Information("Mod changed to {ModId}", App.Mods.ActiveModId);
         }

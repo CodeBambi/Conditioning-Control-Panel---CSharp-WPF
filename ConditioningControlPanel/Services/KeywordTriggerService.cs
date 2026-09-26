@@ -370,7 +370,10 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Fall back to default sub_audio directory
+            // Fall back to default sub_audio directory - Bambi-voiced, so never for CCP Default.
+            // Those mods get the recorded neutral clips instead (Resources/Audio/backroom/words).
+            if (!ModAudioPolicy.UsesSharedSubAudio(App.Mods?.ActiveModId))
+                return BackRoom.BackRoomVoice.FindNeutralClip(keyword);
             return SearchAudioDirectory(_audioPath, cleanText, textVariants, extensions, isModCache: false);
         }
 

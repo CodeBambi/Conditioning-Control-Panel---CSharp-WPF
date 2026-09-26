@@ -64,8 +64,19 @@ namespace ConditioningControlPanel.Services.Companion.Brain
     public sealed class CompanionBrain : IDisposable
     {
         private readonly IAiService _transport;
-        private readonly IPromptAssembler _assembler;
-        private readonly ICompanionSessionStore _store;
+        private IPromptAssembler _assembler;
+        private ICompanionSessionStore _store;
+        private readonly Func<bool> _preview;
+        private readonly Func<string?> _contextStamp;
+        private readonly Action<IReadOnlyList<Models.AiCommandData>> _executeCommands;
+        private readonly Action<Action> _scheduleEffects;
+        private readonly object _conversationMutation = new();
+        private int _conversationRevision;
+        private CompanionMemoryMaintenance? _maintenance;
+        private readonly Func<string?> _accountIdentity;
+        private readonly string? _accountDirectory;
+        private readonly bool _accountScoped;
+        private string? _currentAccount;
 
         // The linkable media pool, exactly as the stable prefix lists it. Injected so the
         // recommendation scan is testable without standing up BambiSprite and the whole mod stack.
@@ -89,6 +100,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         // out from under them would be the more surprising bug of the two.
         private readonly bool _ownsMemory;
 
+        internal Func<IReadOnlyList<CompanionActivity>> Activities { get; set; } = CompanionActivities.Current;
+
         private static readonly Random _random = new();
 
         public CompanionBrain(
@@ -97,14 +110,32 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             IMemoryStore? memory = null,
             ICompanionSessionStore? store = null,
             RecentRecommendations? recommendations = null,
-            Func<IReadOnlyList<string>>? mediaTitles = null)
+            Func<IReadOnlyList<string>>? mediaTitles = null, Func<bool>? preview = null,
+            Func<string?>? contextStamp = null,
+            Action<IReadOnlyList<Models.AiCommandData>>? executeCommands = null,
+            Action<Action>? scheduleEffects = null, Func<string?>? accountIdentity = null,
+            string? accountDirectory = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+            _preview = preview ?? (() => CompanionExperience.IsV2Enabled);
+            _contextStamp = contextStamp ?? (() => string.Join("|", App.UnifiedUserId,
+                App.Settings?.Current?.PersonaIdentityFenceUtc?.Ticks,
+                App.Settings?.Current?.PersonaVoiceFenceUtc?.Ticks));
+            _executeCommands = executeCommands ?? ExecuteAcceptedCommands;
+            _scheduleEffects = scheduleEffects ?? ScheduleEffects;
             _ownsMemory = memory == null;
-            Memory = memory ?? new MemoryStore();
+            _accountIdentity = accountIdentity ?? (() => App.UnifiedUserId);
+            _accountDirectory = accountDirectory;
+            _currentAccount = _accountIdentity();
+            _accountScoped = _preview() && memory == null && store == null && assembler == null;
+            Memory = memory ?? (_accountScoped ? MemoryStore.ForPreviewAccount(_currentAccount, _accountDirectory) : new MemoryStore());
             Recommendations = recommendations ?? new RecentRecommendations();
-            _assembler = assembler ?? new PromptAssembler(Memory, Recommendations);
-            _store = store ?? new CompanionSessionStore();
+            if (Memory is MemoryStore maintenanceStore)
+                _maintenance = new CompanionMemoryMaintenance(maintenanceStore, _transport.SendAsync,
+                    () => _preview() && maintenanceStore.IsChatMemoryEnabled, _contextStamp);
+            _assembler = assembler ?? new PromptAssembler(Memory, Recommendations,
+                rollingContext: () => _maintenance?.GetContext());
+            _store = store ?? (_accountScoped ? CreateAccountSessionStore() : new CompanionSessionStore());
             _mediaTitles = mediaTitles ?? DefaultMediaTitles;
 
             Session = new ChatSession();
@@ -164,7 +195,42 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public ChatSession Session { get; }
 
         /// <summary>The durable user model. A shell in Train 1 — see <see cref="MemoryStore"/>.</summary>
-        public IMemoryStore Memory { get; }
+        public IMemoryStore Memory { get; private set; }
+        internal IReadOnlyList<string> SummaryQuotes => _maintenance?.SummaryQuotes ?? Array.Empty<string>();
+        internal void ClearSummary() { EnsureCurrentAccount(); _maintenance?.Forget(); }
+
+        private CompanionSessionStore CreateAccountSessionStore()
+        {
+            var directory = MemoryStore.PreviewAccountDirectory(_currentAccount, _accountDirectory);
+            // Existing unscoped files are preserved. They have no reliable account owner.
+            return new CompanionSessionStore(System.IO.Path.Combine(directory, "session.json"),
+                System.IO.Path.Combine(directory, "no-legacy-import.json"));
+        }
+
+        internal void EnsureCurrentAccount()
+        {
+            if (!_accountScoped) return;
+            lock (_conversationMutation)
+            {
+                var account = _accountIdentity();
+                if (account == _currentAccount) return;
+                _conversationRevision++;
+                _maintenance?.Dispose();
+                (Memory as IDisposable)?.Dispose();
+                _currentAccount = account;
+                Memory = MemoryStore.ForPreviewAccount(account, _accountDirectory);
+                var memoryStore = (MemoryStore)Memory;
+                _maintenance = new CompanionMemoryMaintenance(memoryStore, _transport.SendAsync,
+                    () => _preview() && memoryStore.IsChatMemoryEnabled, _contextStamp);
+                _assembler = new PromptAssembler(Memory, Recommendations, rollingContext: () => _maintenance?.GetContext());
+                _store = CreateAccountSessionStore();
+                Recommendations.Clear();
+                Session.Clear();
+                var snapshot = _store.Load();
+                if (snapshot.Turns.Count > 0) Session.Restore(snapshot.Turns);
+                _memoryRecallSignaled = false;
+            }
+        }
 
         /// <summary>Titles she suggested recently, injected as an exclusion line.</summary>
         public RecentRecommendations Recommendations { get; }
@@ -187,6 +253,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public async Task<AiReplyResult> ChatAsync(string userText, CancellationToken cancellationToken = default)
         {
+            EnsureCurrentAccount();
             var input = (userText ?? string.Empty).Trim();
             if (input.Length == 0)
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
@@ -196,23 +263,38 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (_isUserQueued)
             {
                 App.Logger?.Debug("CompanionBrain: user send dropped (one already queued)");
-                return new AiReplyResult(GetThinkingPhrase(), IsAiGenerated: false, Refusal: null);
+                return _preview() ? AiReplyResult.Failed(AiFailureKind.Busy, true)
+                    : new AiReplyResult(GetThinkingPhrase(), IsAiGenerated: false, Refusal: null);
             }
+
+            // Foreground chat never waits for a utility provider that ignores cancellation.
+            if (_preview() && _maintenance != null) _ = _maintenance.InterruptAsync();
 
             _isUserQueued = true;
             try
             {
-                await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (_preview())
+                {
+                    if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+                    {
+                        _isUserQueued = false;
+                        return AiReplyResult.Failed(AiFailureKind.Busy, true);
+                    }
+                }
+                else await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
                 _isUserQueued = false;
-                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+                return _preview() ? AiReplyResult.Failed(AiFailureKind.Cancelled, true)
+                    : new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
             }
 
             _isUserQueued = false;
             _isProcessing = true;
 
+            var revision = System.Threading.Volatile.Read(ref _conversationRevision);
+            var contextStamp = _contextStamp();
             var userTurn = Session.Append(TurnKind.UserChat, input);
 
             // EMIT hook for the app's "the user just talked to her" signal (#877). It belongs
@@ -234,10 +316,16 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // the 100-token chat cap and get guillotined mid-string. Size the budget to
                 // what we asked the model to produce. See AiCallOptions.ChatWithEffects.
                 var effectsOn = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
+                var options = effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat;
+                var offered = _preview() && !ConversationDelivery.CardFollows(input)
+                    ? ConversationDelivery.Select(Activities(), input, Session.Turns) : Array.Empty<CompanionActivity>();
+                if (_preview())
+                {
+                    options = ConversationDelivery.Options(options, input, effectsOn);
+                    request = ConversationDelivery.Apply(request, input, offered);
+                }
                 var result = await _transport
-                    .SendAsync(request.Messages,
-                        effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat,
-                        cancellationToken)
+                    .SendAsync(request.Messages, options, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (result.Refusal != null)
@@ -247,7 +335,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     return result;
                 }
 
-                if (!result.IsAiGenerated)
+                if (!result.IsAiGenerated && !result.IsApplicationReply)
                 {
                     // Canned fallback / login hint / transport failure. Roll the user turn back the
                     // way the legacy path always did ("don't poison history with an unanswered
@@ -256,14 +344,22 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     // once the provider comes back. The bubble transcript the user actually reads is
                     // AvatarTubeWindow.ChatHistory, which is untouched by this.
                     Session.Remove(userTurn);
-                    return result;
+                    return _preview() && result.Failure == null
+                        ? AiReplyResult.Failed(cancellationToken.IsCancellationRequested
+                            ? AiFailureKind.Cancelled : AiFailureKind.Unavailable, true)
+                        : result;
                 }
+
+                cancellationToken.ThrowIfCancellationRequested();
 
                 // Live 0806: small models imitate the bark-echo sigil and wrap their own replies in
                 // «X said aloud: "…"». Unwrap before the text reaches the bubble, history, or disk.
                 // The speaker name lets the 0813 transcript shape drop lines the model attributed
                 // to a DIFFERENT companion (the previous mod's) instead of quoting them.
-                var chatText = AiTextHygiene.UnwrapSpokenSigil(result.Text, ActiveSpeakerName());
+                var delivery = _preview() ? ConversationDelivery.Parse(result.Text, offered)
+                    : (Text: result.Text, Ids: Array.Empty<string>());
+                var chatText = AiTextHygiene.UnwrapSpokenSigil(delivery.Text, ActiveSpeakerName());
+                chatText = AiTextHygiene.StripInstructionLeak(chatText);
 
                 // Live 0806: and they invent URLs when asked for a video they have no link for.
                 // Strip before the reply is appended — a fabricated link left in the window teaches
@@ -274,28 +370,52 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // stored: the persisted history is the model's few-shot bait, so leaving her
                 // inventions in it is how one made-up title became a fixation (0807). Rewriting
                 // here heals bubble, chip, history and future prompts in one place.
-                chatText = AiTextHygiene.RewriteOffPoolTitles(chatText);
+                if (!_preview()) chatText = AiTextHygiene.RewriteOffPoolTitles(chatText);
 
                 if (chatText.Length == 0)
                 {
                     // Nothing but sigil shell, or nothing but invented links. Either way there is no
                     // reply left to show: same treatment as a canned fallback.
                     Session.Remove(userTurn);
-                    return new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
+                    return _preview() ? AiReplyResult.Failed(AiFailureKind.InvalidResponse, true)
+                        : new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
                 }
                 if (!string.Equals(chatText, result.Text, StringComparison.Ordinal))
                     result = result with { Text = chatText };
 
-                Session.Append(TurnKind.AssistantChat, result.Text);
-                NoteRecommendedTitles(result.Text);
-                PersistAsync();
-                SignalMemoryRecallIfDue();
-                return result;
+                lock (_conversationMutation)
+                {
+                    if (_preview() && (revision != _conversationRevision || contextStamp != _contextStamp()))
+                    {
+                        Session.Remove(userTurn);
+                        return AiReplyResult.Failed(AiFailureKind.Cancelled, true);
+                    }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Session.Append(CompanionTurn.Create(TurnKind.AssistantChat, result.Text) with
+                    { ActivityIds = delivery.Ids, IsApplicationReply = result.IsApplicationReply });
+                    if (_preview() && !result.IsApplicationReply && Memory is MemoryStore relationshipStore)
+                        relationshipStore.NoteChatTurn(App.Mods?.ActiveModId);
+                    if (_preview() && !result.IsApplicationReply) _maintenance?.Accept(userTurn);
+                    _conversationRevision++;
+                    ApplyPreviewCommands(result, cancellationToken);
+                    NoteRecommendedTitles(result.Text);
+                    PersistAsync();
+                    SignalMemoryRecallIfDue();
+                    return result;
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                Session.Remove(userTurn);
+                return _preview() ? AiReplyResult.Failed(AiFailureKind.Cancelled, true)
+                    : new AiReplyResult(string.Empty, false, null);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "CompanionBrain: chat turn failed");
-                return new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
+                Session.Remove(userTurn);
+                App.Logger?.Warning("CompanionBrain: chat turn failed ({ErrorType})", ex.GetType().Name);
+                return _preview() ? AiReplyResult.Failed(AiFailureKind.Unavailable, true)
+                    : new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
             }
             finally
             {
@@ -320,11 +440,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public async Task<AiReplyResult> ReactAsync(CompanionEvent evt, CancellationToken cancellationToken = default)
         {
+            EnsureCurrentAccount();
             var descriptor = evt?.Normalized() ?? string.Empty;
             if (descriptor.Length == 0)
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
 
-            if (_isProcessing || _isUserQueued)
+            if (_isProcessing || _isUserQueued || (_preview() && _maintenance?.PendingJob.IsCompleted == false))
             {
                 App.Logger?.Debug("CompanionBrain: ambient reaction dropped (busy)");
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
@@ -337,12 +458,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
 
             _isProcessing = true;
+            var revision = System.Threading.Volatile.Read(ref _conversationRevision);
+            var contextStamp = _contextStamp();
             var eventTurn = Session.Append(TurnKind.AmbientEvent, descriptor);
             try
             {
                 var request = _assembler.BuildRequest(AiPurpose.Reaction, Session, descriptor);
                 var result = await _transport
-                    .SendAsync(request.Messages, AiCallOptions.Reaction, cancellationToken)
+                    .SendAsync(request.Messages, _preview() ? AiCallOptions.ForPreview(AiCallOptions.Reaction)
+                        : AiCallOptions.Reaction, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (result.Refusal != null || !result.IsAiGenerated)
@@ -356,6 +480,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
 
                 var reactionText = AiTextHygiene.UnwrapSpokenSigil(result.Text, ActiveSpeakerName());
+                reactionText = AiTextHygiene.StripInstructionLeak(reactionText);
                 reactionText = AiTextHygiene.StripUnsanctionedLinks(reactionText);
                 if (reactionText.Length == 0)
                 {
@@ -369,10 +494,20 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // See TurnKind.AmbientReply for why persisting the reply without its event is worse
                 // than persisting neither. Nothing dialogue-shaped changed, so there is nothing to
                 // persist here at all.
-                Session.Append(TurnKind.AmbientReply, result.Text);
-                NoteRecommendedTitles(result.Text);
-                SignalMemoryRecallIfDue();
-                return result;
+                lock (_conversationMutation)
+                {
+                    if (_preview() && (revision != _conversationRevision || contextStamp != _contextStamp()))
+                    {
+                        Session.Remove(eventTurn);
+                        return AiReplyResult.Failed(AiFailureKind.Cancelled, true);
+                    }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Session.Append(TurnKind.AmbientReply, result.Text);
+                    ApplyPreviewCommands(result, cancellationToken);
+                    NoteRecommendedTitles(result.Text);
+                    SignalMemoryRecallIfDue();
+                    return result;
+                }
             }
             catch (Exception ex)
             {
@@ -390,6 +525,46 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// <summary>Convenience overload for call sites that only have a descriptor string.</summary>
         public Task<AiReplyResult> ReactAsync(string descriptor, CancellationToken cancellationToken = default)
             => ReactAsync(new CompanionEvent(descriptor), cancellationToken);
+
+        private void ApplyPreviewCommands(AiReplyResult result, CancellationToken cancellationToken)
+        {
+            if (!_preview() || result.ProposedCommands is not { Count: > 0 }) return;
+            var revision = _conversationRevision;
+            var context = _contextStamp();
+            void Execute()
+            {
+                lock (_conversationMutation)
+                {
+                    if (cancellationToken.IsCancellationRequested || revision != _conversationRevision || context != _contextStamp()) return;
+                    try { _executeCommands(result.ProposedCommands); }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("CompanionBrain: accepted effects failed ({ErrorType})", ex.GetType().Name);
+                    }
+                }
+            }
+            try { _scheduleEffects(Execute); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("CompanionBrain: effect scheduling failed ({ErrorType})", ex.GetType().Name);
+            }
+        }
+
+        private static void ScheduleEffects(Action execute)
+        {
+            // Effect implementations synchronously dispatch to WPF. Queue onto that thread before
+            // taking the lock, so a simultaneous UI forget action cannot deadlock the reply worker.
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess()) execute();
+            else dispatcher.BeginInvoke(execute, System.Windows.Threading.DispatcherPriority.Normal);
+        }
+
+        private static void ExecuteAcceptedCommands(IReadOnlyList<Models.AiCommandData> commands)
+        {
+            if (App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects != true || App.Commands == null) return;
+            App.Commands.BeginBatch();
+            foreach (var command in commands) App.Commands.ExecuteCommand(command);
+        }
 
         // ===================== barks =====================
 
@@ -517,7 +692,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // are model-authored and flow into future prompts via the exclusion line, so they
                 // are bounded hard: quoted spans only, length-capped, newlines stripped, two per
                 // reply.
-                if (noted.Count == 0)
+                if (!_preview() && noted.Count == 0)
                 {
                     int banned = 0;
                     foreach (var (start, length, quoted) in Services.Companion.CompanionTitleMatcher.CandidateSpans(text))
@@ -561,12 +736,40 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public void ForgetThread()
         {
+            EnsureCurrentAccount();
+            lock (_conversationMutation)
+            {
+                ForgetThreadCore();
+            }
+            App.Logger?.Information("CompanionBrain: conversation thread dropped");
+        }
+
+        private void ForgetThreadCore()
+        {
+            _conversationRevision++;
+            _maintenance?.Forget();
             Session.Clear();
             Recommendations.Clear();
             _store.Wipe();
             _memoryRecallSignaled = false;
-            ClearLegacyLocalHistory();
-            App.Logger?.Information("CompanionBrain: conversation thread dropped");
+            if (!_accountScoped) ClearLegacyLocalHistory();
+        }
+
+        internal Action CaptureForgetAction(IMemoryStore? expectedOwner = null)
+        {
+            EnsureCurrentAccount();
+            var owner = expectedOwner ?? Memory;
+            return () =>
+            {
+                lock (_conversationMutation)
+                {
+                    EnsureCurrentAccount();
+                    if (!ReferenceEquals(owner, Memory)) return;
+                    // Keep this captured store throughout. Re-resolving mid-action could wipe a new account.
+                    ForgetThreadCore();
+                    owner.Wipe();
+                }
+            };
         }
 
         /// <summary>
@@ -623,7 +826,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         }
 
         /// <summary>Writes the current dialogue synchronously — used on shutdown.</summary>
-        public void Flush() => _store.Save(Session.DialogueTurns());
+        public void Flush()
+        {
+            lock (_conversationMutation) _store.Save(Session.DialogueTurns());
+        }
 
         /// <summary>
         /// Fire-and-forget persistence so chat latency never pays for disk I/O. Only reached AFTER
@@ -632,9 +838,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private void PersistAsync()
         {
             var dialogue = Session.DialogueTurns();
+            var revision = _conversationRevision;
             _ = Task.Run(() =>
             {
-                try { _store.Save(dialogue); }
+                try
+                {
+                    lock (_conversationMutation)
+                        if (revision == _conversationRevision) _store.Save(dialogue);
+                }
                 catch (Exception ex) { App.Logger?.Debug("CompanionBrain: persist failed: {Error}", ex.Message); }
             });
         }
@@ -671,6 +882,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             if (_disposed) return;
             _disposed = true;
+            _maintenance?.Dispose();
             DetachBarkSource();
             try { Flush(); } catch { /* shutdown is best-effort */ }
 

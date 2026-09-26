@@ -101,8 +101,8 @@ public class ChasterServiceTests : IDisposable
         service.Note("typo");
         service.Note("attention");
 
-        Assert.Equal(15, service.BalanceSeconds);
-        Assert.Equal(new[] { ("typo", 15) }, seen);
+        Assert.Equal(30, service.BalanceSeconds);
+        Assert.Equal(new[] { ("typo", 30) }, seen);
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class ChasterServiceTests : IDisposable
         service.Note("typo");
         service.Note("session");
 
-        Assert.Equal(15, service.TodayAddedSeconds);
+        Assert.Equal(30, service.TodayAddedSeconds);
         _utc = _utc.AddDays(1);
         Assert.Equal(0, service.TodayAddedSeconds);
     }
@@ -146,8 +146,8 @@ public class ChasterServiceTests : IDisposable
 
         Assert.Equal(TabPrices.All.Count, costs.Count + earnBacks.Count);
         Assert.Equal("program_skipped", costs[0].Id);
-        Assert.Equal("quest_weekly", earnBacks[0].Id);
-        Assert.Equal("+0:10 each", TabPageText.Price(TabPrices.Find("mantra")!, "{0} each"));
+        Assert.Equal("streak", earnBacks[0].Id);
+        Assert.Equal("+0:30 each", TabPageText.Price(TabPrices.Find("mantra")!, "{0} each"));
         Assert.Equal("-10:00", TabPageText.Price(TabPrices.Find("session")!, "{0} each"));
 
         var en = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", "en.json")));
@@ -175,8 +175,8 @@ public class ChasterServiceTests : IDisposable
         var after = service.Note("typo");
 
         Assert.Equal(TabRefusal.SafetyExit, during.Refusal);
-        Assert.Equal(-15, credit.AppliedSeconds);
-        Assert.Equal(15, after.AppliedSeconds);
+        Assert.Equal(-30, credit.AppliedSeconds);
+        Assert.Equal(30, after.AppliedSeconds);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class ChasterServiceTests : IDisposable
 
         using var second = Make();
 
-        Assert.Equal(15, second.BalanceSeconds);
+        Assert.Equal(30, second.BalanceSeconds);
     }
 
     [Fact]
@@ -204,11 +204,11 @@ public class ChasterServiceTests : IDisposable
         Assert.Equal(SettleOutcome.Pushed, again);
         Assert.Equal(SettleOutcome.Nothing, empty);
         Assert.Equal(0, service.BalanceSeconds);
-        Assert.Equal(615, service.Bill().PushedSeconds);
+        Assert.Equal(630, service.Bill().PushedSeconds);
         Assert.Equal(2, _http.Seen.Count);
         Assert.All(_http.Seen, c => Assert.Equal("/locks/lock1/update-time", c.Path));
         Assert.Contains("\"duration\":600", _http.Seen[0].Body);
-        Assert.Contains("\"duration\":15", _http.Seen[1].Body);
+        Assert.Contains("\"duration\":30", _http.Seen[1].Body);
     }
 
     [Fact]
@@ -231,11 +231,145 @@ public class ChasterServiceTests : IDisposable
         service.NoteSeconds("watcher", 300);
 
         Assert.Equal(SettleOutcome.Pushed, await service.SettleAsync());
+        // One write: the catch-up rides the price, never goes out on its own.
         var pushes = _http.Seen.Where(s => s.Path.EndsWith("update-time")).ToList();
-        Assert.Equal(2, pushes.Count);
-        Assert.Contains("\"duration\":" + (18 * 60 + LockRelock.MarginSeconds), pushes[0].Body);
-        Assert.Contains("\"duration\":300", pushes[1].Body);
+        Assert.Single(pushes);
+        Assert.Contains("\"duration\":" + (18 * 60 + LockRelock.MarginSeconds + 300), pushes[0].Body);
         Assert.Equal(300, service.Bill().PushedSeconds);
+        Assert.Equal(0, service.BalanceSeconds);
+        // The ladder's gross count includes the catch-up, like the server's read of the lock
+        // (plus the first service's plain 300, which shares the tab file).
+        Assert.Equal(300 + 18 * 60 + LockRelock.MarginSeconds + 300, service.AddedLifetimeSeconds);
+    }
+
+    [Fact]
+    public async Task A_failing_push_never_sends_a_catch_up_on_its_own()
+    {
+        var ended = _utc.AddMinutes(-18).ToString("o");
+        var fail = true;
+        _http.Answer = p => p == "/locks"
+            ? Json(200, "[{\"_id\":\"lock1\",\"role\":\"wearer\",\"endDate\":\"" + ended + "\"}]")
+            : fail ? Json(503, "") : new HttpResponseMessage(HttpStatusCode.NoContent);
+        _options = _options with { RelockPastEnd = true };
+        using var service = Make();
+        service.NoteSeconds("watcher", 300);
+
+        Assert.Equal(SettleOutcome.TryLater, await service.SettleAsync());
+        Assert.Equal(SettleOutcome.TryLater, await service.SettleAsync());
+        fail = false;
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleAsync());
+
+        var pushes = _http.Seen.Where(s => s.Path.EndsWith("update-time")).ToList();
+        Assert.Equal(3, pushes.Count);
+        Assert.All(pushes, s => Assert.Contains("\"duration\":" + (18 * 60 + LockRelock.MarginSeconds + 300), s.Body));
+        Assert.Equal(18 * 60 + LockRelock.MarginSeconds + 300, service.AddedLifetimeSeconds);
+    }
+
+    [Fact]
+    public async Task A_catch_up_counts_against_the_days_push_ceiling()
+    {
+        var ended = _utc.AddMinutes(-10).ToString("o");
+        _http.Answer = p => p == "/locks"
+            ? Json(200, "[{\"_id\":\"lock1\",\"role\":\"wearer\",\"endDate\":\"" + ended + "\"}]")
+            : new HttpResponseMessage(HttpStatusCode.NoContent);
+        _options = _options with { RelockPastEnd = true, Limits = TabLimits.FromMinutes(15, 120) };
+        using var service = Make();
+        service.NoteSeconds("watcher", 900);
+
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleAsync());
+
+        var push = Assert.Single(_http.Seen, s => s.Path.EndsWith("update-time"));
+        // 15:00 a day in all: 10:30 catch-up leaves 4:30 for the price, the rest waits.
+        Assert.Contains("\"duration\":900", push.Body);
+        Assert.Equal(900 - 270, service.BalanceSeconds);
+        Assert.Equal(0, service.PushableTodaySeconds);
+    }
+
+    [Fact]
+    public async Task An_api_401_refreshes_once_and_keeps_the_link()
+    {
+        _http.RefreshIsReal = true;
+        var calls = 0;
+        _http.Answer = p => p == "/chaster/refresh"
+            ? Json(200, "{\"access_token\":\"NEW\",\"expires_in\":300}")
+            : ++calls == 1 ? Json(401, "") : new HttpResponseMessage(HttpStatusCode.NoContent);
+        using var service = Make();
+        service.NoteSeconds("watcher", 300);
+
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleAsync());
+        Assert.True(service.IsLinked);
+        Assert.Equal(new[] { "/locks/lock1/update-time", "/chaster/refresh", "/locks/lock1/update-time" }, _http.Seen.Select(s => s.Path));
+        Assert.Equal("NEW", _store.Tokens!.AccessToken);
+        Assert.Equal(0, service.BalanceSeconds);
+    }
+
+    [Fact]
+    public async Task An_api_that_keeps_answering_401_never_drops_the_link()
+    {
+        _http.RefreshIsReal = true;
+        _http.Answer = p => p == "/chaster/refresh"
+            ? Json(200, "{\"access_token\":\"NEW\",\"expires_in\":300}")
+            : Json(401, "");
+        using var service = Make();
+        service.NoteSeconds("watcher", 300);
+
+        Assert.Equal(SettleOutcome.TryLater, await service.SettleAsync());
+        Assert.True(service.IsLinked);
+        Assert.Equal(300, service.BalanceSeconds);
+        Assert.Null(await service.GetLocksAsync());
+        Assert.True(service.IsLinked);
+    }
+
+    [Fact]
+    public async Task A_refresh_that_lands_after_an_unlink_is_thrown_away()
+    {
+        _http.RefreshIsReal = true;
+        _http.HoldRefresh = new TaskCompletionSource();
+        _store.Tokens = new ChasterStoredTokens("OLD", "RT", _utc.AddSeconds(-5));
+        _http.Answer = p => p switch
+        {
+            "/chaster/refresh" => Json(200, "{\"access_token\":\"NEW\",\"refresh_token\":\"RT2\",\"expires_in\":300}"),
+            "/chaster/revoke" => Json(200, "{\"ok\":true}"),
+            _ => Json(200, "[]"),
+        };
+        using var service = Make();
+
+        var locks = service.GetLocksAsync();
+        await service.UnlinkAsync();
+        _http.HoldRefresh.SetResult();
+
+        Assert.Null(await locks);
+        Assert.False(service.IsLinked);
+        Assert.Null(_store.Tokens);
+        // Both grants are revoked: the one unlinked, and the one the late refresh minted.
+        await Task.Delay(50);
+        var revoked = _http.Seen.Where(s => s.Path == "/chaster/revoke").Select(s => s.Body).ToList();
+        Assert.Contains(revoked, b => b!.Contains("\"RT\""));
+        Assert.Contains(revoked, b => b!.Contains("\"RT2\""));
+    }
+
+    [Fact]
+    public async Task A_write_that_broke_mid_flight_keeps_its_pending_mark()
+    {
+        _http.Answer = _ => Json(502, "");
+        using var service = Make();
+        service.NoteSeconds("watcher", 300);
+
+        Assert.Equal(SettleOutcome.TryLater, await service.SettleAsync());
+        // Counted as landed on the next settle, never sent again.
+        _http.Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
+        Assert.Equal(SettleOutcome.Nothing, await service.SettleAsync());
+        Assert.Single(_http.Seen, s => s.Path.EndsWith("update-time"));
+        Assert.Equal(0, service.BalanceSeconds);
+    }
+
+    [Fact]
+    public void A_tab_file_is_clamped_when_it_is_read()
+    {
+        File.WriteAllText(Path.Combine(_dir, "tab.json"), "{\"balance\":99999999,\"pending\":-5,\"day_added\":-40}");
+        using var service = Make();
+
+        Assert.Equal(CircesTab.BacklogCapSeconds, service.BalanceSeconds);
     }
 
     [Theory]
@@ -557,7 +691,7 @@ public class ChasterServiceTests : IDisposable
 
         Assert.False(service.IsLinked);
         Assert.Equal("/chaster/revoke", _http.Seen.Single().Path);
-        Assert.Equal(15, service.BalanceSeconds);
+        Assert.Equal(30, service.BalanceSeconds);
         Assert.False(service.Note("typo").Booked);
     }
 

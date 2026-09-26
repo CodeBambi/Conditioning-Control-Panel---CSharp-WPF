@@ -131,13 +131,13 @@
                            Source="{Binding Source='🪞', Converter={StaticResource CmpEmojiToImage}}"/>
                     <TextBlock Text="{loc:Str companion_personality_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
-                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagStyle}">
+                <Border x:Name="PreviewTrainTag" Grid.Column="2" Style="{StaticResource CmpTrainTagStyle}">
                     <TextBlock Text="{loc:Str companion_tag_train3}" Style="{StaticResource CmpTrainTagTextStyle}"/>
                 </Border>
             </Grid>
 
             <!-- ========== interview spotlight ========== -->
-            <Grid Margin="0,13,0,14"
+            <Grid x:Name="InterviewSpotlight" Margin="0,13,0,14"
                   Visibility="{Binding IsInterviewed, Converter={StaticResource CmpBoolToVisInverse}}">
                 <Border x:Name="InterviewCard" Style="{StaticResource CmpZ4InterviewCardStyle}">
                     <Grid>

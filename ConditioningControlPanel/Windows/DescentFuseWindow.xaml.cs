@@ -165,8 +165,20 @@ namespace ConditioningControlPanel
         /// first tick), but an ignition firing while a slow catch-up is still fading absolutely
         /// can.</para>
         /// </summary>
+        /// <summary>THE CEREMONY IS OVER (owner, 6.11.0 desk pass: "the ceremony is over, we can disable
+        /// the animation with the cracked screen and the descent, it's done, might just confuse people
+        /// now"). Every show refuses to open; each caller already treats a null window as "nothing
+        /// played" (the catch-up and pre-zero holds are released, the ignition goes straight on). The
+        /// migration choice itself still opens for an account that never answered.</summary>
+        internal const bool ShowsRetired = true;
+
         public static DescentFuseWindow? Open(DescentShowKind kind)
         {
+            if (ShowsRetired)
+            {
+                Log.Information("[Fuse] The {Kind} show is retired (the ceremony is over) - not opening it.", kind);
+                return null;
+            }
             try
             {
                 var dispatcher = Application.Current?.Dispatcher;

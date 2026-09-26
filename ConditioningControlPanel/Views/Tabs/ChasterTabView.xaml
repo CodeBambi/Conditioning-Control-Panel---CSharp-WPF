@@ -493,19 +493,22 @@
                                     </StackPanel>
                                     <TextBlock x:Name="TxtHeroEnds" FontSize="13" Margin="0,2,0,0" Visibility="Collapsed"
                                                Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock x:Name="SetupHint" Visibility="Collapsed" FontSize="16" FontWeight="SemiBold"
+                                               Foreground="White" TextWrapping="Wrap" MaxWidth="480"
+                                               HorizontalAlignment="Left" Margin="0,8,0,12"/>
                                     <!-- the state pills: test lock, frozen, hidden, offline, no lock, on hold -->
                                     <WrapPanel x:Name="HeroPills" Margin="0,10,0,0"/>
                                     <!-- The pick. Nothing is pushed to a lock the player did not pick, so this
                                          shows whenever no pick matches an active lock; with one lock it is one tap. -->
                                     <Grid x:Name="LockRow" Margin="0,8,0,0" Visibility="Collapsed" HorizontalAlignment="Left">
-                                        <ComboBox x:Name="CmbLock" Style="{StaticResource DarkComboBoxStyle}" FontSize="12"
-                                                  Foreground="{DynamicResource TextLightBrush}" Width="240" MinHeight="30"
+                                        <ComboBox x:Name="CmbLock" FontSize="16"
+                                                  Foreground="Black" Background="White" Width="320" MinHeight="48"
                                                   SelectionChanged="CmbLock_SelectionChanged"/>
                                         <Border x:Name="UseLockPill" Visibility="Collapsed" BorderBrush="#99E0B052" BorderThickness="1.5"
-                                                CornerRadius="15" Height="30" Background="#26E0B052" ToolTip="{loc:Str chaster_lock_use_tip}">
-                                            <Button x:Name="BtnUseLock" Style="{StaticResource CirceLink}" Padding="14,0"
+                                                CornerRadius="12" MinHeight="48" Background="#E0B052" ToolTip="{loc:Str chaster_lock_use_tip}">
+                                            <Button x:Name="BtnUseLock" Style="{StaticResource CirceCta}" Padding="20,0" Height="48" Background="#E0B052"
                                                     VerticalAlignment="Center" Click="BtnUseLock_Click">
-                                                <TextBlock x:Name="TxtUseLock" FontSize="12" FontWeight="SemiBold" Foreground="#E0B052"/>
+                                                <TextBlock x:Name="TxtUseLock" FontSize="16" FontWeight="Bold" Foreground="#21152E"/>
                                             </Button>
                                         </Border>
                                     </Grid>
@@ -611,6 +614,59 @@
                             <ctrl:ChasterReceiptView x:Name="Receipt" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                         </Border>
 
+                        <!-- ================= THE HEADS-UP CLOCK: what CCP added, and the raffle card =================
+                             Added only, lifetime, as this PC counted it. Hover the clock (or click to pin) and the
+                             player's own Locktober raffle card unrolls under it; its days and total are read off
+                             Chaster by the server, never off this number. All the code is in ChasterTabView.Ladder.cs. -->
+                        <Border x:Name="AddedCard" Style="{StaticResource CirceCard}" Margin="0,0,0,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="AddedClock" Grid.Column="0" Cursor="Hand" Background="#22FF6B8A" BorderBrush="#88FF6B8A"
+                                        BorderThickness="1.5" CornerRadius="14" Padding="14,6,12,6" RenderTransformOrigin="0.5,0.5"
+                                        VerticalAlignment="Center" ToolTip="{loc:Str chaster_added_hint}"
+                                        MouseEnter="AddedClock_MouseEnter" MouseLeave="AddedClock_MouseLeave"
+                                        MouseLeftButtonUp="AddedClock_Click">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="AddedClockScale"/>
+                                    </Border.RenderTransform>
+                                    <StackPanel Orientation="Horizontal">
+                                        <!-- a stopwatch: ring, crown, one hand the code turns -->
+                                        <Grid Width="26" Height="30" VerticalAlignment="Center" Margin="0,0,10,0">
+                                            <Rectangle Width="8" Height="4" RadiusX="1.5" RadiusY="1.5" Fill="#FFFF6B8A" VerticalAlignment="Top" HorizontalAlignment="Center"/>
+                                            <Ellipse Width="24" Height="24" Stroke="#FFFF6B8A" StrokeThickness="2.5" VerticalAlignment="Bottom"/>
+                                            <Rectangle Width="2.5" Height="9" RadiusX="1" RadiusY="1" Fill="#FFFFC0CB" VerticalAlignment="Bottom"
+                                                       HorizontalAlignment="Center" Margin="0,0,0,12" RenderTransformOrigin="0.5,1">
+                                                <Rectangle.RenderTransform>
+                                                    <RotateTransform x:Name="AddedClockHand"/>
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                        </Grid>
+                                        <TextBlock x:Name="TxtAddedClock" Text="0:00:00" FontFamily="Consolas, Courier New" FontSize="30"
+                                                   FontWeight="Bold" Foreground="#FFFF6B8A" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtAddedChevron" Text="&#x25BE;" FontSize="14" Margin="10,0,0,0" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextMutedBrush}" RenderTransformOrigin="0.5,0.5"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="16,0,12,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str chaster_added_title}" Style="{StaticResource CirceEyebrow}"/>
+                                    <TextBlock x:Name="TxtAddedMonth" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="15" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextLightBrush}" Margin="0,2,0,0"/>
+                                    <TextBlock Text="{loc:Str chaster_added_note}" Style="{StaticResource CirceSub}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str chaster_raffle_post_days}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" ToolTip="{loc:Str chaster_raffle_post_days_tip}"/>
+                                    <CheckBox x:Name="ChkRafflePost" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              ToolTip="{loc:Str chaster_raffle_post_days_tip}"
+                                              Checked="ChkRafflePost_Changed" Unchecked="ChkRafflePost_Changed"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
                         <!-- The first switch-on, and only the first: four facts, one button. -->
                         <Border x:Name="ConsentCard" Visibility="Collapsed" Style="{StaticResource CirceCard}"
                                 BorderBrush="#FF6B8A" BorderThickness="1.5" Margin="0,0,0,14">
@@ -653,15 +709,30 @@
                         <UniformGrid x:Name="PresetRow" Columns="4" Margin="0,0,-12,0">
                             <ToggleButton x:Name="BtnPresetGentle" Style="{StaticResource CirceKey}" Tag="gentle" Click="Preset_Click"
                                           ToolTip="{loc:Str chaster_preset_gentle_hint}">
-                                <TextBlock Text="{loc:Str chaster_preset_gentle}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"/>
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="{loc:Str chaster_preset_gentle}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtStakesGentle" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" Opacity="0.7"
+                                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                </StackPanel>
                             </ToggleButton>
                             <ToggleButton x:Name="BtnPresetStrict" Style="{StaticResource CirceKey}" Tag="strict" Click="Preset_Click"
                                           ToolTip="{loc:Str chaster_preset_strict_hint}">
-                                <TextBlock Text="{loc:Str chaster_preset_strict}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"/>
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="{loc:Str chaster_preset_strict}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtStakesStrict" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" Opacity="0.7"
+                                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                </StackPanel>
                             </ToggleButton>
                             <ToggleButton x:Name="BtnPresetCirce" Style="{StaticResource CirceKey}" Tag="circe" Click="Preset_Click"
                                           ToolTip="{loc:Str chaster_preset_circe_hint}">
-                                <TextBlock Text="{loc:Str chaster_preset_circe}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"/>
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="{loc:Str chaster_preset_circe}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtStakesCirce" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="12" Opacity="0.7"
+                                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                </StackPanel>
                             </ToggleButton>
                             <!-- The fourth key is the player's own mix: it lights whenever the boards match no
                                  preset, and pressing it changes nothing. -->
@@ -805,6 +876,10 @@
              sits under the browser as its loading frame and as the fallback when there is no
              runtime. The figure, the badge and the two lines live BELOW the plate, where the
              browser's airspace cannot swallow them. -->
+        <!-- A loaded, hidden host lets WebView2 initialize before the first hover. -->
+        <Grid x:Name="TrailerWarmHost" Width="320" Height="190" Visibility="Hidden" IsHitTestVisible="False">
+            <ctrl:ChasterTrailerView x:Name="TrailerWeb"/>
+        </Grid>
         <Popup x:Name="Trailer" AllowsTransparency="False" Placement="Bottom" VerticalOffset="6" PopupAnimation="None"
                StaysOpen="True" MouseEnter="Trailer_MouseEnter" MouseLeave="Trailer_MouseLeave">
             <Border x:Name="TrailerCard" Width="320" Background="#FF1A1230" BorderBrush="{DynamicResource GlassBorderBrush}"
@@ -824,7 +899,7 @@
                                     </Image.RenderTransform>
                                 </Image>
                             </Border>
-                            <ctrl:ChasterTrailerView x:Name="TrailerWeb" Visibility="Collapsed"/>
+
                         </Grid>
                         <Grid Margin="6,8,6,0">
                             <Grid.ColumnDefinitions>
@@ -847,6 +922,51 @@
                         </Grid>
                     </StackPanel>
                 </AdornerDecorator>
+            </Border>
+        </Popup>
+
+        <!-- ================= THE RAFFLE CARD: unrolls under the heads-up clock =================
+             The player's own card, never anyone else's (owner, 2026-09-26: a raffle, not a board).
+             Hover opens it (StaysOpen, no mouse capture), a click on the clock pins it, a click
+             anywhere else or the app losing focus closes a pinned one. Drawn in ChasterTabView.Ladder.cs. -->
+        <Popup x:Name="LadderPopup" AllowsTransparency="True" Placement="Bottom" VerticalOffset="8" PopupAnimation="None"
+               StaysOpen="True" MouseEnter="LadderPopup_MouseEnter" MouseLeave="LadderPopup_MouseLeave" Opened="LadderPopup_Opened">
+            <Border x:Name="LadderCard" Width="360" Background="#F7201636" BorderBrush="#88FF6B8A" BorderThickness="1.5"
+                    CornerRadius="16" Padding="14,12,14,12" RenderTransformOrigin="0.5,0">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="LadderUnroll"/>
+                </Border.RenderTransform>
+                <StackPanel>
+                    <Grid Margin="2,0,0,8">
+                        <TextBlock Text="{loc:Str chaster_raffle_title}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
+                                   Foreground="#FFF3EAF7"/>
+                        <TextBlock x:Name="TxtRaffleDay" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
+                                   FontWeight="SemiBold" Foreground="#FFC9B8D8"/>
+                    </Grid>
+                    <StackPanel x:Name="LadderRows">
+                        <!-- one pip a day of the month: lit = a day CCP's add counted -->
+                        <WrapPanel x:Name="RafflePips" Margin="0,0,0,10"/>
+                        <Grid Margin="0,0,0,2">
+                            <TextBlock x:Name="TxtRaffleDays" FontSize="13" Foreground="#FFF3EAF7"/>
+                            <TextBlock x:Name="TxtRaffleTotal" HorizontalAlignment="Right" FontFamily="Consolas, Courier New" FontSize="13"
+                                       FontWeight="Bold" Foreground="#FFFF6B8A"/>
+                        </Grid>
+                        <Border x:Name="RaffleStatusChip" CornerRadius="10" Padding="10,5,10,5" Margin="0,8,0,0" HorizontalAlignment="Left">
+                            <TextBlock x:Name="TxtRaffleStatus" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="14" FontWeight="SemiBold"/>
+                        </Border>
+                        <TextBlock x:Name="TxtRaffleTicketOn" FontSize="12" Foreground="#FFC9B8D8" Margin="2,4,0,0" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtLadderState" FontSize="12" Foreground="#FFC9B8D8" Margin="2,6,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+                    <TextBlock Text="{loc:Str chaster_added_note}" FontSize="11" Foreground="#FFA898B8" Margin="2,10,0,0" TextWrapping="Wrap"/>
+                    <Grid Margin="2,2,0,0">
+                        <TextBlock Text="{loc:Str chaster_raffle_rule}" FontSize="11" Foreground="#FFA898B8" TextWrapping="Wrap" Margin="0,0,48,0"/>
+                        <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom" FontSize="11">
+                            <Hyperlink x:Name="LnkRaffleRules" Foreground="#FFFF9BB0" Click="LnkRaffleRules_Click">
+                                <Run Text="{loc:Str chaster_raffle_rules}"/>
+                            </Hyperlink>
+                        </TextBlock>
+                    </Grid>
+                </StackPanel>
             </Border>
         </Popup>
 

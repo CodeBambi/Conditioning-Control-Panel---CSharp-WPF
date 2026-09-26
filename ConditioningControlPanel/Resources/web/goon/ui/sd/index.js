@@ -21,6 +21,7 @@
  * ==========================================================================*/
 
 import { GoonRoundKind } from '../../core/contracts.js';
+import { S } from '../strings.js';
 import { createEmitter } from '../../core/rounds/model.js';
 import { createIntro, ROUND_COPY } from './intro.js';
 import { createVerdict } from './verdict.js';
@@ -151,7 +152,7 @@ export function createSuddenDeathUi({ audio = null, getClock = null, onLog = nul
     screenRoot = el('div', 'gg-sd');
     if (!screenRoot) return null;
 
-    roundLabel = add(screenRoot, el('div', 'gg-sd-round', 'sudden death'));
+    roundLabel = add(screenRoot, el('div', 'gg-sd-round', S.sd.title));
     ladder = add(screenRoot, el('div', 'gg-sd-track'));
     notches = [];
     for (let v = NET_MIN; v <= NET_MAX; v++) {
@@ -161,7 +162,7 @@ export function createSuddenDeathUi({ audio = null, getClock = null, onLog = nul
       notches.push(notch);
     }
     marker = add(ladder, el('b', 'gg-sd-marker'));
-    add(screenRoot, el('div', 'gg-sd-track-label', 'three clear rounds ends it.'));
+    add(screenRoot, el('div', 'gg-sd-track-label', S.sd.track));
 
     if (host) add(host, screenRoot);
     else if (doc() && doc().body) add(doc().body, screenRoot);
@@ -197,8 +198,8 @@ export function createSuddenDeathUi({ audio = null, getClock = null, onLog = nul
 
   function setRoundLabel(roundNo, kind) {
     ensureScreen();
-    const copy = ROUND_COPY[kind] || { title: 'round' };
-    text(roundLabel, 'round ' + Math.max(1, roundNo | 0) + ' · ' + copy.title);
+    const copy = ROUND_COPY[kind] || { title: S.sd.roundFallback };
+    text(roundLabel, S.sd.round(Math.max(1, roundNo | 0), copy.title));
   }
 
   function sfx(id) {

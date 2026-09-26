@@ -49,7 +49,9 @@ import { GoonConnectionHealth } from '../core/match.js';
 import { GoonConsts, GoonElement, GoonMatchPhase, GoonPayloadKind, enumName } from '../core/contracts.js';
 import { GoonReceiptStatus } from '../core/scoring.js';
 import { S } from './strings.js';
+import { emoteLine } from './emotes.js';
 import { createPreview, stickerUrl, markFor, throwWord, warmSticker } from './throwPreview.js';
+import { popIn, popOut, squash, shake, impactMark } from './juiceDom.js';
 
 /** Closeness 0-3 -> the word that always rides with the colour. */
 export const CLOSENESS_WORDS = Object.freeze(['steady', 'warm', 'close', 'edge']);
@@ -482,7 +484,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
   // look draggable, which is half of why this went unnoticed for a whole batch.
   add(head, el('i', 'gg-mon-grip-dots'));
   const dot = add(head, el('i', 'gg-mon-dot'));
-  const nameEl = add(head, el('span', 'gg-mon-name', 'opponent'));
+  const nameEl = add(head, el('span', 'gg-mon-name', S.opponent.name));
   const scoreEl = add(head, el('span', 'gg-mon-score', '0'));
 
   // ---- the screen inside the bezel ---------------------------------------
@@ -527,10 +529,11 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     if (m.key === 'Videos') {
       for (let i = 0; i < 3; i++) add(node, el('i', 'gg-mini-bar'));
       add(node, el('i', 'gg-mini-scan'));
+      add(node, el('i', 'gg-mini-record'));
     }
     if (m.key === 'Spiral') add(node, el('i', 'gg-mini-spiral-disc'));
     if (m.key === 'Subliminals') add(node, el('span', 'gg-mini-line', 'deeper'));
-    if (m.key === 'BouncingText') add(node, el('span', 'gg-mini-word', 'good girl'));
+    if (m.key === 'BouncingText') add(node, el('span', 'gg-mini-word', 'good pet'));
     if (m.key === 'LockCards') {
       const card = add(node, el('div', 'gg-mini-card'));
       for (let i = 0; i < 3; i++) add(card, el('i', 'gg-mini-scribble'));
@@ -583,19 +586,19 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
   // ---- attention slim bar ------------------------------------------------
   const attWrap = add(root, el('div', 'gg-mon-att'));
   const attFill = add(attWrap, el('i', 'gg-mon-att-fill'));
-  const attLabel = add(root, el('div', 'gg-mon-att-label', 'their focus 100%'));
+  const attLabel = add(root, el('div', 'gg-mon-att-label', S.opponent.focus(100)));
 
   // ---- the closeness gauge: what they CLAIM -------------------------------
   const gauge = add(root, el('div', 'gg-mon-close'));
-  const gaugeLabel = add(gauge, el('div', 'gg-mon-close-label', 'they claim'));
+  const gaugeLabel = add(gauge, el('div', 'gg-mon-close-label', S.opponent.claim));
   const segRow = add(gauge, el('div', 'gg-mon-close-segs'));
   const segs = [];
   for (let i = 0; i < 4; i++) segs.push(add(segRow, el('i', 'gg-mon-close-seg')));
-  const gaugeWord = add(gauge, el('div', 'gg-mon-close-word', 'unknown'));
+  const gaugeWord = add(gauge, el('div', 'gg-mon-close-word', S.opponent.unknown));
 
   // ---- abandon countdown / connection word -------------------------------
   const foot = add(root, el('div', 'gg-mon-foot'));
-  const connWord = add(foot, el('span', 'gg-mon-conn', 'live'));
+  const connWord = add(foot, el('span', 'gg-mon-conn', S.opponent.live));
   const abandonEl = add(foot, el('span', 'gg-mon-abandon'));
   if (abandonEl) abandonEl.hidden = true;
 
@@ -606,6 +609,9 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
   let lastCloseness = null;
   let lastHealth = GoonConnectionHealth.Fresh;
   let emoteTimer = 0;
+  let emoteSeq = 0;
+  // A finished pop-out holds its end frame (fill forwards); drop it once hidden or re-shown.
+  const stopBubbleAnims = () => { try { for (const a of bubble.getAnimations()) a.cancel(); } catch (_e) { /* no WAAPI */ } };
   let passTimer = 0;
   let lastEmoteMarkAt = -Infinity;
   let lastEmoteMarkKey = null;
@@ -708,9 +714,11 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     for (let i = 0; i < segs.length; i++) cls(segs[i], 'is-lit', known && i <= v);
     cls(gauge, 'is-edge', known && v === 3);
     gauge && gauge.setAttribute && gauge.setAttribute('data-gg-close', known ? String(v) : 'none');
-    text(gaugeWord, known ? CLOSENESS_WORDS[v] : 'no word yet');
+    text(gaugeWord, known ? (S.closeness.stops[v] || CLOSENESS_WORDS[v]) : S.opponent.noWord);
 
     if (known && v !== lastCloseness) {
+      // The segment that just lit gives a small press; a step down gives nothing.
+      if (lastCloseness !== null && v > lastCloseness && segs[v]) squash(segs[v], { amount: 0.18, ms: 240 });
       const runIt = () => {
         cls(gauge, 'is-sweep', true);
         setTimeout(() => cls(gauge, 'is-sweep', false), 320);
@@ -729,7 +737,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     if (!op) return;
     const p = stalePrefix();
 
-    text(nameEl, op.displayName || 'opponent');
+    text(nameEl, op.displayName || S.opponent.name);
     // The stale prefix rides on their score and their focus. It rode on their
     // charge count too until that readout came out (2026-08-05).
     text(scoreEl, p + String(op.score | 0));
@@ -737,7 +745,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     const pct = Math.max(0, Math.min(100, Number(op.attentionPct) || 0));
     if (attFill && attFill.style) attFill.style.width = pct + '%';
     cls(attWrap, 'is-low', pct < 50);
-    text(attLabel, 'their focus ' + p + Math.round(pct) + '%');
+    text(attLabel, S.opponent.focus(p + Math.round(pct)));
 
     paintCloseness(op);
     paintHealth(op);
@@ -749,7 +757,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     cls(root, 'is-gone', h === GoonConnectionHealth.Dead);
     cls(dot, 'is-wobbly', h === GoonConnectionHealth.Wobbly);
     cls(dot, 'is-gone', h === GoonConnectionHealth.Dead);
-    text(connWord, h === GoonConnectionHealth.Fresh ? 'live' : h === GoonConnectionHealth.Wobbly ? 'wobbly' : 'gone');
+    text(connWord, h === GoonConnectionHealth.Fresh ? S.opponent.live : h === GoonConnectionHealth.Wobbly ? S.opponent.wobbly : S.opponent.gone);
 
     // Once their ticks go stale the engine is already counting toward an abandon
     // at GoonConsts.TickDeadMs. Show the same clock rather than a silent freeze.
@@ -760,7 +768,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     }
     if (abandonEl) {
       abandonEl.hidden = h === GoonConnectionHealth.Fresh;
-      if (!abandonEl.hidden) text(abandonEl, secs > 0 ? 'abandon in ' + secs + 's' : 'abandoned');
+      if (!abandonEl.hidden) text(abandonEl, secs > 0 ? S.opponent.abandonIn(secs) : S.opponent.abandoned);
     }
   }
 
@@ -831,13 +839,18 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     if (!bubble) return;
     text(bubbleIcon, icon || '');
     text(bubbleText, msg || '');
+    const wasUp = !bubble.hidden;
     bubble.hidden = false;
     cls(bubble, 'is-in', true);
+    // IN: a THUD pop from the speaker's corner; a second emote on top of the first squashes
+    // instead, so a spam never restarts the entrance. OUT: shrink back down, then hide.
+    if (wasUp) squash(bubble, { amount: 0.08 }); else { stopBubbleAnims(); popIn(bubble, { from: 0.7 }); }
     sfx(audio, 'gg-emote');
     try { clearTimeout(emoteTimer); } catch (_e) { /* gone */ }
+    const shownAt = ++emoteSeq;
     emoteTimer = setTimeout(() => {
       cls(bubble, 'is-in', false);
-      bubble.hidden = true;
+      popOut(bubble, { dy: 6, to: 0.85 }).then(() => { if (shownAt === emoteSeq) { bubble.hidden = true; stopBubbleAnims(); } });
     }, EMOTE_MS);
     led.add(() => { try { clearTimeout(emoteTimer); } catch (_e) { /* gone */ } });
   }
@@ -861,6 +874,8 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     const w = windows.get(id);
     if (!w) return;
     for (const t of w.timers) { try { clearTimeout(t); } catch (_e) { /* gone */ } }
+    w.preview?.destroy();
+    try { w.preview?.node.remove(); } catch (_e) { /* already removed */ }
     windows.delete(id);
     paint();
   }
@@ -884,6 +899,16 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
       const cur = windows.get(id);
       if (!cur) return;
       cur.open = true;
+      if (kind === GoonPayloadKind.FlashBurst || kind === GoonPayloadKind.Video) {
+        // One decoder per media kind. A newer throw replaces the older preview.
+        for (const other of windows.values()) {
+          if (other !== cur && other.key === key && other.preview) {
+            other.preview.destroy(); other.preview.node.remove(); other.preview = null;
+          }
+        }
+        cur.preview = createPreview({ kind, gifClip: kind === GoonPayloadKind.FlashBurst, sampleMs: kind === GoonPayloadKind.Video ? 2000 : 0, cls: 'gg-mon-media' });
+        if (cur.preview) add(parts.get(key), cur.preview.node);
+      }
       paint();
     }));
     w.timers.push(laterOnce(Math.max(0, leadMs | 0) + run, () => closeWindow(id)));
@@ -927,7 +952,8 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     // Both of these are OUR OWN canned strings, but they go through textContent
     // for the same reason everything else on this monitor does.
     text(emoteIconEl, glyph || (line ? '' : '💬'));
-    text(emoteTextEl, line.length > EMOTE_MINI_TEXT_MAX ? line.slice(0, EMOTE_MINI_TEXT_MAX - 1) + '…' : line);
+    const shown = emoteLine(line);
+    text(emoteTextEl, shown.length > EMOTE_MINI_TEXT_MAX ? shown.slice(0, EMOTE_MINI_TEXT_MAX - 1) + '…' : shown);
 
     const lost = health() === GoonConnectionHealth.Dead;
     cls(node, 'is-lost', lost);
@@ -1143,6 +1169,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
 
   function throwAtUs(kind, payload, flightMs) {
     flareMonitor(markFor(kind).tint);
+    sfx(audio, 'throw-flight');
     // Reduced motion: the highlight IS the feedback. Nothing travels, and the
     // `payload-in` cue still lands on the beat it always did.
     if (isCalm()) return;
@@ -1157,6 +1184,10 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
       const tint = rec.tint;
       dropFlight(rec);
       splash(at, tint);
+      impactMark(at.x, at.y, { ...markFor(kind), incoming: true });
+      const d = doc();
+      shake(d?.getElementById?.('gg-fx'), 3);
+      shake(d?.getElementById?.('gg-stage'), 3);
     }));
   }
 

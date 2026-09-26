@@ -186,7 +186,7 @@ namespace ConditioningControlPanel
             {
                 CmbPresets.Items.Add(new ComboBoxItem
                 {
-                    Content = App.Mods?.MakeModAware(preset.Name) ?? preset.Name,
+                    Content = Services.PresetNaming.DisplayName(preset),
                     Tag = preset.Id,
                     Foreground = new SolidColorBrush(Color.FromRgb(224, 224, 224)) // Light gray #E0E0E0
                 });
@@ -244,7 +244,7 @@ namespace ConditioningControlPanel
             if (preset != null)
             {
                 var result = MessageBox.Show(
-                    $"Load preset '{preset.Name}'?\n\nThis will replace your current settings.",
+                    $"Load preset '{Services.PresetNaming.DisplayName(preset)}'?\n\nThis will replace your current settings.",
                     "Load Preset",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
@@ -314,7 +314,7 @@ namespace ConditioningControlPanel
             if (PresetsTab?.PresetDetailScroller?.Visibility != Visibility.Visible) return;
 
             if (PresetsTab.TxtDetailTitle != null)
-                PresetsTab.TxtDetailTitle.Text = App.Mods?.MakeModAware(_selectedPreset.Name) ?? _selectedPreset.Name;
+                PresetsTab.TxtDetailTitle.Text = Services.PresetNaming.DisplayName(_selectedPreset);
             if (PresetsTab.TxtDetailSubtitle != null)
                 PresetsTab.TxtDetailSubtitle.Text = App.Mods?.MakeModAware(_selectedPreset.Description) ?? _selectedPreset.Description;
         }
@@ -383,7 +383,7 @@ namespace ConditioningControlPanel
 
             var nameText = new TextBlock
             {
-                Text = App.Mods?.MakeModAware(preset.Name) ?? preset.Name,
+                Text = Services.PresetNaming.DisplayName(preset),
                 // A cap, not a width: short names keep short chips. Without it a long custom name
                 // would make one chip as wide as the rail and wrap everything after it.
                 MaxWidth = 150,
@@ -477,7 +477,7 @@ namespace ConditioningControlPanel
             PresetsTab.SessionButtonsPanel.Visibility = Visibility.Collapsed;
             
             // Update detail panel
-            PresetsTab.TxtDetailTitle.Text = App.Mods?.MakeModAware(preset.Name) ?? preset.Name;
+            PresetsTab.TxtDetailTitle.Text = Services.PresetNaming.DisplayName(preset);
             PresetsTab.TxtDetailSubtitle.Text = App.Mods?.MakeModAware(preset.Description) ?? preset.Description;
             
             PresetsTab.TxtDetailFlash.Text = preset.FlashEnabled
@@ -1311,6 +1311,7 @@ namespace ConditioningControlPanel
         {
             var dash = SettingsTab;
             if (dash == null) return;
+            dash.RefreshClickPreference();
             var show = Services.DashboardToggleHintRule.ShouldShow(App.Settings?.Current?.DashboardToggleHintUses ?? 0);
             var v = show ? Visibility.Visible : Visibility.Collapsed;
             if (dash.DashToggleHint != null) dash.DashToggleHint.Visibility = v;
@@ -1570,7 +1571,7 @@ namespace ConditioningControlPanel
             if (_selectedSession == null || !_selectedSession.IsAvailable) return;
 
             var confirmed = ShowStyledDialog(
-                $"🌅 Start {_selectedSession.Name}?",
+                $"🌅 Start {_selectedSession.GetModeAwareName()}?",
                 $"Duration: {_selectedSession.DurationMinutes} minutes\n\n" +
                 "Your current settings will be temporarily replaced.\n" +
                 "They will be restored when the session ends." +
@@ -1641,6 +1642,7 @@ namespace ConditioningControlPanel
             // Release the controller-owned-run marker (MainWindow.RemoteControl.cs). Hygiene only —
             // IsSessionRemoteStarted already reads false once the engine stops.
             _remoteStartedSession = null;
+            try { Services.Companion.Asks.CompanionAskService.Instance.NoteFinished(e.Session.GetModeAwareName()); } catch { }
             Dispatcher.Invoke(() =>
             {
                 // Award XP. The completion dialog is shown from OnSessionLogReady,
@@ -2006,7 +2008,7 @@ namespace ConditioningControlPanel
 
             var confirmed = ShowStyledDialog(
                 Loc.Get("title_stop_session_confirm"),
-                Loc.GetF("msg_stop_session_body", session?.Icon, session?.Name,
+                Loc.GetF("msg_stop_session_body", session?.Icon, session?.GetModeAwareName(),
                     $"{((int)elapsed.TotalMinutes):D2}:{elapsed.Seconds:D2}",
                     $"{((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}",
                     potentialXP, penaltyText),
@@ -2172,7 +2174,28 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void LoadPreset(Models.Preset preset)
+        /// <summary>
+        /// The per-mod defaults picked in the Customise window, applied on every switch to
+        /// <paramref name="modId"/>. Only the user's stored choice applies (ModPresetDefaults);
+        /// assets go through the one asset apply path, settings through LoadPreset (session-lock
+        /// guard included), quietly, since a mod switch is not the moment for a "loaded" box.
+        /// </summary>
+        internal void ApplyModDefaultPresets(string? modId)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            var assetId = Services.ModPresetDefaults.ForActivation(s.ModDefaultAssetPreset, modId);
+            if (assetId != null && Services.AssetPresetService.Find(s.AssetPresets, assetId) != null)
+                ApplyAssetPresetFromLauncher(assetId);
+
+            var settingsId = Services.ModPresetDefaults.ForActivation(s.ModDefaultSettingsPreset, modId);
+            var preset = settingsId == null ? null
+                : Models.Preset.GetDefaultPresets().Concat(s.UserPresets).FirstOrDefault(p => p.Id == settingsId);
+            if (preset != null) LoadPreset(preset, quiet: true);
+        }
+
+        private void LoadPreset(Models.Preset preset, bool quiet = false)
         {
             // The chokepoint: Preset.ApplyTo overwrites ~40 of the fields a running session
             // prescribes, so applying a preset mid-session discards the dose wholesale. Guarded
@@ -2194,7 +2217,8 @@ namespace ConditioningControlPanel
             RefreshPresetsDropdown();
 
             App.Logger?.Information("Loaded preset: {Name}", preset.Name);
-            MessageBox.Show(Loc.GetF("msg_preset_0_loaded", preset.Name), Loc.Get("title_preset_loaded"),
+            if (quiet) return;
+            MessageBox.Show(Loc.GetF("msg_preset_0_loaded", Services.PresetNaming.DisplayName(preset)), Loc.Get("title_preset_loaded"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
@@ -2242,7 +2266,7 @@ namespace ConditioningControlPanel
             if (RefuseActionIfSessionLocked("load-preset-click")) return;
 
             var result = MessageBox.Show(
-                Loc.GetF("msg_load_preset_confirm_0", _selectedPreset.Name),
+                Loc.GetF("msg_load_preset_confirm_0", Services.PresetNaming.DisplayName(_selectedPreset)),
                 Loc.Get("title_load_preset"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);

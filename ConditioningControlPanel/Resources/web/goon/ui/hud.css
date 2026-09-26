@@ -2888,3 +2888,43 @@ html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
   .gg-ava-dm { min-width: 30px; height: 24px; font-size: 0.58rem; }
 }
 
+
+/* GAME NIGHT: the song bar. With a song picked the timer's track is the song,
+   start to game over: a touch thicker and warmer, still the only bar. */
+.gg-timer.is-song .gg-timer-track { height: 4px; }
+.gg-timer.is-song .gg-timer-fill { background: linear-gradient(90deg, #b388ff, var(--gg-pink)); box-shadow: 0 0 8px rgba(255, 105, 180, 0.55); }
+
+/* Compact rack under the opponent TV. Keep every control a usable target. */
+.gg-hud-body { grid-template-columns: minmax(0, 1fr) auto; }
+.gg-rightcol > .gg-arsenal {
+  position: static; inset: auto; width: min(100%, 264px);
+  flex-direction: column; align-items: stretch; gap: .2rem;
+  --gg-item: 48px;
+}
+.gg-rightcol .gg-arsenal-panel { padding: .3rem; max-height: none; gap: .25rem; }
+.gg-rightcol .gg-arsenal-rails { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .15rem; }
+.gg-rightcol .gg-arsenal-rails > .gg-rail { display: contents; }
+.gg-rightcol .gg-item { width: 100%; min-height: 48px; padding: .1rem; }
+.gg-rightcol .gg-item-img, .gg-rightcol .gg-item-fallback { width: 36px; max-width: 100%; }
+.gg-rightcol .gg-arsenal-tab { width: 100%; min-height: 28px; flex-direction: row; }
+.gg-rightcol .gg-item-tip { right: 0; left: auto; }
+@media (max-width: 700px) {
+  .gg-hud-body { grid-template-columns: minmax(0, 1fr); }
+  .gg-rightcol > .gg-arsenal { width: min(100%, 208px); }
+  .gg-rightcol .gg-arsenal-tab { min-height: 44px; }
+}
+
+/* Actual session media inside the TV. Decoration remains only until decode. */
+.gg-mon-media { position: absolute; inset: 8% 12%; width: 76%; height: 84%; object-fit: cover; border-radius: 3px; opacity: 0; pointer-events: none; }
+.gg-mon-media.is-ready { opacity: 1; }
+.gg-mini-flash:has(.gg-mon-media.is-ready) .gg-mini-shard { visibility: hidden; }
+
+.gg-mini-video:has(.gg-mon-media.is-ready) .gg-mini-bar,
+.gg-mini-video:has(.gg-mon-media.is-ready) .gg-mini-scan { visibility: hidden; }
+.gg-mini-record { position: absolute; right: 7%; top: 7%; width: 7px; height: 7px; border-radius: 50%; background: #ff304b; box-shadow: 0 0 7px #ff304b; z-index: 2; }
+
+.gg-drop-fly.gg-drop-item { width: 42px; height: 42px; object-fit: contain; margin: -21px; border-radius: 0; background: none; box-shadow: none; filter: drop-shadow(0 0 9px #ffbb66); transition: none; }
+
+.gg-impact-mark { position: absolute; width: 56px; height: 56px; display: grid; place-items: center; margin: 0; border: 2px solid rgba(var(--gg-impact-tint), .85); border-radius: 50%; color: rgb(var(--gg-impact-tint)); background: rgba(18, 6, 30, .7); box-shadow: 0 0 22px rgba(var(--gg-impact-tint), .5); font: 800 28px/1 system-ui; pointer-events: none; transform: translate(-50%, -50%); }
+.gg-impact-mark::after { content: ''; position: absolute; inset: -10px; border: 1px solid rgba(var(--gg-impact-tint), .5); border-radius: inherit; }
+.gg-impact-mark.is-incoming { width: 70px; height: 70px; font-size: 34px; }

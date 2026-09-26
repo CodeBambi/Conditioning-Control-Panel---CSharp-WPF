@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Tests;
 /// online pill. The drawer is realized on the shared STA thread; nothing touches the network.
 /// </summary>
 [Collection(CompanionWpfRenderCollection.Name)]
-public class FriendsDrawerTests
+public partial class FriendsDrawerTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 

@@ -111,18 +111,18 @@ public partial class EmiDeskWindow
         },
         BodyFrame: "idle");
 
-    /// <summary>The second poke inside the window. The pet flick, wearing a look.</summary>
+    /// <summary>The fourth poke inside the window. The pet flick, wearing a look.</summary>
     private static readonly EmiChain PokeAnnoyChain = new(
-        "pokeAnnoy", "POKE 2 (annoyed)",
+        "pokeAnnoy", "POKE 4 (annoyed)",
         new[] { new EmiFrame(EmiAlive.PokeAnnoyFace, 700), new EmiFrame(EmiChains.RestFace, 180) },
         BodyFrame: "idle");
 
     /// <summary>
-    /// The third. The canon <c>rage</c> frames and then the glare, held, and WORDLESS: she does not
+    /// The fifth. The canon <c>rage</c> frames and then the glare, held, and WORDLESS: she does not
     /// tell you off, which is funnier and keeps the line engine out of a gesture.
     /// </summary>
     private static readonly EmiChain PokeRageChain = new(
-        "pokeRage", "POKE 3 (rage)",
+        "pokeRage", "POKE 5 (rage)",
         new[]
         {
             new EmiFrame(">.<", 200), new EmiFrame(">_<", 200), new EmiFrame(">.<", 200),
@@ -156,7 +156,7 @@ public partial class EmiDeskWindow
     {
         try
         {
-            if (_closingForGood) return;
+            if (PresentationActive || _closingForGood) return;
             StopAlive();
 
             _aliveLastTick = DateTime.MinValue;
@@ -771,6 +771,10 @@ public partial class EmiDeskWindow
                 break;
             case EmiPokeStep.Annoyed:
                 PlayChain(PokeAnnoyChain);
+                break;
+            case EmiPokeStep.Glee:
+                EmiSfx.Chime();
+                PlayChain("petStreak");
                 break;
             default:
                 PlayChain(PetFlickChain);

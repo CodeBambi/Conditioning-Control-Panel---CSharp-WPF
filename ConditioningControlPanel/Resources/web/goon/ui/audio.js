@@ -103,6 +103,7 @@ import {
 // writer for every such pref). This tier only needs to be able to answer with
 // the same number — see mediaVolume() on the api.
 import { mediaGain } from './prefs.js';
+import { pentaHz, rungGain, ROOT_HZ } from './juice.js';
 
 /* ----------------------------------------------------------------------------
  * URL RESOLUTION — pure, exported, and testable without a network.
@@ -155,7 +156,10 @@ export const DEFAULT_SFX_BUS = BUS_GAME;
  * the section headers are executable instead of decorative and a cue cannot be
  * pasted into the wrong section and still sound like the section it landed in.
  * -------------------------------------------------------------------------- */
-const D = dtrhSfxUrl;
+// DtRH cues are COPIED in as assets/sfx/dtrh-<name> (2026-09-25): every mp3 under
+// /dtrh/assets ships in the separately downloaded audio-web pack, so the hotlink was silent
+// on any install (and any build) without it, and every bubble pop went quiet.
+const D = (file) => localSfxUrl('dtrh-' + file);
 const L = localSfxUrl;
 /** Chrome the player drives. */
 const uiCue = (e) => Object.assign({ bus: BUS_UI }, e);
@@ -196,11 +200,17 @@ export const SFX_REGISTRY = Object.freeze({
   'gg-drop-dud':    gameCue({ files: [L('captcha-reject-1.mp3'), L('captcha-reject-2.mp3')], gain: 0.20, minGapMs: 220 }),
 
   /* ---- payloads ----------------------------------------------------- game - */
+  'throw-flight': gameCue({ files: [L('sticker-drag-1.mp3')], gain: 0.28, minGapMs: 120 }),
+  'throw-impact': gameCue({ files: [L('stamp_thud.mp3')], gain: 0.24, minGapMs: 120 }),
   'gg-fire':        gameCue({ files: [L('custody-stamp-1.mp3')],   gain: 0.42 }),
   'payload-out':    gameCue({ files: [L('custody-stamp-1.mp3')],   gain: 0.42 }),
   /** ONE landing cue for every family. Per-kind stings would be noise. */
   'payload-in':     gameCue({ files: [L('stamp_thud.mp3')],        gain: 0.38 }),
   'gg-endured':     gameCue({ files: [D('chime2.mp3')],            gain: 0.34 }),
+  /** Game Night: your throw landed (ui/hitStamps.js). The THUD under the HIT stamp. */
+  'gg-hit':         gameCue({ files: [L('stamp_thud.mp3')],        gain: 0.48 }),
+  /** ...and refused. Flat on purpose. */
+  'gg-hit-dull':    gameCue({ files: [L('captcha-reject-1.mp3')],  gain: 0.22, minGapMs: 200 }),
 
   /* ---- the two of you ----------------------------------------------- game - */
   'gg-emote':       gameCue({ files: [L('chime-1.mp3')],           gain: 0.24, minGapMs: 160 }),
@@ -216,19 +226,24 @@ export const SFX_REGISTRY = Object.freeze({
   'announce-in':    gameCue({ files: [L('briefing-open-1.mp3')],   gain: 0.20, minGapMs: 500 }),
 
   /* ---- the field ---------------------------------------------------- game - */
-  'bubble-pop':     gameCue({ files: [D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.34, minGapMs: 24 }),
-  /** An EFFECT bubble is juicier than a plain one: bigger sample, more gain. */
-  'bubble-pop-fx':  gameCue({ files: [D('Pop.mp3')],               gain: 0.46, minGapMs: 24 }),
-  /** ...and the prism/video bubble is hollower still, because it earns a window. */
-  'bubble-pop-video': gameCue({ files: [L('void_pop.mp3')],        gain: 0.44, minGapMs: 60 }),
+  /** The three classic CCP pops, the same set DtRH and the desktop bubbles draw from (owner, 2026-09-25). */
+  'bubble-pop':     gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.17, minGapMs: 24 }),
+  /** An EFFECT bubble pops the same set, a touch louder. */
+  'bubble-pop-fx':  gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.21, minGapMs: 24 }),
+  /** ...and the prism/video bubble too: every bubble sounds like a CCP bubble. */
+  'bubble-pop-video': gameCue({ files: [D('Pop.mp3'), D('Pop2.mp3'), D('Pop3.mp3')], gain: 0.21, minGapMs: 40 }),
   'flash':          gameCue({ files: [L('grid-tile-flicker-1.mp3'), L('grid-tile-flicker-2.mp3')], gain: 0.16, minGapMs: 260 }),
-  'flash-pop':      gameCue({ files: [D('Pop3.mp3')],              gain: 0.30, minGapMs: 24 }),
+  'flash-pop':      gameCue({ files: [D('Pop3.mp3')],              gain: 0.15, minGapMs: 24 }),
   /** Barely there on purpose — a word you half-hear is the whole point. */
   'subliminal':     gameCue({ files: [L('custody-log-tick-1.mp3'), L('custody-log-tick-2.mp3')], gain: 0.10, minGapMs: 300 }),
   /** The lock card is a match payload, so its chime and its buzz are GAME even
    *  though the player is typing — the keyboard is not chrome here. */
-  'lock-solved':    gameCue({ files: [D('chime1.mp3')],            gain: 0.40 }),
-  'lock-slip':      gameCue({ files: [L('error-blip-1.mp3')],      gain: 0.24, minGapMs: 90 }),
+  'drop-land': gameCue({ files: [L('slip_dling.mp3')], gain: 0.22, minGapMs: 90 }),
+  'lock-in': gameCue({ files: [L('freeze-sting-1.mp3')], gain: 0.18 }),
+  'lock-tick': gameCue({ files: [L('custody-log-tick-1.mp3')], gain: 0.06, minGapMs: 200 }),
+  'lock-type': gameCue({ files: [L('checkbox-tick-1.mp3')], gain: 0.06, minGapMs: 45 }),
+  'lock-solved':    gameCue({ files: [D('chime1.mp3')],            gain: 0.22 }),
+  'lock-slip':      gameCue({ files: [L('error-blip-1.mp3')],      gain: 0.12, minGapMs: 90 }),
 
   /* ---- the recap ---------------------------------------------------- game - */
   'recap-reveal':   gameCue({ files: [L('ticket_reveal.mp3')],     gain: 0.45 }),
@@ -246,6 +261,74 @@ export const SFX_REGISTRY = Object.freeze({
   'spiral-in':        gameCue({ files: [L('loom-spiral-up-1.mp3')],   gain: 0.16 }),
   'spiral-out':       gameCue({ files: [L('loom-spiral-down-1.mp3')], gain: 0.16 }),
 });
+
+/* ----------------------------------------------------------------------------
+ * SYNTH MOTIFS - Breakout's pickup and warning cues, ported (owner, 2026-09-25:
+ * "steal some sounds from the breakout game"). Same key as Breakout and the Back
+ * Room kit (C pentatonic, C5 root, ui/juice.js), so nothing here can clash with
+ * a pop or a rising GIF note. When an id has a motif, sfx() plays the motif and
+ * the registry file above is only the fallback for a context without oscillators.
+ * Quiet by rule: every note sits in 0.012..0.07 before the trim.
+ *   hz, at (s after now), dur (s), gain, wave, pan (-1..1), attack (s)
+ * -------------------------------------------------------------------------- */
+const semiHz = (semi) => ROOT_HZ * Math.pow(2, semi / 12);
+const STEP = 0.075;   // one sixteenth at Breakout's default tempo, near enough
+export const SFX_MOTIFS = Object.freeze({
+  /** An item dropped into the rack: Breakout's multiball catch, a detuned pair climbing root, fifth, octave. */
+  'gg-drop': Object.freeze([0, 7, 12].flatMap((semi, i) => [-1, 1].map((side) => ({
+    hz: semiHz(semi + 12) * (1 + side * 0.004), at: i * STEP, dur: 0.16, gain: 0.05, wave: 'triangle', pan: side * 0.22,
+  })))),
+  /** The item lands in its slot: Breakout's shield catch, two glass bells (fifth, then the octave) with a glint. */
+  'drop-land': Object.freeze([pentaHz(3), pentaHz(5)].flatMap((f, i) => [
+    { hz: f, at: i * STEP * 2, dur: 0.36, gain: 0.05, wave: 'sine' },
+    { hz: f * 4, at: i * STEP * 2, dur: 0.1, gain: 0.012, wave: 'sine' },
+  ])),
+  /** A lock card arrives: Breakout's fireball catch, warm and low, three steps up. */
+  'lock-in': Object.freeze([3, 5, 7].map((rung, i) => ({
+    hz: pentaHz(rung, -1), at: i * STEP, dur: i === 2 ? 0.34 : 0.2, gain: 0.05, wave: 'triangle',
+  }))),
+  /** The bounty clock: one soft, low tick (Breakout's powerWarn, an octave and a half down). */
+  'lock-tick': Object.freeze([{ hz: pentaHz(0, -1), at: 0, dur: 0.06, gain: 0.022, wave: 'triangle' }]),
+  /** A correct key: a tiny dry pluck, well under the music. */
+  'lock-type': Object.freeze([{ hz: pentaHz(2, -1), at: 0, dur: 0.045, gain: 0.018, wave: 'triangle', attack: 0.003 }]),
+  /** Unlocked: Breakout's shield bells climbing root, fifth, octave. */
+  'lock-solved': Object.freeze([0, 7, 12].flatMap((semi, i) => [
+    { hz: semiHz(semi), at: i * STEP, dur: 0.34, gain: 0.055, wave: 'sine' },
+    { hz: semiHz(semi) * 4, at: i * STEP, dur: 0.1, gain: 0.012, wave: 'sine' },
+  ])),
+  /** A slip: Breakout's powerMiss, one dull, low, short note. Nothing falls in pitch. */
+  'lock-slip': Object.freeze([{ hz: ROOT_HZ / 4, at: 0, dur: 0.16, gain: 0.04, wave: 'triangle', attack: 0.05 }]),
+});
+
+/** Schedule a motif on `bus`. Every voice disconnects itself when it ends. */
+function playMotif(c, notes, bus) {
+  const t0 = c.currentTime + 0.005;
+  for (const n of notes) {
+    const at = t0 + (n.at || 0);
+    const osc = c.createOscillator();
+    const g = c.createGain();
+    osc.type = n.wave || 'sine';
+    osc.frequency.value = n.hz;
+    const peak = Math.max(0.0002, Math.min(0.13, (n.gain || 0.03) * SFX_TRIM));
+    const attack = n.attack || 0.006;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(peak, at + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + Math.max(attack + 0.02, n.dur));
+    osc.connect(g);
+    let out = g;
+    if (n.pan && typeof c.createStereoPanner === 'function') {
+      const p = c.createStereoPanner();
+      p.pan.value = n.pan;
+      g.connect(p);
+      out = p;
+    }
+    out.connect(bus);
+    osc.start(at);
+    osc.stop(at + n.dur + 0.03);
+    osc.onended = () => { try { osc.disconnect(); g.disconnect(); if (out !== g) out.disconnect(); } catch (_e) { /* gone */ } };
+  }
+  return true;
+}
 
 /** Every sfx id the game may ask for. Derived, so the two can never drift. */
 export const SFX_IDS = Object.freeze(Object.keys(SFX_REGISTRY));
@@ -343,11 +426,20 @@ export function busGain(entryGain, busVol, master) {
  * @param {object} [o.logger] console-shaped; omit for total silence
  * @param {boolean} [o.trace] log every call (default: only the first of each id)
  */
+/** What the match's cues and bed keep while a duel plays, and how long the glide takes. */
+export const DUEL_DUCK = 0.5;
+export const DUEL_DUCK_SEC = 0.3;
+
 export function createAudio({ prefs = null, logger = null, trace = false } = {}) {
   const log = logger;
   const seen = new Set();
   let logged = 0;
   let ducked = false;
+  /* THE DUEL DUCK (2026-09-24, owner: "duck the Goon game audio a bit while a duel is
+   * running, glide down/up"). While the Arcademy class plays in the window, the match's
+   * own cues and the drone bed sit at DUEL_DUCK of their slider, gliding over
+   * DUEL_DUCK_SEC both ways so it never reads as a cut. */
+  let duelDucked = false;
   let currentMusic = null;
   let disposed = false;
 
@@ -371,6 +463,8 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
   let ctx = null;
   let dead = false;              // no AudioContext in this host: stop trying
   let masterBus = null, uiBus = null, gameBus = null, musicBus = null, droneBus = null, voiceBus = null;
+  /** Game night: the match's song is playing, so the drone bed is silent under it. */
+  let droneMuted = false;
   let unlockHook = null;
   let stateHook = null;
   // THE BED. `droneWanted` is the latch the phase router writes; `drone` is the
@@ -485,6 +579,8 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
 
   const clamp01 = (v) => Math.max(0, Math.min(1, (typeof v === 'number' && isFinite(v)) ? v : 0));
 
+  const duelGain = () => (duelDucked ? DUEL_DUCK : 1);
+
   function applyBusGains() {
     try {
       if (masterBus) masterBus.gain.value = clamp01(vol.master);
@@ -496,11 +592,11 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
       // They GLIDE for the same reason the bed does — a drag mid-pop should not
       // click — just over a much shorter constant, because nothing here sustains.
       if (uiBus) glide(uiBus.gain, clamp01(vol.ui), BUS_GLIDE_SEC);
-      if (gameBus) glide(gameBus.gain, clamp01(vol.game), BUS_GLIDE_SEC);
+      if (gameBus) glide(gameBus.gain, clamp01(vol.game) * duelGain(), BUS_GLIDE_SEC);
       // THE BED IS THE ONE THAT REALLY NEEDS IT. It is playing while the slider
       // moves, so a stepped write would zipper on every pixel of the drag (the
       // Intake's pref buses use setTargetAtTime for exactly this reason).
-      if (droneBus) glide(droneBus.gain, clamp01(vol.drone), DRONE_GLIDE_SEC);
+      if (droneBus) glide(droneBus.gain, droneMuted ? 0 : clamp01(vol.drone) * duelGain(), DRONE_GLIDE_SEC);
       // ...and the voice bus glides on the CUE constant, not the bed's: a note is
       // ten seconds long, so a drag can land in the middle of one, but there is
       // nothing sustaining that a longer ramp would help.
@@ -744,6 +840,17 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
       const prev = lastAt.get(id);
       if (prev != null && t - prev < gap) { stats.throttled++; return false; }
 
+      // A motif needs no fetch: it is synthesised on the spot, on the same bus.
+      const motif = SFX_MOTIFS[id];
+      if (motif && typeof c.createOscillator === 'function') {
+        if (c.state !== 'running') { stats.dropped++; return false; }
+        lastAt.set(id, t);
+        try { playMotif(c, motif, busFor(id, c)); } catch (_e) { stats.dropped++; return false; }
+        stats.played++;
+        note('sfx:' + id);
+        return true;
+      }
+
       // Warm on demand: the first ask for an id kicks its fetch and stays quiet.
       let ready = null;
       let readyIdx = -1;
@@ -779,6 +886,83 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
         livePlays.push(rec);
         stats.played++;
         note('sfx:' + id);
+        return true;
+      } catch (_e) { stats.dropped++; return false; }
+    },
+
+    /**
+     * A tiny synthesised pluck on rung `i` of the C pentatonic ladder (C5 root,
+     * the key Breakout and the Back Room kit share), for count-ups and staggered
+     * reveals that want to climb. Juice pass 2026-09-23. Quiet by rule: the
+     * gain stays in 0.03..0.13 and tilts down as the ladder climbs, the note is
+     * about 140 ms, and it rides the GAME bus so the match slider owns it.
+     * Pentatonic has no semitone clashes, so any two rungs can overlap. Same
+     * throttle and autoplay rules as a cue: dropped, never queued.
+     */
+    tone(i, { gain = null, ms = 140, octave = 0 } = {}) {
+      if (disposed) return false;
+      const c = ensureCtx();
+      if (!c || c.state !== 'running') { stats.dropped++; return false; }
+      const t = now();
+      const key = 'tone';
+      const prev = lastAt.get(key);
+      if (prev != null && t - prev < 40) { stats.throttled++; return false; }
+      lastAt.set(key, t);
+      try {
+        const at = c.currentTime;
+        const osc = c.createOscillator();
+        const g = c.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = pentaHz(i, octave);
+        const peak = gain == null ? rungGain(i) : Math.max(0.03, Math.min(0.13, Number(gain) || 0.06));
+        const dur = Math.max(0.06, Math.min(0.4, (Number(ms) || 140) / 1000));
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.linearRampToValueAtTime(peak, at + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+        osc.connect(g);
+        g.connect(gameBus || c.destination);
+        osc.start(at);
+        osc.stop(at + dur + 0.02);
+        osc.onended = () => { try { osc.disconnect(); g.disconnect(); } catch (_e) { /* gone */ } };
+        stats.played++;
+        note('tone:' + i);
+        return true;
+      } catch (_e) { stats.dropped++; return false; }
+    },
+
+    /**
+     * A synthesised pluck at an exact frequency on the GAME bus (the score HUD's
+     * combo blip). Same rules as tone(): throttled, dropped not queued, and only
+     * on a running context, so the Game slider, master and mute all own it.
+     */
+    pluck(hz, { gain = 0.05, ms = 160 } = {}) {
+      if (disposed) return false;
+      const f = Number(hz);
+      if (!(f > 20 && f < 20000)) return false;
+      const c = ensureCtx();
+      if (!c || c.state !== 'running') { stats.dropped++; return false; }
+      const t = now();
+      const prev = lastAt.get('pluck');
+      if (prev != null && t - prev < 30) { stats.throttled++; return false; }
+      lastAt.set('pluck', t);
+      try {
+        const at = c.currentTime;
+        const osc = c.createOscillator();
+        const g = c.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = f;
+        const peak = Math.max(0.01, Math.min(0.13, Number(gain) || 0.05));
+        const dur = Math.max(0.06, Math.min(0.4, (Number(ms) || 160) / 1000));
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.linearRampToValueAtTime(peak, at + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+        osc.connect(g);
+        g.connect(gameBus || c.destination);
+        osc.start(at);
+        osc.stop(at + dur + 0.02);
+        osc.onended = () => { try { osc.disconnect(); g.disconnect(); } catch (_e) { /* gone */ } };
+        stats.played++;
+        note('pluck');
         return true;
       } catch (_e) { stats.dropped++; return false; }
     },
@@ -884,6 +1068,31 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
     get droneWanted() { return droneWanted; },
     /** True only when real oscillators are running. False under node, always. */
     get droneIsPlaying() { return !!(drone && drone.isPlaying); },
+
+    /** Silence the drone bed while the match's song plays (ui/songPlayer.js). Idempotent. */
+    muteDrone(on) {
+      if (disposed) return;
+      const next = !!on;
+      if (next === droneMuted) return;
+      droneMuted = next;
+      applyBusGains();
+      note('drone:' + (droneMuted ? 'under-song' : 'back'));
+    },
+    get droneMuted() { return droneMuted; },
+
+    /** Ride the match cues and the drone down while a duel's class plays. Idempotent. */
+    duelDuck(on) {
+      if (disposed) return;
+      const next = !!on;
+      if (next === duelDucked) return;
+      duelDucked = next;
+      try {
+        if (gameBus) glide(gameBus.gain, clamp01(vol.game) * duelGain(), DUEL_DUCK_SEC);
+        if (droneBus) glide(droneBus.gain, droneMuted ? 0 : clamp01(vol.drone) * duelGain(), DUEL_DUCK_SEC);
+      } catch (_e) { /* ignore */ }
+      note('duel-duck:' + (duelDucked ? 'on' : 'off'));
+    },
+    get isDuelDucked() { return duelDucked; },
 
     /** Ride the music bus down under speech/lock cards. Idempotent. */
     duck(on) {

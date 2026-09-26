@@ -1,0 +1,132 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.CompanionPickerCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+
+    <UserControl.Resources>
+        <ControlTemplate x:Key="PickerLinkTemplate" TargetType="Button">
+            <TextBlock x:Name="t" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                       Background="Transparent" TextWrapping="Wrap"/>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="t" Property="TextDecorations" Value="Underline"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+    </UserControl.Resources>
+
+    <!-- THE one place that picks the companion's avatar and personality. Hosted by the
+         Customise window today and meant for the Companion tab next, so it knows nothing about
+         either host: it reads the live state from App.AvatarWindow / App.Personality and writes
+         through the existing doors (AvatarTubeWindow.SelectAvatarSet, the tube arrows' path, and
+         MainWindow.ActivatePersonalityPreset, the gated chip-row path).
+
+         Two faces: LIVE (Refresh) edits the companion of the mod in use; PREVIEW (ShowPreview)
+         describes another mod's companion, read-only, without activating that mod. -->
+    <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}"
+            BorderThickness="1" CornerRadius="12" Padding="16">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- portrait -->
+            <Border Grid.Column="0" Width="120" Height="150" CornerRadius="10" Margin="0,0,18,0" VerticalAlignment="Top"
+                    Background="{DynamicResource DarkerBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}"
+                    BorderThickness="1" ClipToBounds="True">
+                <Grid>
+                    <TextBlock x:Name="TxtPreviewGlyph" Text="&#x2727;" FontSize="38"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Image x:Name="ImgPreview" Stretch="Uniform" Margin="4"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Column="1">
+            <!-- LIVE: pick look and personality -->
+            <StackPanel x:Name="LivePanel">
+                <TextBlock x:Name="TxtLiveName" FontSize="20" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"
+                           TextTrimming="CharacterEllipsis"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{loc:Str modmgr_label_look}" FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
+                        <ComboBox x:Name="CmbAvatar" Style="{DynamicResource DarkComboBoxStyle}"
+                                  Foreground="{DynamicResource TextLightBrush}" MinHeight="30"
+                                  SelectionChanged="CmbAvatar_SelectionChanged"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="{loc:Str modmgr_label_personality}" FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
+                        <ComboBox x:Name="CmbPersonality" Style="{DynamicResource DarkComboBoxStyle}"
+                                  Foreground="{DynamicResource TextLightBrush}" MinHeight="30"
+                                  SelectionChanged="CmbPersonality_SelectionChanged"/>
+                        <!-- The deeper personality editor, right under the choice it refines. It used
+                             to sit below the whole card and was off screen in the Companion sheet. -->
+                        <Button x:Name="BtnMorePersonality" Content="{loc:Str companion_v2_personality}"
+                                Click="BtnMorePersonality_Click" Visibility="Collapsed"
+                                HorizontalAlignment="Left" Margin="0,5,0,0" Cursor="Hand"
+                                Foreground="#B084DC" FontSize="11" Template="{StaticResource PickerLinkTemplate}"/>
+                    </StackPanel>
+                </Grid>
+                <TextBlock x:Name="TxtAvatarHint" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,0"/>
+
+                <!-- how the personality talks: one or two lines in its own voice -->
+                <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="14,10" Margin="0,10,0,0">
+                    <StackPanel x:Name="SamplePanel"/>
+                </Border>
+
+                <Button x:Name="BtnTubeFit" Content="{loc:Str btn_tube_fit}" ToolTip="{loc:Str tooltip_tube_fit}"
+                        Click="BtnTubeFit_Click" HorizontalAlignment="Left" Margin="0,8,0,0"
+                        Foreground="#B084DC" FontSize="11" Cursor="Hand" Template="{StaticResource PickerLinkTemplate}"/>
+            </StackPanel>
+
+            <!-- PREVIEW: another mod's companion, read-only -->
+            <StackPanel x:Name="PreviewPanel" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock x:Name="TxtPreviewName" FontSize="20" FontWeight="SemiBold" Foreground="White"
+                               VerticalAlignment="Center"/>
+                    <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="8,3"
+                            Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str modmgr_preview_tag}" FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                    </Border>
+                </StackPanel>
+                <TextBlock x:Name="TxtPreviewCounts" FontSize="13" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,8"/>
+                <Border x:Name="PreviewSampleBorder" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10"
+                        Padding="14,10" Margin="0,0,0,8">
+                    <TextBlock x:Name="TxtPreviewSample" FontSize="13" FontStyle="Italic" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextLightBrush}"/>
+                </Border>
+                <TextBlock Text="{loc:Str modmgr_preview_hint}" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}"/>
+            </StackPanel>
+
+            <!-- PERK: what this companion does to XP, read-only. Separate from the personality
+                 (how she talks) on purpose; a cost reads as plainly as a bonus. -->
+            <Button x:Name="BtnPerkChange" Content="{loc:Str companion_perk_picker}" Click="Perk_Click"
+                    Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,10,0,0"/>
+            <Grid x:Name="PerkRow" Margin="0,10,0,0" ToolTip="{loc:Str modmgr_perk_tooltip}">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border x:Name="PerkBadge" Width="22" Height="22" CornerRadius="11" VerticalAlignment="Top"
+                        Background="{DynamicResource PanelAccentBrush}">
+                    <TextBlock x:Name="TxtPerkGlyph" FontSize="11" FontFamily="Segoe UI Symbol"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"/>
+                </Border>
+                <TextBlock Grid.Column="1" Text="{loc:Str modmgr_perk_label}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="8,0,6,0"/>
+                <TextBlock Grid.Column="2" x:Name="TxtPerk" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextLightBrush}"/>
+            </Grid>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

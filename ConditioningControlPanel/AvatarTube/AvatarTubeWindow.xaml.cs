@@ -74,6 +74,15 @@ namespace ConditioningControlPanel
                     _parentWindow.ActualWidth, _parentWindow.ActualHeight,
                     _parentWindow.WindowState == WindowState.Minimized,
                     _parentWindow.IsVisible);
+                try
+                {
+                    var ps = PresentationSource.FromVisual(_parentWindow);
+                    double pdpi = ps?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                    double minW = double.IsFinite(_parentWindow.MinWidth) ? _parentWindow.MinWidth : 0;
+                    _parentMinWidthPx = Math.Max(0, minW * (pdpi > 0 ? pdpi : 1.0));
+                    _parentMaximized = _parentWindow.WindowState == WindowState.Maximized;
+                }
+                catch { }
                 // Seed the parent HWND here (on the parent's own thread) so ApplyNativeOwner
                 // never has to touch WindowInteropHelper from the avatar thread.
                 if (_parentHandle == IntPtr.Zero)
@@ -132,8 +141,9 @@ namespace ConditioningControlPanel
 
             // Load user's saved avatar selection, or use max unlocked
             _selectedAvatarSet = App.Settings?.Current?.SelectedAvatarSet ?? _maxUnlockedSet;
-            // Clamp to valid range (1 to max unlocked)
-            _selectedAvatarSet = Math.Clamp(_selectedAvatarSet, 1, _maxUnlockedSet);
+            // Preserve a supported custom set (8+); clamp the level sets to what is unlocked.
+            if (App.Mods?.GetCustomAvatarSets()?.Any(c => c.SetNumber == _selectedAvatarSet) != true)
+                _selectedAvatarSet = Math.Clamp(_selectedAvatarSet, 1, _maxUnlockedSet);
             _currentAvatarSet = _selectedAvatarSet;
 
             // Fall back if the saved set isn't supported by the active mod (e.g. a level was retired,
@@ -524,6 +534,7 @@ namespace ConditioningControlPanel
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             _tubeHandle = new WindowInteropHelper(this).Handle;
+            HookSpeechBubblePlacement();
             // NOTE: _parentHandle is read on the PARENT thread inside HookParent() below — reading the
             // parent window's handle here would VerifyAccess-throw when this Loaded runs on the avatar thread.
 
@@ -537,6 +548,9 @@ namespace ConditioningControlPanel
                 if (double.IsNaN(ContentViewbox.Width) || ContentViewbox.Width <= 0) return;
                 if (Width != ContentViewbox.Width) Width = ContentViewbox.Width;
                 if (Height != ContentViewbox.Height) Height = ContentViewbox.Height;
+                // Every size change (scale step, DPI refit, user zoom) re-docks: the dock is
+                // measured from the tube's real footprint, so it must follow the footprint.
+                if (_isAttached) Dispatcher.BeginInvoke(new Action(UpdatePosition), DispatcherPriority.Normal);
             };
 
             // Hook window messages (minimal hook, no z-order forcing)
@@ -625,7 +639,7 @@ namespace ConditioningControlPanel
         public void SetPose(int poseNumber)
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => SetPose(poseNumber))); return; }
-            if (poseNumber < 1 || poseNumber > 4) return;
+            if (poseNumber < 1 || poseNumber > _avatarPoses.Length) return;
             if (_avatarPoses.Length == 0) return;
             _currentPoseIndex = poseNumber - 1;
             ImgAvatar.Source = _avatarPoses[_currentPoseIndex];

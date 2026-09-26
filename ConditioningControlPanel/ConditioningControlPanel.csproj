@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.10.3</Version>
+    <Version>6.11.0</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -269,6 +269,7 @@
     <Resource Include="Resources\february_drone.png" />
     <Resource Include="Resources\logo.png" />
     <Resource Include="Resources\logo2.png" />
+    <Resource Include="Resources\branding\ccp-logo.jpg" />
     <!-- Weekly Intake Pass card art, one per niche (see Services\Quiz\IntakeNiche.cs).
          These must stay listed explicitly: there is no Resources\**\*.png glob, and a missing
          entry makes the pack:// URI fail at RUNTIME while the build still succeeds. -->

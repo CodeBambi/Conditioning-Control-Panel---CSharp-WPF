@@ -23,7 +23,7 @@ namespace ConditioningControlPanel.Services
     public class NotificationService
     {
         private Panel? _host;
-        private readonly List<(string message, NotificationType type, TimeSpan? duration, string? stickyKey, string? actionLabel, Action? action)> _pending = new();
+        private readonly List<(string message, NotificationType type, TimeSpan? duration, string? stickyKey, string? actionLabel, Action? action, string? secondaryActionLabel, Action? secondaryAction)> _pending = new();
         private readonly Dictionary<string, Border> _stickyByKey = new();
 
         public void AttachHost(Panel host)
@@ -34,19 +34,20 @@ namespace ConditioningControlPanel.Services
             {
                 var queue = _pending.ToArray();
                 _pending.Clear();
-                foreach (var (msg, type, dur, key, actionLabel, action) in queue)
+                foreach (var (msg, type, dur, key, actionLabel, action, secondaryLabel, secondaryAction) in queue)
                 {
                     if (key != null) ShowStickyInternal(key, msg, type, actionLabel, action);
-                    else ShowInternal(msg, type, dur ?? TimeSpan.FromSeconds(5), actionLabel, action);
+                    else ShowInternal(msg, type, dur ?? TimeSpan.FromSeconds(5), actionLabel, action, secondaryLabel, secondaryAction);
                 }
             }
         }
 
         public void Show(string message, NotificationType type = NotificationType.Info, TimeSpan? duration = null,
-            string? actionLabel = null, Action? action = null)
+            string? actionLabel = null, Action? action = null,
+            string? secondaryActionLabel = null, Action? secondaryAction = null)
         {
-            if (_host == null) { _pending.Add((message, type, duration, null, actionLabel, action)); return; }
-            ShowInternal(message, type, duration ?? TimeSpan.FromSeconds(5), actionLabel, action);
+            if (_host == null) { _pending.Add((message, type, duration, null, actionLabel, action, secondaryActionLabel, secondaryAction)); return; }
+            ShowInternal(message, type, duration ?? TimeSpan.FromSeconds(5), actionLabel, action, secondaryActionLabel, secondaryAction);
         }
 
         /// <summary>
@@ -63,7 +64,7 @@ namespace ConditioningControlPanel.Services
         {
             if (string.IsNullOrWhiteSpace(key)) return;
             if (App.Settings?.Current?.DismissedNotificationKeys?.Contains(key) == true) return;
-            if (_host == null) { _pending.Add((message, type, null, key, actionLabel, action)); return; }
+            if (_host == null) { _pending.Add((message, type, null, key, actionLabel, action, null, null)); return; }
             ShowStickyInternal(key, message, type, actionLabel, action);
         }
 
@@ -85,9 +86,9 @@ namespace ConditioningControlPanel.Services
         }
 
         private void ShowInternal(string message, NotificationType type, TimeSpan duration,
-            string? actionLabel, Action? action)
+            string? actionLabel, Action? action, string? secondaryActionLabel = null, Action? secondaryAction = null)
         {
-            var border = BuildToast(message, type, stickyKey: null, actionLabel, action);
+            var border = BuildToast(message, type, stickyKey: null, actionLabel, action, secondaryActionLabel, secondaryAction);
             _host?.Children.Add(border);
             AnimateIn(border);
 
@@ -115,7 +116,8 @@ namespace ConditioningControlPanel.Services
         }
 
         private Border BuildToast(string message, NotificationType type, string? stickyKey,
-            string? actionLabel = null, Action? action = null)
+            string? actionLabel = null, Action? action = null,
+            string? secondaryActionLabel = null, Action? secondaryAction = null)
         {
             var accent = type switch
             {
@@ -144,7 +146,10 @@ namespace ConditioningControlPanel.Services
                 },
             };
 
+            bool hasSecondary = secondaryAction != null && !string.IsNullOrWhiteSpace(secondaryActionLabel);
             var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            if (hasSecondary) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -152,7 +157,8 @@ namespace ConditioningControlPanel.Services
             {
                 Text = message,
                 Foreground = Brushes.White,
-                FontSize = 12,
+                FontSize = 13,
+                LineHeight = 20,
                 TextWrapping = TextWrapping.Wrap,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 8, 0),
@@ -160,7 +166,7 @@ namespace ConditioningControlPanel.Services
             Grid.SetColumn(text, 0);
             grid.Children.Add(text);
 
-            var buttonStack = new StackPanel
+            var buttonStack = new WrapPanel
             {
                 Orientation = Orientation.Horizontal,
                 VerticalAlignment = VerticalAlignment.Top,
@@ -172,30 +178,35 @@ namespace ConditioningControlPanel.Services
             // to resolve the underlying condition (e.g. recalibration
             // populates DeviceName, so the toast simply won't re-trigger
             // next session).
-            if (!string.IsNullOrWhiteSpace(actionLabel) && action != null)
+            void AddAction(string? label, Action? callback, bool primary)
             {
+                if (string.IsNullOrWhiteSpace(label) || callback == null) return;
                 var actionBtn = new Button
                 {
-                    Content = actionLabel,
-                    FontSize = 11,
+                    Content = label,
+                    FontSize = 12,
                     FontWeight = FontWeights.SemiBold,
                     Padding = new Thickness(10, 4, 10, 4),
                     Margin = new Thickness(0, 0, 6, 0),
-                    Background = accent,
-                    BorderThickness = new Thickness(0),
-                    Foreground = Brushes.White,
+                    Background = primary ? accent : Brushes.Transparent,
+                    BorderBrush = accent,
+                    BorderThickness = new Thickness(1),
+                    Foreground = primary ? Brushes.Black : Brushes.White,
                     Cursor = Cursors.Hand,
                 };
                 actionBtn.Click += (_, _) =>
                 {
                     if (border.Tag is DispatcherTimer at) { try { at.Stop(); } catch { } }
-                    try { action(); }
+                    try { callback(); }
                     catch (Exception ex) { App.Logger?.Warning(ex, "NotificationService: action button handler failed"); }
                     if (stickyKey != null) _stickyByKey.Remove(stickyKey);
                     FadeOutAndRemove(border);
                 };
                 buttonStack.Children.Add(actionBtn);
             }
+
+            AddAction(actionLabel, action, primary: true);
+            AddAction(secondaryActionLabel, secondaryAction, primary: false);
 
             var dismissBtn = new Button
             {
@@ -226,9 +237,19 @@ namespace ConditioningControlPanel.Services
                 }
                 FadeOutAndRemove(border);
             };
-            buttonStack.Children.Add(dismissBtn);
-
-            Grid.SetColumn(buttonStack, 1);
+            if (hasSecondary)
+            {
+                Grid.SetColumn(dismissBtn, 1);
+                grid.Children.Add(dismissBtn);
+                Grid.SetRow(buttonStack, 1);
+                Grid.SetColumnSpan(buttonStack, 2);
+                buttonStack.Margin = new Thickness(0, 12, 0, 0);
+            }
+            else
+            {
+                buttonStack.Children.Add(dismissBtn);
+                Grid.SetColumn(buttonStack, 1);
+            }
             grid.Children.Add(buttonStack);
 
             border.Child = grid;

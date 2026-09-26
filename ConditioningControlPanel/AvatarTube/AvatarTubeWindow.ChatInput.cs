@@ -492,7 +492,7 @@ namespace ConditioningControlPanel
             // placement is derived from MaxWidth (a 600px bubble does not fit left of the seam and
             // is allowed to give the seam up rather than hang off the canvas), so the margin has
             // to be recomputed before the layout pass below or the panel lands clipped.
-            SpeechBubble.MaxWidth = 600;
+            SpeechBubble.MaxWidth = SpeechBubbleHistoryWidth;
             ApplySpeechBubblePlacement();
 
             SpeechBubble.UpdateLayout();
@@ -508,7 +508,7 @@ namespace ConditioningControlPanel
             _isShowingChatHistory = false;
             ChatHistoryView.Visibility = Visibility.Collapsed;
             SpeechScroller.Visibility = Visibility.Visible;
-            SpeechBubble.MaxWidth = 380; // Restore default bubble width.
+            SpeechBubble.MaxWidth = SpeechBubbleMaxWidth; // Restore default bubble width.
             CollapseSpeechBubble();
         }
 
@@ -835,6 +835,7 @@ namespace ConditioningControlPanel
                         // the AI badge (P2/C4 — audit smoke-test #1).
                         PlayDoubleBounce();
                         GigglePriority(result.Text, aiGenerated: result.IsAiGenerated);
+                        if (routesThroughBrain) Services.Companion.Asks.CompanionAskService.Instance.OfferForRequest(input);
                     }
                 }
                 catch (Exception ex)

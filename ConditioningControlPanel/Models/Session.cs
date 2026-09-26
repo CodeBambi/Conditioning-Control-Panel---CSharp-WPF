@@ -85,20 +85,29 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// Returns the session name adjusted for the current content mode.
+        /// Returns the session name adjusted for the current content mode. Built-in sessions read
+        /// a per-mod name with variants (Services/PresetNaming); custom and imported sessions keep
+        /// their own name through the mod's text replacements.
         /// </summary>
         public string GetModeAwareName()
         {
-            return App.Mods?.MakeModAware(Name) ?? Name;
+            return Services.PresetNaming.DisplayName(this);
         }
 
         /// <summary>
-        /// Returns the session description adjusted for the current content mode.
-        /// Replaces Bambi-specific trigger names with generic equivalents in SH mode.
+        /// Returns the session description adjusted for the current content mode. Built-in
+        /// sessions read neutral copy under CCP Default (Services/PresetNaming); every other mod
+        /// keeps the authored text through the mod's text replacements.
         /// </summary>
         public string GetModeAwareDescription()
         {
-            return App.Mods?.MakeModAware(Description) ?? Description;
+            return Services.PresetNaming.Description(this);
+        }
+
+        /// <summary>A phase's name as shown, mod-aware like the description.</summary>
+        public string GetModeAwarePhaseName(SessionPhase phase)
+        {
+            return Services.PresetNaming.PhaseName(this, phase);
         }
 
         /// <summary>
@@ -754,8 +763,9 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
             if (Settings.BouncingTextEnabled)
             {
                 var speed = Settings.BouncingTextSpeed <= 3 ? Loc.Get("session_spoiler_speed_slow") : Settings.BouncingTextSpeed <= 6 ? Loc.Get("session_spoiler_speed_medium") : Loc.Get("session_spoiler_speed_fast");
-                var phrases = Settings.BouncingTextPhrases.Any()
-                    ? Loc.GetF("session_spoiler_using_phrases", string.Join("\", \"", Settings.BouncingTextPhrases))
+                var bouncingWords = Services.PresetNaming.BouncingWords(this);
+                var phrases = bouncingWords.Any()
+                    ? Loc.GetF("session_spoiler_using_phrases", string.Join("\", \"", bouncingWords))
                     : Loc.Get("session_spoiler_uses_global_phrase_pool");
                 parts.Add(Loc.GetF("session_spoiler_bouncing_text", speed, phrases));
             }

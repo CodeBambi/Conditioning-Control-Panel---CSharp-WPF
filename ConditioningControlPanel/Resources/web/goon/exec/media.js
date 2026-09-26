@@ -15,6 +15,11 @@
  *
  *   setManifest({images,videos,skipped,truncated})
  *   setLocalLibrary([{kind,name,url}])                 (see below)
+ *   setOnlineLibrary({images,videos})                  the flavour's online set, a third source
+ *   setPeerNicheLibrary({images,videos})               the OPPONENT'S niches, fetched here;
+ *                                                      only drawReceived/peekReceived reach it
+ *   setNoiseLibrary({set,images}) / listNoise(set)     a Sort duel's NOISE boards (never the deck)
+ *   setNoiseRequester(fn) / requestNoise(set)          ask the host for one board, once per set
  *   draw() / drawKind('image'|'video') -> {kind, name, url, acquire} | null
  *   acquire(entry) -> {url, release(), provenance}
  *   counts() -> {images, videos, skipped, truncated}   hasMedia() -> bool
@@ -135,10 +140,34 @@ export function drawStillImage(pool) {
 
 const SHA_RE = /^[0-9a-f]{64}$/;
 
+/** Share of the online set shown before the pool asks the host for the next wave. */
+export const ONLINE_LOW_SHARE = 0.7;
+
 export function createGoonMediaPool() {
   let hostEntries = [];   // the host's manifest — the user's active preset
   let localEntries = [];  // standalone: files the player picked in this browser
-  let entries = [];       // hostEntries + localEntries — what the deck indexes
+  let onlineEntries = []; // the in-game flavour's Scrolller pictures (host `online-media` frame)
+  /* THE OPPONENT'S NICHES (host `peer-media` frame, 2026-09-24). Pictures this host fetched from
+   * the niches the opponent named in their hello. NOT in the deck: like `received`, they appear
+   * only where the opponent's payload asked for their media (drawReceived's fallback when no
+   * real artifact of theirs has landed), never in the player's own effects. */
+  let peerNicheEntries = [];
+  const peerNicheShownAt = new Map();
+  let peerNicheSeq = 0;
+  /* THE SORT DUEL'S NOISE BOARDS (host `noise-media` frame, 2026-09-25): safe-for-work Scrolller
+   * boards the player sorts AGAINST. Kept per set id, NEVER in the deck: only the Sort duel's
+   * left pile reads them (ui/duel/duelController.js via listNoise). */
+  const noiseEntries = new Map();   // set id -> [{kind:'image', url}]
+  const noiseAsked = new Set();
+  let noiseRequester = null;
+  let entries = [];       // hostEntries + localEntries + onlineEntries - what the deck indexes
+  /* THE ONLINE DECK REFILLS (2026-09-24). The host fetches one wave per pick (about 24 stills,
+   * 12 clips). Once most of that wave has been on screen the pool asks for the next one, ONCE per
+   * list: a new `online-media` frame that grows the list re-arms it. Names are identities, so a
+   * picture drawn twice counts once. */
+  const onlineShown = new Set();
+  let onlineAsked = false;
+  let onOnlineLow = null;
   let skipped = 0;    // reported by the host (browser-undecodable formats etc.)
   let truncated = false;
   let deck = [];      // shuffled indices into entries, drawn from the end
@@ -175,8 +204,9 @@ export function createGoonMediaPool() {
    * is what makes them independent: whichever moved, the other survives.
    */
   function rebuildEntries() {
-    entries = localEntries.length ? hostEntries.concat(localEntries) : hostEntries.slice();
+    entries = hostEntries.concat(localEntries, onlineEntries);
     deck = [];          // re-deal with the new entries in the mix
+    clipDeck = [];
     recent.length = 0;
   }
 
@@ -185,8 +215,17 @@ export function createGoonMediaPool() {
     if (!e || !e.url) return null;
     const kind = e.kind === 'video' ? 'video' : (e.kind === 'image' ? 'image' : '');
     if (!kind) return null;
-    return { kind, name: String(e.name || ''), url: String(e.url) };
+    const v = { kind, name: String(e.name || ''), url: String(e.url) };
+    // `clip`: a video that IS a gif (Scrolller's GifClip rendition), short and made to
+    // loop. Only these may stand in for a gif on a gif surface (drawClip); a player's
+    // own video files stay video-window material.
+    if (kind === 'video' && e.clip) v.clip = true;
+    return v;
   }
+
+  /** The gif clips, dealt off their own shuffle (drawClip). */
+  let clipDeck = [];
+  let lastClip = -1;
 
   function reshuffle() {
     deck = entries.map((_, i) => i);
@@ -231,9 +270,37 @@ export function createGoonMediaPool() {
     return { url: entry.url, release() {}, provenance: 'local' };
   }
 
+  function noteShown(e) {
+    if (!e || !e.online) return;
+    onlineShown.add(e.name);
+    if (onlineAsked || !onOnlineLow || !onlineEntries.length) return;
+    if (onlineShown.size < Math.ceil(onlineEntries.length * ONLINE_LOW_SHARE)) return;
+    onlineAsked = true;
+    try { onOnlineLow(); } catch (_e) { /* a refill is never load-bearing */ }
+  }
+
   const view = (e) => ({
     kind: e.kind, name: e.name, url: e.url, provenance: 'local', acquire: () => acquire(e),
   });
+
+  /**
+   * One picture from the opponent's niches, least-recently-shown first (the peer pool's own
+   * rotation rule), or null when there are none. `provenance: 'niche'` so a caller can tell it
+   * from the player's own deck; it is NOT 'peer' (no sha, nothing to report or block by hash).
+   * `stamp` false is the preview's read: same pick, no rotation write.
+   */
+  function drawPeerNiche(kind, stamp) {
+    const pool = peerNicheEntries.filter((e) => e.kind === kind);
+    if (!pool.length) return null;
+    let best = pool[0];
+    for (const e of pool) if ((peerNicheShownAt.get(e.url) || 0) < (peerNicheShownAt.get(best.url) || 0)) best = e;
+    if (stamp) peerNicheShownAt.set(best.url, ++peerNicheSeq);
+    const e = best;
+    return {
+      kind: e.kind, name: e.name, url: e.url, clip: e.clip, provenance: 'niche',
+      acquire: () => ({ url: e.url, release() {}, provenance: 'niche' }),
+    };
+  }
 
   /* ------------------------------------------------------------ received map */
 
@@ -363,7 +430,7 @@ export function createGoonMediaPool() {
     for (let tries = 0; tries < 24; tries++) {
       const i = drawIndex();
       if (i < 0) return null;
-      if (entries[i].kind === kind) return view(entries[i]);
+      if (entries[i].kind === kind) { noteShown(entries[i]); return view(entries[i]); }
     }
     return null;
   }
@@ -377,6 +444,9 @@ export function createGoonMediaPool() {
    *  that shows an asset name. Keep this regex identical to dtrh/hostMedia.js's SHARE_RE. */
   const HOST_SHARE_RE = /^online(?:\d{1,3}):/i;
   const hostName = (e) => String((e && e.name) || '').replace(HOST_SHARE_RE, '');
+  /** The host manifest's remote entries carry that same stamp: its videos are the app-wide
+   *  online pool's gif clips, so they may stand in for a gif too. */
+  const isHostRemote = (e) => HOST_SHARE_RE.test(String((e && e.name) || ''));
 
   return {
     /** Swap in a manifest: {images:[{name,url}], videos:[...], skipped, truncated}. */
@@ -384,7 +454,7 @@ export function createGoonMediaPool() {
       const src = m || {};
       hostEntries = [];
       for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) hostEntries.push(v); }
-      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url }); if (v) hostEntries.push(v); }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url, clip: isHostRemote(e) }); if (v) hostEntries.push(v); }
       skipped = src.skipped | 0;
       truncated = !!src.truncated;
       rebuildEntries();
@@ -415,12 +485,95 @@ export function createGoonMediaPool() {
       return counts();
     },
 
+    /**
+     * Swap in the ONLINE set: the flavour's pictures the host fetched and materialised under
+     * https://ccp.assets/.temp/ (`online-media` frame, {images:[{name,url}], videos:[...]}). Same
+     * shape and same terms as setLocalLibrary: the whole current list every time, a third set
+     * beside the host's and the local one, re-deals, never touches `received`. An empty or
+     * missing list simply takes the online pictures back out.
+     */
+    setOnlineLibrary(m) {
+      const src = m || {};
+      const before = onlineEntries.length;
+      onlineEntries = [];
+      for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) { v.online = true; onlineEntries.push(v); } }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url, clip: true }); if (v) { v.online = true; onlineEntries.push(v); } }
+      // Forget what left the list; a list that grew (a refill landed) or a new pick re-arms the ask.
+      const names = new Set(onlineEntries.map((e) => e.name));
+      for (const n of Array.from(onlineShown)) if (!names.has(n)) onlineShown.delete(n);
+      if (onlineEntries.length > before || !onlineEntries.length) onlineAsked = false;
+      rebuildEntries();
+      return counts();
+    },
+
+    /** fn() once the online set is mostly shown (boot sends `media-more`). One ask per list. */
+    setOnlineLowHandler(fn) { onOnlineLow = typeof fn === 'function' ? fn : null; },
+    /**
+     * Swap in the OPPONENT'S niche set (host `peer-media` frame): the whole current list every
+     * time, an empty or missing list takes it back out. Never touches the deck or `received`.
+     */
+    setPeerNicheLibrary(m) {
+      const src = m || {};
+      peerNicheEntries = [];
+      for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) peerNicheEntries.push(v); }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url, clip: true }); if (v) peerNicheEntries.push(v); }
+      peerNicheShownAt.clear();
+      return peerNicheEntries.length;
+    },
+
+    /** The bridge seam: fn(set) sends `noise-want {set}` to the host. '' = release them all. */
+    setNoiseRequester(fn) { noiseRequester = typeof fn === 'function' ? fn : null; },
+    /** Ask for one noise board, once per set until the boards are released. */
+    requestNoise(set) {
+      const id = typeof set === 'string' ? set : '';
+      if (!id || noiseAsked.has(id) || !noiseRequester) return false;
+      noiseAsked.add(id);
+      try { noiseRequester(id); } catch (_e) { noiseAsked.delete(id); return false; }
+      return true;
+    },
+    /** Host `noise-media {set, state, images}`: the whole current list for that board. */
+    setNoiseLibrary(m) {
+      const id = m && typeof m.set === 'string' ? m.set : '';
+      if (!id) return 0;
+      const list = [];
+      for (const e of (m.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) list.push({ kind: 'image', url: v.url }); }
+      if (list.length) noiseEntries.set(id, list); else noiseEntries.delete(id);
+      if (m.state === 'declined' || m.state === 'off') noiseAsked.delete(id);
+      return list.length;
+    },
+    /** A board's pictures as plain rows (a copy). [] until it lands. */
+    listNoise(set) { return (noiseEntries.get(set) || []).map((e) => ({ kind: e.kind, url: e.url })); },
+    /** Match over: forget every board and tell the host to hand the files back. */
+    clearNoise() {
+      const had = noiseAsked.size > 0 || noiseEntries.size > 0;
+      noiseEntries.clear();
+      noiseAsked.clear();
+      if (had && noiseRequester) { try { noiseRequester(''); } catch (_e) { /* ignore */ } }
+    },
+
+    /** How many pictures the opponent's niches have landed here. */
+    peerNicheCount: () => peerNicheEntries.length,
+
+    /** How many of the deck's entries came from the online flavour. */
+    onlineCount: () => onlineEntries.length,
+
     /** How many of the deck's entries came from the player's own picks. */
     localCount: () => localEntries.length,
 
     hasMedia: () => entries.length > 0,
     counts,
     acquire,
+
+    /**
+     * The deck's whole current list as plain rows {kind, url, clip?} (a copy: host + local +
+     * online, never `received`). Read by a game night duel (ui/duel/arcademyHost.js), which hands
+     * it to the real Arcademy media provider as that class's local inventory. Draws nothing.
+     */
+    list: () => entries.map((e) => (e.clip ? { kind: e.kind, url: e.url, clip: true } : { kind: e.kind, url: e.url })),
+
+    /** Only the online flavour's rows, same shape as list(). A duel's class draws these first
+     *  (owner, 2026-09-24: zero setup), and the whole deck only when there are none. */
+    listOnline: () => onlineEntries.map((e) => (e.clip ? { kind: e.kind, url: e.url, clip: true } : { kind: e.kind, url: e.url })),
 
     /** Resolve an asset name to its virtual-host URL (null if not in the pool). */
     urlByName(name) {
@@ -431,11 +584,52 @@ export function createGoonMediaPool() {
     /** Next entry from the shuffled deck (null when the pool is empty). */
     draw() {
       const i = drawIndex();
-      return i < 0 ? null : view(entries[i]);
+      if (i < 0) return null;
+      noteShown(entries[i]);
+      return view(entries[i]);
     },
 
     /** Draw specifically an image/video (null when that kind is absent). */
     drawKind: drawKindInner,
+
+    /**
+     * A GIF CLIP for a gif surface (the glitch/drain wash, flashes), or null when the deck has
+     * none. Online stills are posters BY DESIGN (the host's GifStill tenant), so a gif surface
+     * that draws from the image lane never moves on a Scrolller-only deck; the motion lives in
+     * the GifClip video rendition, marked `clip` here. A player's own video files never come
+     * out of this draw. Its own shuffle, no immediate repeat, and it does not spend the main
+     * deck, so the image and video draws around it are unchanged.
+     */
+    drawClip() {
+      const pool = [];
+      for (let i = 0; i < entries.length; i++) if (entries[i].clip) pool.push(i);
+      if (!pool.length) { clipDeck = []; return null; }
+      clipDeck = clipDeck.filter((i) => entries[i] && entries[i].clip);
+      if (!clipDeck.length) {
+        clipDeck = pool.slice();
+        for (let i = clipDeck.length - 1; i > 0; i--) {
+          const j = (Math.random() * (i + 1)) | 0;
+          [clipDeck[i], clipDeck[j]] = [clipDeck[j], clipDeck[i]];
+        }
+        if (clipDeck.length > 1 && clipDeck[clipDeck.length - 1] === lastClip) {
+          [clipDeck[0], clipDeck[clipDeck.length - 1]] = [clipDeck[clipDeck.length - 1], clipDeck[0]];
+        }
+      }
+      const i = clipDeck.pop();
+      lastClip = i;
+      noteShown(entries[i]);
+      return view(entries[i]);
+    },
+
+    /** How many gif clips the deck holds (drawClip's pool). */
+    clipCount: () => entries.reduce((n, e) => n + (e.clip ? 1 : 0), 0),
+
+    // Preview without consuming the GIF shuffle or changing its echo guard.
+    peekClip() {
+      const next = entries[clipDeck[clipDeck.length - 1]];
+      const entry = next?.clip ? next : entries.find((e) => e.clip);
+      return entry ? view(entry) : null;
+    },
 
     /**
      * A NON-CONSUMING look at what the next drawKind(kind) would most likely
@@ -576,7 +770,8 @@ export function createGoonMediaPool() {
       const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
       if (!want) return null;
       const all = receivedViews(want);
-      if (!all.length) return null;
+      // Nothing of theirs has landed as a file: their NICHES are the next best thing to it.
+      if (!all.length) return drawPeerNiche(want, true);
       // Real footage if they have sent any this match; their gif loops if that is all there is.
       let pool = footageFirst(all, want);
       // …and, when the caller is paying per frame for it, a still ahead of an animation.
@@ -601,7 +796,7 @@ export function createGoonMediaPool() {
       const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
       if (!want) return null;
       const all = receivedViews(want);
-      if (!all.length) return null;
+      if (!all.length) return drawPeerNiche(want, false);
       // The SAME candidate set drawReceived would choose from, or the preview would advertise a
       // gif loop the render then refuses to play.
       return rotate(footageFirst(all, want));

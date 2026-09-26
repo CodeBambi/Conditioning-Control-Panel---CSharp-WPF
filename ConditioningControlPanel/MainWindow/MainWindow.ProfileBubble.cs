@@ -223,6 +223,8 @@ namespace ConditioningControlPanel
             var art = tier > 0 ? Controls.TierBadge.TierArt(tier) : null;
             ProfileBubbleTierBadge.Source = art;
             ProfileBubbleTierBadge.Visibility = art != null ? Visibility.Visible : Visibility.Collapsed;
+            if (art != null) EnsureProfileTierFx();
+            else if (ProfileTierBadgePopup != null) ProfileTierBadgePopup.IsOpen = false;
         }
 
         private static readonly SolidColorBrush ProfileBubbleNeutralBrush = MakeFrozenBrush(0x3D, 0x3D, 0x60);

@@ -12,6 +12,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public EngineRoomDrawer()
         {
             InitializeComponent();
+            if (Services.Companion.CompanionExperience.IsV2Enabled)
+                CloudDailyLimit.Visibility = System.Windows.Visibility.Collapsed;
             // The live-actions feed is height-capped and scrolls internally; without this a wheel
             // notch over it never reaches the page — see CompanionWheelRelay.
             CompanionWheelRelay.Attach(LiveActionsFeed);

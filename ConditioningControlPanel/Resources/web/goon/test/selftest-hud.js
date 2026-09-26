@@ -341,7 +341,8 @@ function makeFakeMatch() {
   });
   ok(left.children.length === 4, 'left rail renders 4 items', String(left.children.length));
   ok(right.children.length === 4, 'right rail renders 4 items', String(right.children.length));
-  ok(left.children.length + right.children.length === arsenalMod.ARSENAL_ITEMS.length,
+  // The game night card (duel: true) only gets a slot when mountArsenal is handed a duel hook.
+  ok(left.children.length + right.children.length === arsenalMod.ARSENAL_ITEMS.filter((i) => !i.duel).length,
     'every arsenal item got a slot (8: 7 payloads + emote)', String(left.children.length + right.children.length));
   ok(arsenalMod.ARSENAL_ITEMS.some((i) => i.id === 'spiral' && i.kind === GoonPayloadKind.Spiral),
     'the spiral slot is wired to GoonPayloadKind.Spiral');
@@ -895,12 +896,11 @@ function makeFakeMatch() {
   /* ---- the DOM ---------------------------------------------------------- */
   ok(side && side.root && side.panel && side.tab, 'mountHud builds the sidebar');
   ok(hasClass(side.root, 'gg-arsenal'), 'under the name ui/hud.css styles', side.root.className);
-  ok(hasClass(side.root.parentNode, 'gg-hud-body'), 'it is a cell of the desk body, not a layer of its own');
+  ok(hasClass(side.root.parentNode, 'gg-rightcol'), 'rack belongs to the opponent column');
   const bodyKids16 = side.root.parentNode.children.map((k) => k.className);
-  ok(bodyKids16[0].indexOf('gg-arsenal') === 0,
-    'and the FIRST one — the sidebar is on the left, where nothing structural lives', bodyKids16.join(' | '));
-  ok(bodyKids16.some((c) => /gg-rightcol/.test(c)),
-    'the right column (monitor · receipts · videos.js keep-out) is untouched by it');
+  ok(bodyKids16.findIndex((c) => c.startsWith('gg-arsenal')) === bodyKids16.indexOf('gg-mon-host') + 1,
+    'rack sits immediately below the opponent TV', bodyKids16.join(' | '));
+  ok(bodyKids16.includes('gg-receipts'), 'receipts remain in the same column');
 
   const panelKids = side.panel.children.map((k) => k.className);
   ok(panelKids.includes('gg-heat'), 'the panel carries the heat gauge', panelKids.join(' | '));
@@ -2621,19 +2621,21 @@ const audioMod = await import('../ui/audio.js');
 
   // The two roots are used, and used the right way round.
   const urls = SFX_IDS.flatMap((id) => SFX_REGISTRY[id].files);
-  ok(urls.some((u) => u.startsWith(DTRH_SFX_DIR)),
-    'DtRH cues are hotlinked absolute (/dtrh/…), never copied');
+  ok(!urls.some((u) => u.startsWith(DTRH_SFX_DIR)),
+    'DtRH cues are local copies (assets/sfx/dtrh-*), never hotlinked: /dtrh/ mp3s ride the audio-web pack');
+  ok(urls.some((u) => /assets[\\/]sfx[\\/]dtrh-Pop\.mp3$/.test(u)), 'the bubble pops resolve to the copied DtRH pops');
   ok(urls.some((u) => /assets[\\/]sfx[\\/]/.test(u)),
     'and the intake/bureau recycles are local copies under assets/sfx/');
   ok(LOCAL_SFX_DIR === '../assets/sfx/', 'the local dir is module-relative (ui/ -> ../assets/sfx/)');
   ok(!urls.some((u) => u.startsWith('/intake/')),
     'nothing points at /intake/ — the harnesses only mount /dtrh/, so those had to be copied');
 
-  // The three pops really are three different sounds, or the distinction is a lie.
+  // Every bubble pops with the three classic CCP pops, DtRH's set (owner, 2026-09-25);
+  // the kinds differ by level only.
   const pops = ['bubble-pop', 'bubble-pop-fx', 'bubble-pop-video'];
   ok(pops.every((p) => SFX_REGISTRY[p]), 'plain / effect / video bubbles each have their own cue');
-  ok(new Set(pops.map((p) => SFX_REGISTRY[p].files.join(','))).size === 3,
-    'and all three resolve to different files');
+  ok(pops.every((p) => ['Pop.mp3', 'Pop2.mp3', 'Pop3.mp3'].every((f) => SFX_REGISTRY[p].files.some((u) => u.endsWith('/dtrh-' + f)))),
+    'and every one draws from the three classic pops');
   ok(SFX_REGISTRY['bubble-pop-fx'].gain > SFX_REGISTRY['bubble-pop'].gain,
     'the effect pop is the juicier of the two');
   // Taste pins: the caption is under the pops, and the safety valve is not a sting.
@@ -2765,8 +2767,8 @@ const audioMod = await import('../ui/audio.js');
   ok((annSrc.match(/cue\(\);/g) || []).length === 1,
     'fired once, on the way IN — the slide-out is deliberately silent');
 
-  ok(/onMistake: \(\) =>[\s\S]{0,160}'lock-slip'/.test(lockSrc),
-    'exec/lockCards.js buzzes a wrong keystroke through the view onMistake seam');
+  ok(/cue\('lock-slip'\)/.test(lockSrc),
+    'the lock view plays the error cue for ambient and thrown cards');
   ok(/'lock-solved'/.test(lockSrc), 'and still chimes a solved card');
 
   ok(/const STING = \{ won: 'recap-won', lost: 'recap-lost', draw: 'recap-draw' \}/.test(recapSrc),
@@ -5205,8 +5207,8 @@ const audioMod = await import('../ui/audio.js');
     ok(chipHost20.parentNode === col20,
       'the CHIP stays in the opponent column — it is about THEIR voice, not a control');
     const kids = col20.children;
-    ok(kids.indexOf(chipHost20) === kids.indexOf(findOne(col20, 'gg-mon-host')) + 1,
-      'the chip sits directly under their bezel');
+    ok(kids.indexOf(chipHost20) === kids.indexOf(findOne(col20, 'gg-arsenal')) + 1,
+      'the chip follows the rack below their bezel');
     ok(kids.indexOf(micHost20) < 0,
       'and the mic is no longer in that column at all');
     ok(!!findOne(frame20, 'gg-voice-btn'), 'the button is built');
@@ -6518,6 +6520,77 @@ const audioMod = await import('../ui/audio.js');
       'mountHud hands ui/prefs.js to the monitor — without it the position is remembered nowhere', seen.join(','));
     hud.unmount();
   }
+}
+
+/* ---- L. the start guide (ui/startGuide.js) rides the countdown ------------ */
+{
+  const guideMod = await import('../ui/startGuide.js');
+  const countdownMod = await import('../ui/screens/countdown.js');
+  const fsG = await import('node:fs/promises');
+  const urlG = await import('node:url');
+  const readUi = (rel) => fsG.readFile(urlG.fileURLToPath(new URL('../' + rel, import.meta.url)), 'utf8');
+
+  // Built alone: a title and exactly the three cards, in the documented order.
+  const built = guideMod.buildGuide({ you: 'me', them: 'them' });
+  ok(!!built && hasClass(built, 'gg-guide'), 'buildGuide returns the .gg-guide section');
+  const cards = findAll(built, 'gg-guide-card');
+  ok(cards.length === 3 && guideMod.GUIDE_CARDS.length === 3, 'three cards, one per way to score', cards.length);
+  ok(cards.every((c, i) => hasClass(c, 'gg-guide-card--' + guideMod.GUIDE_CARDS[i])),
+    'the cards read pop, throw, duel');
+  ok(!!findOne(built, 'gg-guide-title') && findOne(built, 'gg-guide-title').textContent === S.guide.title,
+    'the title is the deck\'s "How to win" line', findOne(built, 'gg-guide-title')?.textContent);
+  ok(findAll(built, 'gsc').length === 3, 'every card carries a scene');
+  ok(findAll(built, 'gsc-spark').length === 6 && !!findOne(built, 'gsc-crown') && !!findOne(built, 'gsc-item'),
+    'the scenes have their pieces (sparks, item, crown)');
+  ok(findAll(built, 'gsc-lane-name').map((x) => x.textContent).join('|') === 'me|them',
+    'the duel lanes wear the two names');
+
+  // Over the countdown: it mounts inside the stage and leaves with the screen.
+  // Reduced motion for the mount, so the punch is a no-op under the stub DOM
+  // and this doubles as the "static" path: the cards are all there, still.
+  dom.doc.documentElement.setAttribute('data-gg-motion', 'reduced');
+  const section = dom.doc.createElement('section');
+  const ctx = {
+    audio: { sfx() {} }, logger: null,
+    getMatch: () => ({ localDisplayName: 'me', opponent: { displayName: 'them' }, startMatchMs: 0 }),
+    getClock: () => null,
+  };
+  let handle = null;
+  let threw = null;
+  try { handle = countdownMod.mount(section, ctx); } catch (e) { threw = e; }
+  ok(!threw, 'the countdown mounts with the guide inside it', threw && threw.message);
+  const stage = findOne(section, 'gg-count');
+  ok(!!stage && hasClass(stage, 'has-guide'), 'the stage wears has-guide so the numeral moves to the foot');
+  ok(findAll(section, 'gg-guide-card').length === 3, 'three cards sit over the count');
+  ok(!!findOne(section, 'gg-count-num'), 'and the shared-clock numeral is still there');
+  try { handle?.unmount(); } catch (e) { threw = e; }
+  ok(!threw, 'unmount does not throw', threw && threw.message);
+  ok(findAll(section, 'gg-guide-card').length === 0, 'the cards are gone when play starts (unmount)');
+  dom.doc.documentElement.removeAttribute('data-gg-motion');
+
+  // The options sheet: opens on the body, any click closes it, close is idempotent.
+  let closed = 0;
+  const sheet = guideMod.openGuideSheet({ host: dom.doc.body, onClose: () => { closed++; } });
+  ok(!!sheet && sheet.isOpen() && findAll(dom.doc.body, 'gg-guide-sheet').length === 1, 'the sheet mounts once on the body');
+  ok(findAll(sheet.node, 'gg-guide-card').length === 3 && !!findOne(sheet.node, 'gg-guide-done'), 'with the three cards and a Got it');
+  sheet.node.dispatchEvent({ type: 'click' });
+  ok(!sheet.isOpen() && closed === 1 && hasClass(sheet.node, 'is-leaving'), 'a click on the scrim closes it');
+  sheet.close();
+  ok(closed === 1, 'close is idempotent');
+  await sleep(260);
+  ok(findAll(dom.doc.body, 'gg-guide-sheet').length === 0, 'and the node is removed after the fade');
+
+  // The still rails live in the CSS, all three of them, and the loops park.
+  const css = await readUi('ui/startGuide.css');
+  ok(/html\[data-gg-motion="reduced"\] \.gg-guide \*[\s\S]*?animation: none !important/.test(css),
+    'reduced motion switches every guide animation off');
+  ok(/html\[data-gg-perf="lite"\] \.gg-guide \*/.test(css), 'so does the lite perf tier');
+  ok(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.gg-guide \*[\s\S]*?animation: none !important/.test(css),
+    'and the OS media query');
+  ok(/\.gsc \* \{ animation-play-state: var\(--gg-deco-play\); \}/.test(css), 'the scene loops park under the heat governor');
+  ok(/\.gg-count\.has-guide \.gg-count-num/.test(css), 'has-guide restyles the numeral');
+  ok(/@media \(max-width: 800px\)/.test(css), 'and the cards restack under 800px');
+  ok(!/—/.test(css) && !/—/.test(await readUi('ui/startGuide.js')), 'no em-dashes in the new files');
 }
 
 await sleep(60);

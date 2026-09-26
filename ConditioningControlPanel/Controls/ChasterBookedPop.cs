@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Chaster;
 using ConditioningControlPanel.Services.Compositor;
 
@@ -50,6 +51,18 @@ namespace ConditioningControlPanel.Controls
         private readonly ScaleTransform _scale = new(1, 1);
         private readonly TranslateTransform _lift = new();
         private readonly DropShadowEffect _glow = new() { ShadowDepth = 0, BlurRadius = 22, Opacity = 0.9 };
+        // The faded name of what cost (or earned) the time, under the figure. Rides the same
+        // rise as the figure but not its scale punch, so it reads as a caption.
+        private readonly TextBlock _sourceText = new() { FontSize = 15, FontWeight = FontWeights.SemiBold, IsHitTestVisible = false };
+        private readonly Border _source = new()
+        {
+            CornerRadius = new CornerRadius(9),
+            Padding = new Thickness(9, 2, 9, 3),
+            Background = new SolidColorBrush(Color.FromArgb(0xC8, 0x1A, 0x0C, 0x1E)),
+            Opacity = BookedFlashPlan.SourceOpacity,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+        };
         private Color _colour;
         private bool _gone;
 
@@ -85,9 +98,14 @@ namespace ConditioningControlPanel.Controls
             _outline.Effect = _glow;
             _stage.Children.Add(_outline);
             _stage.Children.Add(_figure);
+            _sourceText.FontFamily = Display;
+            _source.Child = _sourceText;
+            _source.RenderTransform = _lift;
+            _stage.Children.Add(_source);
             Content = _stage;
 
             Paint(look.Text, look.Colour);
+            Label(look.Source);
             SourceInitialized += (_, _) => PlaceNative();
         }
 
@@ -127,10 +145,11 @@ namespace ConditioningControlPanel.Controls
         }
 
         /// <summary>Same figure, bigger number (a booking inside the coalescing window).</summary>
-        internal void Retitle(string text, Color colour)
+        internal void Retitle(string text, Color colour, string? source = null)
         {
             if (_gone) return;
             Paint(text, colour);
+            if (source != null) Label(source);
             // A small re-punch so the change of number is seen, not just the number.
             if (_plan.ScaleInMs > 0)
             {
@@ -189,6 +208,31 @@ namespace ConditioningControlPanel.Controls
             Canvas.SetTop(_outline, cy - h / 2);
             _scale.CenterX = w / 2;
             _scale.CenterY = h / 2;
+        }
+
+        /// <summary>The source badge: the row's short name, or nothing when the row has no copy
+        /// (a raw id is never shown to a player).</summary>
+        private void Label(string? eventId)
+        {
+            var name = SourceName(eventId);
+            if (name == null) { _source.Visibility = Visibility.Collapsed; return; }
+            _sourceText.Text = name;
+            _sourceText.Foreground = new SolidColorBrush(Lighten(_colour, 0.55));
+            _source.Visibility = Visibility.Visible;
+            _source.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var size = _source.DesiredSize;
+            var cx = BookedPopLayout.WindowWidthDip / 2;
+            var below = Canvas.GetTop(_figure) + (_figure.Data?.Bounds.Bottom ?? 0) + 10;
+            Canvas.SetLeft(_source, cx - size.Width / 2);
+            Canvas.SetTop(_source, Math.Min(below, BookedPopLayout.WindowHeightDip - size.Height - 4));
+        }
+
+        internal static string? SourceName(string? eventId)
+        {
+            if (string.IsNullOrEmpty(eventId)) return null;
+            var key = TabMenuCopy.ShortKey(eventId);
+            var name = Loc.Get(key);
+            return string.IsNullOrWhiteSpace(name) || name == key ? null : name;
         }
 
         private static Color Lighten(Color c, double t) => Color.FromRgb(

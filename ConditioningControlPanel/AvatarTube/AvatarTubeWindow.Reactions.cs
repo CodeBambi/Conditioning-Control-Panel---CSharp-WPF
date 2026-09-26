@@ -310,12 +310,10 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>
-        /// True when the active mod is Bambi Sleep ("BS mode"). Used to suppress the canned giggle
-        /// SFX (giggle1-8.mp3), which sounds cheap next to that mod's real voiceline barks.
-        /// </summary>
-        private static bool IsBambiSleepMod()
-            => App.Mods?.ActiveModId?.Contains("bambi", StringComparison.OrdinalIgnoreCase) == true;
+        /// <summary>True when the canned giggle SFX (giggle1-8.mp3) stays silent: Bambi Sleep (real barks) and the
+        /// gender-neutral CCP Default. See <see cref="Services.ModAudioPolicy.SuppressesGiggleSfx"/>.</summary>
+        private static bool SuppressGiggleSfx()
+            => Services.ModAudioPolicy.SuppressesGiggleSfx(App.Mods?.ActiveModId);
 
         /// <summary>
         /// Plays a fallback sound when no specific audio is connected to a speech bubble.
@@ -327,7 +325,7 @@ namespace ConditioningControlPanel
             {
                 // Bambi Sleep mode: suppress the canned "hehehe" giggle SFX entirely — it sounds cheap
                 // next to that mod's real voiceline barks, so a clip-less bubble just stays silent.
-                if (IsBambiSleepMod()) return;
+                if (SuppressGiggleSfx()) return;
 
                 // Use giggle sounds 1-4 for regular speech bubbles
                 var fallbackSounds = new[] {
@@ -551,7 +549,9 @@ namespace ConditioningControlPanel
             // its own name instead of the Bambi roster name like "Synthetic Blowdoll"
             // (#325 — BUG-GLMA287TET). No-op for mod-agnostic modes.
             var rawCompanionName = Models.CompanionDefinition.GetById(args.Companion).Name;
-            var companionName = App.Mods?.MakeModAware(rawCompanionName) ?? rawCompanionName;
+            var companionName = App.Mods?.IsCCPDefault == true && !string.IsNullOrWhiteSpace(App.Mods.GetCompanionName())
+                ? App.Mods.GetCompanionName()
+                : App.Mods?.MakeModAware(rawCompanionName) ?? rawCompanionName;
             if (args.NewLevel == Models.CompanionProgress.MaxLevel)
             {
                 GigglePriority($"{companionName} reached MAX LEVEL! *sparkles*", aiGenerated: false);

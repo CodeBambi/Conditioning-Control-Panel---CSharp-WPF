@@ -70,6 +70,25 @@ namespace ConditioningControlPanel.Services.AIService
         /// </summary>
         public bool Interactive { get; init; }
 
+        /// <summary>One logical generation. Transport retries retain this identifier.</summary>
+        public string? RequestId { get; init; }
+        public bool CompanionV2 { get; init; }
+        public bool IsStructuredUtility => CompanionV2 && Purpose is AiPurpose.Memory or AiPurpose.Summary;
+
+        public static AiCallOptions ForPreview(AiCallOptions options) => options with
+        {
+            CompanionV2 = true,
+            RequestId = Guid.NewGuid().ToString("D"),
+            MaxTokens = PreviewTokenLimit(options.Purpose)
+        };
+
+        public static int PreviewTokenLimit(AiPurpose purpose) => purpose switch
+        {
+            AiPurpose.Reaction => 80,
+            AiPurpose.Memory or AiPurpose.Summary => 300,
+            _ => 240
+        };
+
         /// <summary>Chat-box defaults: tier A, interactive, 100 tokens out.</summary>
         public static AiCallOptions Chat { get; } =
             new() { Purpose = AiPurpose.Chat, MaxTokens = 100, Temperature = 0.7, Interactive = true };

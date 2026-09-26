@@ -97,6 +97,22 @@ public class ChasterMissesTests : IDisposable
     }
 
     [Fact]
+    public void Coming_back_keeps_what_today_already_booked()
+    {
+        using (var before = Make()) before.NoteSeen();
+        _local = _local.AddDays(4);
+        _options = _options with { Prices = new HashSet<string> { CircesMisses.EventId, "typo" } };
+        using var service = Make();
+
+        service.Note("typo");
+        Assert.Equal(30, service.TodayAddedSeconds);
+        Assert.Equal(300 + 600 + 1200, service.NoteSeen());
+
+        // The misses are dated on the days away; today's counter is untouched by them.
+        Assert.Equal(30, service.TodayAddedSeconds);
+    }
+
+    [Fact]
     public void A_month_away_is_the_backlog_cap_and_not_a_month()
     {
         _options = _options with { Limits = TabLimits.FromMinutes(60, 180) };

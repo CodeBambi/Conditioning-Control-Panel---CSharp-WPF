@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -344,13 +344,27 @@ namespace ConditioningControlPanel.Models
 
         private int _selectedAvatarSet = 0; // 0 = auto (use max unlocked)
         /// <summary>
-        /// User's selected avatar set (1-6). 0 means auto-select highest unlocked.
+        /// User's selected avatar set. 0 means auto-select highest unlocked.
         /// </summary>
         public int SelectedAvatarSet
         {
             get => _selectedAvatarSet;
-            set { _selectedAvatarSet = Math.Clamp(value, 0, 7); OnPropertyChanged(); }
+            set
+            {
+                _selectedAvatarSet = Math.Clamp(value, 0,
+                    Services.Companion.CompanionExperience.IsV2Enabled ? int.MaxValue : 7);
+                OnPropertyChanged();
+            }
         }
+
+        // Retired with tube EMI (companion pivot, 2026-09-25). Kept only so settings files that
+        // carry these keys still load; nothing reads or writes them.
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
+        public bool CompanionEmiPreviewChoiceMade { get; set; }
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
+        public bool CompanionEmiFixedVoiceApplied { get; set; }
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
+        public int CompanionEmiVoiceRevision { get; set; }
 
         private bool _welcomed = false;
         public bool Welcomed
@@ -2263,6 +2277,28 @@ namespace ConditioningControlPanel.Models
         {
             get => _assetPresets;
             set { _assetPresets = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modDefaultSettingsPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Per mod id, the settings preset (Preset.Id) to load each time that mod is switched to,
+        /// picked in the Customise window. "" = the user chose "Keep current" on purpose; a missing
+        /// key = never chosen. Local only. See Services/ModPresetDefaults.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModDefaultSettingsPreset
+        {
+            get => _modDefaultSettingsPreset;
+            set { _modDefaultSettingsPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modDefaultAssetPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Per mod id, the asset preset (AssetPreset.Id) to apply on switching to it. Same rules.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModDefaultAssetPreset
+        {
+            get => _modDefaultAssetPreset;
+            set { _modDefaultAssetPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
         }
 
         private string? _currentAssetPresetId = null;
@@ -4718,8 +4754,8 @@ namespace ConditioningControlPanel.Models
             { "EMPTY", true },
             { "MINDLESS", true },
             { "OBEDIENT", true },
-            { "PRETTY", true },
-            { "PINK", true },
+            { "RELAX", true },
+            { "SINK", true },
             { "DROP", true }
         };
         public Dictionary<string, bool> BouncingTextPool
@@ -5262,6 +5298,19 @@ namespace ConditioningControlPanel.Models
             set { _chasterRelockPastEnd = value; OnPropertyChanged(); }
         }
 
+        private bool _chasterRafflePostDays;
+
+        /// <summary>Opt-in (owner, 2026-09-26): "Post my days in Discord" for the Locktober raffle.
+        /// On = the bot's daily digest lists this account's display name, yesterday's CCP-added
+        /// time, the month's total and days counted, and the ticket list shows the name. Off = never
+        /// in the digest, and only a per-month label on the ticket list. Off by default.</summary>
+        [JsonProperty]
+        public bool ChasterRafflePostDays
+        {
+            get => _chasterRafflePostDays;
+            set { _chasterRafflePostDays = value; OnPropertyChanged(); }
+        }
+
         // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----
         // These are the room's own switches, shown in the room's Options and not in Settings, the same
         // way BackRoomTunnel and BackRoomMelt are. They are deliberately NOT the app-wide MediaSource /
@@ -5782,6 +5831,14 @@ namespace ConditioningControlPanel.Models
 
         #region Companion Leveling System (v5.3)
 
+        private CompanionBonusType? _companionPerk;
+        /// <summary>Independent preview perk. Null inherits the current bundle until first use.</summary>
+        public CompanionBonusType? CompanionPerk
+        {
+            get => _companionPerk;
+            set { _companionPerk = value.HasValue && Enum.IsDefined(value.Value) ? value : null; OnPropertyChanged(); }
+        }
+
         private int _activeCompanionId = 0;
         /// <summary>
         /// Currently active companion (0=OG Bambi Sprite, 1=Cult Bunny, 2=Brain Parasite, 3=Bambi Trainer).
@@ -6088,11 +6145,13 @@ namespace ConditioningControlPanel.Models
             set { _randomBubbleEnabled = value; OnPropertyChanged(); }
         }
 
-        // Fresh-install list: the neutral CCP Default triggers plus the two phrases from the old
-        // default list that carried no theme, so Trigger Mode still ships a usable spread.
+        // Fresh-install list: the neutral CCP Default triggers plus two more classic neutral phrases,
+        // so Trigger Mode still ships a usable spread. Not "SNAP AND FORGET": that is a BambiSleep
+        // trigger with its own Bambi-voiced clip in Resources\sub_audio, which Trigger Mode plays by
+        // exact name, so a fresh CCP Default install spoke in Bambi's voice (pivot audit 2026-09-25).
         private List<string> _customTriggers = new(BuiltInMods.CCPDefault.CustomTriggers ?? new List<string>())
         {
-            "SNAP AND FORGET",
+            "LET GO",
             "SAFE AND SECURE"
         };
         /// <summary>
@@ -8058,6 +8117,57 @@ namespace ConditioningControlPanel.Models
             set { _goonLastOpponentJson = value ?? ""; OnPropertyChanged(); }
         }
 
+        private string _goonMediaFlavour = "";
+        /// <summary>
+        /// The Goon Game's picture flavour (trance, pink, frills, shiny, censored, mine), or ""
+        /// when the player never picked. A non-empty pick IS the player's opt-in to online
+        /// pictures for this game only; the app-wide MediaSource is not read. Written by
+        /// GoonHostService from the page's media-flavour frame, echoed in init.
+        /// </summary>
+        [JsonProperty("goonMediaFlavour")]
+        public string GoonMediaFlavour
+        {
+            get => _goonMediaFlavour;
+            set { _goonMediaFlavour = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _goonMediaCustom = "";
+        /// <summary>
+        /// The page's per-flavour niche edits, as a JSON object string
+        /// { flavourId: { on:[], off:[], added:[] } }. Opaque to the host beyond a size cap
+        /// and a parse check; the page owns its shape. "" = no edits.
+        /// </summary>
+        [JsonProperty("goonMediaCustom")]
+        public string GoonMediaCustom
+        {
+            get => _goonMediaCustom;
+            set { _goonMediaCustom = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _goonMediaSubs = "";
+        /// <summary>
+        /// The last validated niche list the page computed for the pick (comma-joined, max 8),
+        /// so a returning player's pictures start at page ready before the page says anything.
+        /// </summary>
+        [JsonProperty("goonMediaSubs")]
+        public string GoonMediaSubs
+        {
+            get => _goonMediaSubs;
+            set { _goonMediaSubs = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _goonMediaOnline = true;
+        /// <summary>
+        /// Online pictures for the Goon Game. Off = the host fetches nothing and posts
+        /// online-media state 'off'. Default on, but nothing is fetched until a flavour is picked.
+        /// </summary>
+        [JsonProperty("goonMediaOnline")]
+        public bool GoonMediaOnline
+        {
+            get => _goonMediaOnline;
+            set { _goonMediaOnline = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region The Arcademy (webview mini-game hub)
@@ -8727,6 +8837,9 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
 
+        /// <summary>Swap open and toggle gestures on Home feature tiles only.</summary>
+        public bool DashboardInvertClicks { get; set; }
+
         /// <summary>
         /// The Home dashboard's browser card is folded shut: the header strip stays, everything
         /// below it (the Deeper toolbar, the audio row and the WebView2) is collapsed and the card
@@ -9082,6 +9195,27 @@ namespace ConditioningControlPanel.Models
             get => _deeperPlayerWindowHeight;
             set { _deeperPlayerWindowHeight = value; OnPropertyChanged(); }
         }
+
+        private bool _companionAsksEnabled = true;
+        /// <summary>The companion now and then asks a question with a few answer buttons.</summary>
+        [JsonProperty]
+        public bool CompanionAsksEnabled
+        {
+            get => _companionAsksEnabled;
+            set { _companionAsksEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>Video titles the user said they loved on an ask card (offered first).</summary>
+        [JsonProperty]
+        public List<string> CompanionAskLovedVideos { get; set; } = new();
+
+        /// <summary>Video titles the user called "meh" on an ask card (never offered again).</summary>
+        [JsonProperty]
+        public List<string> CompanionAskMehVideos { get; set; } = new();
+
+        /// <summary>Get-to-know topics already answered (colour, time, drop).</summary>
+        [JsonProperty]
+        public List<string> CompanionAskKnownTopics { get; set; } = new();
 
         #endregion
     }

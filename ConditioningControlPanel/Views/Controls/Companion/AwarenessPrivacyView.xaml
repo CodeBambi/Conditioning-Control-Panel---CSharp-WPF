@@ -162,7 +162,7 @@
                         Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVisInverse}}">
                     <TextBlock Text="{loc:Str companion_tag_live}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
                 </Border>
-                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagStyle}"
+                <Border x:Name="PreviewTrainTag" Grid.Column="2" Style="{StaticResource CmpTrainTagStyle}"
                         Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVis}}">
                     <TextBlock Text="{loc:Str companion_tag_train2}" Style="{StaticResource CmpTrainTagTextStyle}"/>
                 </Border>

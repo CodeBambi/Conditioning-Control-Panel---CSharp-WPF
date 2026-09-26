@@ -151,6 +151,8 @@ namespace ConditioningControlPanel.Controls
 
                 core.SetVirtualHostNameToFolderMapping(VirtualHost, WebFolder, CoreWebView2HostResourceAccessKind.Deny);
                 core.NavigationStarting += OnNavigationStarting;
+                // No popups, ever: a window.open would otherwise get a browser window of its own.
+                core.NewWindowRequested += (_, e) => e.Handled = true;
                 core.NavigationCompleted += OnNavigationCompleted;
                 core.ProcessFailed += OnProcessFailed;
                 core.Navigate(Url);
@@ -169,13 +171,20 @@ namespace ConditioningControlPanel.Controls
                 e.Cancel = true;
         }
 
-        private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+        private async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             if (!e.IsSuccess) { Fail("navigation failed: " + e.WebErrorStatus); return; }
+            // Mount the latest hovered row before covering the fallback picture.
+            string? mounted = null;
+            while (_pending is { } next && next != mounted && !_disposed && !_failed)
+            {
+                await MountAsync(next).ConfigureAwait(true);
+                mounted = next;
+            }
+            if (_disposed || _failed) return;
             IsReady = true;
             try { Ready?.Invoke(this, EventArgs.Empty); }
             catch (Exception ex) { App.Logger?.Debug("[Chaster] trailer Ready handler threw: {E}", ex.Message); }
-            if (_pending is { } id) _ = MountAsync(id);
         }
 
         private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e) =>

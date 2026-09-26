@@ -23,7 +23,7 @@ public sealed record EmiMoment(string Id, object? Context);
 /// path: no window until the first summon, no timers while she is away, and every gate the rest of
 /// the app asks (<see cref="AvatarMuted"/>) short-circuits on <see cref="IsOut"/>.
 /// </summary>
-public sealed class EmiDeskService : IDisposable
+public sealed partial class EmiDeskService : IDisposable
 {
     /// <summary>The default summon chord. A chord is required; bare keys are refused.</summary>
     public const string DefaultHotkey = "Ctrl+Alt+E";
@@ -83,7 +83,7 @@ public sealed class EmiDeskService : IDisposable
         {
             try
             {
-                if (!IsOut) return false;
+                if (!IsOut || _tubeVisibility.Suppressed) return false;
                 var s = App.Settings?.Current;
                 if (s == null || !s.EmiDeskMuteAvatar) return false;
                 return _muteAccepted;
@@ -211,7 +211,7 @@ public sealed class EmiDeskService : IDisposable
             if (!IsOut) return false;
             var win = _window;
             if (win == null || win.Visibility != Visibility.Visible) return false;
-            if (win.InputLocked || win.Transiting) return false;
+            if (win.PresentationActive || win.InputLocked || win.Transiting) return false;
             if (win.AskLive) return false;
 
             if (App.Video?.IsPlaying == true) return false;
@@ -278,7 +278,7 @@ public sealed class EmiDeskService : IDisposable
                 disp.BeginInvoke(new Action(() => Summon(why)));
                 return;
             }
-            if (IsOut) return;
+            if (IsOut || _tubeVisibility.Suppressed) return;
 
             var win = EnsureWindow();
             if (win == null) return;
@@ -297,6 +297,13 @@ public sealed class EmiDeskService : IDisposable
             // while that pump was running, this summon is stale and stops here.
             MaybeAskAboutMuting();
             if (_disposed) return;
+            // The tube may take EMI while the mute prompt runs its nested message pump.
+            if (_tubeVisibility.Suppressed)
+            {
+                IsOut = false;
+                RaiseOutChanged();
+                return;
+            }
             if (_summonGen != gen || !IsOut)
             {
                 Log.Information("[EmiDesk] summon abandoned: she was sent away while the mute prompt was up");
@@ -412,6 +419,7 @@ public sealed class EmiDeskService : IDisposable
     /// <summary>Send her away. Safe to call when she is not out.</summary>
     public void Dismiss()
     {
+        if (_window?.PresentationActive == true) _window.StopPresentation();
         try
         {
             if (_disposed) return;
@@ -422,6 +430,7 @@ public sealed class EmiDeskService : IDisposable
                 disp.BeginInvoke(new Action(Dismiss));
                 return;
             }
+            _tubeVisibility.Dismiss();
             // Invalidate any summon parked in a nested message pump before anything else: without
             // this, the mute prompt returns and puts her straight back on screen behind us.
             _summonGen++;
@@ -519,7 +528,7 @@ public sealed class EmiDeskService : IDisposable
             if (DateTime.UtcNow < _farewellUntilUtc) return;
 
             var win = _window;
-            if (win == null || win.Visibility != Visibility.Visible) return;
+            if (win == null || win.PresentationActive || win.Visibility != Visibility.Visible) return;
 
             // Claim the silence BEFORE the line, so `arcademyOpened` cannot slip in between.
             _farewellUntilUtc = DateTime.UtcNow.AddMilliseconds(ArcademyByeSuppressMs);
@@ -583,6 +592,16 @@ public sealed class EmiDeskService : IDisposable
             _farewellTimer = null;
         }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] CancelFarewell failed"); }
+    }
+
+    // Explicit demo activation bypasses idle preferences without changing them.
+    internal EmiDeskWindow? BeginPresentation()
+    {
+        var window = EnsureWindow();
+        if (window == null) return null;
+        if (!IsOut) window.RestorePlacement();
+        IsOut = true; RaiseOutChanged();
+        return window;
     }
 
     private EmiDeskWindow? EnsureWindow()
@@ -679,7 +698,7 @@ public sealed class EmiDeskService : IDisposable
                 disp.BeginInvoke(new Action(() => Speak(momentId, ctx)));
                 return;
             }
-            Speak(momentId, ctx);
+            if (_window?.PresentationActive != true) Speak(momentId, ctx);
         }
         catch (Exception ex)
         {
@@ -711,7 +730,7 @@ public sealed class EmiDeskService : IDisposable
         {
             if (!IsOut) return;
             var win = _window;
-            if (win == null || win.Visibility != Visibility.Visible) return;
+            if (win == null || win.PresentationActive || win.Visibility != Visibility.Visible) return;
 
             // THE GOODBYE WINS. She has said her arcademy farewell and the outro is already
             // scheduled; anything landing inside that window would talk over her last line and
@@ -1266,7 +1285,7 @@ public sealed class EmiDeskService : IDisposable
         {
             if (!IsOut) return;
             var win = _window;
-            if (win == null || win.Visibility != Visibility.Visible) return;
+            if (win == null || win.PresentationActive || win.Visibility != Visibility.Visible) return;
 
             // The goodbye still wins: she is on her way to the Arcademy and must not be teaching
             // anybody anything on the way out.

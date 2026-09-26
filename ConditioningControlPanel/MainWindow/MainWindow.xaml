@@ -531,7 +531,7 @@
              land on dead canvas instead of on the page. Do NOT switch this to Stretch. -->
         <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0" Grid.ColumnSpan="2"
                 HorizontalAlignment="Left" Width="56" Panel.ZIndex="60" ClipToBounds="True"
-                BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="0,0,1,0">
+                BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="0,0,1,0">
             <!-- Static depth gradient (was flat PanelBgBrush): top matches the panel tone the
                  title bar hands off, sinking slightly by the bottom so the rail reads as its own
                  column instead of a stripe of the same slab every panel uses. Not animated.
@@ -719,11 +719,11 @@
                                 <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
                                          IsHitTestVisible="False"
                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="40" Height="40"
+                                <Viewbox Grid.Column="0" Width="46" Height="46"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <!-- x:Name = the handle ApplyDoorArt (MainWindow.NavRail.cs) uses to
                                          re-point the art at the active mod's override. The literal
@@ -777,11 +777,11 @@
                                 <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
                                          IsHitTestVisible="False"
                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="40" Height="40"
+                                <Viewbox Grid.Column="0" Width="46" Height="46"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorStudio"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -883,11 +883,11 @@
                                 <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
                                          IsHitTestVisible="False"
                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="40" Height="40"
+                                <Viewbox Grid.Column="0" Width="46" Height="46"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorCompanion"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -974,11 +974,11 @@
                                 <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
                                          IsHitTestVisible="False"
                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="40" Height="40"
+                                <Viewbox Grid.Column="0" Width="46" Height="46"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorPlay"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1112,11 +1112,11 @@
                                 <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
                                          IsHitTestVisible="False"
                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="40" Height="40"
+                                <Viewbox Grid.Column="0" Width="46" Height="46"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorYou"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1235,11 +1235,11 @@
                                 <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
                                          IsHitTestVisible="False"
                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="40" Height="40"
+                                <Viewbox Grid.Column="0" Width="46" Height="46"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorLibrary"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1417,11 +1417,11 @@
                             <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
                                      IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Column="0" Width="40" Height="40"
+                            <Viewbox Grid.Column="0" Width="46" Height="46"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorWebApp"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1453,11 +1453,11 @@
                             <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
                                      IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Column="0" Width="40" Height="40"
+                            <Viewbox Grid.Column="0" Width="46" Height="46"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorSettings"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1947,8 +1947,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_10_3_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_10_3_let_the_games_begin}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_11_0_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_11_0_locktober}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -2106,14 +2106,26 @@
                             <!-- Tier badge (Basic gold / Prime cyan), tucked over the bottom-right rim.
                                  Painted by RefreshProfileBubble; collapsed for free accounts. The Grid
                                  does not clip, so the negative margin hangs it past the circle. -->
-                            <Image x:Name="ProfileBubbleTierBadge" Width="30" Stretch="Uniform"
+                            <Image x:Name="ProfileBubbleTierBadge" Width="33" Stretch="Uniform"
                                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                   Margin="0,0,-12,-5" Visibility="Collapsed" IsHitTestVisible="False"
-                                   RenderTransformOrigin="0.5,0.5">
+                                   Margin="0,0,-13,-6" Visibility="Collapsed"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   RenderTransformOrigin="0.5,0.5"
+                                   MouseEnter="ProfileTierBadge_MouseEnter" MouseLeave="ProfileTierBadge_MouseLeave">
                                 <Image.RenderTransform>
                                     <RotateTransform Angle="-12"/>
                                 </Image.RenderTransform>
                             </Image>
+                            <!-- Hover blows the badge up to the LEFT of the bubble: the account menu
+                                 owns the space below it. A layered popup's pixels take the mouse, so it
+                                 never sits over the badge itself (MainWindow.ProfileBubbleTierFx.cs). -->
+                            <Popup x:Name="ProfileTierBadgePopup" PlacementTarget="{Binding ElementName=ProfileBubbleTierBadge}"
+                                   Placement="Left" AllowsTransparency="True" StaysOpen="True"
+                                   IsHitTestVisible="False" Focusable="False" PopupAnimation="None">
+                                <Image x:Name="ProfileTierBadgeBig" Height="72" Margin="12"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       RenderTransformOrigin="1,0.5" IsHitTestVisible="False"/>
+                            </Popup>
                         </Grid>
                     </Button>
                     <!-- The bubble's account menu. StaysOpen + manual close-grace timers, same
@@ -2636,7 +2648,7 @@
 
 
         <!-- Global Bottom Bar: Start / Save / Exit (Always visible) -->
-        <Border Grid.Row="5" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Margin="10,5,10,10" CornerRadius="10" Padding="15,12">
+        <Border Grid.Row="5" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Margin="10,10,10,10" CornerRadius="10" Padding="15,12">
             <!-- One flat grid so the Start controls and Save/Exit can't collide. Auto
                  columns (Remember / caret / Pause) take their size first, START flexes,
                  and Save/Exit share the rest — nothing clips at any window width. -->
@@ -3075,6 +3087,10 @@
                         <!-- Header -->
                         <Border Grid.Row="0" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10,10,0,0" Padding="20,15">
                             <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Button Grid.Row="1" Content="{loc:Str first_show_replay}" Click="BtnFirstShowReplay_Click"
+                                        Style="{StaticResource PinkButton}" FontSize="20" FontWeight="Bold"
+                                        HorizontalAlignment="Stretch" Padding="22,16" Margin="0,18,0,0"/>
                                 <TextBlock Text="{loc:Str label_how_to_use_the_app}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                            HorizontalAlignment="Center"/>
                                 <Button Content="✕" Click="MainTutorial_Close" HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -3351,25 +3367,6 @@
                         <!-- Footer -->
                         <Border Grid.Row="2" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="0,0,10,10" Padding="20,15">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <Button Content="{loc:Str btn_start_interactive_tutorial}" Click="BtnStartTutorial_Click" Margin="0,0,15,0"
-                                        Background="Transparent" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                        Padding="20,10" FontWeight="SemiBold" Cursor="Hand">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="border" Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
                                 <Button Content="{loc:Str btn_got_it}" Style="{StaticResource PinkButton}"
                                         Click="MainTutorial_Close" Padding="40,10"/>
                             </StackPanel>

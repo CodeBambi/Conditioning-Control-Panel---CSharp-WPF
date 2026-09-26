@@ -308,8 +308,12 @@ public sealed class EmiLineEngine
     /// cooldown clock, the recent ring, the ask gap and the launch's one double. Call it with the
     /// line's or the ask's id the instant the bubble goes up, and again for an ask's yes/no
     /// reaction line.
+    ///
+    /// <para><paramref name="spoke"/> is false for a wordless hold face. A hold never speaks, so it
+    /// must not stamp the global floor: every ignored channel used to restart the 45 s floor about
+    /// every 20 s, and nothing below priority 3 could land on an idle desk (found 2026-09-25).</para>
     /// </summary>
-    public void Ack(string? id)
+    public void Ack(string? id, bool spoke = true)
     {
         if (string.IsNullOrEmpty(id)) return;
         lock (_gate)
@@ -317,7 +321,7 @@ public sealed class EmiLineEngine
             try
             {
                 var now = DateTime.UtcNow;
-                _lastSpokeUtc = now;
+                if (spoke) _lastSpokeUtc = now;
                 if (id.StartsWith("ask.", StringComparison.Ordinal)) _lastAskUtc = now;
 
                 if (_ackMoment.TryGetValue(id, out var key))

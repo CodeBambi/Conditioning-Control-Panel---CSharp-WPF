@@ -106,6 +106,7 @@ public partial class LauncherWindow : Window
             RefreshLockdownVeil();
             HookEngine();
             _statusTimer.Start();
+            StartOpenTables();
 
             if (MotionFx.AllowTransitions)
                 foreach (var t in _tiles) t.Opacity = 0;
@@ -121,6 +122,7 @@ public partial class LauncherWindow : Window
     private void OnHidden()
     {
         _statusTimer.Stop();
+        StopOpenTables();
         RestoreRootOpacity();
         try { FxOnHidden(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnHidden threw"); }
     }
@@ -143,6 +145,7 @@ public partial class LauncherWindow : Window
         _fadeGuard?.Stop();
         _statusTimer.Stop();
         _shortcutTextTimer.Stop();
+        StopOpenTables();
         LauncherHost.RequestSignIn = null;
         UnhookEngine();
         var mods = App.Mods;
@@ -155,6 +158,7 @@ public partial class LauncherWindow : Window
             lockdown.LockdownDeactivated -= OnLockdownChanged;
         }
         try { FxOnClosed(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnClosed threw"); }
+        TierBadgeFxStop();
     }
 
     // ------------------------------------------------------------------ title bar
@@ -430,6 +434,8 @@ public partial class LauncherWindow : Window
             };
             TierBadge.Source = badge == null ? null : ModResourceResolver.ResolveImageDecoded(badge, 64);
             TierBadge.Visibility = TierBadge.Source == null ? Visibility.Collapsed : Visibility.Visible;
+            if (TierBadge.Source != null) EnsureTierBadgeFx();
+            else TierBadgePopup.IsOpen = false;
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshAccount failed"); }
     }

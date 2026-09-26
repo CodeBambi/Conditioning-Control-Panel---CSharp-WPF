@@ -193,6 +193,9 @@ import {
   viewportCap, safeInsets,
 } from './pinch.js';
 import { perfLite } from './perfTier.js';
+/* exec/ imports nothing from ui/ (selftest-hud holds that line), so the two labels are read
+   straight off the language layer by their keys (ui/strings.js S.video). */
+import { t } from '../core/i18n.js';
 
 const MAX_SOURCE_TRIES = 3;   // a broken entry costs one redraw, not the run
 
@@ -1507,7 +1510,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     const skipBtn = document.createElement('button');
     skipBtn.className = SKIP_BTN_CLASS;
     skipBtn.setAttribute('type', 'button');
-    skipBtn.setAttribute('aria-label', 'close this video');
+    skipBtn.setAttribute('aria-label', t('gg_video_close'));
     skipBtn.textContent = '✕';
 
     // THE FLAG — built ONLY for a peer window, so a player can never be offered
@@ -1517,7 +1520,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (flagBtn) {
       flagBtn.className = SKIP_BTN_CLASS + ' ' + FLAG_BTN_CLASS;
       flagBtn.setAttribute('type', 'button');
-      flagBtn.setAttribute('aria-label', 'hide this and flag it for reporting');
+      flagBtn.setAttribute('aria-label', t('gg_video_flag'));
       flagBtn.textContent = FLAG_GLYPH;
     }
 

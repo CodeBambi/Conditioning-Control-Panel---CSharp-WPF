@@ -732,7 +732,22 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Unified user ID that links Patreon and Discord accounts together
         /// </summary>
-        public static string? UnifiedUserId { get; set; }
+        private static string? _unifiedUserId;
+        public static event EventHandler? UnifiedIdentityChanged;
+        public static string? UnifiedUserId
+        {
+            get => _unifiedUserId;
+            set
+            {
+                if (string.Equals(_unifiedUserId, value, StringComparison.Ordinal)) return;
+                _unifiedUserId = value;
+                foreach (EventHandler handler in UnifiedIdentityChanged?.GetInvocationList() ?? Array.Empty<Delegate>())
+                {
+                    try { handler(null, EventArgs.Empty); }
+                    catch (Exception ex) { Logger?.Debug("Identity observer failed ({Kind})", ex.GetType().Name); }
+                }
+            }
+        }
 
         /// <summary>
         /// Snapshot of the UnifiedUserId as restored from settings at startup, captured
@@ -1326,8 +1341,22 @@ namespace ConditioningControlPanel
             _hangStressTimer = timer;   // root it so it isn't collected
         }
 
+#if DEBUG
+        private bool _firstShowPreview;
+#endif
         protected override void OnStartup(StartupEventArgs e)
         {
+#if DEBUG
+            if (e.Args.Contains("--first-show-preview"))
+            {
+                _firstShowPreview = true;
+                base.OnStartup(e);
+                IsUnattendedRig = true;
+                EmiDesk = new Services.EmiDesk.EmiDeskService();
+                Services.FirstShow.FirstShowService.Open(preview: true);
+                return;
+            }
+#endif
             // Dump-writer mode: spawned by UiHangWatchdog in a WEDGED sibling CCP process
             // (`--write-hang-dump <pid> <path>`). Write the minidump from this healthy process
             // and exit before touching the splash, the single-instance mutex, or any service.
@@ -2164,6 +2193,7 @@ namespace ConditioningControlPanel
             {
                 Brain = new Services.Companion.Brain.CompanionBrain(Ai);
                 Brain.AttachBarkSource(Bark);
+                Services.Companion.Asks.CompanionAskService.Instance.Start();
                 Logger?.Information("CompanionBrain initialized (enabled={Enabled}, restored={Restored} turns)",
                     Services.Companion.Brain.CompanionBrain.IsEnabled, Brain.RestoredTurnCount);
             }
@@ -5505,6 +5535,13 @@ Application State:
 
         protected override void OnExit(ExitEventArgs e)
         {
+#if DEBUG
+            if (_firstShowPreview)
+            {
+                base.OnExit(e);
+                return;
+            }
+#endif
             Logger?.Information("Application shutting down...");
 
             // EMI Desk (MOMENTS 4.B / 3.8): the wordless flinch. appClosing is a HOLD with no pool
