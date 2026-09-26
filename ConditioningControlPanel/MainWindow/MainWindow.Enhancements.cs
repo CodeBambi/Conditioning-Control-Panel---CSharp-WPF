@@ -199,7 +199,7 @@ namespace ConditioningControlPanel
 
             // Title section
             var titleStack = new StackPanel { Margin = new Thickness(0, 0, 0, 15) };
-            titleStack.Children.Add(new TextBlock
+            titleStack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "✨ " + (App.Mods?.GetEnhancementTreeTitle() ?? Loc.Get("label_enhancement_tree_title")),
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
@@ -235,7 +235,7 @@ namespace ConditioningControlPanel
                     Margin = new Thickness(0, 6, 0, 0),
                     HorizontalAlignment = HorizontalAlignment.Left
                 };
-                certifiedChip.Child = new TextBlock
+                certifiedChip.Child = new ConditioningControlPanel.Helpers.EmojiTextBlock
                 {
                     Text = "🎓 " + Loc.Get("skill_certified_data_bimbo_name"),
                     Foreground = new SolidColorBrush(Color.FromRgb(255, 200, 80)),
@@ -301,7 +301,7 @@ namespace ConditioningControlPanel
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Center
             };
-            pointsStack.Children.Add(new TextBlock
+            pointsStack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "💎",
                 FontSize = 24,
@@ -404,7 +404,7 @@ namespace ConditioningControlPanel
                 FontSize = 10,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            ditzyButtonStack.Children.Add(new TextBlock
+            ditzyButtonStack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "📊 ",
                 FontSize = 12,
@@ -443,7 +443,7 @@ namespace ConditioningControlPanel
                 mainStack.Children.Add(ditzyButton);
 
             // Stats title
-            detailedStatsStack.Children.Add(new TextBlock
+            detailedStatsStack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "📊 " + (App.Mods?.GetStatsTitle() ?? "Ditzy Data Stats"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
@@ -1976,7 +1976,7 @@ namespace ConditioningControlPanel
 
             if (isUnlocked)
             {
-                stack.Children.Add(new TextBlock
+                stack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
                 {
                     Text = $"💎{skill.Cost} {Loc.Get("label_skill_owned")}",
                     Foreground = new SolidColorBrush(Color.FromRgb(180, 130, 255)),
@@ -1990,7 +1990,7 @@ namespace ConditioningControlPanel
                     ? Color.FromRgb(255, 215, 0)
                     : Color.FromRgb(120, 120, 120);
 
-                stack.Children.Add(new TextBlock
+                stack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
                 {
                     Text = $"💎 {skill.Cost}",
                     Foreground = new SolidColorBrush(costColor),

@@ -1,6 +1,7 @@
 <UserControl x:Class="ConditioningControlPanel.Views.Tabs.ExclusivesTabView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
@@ -255,7 +256,7 @@
                                     </RadialGradientBrush>
                                 </Border.Background>
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock x:Name="SpotVeilLock" x:FieldModifier="internal"
+                                    <helpers:EmojiTextBlock x:Name="SpotVeilLock" x:FieldModifier="internal"
                                                Text="🔒" FontSize="44" HorizontalAlignment="Center"/>
                                     <Border CornerRadius="12" Padding="14,5" Margin="0,10,0,0">
                                         <Border.Background>

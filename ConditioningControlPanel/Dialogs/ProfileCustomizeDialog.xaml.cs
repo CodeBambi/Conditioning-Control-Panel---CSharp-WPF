@@ -589,7 +589,7 @@ namespace ConditioningControlPanel
                     Margin = new Thickness(4),
                     IsHitTestVisible = false
                 });
-                content.Children.Add(new TextBlock
+                content.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
                 {
                     Text = "🔒",
                     FontSize = 11,

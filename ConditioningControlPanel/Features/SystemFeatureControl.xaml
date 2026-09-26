@@ -197,7 +197,7 @@
                                 <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str btn_escape}"
                                                         Foreground="{StaticResource TextLightBrush}"
                                                         FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" x:Name="TxtPanicKeyState" Text="🔑 -"
+                                <helpers:EmojiTextBlock Grid.Column="1" x:Name="TxtPanicKeyState" Text="🔑 -"
                                            Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"
                                            HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>

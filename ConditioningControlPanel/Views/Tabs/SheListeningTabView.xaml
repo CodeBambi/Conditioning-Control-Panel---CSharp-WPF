@@ -192,7 +192,7 @@
 
                                             <Grid Margin="0,2">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="🎚" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
+                                                    <helpers:EmojiTextBlock Text="🎚" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
                                                     <TextBlock Text="{loc:Str set2_devices_mic_input}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                                                 </StackPanel>
                                                 <TextBlock x:Name="TxtSL_MicDeviceChip" x:FieldModifier="internal"
@@ -202,7 +202,7 @@
                                             </Grid>
                                             <Grid Margin="0,2">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="👂" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
+                                                    <helpers:EmojiTextBlock Text="👂" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
                                                     <TextBlock Text="{loc:Str rf_sl_chip_wake_word}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                                                 </StackPanel>
                                                 <TextBlock x:Name="TxtSL_WakeWordChip" x:FieldModifier="internal"
@@ -212,7 +212,7 @@
                                             </Grid>
                                             <Grid Margin="0,2">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="🎙" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
+                                                    <helpers:EmojiTextBlock Text="🎙" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
                                                     <TextBlock Text="{loc:Str rf_sl_chip_ptt}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                                                 </StackPanel>
                                                 <TextBlock x:Name="TxtSL_PttChip" x:FieldModifier="internal"
@@ -221,7 +221,7 @@
                                             </Grid>
                                             <Grid Margin="0,2">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="🎧" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
+                                                    <helpers:EmojiTextBlock Text="🎧" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
                                                     <TextBlock Text="{loc:Str rf_sl_chip_headphones}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                                                 </StackPanel>
                                                 <TextBlock x:Name="TxtSL_HeadphonesChip" x:FieldModifier="internal"
@@ -241,7 +241,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto" MinWidth="56"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="🔉 Mic sensitivity" FontSize="13" FontWeight="SemiBold"
+                                        <helpers:EmojiTextBlock Grid.Column="0" Text="🔉 Mic sensitivity" FontSize="13" FontWeight="SemiBold"
                                                    Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                         <Slider x:Name="SldSL_MicSensitivity" x:FieldModifier="internal" Grid.Column="1" VerticalAlignment="Center"
                                                 Margin="14,0"
@@ -263,7 +263,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
-                                            <TextBlock Text="🎤 Spoken mantras" FontSize="13" FontWeight="SemiBold"
+                                            <helpers:EmojiTextBlock Text="🎤 Spoken mantras" FontSize="13" FontWeight="SemiBold"
                                                        Foreground="{StaticResource TextLightBrush}"/>
                                             <TextBlock x:Name="SL_MantrasHint" x:FieldModifier="internal"
                                                        Text="She asks you to repeat a phrase; the mic opens only when she prompts you."
@@ -285,7 +285,7 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="✨ Reliable wake" FontSize="13" FontWeight="SemiBold"
+                                                <helpers:EmojiTextBlock Text="✨ Reliable wake" FontSize="13" FontWeight="SemiBold"
                                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                                 <TextBlock Text="open-source, offline, no key" FontSize="9"
                                                            Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
@@ -400,7 +400,7 @@
                                     <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,8,0,10"/>
 
                                     <Border Background="#22FF69B4" CornerRadius="6" Padding="10,8">
-                                        <TextBlock Foreground="{DynamicResource PinkBrush}" FontSize="12" TextWrapping="Wrap" LineHeight="17"
+                                        <helpers:EmojiTextBlock Foreground="{DynamicResource PinkBrush}" FontSize="12" TextWrapping="Wrap" LineHeight="17"
                                                    Text="🛟 Safety word: say &quot;red&quot; (or &quot;stop everything&quot;) any time to stop all effects."/>
                                     </Border>
 
@@ -454,7 +454,7 @@
                             <Border Background="#22FF69B4" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                     CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
                                 <StackPanel>
-                                    <TextBlock Text="🛟  Safety word — stops every effect, instantly" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🛟  Safety word — stops every effect, instantly" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="20"
                                                Text="“red”  ·  “stop everything”  ·  “make it stop”  ·  “all stop”"/>
                                 </StackPanel>
@@ -470,42 +470,42 @@
                                 <!-- ── Left column ─────────────────────────────────────────── -->
                                 <StackPanel Grid.Column="0">
 
-                                    <TextBlock Text="🫧  Bubbles" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🫧  Bubbles" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me some bubbles” · “bubbles on” · “give me bubbles”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the bubbles” · “no more bubbles” · “bubbles off”"/>
                                     </TextBlock>
 
-                                    <TextBlock Text="📺  Video" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="📺  Video" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="play "/><Run Text="“show me a video” · “play a video” · “put on a video”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="stop "/><Run Text="“stop the video” · “no more videos” · “video off”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="pause "/><Run Text="“pause the video” · “resume the video” · “keep playing”"/>
                                     </TextBlock>
 
-                                    <TextBlock Text="✨  Flash" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="✨  Flash" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“flash me” · “one flash” · “give me a flash”"/>
 
-                                    <TextBlock Text="🌀  Spiral" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🌀  Spiral" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me the spiral” · “spiral on” · “bring up the spiral”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the spiral” · “hide the spiral” · “spiral off”"/>
                                     </TextBlock>
 
-                                    <TextBlock Text="🩷  Pink filter" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🩷  Pink filter" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“make it pink” · “go pink” · “pink filter on”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“make it normal” · “stop the pink filter” · “pink filter off”"/>
                                     </TextBlock>
 
-                                    <TextBlock Text="💬  Subliminals" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="💬  Subliminals" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me subliminals” · “subliminals on” · “start the subliminals”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the subliminals” · “no more subliminals” · “subliminals off”"/>
                                     </TextBlock>
 
-                                    <TextBlock Text="🔤  Bouncing text" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🔤  Bouncing text" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21">
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me bouncing text” · “bouncing text on” · “start the bouncing text”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the bouncing text” · “no more bouncing text” · “bouncing text off”"/>
@@ -516,36 +516,36 @@
                                 <!-- ── Right column ────────────────────────────────────────── -->
                                 <StackPanel Grid.Column="2">
 
-                                    <TextBlock Text="🧠  Mind wipe" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🧠  Mind wipe" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“wipe my mind” · “empty my head” · “blank my mind”"/>
 
-                                    <TextBlock Text="🔒  Lock card" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🔒  Lock card" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“lock me” · “give me a lock card” · “lock me up”"/>
 
-                                    <TextBlock Text="📝  Pop quiz" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="📝  Pop quiz" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“quiz me” · “test me” · “ask me a question”"/>
 
-                                    <TextBlock Text="⚡  Keyword triggers" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="⚡  Keyword triggers" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“trigger words on” · “keyword triggers on” · “start the keyword triggers”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“trigger words off” · “stop the keyword triggers”"/>
                                     </TextBlock>
 
-                                    <TextBlock Text="🎯  Quick toys" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🎯  Quick toys" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="freeze "/><Run Text="“freeze” · “freeze me” · “hold still”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="shake "/><Run Text="“shake the screen” · “shake it” · “make it shake”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="count "/><Run Text="“count for me” · “counting game” · “make me count”"/>
                                     </TextBlock>
 
-                                    <TextBlock Text="🌊  Go deeper" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🌊  Go deeper" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“deeper” · “take me deeper” · “drop me down”"/>
 
-                                    <TextBlock Text="🎀  Takeover" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🎀  Takeover" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21">
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“take over” · “take control” · “you’re in charge”"/><LineBreak/>
                                         <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“give me control back” · “stop the takeover” · “release control”"/>
@@ -569,25 +569,25 @@
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“pause” · “resume” · “keep going”"/>
 
-                                    <TextBlock Text="🔊  Volume" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🔊  Volume" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“louder” · “quieter” · “mute”"/>
 
-                                    <TextBlock Text="💗  Mantra" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="💗  Mantra" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21"
                                                Text="“give me a mantra” · “say a mantra” · “give me something to say”"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="🔁  Again" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🔁  Again" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“again” · “one more” · “harder”  (repeats the last thing)"/>
 
-                                    <TextBlock Text="❓  Help" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="❓  Help" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“what can I say” · “what can you do” · “commands”"/>
 
-                                    <TextBlock Text="🎤  Stop the mic" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <helpers:EmojiTextBlock Text="🎤  Stop the mic" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21"
                                                Text="“stop listening” · “mic off” · “you can stop listening”"/>
                                 </StackPanel>
