@@ -151,6 +151,8 @@ namespace ConditioningControlPanel.Controls
 
                 core.SetVirtualHostNameToFolderMapping(VirtualHost, WebFolder, CoreWebView2HostResourceAccessKind.Deny);
                 core.NavigationStarting += OnNavigationStarting;
+                // No popups, ever: a window.open would otherwise get a browser window of its own.
+                core.NewWindowRequested += (_, e) => e.Handled = true;
                 core.NavigationCompleted += OnNavigationCompleted;
                 core.ProcessFailed += OnProcessFailed;
                 core.Navigate(Url);

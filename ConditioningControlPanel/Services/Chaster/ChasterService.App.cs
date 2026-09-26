@@ -29,7 +29,8 @@ public sealed partial class ChasterService
                     // A raise only counts once its day is up (LimitChange); a lowering was applied at once.
                     TabLimits.FromMinutes(LimitChange.Effective(s.ChasterDayLimit, DateTime.UtcNow),
                         LimitChange.Effective(s.ChasterBacklogLimit, DateTime.UtcNow)),
-                    RemoteOpen: App.RemoteControl?.IsActive == true,
+                    // A Remote session still counts for a short grace after it ends (security pass 3).
+                    RemoteOpen: RemoteCounts(App.RemoteControl?.IsActive == true, App.RemoteControl?.LastEndedUtc, DateTime.UtcNow),
                     PanicArmed: s.PanicKeyEnabled,
                     RelockPastEnd: s.ChasterRelockPastEnd,
                     Paused: s.ChasterPaused);
@@ -41,7 +42,23 @@ public sealed partial class ChasterService
             new ChasterClient(userAgent: $"ConditioningControlPanel/{UpdateService.AppVersion}"),
             new DpapiChasterTokenStore(),
             Path.Combine(App.UserDataPath, "chaster_tab.json"),
-            options);
+            options)
+        {
+            MinutesOn = MinutesFromDayLog,
+            LadderApi = new ChasterLadderApi(),
+            RafflePostDays = () => App.Settings?.Current?.ChasterRafflePostDays == true,
+        };
+    }
+
+    /// <summary>The idle-day row's eyes: conditioning minutes the feature day log booked on a
+    /// day. A day with no entry had none; no log at all means nobody can tell (null).</summary>
+    private static int? MinutesFromDayLog(string dayKey)
+    {
+        var log = App.FeatureDayLog?.Log;
+        if (log == null) return null;
+        foreach (var entry in log.Days.ToArray())
+            if (entry != null && entry.D == dayKey) return entry.Cm;
+        return 0;
     }
 
 #if DEBUG

@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Tests;
 
 /// <summary>
 /// Natasha's favourite: about one bubble in ten and one flash in ten wears a faint red, and the
-/// one popped or seen is 3:00 on the tab. The roll, the price row, the presets that carry it,
+/// one popped or seen is 5:00 on the tab. The roll, the price row, the presets that carry it,
 /// the blink envelope and the "can this even charge" gate the cue is dealt behind.
 /// </summary>
 public class NatashasFavouriteTests
@@ -28,12 +28,12 @@ public class NatashasFavouriteTests
     {
         var row = TabPrices.Find("natasha");
         Assert.NotNull(row);
-        Assert.Equal(180, row!.Seconds);
+        Assert.Equal(300, row!.Seconds);
         Assert.Equal(TabPriceGate.Free, row.Gate);
         Assert.False(row.PerUnit);
 
         Assert.Equal(0, TabPrices.Resolve("natasha", new HashSet<string>()));
-        Assert.Equal(180, TabPrices.Resolve("natasha", new HashSet<string> { "natasha" }));
+        Assert.Equal(300, TabPrices.Resolve("natasha", new HashSet<string> { "natasha" }));
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class NatashasFavouriteTests
             // Popping the red one is the row's price, once, like any other event.
             var booking = service.Note("natasha");
             Assert.True(booking.Booked);
-            Assert.Equal(180, service.BalanceSeconds);
+            Assert.Equal(300, service.BalanceSeconds);
 
             options = options with { TabEnabled = false };
             Assert.False(service.CanBook("natasha"));
