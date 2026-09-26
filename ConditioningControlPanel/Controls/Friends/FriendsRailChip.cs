@@ -295,8 +295,17 @@ public sealed class FriendsRailChip : UserControl
         _popup.IsOpen = true;
     }
 
+    /// <summary>Opens the drawer if it is folded (an Inbox row asking for it).</summary>
+    internal void OpenDrawer()
+    {
+        if (_popup.IsOpen) return;
+        Rebind();
+        _popup.IsOpen = true;
+    }
+
     private void OnPopupOpened(object? sender, EventArgs e)
     {
+        Services.Friends.FriendsSfx.DrawerOpen();
         try
         {
             if (_host is MainWindow mw) mw.HoldNavRailOpen(_popup);
@@ -317,6 +326,7 @@ public sealed class FriendsRailChip : UserControl
 
     private void OnPopupClosed(object? sender, EventArgs e)
     {
+        Services.Friends.FriendsSfx.DrawerClose();
         try
         {
             _closedAt = DateTime.UtcNow;

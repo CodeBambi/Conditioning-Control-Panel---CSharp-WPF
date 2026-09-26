@@ -322,6 +322,7 @@ public sealed partial class FriendsDrawer
                     var rr = reason;
                     sub.Click += async (_, _) =>
                     {
+                        FriendsSfx.Click();
                         try { if (_svc != null) await _svc.ReportAsync(f.Id, rr); } catch { }
                         ShowNote(f.Id, "friends_report_done");
                     };
@@ -361,7 +362,7 @@ public sealed partial class FriendsDrawer
                 case "squelch": await _svc.SetSquelchAsync(f.Id, true); break;
                 case "unsquelch": await _svc.SetSquelchAsync(f.Id, false); break;
                 case "remove": await _svc.RemoveAsync(f.Id); _openId = null; break;
-                case "block": await _svc.BlockAsync(f.Id); _openId = null; break;
+                case "block": FriendsSfx.Dismiss(); await _svc.BlockAsync(f.Id); _openId = null; break;
             }
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] menu {What} failed: {E}", what, ex.Message); }
