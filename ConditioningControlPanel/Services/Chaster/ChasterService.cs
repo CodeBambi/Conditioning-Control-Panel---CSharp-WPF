@@ -205,7 +205,14 @@ public sealed partial class ChasterService : IDisposable
         if (eventId == "session") ForgiveMisses();
         // "misses" has a row so it can be switched on, but only NoteSeen ever books it.
         if (eventId == CircesMisses.EventId) return new(0, TabRefusal.Nothing);
-        return BookSeconds(eventId, TabPrices.Resolve(eventId, options.Prices, units), originPx);
+        // The day-end rows and the streak are the service's own verdicts; no caller books them.
+        if (TabDayEnd.ServiceRows.Contains(eventId)) return new(0, TabRefusal.Nothing);
+        var seconds = TabPrices.Resolve(eventId, options.Prices, units);
+        if (options.Prices.Contains(TabDayEnd.HeatId) && TabDayEnd.HeatApplies(eventId))
+            seconds = TabDayEnd.Heated(seconds, HeatCount(eventId));
+        var booking = BookSeconds(eventId, seconds, originPx);
+        if (eventId == "session") NoteStreak(options);
+        return booking;
     }
 
     /// <summary>CCP is running today. Call at launch and when the local day turns over. With
@@ -215,12 +222,14 @@ public sealed partial class ChasterService : IDisposable
     {
         if (!IsLinked) return 0;
         var booked = 0;
+        string? endedDay = null;
         lock (_gate)
         {
             var local = _localNow();
             var today = CircesTab.DayKey(local);
             var last = _tab.LastSeenDay;
             if (last == today) return 0;
+            endedDay = last;
             _tab.LastSeenDay = today;
             if (Active(out var options) && options.Prices.Contains(CircesMisses.EventId)
                 && CircesMisses.TryDay(last, out var lastDay))
@@ -238,6 +247,7 @@ public sealed partial class ChasterService : IDisposable
             RaiseBooked(CircesMisses.EventId, new TabBooking(booked, TabRefusal.None), null);
             SchedulePush();
         }
+        JudgeEndedDay(endedDay);
         return booked;
     }
 
@@ -318,7 +328,7 @@ public sealed partial class ChasterService : IDisposable
                 seconds = Math.Min(seconds, room);
             }
             booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps);
-            if (booking.AppliedSeconds > 0) CircesTab.NoteUse(_tab, eventId, _localNow());
+            if (booking.AppliedSeconds > 0) { CircesTab.NoteUse(_tab, eventId, _localNow()); NoteHeat(eventId); }
             if (remote && booking.AppliedSeconds > 0)
             {
                 var today = CircesTab.DayKey(_localNow());

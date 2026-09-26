@@ -59,6 +59,20 @@ public sealed class TabState
     /// <see cref="TabPrices.DailyMaxUses"/>.</summary>
     [JsonProperty("uses_day")] public string? UsesDay { get; set; }
     [JsonProperty("uses")] public Dictionary<string, int>? Uses { get; set; }
+
+    /// <summary>How many times each row booked a cost on <see cref="HeatDay"/>, every row, for
+    /// the heat rule (<see cref="TabDayEnd.Heated"/>).</summary>
+    [JsonProperty("heat_day")] public string? HeatDay { get; set; }
+    [JsonProperty("heat")] public Dictionary<string, int>? Heat { get; set; }
+
+    /// <summary>The last daily-quest board seen: its day and how many dailies were still open.
+    /// Judged once its day is over (the dailies-left row).</summary>
+    [JsonProperty("board_day")] public string? BoardDay { get; set; }
+    [JsonProperty("board_open")] public int BoardOpen { get; set; }
+
+    /// <summary>Days in a row with a finished session, and the last such day.</summary>
+    [JsonProperty("streak_day")] public string? StreakDay { get; set; }
+    [JsonProperty("streak")] public int Streak { get; set; }
 }
 
 public enum TabRefusal

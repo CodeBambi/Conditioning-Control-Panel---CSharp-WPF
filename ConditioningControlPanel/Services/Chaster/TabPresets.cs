@@ -44,7 +44,7 @@ public static class TabPresets
     private static readonly string[] GentleIds =
     {
         // everything that earns time back
-        "lockcard", "session", "quest", "quest_weekly", "video", "levelup", "program_done", "wall",
+        TabDayEnd.StreakEventId, "lockcard", "session", "quest", "quest_weekly", "video", "levelup", "program_done", "wall",
         // and the two smallest costs, so the tab is not a one-way street
         "typo", "crash",
     };
@@ -54,6 +54,7 @@ public static class TabPresets
         CircesMisses.EventId, "typo", "attention", NatashasFavourite.EventId, "mantra", "program_skipped",
         "remote_media", "remote_video", "escape", "watcher",
         "melt", "bubbles", "ball", "padlock", "crash",
+        TabDayEnd.IdleEventId, TabDayEnd.DailiesEventId, TabDayEnd.HeatId,
         // the one way down
         "session",
     };
@@ -62,8 +63,9 @@ public static class TabPresets
     {
         // costs
         CircesMisses.EventId, "typo", "attention", NatashasFavourite.EventId, "mantra", "program_skipped", "melt",
+        TabDayEnd.DailiesEventId, TabDayEnd.HeatId,
         // earns back
-        "lockcard", "session", "quest", "video", "levelup", "program_done",
+        TabDayEnd.StreakEventId, "lockcard", "session", "quest", "video", "levelup", "program_done",
     };
 
     public static readonly IReadOnlyList<TabPreset> All = new[]
@@ -76,7 +78,7 @@ public static class TabPresets
     /// <summary>Only ids that are really on the price table and are allowed to carry a price. A
     /// typo in a preset must drop the row, never invent one.</summary>
     private static IReadOnlyList<string> Clean(IEnumerable<string> ids) =>
-        ids.Where(id => TabPrices.Find(id) != null && !TabPrices.NeverPriced.Contains(id))
+        ids.Where(id => (TabPrices.Find(id) != null || TabPrices.Modifiers.Contains(id)) && !TabPrices.NeverPriced.Contains(id))
            .Distinct(StringComparer.Ordinal)
            .ToList();
 
@@ -95,7 +97,7 @@ public static class TabPresets
     public static string? Match(IEnumerable<string>? enabledIds)
     {
         var on = new HashSet<string>(enabledIds ?? Array.Empty<string>(), StringComparer.Ordinal);
-        on.RemoveWhere(id => TabPrices.Find(id) == null || TabPrices.NeverPriced.Contains(id));
+        on.RemoveWhere(id => (TabPrices.Find(id) == null && !TabPrices.Modifiers.Contains(id)) || TabPrices.NeverPriced.Contains(id));
         if (on.Count == 0) return null;
         foreach (var preset in All)
             if (on.SetEquals(preset.PriceIds)) return preset.Id;
