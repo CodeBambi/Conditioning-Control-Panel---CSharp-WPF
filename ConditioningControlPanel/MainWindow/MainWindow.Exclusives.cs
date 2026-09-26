@@ -433,7 +433,7 @@ namespace ConditioningControlPanel
 
             // --- locked veil: fog scrim + breathing padlock + unlock pill.
             //     Decoration only - the card still navigates, the destination gates. ---
-            var veilLock = new TextBlock
+            var veilLock = new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "🔒",
                 FontSize = 34,

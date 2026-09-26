@@ -93,7 +93,7 @@ public partial class ChaosSlotPickerWindow : Window
             FontWeight = FontWeights.Bold,
             Foreground = TextMut,
         });
-        body.Children.Add(new TextBlock
+        body.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
         {
             Text = "🔒",
             FontSize = 34,
@@ -151,7 +151,7 @@ public partial class ChaosSlotPickerWindow : Window
 
         if (!s.Exists)
         {
-            body.Children.Add(new TextBlock
+            body.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "✨",
                 FontSize = 34,

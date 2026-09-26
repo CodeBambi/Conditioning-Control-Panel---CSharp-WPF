@@ -88,6 +88,38 @@ namespace ConditioningControlPanel.Helpers
     }
 
     /// <summary>
+    /// Code-built UI glue: a colour Twemoji Image for an emoji, or (when no asset ships for it)
+    /// a TextBlock that at least paints in a light theme brush instead of WPF's default black.
+    /// </summary>
+    public static class EmojiIcon
+    {
+        public static FrameworkElement Create(string emoji, double size, Thickness margin = default)
+        {
+            var src = EmojiImage.Get(emoji);
+            if (src != null)
+            {
+                return new System.Windows.Controls.Image
+                {
+                    Source = src,
+                    Width = size,
+                    Height = size,
+                    Stretch = Stretch.Uniform,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = margin,
+                };
+            }
+            return new System.Windows.Controls.TextBlock
+            {
+                Text = emoji,
+                FontSize = size,
+                Foreground = Application.Current?.TryFindResource("TextLightBrush") as Brush ?? Brushes.White,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = margin,
+            };
+        }
+    }
+
+    /// <summary>
     /// XAML binding glue. Source: an emoji string. Target: ImageSource for an Image element.
     /// Returns null on miss so callers can DataTrigger a TextBlock fallback if desired.
     /// </summary>

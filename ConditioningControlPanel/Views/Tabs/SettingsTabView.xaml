@@ -1206,7 +1206,7 @@
                                 CornerRadius="3" Padding="6,1" Margin="0,0,8,0"
                                 HorizontalAlignment="Right" VerticalAlignment="Center"
                                 ToolTip="{Binding ElementName=DeeperBrowserBadge, Path=Tag}">
-                            <TextBlock x:Name="TxtDeeperBrowserBadge" x:FieldModifier="internal"
+                            <helpers:EmojiTextBlock x:Name="TxtDeeperBrowserBadge" x:FieldModifier="internal"
                                        Text="🌊 Deeper"
                                        Foreground="{DynamicResource DeeperAccentBrush}"
                                        FontSize="9" FontWeight="SemiBold"/>
@@ -1565,7 +1565,7 @@
 
                             <Grid x:Name="BrowserContainer" x:FieldModifier="internal" Grid.Row="2">
                                 <!-- WebView2 will be added here programmatically -->
-                                <TextBlock x:Name="BrowserLoadingText" x:FieldModifier="internal"
+                                <helpers:EmojiTextBlock x:Name="BrowserLoadingText" x:FieldModifier="internal"
                                            Text="{loc:Str label_click_to_load_browser}"
                                            Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"

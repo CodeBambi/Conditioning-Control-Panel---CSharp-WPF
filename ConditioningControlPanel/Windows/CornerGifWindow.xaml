@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.CornerGifWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
         Title="Corner GIFs"
         Width="460" Height="640"
         WindowStartupLocation="CenterOwner"
@@ -16,7 +17,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0"
+        <helpers:EmojiTextBlock Grid.Row="0"
                    Text="🖼 Corner GIFs"
                    Foreground="{DynamicResource PinkBrush}"
                    FontSize="20"
