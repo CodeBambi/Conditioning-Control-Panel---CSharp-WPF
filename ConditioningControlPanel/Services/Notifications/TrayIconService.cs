@@ -147,6 +147,17 @@ namespace ConditioningControlPanel.Services;
         }
     }
 
+    /// <summary>
+    /// Call when the leash comes on or off (the leash snapshot changed). With the panel showing,
+    /// the icon is up exactly while leashed, so the tray "Cut leash" is always one right-click
+    /// away. Tucked into the tray, the icon is always up anyway and this leaves it alone.
+    /// </summary>
+    public void SyncLeashIcon()
+    {
+        if (_notifyIcon == null || _windowClosed || !_mainWindow.IsVisible) return;
+        _notifyIcon.Visible = Leash.LeashTrayRule.KeepIconVisible(Leash.LeashGuard.Check());
+    }
+
     public void Hide()
     {
         if (_notifyIcon != null)
@@ -195,6 +206,10 @@ namespace ConditioningControlPanel.Services;
         SetForegroundWindow(windowHandle);
         _mainWindow.Activate();
         // Hide() is now redundant since we already set Visible = false above
+        // ...except while leashed: the tray "Cut leash" must stay reachable with the panel open
+        // (Services/Leash/LeashTrayRule.cs). Hiding first still cleared the balloon.
+        if (_notifyIcon != null && Leash.LeashTrayRule.KeepIconVisible(Leash.LeashGuard.Check()))
+            _notifyIcon.Visible = true;
         OnShowRequested?.Invoke();
     }
 
