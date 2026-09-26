@@ -78,9 +78,6 @@
             </Border>
             <Path x:Name="HoverWashA" Fill="#14FFFFFF" Opacity="0" IsHitTestVisible="False"/>
             <Path x:Name="PeekScrimA" Fill="Black" Opacity="0" IsHitTestVisible="False"/>
-            <Path x:Name="ActiveRingA" Stroke="{DynamicResource FxGlowBrush}"
-                  StrokeThickness="3" Fill="#12FF69B4"
-                  Visibility="Collapsed" IsHitTestVisible="False"/>
             <Border x:Name="TitlePillA"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
                     Margin="8,8,0,0" CornerRadius="7" Background="#B01A1A2E"
@@ -103,6 +100,12 @@
                         </Path.Stroke>
                     </Path>
                 </Grid>
+                <!-- Ring lives on the REGION, not the face: the pressed face slides 2.5px down under
+                     the fixed region clip and bares the dark socket along the top edge. The ring stays
+                     put on the card edge and covers that strip, like FeatureCard's ring does. -->
+                <Path x:Name="ActiveRingA" Stroke="{DynamicResource FxGlowBrush}"
+                      StrokeThickness="3" Fill="#12FF69B4"
+                      Visibility="Collapsed" IsHitTestVisible="False"/>
             </Grid>
             <Grid x:Name="HalfRegionB">
                 <Border x:Name="HalfSocketB" Background="#FF080811" CornerRadius="11" Visibility="Collapsed"/>
@@ -115,9 +118,6 @@
             </Border>
             <Path x:Name="HoverWashB" Fill="#14FFFFFF" Opacity="0" IsHitTestVisible="False"/>
             <Path x:Name="PeekScrimB" Fill="Black" Opacity="0" IsHitTestVisible="False"/>
-            <Path x:Name="ActiveRingB" Stroke="{DynamicResource FxGlowBrush}"
-                  StrokeThickness="3" Fill="#12FF69B4"
-                  Visibility="Collapsed" IsHitTestVisible="False"/>
             <Border x:Name="TitlePillB"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Margin="0,0,8,8" CornerRadius="7" Background="#B01A1A2E"
@@ -140,6 +140,12 @@
                         </Path.Stroke>
                     </Path>
                 </Grid>
+                <!-- Ring lives on the REGION, not the face: the pressed face slides 2.5px down under
+                     the fixed region clip and bares the dark socket along the top edge. The ring stays
+                     put on the card edge and covers that strip, like FeatureCard's ring does. -->
+                <Path x:Name="ActiveRingB" Stroke="{DynamicResource FxGlowBrush}"
+                      StrokeThickness="3" Fill="#12FF69B4"
+                      Visibility="Collapsed" IsHitTestVisible="False"/>
             </Grid>
             <!-- The seam. Drawn over the art so the split is legible even when the
                  two artworks share a palette - and over the scrim, because while a
