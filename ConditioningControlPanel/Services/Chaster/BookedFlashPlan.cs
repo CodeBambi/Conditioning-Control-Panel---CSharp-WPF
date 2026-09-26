@@ -44,7 +44,11 @@ public static class BookedFlashPlan
 
     /// <summary>The drawn figure: text, colour, how far it lifts, how long it lives, and whether
     /// it blinks on arrival.</summary>
-    public readonly record struct Plan(string Text, Color Colour, double TravelPx, int DurationMs, bool Flash);
+    public readonly record struct Plan(string Text, Color Colour, double TravelPx, int DurationMs, bool Flash, string? Source = null);
+
+    /// <summary>How visible the source badge under the figure is (owner, 2026-09-26: faded,
+    /// about 30% transparent, so the number stays the message).</summary>
+    public const double SourceOpacity = 0.7;
 
     /// <summary>
     /// Fold a new booking into the figure that is already up, or start a new one.
@@ -91,6 +95,6 @@ public static class BookedFlashPlan
             _ => (48.0, 900, true),
         };
 
-        return new Plan(CircesTab.Format(seconds), colour, travel, duration, flash);
+        return new Plan(CircesTab.Format(seconds), colour, travel, duration, flash, string.IsNullOrEmpty(eventId) ? null : eventId);
     }
 }

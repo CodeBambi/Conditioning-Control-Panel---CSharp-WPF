@@ -50,6 +50,9 @@ public static class TabMenuCopy
         ["levelup"] = "features/4new.png",
         ["leash"] = "features/remote_control.png",
         ["leash_credit"] = "features/remote_control.png",
+        [TabDayEnd.IdleEventId] = "features/spiral_overlay.png",
+        [TabDayEnd.DailiesEventId] = "features/free_today_stamp.png",
+        [TabDayEnd.StreakEventId] = "features/spiral_overlay.png",
         [JackpotId] = "features/backroom.png",
     };
 
@@ -65,6 +68,9 @@ public static class TabMenuCopy
         ["natasha"] = "bubbles",
         ["leash"] = "detention",
         ["leash_credit"] = "pardon",
+        [TabDayEnd.IdleEventId] = "session",
+        [TabDayEnd.DailiesEventId] = "quest",
+        [TabDayEnd.StreakEventId] = "session",
     };
 
     /// <summary>The scene id the trailers page mounts for a row: its own id unless it shares one.</summary>

@@ -39,7 +39,7 @@ public class TabPresetsTests
         foreach (var preset in TabPresets.All)
         {
             Assert.NotEmpty(preset.PriceIds);
-            Assert.All(preset.PriceIds, id => Assert.NotNull(TabPrices.Find(id)));
+            Assert.All(preset.PriceIds, id => Assert.True(TabPrices.Find(id) != null || TabPrices.Modifiers.Contains(id)));
             Assert.Equal(preset.PriceIds.Count, preset.PriceIds.Distinct(StringComparer.Ordinal).Count());
         }
     }
@@ -54,8 +54,8 @@ public class TabPresetsTests
     [Fact]
     public void Gentle_leans_down_and_strict_leans_up_and_both_keep_a_way_the_other_way()
     {
-        var gentle = TabPresets.Find(TabPresets.Gentle)!.PriceIds.Select(id => TabPrices.Find(id)!).ToList();
-        var strict = TabPresets.Find(TabPresets.Strict)!.PriceIds.Select(id => TabPrices.Find(id)!).ToList();
+        var gentle = TabPresets.Find(TabPresets.Gentle)!.PriceIds.Where(id => !TabPrices.Modifiers.Contains(id)).Select(id => TabPrices.Find(id)!).ToList();
+        var strict = TabPresets.Find(TabPresets.Strict)!.PriceIds.Where(id => !TabPrices.Modifiers.Contains(id)).Select(id => TabPrices.Find(id)!).ToList();
 
         Assert.True(gentle.Sum(p => p.Seconds) < 0, "Gentle must add up to time coming off");
         Assert.True(strict.Sum(p => p.Seconds) > 0, "Strict must add up to time going on");
@@ -67,7 +67,7 @@ public class TabPresetsTests
     [Fact]
     public void Circes_choice_needs_no_tier_and_no_sparkles()
     {
-        var circe = TabPresets.Find(TabPresets.Circe)!.PriceIds.Select(id => TabPrices.Find(id)!).ToList();
+        var circe = TabPresets.Find(TabPresets.Circe)!.PriceIds.Where(id => !TabPrices.Modifiers.Contains(id)).Select(id => TabPrices.Find(id)!).ToList();
         Assert.All(circe, p => Assert.Equal(TabPriceGate.Free, p.Gate));
         // and it is a middle, not a copy of either end
         Assert.Contains(circe, p => p.Seconds > 0);
