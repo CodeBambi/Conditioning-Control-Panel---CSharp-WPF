@@ -42,7 +42,11 @@ public sealed partial class ChasterService
             new DpapiChasterTokenStore(),
             Path.Combine(App.UserDataPath, "chaster_tab.json"),
             options)
-        { MinutesOn = MinutesFromDayLog };
+        {
+            MinutesOn = MinutesFromDayLog,
+            LadderApi = new ChasterLadderApi(),
+            LadderShowName = () => App.Settings?.Current?.ChasterLadderShowName == true,
+        };
     }
 
     /// <summary>The idle-day row's eyes: conditioning minutes the feature day log booked on a

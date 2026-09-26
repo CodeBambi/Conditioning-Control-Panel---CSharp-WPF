@@ -379,7 +379,7 @@ public sealed partial class ChasterService : IDisposable
                     App.Logger?.Warning("[Chaster] the tab file held numbers outside its limits; clamped");
                 }
                 // An add from last time that was never answered: counted as landed, never resent.
-                var doubted = CircesTab.ResolvePending(_tab);
+                var doubted = CircesTab.ResolvePending(_tab, _utcNow());
                 if (doubted > 0)
                 {
                     SaveTab();
@@ -419,13 +419,14 @@ public sealed partial class ChasterService : IDisposable
                 CircesTab.ClearPending(_tab);
                 if (added.Ok)
                 {
-                    CircesTab.ApplyPush(_tab, plan, _localNow());
+                    CircesTab.ApplyPush(_tab, plan, _localNow(), _utcNow());
                     _pushedThisRun += plan.Seconds;
                 }
                 SaveTab();
             }
             if (!added.Ok) return Failed(added.Status);
             App.Logger?.Information("[Chaster] settled {Seconds}s to the lock", plan.Seconds);
+            LadderPushLanded();
             return SettleOutcome.Pushed;
         }
         finally { _settleGate.Release(); }
@@ -538,6 +539,7 @@ public sealed partial class ChasterService : IDisposable
         _settleTimer?.Dispose();
         _pushTimer?.Dispose();
         _lockTimer?.Dispose();   // ChasterService.App.cs
+        DisposeLadder();         // ChasterService.Ladder.cs
         _settleGate.Dispose();
         _refreshGate.Dispose();
     }
