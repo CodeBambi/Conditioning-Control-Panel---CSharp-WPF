@@ -1044,9 +1044,15 @@ namespace ConditioningControlPanel.Views.Tabs
             var ids = TabPresets.Apply(id);
             if (ids.Count == 0) return;
             settings.ChasterPrices = new List<string>(ids);
+            // The preset sets the stakes too: a lower limit now, a higher one after its day.
+            if (TabPresets.Find(id) is { } preset)
+                (settings.ChasterDayLimit, settings.ChasterBacklogLimit) =
+                    TabPresets.RequestLimits(preset, settings.ChasterDayLimit, settings.ChasterBacklogLimit, DateTime.UtcNow);
             App.Settings?.Save();
             ApplyPriceToggles();
             RefreshPresets();
+            RefreshLimits();
+            RefreshDay(animate: true);
             FxPreset(tile, PresetColour(id));
             FxKeyTurned(LitRows());
         }
@@ -1067,6 +1073,17 @@ namespace ConditioningControlPanel.Views.Tabs
             BtnPresetStrict.IsChecked = match == TabPresets.Strict;
             BtnPresetCirce.IsChecked = match == TabPresets.Circe;
             BtnPresetCustom.IsChecked = match == TabPresets.Custom;
+            Stakes(TxtStakesGentle, TabPresets.Gentle);
+            Stakes(TxtStakesStrict, TabPresets.Strict);
+            Stakes(TxtStakesCirce, TabPresets.Circe);
+        }
+
+        /// <summary>"Worst month +4 days": what the preset can cost past the lock end.</summary>
+        private static void Stakes(TextBlock line, string presetId)
+        {
+            if (TabPresets.Find(presetId) is not { } preset) return;
+            var (value, days) = TabPresets.WorstMonth(preset);
+            line.Text = Loc.GetF(days ? "chaster_preset_stakes_days" : "chaster_preset_stakes_hours", value);
         }
 
         /// <summary>Push the saved set onto the rows. Never the other way round: the settings

@@ -44,7 +44,7 @@ public class ChasterHooksTests
     {
         var on = new HashSet<string> { "typo" };
 
-        Assert.Equal(135, TabPrices.Resolve("typo", on, 9));
+        Assert.Equal(270, TabPrices.Resolve("typo", on, 9));
         Assert.Equal(0, TabPrices.Resolve("typo", on, 0));
     }
 
@@ -73,6 +73,8 @@ public class ChasterHooksTests
 
         var unwired = TabPrices.All.Select(p => p.Id)
             .Where(id => id != CircesMisses.EventId)
+            // The deeper rows are the service's own verdicts on a day (TabDayEnd).
+            .Where(id => !TabDayEnd.ServiceRows.Contains(id))
             .Where(id => !source.Contains("Note(\"" + id + "\"", StringComparison.Ordinal)
                       && !source.Contains("NoteSeconds(\"" + id + "\"", StringComparison.Ordinal)
                       && !source.Contains("NoteAt(\"" + id + "\"", StringComparison.Ordinal)

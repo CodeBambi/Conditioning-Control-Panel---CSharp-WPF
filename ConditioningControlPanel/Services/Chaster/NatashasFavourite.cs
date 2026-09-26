@@ -4,7 +4,8 @@ namespace ConditioningControlPanel.Services.Chaster;
 
 /// <summary>
 /// Natasha's favourite: about one ambient bubble in ten and one flash in ten wears a faint red.
-/// Pop that bubble, or see that flash, and 3:00 goes on the tab. The cue is meant to mix in
+/// Pop that bubble, or see that flash, and 5:00 goes on the tab (owner, 2026-09-26: it is the
+/// one price that meets everyday use, so it should sting, and the red should hide better). The cue is meant to mix in
 /// with the others (a thin red halo, and every couple of seconds a short red blink across the
 /// picture), visible to someone who knows, easy to miss for someone who does not.
 ///
@@ -15,8 +16,8 @@ public static class NatashasFavourite
 {
     public const string EventId = "natasha";
 
-    /// <summary>+3:00.</summary>
-    public const int Seconds = 180;
+    /// <summary>+5:00.</summary>
+    public const int Seconds = 300;
 
     /// <summary>One in this many bubbles, and one in this many flashes.</summary>
     public const int OneIn = 10;
@@ -25,11 +26,11 @@ public static class NatashasFavourite
 
     /// <summary>The still half of the cue: a thin red halo. Deliberately under the lucky gold
     /// (0.55) and the magnet's steel blue (0.55) so it does not shout.</summary>
-    public const double HaloOpacity = 0.32;
+    public const double HaloOpacity = 0.2;
     public const double HaloBlurDip = 14;
 
     /// <summary>The moving half: a red wash across the body, peaking at this alpha.</summary>
-    public const double WashPeak = 0.22;
+    public const double WashPeak = 0.12;
 
     /// <summary>Seconds between blinks. Not a multiple of the drain's or magnet's pulse, so a
     /// field of three kinds never blinks in step.</summary>

@@ -101,8 +101,8 @@ public class ChasterServiceTests : IDisposable
         service.Note("typo");
         service.Note("attention");
 
-        Assert.Equal(15, service.BalanceSeconds);
-        Assert.Equal(new[] { ("typo", 15) }, seen);
+        Assert.Equal(30, service.BalanceSeconds);
+        Assert.Equal(new[] { ("typo", 30) }, seen);
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class ChasterServiceTests : IDisposable
         service.Note("typo");
         service.Note("session");
 
-        Assert.Equal(15, service.TodayAddedSeconds);
+        Assert.Equal(30, service.TodayAddedSeconds);
         _utc = _utc.AddDays(1);
         Assert.Equal(0, service.TodayAddedSeconds);
     }
@@ -146,8 +146,8 @@ public class ChasterServiceTests : IDisposable
 
         Assert.Equal(TabPrices.All.Count, costs.Count + earnBacks.Count);
         Assert.Equal("program_skipped", costs[0].Id);
-        Assert.Equal("quest_weekly", earnBacks[0].Id);
-        Assert.Equal("+0:10 each", TabPageText.Price(TabPrices.Find("mantra")!, "{0} each"));
+        Assert.Equal("streak", earnBacks[0].Id);
+        Assert.Equal("+0:30 each", TabPageText.Price(TabPrices.Find("mantra")!, "{0} each"));
         Assert.Equal("-10:00", TabPageText.Price(TabPrices.Find("session")!, "{0} each"));
 
         var en = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", "en.json")));
@@ -175,8 +175,8 @@ public class ChasterServiceTests : IDisposable
         var after = service.Note("typo");
 
         Assert.Equal(TabRefusal.SafetyExit, during.Refusal);
-        Assert.Equal(-15, credit.AppliedSeconds);
-        Assert.Equal(15, after.AppliedSeconds);
+        Assert.Equal(-30, credit.AppliedSeconds);
+        Assert.Equal(30, after.AppliedSeconds);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class ChasterServiceTests : IDisposable
 
         using var second = Make();
 
-        Assert.Equal(15, second.BalanceSeconds);
+        Assert.Equal(30, second.BalanceSeconds);
     }
 
     [Fact]
@@ -204,11 +204,11 @@ public class ChasterServiceTests : IDisposable
         Assert.Equal(SettleOutcome.Pushed, again);
         Assert.Equal(SettleOutcome.Nothing, empty);
         Assert.Equal(0, service.BalanceSeconds);
-        Assert.Equal(615, service.Bill().PushedSeconds);
+        Assert.Equal(630, service.Bill().PushedSeconds);
         Assert.Equal(2, _http.Seen.Count);
         Assert.All(_http.Seen, c => Assert.Equal("/locks/lock1/update-time", c.Path));
         Assert.Contains("\"duration\":600", _http.Seen[0].Body);
-        Assert.Contains("\"duration\":15", _http.Seen[1].Body);
+        Assert.Contains("\"duration\":30", _http.Seen[1].Body);
     }
 
     [Fact]
@@ -557,7 +557,7 @@ public class ChasterServiceTests : IDisposable
 
         Assert.False(service.IsLinked);
         Assert.Equal("/chaster/revoke", _http.Seen.Single().Path);
-        Assert.Equal(15, service.BalanceSeconds);
+        Assert.Equal(30, service.BalanceSeconds);
         Assert.False(service.Note("typo").Booked);
     }
 
