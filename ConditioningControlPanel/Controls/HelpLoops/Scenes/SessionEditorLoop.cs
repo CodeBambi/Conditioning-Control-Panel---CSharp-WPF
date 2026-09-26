@@ -24,8 +24,6 @@ internal sealed class SessionEditorLoop : HelpLoopScene
     private static readonly Brush SpiralBlock = LoopPalette.Solid("#6b4bb8");
     private static readonly Brush FlashFill = LoopPalette.Solid("#b04f86");
     private static readonly Brush PreviewFill = LoopPalette.Solid("#0f0b1c");
-    private static readonly Brush PhotoFill = LoopPalette.Freeze(new LinearGradientBrush(
-        LoopPalette.Css("#ff8fc8"), LoopPalette.Css("#9b5cff"), new Point(0, 0), new Point(1, 1)));
 
     private static readonly (double, double, double)[] CursorPath;
     private static readonly double SpiralChipX;
@@ -160,8 +158,7 @@ internal sealed class SessionEditorLoop : HelpLoopScene
             if (playX >= FlashBlock.Left && playX <= FlashBlock.Right)
             {
                 var r = new Rect(Preview.X + 14, Preview.Y + 6, 36, 28);
-                dc.DrawRoundedRectangle(Brushes.White, null, r, 2, 2);
-                dc.DrawRectangle(PhotoFill, null, LoopFrame.Inset(r, 2));
+                f.Photo(dc, r, PhotoLook.Pink, shadow: false);
             }
             if (playX >= spiral.Left && playX <= spiral.Right)
                 Spiral(dc, new Point(Preview.X + Preview.Width / 2, Preview.Y + Preview.Height / 2), 17, t / 400.0, p.Lilac);

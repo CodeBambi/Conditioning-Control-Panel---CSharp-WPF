@@ -77,7 +77,7 @@ internal sealed class RemoteControlLoop : HelpLoopScene
         {
             var r = new Rect(196, 64, 104, 76);
             using (f.At(dc, r.X + r.Width / 2, r.Y + r.Height / 2, Lerp(.6, 1, Back(photoK)), photoO))
-                MiniPhoto(f, dc, r);
+                f.Photo(dc, r, PhotoLook.Pink);
         }
         for (int i = 0; i < BubbleXs.Length; i++)
         {
@@ -167,16 +167,5 @@ internal sealed class RemoteControlLoop : HelpLoopScene
                 f.DrawText(dc, "ended", Screen.X + Screen.Width / 2, Screen.Y + 90, 14, p.Red, LoopFrame.Display, FontWeights.SemiBold, TextAlignment.Center);
                 f.DrawText(dc, "by panic", Screen.X + Screen.Width / 2, Screen.Y + 110, 9, p.Dim, LoopFrame.Mono, FontWeights.Medium, TextAlignment.Center);
             }
-    }
-
-    private static readonly Brush PhotoFill = LoopPalette.Freeze(new LinearGradientBrush(
-        LoopPalette.Css("#ff8fc8"), LoopPalette.Css("#9b5cff"), new Point(0, 0), new Point(1, 1)));
-
-    /// <summary>A flash picture: white frame, pink gradient.</summary>
-    private static void MiniPhoto(LoopFrame f, DrawingContext dc, Rect r)
-    {
-        LoopFrame.SoftShadow(dc, r, 4, 8, 18, 0xAA);
-        dc.DrawRoundedRectangle(Brushes.White, null, r, 4, 4);
-        dc.DrawRoundedRectangle(PhotoFill, null, LoopFrame.Inset(r, 3), 1.5, 1.5);
     }
 }

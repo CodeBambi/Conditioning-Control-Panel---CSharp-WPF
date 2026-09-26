@@ -36,8 +36,6 @@ internal sealed class ScreenOcrLoop : HelpLoopScene
         }, 90));
     private static readonly Brush ReadBox = LoopPalette.Solid("#b99cff26");
     private static readonly Brush HotBox = LoopPalette.Solid("#ff6fb533");
-    private static readonly Brush PhotoFill = LoopPalette.Freeze(new LinearGradientBrush(
-        LoopPalette.Css("#5fffd0"), LoopPalette.Css("#2b6bff"), new Point(.33, .03), new Point(.67, .97)));
 
     private static readonly IReadOnlyList<HelpLoopStep> StepList = new[]
     {
@@ -125,11 +123,7 @@ internal sealed class ScreenOcrLoop : HelpLoopScene
         {
             var r = new Rect(352, 50, 104, 128);
             using (f.At(dc, r.X + r.Width / 2, r.Y + r.Height / 2, Lerp(.6, 1, Back(photoK)), photoO))
-            {
-                LoopFrame.SoftShadow(dc, r, 4, 8, 18, 0xAA);
-                dc.DrawRoundedRectangle(Brushes.White, null, r, 4, 4);
-                dc.DrawRoundedRectangle(PhotoFill, null, LoopFrame.Inset(r, 3), 1.5, 1.5);
-            }
+                f.Photo(dc, r, PhotoLook.Sea);
         }
         double wave = Seg(t, 4950, 5950);
         using (f.Fade(dc, Seg(t, 4800, 5000) * (1 - outK)))
