@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 
@@ -17,12 +15,10 @@ internal sealed class PinkFilterLoop : HelpLoopScene
 
     // Checkbox inside the default window (60,28,320,190): left 16, bottom 16, 14 square.
     private const double ChkX = 60 + 16 + 7, ChkY = 28 + 190 - 16 - 7;
-    private static readonly Rect ChkRect = new(ChkX - 7, ChkY - 7, 14, 14);
 
-    private static readonly Brush PinkWash = Frozen(Color.FromRgb(0xFF, 0x4F, 0xA8));
-    private static readonly Brush ChkEdge = Frozen(Color.FromRgb(0x8F, 0x7F, 0xC4));
-    private static readonly Brush LabelBrush = Frozen(Color.FromRgb(0xD9, 0xCC, 0xFF));
-    private static readonly Typeface Label = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+    private static readonly Brush PinkWash = LoopPalette.Solid("#ff4fa8");
+    private static readonly Brush ChkEdge = LoopPalette.Solid("#8f7fc4");
+    private static readonly Brush LabelBrush = LoopPalette.Solid("#d9ccff");
 
     private static readonly IReadOnlyList<HelpLoopStep> StepList = new[]
     {
@@ -44,16 +40,15 @@ internal sealed class PinkFilterLoop : HelpLoopScene
         // Checkbox + label live on the desktop, under the wash.
         bool ticked = t > 6080;
         var back = f.Back;
-        var edge = new Pen(ticked ? p.Mint : ChkEdge, 2);
-        back.DrawRoundedRectangle(ticked ? p.Mint : null, edge, new Rect(ChkRect.X + 1, ChkRect.Y + 1, 12, 12), 3, 3);
-        var label = new FormattedText("Remember me", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Label, 10, LabelBrush, 1.0);
-        back.DrawText(label, new Point(60 + 38, ChkY - label.Height / 2));
+        back.DrawRoundedRectangle(ticked ? p.Mint : null, new Pen(ticked ? p.Mint : ChkEdge, 2),
+            new Rect(ChkX - 6, ChkY - 6, 12, 12), 3, 3);
+        f.DrawText(back, "Remember me", 60 + 38, ChkY - 7, 10, LabelBrush, LoopFrame.Body, FontWeights.SemiBold, TextAlignment.Left);
 
-        double o = Schedule(Opacity, t);
+        double o = LoopMath.Schedule(Opacity, t);
         if (o > 0)
         {
             f.Front.PushOpacity(o);
-            f.Front.DrawRectangle(PinkWash, null, new Rect(0, 0, 480, 270));
+            f.Front.DrawRectangle(PinkWash, null, new Rect(0, 0, LoopFrame.StageWidth, LoopFrame.StageHeight));
             f.Front.Pop();
         }
 
@@ -62,44 +57,12 @@ internal sealed class PinkFilterLoop : HelpLoopScene
         var b = f.SliderKnob(14, 12, .38);
         var c = f.SliderKnob(14, 12, .2);
 
-        var cur = PathAt(new (double, double, double)[]
+        var cur = LoopMath.Path(new (double, double, double)[]
         {
             (1800, 300, 230), (2600, a.X, a.Y), (2700, a.X, a.Y), (3600, b.X, b.Y), (4600, b.X, b.Y),
             (5200, c.X, c.Y), (5400, c.X, c.Y), (6000, ChkX, ChkY), (6900, ChkX, ChkY),
         }, t);
         f.Ripple(ChkX, ChkY, LoopMath.Seg(t, 6080, 6500));
         f.Cursor(cur.X, cur.Y, (t > 2650 && t < 3650) || (t > 4550 && t < 5250) || (t > 6050 && t < 6200));
-    }
-
-    private static double Schedule((double T, double V)[] pts, double t)
-    {
-        if (t <= pts[0].T) return pts[0].V;
-        for (int i = 1; i < pts.Length; i++)
-            if (t <= pts[i].T)
-                return LoopMath.Lerp(pts[i - 1].V, pts[i].V, LoopMath.EaseInOut(LoopMath.Seg(t, pts[i - 1].T, pts[i].T)));
-        return pts[^1].V;
-    }
-
-    private static Point PathAt((double T, double X, double Y)[] pts, double t)
-    {
-        if (t <= pts[0].T) return new Point(pts[0].X, pts[0].Y);
-        for (int i = 1; i < pts.Length; i++)
-        {
-            if (t <= pts[i].T)
-            {
-                var a = pts[i - 1];
-                var b = pts[i];
-                double k = LoopMath.EaseInOut(LoopMath.Seg(t, a.T, b.T));
-                return new Point(LoopMath.Lerp(a.X, b.X, k), LoopMath.Lerp(a.Y, b.Y, k));
-            }
-        }
-        return new Point(pts[^1].X, pts[^1].Y);
-    }
-
-    private static Brush Frozen(Color c)
-    {
-        var b = new SolidColorBrush(c);
-        b.Freeze();
-        return b;
     }
 }

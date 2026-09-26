@@ -17,7 +17,8 @@ internal sealed class BrainDrainLoop : HelpLoopScene
     private static readonly double[] Clips = { 1500, 3900, 6000 };
     private static readonly double[] DripX = { 70, 140, 215, 300, 365 };
 
-    private static readonly Brush DripBrush = BuildDripBrush();
+    private static readonly Brush DripBrush = LoopPalette.Freeze(
+        new LinearGradientBrush(LoopPalette.Css("#ff6fb5cc"), LoopPalette.Css("#b99cffcc"), 90));
 
     private static readonly IReadOnlyList<HelpLoopStep> StepList = new[]
     {
@@ -33,8 +34,7 @@ internal sealed class BrainDrainLoop : HelpLoopScene
 
     public override void Draw(LoopFrame f, double t)
     {
-        var p = f.P;
-        double b = Schedule(Blur, t);
+        double b = LoopMath.Schedule(Blur, t);
         double m = LoopMath.Seg(t, 2800, 3600) * (1 - LoopMath.Seg(t, 6400, 7200));
 
         f.BackBlur = b * 7;
@@ -49,35 +49,29 @@ internal sealed class BrainDrainLoop : HelpLoopScene
             g.Children.Add(new ScaleTransform(1, 1 + m * .03 * (1 + Math.Sin(t / 520)), 240, 0));
             back.PushTransform(g);
         }
-        var dk = f.Desktop();
-        if (warp)
+        var dk = f.Desktop(null, drawLines: false);
+        for (int i = 0; i < dk.Lines.Count; i++)
         {
-            for (int i = 0; i < dk.Lines.Count; i++)
-            {
-                var l = dk.Lines[i];
-                double dx = m * 7 * Math.Sin(t / 260 + i * 1.3);
-                var cover = l;
-                cover.Inflate(1.5, 1.5);
-                back.DrawRectangle(p.Window, null, cover);
-                back.DrawRoundedRectangle(i % 3 == 1 ? p.LineB : p.LineA, null,
-                    new Rect(l.X + dx, l.Y + m * 2 * Math.Sin(t / 330 + i), l.Width, l.Height), l.Height / 2, l.Height / 2);
-            }
-            back.Pop();
+            var l = dk.Lines[i];
+            double dx = m * 7 * Math.Sin(t / 260 + i * 1.3);
+            double dy = m * 2 * Math.Sin(t / 330 + i);
+            f.DesktopLine(back, new Rect(l.X + dx, l.Y + dy, l.Width, l.Height), i);
         }
+        if (warp) back.Pop();
 
         // Drips hang from the top edge, over the blur.
         var dc = f.Front;
         if (m > 0)
         {
-            dc.PushOpacity(m);
-            for (int i = 0; i < DripX.Length; i++)
+            using (f.Fade(dc, m))
             {
-                double w = 9 + i % 3 * 4;
-                double h = m * (40 + i * 23 + 10 * Math.Sin(t / 600 + i));
-                if (h <= 0) continue;
-                dc.DrawGeometry(DripBrush, null, DripShape(DripX[i], w, h));
+                for (int i = 0; i < DripX.Length; i++)
+                {
+                    double w = 9 + i % 3 * 4;
+                    double h = m * (40 + i * 23 + 10 * Math.Sin(t / 600 + i));
+                    if (h > 0) dc.DrawGeometry(DripBrush, null, DripShape(DripX[i], w, h));
+                }
             }
-            dc.Pop();
         }
 
         f.Slider(14, 12, "BLUR", b);
@@ -86,13 +80,10 @@ internal sealed class BrainDrainLoop : HelpLoopScene
         foreach (var x in Clips) if (t >= x) c = x;
         double wk = LoopMath.Seg(t, c, c + 700);
         bool pulsing = wk > 0 && wk < 1;
-        double s = 1 + .25 * (pulsing ? Math.Sin(wk * Math.PI) : 0);
-        dc.PushTransform(new ScaleTransform(s, s, 420 + 13, 16 + 13));
-        f.Speaker(420, 16, pulsing ? wk : 0, drop: true);
-        dc.Pop();
+        f.Speaker(420, 16, pulsing ? wk : 0, true, 2, 1 + .25 * (pulsing ? Math.Sin(wk * Math.PI) : 0));
     }
 
-    /// <summary>A drip: straight sides, flat top at y 0, round bottom (radius 8, like the mockup).</summary>
+    /// <summary>A drip: flat top at y 0, straight sides, rounded bottom (radius up to 8, like the mockup).</summary>
     private static Geometry DripShape(double x, double w, double h)
     {
         double r = Math.Min(Math.Min(8, w / 2), h);
@@ -108,21 +99,5 @@ internal sealed class BrainDrainLoop : HelpLoopScene
         }
         g.Freeze();
         return g;
-    }
-
-    private static Brush BuildDripBrush()
-    {
-        var b = new LinearGradientBrush(Color.FromArgb(0xCC, 0xFF, 0x6F, 0xB5), Color.FromArgb(0xCC, 0xB9, 0x9C, 0xFF), 90);
-        b.Freeze();
-        return b;
-    }
-
-    private static double Schedule((double T, double V)[] pts, double t)
-    {
-        if (t <= pts[0].T) return pts[0].V;
-        for (int i = 1; i < pts.Length; i++)
-            if (t <= pts[i].T)
-                return LoopMath.Lerp(pts[i - 1].V, pts[i].V, LoopMath.EaseInOut(LoopMath.Seg(t, pts[i - 1].T, pts[i].T)));
-        return pts[^1].V;
     }
 }
