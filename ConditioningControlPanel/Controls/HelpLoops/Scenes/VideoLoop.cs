@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Controls.HelpLoops
                 {
                     var c = new Point(TargetX, TargetY);
                     dc.DrawEllipse(RingRest, null, c, 33, 33);
-                    DrawSweep(dc, c, 33, left * 360, f.P.Mint);
+                    LoopFrame.Sweep(dc, c, 33, left * 360, f.P.Mint);
                     dc.DrawEllipse(f.P.Panel, null, c, 27, 27);
                     f.DrawText(dc, "WATCHING", TargetX, TargetY - 7, 10, f.P.Text, LoopFrame.Display, FontWeights.SemiBold, TextAlignment.Center);
                 }
@@ -95,24 +95,6 @@ namespace ConditioningControlPanel.Controls.HelpLoops
             var p = Path(CursorPath, t);
             f.Ripple(TargetX, TargetY, Seg(t, 4470, 4900));
             f.Cursor(p.X, p.Y, t > 4450 && t < 4600);
-        }
-
-        /// <summary>conic-gradient(color deg, rest): a pie from 12 o'clock, clockwise.</summary>
-        internal static void DrawSweep(DrawingContext dc, Point c, double r, double deg, Brush brush)
-        {
-            if (deg <= 0.5) return;
-            if (deg >= 359.5) { dc.DrawEllipse(brush, null, c, r, r); return; }
-            var a = (deg - 90) * Math.PI / 180;
-            var g = new StreamGeometry();
-            using (var ctx = g.Open())
-            {
-                ctx.BeginFigure(c, true, true);
-                ctx.LineTo(new Point(c.X, c.Y - r), false, false);
-                ctx.ArcTo(new Point(c.X + Math.Cos(a) * r, c.Y + Math.Sin(a) * r), new Size(r, r), 0, deg > 180,
-                    SweepDirection.Clockwise, false, false);
-            }
-            g.Freeze();
-            dc.DrawGeometry(brush, null, g);
         }
     }
 }
