@@ -52,12 +52,14 @@ namespace ConditioningControlPanel.Views.Tabs
             _loading = true;
             try { ChkRafflePost.IsChecked = App.Settings?.Current?.ChasterRafflePostDays == true; }
             finally { _loading = false; }
+            ScrapInit();
         }
 
         /// <summary>From OnTabShown: a page open is one of the two moments the server re-reads
         /// the lock (the other is a push landing). Throttled inside the service.</summary>
         private void LadderOnShown()
         {
+            ScrapOnShown();
             if (App.Chaster?.IsLinked != true) return;
             _ = FetchLadderAsync(force: true);
         }
@@ -285,6 +287,13 @@ namespace ConditioningControlPanel.Views.Tabs
         private static readonly Brush ChipWaitText = Frozen(Color.FromRgb(0xFF, 0xC0, 0xCB));
         private static readonly Brush ChipOut = Frozen(Color.FromArgb(0x33, 0xA8, 0x98, 0xB8));
         private static readonly Brush ChipOutText = Frozen(Color.FromRgb(0xC9, 0xB8, 0xD8));
+
+        /// <summary>Paints a given card (the render test and the demo shots).</summary>
+        internal void ShowRaffleCard(RaffleCard? card)
+        {
+            _raffleCard = card;
+            PaintLadder();
+        }
 
         private void PaintLadder()
         {

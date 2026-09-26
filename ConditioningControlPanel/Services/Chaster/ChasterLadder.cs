@@ -1,7 +1,18 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace ConditioningControlPanel.Services.Chaster;
+
+/// <summary>One row of the month's top ten. <see cref="Named"/> is false when the player did not
+/// opt in: <see cref="Name"/> is then a label the server made up ("Locked 7F3A9C").</summary>
+public sealed record LadderRow(int Rank, string Name, bool Named, int AddedSeconds, bool You);
+
+/// <summary>The month's top ten by time CCP added (brag rights only, no prize rides on it),
+/// plus the caller's own row when they have one. <see cref="ShowName"/> is what the server holds
+/// for the caller's name opt-in.</summary>
+public sealed record LadderBoard(string Month, IReadOnlyList<LadderRow> Rows, LadderRow? You, bool ShowName);
 
 /// <summary>What the server read off Chaster for this month (total and days counted), or why
 /// it would not.</summary>
@@ -28,6 +39,8 @@ public static class ChasterLadder
 {
     /// <summary>The fewest minutes between two verifies (the server allows four an hour).</summary>
     public static readonly TimeSpan MinVerifyInterval = TimeSpan.FromMinutes(15);
+
+    public const int TopCount = 10;
 
     public static string MonthKey(DateTime nowUtc) =>
         nowUtc.ToString("yyyy-MM", CultureInfo.InvariantCulture);
@@ -58,6 +71,10 @@ public static class ChasterLadder
     /// <summary>When the next verify may go, or null when one may go now.</summary>
     public static DateTime? VerifyAt(DateTime? lastUtc, DateTime nowUtc) =>
         VerifyDue(lastUtc, nowUtc) ? null : lastUtc!.Value + MinVerifyInterval;
+
+    /// <summary>The player's own row below the ten, when they are ranked but not in them.</summary>
+    public static LadderRow? OwnRowBelow(LadderBoard board) =>
+        board.You != null && !board.Rows.Any(r => r.You) ? board.You : null;
 
     /// <summary>The heads-up clock: "0:00:00", hours unbounded ("126:04:09").</summary>
     public static string FormatClock(long seconds)
