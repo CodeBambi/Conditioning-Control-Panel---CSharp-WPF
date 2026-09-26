@@ -10,7 +10,6 @@ namespace ConditioningControlPanel.Services
             ["FlashImages"] = new HelpContent
             {
                 SectionId = "FlashImages",
-                ClipFile = "flash_images.mov",
                 CaptionKey = "help_caption_flash_images",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\u26A1",
@@ -56,7 +55,6 @@ namespace ConditioningControlPanel.Services
             ["Video"] = new HelpContent
             {
                 SectionId = "Video",
-                ClipFile = "mandatory_video.mov",
                 CaptionKey = "help_caption_mandatory_video",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83C\uDFAC",
@@ -103,7 +101,6 @@ namespace ConditioningControlPanel.Services
             ["Subliminals"] = new HelpContent
             {
                 SectionId = "Subliminals",
-                ClipFile = "subliminals.mov",
                 CaptionKey = "help_caption_subliminals",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDCAD",
@@ -998,7 +995,6 @@ namespace ConditioningControlPanel.Services
             ["SpiralOverlay"] = new HelpContent
             {
                 SectionId = "SpiralOverlay",
-                ClipFile = "spiral.mov",
                 CaptionKey = "help_caption_spiral_overlay",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83C\uDF00",
@@ -1023,7 +1019,6 @@ namespace ConditioningControlPanel.Services
             ["PinkFilter"] = new HelpContent
             {
                 SectionId = "PinkFilter",
-                ClipFile = "pinkfilter.mov",
                 CaptionKey = "help_caption_pink_filter",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDC97",
@@ -1047,7 +1042,6 @@ namespace ConditioningControlPanel.Services
             ["BubblePop"] = new HelpContent
             {
                 SectionId = "BubblePop",
-                ClipFile = "bubblepop.mov",
                 CaptionKey = "help_caption_bubble_pop",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83E\uDEE7",
@@ -1072,7 +1066,6 @@ namespace ConditioningControlPanel.Services
             ["LockCard"] = new HelpContent
             {
                 SectionId = "LockCard",
-                ClipFile = "lockcard.mov",
                 CaptionKey = "help_caption_lock_card",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDD12",
@@ -1096,7 +1089,6 @@ namespace ConditioningControlPanel.Services
             ["BouncingText"] = new HelpContent
             {
                 SectionId = "BouncingText",
-                ClipFile = "bouncingtext.mov",
                 CaptionKey = "help_caption_bouncing_text",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDCFA",
@@ -1142,7 +1134,6 @@ namespace ConditioningControlPanel.Services
             ["BubbleCount"] = new HelpContent
             {
                 SectionId = "BubbleCount",
-                ClipFile = "bubblecount.mov",
                 CaptionKey = "help_caption_bubble_count",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83E\uDEE7",

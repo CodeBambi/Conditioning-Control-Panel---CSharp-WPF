@@ -1,5 +1,8 @@
 # Tutorial video clips
 
+> The dashboard features no longer use clips: their ? popovers play drawn loops
+> (`Controls/HelpLoops/`, native WPF). Only topics without a loop read this folder.
+
 Short, **low-res, muted** loops played by `HelpVideoWindow` (the in-app "?" video
 help system). These are bundled with the build (disk-copied via the
 `Resources\tutorial_videos\**\*` `<Content>` group in the `.csproj`) and resolved at
