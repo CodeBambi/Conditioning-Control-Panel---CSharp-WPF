@@ -46,7 +46,7 @@ public sealed partial class ChasterService
         {
             MinutesOn = MinutesFromDayLog,
             LadderApi = new ChasterLadderApi(),
-            LadderShowName = () => App.Settings?.Current?.ChasterLadderShowName == true,
+            RafflePostDays = () => App.Settings?.Current?.ChasterRafflePostDays == true,
         };
     }
 

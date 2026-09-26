@@ -611,10 +611,10 @@
                             <ctrl:ChasterReceiptView x:Name="Receipt" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                         </Border>
 
-                        <!-- ================= THE HEADS-UP CLOCK: what CCP added, and the month's ladder =================
+                        <!-- ================= THE HEADS-UP CLOCK: what CCP added, and the raffle card =================
                              Added only, lifetime, as this PC counted it. Hover the clock (or click to pin) and the
-                             month's top 10 unrolls under it; that board is read off Chaster by the server, never
-                             off this number. All the code is in ChasterTabView.Ladder.cs. -->
+                             player's own Locktober raffle card unrolls under it; its days and total are read off
+                             Chaster by the server, never off this number. All the code is in ChasterTabView.Ladder.cs. -->
                         <Border x:Name="AddedCard" Style="{StaticResource CirceCard}" Margin="0,0,0,14">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -655,10 +655,11 @@
                                     <TextBlock Text="{loc:Str chaster_added_note}" Style="{StaticResource CirceSub}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str chaster_ladder_show_name}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                    <CheckBox x:Name="ChkLadderName" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                              Checked="ChkLadderName_Changed" Unchecked="ChkLadderName_Changed"/>
+                                    <TextBlock Text="{loc:Str chaster_raffle_post_days}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" ToolTip="{loc:Str chaster_raffle_post_days_tip}"/>
+                                    <CheckBox x:Name="ChkRafflePost" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              ToolTip="{loc:Str chaster_raffle_post_days_tip}"
+                                              Checked="ChkRafflePost_Changed" Unchecked="ChkRafflePost_Changed"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -917,7 +918,8 @@
             </Border>
         </Popup>
 
-        <!-- ================= THE LADDER: unrolls under the heads-up clock =================
+        <!-- ================= THE RAFFLE CARD: unrolls under the heads-up clock =================
+             The player's own card, never anyone else's (owner, 2026-09-26: a raffle, not a board).
              Hover opens it (StaysOpen, no mouse capture), a click on the clock pins it, a click
              anywhere else or the app losing focus closes a pinned one. Drawn in ChasterTabView.Ladder.cs. -->
         <Popup x:Name="LadderPopup" AllowsTransparency="True" Placement="Bottom" VerticalOffset="8" PopupAnimation="None"
@@ -928,11 +930,35 @@
                     <ScaleTransform x:Name="LadderUnroll"/>
                 </Border.RenderTransform>
                 <StackPanel>
-                    <TextBlock Text="{loc:Str chaster_ladder_title}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
-                               Foreground="#FFF3EAF7" Margin="2,0,0,8"/>
-                    <StackPanel x:Name="LadderRows"/>
+                    <Grid Margin="2,0,0,8">
+                        <TextBlock Text="{loc:Str chaster_raffle_title}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
+                                   Foreground="#FFF3EAF7"/>
+                        <TextBlock x:Name="TxtRaffleDay" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
+                                   FontWeight="SemiBold" Foreground="#FFC9B8D8"/>
+                    </Grid>
+                    <StackPanel x:Name="LadderRows">
+                        <!-- one pip a day of the month: lit = a day CCP's add counted -->
+                        <WrapPanel x:Name="RafflePips" Margin="0,0,0,10"/>
+                        <Grid Margin="0,0,0,2">
+                            <TextBlock x:Name="TxtRaffleDays" FontSize="13" Foreground="#FFF3EAF7"/>
+                            <TextBlock x:Name="TxtRaffleTotal" HorizontalAlignment="Right" FontFamily="Consolas, Courier New" FontSize="13"
+                                       FontWeight="Bold" Foreground="#FFFF6B8A"/>
+                        </Grid>
+                        <Border x:Name="RaffleStatusChip" CornerRadius="10" Padding="10,5,10,5" Margin="0,8,0,0" HorizontalAlignment="Left">
+                            <TextBlock x:Name="TxtRaffleStatus" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="14" FontWeight="SemiBold"/>
+                        </Border>
+                        <TextBlock x:Name="TxtRaffleTicketOn" FontSize="12" Foreground="#FFC9B8D8" Margin="2,4,0,0" Visibility="Collapsed"/>
+                    </StackPanel>
                     <TextBlock x:Name="TxtLadderState" FontSize="12" Foreground="#FFC9B8D8" Margin="2,6,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
-                    <TextBlock Text="{loc:Str chaster_ladder_foot}" FontSize="11" Foreground="#FFA898B8" Margin="2,10,0,0" TextWrapping="Wrap"/>
+                    <TextBlock Text="{loc:Str chaster_added_note}" FontSize="11" Foreground="#FFA898B8" Margin="2,10,0,0" TextWrapping="Wrap"/>
+                    <Grid Margin="2,2,0,0">
+                        <TextBlock Text="{loc:Str chaster_raffle_rule}" FontSize="11" Foreground="#FFA898B8" TextWrapping="Wrap" Margin="0,0,48,0"/>
+                        <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom" FontSize="11">
+                            <Hyperlink x:Name="LnkRaffleRules" Foreground="#FFFF9BB0" Click="LnkRaffleRules_Click">
+                                <Run Text="{loc:Str chaster_raffle_rules}"/>
+                            </Hyperlink>
+                        </TextBlock>
+                    </Grid>
                 </StackPanel>
             </Border>
         </Popup>

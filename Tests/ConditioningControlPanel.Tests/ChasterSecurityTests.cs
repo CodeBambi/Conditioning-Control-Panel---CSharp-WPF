@@ -32,7 +32,7 @@ public class ChasterSecurityTests
             nameof(AppSettings.ChasterDailyLimitPendingMinutes), nameof(AppSettings.ChasterDailyLimitPendingAtUtc),
             nameof(AppSettings.ChasterBacklogLimitPendingMinutes), nameof(AppSettings.ChasterBacklogLimitPendingAtUtc),
             nameof(AppSettings.ChasterPaused), nameof(AppSettings.ChasterRelockPastEnd),
-            nameof(AppSettings.ChasterConsentSeen), nameof(AppSettings.ChasterLadderShowName),
+            nameof(AppSettings.ChasterConsentSeen), nameof(AppSettings.ChasterRafflePostDays),
         })
         {
             Assert.Contains(expected, names);
@@ -71,7 +71,7 @@ public class ChasterSecurityTests
             ChasterPaused = false,
             ChasterRelockPastEnd = true,
             ChasterConsentSeen = true,
-            ChasterLadderShowName = true,
+            ChasterRafflePostDays = true,
         };
 
         ProfileSyncService.PreserveLocalOnlyFields(current, restored);
@@ -87,7 +87,7 @@ public class ChasterSecurityTests
         Assert.True(restored.ChasterPaused);
         Assert.False(restored.ChasterRelockPastEnd);
         Assert.False(restored.ChasterConsentSeen);
-        Assert.False(restored.ChasterLadderShowName);
+        Assert.False(restored.ChasterRafflePostDays);
     }
 
     [Fact]
