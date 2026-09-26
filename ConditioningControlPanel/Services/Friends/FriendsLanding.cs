@@ -180,6 +180,7 @@ public static class FriendsLanding
         {
             var word = PokeText(item.PokeId);
             var pink = LandingRules.PokeIsPink(item.PokeId);
+            FriendsSfx.PokeIn(inGame);
             if (inGame)
             {
                 var game = ActiveGameWindow();
@@ -196,6 +197,7 @@ public static class FriendsLanding
         {
             var anchor = inGame ? ActiveGameWindow() ?? Anchor() : Anchor();
             if (anchor == null) { Inbox(item); return; }
+            FriendsSfx.Knock();
             if (!inGame)
                 EmiSays(item.Kind == SendKind.Invite
                         ? Str("friends_land_emi_knock", "someone wants you")
@@ -219,10 +221,35 @@ public static class FriendsLanding
                 Glyph = item.Kind == SendKind.Poke ? "✨" : item.Kind == SendKind.Invite ? "🚪" : "🎁",
                 Open = () => Reopen(item),
             };
-            foreach (var existing in ladder.Inbox)
-                if (string.Equals(existing.Key, row.Key, StringComparison.OrdinalIgnoreCase)) return;
-            ladder.Inbox.Insert(0, row);
+            ladder.FileRow(row);
         }
+
+        public void RequestRow(FriendRequest request)
+        {
+            var ladder = App.StartupLadder;
+            if (ladder == null) return;
+            ladder.FileRow(new Startup.InboxItem
+            {
+                Key = RequestKey(request.Id),
+                Title = request.Name,
+                Summary = Str("friends_land_request_line", "wants to be friends"),
+                Glyph = "💌",
+                Open = OpenDrawer,
+            });
+        }
+
+        public void RequestAnnounce(FriendRequest request, bool inGame)
+        {
+            FriendsSfx.Request();
+            var owner = inGame ? ActiveGameWindow() ?? Anchor() : Anchor();
+            if (owner == null) return;
+            FriendToast.Show(owner, request.Name, request.AvatarUrl,
+                Str("friends_land_request_line", "wants to be friends"), pink: false);
+        }
+
+        public void RequestCue() => FriendsSfx.Request();
+
+        public void RequestGone(string requestId) => App.StartupLadder?.RemoveRow(RequestKey(requestId));
 
         public void SentBeat(SendKind kind, Friend to)
         {
@@ -236,6 +263,26 @@ public static class FriendsLanding
             };
             FloatingWord.Throw(anchor, word, pink: false, small: true);
         }
+    }
+
+    private static string RequestKey(string id) => "friends-request:" + id;
+
+    /// <summary>A request row opened: the panel up, the friends drawer open on it.</summary>
+    private static void OpenDrawer()
+    {
+        try
+        {
+            var mw = App.MainWindowRef;
+            if (mw is not { IsVisible: true } || mw.WindowState == WindowState.Minimized)
+                Launcher.LauncherHost.OpenPanel();
+            // After the panel has had a layout pass: a popup placed on a hidden chip lands at 0,0.
+            Application.Current?.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                try { App.MainWindowRef?.FriendsChip?.OpenDrawer(); }
+                catch (Exception ex) { App.Logger?.Debug("[Friends] open drawer: {E}", ex.Message); }
+            }));
+        }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] open drawer: {E}", ex.Message); }
     }
 
     /// <summary>An Inbox row opened later: the card again while it is still answerable.</summary>
@@ -269,7 +316,7 @@ public static class FriendsLanding
             if (item.Kind == SendKind.Watch && !item.IsExpired(DateTimeOffset.UtcNow)) TheSink.Inbox(item);
             return;
         }
-        if (item.Kind == SendKind.Invite) Join(item);
+        if (item.Kind == SendKind.Invite) { FriendsSfx.Join(); Join(item); }
         else if (item.Watch != null) Watch(item.Watch);
     }
 

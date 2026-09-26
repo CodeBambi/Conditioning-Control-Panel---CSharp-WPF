@@ -262,6 +262,39 @@ namespace ConditioningControlPanel.Services.Startup
         /// <summary>Raised on the UI thread after a row is added, opened or dismissed.</summary>
         public event Action? InboxChanged;
 
+        /// <summary>Files a row and nothing else: never presents, never holds. For surfaces that
+        /// are a notice rather than a modal (a friend request). A row with the same key is kept once.</summary>
+        public void FileRow(InboxItem item)
+        {
+            if (item == null) return;
+            if (!_dispatcher.CheckAccess())
+            {
+                _dispatcher.BeginInvoke(new Action(() => FileRow(item)), DispatcherPriority.Normal);
+                return;
+            }
+            foreach (var existing in Inbox)
+                if (string.Equals(existing.Key, item.Key, StringComparison.OrdinalIgnoreCase)) return;
+            Inbox.Insert(0, item);
+            InboxChanged?.Invoke();
+        }
+
+        /// <summary>Takes a row back by key without running anything (its surface went away).</summary>
+        public void RemoveRow(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            if (!_dispatcher.CheckAccess())
+            {
+                _dispatcher.BeginInvoke(new Action(() => RemoveRow(key)), DispatcherPriority.Normal);
+                return;
+            }
+            for (int i = Inbox.Count - 1; i >= 0; i--)
+            {
+                if (!string.Equals(Inbox[i].Key, key, StringComparison.OrdinalIgnoreCase)) continue;
+                Inbox.RemoveAt(i);
+                InboxChanged?.Invoke();
+            }
+        }
+
         /// <summary>Removes the row and runs the surface it was holding.</summary>
         public void OpenItem(InboxItem item)
         {
