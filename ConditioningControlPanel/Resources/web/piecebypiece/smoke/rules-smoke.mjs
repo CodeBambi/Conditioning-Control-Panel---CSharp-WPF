@@ -11,6 +11,7 @@ import { createRules, readResult } from '../game/rules.js';
 import { createClock, formatClock, DEFAULT_MS } from '../game/clock.js';
 import { createHotseat } from '../game/hotseat.js';
 import { createBus } from '../game/events.js';
+import { turnOpacity, turnRecipe, readTurn } from '../game/turn-loom.js';
 
 let passed = 0;
 const failures = [];
@@ -23,6 +24,27 @@ function eq(what, got, want) {
   ok(`${what} (got ${JSON.stringify(got)}, wanted ${JSON.stringify(want)})`, JSON.stringify(got) === JSON.stringify(want));
 }
 
+// The same online turn must look identical from either seat, even after reconnect.
+{
+  eq('Loom waits ten seconds', turnOpacity(9999), 0);
+  eq('Loom halfway through its fade', turnOpacity(16000), .5);
+  eq('Loom fully replaces squares', turnOpacity(22000), 1);
+  eq('Loom clamps a long think', turnOpacity(90000), 1);
+  const clock = createClock({ perSideMs: 0, now: () => 12000 }); clock.start('w');
+  const rules = createRules();
+  const game = { clock, rules, current: { matchId: 'shared-table' }, isOver: () => false,
+    turn: () => rules.turn(), plies: () => rules.ply() };
+  const first = readTurn(game, 'white-local-seed');
+  eq('Loom ignores local seat seed online', first.key, readTurn(game, 'black-local-seed').key);
+  eq('Loom recipe is deterministic', turnRecipe(first.key), turnRecipe(first.key));
+  ok('Loom varies between turns', JSON.stringify(turnRecipe(first.key)) !== JSON.stringify(turnRecipe(first.key + '|next')));
+  rules.move('e2', 'e4');
+  eq('optimistic next turn cannot inherit old age', readTurn(game, 'local'), null);
+  clock.press('b');
+  ok('confirmed next turn gets a new recipe key', readTurn(game, 'local').key !== first.key);
+  clock.stop();
+  eq('a stopped game cannot grow the Loom', readTurn(game, 'local'), null);
+}
 // --- the referee -----------------------------------------------------------
 {
   const r = createRules();
@@ -90,13 +112,20 @@ function eq(what, got, want) {
   let clock = 0;
   const c = createClock({ perSideMs: 5000, now: () => clock });
   eq('both sides start with the full budget', c.snapshot(), { w: 5000, b: 5000, total: 5000, active: null });
+  eq('stopped clock has no current turn age', c.turnElapsedMs(), 0);
   c.start('w');
   clock += 1200;
   eq('only the side to move is charged', [c.remaining('w'), c.remaining('b')], [3800, 5000]);
+  eq('draining a balance does not reset turn age', c.turnElapsedMs(), 1200);
+  c.start('w');
+  eq('starting the same active seat preserves turn age', c.turnElapsedMs(), 1200);
   c.press('b');
+  eq('the next turn starts at zero', c.turnElapsedMs(), 0);
   clock += 800;
   eq('pressing the clock swaps who pays', [c.remaining('w'), c.remaining('b')], [3800, 4200]);
+  eq('next side has its own turn age', c.turnElapsedMs(), 800);
   c.stop();
+  eq('stopping clears the reported turn age', c.turnElapsedMs(), 0);
   clock += 10000;
   eq('a stopped clock charges nobody', [c.remaining('w'), c.remaining('b')], [3800, 4200]);
 }
@@ -110,6 +139,7 @@ function eq(what, got, want) {
   eq('running out flags that side', flagged, 'w');
   eq('a clock never goes below zero', c.remaining('w'), 0);
   ok('the clock stops once it has flagged', !c.isRunning());
+  eq('a flagged clock has no active turn age', c.turnElapsedMs(), 0);
 }
 eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000), formatClock(9400), formatClock(-5)],
   ['15:00', '1:04', '0:09.4', '0:00.0']);
@@ -248,6 +278,9 @@ eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000),
   const clock = createClock({ perSideMs: 0, now: () => elapsed, onFlag: () => flags++ });
   clock.start('w'); elapsed = 3600000; clock.debit('w', 9999999);
   eq('untimed cannot flag', flags, 0);
+  eq('untimed still measures the current turn', clock.turnElapsedMs(), 3600000);
+  clock.press('b');
+  eq('untimed turn age resets on the next side', clock.turnElapsedMs(), 0);
   eq('untimed display', formatClock(clock.remaining('w')), 'Untimed');
   ok('untimed snapshot marks mode', clock.snapshot().untimed && clock.snapshot().total === 0);
   clock.stop();
@@ -262,6 +295,15 @@ eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000),
   const timed = createClock({ perSideMs: 60000, now: () => elapsed });
   timed.restore({ w: 20000, b: 40000 }); timed.start('w'); elapsed += 2000;
   eq('restored clock runs from saved value', timed.remaining('w'), 18000);
+  eq('restored turn starts when play resumes', timed.turnElapsedMs(), 2000);
+  timed.restore({ w: 10000, b: 20000 });
+  eq('restore stands the clock down', timed.turnElapsedMs(), 0);
+  elapsed += 50000; timed.start('w');
+  eq('time away is excluded from a resumed local turn', timed.turnElapsedMs(), 0);
+  elapsed += 500; timed.reset();
+  eq('reset clears the current turn age', timed.turnElapsedMs(), 0);
+  timed.start('w');
+  eq('a new game has a fresh turn age', timed.turnElapsedMs(), 0);
   timed.stop();
 }
 // --- report ----------------------------------------------------------------

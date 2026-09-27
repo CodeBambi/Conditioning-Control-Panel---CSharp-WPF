@@ -123,6 +123,8 @@ function main() {
   // --- J: the feel (outline, dust, sound) ---
   // Settings are merged, never replaced: the host bridge may have filled some.
   window.PBP.settings = Object.assign({ outline: true, sfxVolume: 0.6 }, window.PBP.settings || {});
+  jiggle.bindBus(bus);
+  { const dispose = view.dispose; view.dispose = () => { jiggle.dispose(); dispose(); }; }
   anim.bindBus(bus, (v) => view.projectPoint(v));   // anim.js speaks `land` and `sunk`
   // Loaded late and guarded, so a missing module never holds the game. The
   // per-frame updates ride on view.render, which the loop calls last, after
@@ -245,6 +247,12 @@ function main() {
     board.motes = m.createMotes({ scene: view.scene });
     feelLate.push((dt) => board.motes.update(dt, view.camera, view.renderer));
   }).catch((e) => console.warn('[pbp] motes missing', e));
+  import('./board/turn-spiral.js').then(m => {
+    board.turnSpiral = m.createTurnSpiral({ view, game, bus, menuOpen: () => !!window.PBP.door?.isUp() });
+    feelLate.push(dt => board.turnSpiral.update(dt));
+    const dispose = view.dispose;
+    view.dispose = () => { board.turnSpiral.dispose(); dispose(); };
+  }).catch(e => console.warn('[pbp] turn spiral missing', e));
   // --- end T ---
   // Esc closes the board - but never mid-drag, where it is "put the piece back".
   window.addEventListener('keydown', (e) => {

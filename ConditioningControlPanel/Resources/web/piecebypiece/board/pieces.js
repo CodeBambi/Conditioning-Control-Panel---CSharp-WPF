@@ -222,7 +222,6 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
   const glb = new Map();          // "type:side" -> art from a supplied glb
   const bySquare = new Map();     // square -> piece object
   let wobble = 0;
-  let clock = 0;
 
   const artKey = (type, side) => type + ':' + side;
   const artFor = (type, side) => glb.get(artKey(type, side)) || null;
@@ -337,6 +336,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     place(piece, to);
     bySquare.set(to, piece);
     if (hooks.onMoved) hooks.onMoved(piece, was, squareToWorld(from, 0));
+    jiggle?.follow?.(piece);
     return piece;
   }
 
@@ -377,17 +377,10 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     }
   }
 
-  function update(dt) {
-    clock += dt;
+  function update() {
+    // Idle life bends the body in jiggle.js. Root transforms belong to moves,
+    // captures and poses, so every resting base stays planted on its square.
     updateContacts();
-    if (wobble <= 0.001) return;
-    for (const piece of bySquare.values()) {
-      if (piece.userData.held || piece.userData.busy) continue;
-      const ph = piece.userData.phase;
-      piece.rotation.z = Math.sin(clock * 1.7 + ph) * 0.055 * wobble;
-      piece.rotation.x = Math.sin(clock * 1.3 + ph * 1.7) * 0.04 * wobble;
-      piece.position.y = Math.abs(Math.sin(clock * 0.9 + ph)) * 0.025 * wobble;
-    }
   }
 
   // --- optional glb art ------------------------------------------------------

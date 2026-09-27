@@ -19,7 +19,7 @@
  * turned to face down the board, leans the same way a white one does.
  *
  * Wiring, all of it optional, all of it one line at the call site:
- *   pieces.js  attach on build, idle sway from the meter wobble
+ *   pieces.js  attach on build; idle.js bends resting bodies with planted bases
  *   anim.js    land on arrival, buzz drives a fast small bend
  *   drag.js    sag on grab, lag while the pointer drags it around
  *   boot.js    update(dt) once a frame, after everything else has moved
@@ -28,6 +28,7 @@
 import * as THREE from 'three';
 import { SILICONE_GLSL } from './silicone.js';
 import { TRAVEL } from './captures.js';
+import { createIdle } from './idle.js';
 
 /** Every number that decides how the men feel. One place, on purpose. */
 export const TUNING = Object.freeze({
@@ -126,6 +127,13 @@ export function createJiggle() {
   let clock = 0;
   let wobble = 0;
   let lastCost = 0;
+  const available = piece => {
+    const d = piece.userData, s = states.get(piece);
+    return !!s && !d.held && !d.busy && !d.capturePose && !d.parade && !d.pose
+      && Math.abs(piece.position.y) < .025 && clock >= (s.idleAfter || 0)
+      && s.vel.lengthSq() < .003 && s.bend.lengthSq() < .0002 && Math.abs(s.sVel) < .05;
+  };
+  const idle = createIdle({ pieces: () => states.keys(), available });
 
   const gain = () => (prefersReducedMotion() ? T.reducedScale : 1);
 
@@ -262,6 +270,7 @@ export function createJiggle() {
   function impulse(piece, { bend = null, squash = 0, local = false } = {}) {
     const s = stateOf(piece);
     if (!s) return;
+    s.idleAfter = clock + 1;
     const g = gain() / s.world * (piece.userData.type === 'p' ? .60 : 1);
     if (bend) {
       const v = local ? dir.set(bend[0], 0, bend[1]) : toLocal(piece, bend[0], bend[1]);
@@ -287,6 +296,7 @@ export function createJiggle() {
       bz = (-travel[1] / len) * T.landBend * hard;
     }
     impulse(piece, { bend: [bx, bz], squash: T.landSquash * hard });
+    s.idleAfter = clock + 1.2;
   }
 
   /** Lifted off the board: the tip stretches down under its own weight. */
@@ -327,11 +337,12 @@ export function createJiggle() {
     clock += dt;
     const steps = Math.max(1, Math.min(24, Math.ceil(dt / T.substep)));
     const h = dt / steps;
-    const idle = wobble > 0.001 && !prefersReducedMotion() ? wobble * T.idleAmp : 0;
+    idle.update(dt, prefersReducedMotion());
     for (const [piece, s] of states) {
       if (!piece.parent) { states.delete(piece); continue; }
       if (piece.userData.capturePose) {
         const act = piece.userData.capturePose;
+        s.idleAfter = clock + .9;
         s.bend.set(0, 0); s.vel.set(0, 0); s.squash = s.sVel = 0; s.forced.set(0, 0);
         s.u.uBend.value.set(act.x, act.z); s.u.uSquash.value = 0;
         s.u.uLag.value.set(act.lx || 0, act.lz || 0); s.u.uFlex.value.set(act.stretch || 0, act.drop || 0);
@@ -343,13 +354,15 @@ export function createJiggle() {
       s.bend.x = THREE.MathUtils.clamp(s.bend.x, -T.maxBend, T.maxBend);
       s.bend.y = THREE.MathUtils.clamp(s.bend.y, -T.maxBend, T.maxBend);
       s.squash = THREE.MathUtils.clamp(s.squash, -T.maxSquash, T.maxSquash);
-      if (idle && !piece.userData.busy && !piece.userData.held) {
-        const firmness = piece.userData.type === 'p' ? .40 : 1;
-        s.forced.x += Math.sin(clock * T.idleFreq + s.phase) * idle * firmness;
-        s.forced.y += Math.cos(clock * T.idleFreq * T.idleCross + s.phase * 1.7) * idle * firmness;
+      const quiet = s.forced.lengthSq() < .000001 ? idle.sample(piece, wobble) : null;
+      let qx = 0, qz = 0, qs = 0;
+      if (quiet) {
+        const local = toLocal(piece, quiet.worldX, quiet.worldZ);
+        qx = (quiet.x + local.x) * s.height; qz = (quiet.z + local.z) * s.height;
+        qs = quiet.squash;
       }
-      s.u.uBend.value.set(s.bend.x + s.forced.x, s.bend.y + s.forced.y);
-      s.u.uSquash.value = s.squash;
+      s.u.uBend.value.set(s.bend.x + s.forced.x + qx, s.bend.y + s.forced.y + qz);
+      s.u.uSquash.value = s.squash + qs;
       s.u.uTime.value = clock;
       s.forced.set(0, 0);
     }
@@ -358,6 +371,8 @@ export function createJiggle() {
 
   return {
     attach, release, update, impulse, land, grab, lag, drive,
+    bindBus: idle.bindBus, follow: idle.follow, idleStats: idle.stats,
+    dispose() { idle.dispose(); states.clear(); },
     setWobble(v) { wobble = Math.max(0, Math.min(1, Number(v) || 0)); },
     /** Harness and ramp entry point: poke(piece, {bend:[x,z], squash}). */
     poke(piece, opts = {}) { impulse(piece, { bend: opts.bend || null, squash: opts.squash || 0 }); },
@@ -372,6 +387,6 @@ export function createJiggle() {
         uBend: [s.u.uBend.value.x, s.u.uBend.value.y], uSquash: s.u.uSquash.value,
       };
     },
-    stats() { return { pieces: states.size, lastMs: lastCost, reduced: prefersReducedMotion() }; },
+    stats() { return { pieces: states.size, lastMs: lastCost, reduced: prefersReducedMotion(), idle: idle.stats() }; },
   };
 }

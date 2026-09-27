@@ -373,6 +373,7 @@ function harness(opts = {}) {
 
   local += 4000;
   eq('the side to move is charged for the think', clock.remaining('w'), 296000);
+  eq('online turn age derives from server time', clock.turnElapsedMs(), 4000);
   eq('the side waiting is not', clock.remaining('b'), 300000);
   eq('the offset was fixed at the sync, not recomputed since', clock.offset(), SERVER_EPOCH);
   eq('so our reading of the server clock moved with us', clock.serverNow(), SERVER_EPOCH + 4000);
@@ -381,6 +382,7 @@ function harness(opts = {}) {
   local += 6000;
   clock.sync({ w_ms: 290000, b_ms: 300000, turn: 'w', server_now_ms: SERVER_EPOCH + 10000, turn_started_ms: SERVER_EPOCH, total_ms: 300000 });
   eq('a fresh sync agrees with the derivation', clock.remaining('w'), 290000);
+  eq('same-turn polling does not restart the turn age', clock.turnElapsedMs(), 10000);
   eq('and a falling balance in one turn identifies a discounting server', clock.discountMode(), { mode: 'now', measured: true });
 
   // Now the local clock jumps forward on its own (a suspend/resume, an NTP
@@ -389,6 +391,7 @@ function harness(opts = {}) {
   ok('a local jump does show, between syncs', clock.remaining('w') < 290000);
   clock.sync({ w_ms: 289000, b_ms: 300000, turn: 'w', server_now_ms: SERVER_EPOCH + 11000, turn_started_ms: SERVER_EPOCH, total_ms: 300000 });
   eq('and the next sync corrects it completely', clock.remaining('w'), 289000);
+  eq('reconnect corrects age against the same server turn start', clock.turnElapsedMs(), 11000);
 
   clock.sync({ w_ms: 500, b_ms: 1000, turn: 'w', server_now_ms: SERVER_EPOCH + 50000, turn_started_ms: SERVER_EPOCH + 40000 });
   eq('a clock cannot go below zero', (() => { local += 900; return clock.remaining('w'); })(), 0);
@@ -396,6 +399,7 @@ function harness(opts = {}) {
 
   clock.stop();
   eq('stopping freezes the numbers', clock.snapshot().active, null);
+  eq('a stopped online game has no active turn age', clock.turnElapsedMs(), 0);
   const frozen = clock.remaining('b');
   local += 20000;
   eq('and they stay frozen', clock.remaining('b'), frozen);
@@ -424,6 +428,24 @@ function harness(opts = {}) {
   // Only a server_now_ms, which is what a quiet long poll answers with.
   clock.noteServerNow(SERVER_EPOCH + 10000);
   eq('a bare server_now_ms keeps the offset honest', clock.remaining('w'), 290000);
+  eq('an empty poll keeps the turn age', clock.turnElapsedMs(), 10000);
+}
+
+// Joining an existing turn starts at its true age, even on a different local clock.
+{
+  let local = 987654;
+  const clock = createRemoteClock({ now: () => local });
+  eq('an unsynced online clock has no current turn', clock.turnElapsedMs(), 0);
+  clock.sync({ w_ms: 300000, b_ms: 283000, turn: 'b', server_now_ms: SERVER_EPOCH + 17000, turn_started_ms: SERVER_EPOCH });
+  eq('late join observes the existing turn age', clock.turnElapsedMs(), 17000);
+  local += 2000;
+  clock.noteServerNow(SERVER_EPOCH + 19000);
+  eq('late join progresses through an empty poll', clock.turnElapsedMs(), 19000);
+  clock.sync({ w_ms: 300000, b_ms: 281000, turn: 'w', turn_started_ms: SERVER_EPOCH + 19000 });
+  eq('a server move starts the next turn without a local reset', clock.turnElapsedMs(), 0);
+  local += 700;
+  eq('new server turn age advances', clock.turnElapsedMs(), 700);
+  clock.stop();
 }
 
 /* ---------------------------------------------------------------------------

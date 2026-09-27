@@ -232,6 +232,8 @@ export function createRemoteClock({ perSideMs = DEFAULT_MS, now = null } = {}) {
     remaining,
     stop,
     serverNow,
+    // A same-turn poll refreshes the offset, not the authoritative turn start.
+    turnElapsedMs: () => running && active ? Math.max(0, serverNow() - turnStartedMs) : 0,
     snapshot: () => ({ w: remaining('w'), b: remaining('b'), total, active: running ? active : null }),
     isRunning: () => running,
     hasSynced: () => synced,
