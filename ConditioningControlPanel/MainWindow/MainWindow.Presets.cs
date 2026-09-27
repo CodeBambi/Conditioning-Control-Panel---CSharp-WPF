@@ -2200,7 +2200,11 @@ namespace ConditioningControlPanel
             // it the preset surface a user is most likely to be looking at mid-session.
             if (RefuseActionIfSessionLocked($"load-preset:{preset.Name}")) return;
 
-            preset.ApplyTo(App.Settings.Current);
+            // A preset writes both strict flags wholesale; mid-Lockdown they stay on (#1282).
+            var cur = App.Settings.Current;
+            bool strictBefore = cur.StrictLockEnabled, bubbleStrictBefore = cur.BubbleCountStrictLock;
+            preset.ApplyTo(cur);
+            Services.LockdownStrictHold.RestoreAfterApply(cur, strictBefore, bubbleStrictBefore);
             App.Settings.Save();
 
             _isLoading = true;

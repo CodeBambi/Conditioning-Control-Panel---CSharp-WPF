@@ -30,4 +30,14 @@ public class LockdownStrictHoldTests
         Assert.False(LockdownStrictHold.Holds(lockdownActive: false, forceStrictLock: true));
         Assert.False(LockdownStrictHold.Refuses(lockdownActive: false, forceStrictLock: true, turningOn: false));
     }
+
+    [Theory]
+    // holds, before, incoming, expected
+    [InlineData(true, true, false, true)]   // a preset cannot switch a held flag off
+    [InlineData(true, false, true, true)]   // a preset may switch one on
+    [InlineData(true, false, false, false)]
+    [InlineData(false, true, false, false)] // no Lockdown: the preset wins
+    [InlineData(false, false, true, true)]
+    public void A_wholesale_write_keeps_a_held_flag_on(bool holds, bool before, bool incoming, bool expected)
+        => Assert.Equal(expected, LockdownStrictHold.Keep(holds, before, incoming));
 }

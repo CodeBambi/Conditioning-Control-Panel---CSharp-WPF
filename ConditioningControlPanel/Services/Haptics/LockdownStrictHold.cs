@@ -18,9 +18,27 @@ public static class LockdownStrictHold
     public static bool Refuses(bool lockdownActive, bool forceStrictLock, bool turningOn)
         => !turningOn && Holds(lockdownActive, forceStrictLock);
 
+    /// <summary><see cref="Holds"/> against the live Lockdown and settings.</summary>
+    public static bool HoldsNow
+        => Holds(App.Lockdown?.IsActive == true, App.Settings?.Current?.LockdownForceStrictLock == true);
+
     /// <summary><see cref="Refuses"/> against the live Lockdown and settings.</summary>
-    public static bool RefusesNow(bool turningOn)
-        => Refuses(App.Lockdown?.IsActive == true,
-                   App.Settings?.Current?.LockdownForceStrictLock == true,
-                   turningOn);
+    public static bool RefusesNow(bool turningOn) => !turningOn && HoldsNow;
+
+    /// <summary>
+    /// What a strict flag becomes when something writes it wholesale (a preset, a recalled
+    /// config): while held, a flag that was on stays on; otherwise the incoming value wins.
+    /// </summary>
+    public static bool Keep(bool holds, bool before, bool incoming) => holds ? before || incoming : incoming;
+
+    /// <summary>
+    /// Put the strict flags back after a wholesale write (Preset.ApplyTo), so loading a preset
+    /// mid-Lockdown cannot switch Strict Lock off. Pass the values read before the write.
+    /// </summary>
+    public static void RestoreAfterApply(Models.AppSettings s, bool strictBefore, bool bubbleStrictBefore)
+    {
+        var holds = HoldsNow;
+        s.StrictLockEnabled = Keep(holds, strictBefore, s.StrictLockEnabled);
+        s.BubbleCountStrictLock = Keep(holds, bubbleStrictBefore, s.BubbleCountStrictLock);
+    }
 }
