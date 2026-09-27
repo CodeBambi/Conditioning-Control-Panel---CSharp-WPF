@@ -104,3 +104,16 @@ test('checkpoint rebuild preserves payloads and armour independently of prior pl
   const traveled=rig({rng:()=>.4});traveled.game.jumpToWall(15);
   assert.deepEqual(payloads(first.g),payloads(traveled.g));
 });
+
+test('Skip this board: Endless moves to the next board and pays nothing; Story refuses',()=>{
+  const {game,g,events}=rig();const sat=g.sat,sp=g.stats.sp,name=g.endlessBoard.name;
+  assert.equal(game.skipBoard(),true);
+  const s=game.snapshot();
+  assert.equal(s.stats.walls,1);assert.equal(s.endlessBoard.index,1);
+  assert.equal(s.sat,sat);assert.equal(s.stats.sp,sp);
+  assert.ok(s.bricks.some(b=>b.alive));assert.equal(s.balls.length,1);
+  assert.ok(events.some(([n,d])=>n==='wall'&&d.skipped));
+  assert.ok(typeof name==='string');
+  const story=createGame({rng:()=>.6});
+  assert.equal(story.skipBoard(),false);assert.equal(story.snapshot().stats.walls,0);
+});
