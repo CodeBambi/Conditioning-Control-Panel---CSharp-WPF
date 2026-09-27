@@ -1,5 +1,15 @@
 // Capture gathers inward; launch releases a small shower. Grey stays quiet.
 export default {
+  portalTransit(fx,d) {
+    if(fx.reduced)return;
+    const rgb=fx.colour?fx.colours.MINT:fx.colours.GREY;
+    fx.stamps.push({kind:'ring',x:d.fromX,y:d.fromY,r0:30,r1:5,life:.22,rgb});
+    fx.stamps.push({kind:'ring',x:d.x,y:d.y,r0:6,r1:40,life:.32,rgb});
+    if(!fx.colour)return;
+    fx.P.implode(d.fromX,d.fromY,fx.colours.PINK,16,120,.25,{from:32});
+    fx.P.spray(d.x,d.y,Math.atan2(d.vy||0,d.vx||1),.9,rgb,24,190,.4,{gv:0});
+    fx.P.burst(d.x,d.y,fx.colours.WHITE,8,90,.25,{gv:0,r0:.7,r1:1.5});
+  },
   demolitionCapture(fx,d) {
     if(!fx.colour)return;
     const rgb=fx.colours.MINT;

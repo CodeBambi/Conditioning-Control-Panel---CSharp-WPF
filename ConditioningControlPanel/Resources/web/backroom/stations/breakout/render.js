@@ -16,6 +16,7 @@ import { FINALE_PULSE_PERIOD } from './finale-chaos.js';
 import { drawMetronome } from './reform.js';
 import { createLevelIntro } from './level-intro.js';
 import { drawEndlessField } from './endless-presentation.js';
+import { createPortalRenderer } from './render-portals.js';
 /* ============================================================================
  * stations/breakout/render.js - canvas 2D. Everything visual keys on the
  * snapshot's `rungs` (the juice ladder) and `state` (COLOUR / GREY). The
@@ -85,6 +86,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   const shockwaves = [], drifters = [];
   const rewardPick = createRewardPicker(rng);
   const levelIntro = createLevelIntro();
+  const portalFx = createPortalRenderer({ software });
   const landscape = createLandscape(W, H, rng, reduced);
   let breakoutFlash = 0, breakoutGif = -1, irisMelt = 0, irisBuffer = null;
   const P = createParticles({ max: 600, rng });
@@ -120,7 +122,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   const bubbleRewards = [];
   function onEvent(name, d) {
     d = d || {};
-    spellFx.event(name, d);
+    spellFx.event(name, d); portalFx.event(name, d);
     if (name === 'paddle') happy = .9;
     if (!reduced && (name === 'brick' || name === 'brickDamage' || name === 'metalHit' ||
         name === 'irisHit' || name === 'pendulumAnchorHit' || (name === 'hit' && d.kind === 'paddle'))) {
@@ -1424,6 +1426,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     drawPowerups(g,s);
     drawJunctionShield(s,mix,dt);
     drawPaddle(s, mix, dt); mark("particlesBallMs");
+    portalFx.draw(g, canvas, s, { now, dt, reduced }); mark("portalsMs");
     if (!extras) drawCombo(s, mix, dt);                                   // the v2 station shows the combo in its strip
     drawOverlays(s, dt, mix, grey ? null : word, now);
     if (tr && tr.kind === 'relapse' && !grey) {                             // slow-mo drain: colour leaves from the bottom up
@@ -1509,7 +1512,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   }
 
   const r = { resize, draw, onEvent, onGameEvent: onEvent, toField,
-    dispose() { smoke.clear(); endingCard.reset();letterFaces.clear();greyMetalFace=null; toughFaces.clear(); brickPictures.clear(); wordFaces.clear(); plainFaces.clear(); tierGlows.clear(); foreground?.remove(); foreground = null; spellFx.reset(); bubbleRewards.length = 0; P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); wellFx.dispose(); irisFx.dispose(); finaleFx.dispose(); finaleFreezeFrame=null; finaleOutroFrame=null; finaleOutroOwner=null; irisBuffer=null; off = null; },
+    dispose() { portalFx.dispose(); smoke.clear(); endingCard.reset();letterFaces.clear();greyMetalFace=null; toughFaces.clear(); brickPictures.clear(); wordFaces.clear(); plainFaces.clear(); tierGlows.clear(); foreground?.remove(); foreground = null; spellFx.reset(); bubbleRewards.length = 0; P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); wellFx.dispose(); irisFx.dispose(); finaleFx.dispose(); finaleFreezeFrame=null; finaleOutroFrame=null; finaleOutroOwner=null; irisBuffer=null; off = null; },
     particleCount: () => P.count() };
   return r;
 }
