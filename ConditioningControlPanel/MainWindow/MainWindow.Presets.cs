@@ -1783,14 +1783,22 @@ namespace ConditioningControlPanel
                         // recap is simply there when the video surface goes away.
                         var videoUp = App.Video?.IsPlaying == true
                                       || App.Video?.IsBrowserSessionActive == true;
+                        // #1303: a lock card, pop quiz or Bubble Count game still up (a queued
+                        // replay, Takeover, a keyword trigger) is a topmost cover too. A modal recap
+                        // under it disables the card AND hides Continue, so it goes passive for the
+                        // same reason.
+                        var passive = SessionSummaryPresentation.Decide(
+                                          videoUp, LockCardWindow.IsAnyOpen(), PopQuizWindow.IsAnyOpen(),
+                                          BubbleCountWindow.IsAnyOpen())
+                                      == SessionSummaryPresentation.Mode.Passive;
                         var dialog = new SessionCompleteWindow(log)
                         {
                             Owner = IsLoaded ? this : null,
                             // Pulse above any straggler surface, then drop back to normal once
                             // rendered so the summary can't pin itself over other apps.
-                            Topmost = !videoUp,
+                            Topmost = !passive,
                         };
-                        if (videoUp)
+                        if (passive)
                         {
                             // Non-modal recaps do not block the next session, so two runs ending
                             // in quick succession would stack two live cards. Keep exactly one.
