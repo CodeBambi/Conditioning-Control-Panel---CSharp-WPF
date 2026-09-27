@@ -7,7 +7,7 @@ export const ACTS = Object.freeze({
   n: { name: 'backflip', hit: .90, end: 2.36 },
   b: { name: 'double-whip', hit: 1.20, end: 2.85 },
   k: { name: 'royal-squash', hit: .90, end: 2.64 },
-  q: { name: 'breakdance', hit: 1.58, end: 3.35 },
+  q: { name: 'breakdance', hit: 2.30, end: 4.25 },
   r: { name: 'side-swing', hit: 1.30, end: 2.95 },
 });
 const clamp = t => Math.max(0, Math.min(1, t));
@@ -211,7 +211,14 @@ export function createChoreography({ group, emit, landed, reduced }) {
           at.y *= 1 - phase(age, .19, arrivals[type]);
         }
       } else {
-        at.lerp(a.near, phase(t, 0, .30));
+        const approach = clamp((t - .04) / .22), distance = a.from.distanceTo(a.near);
+        at.lerp(a.near, smooth(approach));
+        if (distance > .05) {
+          at.y = .24 * Math.sin(Math.PI * approach);
+          const since = Math.max(0, t - .26);
+          const bounce = -Math.sin(since * 26) * Math.exp(-since * 12);
+          sy = 1 + .14 * bounce;
+        }
         if (type === 'b') {
           const ready = phase(t, .28, .52), release = 1 - phase(age, .14, .58);
           const sweep = -.82 + 1.64 * phase(t, .54, .86) - 1.64 * phase(t, 1.04, 1.36);
@@ -237,22 +244,31 @@ export function createChoreography({ group, emit, landed, reduced }) {
           at.addScaledVector(d, -.10 * charge);
         }
         if (type === 'q') {
-          // Three readable beats: arch onto the crown, lift/coil the base, then whip.
-          const arch = phase(t, .22, .64), liftBase = phase(t, .80, 1.10);
+          // Plant, rise into a headstand, feint, draw back, hold tension, then whip.
+          const arch = phase(t, .22, .64), rise = phase(t, .72, 1.07);
           const recover = 1 - phase(age, .28, .60), invert = arch * recover;
-          const coil = phase(t, .84, 1.18), lash = phase(t, 1.32, 1.70);
-          const orbit = -Math.PI - .41 * coil + 4.35 * lash - 1.35 * phase(age, .15, .40);
+          const feint = phase(t, 1.12, 1.34), coil = phase(t, 1.38, 1.74);
+          const lash = phase(t, 2.10, 2.40), strike = phase(t, 2.10, hit);
+          const tension = phase(t, 1.74, 1.84) * (1 - phase(t, 2.08, 2.18));
+          const tremble = .025 * Math.sin((t - 1.74) * 76) * tension;
+          const riseAge = Math.max(0, t - 1.07);
+          const wobble = Math.sin(riseAge * 24) * Math.exp(-riseAge * 4.5) * (1 - lash);
+          const orbit = -Math.PI + .30 * feint - .60 * coil + 4.35 * lash
+            - 1.35 * phase(age, .15, .40) + tremble;
           facing = d.clone().applyAxisAngle(up, orbit);
-          tilt = -Math.PI / 2 * liftBase * invert;
-          const baseHeight = Math.max(a.radius + .03, a.contactHeight) * liftBase;
-          const reach = a.queenReach;
-          // Solve both ends of the curved spine. The head stays fixed while the base rises.
+          tilt = Math.PI * (-.94 * rise + .08 * feint + .16 * coil + .20 * strike) * invert;
+          const strikeHeight = Math.max(a.radius + .03, a.contactHeight);
+          const raisedHeight = a.height * (1.05 + .18 * coil + .035 * wobble + tremble);
+          const baseHeight = (raisedHeight * (1 - strike) + strikeHeight * strike) * rise;
+          const reach = a.queenReach * (1 - .82 * rise + .12 * feint + .30 * coil + .40 * strike);
+          // Solve both ends of the curved spine while the planted head carries the weight.
           flex.tip.copy(facing).multiplyScalar(-reach * invert).addScaledVector(up, -baseHeight * invert);
-          flex.stretch = .55 * (1 - liftBase) * invert;
+          flex.stretch = (.55 * (1 - rise) + .24 * coil * (1 - lash) + .07 * wobble) * invert;
           flex.drop = (reach * Math.sin(-tilt) - baseHeight * Math.cos(tilt) - a.height * (1 + flex.stretch)) * invert;
-          flex.lag.copy(up).multiplyScalar(.52 * liftBase * invert).addScaledVector(lateral, -.32 * Math.sin(orbit) * invert);
-          flex.twist = -.35 * Math.sin(orbit) * invert;
-          headPin = phase(t, .64, .80) * (1 - phase(age, .28, .55));
+          flex.lag.copy(up).multiplyScalar(.52 * rise * invert)
+            .addScaledVector(lateral, (-.32 * Math.sin(orbit) + .10 * wobble + 2 * tremble) * invert);
+          flex.twist = (-.35 * Math.sin(orbit) + .08 * wobble) * invert;
+          headPin = phase(t, .64, .72) * (1 - phase(age, .28, .55));
         }
         if (type === 'r') {
           const ready = phase(t, .30, .76), release = 1 - phase(age, .16, .62);
@@ -270,7 +286,8 @@ export function createChoreography({ group, emit, landed, reduced }) {
         }
         const hopStart = type === 'k' ? .70 : .55;
         at.lerp(a.to, phase(age, ['k', 'q'].includes(type) ? hopStart : .32, arrivals[type]));
-        if (type === 'k' || type === 'q') at.y = .48 * Math.sin(Math.PI * clamp((age - hopStart) / (arrivals[type] - hopStart)));
+        if (age >= hopStart && (type === 'k' || type === 'q')) at.y = .48 * Math.sin(Math.PI * clamp((age - hopStart) / (arrivals[type] - hopStart)));
+        if ((type === 'b' || type === 'r') && age >= .32) at.y = .26 * Math.sin(Math.PI * clamp((age - .32) / (arrivals[type] - .32)));
       }
       if (!a.gone) {
         let pos = a.target.clone(), tip = 0, shrink = 1, vs = 1;
@@ -278,12 +295,10 @@ export function createChoreography({ group, emit, landed, reduced }) {
         const impactFlex = { tip: new THREE.Vector3(), lag: new THREE.Vector3(), stretch: 0, drop: 0, twist: 0 };
         if (!a.low && type === 'b') {
           const firstAge = Math.max(0, t - .70);
-          const kick = (1 - Math.exp(-firstAge * 32)) * Math.exp(-firstAge * 5);
+          const kick = (1 - Math.exp(-firstAge * 32)) * Math.exp(-firstAge * 11);
           reaction = lateral;
-          tip = .72 * kick;
-          pos.addScaledVector(lateral, .22 * kick);
-          impactFlex.tip.copy(lateral).multiplyScalar(.30 * kick);
-          impactFlex.lag.copy(lateral).multiplyScalar(-.24 * kick);
+          impactFlex.tip.copy(lateral).multiplyScalar(.72 * kick);
+          impactFlex.lag.copy(lateral).multiplyScalar(-.38 * kick);
           impactFlex.stretch = -.12 * kick;
         }
         if (!a.low && age > 0) {
@@ -330,6 +345,7 @@ export function createChoreography({ group, emit, landed, reduced }) {
           flex.lag.addScaledVector(d, .18 * Math.sin(Math.PI * phase(t, .25, hit + .12)));
         }
       }
+      if (!a.low && !['p', 'n'].includes(type)) { flex.stretch += sy - 1; sy = 1; }
       pose(p, a.scale, at, tilt, spin, facing, bend, sy, 1, flex);
       if (headPin) {
         const head = worldVertex(p, { x: 0, y: p.userData.jiggleUniforms.uHeight.value, z: 0 }).clone();
@@ -343,11 +359,10 @@ export function createChoreography({ group, emit, landed, reduced }) {
       p.position.y += (a.lift || 0) * Math.exp(-dt * 18);
       const sideStrike = ['b', 'q', 'r'].includes(type) && !a.low && !a.gone;
       // Side contacts separate horizontally. A vertical solver turns every slap into a headbutt.
-      const firstSlap = type === 'b' && t >= .70;
-      if (sideStrike && age === 0 && !firstSlap) clearSide(p, captureVolumes(v), type === 'q' ? lateral : d.clone().negate());
+      if (sideStrike && age === 0) clearSide(p, captureVolumes(v), type === 'q' ? lateral : d.clone().negate());
       clearAbove(p, a.gone || sideStrike ? obstacles : [...obstacles, ...captureVolumes(v)]);
-      if (sideStrike && (age > 0 || firstSlap)) {
-        const away = type === 'r' ? a.fly : type === 'b' && age === 0 ? lateral : lateral.clone().negate();
+      if (sideStrike && age > 0) {
+        const away = type === 'r' ? a.fly : lateral.clone().negate();
         for (let pass = 0; pass < 8; pass++) {
           const before = v.position.clone();
           clearSide(v, captureVolumes(p), away);
@@ -369,9 +384,14 @@ export function createChoreography({ group, emit, landed, reduced }) {
           manner: 'signature', world: { x: a.target.x, y: ['q', 'r'].includes(type) ? a.contactHeight : Math.min(a.vHeight, .65), z: a.target.z } });
       }
       if (!a.low) {
+        if (['b', 'q', 'k', 'r'].includes(type) && a.from.distanceTo(a.near) > .05) {
+          cue(a, 'approach-hop', .04, 'hop'); cue(a, 'approach-land', .26, 'hopland');
+        }
+        cue(a, 'square-hop', type === 'p' ? .16 : type === 'n' ? .30 : hit + (type === 'k' ? .70 : type === 'q' ? .55 : .32), 'hop');
+        if (type === 'q') { cue(a, 'stretch', .72, 'stretch'); cue(a, 'windup', 1.38, 'charge'); cue(a, 'tension', 1.78, 'tension'); }
         if (type === 'n') { cue(a, 'hooves', .02, 'hooves'); cue(a, 'neigh', .30, 'neigh'); }
         if (type === 'r') cue(a, 'charge', .32, 'charge');
-        if (type === 'q') cue(a, 'spin', 1.32, 'spin');
+        if (type === 'q') cue(a, 'spin', 2.10, 'spin');
         if (type === 'b') {
           cue(a, 'sweep-one', .54, 'sweep'); cue(a, 'slap-one', .70, 'whip');
           cue(a, 'sweep-two', hit - .16, 'sweep');

@@ -43,6 +43,23 @@
     ok(events.filter(e=>e.name==='dissolve').length===(type==='r'?0:1),type+' dissolve except launch');
     ok(!B.anim.busy(),type+' settles');cases++;
   }
+  const planted=setup('b','w','r'), base=planted.victim.position.clone();
+  B.pieces.move('d4','d5');step(.80);
+  ok(Math.hypot(planted.victim.position.x-base.x,planted.victim.position.z-base.z)<.0001,'first slap keeps victim base planted');
+  const firstBend=Math.hypot(planted.victim.userData.capturePose.x,planted.victim.userData.capturePose.z);
+  ok(firstBend>.08,'first slap bends victim');step(.34);
+  ok(Math.hypot(planted.victim.userData.capturePose.x,planted.victim.userData.capturePose.z)<firstBend*.15,'victim snaps back before second slap');
+  step(.22);ok(Math.abs(planted.victim.quaternion.w)<.95,'second slap tips victim');
+  for(const type of ['p','n','b','r','q','k']) {
+    P.bus.emit('local',{});B.pieces.setPosition({});B.pieces.setPosition({d4:{type,side:'w'}});events=[];
+    const piece=B.pieces.pieceAt('d4');B.pieces.move('d4','d5');step(.16);
+    ok(piece.position.y>.08,type+' travels off the floor');step(.5);
+    ok(events.filter(e=>e.name==='land').length===1,type+' quiet hop lands once');
+    ok(B.sfx.log().some(e=>e.name==='hop'),type+' hop cue plays');
+  }
+  P.bus.emit('local',{});B.pieces.setPosition({});B.pieces.setPosition({d2:{type:'q',side:'w'}});events=[];
+  B.pieces.move('d2','d7');step(1.2);ok(events.filter(e=>e.name==='land').length===1,'long hop sequence has one final landing');
+  ok(B.sfx.log().some(e=>e.name==='hopland'),'intermediate hop has landing sound');
   for(const time of [0,.1,.8,1.2]) {setup('n');B.pieces.move('d4','d5');step(time);B.anim.skip();step(3.1);ok(events.filter(e=>e.name==='sunk').length===1,'skip one exit');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'skip one landing');}
   setup('p');B.pieces.remove('d5');B.pieces.move('d4','e5');step(3.1);ok(events.some(e=>e.name==='land'&&e.capture),'en passant');
   setup('r');B.pieces.move('d4','d5');step(.1);B.pieces.setPosition({d5:{type:'r',side:'w'},d6:{type:'q',side:'b'}});B.pieces.move('d6','d5');step(3.1);ok(events.filter(e=>e.name==='sunk').length===2,'rapid recapture');

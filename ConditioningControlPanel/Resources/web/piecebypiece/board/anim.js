@@ -238,6 +238,10 @@ export function createAnim({ group, jiggle = null }) {
         }
       }
     }
+    s.hops = low || knight || refused || s.whip || s.finish ? 1 : Math.min(3, Math.ceil(from.distanceTo(dest) / 1.8));
+    s.dur = Math.max(s.dur, s.hops * T.slideSec);
+    if (!low && !refused && !s.whip && !s.finish) s.hop = Math.max(.28, s.hop);
+    s.hopIndex = -1; s.launchIndex = -1;
     slides.push(s);
     piece.position.copy(from);
   }
@@ -440,9 +444,26 @@ export function createAnim({ group, jiggle = null }) {
       s.t += dt;
       if (s.t < s.delay) continue;   // the rook waits for his king to go first
       const p = Math.min(1, (s.t - s.delay) / s.dur);
-      s.piece.position.lerpVectors(s.from, s.to, ease(p));
-      s.piece.position.y = s.to.y + (s.knight ? 4 * p * (1 - p) : Math.sin(Math.PI * p)) * s.hop;
-      if (s.lean) leanTo(s, p);
+      const hopping = s.hop > 0 && !prefersReducedMotion();
+      const index = Math.min(s.hops - 1, Math.floor(p * s.hops));
+      const beat = p * s.hops - index;
+      const flight = hopping ? Math.max(0, Math.min(1, (beat - .14) / .86)) : p;
+      if (hopping && index !== s.hopIndex) {
+        if (index > 0) {
+          squash(s.piece, [s.to.x - s.from.x, s.to.z - s.from.z]);
+          emit('captureCue', { name: 'hopland', piece: s.piece.userData.type });
+        } else jiggle?.impulse(s.piece, { squash: 2.2 });
+        s.hopIndex = index;
+      }
+      if (hopping && beat >= .14 && index !== s.launchIndex) {
+        jiggle?.impulse(s.piece, { squash: -2.4 });
+        emit('captureCue', { name: 'hop', piece: s.piece.userData.type });
+        s.launchIndex = index;
+      }
+      const travel = hopping ? (index + ease(flight)) / s.hops : ease(p);
+      s.piece.position.lerpVectors(s.from, s.to, travel);
+      s.piece.position.y += hopping ? Math.sin(Math.PI * flight) * s.hop : 0;
+      if (s.lean && hopping) leanTo(s, flight);
       if (p >= 1) {
         s.piece.position.copy(s.to);
         if (s.lean) s.piece.rotation.set(0, baseYaw(s.piece), 0);
