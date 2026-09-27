@@ -748,7 +748,6 @@ public sealed partial class FriendsDrawer : Border
         var settings = FootButton("", Loc.Get("friends_settings"));
         settings.Tag = "friends-settings";
         settings.Click += (_, _) => { SettingsRequested?.Invoke(); CloseRequested?.Invoke(); };
-        g.Children.Add(settings);
 
         // The bell: corner notices for pokes, knocks and requests. Off keeps the Inbox rows and the cue.
         var bellOn = App.Settings?.Current?.FriendNotificationsEnabled != false;
@@ -774,7 +773,6 @@ public sealed partial class FriendsDrawer : Border
             bell.ToolTip = Loc.Get(s.FriendNotificationsEnabled ? "friends_notices_on" : "friends_notices_off");
         };
         var left = new StackPanel { Orientation = Orientation.Horizontal };
-        g.Children.Remove(settings);
         left.Children.Add(settings);
         left.Children.Add(bell);
         g.Children.Add(left);

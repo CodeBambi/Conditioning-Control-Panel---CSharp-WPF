@@ -59,15 +59,16 @@ public static class FriendsLanding
             }
             _router?.Release();
 
-            // A notice already up when a lockdown, Strict Lock or program session starts goes at once.
+            // A notice already up when a lockdown, Strict Lock or program session starts goes on the next tick.
             if (FriendNotices.AnyUp && ReadWorld().Holding) FriendNotices.CloseAll(fold: true);
 
             // The notice window is unowned: it must not hold OnLastWindowClose once the panel closes.
+            // Stop, not only CloseAll: a delivery landing mid-shutdown must not open a fresh window.
             var mw = App.MainWindowRef;
             if (mw != null && !ReferenceEquals(mw, _hookedPanel))
             {
                 _hookedPanel = mw;
-                mw.Closed += (_, _) => { try { FriendNotices.CloseAll(); KnockCard.CloseAll(); } catch { /* shutting down */ } };
+                mw.Closed += (_, _) => Stop();
             }
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] landing tick: {E}", ex.Message); }

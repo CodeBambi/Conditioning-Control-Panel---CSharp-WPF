@@ -66,8 +66,16 @@ internal sealed class FriendNotices : Window
         MouseEnter += (_, _) => _stack.Paused = true;
         MouseLeave += (_, _) => { _stack.Paused = false; _last = DateTime.UtcNow; };
         SizeChanged += (_, _) => Place();
+        // A new monitor scale keeps the DIP size, so SizeChanged stays quiet: place again once WPF has moved us.
+        DpiChanged += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(Place));
         _tick = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(TickMs) };
         _tick.Tick += (_, _) => OnTick();
+        // Closed by anyone else (a shutdown sweep): never leave a dead window as the one Show reuses.
+        Closed += (_, _) =>
+        {
+            _tick.Stop();
+            if (ReferenceEquals(_current, this)) _current = null;
+        };
     }
 
     /// <summary>Puts a notice up (or folds it into a live one). Never throws.</summary>
@@ -186,24 +194,30 @@ internal sealed class FriendNotices : Window
         try
         {
             if (!IsVisible) return;
-            Rect area = SystemParameters.WorkArea;
-            var src = _anchor != null ? PresentationSource.FromVisual(_anchor) : null;
-            if (_anchor != null && src?.CompositionTarget != null)
-            {
-                var hwnd = new WindowInteropHelper(_anchor).Handle;
-                if (hwnd != IntPtr.Zero)
-                {
-                    var wa = System.Windows.Forms.Screen.FromHandle(hwnd).WorkingArea;
-                    var m = src.CompositionTarget.TransformFromDevice;
-                    area = new Rect(m.Transform(new Point(wa.Left, wa.Top)), m.Transform(new Point(wa.Right, wa.Bottom)));
-                }
-            }
-            var (left, top) = FriendNoticeRules.Place(area.Left, area.Top, area.Width, area.Height, ActualWidth, ActualHeight);
-            Left = left;
-            Top = top;
+            var self = new WindowInteropHelper(this).Handle;
+            if (self == IntPtr.Zero) return;
+            // Device pixels end to end: the anchor's monitor may not share this window's scale, and
+            // Left/Top would convert through the monitor the window is on now, not the one it goes to.
+            var anchor = _anchor != null && PresentationSource.FromVisual(_anchor) != null
+                ? new WindowInteropHelper(_anchor).Handle : IntPtr.Zero;
+            var screen = anchor != IntPtr.Zero
+                ? System.Windows.Forms.Screen.FromHandle(anchor)
+                : System.Windows.Forms.Screen.PrimaryScreen;
+            if (screen == null) return;
+            var wa = screen.WorkingArea;
+            var s = VisualTreeHelper.GetDpi(this).DpiScaleX;
+            if (s <= 0) s = 1;
+            var (left, top) = FriendNoticeRules.Place(wa.Left / s, wa.Top / s, wa.Width / s, wa.Height / s, ActualWidth, ActualHeight);
+            SetWindowPos(self, IntPtr.Zero, (int)Math.Round(left * s), (int)Math.Round(top * s), 0, 0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] notice place: {E}", ex.Message); }
     }
+
+    private const uint SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
 
     // ---------------------------------------------------------------- drawing
 
