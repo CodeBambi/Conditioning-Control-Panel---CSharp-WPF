@@ -237,7 +237,12 @@ export function createDust({ scene, bus = null }) {
         low ? 0 : (d.z * .7 + Math.sin(a) * .55) * reach,
         .035 + Math.random() * .05, low ? 0 : .12, low ? .16 : .22 + Math.random() * .22, tmp);
     }
-    if (!low && strength >= 1) ring(at.x, at.z, .75);
+    if (!low && strength >= 1) ring(at.x, at.z, p.impact === 'squash' ? 1.05 : .65);
+    if (!low && p.impact === 'squash') for (let i = 0; i < 18; i++) {
+      const a = i * Math.PI / 9, reach = .25 + Math.random() * .25;
+      mote(at.x, .025, at.z, Math.cos(a) * reach, 0, Math.sin(a) * reach,
+        .07 + Math.random() * .05, .02, .30, cream);
+    }
     upload(); bursts++;
   }
 
@@ -271,12 +276,18 @@ export function createDust({ scene, bus = null }) {
     const unsubAccent = bus.on('captureAccent', (p) => {
       if (!reduced() && p?.world) puff(p.world, p.height, 'hit', p.piece);
     });
+    const unsubTrail = bus.on('captureTrail', p => {
+      if (reduced() || !p?.world) return;
+      for (let i = 0; i < 4; i++) mote(p.world.x, p.world.y + .14, p.world.z,
+        -p.direction.x * .12, .04, -p.direction.z * .12, .035 + Math.random() * .025, .04, .20, cream);
+      upload();
+    });
     const unsubContact = bus.on('contact', p => impact(p, .65));
     const unsubHop = bus.on('hopLand', p => { if (p?.world) puff(p.world, p.small ? .65 : p.height, 'hop'); });
     const unsubDissolve = bus.on('dissolve', dissolve);
     const unsubLocal = bus.on('local', () => { spawn.fill(-1e9); upload(); for (const f of flashes) f.mesh.visible = false; for (const r of rings) r.mesh.visible = false; });
     const unsubLand = unsub;
-    unsub = () => { unsubLand(); unsubHit(); unsubContact(); unsubHop(); unsubAccent(); unsubDissolve(); unsubLocal(); };
+    unsub = () => { unsubLand(); unsubHit(); unsubTrail(); unsubContact(); unsubHop(); unsubAccent(); unsubDissolve(); unsubLocal(); };
   }
 
   function update(dt, camera, renderer) {

@@ -1,6 +1,6 @@
 // Capture choreography, in board units. Arrival stays fast; the victim owns the tail.
 export const TRAVEL = Object.freeze({
-  p: { hop: 0.23, lean: 0.09, gain: 0.85, damping: 1.1 },
+  p: { hop: 0.23, lean: 0.09, gain: 0.70, damping: 1.8 },
   n: { hop: 0.95, lean: 0.34, gain: 1.15, damping: 1.05 },
   b: { hop: 0.13, lean: 0.16, gain: 0.8, damping: 0.95 },
   r: { hop: 0.045, lean: 0.045, gain: 0.65, damping: 1.7 },

@@ -66,8 +66,8 @@ export const TUNING = Object.freeze({
   substep: 1 / 240,         // the spring is stiff, so integrate it small
 });
 
-const CACHE_KEY = 'pbp-jiggle-4';
-const DEPTH_KEY = 'pbp-jiggle-depth-4';
+const CACHE_KEY = 'pbp-jiggle-5';
+const DEPTH_KEY = 'pbp-jiggle-depth-5';
 const T = TUNING;
 const f = (n) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 
@@ -149,7 +149,7 @@ export function createJiggle() {
       if (prior) prior(shader, renderer);
       shader.uniforms.uBend = u.uBend;
       shader.uniforms.uAct = u.uAct;
-      shader.uniforms.uLag = u.uLag; shader.uniforms.uFlex = u.uFlex; shader.uniforms.uTwist = u.uTwist; shader.uniforms.uBulge = u.uBulge;
+      shader.uniforms.uLag = u.uLag; shader.uniforms.uFlex = u.uFlex; shader.uniforms.uTwist = u.uTwist; shader.uniforms.uBulge = u.uBulge; shader.uniforms.uDent = u.uDent;
       shader.uniforms.uDissolve = u.uDissolve;
       shader.fragmentShader = 'varying vec3 vPbpPosition; uniform float uDissolve;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', `
@@ -196,7 +196,7 @@ export function createJiggle() {
     if (states.has(piece)) return states.get(piece);
     const u = {
       uAct: { value: 0 },
-      uLag: { value: new THREE.Vector2() }, uFlex: { value: new THREE.Vector2() }, uTwist: { value: 0 }, uBulge: { value: 0 },
+      uLag: { value: new THREE.Vector2() }, uFlex: { value: new THREE.Vector2() }, uTwist: { value: 0 }, uBulge: { value: 0 }, uDent: { value: new THREE.Vector4() },
       uDissolve: { value: 0 },
       uBend: { value: new THREE.Vector2(0, 0) },
       uSquash: { value: 0 },
@@ -262,7 +262,7 @@ export function createJiggle() {
   function impulse(piece, { bend = null, squash = 0, local = false } = {}) {
     const s = stateOf(piece);
     if (!s) return;
-    const g = gain() / s.world;
+    const g = gain() / s.world * (piece.userData.type === 'p' ? .60 : 1);
     if (bend) {
       const v = local ? dir.set(bend[0], 0, bend[1]) : toLocal(piece, bend[0], bend[1]);
       s.vel.x += v.x * g;
@@ -335,6 +335,7 @@ export function createJiggle() {
         s.bend.set(0, 0); s.vel.set(0, 0); s.squash = s.sVel = 0; s.forced.set(0, 0);
         s.u.uBend.value.set(act.x, act.z); s.u.uSquash.value = 0;
         s.u.uLag.value.set(act.lx || 0, act.lz || 0); s.u.uFlex.value.set(act.stretch || 0, act.drop || 0);
+        s.u.uDent.value.set(act.dx || 0, act.dy || 0, act.dz || 0, act.dentAt || 0);
         s.u.uTwist.value = act.twist || 0; s.u.uBulge.value = act.bulge || 0; s.u.uAct.value = 1; continue;
       }
       s.u.uAct.value = 0;
@@ -343,8 +344,9 @@ export function createJiggle() {
       s.bend.y = THREE.MathUtils.clamp(s.bend.y, -T.maxBend, T.maxBend);
       s.squash = THREE.MathUtils.clamp(s.squash, -T.maxSquash, T.maxSquash);
       if (idle && !piece.userData.busy && !piece.userData.held) {
-        s.forced.x += Math.sin(clock * T.idleFreq + s.phase) * idle;
-        s.forced.y += Math.cos(clock * T.idleFreq * T.idleCross + s.phase * 1.7) * idle;
+        const firmness = piece.userData.type === 'p' ? .40 : 1;
+        s.forced.x += Math.sin(clock * T.idleFreq + s.phase) * idle * firmness;
+        s.forced.y += Math.cos(clock * T.idleFreq * T.idleCross + s.phase * 1.7) * idle * firmness;
       }
       s.u.uBend.value.set(s.bend.x + s.forced.x, s.bend.y + s.forced.y);
       s.u.uSquash.value = s.squash;
