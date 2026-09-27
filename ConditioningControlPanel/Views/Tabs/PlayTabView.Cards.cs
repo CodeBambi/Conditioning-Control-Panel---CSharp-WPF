@@ -48,6 +48,9 @@ namespace ConditioningControlPanel.Views.Tabs
         private void BtnPlayGoon_Click(object sender, RoutedEventArgs e)
             => Owner?.LaunchPlayGoon();
 
+        private void BtnPlayChess_Click(object sender, RoutedEventArgs e)
+            => Owner?.LaunchPlayChess();
+
         // ---- TOGETHER --------------------------------------------------------------------
 
         private void BtnPlayRemoteControl_Click(object sender, RoutedEventArgs e)

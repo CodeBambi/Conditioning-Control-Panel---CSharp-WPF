@@ -46,6 +46,11 @@ namespace ConditioningControlPanel
         internal void LaunchPlayBreakoutDemo() => Services.BackRoom.BreakoutHostService.LaunchDemo();
         internal void LaunchPlayBreakout() => Services.BackRoom.BreakoutHostService.LaunchFull();
         // Same rule as the launcher tile: every game but the Breakout demo needs an account.
+        internal void LaunchPlayChess()
+        {
+            if (Services.Launcher.LauncherCatalogue.NeedsAccount) { OpenUnifiedLoginDialog(); return; }
+            Services.PieceByPiece.PieceByPieceHostService.Launch();
+        }
         internal void LaunchPlayGoon()
         {
             if (Services.Launcher.LauncherCatalogue.NeedsAccount) { OpenUnifiedLoginDialog(); return; }

@@ -123,10 +123,10 @@ public static class LauncherCatalogue
     public const string PanelId = "panel";
 
     /// <summary>
-    /// Piece by Piece is hidden on the Play page for 6.9.5 ("not ready for release"). The launcher
-    /// follows the same switch so the two surfaces never disagree about what exists.
+    /// Piece by Piece was hidden from 6.9.5 ("not ready for release"). Back on 2026-09-27 (owner),
+    /// free for everyone, on the launcher and on Play. One switch for both surfaces.
     /// </summary>
-    public static readonly bool PieceByPieceAvailable = false;
+    public static readonly bool PieceByPieceAvailable = true;
 
     /// <summary>
     /// Whether an account is signed in. Entries may explicitly allow signed-out play. Settable so a
@@ -230,6 +230,12 @@ public static class LauncherCatalogue
             () => BackRoom.BreakoutHostService.LaunchFull(),
             () => BackRoom.BackRoomHostService.IsBreakoutFullActive, isNew: true);
 
+        // Piece by Piece: free for everyone (owner, 2026-09-27), so no lock.
+        G("piecebypiece", "features/piecebypiece.png", "♟", Tile(0x7B, 0x5C, 0xFF),
+            () => PieceByPieceAvailable, Never,
+            () => PieceByPiece.PieceByPieceHostService.Launch(),
+            () => PieceByPiece.PieceByPieceHostService.IsActive, isNew: true);
+
         // Racing Thoughts: a Back Room unlock since 2026-09-18. Without a track the tile is the
         // mystery card pointing at the counter; the entry stays Available so a shortcut still
         // reaches Launch, where CaucusHostService refuses on the same door (RacingAccess).
@@ -265,13 +271,6 @@ public static class LauncherCatalogue
         G("goon", "features/goon_game_tile.png", "●", Tile(0x76, 0xC8, 0x93), Always, Never,
             () => GoonGame.GoonHostService.Launch(duckMainWindow: false),
             () => GoonGame.GoonHostService.IsActive);
-
-        // Piece by Piece: Launch owns the Lab gate. Hidden while the Play card is hidden.
-        G("piecebypiece", null, "♟", Tile(0x7B, 0x5C, 0xFF),
-            () => PieceByPieceAvailable,
-            () => !LabOk("launcher_game_piecebypiece_title", null),
-            () => PieceByPiece.PieceByPieceHostService.Launch(),
-            () => PieceByPiece.PieceByPieceHostService.IsActive);
 
         // Graded Intake: a panel tab, not a window, so Launch opens the panel on it and IsActive
         // never reports a window (the launcher does not wait for the panel). Locked when the

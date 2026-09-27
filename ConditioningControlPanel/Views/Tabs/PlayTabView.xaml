@@ -32,7 +32,7 @@
 
         The page groups games and panel features:
 
-            GAMES     3 columns    Breakout Demo | Breakout | Goon Game
+            GAMES     2 x 2        Breakout Demo | Breakout / Goon Game | Piece by Piece
 
             TOGETHER  2 columns    Remote Control                  (half width, on purpose)
             EYES      3 columns    Gaze | Focus Gaze | Blink Trainer   (+ the webcam chip)
@@ -338,7 +338,7 @@
 
                 <!-- Breakout and Goon are also available here beside the panel features. -->
                 <TextBlock Text="{loc:Str rf_play_zone_games}" Style="{StaticResource PlayZoneTag}" Margin="2,4,2,8"/>
-                <UniformGrid Rows="1" Columns="3">
+                <UniformGrid Columns="2">
                     <Grid x:Name="SlotBreakoutDemo" x:FieldModifier="internal">
                         <Border Style="{StaticResource PlayCard}">
                             <Grid>
@@ -421,6 +421,34 @@
                                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
                                     </Button>
                                 </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <!-- Piece by Piece: free for everyone (owner, 2026-09-27). -->
+                    <Grid x:Name="SlotPieceByPiece" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush ImageSource="pack://application:,,,/Resources/features/piecebypiece.png" Stretch="UniformToFill"/></Border.Background></Border>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_piecebypiece_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_piecebypiece_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <Button Grid.Row="3" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayChess_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
+                                <Border Style="{StaticResource PlayBadgePill}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-12,-12,0,0" Panel.ZIndex="10">
+                                    <TextBlock Text="{loc:Str exclusives_badge_new}" Style="{StaticResource PlayBadgePillText}"/>
+                                </Border>
                             </Grid>
                         </Border>
                     </Grid>
