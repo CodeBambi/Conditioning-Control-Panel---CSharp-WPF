@@ -6580,6 +6580,7 @@
   "companion_v2_familiarity_hint": "会話を通じて親しさが育ちます。期限やアンロックはありません。",
   "companion_perk_unlock": "レベル{0}で利用可能",
   "companion_perk_picker": "特性",
+  "companion_perk_change": "特性を変更",
   "companion_perk_hint": "一度に1つ。見た目や性格を変えずにXPの仕組みを変更します。",
   "companion_perk_name_0": "Pink Rush",
   "companion_perk_name_1": "Hands Off",

@@ -7335,6 +7335,7 @@
   "companion_v2_familiarity_hint": "Familiarity grows through chat. Nothing expires or needs unlocking.",
   "companion_perk_unlock": "Available at level {0}",
   "companion_perk_picker": "Perk",
+  "companion_perk_change": "Change perk",
   "companion_perk_hint": "One at a time. Change XP behavior without changing look or personality.",
   "companion_perk_name_0": "Pink Rush",
   "companion_perk_name_1": "Hands Off",

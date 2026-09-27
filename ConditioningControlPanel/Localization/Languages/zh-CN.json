@@ -7092,6 +7092,7 @@
   "companion_v2_familiarity_hint": "熟悉感来自聊天。没有过期时间，也无需解锁。",
   "companion_perk_unlock": "等级 {0} 解锁",
   "companion_perk_picker": "特性",
+  "companion_perk_change": "更换特性",
   "companion_perk_hint": "每次选择一项。改变XP机制，不改变外观或性格。",
   "companion_perk_name_0": "Pink Rush",
   "companion_perk_name_1": "Hands Off",
