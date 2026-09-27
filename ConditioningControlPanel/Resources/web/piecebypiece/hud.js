@@ -1,4 +1,5 @@
 import { identity, onIdentity } from './bridge.js';
+import { presentation, setPresentation, onPresentation } from './game/preferences.js';
 
 /* ============================================================================
  * hud.js - the screen furniture: two clocks, one status line, the tally, and
@@ -115,6 +116,9 @@ export function createHud(opts = {}) {
     tags: { w: pick('turn-w'), b: pick('turn-b') },
     captures: { w: pick('captured-w'), b: pick('captured-b') },
     focus: pick('piece-focus'),
+    intensity: pick('game-intensity'),
+    intensityMeter: pick('intensity-meter'),
+    intensityLabel: pick('intensity-label'),
     // the online block; every node optional, a page without it is a quieter HUD
     online: {
       root: pick('hud-online'),
@@ -242,6 +246,8 @@ export function createHud(opts = {}) {
 
   function setMeter(v) {
     meter = clamp01(v);
+    if (el.intensityMeter) el.intensityMeter.value = meter;
+    if (el.intensityLabel) el.intensityLabel.textContent = meter < .25 ? 'Calm' : meter < .55 ? 'Building' : meter < .8 ? 'Intense' : 'Full tilt';
     const still = reducedMotion();
     // the host can turn reduced motion on after boot, so this is re-read rather
     // than remembered; the class is what stops the light sliding
@@ -338,6 +344,7 @@ export function createHud(opts = {}) {
     paintNames();
     paintCheck();
     paintOnline();
+    paintMenu();
   }
 
   const click = (node, fn) => {
@@ -363,6 +370,61 @@ export function createHud(opts = {}) {
   click(el.online.draw, () => { verb('offerDraw'); paintOnline(); });
   click(el.online.accept, () => { verb('acceptDraw'); paintOnline(); });
   click(el.online.decline, () => { verb('declineDraw'); paintOnline(); });
+
+  const seenNotices = new Set();
+  on('notice', p => {
+    const message = typeof p?.text === 'string' ? p.text : '';
+    const node = pick('game-notice');
+    if (!node || !message || seenNotices.has(message)) return;
+    seenNotices.add(message); node.textContent = message; node.hidden = false;
+    later(() => { node.hidden = true; }, 6000);
+  });
+  on('local', () => { seenNotices.clear(); const node = pick('game-notice'); if (node) node.hidden = true; });
+  const options = pick('game-options');
+  const panel = pick('game-options-panel');
+  const sound = pick('game-sound');
+  const motion = pick('game-reduced');
+  const closeOptions = () => { if (panel) panel.hidden = true; options?.setAttribute('aria-expanded', 'false'); };
+  click(options, () => {
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    options.setAttribute('aria-expanded', String(!panel.hidden));
+  });
+  for (const button of root.querySelectorAll('[data-experience]')) click(button, () => setPresentation({ experience: button.dataset.experience }));
+  const menuButton = pick('game-menu');
+  function paintMenu() {
+    if (menuButton) { menuButton.textContent = deal?.mode === 'solo' ? 'Save and menu' : 'Menu'; menuButton.disabled = online && !over; }
+    const note = pick('game-menu-note');
+    if (note) note.hidden = !online || !!over;
+  }
+  click(menuButton, () => { if (online && !over) return; closeOptions(); bus?.emit('menu-request'); });
+  const soundChange = () => setPresentation({ volume: sound.checked ? .6 : 0 });
+  const motionChange = () => setPresentation({ reducedMotion: motion.checked });
+  sound?.addEventListener('change', soundChange);
+  motion?.addEventListener('change', motionChange);
+  undom.push(() => { sound?.removeEventListener('change', soundChange); motion?.removeEventListener('change', motionChange); });
+  const outside = e => { if (!panel?.hidden && !e.target.closest('.game-settings')) closeOptions(); };
+  const optionKey = e => {
+    if (e.key !== 'Escape' || panel?.hidden) return;
+    e.preventDefault(); e.stopPropagation(); closeOptions(); options?.focus();
+  };
+  document.addEventListener('keydown', optionKey);
+  undom.push(() => document.removeEventListener('keydown', optionKey));
+  document.addEventListener('pointerdown', outside);
+  undom.push(() => document.removeEventListener('pointerdown', outside));
+  const preferenceOff = onPresentation(p => {
+    if (el.intensity) el.intensity.hidden = p.experience !== 'distraction';
+    for (const button of root.querySelectorAll('[data-experience]')) button.setAttribute('aria-pressed', String(button.dataset.experience === p.experience));
+    const copy = pick('experience-description');
+    if (copy) copy.textContent = p.experience === 'classic' ? 'The board, animated captures and sound.' : 'Media and effects build as the match progresses.';
+    if (sound) { sound.checked = p.volume > 0; sound.disabled = p.soundLocked; }
+    if (motion) { motion.checked = p.reducedMotion; motion.disabled = p.motionLocked; }
+    const note = pick('game-preference-note');
+    if (note) { note.hidden = !p.motionLocked && !p.soundLocked; note.textContent = 'App and system preferences stay in effect.'; }
+    setMeter(p.experience === 'classic' ? 0 : meter);
+  });
+  unbind.push(preferenceOff);
+  on('local', closeOptions);
 
   /* ---- wiring ------------------------------------------------------------- */
 
@@ -405,6 +467,7 @@ export function createHud(opts = {}) {
     }
     if (el.line) el.line.classList.remove('on');
     for (const tag of Object.values(el.tags)) if (tag) tag.textContent = '';
+    paintMenu();
     stopAsking();
     paintOnline();
   });

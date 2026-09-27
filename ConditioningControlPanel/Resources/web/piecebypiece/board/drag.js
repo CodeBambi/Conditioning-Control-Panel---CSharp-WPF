@@ -324,7 +324,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   }
 
   function onDown(ev) {
-    if (held || suspended || ev.button > 0) return;
+    if (held || suspended || ev.button > 0 || window.PBP?.door?.isUp?.()) return;
     pointerIn = true;
     const found = pieceUnder(ev);
     const square = found ? null : squareUnder(ev);
@@ -481,7 +481,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   }
 
   function onKey(ev) {
-    if (ev.ctrlKey || ev.altKey || ev.metaKey || typing() || suspended) return;
+    if (ev.ctrlKey || ev.altKey || ev.metaKey || typing() || suspended || window.PBP?.door?.isUp?.()) return;
     // Take the last ply back, with nothing in hand. Backspace is the one every
     // player tries first; z is there for the hand that never leaves the board.
     if (!held && (ev.key === 'Backspace' || ev.key === 'z' || ev.key === 'Z')) {

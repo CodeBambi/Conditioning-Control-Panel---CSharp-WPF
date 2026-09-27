@@ -21,7 +21,7 @@
 .pbp-fx-fallback { position: fixed; }
 
 .pbp-fx-front {
-  position: fixed; inset: 0; z-index: 9; overflow: hidden;
+  position: fixed; inset: 0; z-index: 3; overflow: hidden;
   pointer-events: none !important;
 }
 .pbp-fx-front * { pointer-events: none !important; }
