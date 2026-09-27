@@ -268,6 +268,8 @@
   "chaster_account_open": "Ouvrir la page",
   "chaster_account_hint": "CCP ajoute du temps à ton cadenas Chaster",
   "chaster_account_strip_tip": "Ce PC est lié à ton compte Chaster",
+  "chaster_site_open_tip": "Open this lock on chaster.app",
+  "chaster_site_make_tip": "No lock yet. Make one on chaster.app",
   "chaster_unlink_confirm_title": "Délier Chaster",
   "chaster_unlink_confirm_body": "Délier Chaster de ce PC ?\n\nL'ardoise reste ici. Le temps déjà sur le cadenas reste là-bas.",
   "chaster_link_denied": "Chaster a dit non. Rien n'a été lié.",

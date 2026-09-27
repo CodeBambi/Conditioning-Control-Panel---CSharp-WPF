@@ -406,6 +406,8 @@
   "chaster_account_open": "Open page",
   "chaster_account_hint": "CCP adds time to your Chaster lock",
   "chaster_account_strip_tip": "This PC is linked to your Chaster account",
+  "chaster_site_open_tip": "Open this lock on chaster.app",
+  "chaster_site_make_tip": "No lock yet. Make one on chaster.app",
   "chaster_unlink_confirm_title": "Unlink Chaster",
   "chaster_unlink_confirm_body": "Unlink Chaster from this PC?\n\nThe tab stays here. Time already on the lock stays there.",
   "chaster_link_denied": "Chaster said no. Nothing was linked.",

@@ -268,6 +268,8 @@
   "chaster_account_open": "페이지 열기",
   "chaster_account_hint": "CCP가 Chaster 잠금에 시간을 더해요",
   "chaster_account_strip_tip": "이 PC는 Chaster 계정과 연결되어 있어요",
+  "chaster_site_open_tip": "Open this lock on chaster.app",
+  "chaster_site_make_tip": "No lock yet. Make one on chaster.app",
   "chaster_unlink_confirm_title": "Chaster 연결 해제",
   "chaster_unlink_confirm_body": "이 PC에서 Chaster 연결을 해제할까요?\n\n장부는 여기 남아요. 이미 잠금에 올라간 시간은 거기 남아요.",
   "chaster_link_denied": "Chaster가 거절했어요. 아무것도 연결되지 않았어요.",
