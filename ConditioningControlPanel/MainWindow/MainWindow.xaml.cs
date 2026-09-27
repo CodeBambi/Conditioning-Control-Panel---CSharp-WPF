@@ -281,6 +281,8 @@ namespace ConditioningControlPanel
                                                 Key.K, ModifierKeys.Control));
                 CommandBindings.Add(new CommandBinding(SettingsPaletteWindow.OpenPaletteCommand,
                     (_, ce) => { SettingsPaletteWindow.Toggle(this); ce.Handled = true; }));
+                // Mouse back / forward and Alt+Left / Alt+Right between tabs.
+                InitializeTabHistoryInput();
                 HookFocusGazeService();
                 HookBlinkTrainerService();
                 // Tooltip hygiene: start tracking before the user can hover anything, so no tooltip
