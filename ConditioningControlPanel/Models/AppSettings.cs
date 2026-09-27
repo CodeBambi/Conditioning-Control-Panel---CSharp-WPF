@@ -5159,6 +5159,19 @@ namespace ConditioningControlPanel.Models
             set { _friendsPresenceShared = value; OnPropertyChanged(); }
         }
 
+        private bool _friendNotificationsEnabled = true;
+        /// <summary>
+        /// FRIENDS (2026-09-27): corner notices for pokes, knocks and requests. On by default; the
+        /// bell in the drawer foot flips it. Off keeps the Inbox rows and the cue. Not on the profile
+        /// sync; rides the cloud settings backup like any other preference.
+        /// </summary>
+        [JsonProperty]
+        public bool FriendNotificationsEnabled
+        {
+            get => _friendNotificationsEnabled;
+            set { _friendNotificationsEnabled = value; OnPropertyChanged(); }
+        }
+
         // ---- CHASTER: Circe's tab (Services/Chaster) ----
         // Device-local on purpose, like the link itself: none of these ride the cloud profile.
         private bool _chasterTabEnabled;
