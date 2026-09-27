@@ -458,7 +458,13 @@ export function createAnim({ group, jiggle = null }) {
           }
           if (age >= plan.flightEnd && s.hopIndex < j) {
             squash(s.piece, [s.to.x - s.from.x, s.to.z - s.from.z]);
-            if (j < plan.count - 1) emit('captureCue', { name: 'hopland', piece: s.piece.userData.type }); s.hopIndex = j;
+            if (j < plan.count - 1) {
+              emit('captureCue', { name: 'hopland', piece: s.piece.userData.type });
+              const at = s.from.clone().lerp(s.to, (j + 1) / plan.count);
+              emit('hopLand', { piece: s.piece.userData.type, height: s.piece.userData.scaleBase,
+                small: plan.small, world: { x: at.x, y: 0, z: at.z } });
+            }
+            s.hopIndex = j;
           }
         }
       }

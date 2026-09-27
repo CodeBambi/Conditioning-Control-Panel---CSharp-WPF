@@ -43,6 +43,14 @@ No voice synthesis, external recordings or paid services are used.
 the existing shot tool's `--eval` input and checks contact, clearance and interruption.
 The older deck in `captures.js` and optional `?whip=1` path are retained for compatibility.
 
+Impact polish borrows Breakout's short, weighted camera impulses and layered contact feedback.
+`board/juice.js` applies a capped translation, roll and tiny push only while rendering, then restores
+all camera transforms so orbit controls and picking do not drift. Reduced motion disables shake.
+The bishop's first slap emits `contact`; capture strikes emit `hit`; intermediate hop touchdowns
+emit `hopLand`; the final touchdown remains the single `land` event. Directional pink/cream/gold
+motes, small board ripples and quiet recoil sounds follow those beats. Particles reuse the existing
+fixed pool. Skipped captures do not fake a landing impact. Queen windup uses more axial stretch,
+a delayed S bend and damped waves at the raised pose, maximum charge and recoil.
 ## Historical choreography proposals
 
 The older timings and proposed routines below are retained for reference. The implementation above wins.

@@ -133,8 +133,14 @@ function main() {
   const renderBase = view.render;
   view.render = () => {
     for (const fn of feelLate) fn(feelDt);
-    renderBase();
+    if (board.juice) { board.juice.update(feelDt); board.juice.render(renderBase); }
+    else renderBase();
   };
+  import('./board/juice.js').then(m => {
+    board.juice = m.createJuice({ bus, camera: view.camera });
+    const dispose = view.dispose;
+    view.dispose = () => { board.juice.dispose(); dispose(); };
+  }).catch(e => console.warn('[pbp] impact camera missing', e));
   import('./board/outline.js').then((m) => {
     board.outline = m.createOutline({ group: view.pieceGroup, bus });
     feelLate.push((dt) => board.outline.update(dt, view.camera, view.renderer));

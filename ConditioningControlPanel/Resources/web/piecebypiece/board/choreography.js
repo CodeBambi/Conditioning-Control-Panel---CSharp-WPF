@@ -252,22 +252,25 @@ export function createChoreography({ group, emit, landed, reduced }) {
           const tension = phase(t, 1.62, 1.76) * (1 - phase(t, 2.08, 2.18));
           const tremble = .025 * Math.sin((t - 1.62) * 76) * tension;
           const riseAge = Math.max(0, t - .98);
-          const wobble = Math.sin(riseAge * 24) * Math.exp(-riseAge * 4.5) * (1 - lash);
+          const coilAge = Math.max(0, t - 1.62);
+          const wobble = (Math.sin(riseAge * 19) * Math.exp(-riseAge * 2.8)
+            + .65 * Math.sin(coilAge * 23) * Math.exp(-coilAge * 3.8)) * (1 - lash);
           const orbit = -Math.PI + .30 * feint - .60 * coil + 4.35 * lash
             - 2.05 * phase(age, .10, .29) + .35 * phase(age, .29, .47) + tremble;
           facing = d.clone().applyAxisAngle(up, orbit);
           tilt = Math.PI * (-.94 * rise + .08 * feint + .16 * coil + .20 * strike) * invert;
           const strikeHeight = Math.max(a.radius + .03, a.contactHeight);
-          const raisedHeight = a.height * (1.05 + .18 * coil + .035 * wobble + tremble);
+          const raisedHeight = a.height * (1.05 + .30 * coil + .10 * wobble + tremble);
           const baseHeight = (raisedHeight * (1 - strike) + strikeHeight * strike) * rise;
           const reach = a.queenReach * (1 - .82 * rise + .12 * feint + .30 * coil + .40 * strike);
           // Solve both ends of the curved spine while the planted head carries the weight.
           flex.tip.copy(facing).multiplyScalar(-reach * invert).addScaledVector(up, -baseHeight * invert);
-          flex.stretch = (.55 * (1 - rise) + .24 * coil * (1 - lash) + .07 * wobble) * invert;
+          flex.stretch = (.75 * (1 - rise) + .48 * coil * (1 - lash) + .19 * wobble) * invert;
           flex.drop = (reach * Math.sin(-tilt) - baseHeight * Math.cos(tilt) - a.height * (1 + flex.stretch)) * invert;
-          flex.lag.copy(up).multiplyScalar(.52 * rise * invert)
-            .addScaledVector(lateral, (-.32 * Math.sin(orbit) + .10 * wobble + 2 * tremble) * invert);
-          flex.twist = (-.35 * Math.sin(orbit) + .08 * wobble) * invert;
+          // The middle trails both anchored ends, giving the body a soft S curve.
+          flex.lag.copy(up).multiplyScalar((.78 + .22 * wobble) * rise * invert)
+            .addScaledVector(lateral, (-.48 * Math.sin(orbit) + .28 * wobble + 3 * tremble) * invert);
+          flex.twist = (-.45 * Math.sin(orbit) + .18 * wobble) * invert;
           headPin = phase(t, .48, .86) * (1 - phase(age, .43, .68));
         }
         if (type === 'r') {
@@ -297,8 +300,9 @@ export function createChoreography({ group, emit, landed, reduced }) {
           const ring = Math.sin(age * 31) * Math.exp(-age * 7);
           flex.tip.addScaledVector(lateral, (type === 'r' ? -.60 : .55) * kick);
           flex.lag.addScaledVector(lateral, (type === 'r' ? .65 : -.60) * kick);
-          flex.stretch -= .13 * ring;
-          flex.twist += .22 * ring;
+          flex.stretch -= (type === 'q' ? .27 : .13) * ring;
+          flex.twist += (type === 'q' ? .38 : .22) * ring;
+          if (type === 'q') flex.lag.addScaledVector(d, .42 * Math.sin(age * 22) * Math.exp(-age * 4));
         }
       }
       if (!a.gone) {
@@ -399,6 +403,7 @@ export function createChoreography({ group, emit, landed, reduced }) {
       if (t >= hit && !a.struck) {
         a.struck = true;
         if (!a.low) emit('hit', { piece: type, victim: v.userData.type, height: a.vHeight,
+          direction: (['b', 'q'].includes(type) ? lateral.clone().negate() : type === 'r' ? lateral : d).clone(),
           manner: 'signature', world: { x: a.target.x, y: ['q', 'r'].includes(type) ? a.contactHeight : Math.min(a.vHeight, .65), z: a.target.z } });
       }
       if (!a.low) {
@@ -409,6 +414,8 @@ export function createChoreography({ group, emit, landed, reduced }) {
             const mark = name + j + event;
             if (clock >= j * plan.beat + when && !a.marks.has(mark)) {
               a.marks.add(mark); emit('captureCue', { name: event, piece: type });
+              if (event === 'hopland') emit('hopLand', { piece: type, height: a.height,
+                small: plan.small, world: { x: p.position.x, y: 0, z: p.position.z } });
             }
           }
         }
@@ -420,6 +427,11 @@ export function createChoreography({ group, emit, landed, reduced }) {
         if (type === 'b') {
           cue(a, 'sweep-one', .54, 'sweep'); cue(a, 'slap-one', .70, 'whip');
           cue(a, 'sweep-two', hit - .16, 'sweep');
+          if (t >= .70 && !a.marks.has('contact-one')) {
+            a.marks.add('contact-one');
+            emit('contact', { piece: type, height: a.vHeight, direction: lateral.clone(),
+              world: { x: a.target.x, y: Math.min(a.vHeight * .85, a.height * .90), z: a.target.z } });
+          }
         }
       }
       if (t >= (a.low ? .46 : spec.end)) { finish(a, false, false); acts.splice(i, 1); }
