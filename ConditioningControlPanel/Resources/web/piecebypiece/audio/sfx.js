@@ -1,3 +1,6 @@
+import { createCrowdVoices } from './crowd-voices.js';
+import { createCrowd } from './crowd.js';
+
 /* ============================================================================
  * audio/sfx.js - the board makes sounds.
  *
@@ -77,6 +80,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   let ctx = null;
   let master = null;
   let noise = null;
+  let crowdVoices = null;
   let disposed = false;
   let wet = null;            // the delay's return, beside the master
   let meter = 0;
@@ -128,6 +132,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     if (c && c.state === 'suspended' && c.resume) { try { c.resume(); } catch { /* not yet */ } }
   }
   function onVisibility() {
+    if (doc?.hidden) crowd.cancel();
     if (!master || !ctx) return;
     const to = doc && doc.hidden ? 0 : volume();
     try { master.gain.setTargetAtTime(to, ctx.currentTime, 0.02); } catch { master.gain.value = to; }
@@ -198,7 +203,14 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     return T.pawnHz + (T.kingHz - T.pawnHz) * k;
   };
 
+  function audience(kind) {
+    if (!crowdVoices) crowdVoices = createCrowdVoices({ ctx, master, noise });
+    crowdVoices.play(kind);
+  }
   const cues = {
+    crowdApplause() { audience('crowdApplause'); },
+    crowdCheer() { audience('crowdCheer'); },
+    crowdBoo() { audience('crowdBoo'); },
     hooves() {
       for (const at of [0, .085, .21, .295]) {
         tone('triangle', at < .2 ? 680 : 510, .045, .12, { at, slideTo: 290 });
@@ -372,6 +384,13 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     play('clock', { sharp: ms < TUNING.clock.sharpMs });
   });
 
+  const crowd = createCrowd({ bus, game, play, settled: () => !win?.PBP?.board?.anim?.busy?.(), cancel: () => crowdVoices?.cancel(), canPlay: () => {
+    const door = win?.PBP?.door;
+    return !disposed && ctx?.state === 'running' && !doc?.hidden && volume() > 0
+      && (!door?.isUp?.() || door?.screen?.() === 'end');
+  } });
+  on('local', () => { over = false; stopPulse(); lastSecond = -1; });
+
   // --- the video card, seen not heard from -----------------------------------
   let observer = null;
   const isCard = (n) => n && n.classList && n.classList.contains('pbp-card');
@@ -401,6 +420,8 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   return {
     play,
     wake,
+    crowd,
+    update: crowd.update,
     log: () => log.slice(),
     ready: () => !!ctx,
     state: () => ({
@@ -408,9 +429,10 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       meter, wet: +wetLevel.toFixed(3), drift: Math.round(drift), lowClock, room: !!wet,
     }),
     setMeter,
-    setVolume(v) { settings().sfxVolume = clamp01(v); if (master) master.gain.value = doc && doc.hidden ? 0 : clamp01(v); },
+    setVolume(v) { if (v <= 0) crowd.cancel(); settings().sfxVolume = clamp01(v); if (master) master.gain.value = doc && doc.hidden ? 0 : clamp01(v); },
     dispose() {
       disposed = true;
+      crowd.dispose();
       stopPulse();
       for (const off of offs) { try { off(); } catch { /* gone */ } }
       if (observer) observer.disconnect();

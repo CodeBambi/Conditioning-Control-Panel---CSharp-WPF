@@ -1,10 +1,10 @@
-// Planted-body breathing, sparse gestures and small reactions to the nearby game.
+// Planted-body breathing, frequent solo gestures and reactions to the nearby game.
 // Only shader offsets leave this module; it never moves a piece root or changes a move.
 const FIRM = { p: .30, n: .8, b: 1, r: .35, q: .85, k: .7 };
 const clamp = v => Math.max(0, Math.min(1, v));
 const smooth = v => { const t = clamp(v); return t * t * (3 - 2 * t); };
 export function createIdle({ pieces, available, random = Math.random } = {}) {
-  let clock = 0, nextGesture = 4 + random() * 4, gesture = null, focus = null, stopped = false;
+  let clock = 0, nextGesture = 1 + random() * 2, gesture = null, focus = null, stopped = false;
   let attention = [];
   const cooldown = new WeakMap();
   const reactions = new Map();
@@ -17,10 +17,10 @@ export function createIdle({ pieces, available, random = Math.random } = {}) {
 
   function follow(piece) {
     if (stopped || !piece) return;
-    gesture = null; reactions.clear(); nextGesture = clock + 5 + random() * 4;
+    gesture = null; reactions.clear(); nextGesture = clock + 1.8 + random() * 2;
     focus = { piece, start: clock, until: clock + 7, settling: false };
   }
-  function reset() { gesture = focus = null; attention = []; reactions.clear(); nextGesture = clock + 4 + random() * 5; }
+  function reset() { gesture = focus = null; attention = []; reactions.clear(); nextGesture = clock + 1 + random() * 2; }
   function update(dt, reduced) {
     clock += Math.max(0, dt);
     stopped = !!reduced;
@@ -33,10 +33,10 @@ export function createIdle({ pieces, available, random = Math.random } = {}) {
       const choices = ready.filter(p => p.userData.type === type);
       const piece = choices[Math.floor(random() * choices.length)];
       if (piece) {
-        const duration = 1.35 + random() * .65;
+        const duration = 1.6 + random() * .6;
         gesture = { piece, start: clock, end: clock + duration, duration, variant: random() < .5 ? -1 : 1 };
-        cooldown.set(piece, clock + 22 + random() * 20);
-        nextGesture = clock + duration + 4 + random() * 5;
+        cooldown.set(piece, clock + 10 + random() * 10);
+        nextGesture = clock + duration + 1.2 + random() * 1.8;
       } else nextGesture = clock + 1;
     }
     attention = [];
@@ -56,32 +56,32 @@ export function createIdle({ pieces, available, random = Math.random } = {}) {
     if (stopped || !available(piece)) return out;
     const type = piece.userData.type, firm = FIRM[type] || .6;
     const phase = piece.userData.phase || 0;
-    // The baseline is present in Classic too. Extra ramp energy remains tiny.
-    const amp = (.004 + .004 * clamp(wobble)) * firm;
+    // Baseline life in both modes, with firm bases and a little extra ramp energy.
+    const amp = (.011 + .006 * clamp(wobble)) * firm;
     out.x = Math.sin(clock * .83 + phase) * amp;
     out.z = Math.cos(clock * .61 + phase * 1.7) * amp * .65;
     if (gesture?.piece === piece) {
       const t = clamp((clock - gesture.start) / gesture.duration);
       const envelope = Math.sin(Math.PI * t) ** 2, sign = gesture.variant;
       const wave = Math.sin(t * Math.PI * 2), pulse = Math.sin(t * Math.PI * 4);
-      if (type === 'p') { out.squash += .008 * envelope; out.z += sign * .006 * wave * envelope; }
-      if (type === 'n') { out.z += .026 * pulse * envelope; out.squash += .006 * wave * envelope; }
-      if (type === 'b') { out.x += sign * .043 * wave * envelope; out.z += .018 * pulse * envelope; }
-      if (type === 'r') { out.x += sign * .016 * wave * envelope; out.z += .005 * pulse * envelope; }
-      if (type === 'q') { out.x += sign * .026 * wave * envelope; out.z += .016 * Math.cos(t * Math.PI * 2) * envelope; out.squash -= .009 * envelope; }
-      if (type === 'k') { out.z += .021 * wave * envelope; out.squash -= .011 * envelope; }
+      if (type === 'p') { out.squash += .012 * envelope; out.z += sign * .014 * wave * envelope; }
+      if (type === 'n') { out.z += .075 * pulse * envelope; out.squash += .012 * wave * envelope; }
+      if (type === 'b') { out.x += sign * .12 * wave * envelope; out.z += .048 * pulse * envelope; }
+      if (type === 'r') { out.x += sign * .028 * wave * envelope; out.z += .01 * pulse * envelope; }
+      if (type === 'q') { out.x += sign * .078 * wave * envelope; out.z += .044 * Math.cos(t * Math.PI * 2) * envelope; out.squash -= .019 * envelope; }
+      if (type === 'k') { out.z += .065 * wave * envelope; out.squash -= .024 * envelope; }
     }
     const watcher = attention.find(p => p.piece === piece);
     if (watcher && focus) {
       const weight = smooth((clock - focus.start) / .35) * smooth((focus.until - clock) / .7);
-      const amount = .010 * firm * weight * (1 - watcher.distance / 3);
+      const amount = .018 * firm * weight * (1 - watcher.distance / 3);
       out.worldX -= watcher.dx / watcher.distance * amount;
       out.worldZ -= watcher.dz / watcher.distance * amount;
     }
     const reaction = reactions.get(piece);
     if (reaction) {
       const age = clock - reaction.start;
-      const kick = Math.sin(age * 19) * Math.exp(-age * 8) * .052 * firm;
+      const kick = Math.sin(age * 19) * Math.exp(-age * 8) * .075 * firm;
       out.worldX += reaction.dx * kick; out.worldZ += reaction.dz * kick;
     }
     return out;
