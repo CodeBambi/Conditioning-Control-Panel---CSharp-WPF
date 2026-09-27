@@ -558,9 +558,8 @@
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
          which re-globs Resources\web independently - miss the second one and the
          harness pages come straight back into the publish tree (and so the installer). -->
-    <!-- Breakout (stations\breakout) is web first and not in this release: its row is out of
-         stations.json and its folder rides this exclude, so neither the room nor the installer
-         carries it. Restore both when the cabinet ships. -->
+    <!-- Breakout ships in the desktop. Exclude only its tests, notes and browser showcases;
+         the direct play page, engine and ending assets must reach both output and publish. -->
     <ArcademyHarnessExclude>
       Resources\web\arcademy\annex\demo.html;
       Resources\web\arcademy\vn\demo.html;
@@ -570,7 +569,10 @@
       Resources\web\backroom\smoke\**\*;
       Resources\web\backroom\**\tests\**\*;
       Resources\web\backroom\shared\hypno\tests\**\*;
-      Resources\web\backroom\stations\breakout\**\*;
+      Resources\web\backroom\stations\breakout\**\*.test.js;
+      Resources\web\backroom\stations\breakout\**\*.md;
+      Resources\web\backroom\stations\breakout\dev.html;
+      Resources\web\backroom\stations\breakout\showcase*;
       Resources\web\dtrh\tests\**\*
     </ArcademyHarnessExclude>
     <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
@@ -591,7 +593,10 @@
       $(MSBuildProjectDirectory)\Resources\web\backroom\smoke\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\**\tests\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\shared\hypno\tests\**\*;
-      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*.test.js;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*.md;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\dev.html;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\showcase*;
       $(MSBuildProjectDirectory)\Resources\web\dtrh\tests\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
