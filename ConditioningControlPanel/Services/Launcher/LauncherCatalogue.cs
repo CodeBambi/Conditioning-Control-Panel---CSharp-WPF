@@ -230,11 +230,12 @@ public static class LauncherCatalogue
             () => BackRoom.BreakoutHostService.LaunchFull(),
             () => BackRoom.BackRoomHostService.IsBreakoutFullActive, isNew: true);
 
-        // Piece by Piece: free for everyone (owner, 2026-09-27), so no lock.
+        // Piece by Piece: free for everyone (owner, 2026-09-27), so no lock and no account: the
+        // computer plays anyone, and the board's own lobby asks a signed-out player to sign in.
         G("piecebypiece", "features/piecebypiece.png", "♟", Tile(0x7B, 0x5C, 0xFF),
             () => PieceByPieceAvailable, Never,
             () => PieceByPiece.PieceByPieceHostService.Launch(),
-            () => PieceByPiece.PieceByPieceHostService.IsActive, isNew: true);
+            () => PieceByPiece.PieceByPieceHostService.IsActive, requiresAccount: false, isNew: true);
 
         // Racing Thoughts: a Back Room unlock since 2026-09-18. Without a track the tile is the
         // mystery card pointing at the counter; the entry stays Available so a shortcut still
