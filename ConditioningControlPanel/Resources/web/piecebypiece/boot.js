@@ -16,6 +16,7 @@ import { createGlyphs } from './board/glyphs.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
 import { createSolo } from './game/solo.js';
+import { createTurnHandoff } from './ui/turn-handoff.js';
 import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
@@ -89,6 +90,8 @@ function main() {
   // object from the start so a reader never has to care whether that has
   // happened yet: it is simply null until it has.
   window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: false } };
+  board.turnHandoff = createTurnHandoff({ bus, game, board, menuOpen: () => !!window.PBP.door?.isUp() });
+  { const dispose = view.dispose; view.dispose = () => { board.turnHandoff.dispose(); dispose(); }; }
   /**
    * Deal an online game onto this board. The front door calls it with the Match
    * its lobby handed back; everything after that - the seat, the clocks, the
@@ -155,6 +158,8 @@ function main() {
   }).catch((e) => console.warn('[pbp] dust missing', e));
   Promise.all([import('./audio/sfx.js'), import('./board/scene.js')]).then(([m, sc]) => {
     board.sfx = m.createSfx({ bus, game, group: view.pieceGroup, squareOf: sc.worldToSquare, root: dom.fx });
+    feelLate.push(() => board.sfx.update());
+    const dispose = view.dispose; view.dispose = () => { board.sfx.dispose(); dispose(); };
   }).catch((e) => console.warn('[pbp] sfx missing', e));
   // --- end J ---
   // --- K: a room to reflect, and where he just came from ---
@@ -275,6 +280,7 @@ function main() {
     view.update(dt);
     pieces.update(dt);
     anim.update(dt);
+    board.turnHandoff.update(dt);
     drag.update(dt);
     jiggle.update(dt);   // last: it reads what everything else just decided
     if (window.PBP.game && window.PBP.game.update) window.PBP.game.update(dt);
