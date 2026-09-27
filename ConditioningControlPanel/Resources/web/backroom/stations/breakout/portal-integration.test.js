@@ -114,3 +114,21 @@ test('a grown bubble is seated safely only when its portal exit is obstructed',(
  assert.ok(Math.hypot(c.x-event.x,c.y-event.y)>1);assert.equal(c.hits,2);assert.ok(c.age>4);
  advance(60);assert.equal(events.filter(e=>e.kind==='bubble').length,1,'seating must not drop the bubble into another mouth');
 });
+
+test('paddle-fired volleys enter either portal face or rim and hit along the rotated exit path',()=>{
+ for(const [angle,rim] of [[Math.PI/2,false],[-Math.PI/2,false],[Math.PI/2,true]]) {
+  const {game,g,events,advance}=rig();game.setNoLose(true);advance(1);
+  const barrel=g.paddle.x-(g.paddle.w/2-10),side=angle>0?1:-1;
+  g.portals=[{id:'in',pair:'p',x:barrel+(rim?67:0),y:580,angle,halfLength:65},
+   {id:'out',pair:'p',x:900,y:380,angle:Math.PI,halfLength:65}];
+  const target=g.bricks[0];Object.assign(target,{x:side>0?760:1010,y:rim?428:368,w:35,h:24,
+   hp:1,strength:0,gif:-1,word:null,spiral:null,split:false,jackpot:false,powerup:null});
+  g.balls=[{x:100,y:400,vx:100,vy:-100,r:8,stuck:false,lost:false,falling:false,ghost:false,orbit:null,spin:0,trail:[],squash:0,aimed:10}];
+  g.power.laser=4;g.rally=20;advance(100);
+  const transit=events.find(e=>e.name==='portalTransit'&&e.kind==='shot');
+  assert.ok(events.some(e=>e.name==='laserShot'));assert.ok(transit);assert.equal(transit.entrySide,side);
+  assert.ok(side>0?transit.vx<0:transit.vx>0);assert.ok(Math.abs(transit.vy)<1e-6);
+  assert.equal(target.alive,false,'the transported shot damages its exit-side target');
+  assert.ok(events.some(e=>e.name==='laserHit'&&Math.abs(e.x-target.x)<40));assert.ok(g.rally>=20);
+ }
+});

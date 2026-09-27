@@ -1,4 +1,5 @@
 import { readCheckpoint, writeCheckpoint, checkpointFromSnapshot, newEndlessSeed, previewCheckpoint } from './endless-save.js';
+import { breakoutAccess } from './access.js';
 import { createOfficeEnding } from './office-ending.js';
 import {currentMusic} from '../../shared/sound/music.js';
 /* ============================================================================
@@ -58,6 +59,8 @@ export async function mount(ctx) {
   const hostBack = !!ctx.hostBack;
   let diagnostics = null;
   const q = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
+  const readAccess = () => breakoutAccess(ctx.breakout, { hosted: !!globalThis.chrome?.webview, demo: !globalThis.chrome?.webview && q.get('demo') === '1' });
+  let access = readAccess();
   const renderBudget = createRenderBudget(q.has('software') || prefersSoftwareCanvas());
   let budgetResize = false;
   const reduced = !!ctx.reduced || q.has('still') ||
@@ -69,13 +72,13 @@ export async function mount(ctx) {
   let voice = null, lastSay = -Infinity;
   const roomLevels=globalThis.__backroom?.levels;
   const savedLevel=(key,fallback)=>{const v=store.get('bo.audio.'+key);return v!==null&&Number.isFinite(Number(v))?Math.max(0,Math.min(1,Number(v))):fallback;};
-  const audioLevels={music:roomLevels?.music??currentMusic()?.volume??savedLevel('music',1),sfx:roomLevels?.sfx??savedLevel('sfx',1),sub:roomLevels?.sub??savedLevel('sub',1)};
+  const audioLevels={music:ctx.audio?.music??roomLevels?.music??currentMusic()?.volume??savedLevel('music',1),sfx:ctx.audio?.sfx??roomLevels?.sfx??savedLevel('sfx',1),sub:ctx.audio?.sub??roomLevels?.sub??savedLevel('sub',1)};
   function applyAudioLevel(key,value,commit=false){
     audioLevels[key]=value;
     if(roomLevels){roomLevels[commit?'commit':'preview'](key,value);}
     else if(key==='music')currentMusic()?.setVolume(value);
-    if(commit)store.set('bo.audio.'+key,String(value));
-    if(key==='music'){const synth=roomLevels||currentMusic()?Math.min(1,value/.15):value;audio?.setMix('bed',synth);audio?.setMix('sub',synth);}
+    if(commit) { store.set('bo.audio.'+key,String(value)); ctx.commitAudio?.(key,value); }
+    if(key==='music'){const synth=roomLevels||ctx.audio||currentMusic()?Math.min(1,value/.15):value;audio?.setMix('bed',synth);audio?.setMix('sub',synth);}
     else audio?.setMix(key==='sub'?'word':'sfx',value);
   }
   const SAY_GAP_S = 2.5, VOICE_LEVEL = 0.35;
@@ -93,11 +96,16 @@ export async function mount(ctx) {
   let activeEndless = false, boundary = null, constructingGame = false, lastBoardLabel = '';
   function menuRun() { return startFresh ? null : previewRun || savedRun; }
   function syncModeMenu() {
+    if (!access.endless) selectedMode = 'story';
     const endless = selectedMode === 'endless', resume = endless && menuRun();
+    el.querySelector('[data-mode="endless"]').hidden = !access.endless;
+    el.querySelector('[data-mode="story"] span').textContent = access.demo ? '3 free levels' : '8 levels';
+    el.querySelector('.bo-modes').classList.toggle('is-demo', access.demo);
+    el.querySelector('.bo-menu-kicker').textContent = access.demo ? 'STORY DEMO' : 'THE BACK ROOM';
     for (const button of el.querySelectorAll('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === selectedMode));
     ui.play.innerHTML = (resume && !previewRun ? 'Continue' : 'Play') + ' <span aria-hidden="true">&#9656;</span>';
     el.querySelector('[data-menu="new-run"]').hidden = !endless || !savedRun;
-    ui['run-note'].textContent = endless ? (resume ? 'Board ' + (resume.from + 1) + (previewRun ? '. Ready when you are.' : '. Continue restarts this board.') : 'Fresh boards. Familiar tricks. No last life.') : 'Eight levels. Find your colour.';
+    ui['run-note'].textContent = endless ? (resume ? 'Board ' + (resume.from + 1) + (previewRun ? '. Ready when you are.' : '. Continue restarts this board.') : 'Fresh boards. Familiar tricks. No last life.') : access.demo ? 'Three levels. Find your colour. The full game adds five more and Endless.' : 'Eight levels. Find your colour.';
   }
   function saveEndless() {
     if (!activeEndless || !boundary || !game) return false;
@@ -122,11 +130,11 @@ export async function mount(ctx) {
   function makeGame(run = null) {
     game?.dispose(); constructingGame = true;
     try {
-      game = createGame({ audio: { beat: audio.beat, now: audio.now }, onEvent,
+      game = createGame({ storyLimit: access.storyLimit, audio: { beat: audio.beat, now: audio.now }, onEvent,
         ...(q.has('n') ? { breakoutN: num(q, 'n', 20) } : {}),
         saturation: Math.max(0, Math.min(1, num(q, 'sat', .15))),
         speedScale: Number(el.querySelector('.bo-option-pace')?.value) || num(q, 'speed', .55), reduced,
-        ...(run ? { endless: true, seed: run.seed, from: run.from, savedSaturation: run.savedSaturation, bestCombo: run.bestCombo } : {}) });
+        ...(run && access.endless ? { endless: true, seed: run.seed, from: run.from, savedSaturation: run.savedSaturation, bestCombo: run.bestCombo } : {}) });
     } finally { constructingGame = false; }
     if (q.has('nolose')) game.setNoLose(true);
     if (media?.words && game.setWords) game.setWords(media.words.map(w => w.text));
@@ -236,6 +244,10 @@ export async function mount(ctx) {
     const endingActions=document.createElement('div');endingActions.className='bo-ending-actions';endingActions.hidden=true;
     endingActions.innerHTML='<span class="bo-ending-status" role="status">You broke out.</span><button type="button" data-ending="replay">Play again</button><button type="button" data-ending="menu">Menu</button>';
     el.append(endingActions);ui.endingActions=endingActions;
+    const demoCard = document.createElement('section'); demoCard.className = 'bo-demo-complete'; demoCard.hidden = true;
+    demoCard.setAttribute('role','dialog'); demoCard.setAttribute('aria-modal','true'); demoCard.setAttribute('aria-labelledby','bo-demo-title');
+    demoCard.innerHTML = '<div class="bo-pause-card"><p>THREE LEVELS CLEARED</p><h2 id="bo-demo-title">A little colour goes a long way.</h2><p>The full game has all eight Story levels and Endless. Included with Tier 2.</p><button type="button" data-demo="replay">Play again</button><button type="button" data-demo="menu">Menu</button></div>';
+    el.append(demoCard); ui.demoCard = demoCard;
     officeEnding=createOfficeEnding(el,{reduced,actions:endingActions});
     const perfSlot=document.createElement('div');perfSlot.className='bo-perf-slot';
     el.querySelector('.bo-dev').append(perfSlot);
@@ -252,7 +264,7 @@ export async function mount(ctx) {
     for (const key of WORD_KEYS) { const b = document.createElement('button'); b.type = 'button'; b.dataset.word = key; b.textContent = key.toLowerCase(); wordsRow.appendChild(b); }
     // Hidden for now (owner, 2026-09-21): players see no gear and no panel, and a panel left open last time stays shut.
     // F2 still brings both back for whoever knows it; ?dev or the dev.html harness opens with them showing.
-    const tools = q.has('dev') || (typeof location !== 'undefined' && location.pathname.endsWith('/dev.html'));
+    const tools = !globalThis.chrome?.webview && (q.has('dev') || (typeof location !== 'undefined' && location.pathname.endsWith('/dev.html')));
     ui.gear.hidden = !tools;
     setDevOpen(tools && store.get(DEV_KEY) === '1');
     syncModeMenu();
@@ -271,8 +283,9 @@ export async function mount(ctx) {
     lastCombo = c;
   }
   /** The ending is running (the core hit at the spiral centre onward): the mouse is free for its card and never re-taken. */
-  const endingUnderway = () => { const f = game?.snapshot().finale; return !!f && (f.phase === 'outro' || f.phase === 'interrupt'); };
+  const endingUnderway = () => { if (game?.snapshot().demoComplete) return true; const f = game?.snapshot().finale; return !!f && (f.phase === 'outro' || f.phase === 'interrupt'); };
   function setPaused(p) {
+    if (p && game?.snapshot().demoComplete) return;
     officeEnding?.suspend(p);
     if (paused === p) return;
     input.left = input.right = input.launch = false; keysDown.l = keysDown.r = false; touchDrag = null;
@@ -288,12 +301,13 @@ export async function mount(ctx) {
   }
   function beginGame() {
     if (!menuOpen || !game) return;
+    access = readAccess(); if (!access.endless) selectedMode = 'story';
     if (selectedMode === 'endless') {
       const resume = menuRun();
       const run = resume || { seed: newEndlessSeed(savedRun?.seed), from: 0, bestCombo: 0 };
       makeGame(run); boundary = null; activeEndless = true;
       previewRun = null; startFresh = false;
-    } else { if (game.snapshot().endless) makeGame(); activeEndless = false; boundary = null; }
+    } else { if (game.snapshot().endless || game.snapshot().demoComplete || game.snapshot().storyLimit !== access.storyLimit) makeGame(); activeEndless = false; boundary = null; }
     setSp(0); setCombo(0); moved = false; el.classList.remove('is-played');
     game.replayEntrance(); syncEndless(game.snapshot());
     menuOpen = false; ui.menu.hidden = true; el.classList.remove('is-menu');
@@ -393,6 +407,12 @@ export async function mount(ctx) {
     try { cued = !!(audio && typeof audio.cue === 'function' && audio.cue(name, { ...d, xN: Number.isFinite(d.x) ? d.x / s.w : 0.5, sat: s.sat, state: s.state, combo: s.combo })); } catch (e) { /* audio optional */ }
     try { haptics?.onEvent(name, d, s); } catch (e) { /* haptics optional */ }
     switch (name) {
+      case 'demoComplete':
+        mouseLock?.release(); input.launch = input.left = input.right = false;
+        ui.demoCard.hidden = false; ui['ghost-hint'].hidden = true;
+        el.classList.add('is-demo-complete'); audio?.stop(); audioOn = false; haptics?.stop();
+        ui.demoCard.querySelector('button').focus();
+        break;
       case 'finaleCoreReached':
         mouseLock?.release();                        // the ending card wants a visible pointer, from this frame on
         shutdownCover?.remove();
@@ -586,7 +606,7 @@ export async function mount(ctx) {
     const frameMs = lastT ? ts-lastT : 1000/60;
     const dt = Math.min(0.05, frameMs/1000);
     lastT = ts;
-    if (menuOpen || suspended || paused) { try { haptics?.stop(); } catch (e) { /* noop */ } diagnostics?.idle(); renderBudget.idle(ts); return; }
+    if (menuOpen || suspended || paused || game.snapshot().demoComplete) { try { haptics?.stop(); } catch (e) { /* noop */ } diagnostics?.idle(); renderBudget.idle(ts); return; }
     if (mouseLock?.locked && endingUnderway()) mouseLock.release();   // backstop for the release on finaleCoreReached (a dev jump skips the event)
     const perfStart = performance.now();
     if (budgetResize) { resize(); budgetResize = false; }
@@ -663,8 +683,26 @@ export async function mount(ctx) {
     if (window.visualViewport) on(window.visualViewport, 'resize', resize);
     on(window, 'br-media-changed', () => { sourceChanged = true; });
     on(ui.play, 'click', pressStart);
+    if (ctx.onSettings) off.push(ctx.onSettings(frame => {
+      if (frame.audio) for (const key of Object.keys(audioLevels)) {
+        const value = frame.audio[key]; if (Number.isFinite(value)) applyAudioLevel(key,Math.max(0,Math.min(1,value)));
+      }
+      const next = readAccess(); if (next.storyLimit === access.storyLimit) return;
+      saveEndless(); access = next; selectedMode = 'story'; activeEndless = false; boundary = null;
+      mouseLock?.release(); setPaused(false); closeFlavour(); audio?.stop(); audioOn = false;
+      makeGame(); menuOpen = true; ui.menu.hidden = false; ui.demoCard.hidden = true;
+      el.querySelector('.bo-options').hidden = true; ui['run-hud'].hidden = true; ui['ghost-hint'].hidden = true;
+      el.classList.remove('is-demo-complete'); el.classList.add('is-menu'); syncModeMenu();
+    }));
+    on(ui.demoCard, 'click', e => {
+      const action = e.target.closest('[data-demo]')?.dataset.demo; if (!action) return;
+      ui.demoCard.hidden = true; el.classList.remove('is-demo-complete');
+      makeGame(); menuOpen = true; ui.menu.hidden = false; el.classList.add('is-menu'); syncModeMenu();
+      if (action === 'replay') beginGame(); else ui.play.focus();
+    });
     on(ui.menu, 'click', e => {
       const button = e.target.closest('[data-mode]'); if (!button) return;
+      if (button.dataset.mode === 'endless' && !access.endless) return;
       selectedMode = button.dataset.mode; startFresh = false; syncModeMenu();
     });
     on(window, 'pagehide', saveEndless);
@@ -750,7 +788,7 @@ export async function mount(ctx) {
     on(window, 'keydown', (e) => {
       const typing=e.target instanceof HTMLElement&&(e.target.isContentEditable||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'||(e.target.tagName==='INPUT'&&!['range','checkbox','radio','button'].includes(e.target.type)));
       if(!options.hidden){if(e.key==='Escape'){e.preventDefault();options.hidden=true;closePictures();optionsFrom?.focus();}return;}
-      if(typing)return;
+      if(typing || game.snapshot().demoComplete)return;
       if(!menuOpen&&game.snapshot().finale?.phase!=='outro'&&(e.key==='Escape'||e.key.toLowerCase()==='p')){
         e.preventDefault();setPaused(!paused);if(paused)el.querySelector('[data-menu="resume"]').focus();else canvas.focus();return;
       }
@@ -790,7 +828,7 @@ export async function mount(ctx) {
     on(document, 'visibilitychange', () => { if (document.hidden && moved) setPaused(true); });
     if (ui.back) on(ui.back, 'click', back);
     on(window,'keydown',e=>{
-      if(e.key!=='F2')return;
+      if(e.key!=='F2' || globalThis.chrome?.webview)return;
       e.preventDefault();e.stopImmediatePropagation();
       const show=ui.dev.hidden;
       ui.gear.hidden=!show;setDevOpen(show);if(show)syncDev();
