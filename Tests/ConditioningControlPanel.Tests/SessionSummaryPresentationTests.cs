@@ -13,19 +13,20 @@ namespace ConditioningControlPanel.Tests
         public void NothingOnScreen_OpensModal()
         {
             Assert.Equal(SessionSummaryPresentation.Mode.Modal,
-                SessionSummaryPresentation.Decide(videoUp: false, lockCardUp: false, popQuizUp: false));
+                SessionSummaryPresentation.Decide(videoUp: false, lockCardUp: false, popQuizUp: false, bubbleCountUp: false));
         }
 
         [Theory]
-        [InlineData(true, false, false)]
-        [InlineData(false, true, false)]
-        [InlineData(false, false, true)]
-        [InlineData(false, true, true)]
-        [InlineData(true, true, true)]
-        public void AnyTopmostCover_OpensPassive(bool videoUp, bool lockCardUp, bool popQuizUp)
+        [InlineData(true, false, false, false)]
+        [InlineData(false, true, false, false)]
+        [InlineData(false, false, true, false)]
+        [InlineData(false, false, false, true)]
+        [InlineData(false, true, true, false)]
+        [InlineData(true, true, true, true)]
+        public void AnyTopmostCover_OpensPassive(bool videoUp, bool lockCardUp, bool popQuizUp, bool bubbleCountUp)
         {
             Assert.Equal(SessionSummaryPresentation.Mode.Passive,
-                SessionSummaryPresentation.Decide(videoUp, lockCardUp, popQuizUp));
+                SessionSummaryPresentation.Decide(videoUp, lockCardUp, popQuizUp, bubbleCountUp));
         }
     }
 }

@@ -20,7 +20,10 @@ namespace ConditioningControlPanel.Services
             Passive,
         }
 
-        internal static Mode Decide(bool videoUp, bool lockCardUp, bool popQuizUp)
-            => videoUp || lockCardUp || popQuizUp ? Mode.Passive : Mode.Modal;
+        /// <param name="bubbleCountUp">The Bubble Count game is the same kind of cover (ownerless,
+        /// topmost, waits for typed input) and its clip plays on its own lease, so the video flag
+        /// does not see it.</param>
+        internal static Mode Decide(bool videoUp, bool lockCardUp, bool popQuizUp, bool bubbleCountUp)
+            => videoUp || lockCardUp || popQuizUp || bubbleCountUp ? Mode.Passive : Mode.Modal;
     }
 }
