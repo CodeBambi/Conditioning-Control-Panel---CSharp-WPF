@@ -129,4 +129,28 @@ public class WaveOutTeardownTests
         // The caller (the UI thread on engine stop) never waits on the driver.
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromMilliseconds(500));
     }
+
+    [Fact]
+    public void NewWaveOut_CapturesNoContext_AndRestoresTheCallersOne()
+    {
+        // A player built on the UI thread would POST PlaybackStopped to the dispatcher, and the
+        // teardown's report-out wait would then hang on a busy UI thread.
+        var prev = SynchronizationContext.Current;
+        var ctx = new SynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(ctx);
+        try
+        {
+            var w = WaveOutTeardown.NewWaveOut();
+            try
+            {
+                Assert.Same(ctx, SynchronizationContext.Current);
+                var field = typeof(WaveOutEvent).GetField("syncContext",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                Assert.NotNull(field);   // NAudio 2.2.1 keeps it here; a rename would silently void this fix
+                Assert.Null(field!.GetValue(w));
+            }
+            finally { w.Dispose(); }
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(prev); }
+    }
 }

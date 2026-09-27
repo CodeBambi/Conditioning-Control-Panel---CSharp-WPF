@@ -115,7 +115,7 @@ namespace ConditioningControlPanel.Services.Audio
 
                 try
                 {
-                    _output = App.Audio?.CreateWaveOut() ?? new WaveOutEvent();
+                    _output = App.Audio?.CreateWaveOut() ?? WaveOutTeardown.NewWaveOut();
                     App.Audio?.ApplyPreferredDevice(_output);
                     _output.Init(_master);
                     _output.Play();

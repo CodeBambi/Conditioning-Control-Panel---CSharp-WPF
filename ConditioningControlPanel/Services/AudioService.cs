@@ -125,7 +125,7 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var w = new WaveOutEvent();
+                var w = WaveOutTeardown.NewWaveOut();   // PlaybackStopped off the dispatcher (#1295)
                 if (preferred >= 0) w.DeviceNumber = preferred;
                 return w;
             }
@@ -148,7 +148,8 @@ namespace ConditioningControlPanel.Services
                 if (i == preferred) continue; // already failed above
                 try
                 {
-                    var w = new WaveOutEvent { DeviceNumber = i };
+                    var w = WaveOutTeardown.NewWaveOut();
+                    w.DeviceNumber = i;
                     _workingWaveOutDeviceNumber = i;
                     App.Logger?.Information("AudioService: using WaveOut device #{Num} as fallback", i);
                     return w;

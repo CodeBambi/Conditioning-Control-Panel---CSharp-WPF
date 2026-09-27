@@ -4686,7 +4686,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 audioFile = new AudioFileReader(path);
-                sound = new WaveOutEvent();
+                sound = WaveOutTeardown.NewWaveOut();   // reports out off the dispatcher (#1295)
                 App.Audio?.ApplyPreferredDevice(sound);
 
                 // Apply volume curve (gentler, minimum 5%). #1099: the 5% is a floor on the CURVE,

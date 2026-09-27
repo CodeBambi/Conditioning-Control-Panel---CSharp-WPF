@@ -69,8 +69,10 @@ namespace ConditioningControlPanel.Services
             if (Interlocked.Increment(ref _inFlight) > MaxInFlight)
             {
                 // Sixteen teardowns stuck at once means the audio stack is gone. Do not add a
-                // seventeenth thread to the pile; drop the references and let them leak.
+                // seventeenth thread to the pile; drop the references and let them leak. Still
+                // ask it to stop (off this thread), or a looping bed keeps playing after Stop.
                 Interlocked.Decrement(ref _inFlight);
+                StopOffThread(output);
                 NoteAbandoned(tag, "too many teardowns already waiting on the driver");
                 return;
             }
@@ -91,8 +93,26 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 Interlocked.Decrement(ref _inFlight);
+                StopOffThread(output);
                 Diag.Swallowed(ex, "could not start a teardown thread; the device leaks");
             }
+        }
+
+        /// <summary>
+        /// A <see cref="WaveOutEvent"/> that raises PlaybackStopped on its own playback thread.
+        /// WaveOutEvent captures <see cref="SynchronizationContext.Current"/> in its constructor
+        /// and POSTS PlaybackStopped there, so one built on the UI thread reports out only when
+        /// the dispatcher gets round to it. The teardown waits on that report, so a UI thread
+        /// busy past <see cref="StopWaitMs"/> would leak a perfectly healthy device. Only for
+        /// players with no PlaybackStopped handler that needs the UI thread.
+        /// </summary>
+        public static WaveOutEvent NewWaveOut()
+        {
+            var prev = SynchronizationContext.Current;
+            if (prev == null) return new WaveOutEvent();
+            SynchronizationContext.SetSynchronizationContext(null);
+            try { return new WaveOutEvent(); }
+            finally { SynchronizationContext.SetSynchronizationContext(prev); }
         }
 
         /// <summary>
