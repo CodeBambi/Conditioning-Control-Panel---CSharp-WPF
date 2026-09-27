@@ -242,3 +242,36 @@
 /* The mouse capture switch in Options: one row, box before its words (the card's labels stack vertically otherwise). */
 .bo-lock-row span { display:flex;flex-direction:row;align-items:center;gap:9px; }
 .bo-lock-row input { width:16px;height:16px;margin:0;accent-color:#e7b2ef; }
+
+/* Story and Endless share the same cabinet, controls and picture preferences. */
+.bo-modes { display:grid;grid-template-columns:1fr 1fr;gap:10px;width:min(420px,100%); }
+.bo-modes button { display:flex;flex-direction:column;gap:5px;align-items:center;padding:14px 12px;border:1px solid #67516e;border-radius:12px;background:#211728;color:#cbbbce;cursor:pointer;touch-action:manipulation; }
+.bo-modes b { font:750 18px/1.2 system-ui; }
+.bo-modes span { font:12px/1.3 system-ui;color:#c6b8cb; }
+.bo-modes button[aria-pressed="true"] { border-color:#f1accc;background:linear-gradient(140deg,#573047,#2c2037);box-shadow:inset 0 0 0 1px #f1accc30;color:#fff0dc; }
+.bo-modes button[data-mode="endless"][aria-pressed="true"] { border-color:#93dfd0;background:linear-gradient(140deg,#284844,#242438);box-shadow:inset 0 0 0 1px #93dfd030; }
+.bo-modes button:hover { border-color:#ffe0ad; }
+.bo-run-note { min-height:18px;margin:14px 0 18px;font:12px/1.5 system-ui;color:#d4c1d8; }
+.bo-run-hud { position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:4;display:flex;flex-direction:column;gap:4px;align-items:center;max-width:52%;padding:7px 14px;border:1px solid #90d4c735;border-radius:12px;background:#151321e8;pointer-events:none;text-align:center; }
+.bo-run-hud b { color:#def8ec;font:700 12px/1.3 system-ui;letter-spacing:.5px; }
+.bo-run-hud span { color:#eac897;font:10px/1.3 system-ui;letter-spacing:1.2px; }
+.bo-station.is-menu .bo-run-hud { visibility:hidden; }
+.bo-station[data-host-back] .bo-run-hud { top:58px; }
+.bo-pause-card .bo-save-note { margin:-8px 0 0;font-size:12px;letter-spacing:0;text-shadow:none; }
+@media(max-height:650px) {
+  .bo-menu { justify-content:flex-start;padding-top:20px; }
+  .bo-menu-art { display:none; }
+  .bo-menu h1 { font-size:clamp(40px,8vh,68px); }
+  .bo-menu-line { margin:12px 0 18px; }
+  .bo-menu-controls { margin-top:15px; }
+}
+@media(max-height:480px) {
+  .bo-menu-kicker { margin:0 0 5px; }.bo-menu-line { margin:8px 0 12px; }
+  .bo-modes button { padding:9px; }.bo-run-note { margin:9px 0 12px; }
+  .bo-menu-controls { display:none; }
+}
+@media(max-width:600px) {
+  .bo-run-hud { top:59px;max-width:90%;width:max-content; }
+  .bo-station[data-host-back] .bo-run-hud { top:103px; }
+  .bo-run-hud b { font-size:11px; }
+}

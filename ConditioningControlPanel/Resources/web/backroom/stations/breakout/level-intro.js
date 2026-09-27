@@ -3,19 +3,22 @@ export const LEVEL_TITLES = ['FIRST LIGHT', 'THE TIDE', 'THE SPELL', 'THE DOME',
 const COLOURS = ['#f2c888','#8ee4ed','#ecabff','#bca2ff','#ffabd1','#b4f0cc','#ffda9c','#eeeeee'];
 export function createLevelIntro() {
   const tiles = new Map();
-  return { draw(g, level, age, w, h, reduced = false) {
+  return { draw(g, level, age, w, h, reduced = false, endless = null) {
     if (age < 0 || age >= 1.15) return;
-    const i = Math.min(7, Math.max(0, level));
-    if (!tiles.has(i)) {
+    const i = endless ? Math.max(0, level) % 7 : Math.min(7, Math.max(0, level));
+    const key = endless ? 'endless:' + level + ':' + endless.name : i;
+    const accent = endless?.accent || COLOURS[i];
+    if (!tiles.has(key)) {
       const c = document.createElement('canvas'); c.width = 200; c.height = 34;
       const x = c.getContext('2d', { willReadFrequently: true });
       x.textAlign = 'center'; x.textBaseline = 'middle';
-      x.font = 'bold 8px monospace'; x.fillStyle = COLOURS[i];
-      x.fillText(`LEVEL ${i + 1}`, 100, 6);
+      x.font = 'bold 8px monospace'; x.fillStyle = accent;
+      x.fillText(`${endless ? "ENDLESS" : "LEVEL"} ${endless ? level + 1 : i + 1}`, 100, 6);
       x.font = 'bold 17px monospace'; x.fillStyle = '#171321';
-      x.fillText(LEVEL_TITLES[i], 101, 24);
-      x.fillStyle = COLOURS[i]; x.fillText(LEVEL_TITLES[i], 100, 23);
-      tiles.set(i, c);
+      x.fillText((endless?.name?.toUpperCase() || LEVEL_TITLES[i]), 101, 24, 190);
+      x.fillStyle = accent; x.fillText((endless?.name?.toUpperCase() || LEVEL_TITLES[i]), 100, 23, 190);
+      if (tiles.size >= 12) tiles.delete(tiles.keys().next().value);
+      tiles.set(key, c);
     }
     const enter = Math.min(1, age / .22), exit = Math.min(1, (1.15 - age) / .2);
     const ease = 1 - Math.pow(1 - enter, 3), t = 1 - ease;
@@ -32,9 +35,9 @@ export function createLevelIntro() {
       if (i === 7) g.translate(Math.round(Math.sin(age * 61) * t * 3) * 4, 0);
     }
     g.fillStyle = 'rgba(12,10,22,.82)'; g.fillRect(-322, -58, 644, 116);
-    g.fillStyle = COLOURS[i];
+    g.fillStyle = accent;
     g.fillRect(-322, -58, 40, 4); g.fillRect(282, 54, 40, 4);
-    const tile = tiles.get(i);
+    const tile = tiles.get(key);
     if (!reduced && i === 2) {
       const reveal = Math.ceil(ease * 20) * 10;
       g.drawImage(tile, 0, 0, reveal, 34, -300, -51, reveal * 3, 102);
