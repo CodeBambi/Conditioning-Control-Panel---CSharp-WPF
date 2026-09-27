@@ -295,12 +295,16 @@ public sealed class FriendsRailChip : UserControl
         _popup.IsOpen = true;
     }
 
-    /// <summary>Opens the drawer if it is folded (an Inbox row asking for it).</summary>
-    internal void OpenDrawer()
+    /// <summary>Opens the drawer if it is folded (an Inbox row or a corner notice asking for it),
+    /// with that friend's card open when one is named.</summary>
+    internal void OpenDrawer(string? friendId = null)
     {
-        if (_popup.IsOpen) return;
-        Rebind();
-        _popup.IsOpen = true;
+        if (!_popup.IsOpen)
+        {
+            Rebind();
+            _popup.IsOpen = true;
+        }
+        if (!string.IsNullOrEmpty(friendId)) _drawer.OpenOn(friendId);
     }
 
     private void OnPopupOpened(object? sender, EventArgs e)

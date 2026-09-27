@@ -22,6 +22,7 @@ public static class FriendsLanding
 {
     private static DispatcherTimer? _timer;
     private static FriendsLandingRouter? _router;
+    private static Window? _hookedPanel;
     private static readonly Sink TheSink = new();
 
     public static void Start()
@@ -41,7 +42,7 @@ public static class FriendsLanding
         _router?.Dispose();
         _router = null;
         try { KnockCard.CloseAll(); } catch { /* shutting down */ }
-        try { FriendToast.CloseAll(); } catch { /* shutting down */ }
+        try { FriendNotices.CloseAll(); } catch { /* shutting down */ }
     }
 
     private static void Tick()
@@ -57,6 +58,17 @@ public static class FriendsLanding
                     : new FriendsLandingRouter(current, ReadWorld, () => DateTimeOffset.UtcNow, TheSink);
             }
             _router?.Release();
+
+            // A notice already up when a lockdown, Strict Lock or program session starts goes at once.
+            if (FriendNotices.AnyUp && ReadWorld().Holding) FriendNotices.CloseAll(fold: true);
+
+            // The notice window is unowned: it must not hold OnLastWindowClose once the panel closes.
+            var mw = App.MainWindowRef;
+            if (mw != null && !ReferenceEquals(mw, _hookedPanel))
+            {
+                _hookedPanel = mw;
+                mw.Closed += (_, _) => { try { FriendNotices.CloseAll(); KnockCard.CloseAll(); } catch { /* shutting down */ } };
+            }
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] landing tick: {E}", ex.Message); }
     }
@@ -114,7 +126,7 @@ public static class FriendsLanding
                 if (!w.IsActive) continue;
                 if (ReferenceEquals(w, App.MainWindowRef)) return null;
                 if (w is ConditioningControlPanel.Launcher.LauncherWindow) return null;
-                if (w is KnockCard or FriendToast or FloatingWord) return null;
+                if (w is KnockCard or FriendNotices or FloatingWord) return null;
                 return w;
             }
         }
@@ -181,11 +193,19 @@ public static class FriendsLanding
             var word = PokeText(item.PokeId);
             var pink = LandingRules.PokeIsPink(item.PokeId);
             FriendsSfx.PokeIn(inGame);
-            if (inGame)
+            if (!NoticesOn) { Inbox(item); return; }
+            var game = inGame ? ActiveGameWindow() : null;
+            FriendNotices.Show(game ?? Anchor(), Notice(NoticeKind.Poke, item.FromId, item.FromName, item), new NoticeLook
             {
-                var game = ActiveGameWindow();
-                if (game != null) { FriendToast.Show(game, item.FromName, item.FromAvatarUrl, word, pink); return; }
-            }
+                Line = Str("friends_notice_poked", "poked you:"),
+                Word = word,
+                Pink = pink,
+                AvatarUrl = item.FromAvatarUrl,
+                ActionLabel = Str("friends_notice_poke_back", "Poke back"),
+                Act = p => { if (p is InboxItem i) PokeBack(i); },
+                Open = p => OpenDrawer((p as InboxItem)?.FromId),
+            });
+            if (game != null) return;
             EmiSays(string.Format(Str("friends_land_emi_poke", "{0} says {1}"), item.FromName, word),
                 LandingRules.PokeFace(item.PokeId));
             var anchor = Anchor();
@@ -198,12 +218,23 @@ public static class FriendsLanding
             var anchor = inGame ? ActiveGameWindow() ?? Anchor() : Anchor();
             if (anchor == null) { Inbox(item); return; }
             FriendsSfx.Knock();
+            if (!NoticesOn) { Inbox(item); return; }
             if (!inGame)
                 EmiSays(item.Kind == SendKind.Invite
                         ? Str("friends_land_emi_knock", "someone wants you")
                         : Str("friends_land_emi_present", "a present"),
                     item.Kind == SendKind.Invite ? "o_o" : "^_~");
-            KnockCard.Show(anchor, item, KnockLine(item), GoLabel(item), Str("friends_land_later", "Later"), OnKnockDone);
+            var kind = item.Kind == SendKind.Invite ? NoticeKind.Invite : NoticeKind.Watch;
+            FriendNotices.Show(anchor, Notice(kind, item.FromId, item.FromName, item), new NoticeLook
+            {
+                Line = KnockLine(item),
+                AvatarUrl = item.FromAvatarUrl,
+                ActionLabel = GoLabel(item),
+                Act = p => { if (p is InboxItem i && !i.IsExpired(DateTimeOffset.UtcNow)) OnKnockDone(i, KnockOutcome.Go); },
+                Open = p => OpenDrawer((p as InboxItem)?.FromId),
+                // Still answerable after the toast goes: it waits in the Inbox, where it reopens as a card.
+                Left = p => { if (p is InboxItem i && !i.IsExpired(DateTimeOffset.UtcNow)) Inbox(i); },
+            });
         }
 
         public void Inbox(InboxItem item)
@@ -234,17 +265,24 @@ public static class FriendsLanding
                 Title = request.Name,
                 Summary = Str("friends_land_request_line", "wants to be friends"),
                 Glyph = "💌",
-                Open = OpenDrawer,
+                Open = () => OpenDrawer(null),
             });
         }
 
         public void RequestAnnounce(FriendRequest request, bool inGame)
         {
             FriendsSfx.Request();
+            if (!NoticesOn) return;
             var owner = inGame ? ActiveGameWindow() ?? Anchor() : Anchor();
             if (owner == null) return;
-            FriendToast.Show(owner, request.Name, request.AvatarUrl,
-                Str("friends_land_request_line", "wants to be friends"), pink: false);
+            FriendNotices.Show(owner, Notice(NoticeKind.Request, request.Id, request.Name, request), new NoticeLook
+            {
+                Line = Str("friends_land_request_line", "wants to be friends"),
+                AvatarUrl = request.AvatarUrl,
+                ActionLabel = Str("friends_notice_accept", "Accept"),
+                Act = p => { if (p is FriendRequest r) Accept(r); },
+                Open = _ => OpenDrawer(null),
+            });
         }
 
         public void RequestCue() => FriendsSfx.Request();
@@ -267,8 +305,43 @@ public static class FriendsLanding
 
     private static string RequestKey(string id) => "friends-request:" + id;
 
+    // ---------------------------------------------------------------- corner notices
+
+    /// <summary>The drawer's bell. Off: Inbox rows and the cue only, nothing on screen.</summary>
+    private static bool NoticesOn => App.Settings?.Current?.FriendNotificationsEnabled != false;
+
+    private static FriendNotice Notice(NoticeKind kind, string friendId, string name, object payload)
+        => new(kind, friendId, name, DateTimeOffset.UtcNow, FriendNoticeRules.LifetimeMs(kind), payload);
+
+    /// <summary>The same preset straight back, through the drawer's own send path.</summary>
+    private static async void PokeBack(InboxItem item)
+    {
+        try
+        {
+            var svc = App.Friends;
+            if (svc == null || string.IsNullOrEmpty(item.FromId)) return;
+            FriendsSfx.Click();
+            var r = await svc.PokeAsync(item.FromId, string.IsNullOrEmpty(item.PokeId) ? "hi" : item.PokeId);
+            if (r != SendResult.Sent) App.Logger?.Debug("[Friends] poke back: {R}", r);
+        }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] poke back: {E}", ex.Message); }
+    }
+
+    private static async void Accept(FriendRequest request)
+    {
+        try
+        {
+            var svc = App.Friends;
+            if (svc == null) return;
+            FriendsSfx.Click();
+            await svc.AcceptAsync(request.Id);
+            await svc.RefreshAsync();
+        }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] accept: {E}", ex.Message); }
+    }
+
     /// <summary>A request row opened: the panel up, the friends drawer open on it.</summary>
-    private static void OpenDrawer()
+    private static void OpenDrawer(string? friendId)
     {
         try
         {
@@ -278,7 +351,7 @@ public static class FriendsLanding
             // After the panel has had a layout pass: a popup placed on a hidden chip lands at 0,0.
             Application.Current?.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
             {
-                try { App.MainWindowRef?.FriendsChip?.OpenDrawer(); }
+                try { App.MainWindowRef?.FriendsChip?.OpenDrawer(friendId); }
                 catch (Exception ex) { App.Logger?.Debug("[Friends] open drawer: {E}", ex.Message); }
             }));
         }
