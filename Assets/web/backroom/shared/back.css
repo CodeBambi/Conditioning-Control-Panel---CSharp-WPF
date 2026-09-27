@@ -19,6 +19,9 @@ body :is(.br-back,.br-card-back,.br-custom-back,.br-options-back,.slot-back,.slo
 #br-layer .br-station :is(.wheel-back,.cards-back,.counter-back,.roul-back):not([hidden]) {
   position: fixed; top: max(12px, var(--br-brow, 0px)); left: max(12px, var(--br-edge-l, 0px)); z-index: 31;
 }
+/* A station that draws its own Back in the room (data-own-back: every seated station, the counter) takes the corner
+   alone: the room's #br-back is not drawn under it (the slot pins its own the same way in stations/slot/station.css). */
+html:has(#br-layer .br-station[data-own-back]) #br-back { display: none; }
 @media(max-width: 480px) {
   body :is(.br-back,.br-custom-back,.br-options-back,.slot-back,.wheel-back,.cards-back,.roul-back,.counter-back):not([hidden]) { min-width: 86px; padding: 9px 12px; font-size: 15px; }
 }

@@ -20,7 +20,7 @@ function stubDom({ width = 338, height = 450, fails = false, never = false } = {
     if (tag === 'canvas') return canvas;
     const node = {
       tagName: tag, attrs: {}, listeners: {}, paused: true, plays: 0, pauses: 0, loads: 0,
-      videoWidth: 0, videoHeight: 0, canPlayType: () => 'probably',
+      readyState: 2, videoWidth: 0, videoHeight: 0, canPlayType: () => 'probably',
       set src(v) {
         node.attrs.src = v;
         if (never) return;
@@ -106,8 +106,8 @@ test('the room clock owns the frame rate, and every frame lands in the canvas', 
 
   assert.equal(src.tick(0, false), true);
   assert.equal(src.tick(1, false), false, 'a second tick in the same millisecond costs nothing');
-  assert.equal(src.tick(40, false), false, 'still inside the 12 fps gap');
-  assert.equal(src.tick(90, false), true);
+  assert.equal(src.tick(20, false), false, 'still inside the 30 fps gap');
+  assert.equal(src.tick(40, false), true);
   assert.equal(dom.drawn.length, first + 2);
   assert.equal(frames, 2);
   src.dispose();
@@ -172,4 +172,22 @@ test('gif.js routes clips to this module AND still routes pictures to the decode
 test('this module stays three-free, like gif-decode.js', () => {
   const src = readFileSync(new URL('../clip-source.js', import.meta.url), 'utf8');
   assert.doesNotMatch(src, /from\s*'three'/, "CONTRACT 10.13.D: no three.js import belongs in here");
+});
+
+test('metadata without pixels does not count as a painted frame, including still mode', async () => {
+  const dom = stubDom();
+  const pending = clipSource('https://ccp.assets/.temp/a.webm');
+  dom.video().readyState = 1;
+  const src = await pending;
+  assert.equal(src.frames, 0);
+  assert.equal(dom.drawn.length, 0);
+  src.tick(0, false);
+  assert.equal(src.frames, 0);
+  dom.video().readyState = 2;
+  src.tick(1000, true);
+  assert.equal(src.frames, 1);
+  assert.equal(dom.drawn.length, 1);
+  src.tick(2000, true);
+  assert.equal(src.frames, 1);
+  src.dispose();
 });

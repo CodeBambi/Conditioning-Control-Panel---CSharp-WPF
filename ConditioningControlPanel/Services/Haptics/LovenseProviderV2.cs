@@ -157,6 +157,7 @@ namespace ConditioningControlPanel.Services.Haptics
 
             string? winner = null;
             string body = "";
+            var failures = new List<ProbeFailure>();
             foreach (var candidate in candidates)
             {
                 if (ct.IsCancellationRequested) return false;
@@ -179,13 +180,20 @@ namespace ConditioningControlPanel.Services.Haptics
                     // at the default level - so nobody could tell a refused port from a TLS
                     // rejection from a DNS failure on the alias.
                     App.Logger?.Information("Lovense: {Base} did not answer ({Reason})", candidate, ex.Message);
+                    failures.Add(ClassifyProbeFailure(ex));
                 }
             }
 
             if (winner == null)
             {
+                // #1202 / #1216: the per-candidate lines said refused or timed out, but nothing
+                // said which of the two it was overall or whether the PC even sits on the phone's
+                // subnet, so every report read "check Game Mode" whatever the real cause.
+                var sameSubnet = LocalSharesSubnetWith(ExtractHost(configured));
+                App.Logger?.Information("Lovense: probe summary {Summary}, PC on the phone's subnet: {Same}",
+                    string.Join(",", failures), sameSubnet?.ToString() ?? "unknown");
                 RaiseError($"Could not reach Lovense Remote at {configured ?? "(unset)"}. " +
-                           "Check that Game Mode is on and the phone is on the same network.");
+                           UnreachableHint(failures, sameSubnet));
                 lock (_lock) { _connected = false; }
                 return false;
             }
@@ -1040,6 +1048,76 @@ namespace ConditioningControlPanel.Services.Haptics
             // duplicate this often produces is dropped by the caller's dedupe.
             var port = string.Equals(u.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ? 30010 : 20010;
             return $"{u.Scheme}://{u.Host}:{port}";
+        }
+
+        internal enum ProbeFailure { Refused, TimedOut, Other }
+
+        /// <summary>Refused = the phone answered but nothing listens on that port; TimedOut = no
+        /// answer at all (wrong network, client isolation, phone asleep).</summary>
+        internal static ProbeFailure ClassifyProbeFailure(Exception ex)
+        {
+            for (var e = ex; e != null; e = e.InnerException)
+            {
+                if (e is System.Net.Sockets.SocketException se)
+                {
+                    if (se.SocketErrorCode == System.Net.Sockets.SocketError.ConnectionRefused) return ProbeFailure.Refused;
+                    if (se.SocketErrorCode == System.Net.Sockets.SocketError.TimedOut) return ProbeFailure.TimedOut;
+                    return ProbeFailure.Other;
+                }
+                if (e is OperationCanceledException || e is TimeoutException) return ProbeFailure.TimedOut;
+            }
+            return ProbeFailure.Other;
+        }
+
+        /// <summary>The second sentence of the connect error, picked from what the probes saw.</summary>
+        internal static string UnreachableHint(IReadOnlyCollection<ProbeFailure> failures, bool? sameSubnet)
+        {
+            if (failures.Count > 0 && failures.All(f => f == ProbeFailure.Refused))
+                return "The phone answered but Game Mode is not listening. Turn Game Mode on in Lovense Remote and keep the app open on screen.";
+            if (sameSubnet == false)
+                return "This PC is not on the phone's network. Put both on the same Wi-Fi (not a guest network) and check the IP again.";
+            if (failures.Count > 0 && failures.All(f => f == ProbeFailure.TimedOut))
+                return "Nothing answered at that address. Check the IP in Game Mode, that the phone is awake, and that the router does not isolate Wi-Fi devices.";
+            return "Check that Game Mode is on and the phone is on the same network.";
+        }
+
+        /// <summary>True when the phone's IPv4 falls inside the subnet of any local interface.</summary>
+        internal static bool SharesSubnet(IPAddress target, IEnumerable<(IPAddress Address, IPAddress Mask)> locals)
+        {
+            var t = target.GetAddressBytes();
+            if (t.Length != 4) return false;
+            foreach (var (address, mask) in locals)
+            {
+                var a = address.GetAddressBytes();
+                var m = mask.GetAddressBytes();
+                if (a.Length != 4 || m.Length != 4) continue;
+                var match = true;
+                for (var i = 0; i < 4 && match; i++) match = (a[i] & m[i]) == (t[i] & m[i]);
+                if (match) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Null when the host is not an IPv4 literal or the interfaces cannot be read.</summary>
+        private static bool? LocalSharesSubnetWith(string? host)
+        {
+            try
+            {
+                var dotted = DottedFromLovenseClubHost(host) ?? host;
+                if (string.IsNullOrWhiteSpace(dotted) || !IPAddress.TryParse(dotted, out var ip) ||
+                    ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork || IPAddress.IsLoopback(ip))
+                    return null;
+                var locals = new List<(IPAddress, IPAddress)>();
+                foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                    foreach (var u in nic.GetIPProperties().UnicastAddresses)
+                        if (u.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && u.IPv4Mask != null)
+                            locals.Add((u.Address, u.IPv4Mask));
+                }
+                return locals.Count == 0 ? null : SharesSubnet(ip, locals);
+            }
+            catch { return null; }
         }
 
         // ==================================================================

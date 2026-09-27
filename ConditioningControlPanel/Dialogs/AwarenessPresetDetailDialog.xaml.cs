@@ -1100,6 +1100,28 @@ namespace ConditioningControlPanel
             Grid.SetColumn(suffix, 2);
             body.Children.Add(suffix);
 
+            // Lock time can arrive switched off (a preset activated without a yes to it), so its
+            // row carries its own on/off. Other actions have no per-row switch.
+            if (action is ChasterAddTimeAction)
+            {
+                body.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var onBox = new CheckBox
+                {
+                    Content = ConditioningControlPanel.Localization.Loc.Get("chaster_import_action_on"),
+                    ToolTip = ConditioningControlPanel.Localization.Loc.Get("chaster_import_action_tip"),
+                    Foreground = Brushes.White,
+                    FontSize = 11,
+                    IsChecked = action.Enabled,
+                    IsEnabled = editable,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(12, 0, 0, 0),
+                };
+                onBox.Checked += (_, _) => { action.Enabled = true; if (editable) PersistAndMaybeCreate(); };
+                onBox.Unchecked += (_, _) => { action.Enabled = false; if (editable) PersistAndMaybeCreate(); };
+                Grid.SetColumn(onBox, 3);
+                body.Children.Add(onBox);
+            }
+
             return ActionRowFrame(icon, body, trigger, action, editable, parentBorder);
         }
 
@@ -1206,7 +1228,9 @@ namespace ConditioningControlPanel
             }
             else
             {
-                App.KeywordPresets.InstallPreset(_preset.Id);
+                // Lock time in a preset needs a yes first; "no" activates the rest without it.
+                var allowChaster = ChasterImportConfirmDialog.Ask(this, App.KeywordPresets.ChasterSummary(_preset.Id));
+                App.KeywordPresets.InstallPreset(_preset.Id, allowChaster);
             }
 
             Changed = true;

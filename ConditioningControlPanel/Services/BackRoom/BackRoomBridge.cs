@@ -62,8 +62,16 @@ public sealed class BackRoomBridge
         public Action<Action>? OffUi { get; init; }
         /// <summary>Write a validated <c>room-option</c> into the settings and save (10.14). Null = ignored.</summary>
         public Action<RoomOption>? SetOption { get; init; }
+        /// <summary>One validated <c>haptic</c> pulse, or a stop (10.23). Null = no toy path, the frame is dropped.
+        /// The bridge also sends a stop of its own wherever it cancels fx: suspend, close, exit, station-close.</summary>
+        public Action<BackRoomHaptic>? Haptic { get; init; }
         public Func<int>? NextSeed { get; init; }
         public Action<string>? Log { get; init; }
+        /// <summary>A slot outcome the server really dealt just landed on the page (10.24): its line,
+        /// read from the host's own copy of the tape, never from the page. Null = nothing listens.</summary>
+        public Action<string>? SlotLanded { get; init; }
+        /// <summary>The clock the landing rate limit reads. Null = <see cref="DateTime.UtcNow"/>.</summary>
+        public Func<DateTime>? UtcNow { get; init; }
     }
 
     private readonly Deps _d;
@@ -77,6 +85,7 @@ public sealed class BackRoomBridge
     private readonly Dictionary<string, (string TapeId, int Played)> _cursor = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string TapeId, int Played)> _flushed = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _life = new();
+    private readonly BackRoomTabLedger _ledger = new();
     private Action? _cancelForce;
     private bool _initPosted, _closing, _closed, _suspended;
     private bool _adopting;   // only touched inside OnUi, so on one thread
@@ -185,7 +194,13 @@ public sealed class BackRoomBridge
                     FlushCursors(shut);
                     // 10.13.B: that station's holds and tunnel go with it.
                     try { _d.Fx.ReleaseStation(shut); } catch (Exception ex) { _d.Log?.Invoke("fx release threw: " + ex.Message); }
+                    StopHaptic(shut);
                 }
+                break;
+            case "haptic":
+                // No reply (10.23). A stop always lands; a pulse is dropped while closing or suspended,
+                // so a frame already in flight cannot restart what the suspend just stopped.
+                if (ReadHaptic(m) is { } pulse && (pulse.IsStop || !Quiet)) Guard(() => _d.Haptic?.Invoke(pulse));
                 break;
             case "station-request":
                 _ = OnStationRequestAsync(m);
@@ -211,6 +226,9 @@ public sealed class BackRoomBridge
             case "fx-release":
                 if ((string?)m["token"] is { Length: > 0 and <= 64 } releaseToken)
                     Guard(() => _d.Fx.Release(releaseToken, Station(m) ?? string.Empty));
+                break;
+            case "landed":
+                OnLanded(m);
                 break;
             case "melt":
                 _d.Log?.Invoke("melt " + (string?)m["station"] + " left=" + (string?)m["left"]);
@@ -292,6 +310,28 @@ public sealed class BackRoomBridge
         return null;
     }
 
+    public const int HapticMinMs = 20, HapticMaxMs = 1500;
+    private static readonly Regex HapticTag = new("^[A-Za-z0-9_.-]{1,24}$", RegexOptions.CultureInvariant);
+
+    /// <summary><c>{type:'haptic', station, level: 0..1, ms, tag}</c> (10.23). The page is untrusted: a level or
+    /// an ms that is not a finite number drops the frame, the level is clamped to 0..1 and the ms to
+    /// <see cref="HapticMinMs"/>..<see cref="HapticMaxMs"/>, and a tag that is not a short plain token reads as
+    /// empty (it is only ever logged). Level 0 is the stop, whatever its ms says.</summary>
+    internal static BackRoomHaptic? ReadHaptic(JObject m)
+    {
+        if (Station(m) is not { } station) return null;
+        if (m["level"] is not JValue { Type: JTokenType.Integer or JTokenType.Float } lv) return null;
+        var level = lv.Value<double>();
+        if (double.IsNaN(level) || double.IsInfinity(level)) return null;
+        level = Math.Clamp(level, 0, 1);
+        var tag = m["tag"] is JValue { Type: JTokenType.String } t && (string?)t is { } raw && HapticTag.IsMatch(raw) ? raw : string.Empty;
+        if (level <= 0) return new BackRoomHaptic(station, 0, 0, tag);
+        if (m["ms"] is not JValue { Type: JTokenType.Integer or JTokenType.Float } dv) return null;
+        var ms = dv.Value<double>();
+        if (double.IsNaN(ms) || double.IsInfinity(ms)) return null;
+        return new BackRoomHaptic(station, level, (int)Math.Clamp(ms, HapticMinMs, HapticMaxMs), tag);
+    }
+
     /// <summary><c>media-request.count</c>: an integer 1..13, anything else reads as 4 (10.13.C).</summary>
     internal static int MediaCount(JToken? t)
         => t is JValue { Type: JTokenType.Integer } v && v.Value<long>() is >= 1 and <= 13 ? (int)v.Value<long>() : 4;
@@ -342,12 +382,25 @@ public sealed class BackRoomBridge
             result = BackRoomStationResult.Refuse("offline");
         }
         cancelGuard();
+        try { _ledger.Relayed(station, result.Body); } catch (Exception ex) { _d.Log?.Invoke("ledger threw: " + ex.Message); }
         if (result.Body?["tape"] is JObject tape && (string?)tape["id"] is { } tapeId)
         {
             var at = (tape["played"]?.Type == JTokenType.Integer) ? (int)tape["played"]! : 0;
             lock (_gate) { _cursor[station] = (tapeId, at); _flushed[station] = (tapeId, at); }
         }
         Reply(reqId, result);
+    }
+
+    /// <summary>10.24 <c>landed {station, tapeId?, side?, i}</c>, no reply: a slot outcome the server dealt
+    /// has just played. Only the index is the page's; the line is looked up in what the host relayed.</summary>
+    private void OnLanded(JObject m)
+    {
+        if (IsClosed || _d.SlotLanded == null || Station(m) is not { } station) return;
+        if (m["i"] is not JValue { Type: JTokenType.Integer } iv || iv.Value<long>() is < 0 or > BackRoomTabLedger.MaxOutcomes) return;
+        bool side = m["side"] is JValue { Type: JTokenType.Boolean } sv && sv.Value<bool>();
+        var tapeId = m["tapeId"] is JValue { Type: JTokenType.String } tv ? (string?)tv : null;
+        var line = _ledger.Land(station, tapeId, side, (int)iv.Value<long>(), _d.UtcNow?.Invoke() ?? DateTime.UtcNow);
+        if (line != null) Guard(() => _d.SlotLanded(line));
     }
 
     private void Reply(string reqId, BackRoomStationResult r)
@@ -556,7 +609,13 @@ public sealed class BackRoomBridge
     private void CancelFx()
     {
         StopVoice();
+        StopHaptic(string.Empty);
         try { _d.Fx.CancelAll(); } catch (Exception ex) { _d.Log?.Invoke("fx cancel threw: " + ex.Message); }
+    }
+
+    private void StopHaptic(string station)
+    {
+        try { _d.Haptic?.Invoke(new BackRoomHaptic(station, 0, 0, "host")); } catch (Exception ex) { _d.Log?.Invoke("haptic stop threw: " + ex.Message); }
     }
 
     private void StopVoice()

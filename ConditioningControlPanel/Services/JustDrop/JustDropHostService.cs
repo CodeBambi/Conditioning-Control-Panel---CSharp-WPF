@@ -117,6 +117,7 @@ namespace ConditioningControlPanel.Services.JustDrop
                     Mappings = Array.Empty<(string, string, CoreWebView2HostResourceAccessKind)>(),
                     UserDataFolderName = "browser_data_justdrop",
                     InputEnabled = true,
+                    IsGame = true,   // the startup ladder goes quiet while a game is up
                     StartFullscreen = fullscreen,
                     // The window's fullscreen is ours, not the remote page's: a visible toggle, a
                     // live Esc, and a fullscreen that clears the taskbar when it IS asked for.

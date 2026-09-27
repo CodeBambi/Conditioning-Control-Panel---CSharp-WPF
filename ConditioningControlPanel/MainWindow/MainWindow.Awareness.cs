@@ -1015,7 +1015,11 @@ namespace ConditioningControlPanel
                 if (App.KeywordPresets.IsInstalled(preset.Id))
                     App.KeywordPresets.UninstallPreset(preset.Id);
                 else
-                    App.KeywordPresets.InstallPreset(preset.Id);
+                {
+                    // Lock time in a preset needs a yes first; "no" activates the rest without it.
+                    var allowChaster = ChasterImportConfirmDialog.Ask(this, App.KeywordPresets.ChasterSummary(preset.Id));
+                    App.KeywordPresets.InstallPreset(preset.Id, allowChaster);
+                }
                 // PresetsChanged → OnPresetsChanged rebuilds the grid.
             };
             return btn;

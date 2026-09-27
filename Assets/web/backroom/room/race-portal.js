@@ -1,5 +1,5 @@
 /** Same-window Racing Thoughts door. Only a camera pose survives the round trip. */
-import { EYE, WALLS } from './walk.js';
+import { EYE, WALLS, inAnnex } from './walk.js';
 
 export const RACE_POSE_KEY = 'backroom.race-return-pose.v1';
 /** THE OWNED TRACKS, for the page on the other side of the door. The desktop host tells the race what the
@@ -22,7 +22,9 @@ export function raceOwnershipTracks(value) {
 export function validatedRoomPose(value) {
   const p = value?.position;
   if (!Array.isArray(p) || p.length !== 3 || !p.every(Number.isFinite)) return null;
-  if (Math.abs(p[0]) > WALLS.x || Math.abs(p[2]) > WALLS.z || Math.abs(p[1] - EYE) > 0.35) return null;
+  // The main room's rectangle, or the annex and its doorway (the race door stands in the annex, so a return lands there).
+  const inMain = Math.abs(p[0]) <= WALLS.x && Math.abs(p[2]) <= WALLS.z;
+  if ((!inMain && !inAnnex(p[0], p[2])) || Math.abs(p[1] - EYE) > 0.35) return null;
   if (!Number.isFinite(value.yaw) || Math.abs(value.yaw) > 1e6 || !Number.isFinite(value.pitch) || value.pitch < -1.12 || value.pitch > 1.2) return null;
   const yaw = ((value.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
   return { position: p.slice(), yaw, pitch: value.pitch };

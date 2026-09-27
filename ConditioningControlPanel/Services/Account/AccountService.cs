@@ -446,10 +446,11 @@ public static class AccountService
             // Call V2 link endpoint
             var result = await v2Auth.LinkProviderAsync(unifiedId, provider, accessToken);
 
-            // Treat "already linked to this account" as success — it means the link is already done
+            // Treat "already linked to this account" as success - it means the link is already done.
+            // ProviderLinkResponseRules keeps that 409 apart from the different-user conflict, which
+            // must still land in the error branch below.
             var alreadyLinked = !result.Success &&
-                                result.Error != null &&
-                                result.Error.Contains("already linked to this account", StringComparison.OrdinalIgnoreCase);
+                                ProviderLinkResponseRules.IsAlreadyLinkedToThisAccount(result.Error);
 
             if (result.Success || alreadyLinked)
             {
@@ -468,8 +469,21 @@ public static class AccountService
 
                 App.Settings?.Save();
 
-                MessageBox.Show(owner, Loc.GetF("account_linked_success", provider),
-                    Loc.Get("account_linked_title"), MessageBoxButton.OK, MessageBoxImage.Information);
+                if (alreadyLinked && provider == "patreon")
+                {
+                    // A patron repairing a dead grant, not a first link. The server refusing the
+                    // link is the EXPECTED answer here and a modal saying "successfully linked"
+                    // reads as a lie, so this path gets its own word and no dialog to dismiss.
+                    // The tokens landed before the link call, so they are already good.
+                    App.Notifications?.Show(Loc.Get("account_patreon_reconnected"),
+                        NotificationType.Success, TimeSpan.FromSeconds(6));
+                    _ = RevalidatePatreonAfterReconnectAsync();
+                }
+                else
+                {
+                    MessageBox.Show(owner, Loc.GetF("account_linked_success", provider),
+                        Loc.Get("account_linked_title"), MessageBoxButton.OK, MessageBoxImage.Information);
+                }
                 return true;
             }
             else
@@ -484,6 +498,28 @@ public static class AccountService
         {
             App.Logger?.Error(ex, "AccountService: LinkProviderV2Async failed for {Provider}", provider);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// The validation a launch would run, run again now. StartOAuthFlowAsync already validates
+    /// once after the token exchange, so this is belt and braces rather than the only stamp - but
+    /// the reconnect is exactly the moment tier and the 14-day premium window have to come back
+    /// WITHOUT a restart, and a second forced validate is cheap next to telling a paying patron to
+    /// relaunch. Never throws: this rides on a fire-and-forget after the caller has already
+    /// returned true.
+    /// </summary>
+    private static async Task RevalidatePatreonAfterReconnectAsync()
+    {
+        try
+        {
+            if (App.Patreon == null) return;
+            var tier = await App.Patreon.ValidateSubscriptionAsync(forceRefresh: true);
+            App.Logger?.Information("AccountService: Patreon reconnect revalidated, tier {Tier}", tier);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("AccountService: Patreon reconnect revalidation failed: {E}", ex.Message);
         }
     }
 

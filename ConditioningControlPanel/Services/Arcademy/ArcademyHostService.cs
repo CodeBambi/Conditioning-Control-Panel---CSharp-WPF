@@ -282,6 +282,7 @@ internal static class ArcademyHostService
                 Mappings = mappings,
                 UserDataFolderName = "arcademy",
                 InputEnabled = true,
+                IsGame = true,   // the startup ladder goes quiet while a game is up
                 StartFullscreen = false,
                 // Native ownership rather than Topmost: plenty of things raise MainWindow (a bark,
                 // a video window closing, a tray restore) and would otherwise bury the class.
@@ -325,6 +326,7 @@ internal static class ArcademyHostService
             catch (Exception ex) { App.Logger?.Debug("ArcademyHost: minimize main window failed: {E}", ex.Message); }
 
             App.Logger?.Information("ArcademyHostService: launched");
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Arcademy);
         }
         catch (Exception ex)
         {
@@ -6068,6 +6070,7 @@ internal static class ArcademyHostService
                 try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             App.Logger?.Information("ArcademyHostService: closed");
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
         }
         finally { _disposing = false; }
     }

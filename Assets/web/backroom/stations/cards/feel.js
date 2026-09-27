@@ -64,11 +64,14 @@ export const STREAK_FROM = 3;
  * THE CALLOUT (shared/hypno/callout.js, owner 2026-09-15). A settled win names itself at FX_DELAY_MS with
  * its host fx, after the winning cards glowed (winningCards, HIGHLIGHT_GAP_MS apart in dealt order); a
  * blackjack names itself at its bloom, so its plain settle (cards.win) says nothing more. A push and a
- * loss get no callout. The next deal waits WIN_HOLD_MS from the frame the result showed.
+ * loss name themselves at the same size, on the settle frame. The next deal waits WIN_HOLD_MS from the frame the result showed.
  * ------------------------------------------------------------------------------------------ */
 export const WIN_HOLD_MS = FX_DELAY_MS + CALLOUT_MS;
 export const CALLOUTS = Object.freeze({
   'cards.win': { key: 'br_callout_winner', fallback: 'Winner', tier: 'small' },
+  // A loss and a push name themselves too (tester, 2026-09-18: a Winner with no answer for a lost hand read as inconsistent).
+  'cards.lose': { key: 'br_callout_dealer_wins', fallback: 'Dealer Wins', tier: 'small' },
+  'cards.push': { key: 'br_callout_push', fallback: 'Push', tier: 'small' },
   'cards.bloom': { key: 'br_callout_blackjack', fallback: 'Blackjack', tier: 'big' },
   'cards.dealer_bust': { key: 'br_callout_dealer_bust', fallback: 'Dealer Bust', tier: 'small' },
   'cards.streak': { key: 'br_callout_hot_hand', fallback: 'Hot Hand', tier: 'big' },

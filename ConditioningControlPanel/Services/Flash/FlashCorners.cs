@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Services.Flash;
 ///
 /// The rule: a glow flash has always worn a 12 px card radius, so that stays its baseline. Turning
 /// the Rounded corners switch on - which only counts while the account owns a Flashes v2 grant -
-/// raises every flash to 14 px, glow or not. The radius never exceeds a quarter of the shorter
+/// rounds every flash by 7% of its shorter side, glow or not. The radius never exceeds a quarter of the shorter
 /// side, so a small or thin GIF gets a soft edge instead of a lozenge.
 /// </summary>
 public static class FlashCorners
@@ -19,6 +19,8 @@ public static class FlashCorners
 
     /// <summary>Radius the Rounded corners switch asks for, in px at 96 dpi.</summary>
     public const double RoundedDip = 14.0;
+
+    public const double RoundedFraction = 0.07;
 
     /// <summary>The radius may never eat more than this fraction of the shorter side.</summary>
     public const double MaxShorterSideFraction = 0.25;
@@ -44,7 +46,8 @@ public static class FlashCorners
         if (shorterSide <= 0) return 0.0;
 
         var scale = dpiScale > 0 ? dpiScale : 1.0;
-        var radius = Math.Min(baseDip * scale, shorterSide * MaxShorterSideFraction);
+        var radius = wantRounded ? shorterSide * RoundedFraction
+            : Math.Min(baseDip * scale, shorterSide * MaxShorterSideFraction);
         return radius > 0 ? radius : 0.0;
     }
 }

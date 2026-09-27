@@ -1637,6 +1637,16 @@ namespace ConditioningControlPanel.Services
             // Blur strength is its own setting post-rework (BrainDrainIntensity is the AUDIO
             // half's trigger probability) - the visual pulse must ride the visual dial.
             var baseIntensity = settings.BrainDrainBlurStrength;
+
+            // A dial at 0 means "no picture at all", so there is nothing to pulse up FROM: adding
+            // 30 would put a blur on the screen of the one person who asked for none, and the
+            // restore five seconds later would hide the evidence.
+            if (BrainDrainVisualPolicy.IsSilent(baseIntensity))
+            {
+                App.Logger?.Debug("AutonomyService: brain drain pulse skipped - the blur dial is at 0");
+                return;
+            }
+
             var pulseIntensity = Math.Min(100, baseIntensity + 30);
 
             // Increase intensity

@@ -177,6 +177,8 @@ internal static class EmergencyExitHostService
 
             if (!preview)
             {
+                // Circe's tab: opening the exit never costs, and nothing adds while it is up.
+                try { App.Chaster?.NoteSafetyExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 try { App.Bark?.NotifyEmergencyExitOpened(_game, _attempt); }
                 catch (Exception ex) { App.Logger?.Debug("EmergencyExit: opened bark failed: {E}", ex.Message); }
             }

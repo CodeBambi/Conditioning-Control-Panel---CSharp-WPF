@@ -669,6 +669,30 @@ namespace ConditioningControlPanel.Services
         /// Trigger a one-shot flash that works even when service is not running.
         /// Used by Autonomy Mode to trigger flashes independently of engine state.
         /// </summary>
+        /// <summary>Per-window path of Natasha's red halo: the same two-pulse blink the compositor
+        /// draws as a wash, here as a flare of the DropShadow's opacity. Stopped with the window's
+        /// other animations by SafeCloseFlashWindow.</summary>
+        private static DoubleAnimationUsingKeyFrames NatashaBlink(double rest)
+        {
+            var peak = Math.Min(1.0, rest + 2.0 * Chaster.NatashasFavourite.WashPeak);
+            var p = Chaster.NatashasFavourite.PulseSec;
+            var g = Chaster.NatashasFavourite.PulseGapSec;
+            var anim = new DoubleAnimationUsingKeyFrames
+            {
+                Duration = TimeSpan.FromSeconds(Chaster.NatashasFavourite.BlinkPeriodSec),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.Zero));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(peak, TimeSpan.FromSeconds(p / 2)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.FromSeconds(p)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.FromSeconds(p + g)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(peak, TimeSpan.FromSeconds(p + g + p / 2)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.FromSeconds(p + g + p)));
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(rest, TimeSpan.FromSeconds(Chaster.NatashasFavourite.BlinkPeriodSec)));
+            anim.Freeze();
+            return anim;
+        }
+
         public void TriggerFlashOnce(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false, FlashBurstLook? look = null)
         {
             if (_isBusy)
@@ -710,7 +734,8 @@ namespace ConditioningControlPanel.Services
         /// absolute or rooted under <c>App.EffectiveAssetsPath/images</c>; passing
         /// null or empty falls back to <see cref="TriggerFlashOnce"/> behavior.
         /// </summary>
-        public void TriggerFlashOnceWithImage(string? imagePath, int durationMs, bool playSound, bool suppressHaptic = false)
+        public void TriggerFlashOnceWithImage(string? imagePath, int durationMs, bool playSound, bool suppressHaptic = false,
+            System.Windows.Point? bubbleOrigin = null, double bubbleDiameter = 0, int? size = null, int amount = 1)
         {
             if (_isBusy)
             {
@@ -725,16 +750,19 @@ namespace ConditioningControlPanel.Services
             }
 
             string resolved = imagePath!;
-            if (!System.IO.Path.IsPathRooted(resolved))
+            if (!IsRemotePath(resolved) && !System.IO.Path.IsPathRooted(resolved))
                 resolved = System.IO.Path.Combine(App.EffectiveAssetsPath ?? "", "images", resolved);
 
-            if (!System.IO.File.Exists(resolved))
+            if (!IsRemotePath(resolved) && !System.IO.File.Exists(resolved))
             {
+                // Never substitute a different picture for a face the user already saw.
+                if (bubbleOrigin != null) return;
                 App.Logger?.Debug("FlashService: TriggerFlashOnceWithImage path not found ({Path}); falling back to random", resolved);
                 TriggerFlashOnce(amount: 1, duration: durationMs);
                 return;
             }
 
+            if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
             if (string.IsNullOrEmpty(_imagesPath)) RefreshImagesPath();
 
             _isBusy = true;
@@ -743,16 +771,17 @@ namespace ConditioningControlPanel.Services
             StartHeartbeat();
 
             int oneShotGen = Volatile.Read(ref _oneShotGeneration);
-            Task.Run(() => LoadAndShowSpecificImage(resolved, durationMs, playSound, suppressHaptic, oneShotGen));
+            Task.Run(() => LoadAndShowSpecificImage(resolved, durationMs, playSound, suppressHaptic, oneShotGen, bubbleOrigin, bubbleDiameter, size, amount));
         }
 
-        private async void LoadAndShowSpecificImage(string imagePath, int durationMs, bool playSound, bool suppressHaptic = false, int? oneShotGen = null)
+        private async void LoadAndShowSpecificImage(string imagePath, int durationMs, bool playSound, bool suppressHaptic = false, int? oneShotGen = null,
+            System.Windows.Point? bubbleOrigin = null, double bubbleDiameter = 0, int? size = null, int amount = 1)
         {
             try
             {
                 var settings = App.Settings.Current;
                 var soundPath = playSound ? GetNextSound() : null;
-                var scale = settings.ImageScale / 100.0;
+                var scale = (size ?? settings.ImageScale) / 100.0;
 
                 var data = await LoadImageAsync(imagePath);
                 if (data == null)
@@ -762,13 +791,37 @@ namespace ConditioningControlPanel.Services
                 }
 
                 var monitor = PickMonitor(settings);
+                if (bubbleOrigin is { } origin)
+                {
+                    // Compare physical coordinates, including monitors with different DPI.
+                    monitor = GetMonitors().FirstOrDefault(m => new Rect(m.X * m.DpiScale,
+                        m.Y * m.DpiScale, m.Width * m.DpiScale, m.Height * m.DpiScale).Contains(origin))!;
+                    if (monitor == null) { _isBusy = false; return; }
+                }
                 var geometry = CalculateGeometry(data.Width, data.Height, monitor, scale);
+                if (bubbleOrigin is { } center)
+                {
+                    geometry.X = (int)Math.Clamp(center.X / monitor.DpiScale - geometry.Width / 2.0,
+                        monitor.X, monitor.X + Math.Max(0, monitor.Width - geometry.Width));
+                    geometry.Y = (int)Math.Clamp(center.Y / monitor.DpiScale - geometry.Height / 2.0,
+                        monitor.Y, monitor.Y + Math.Max(0, monitor.Height - geometry.Height));
+                    data.BubbleOriginPx = center;
+                    data.BubbleDiameterPx = bubbleDiameter;
+                }
                 data.Geometry = geometry;
                 data.Monitor = monitor;
+                var images = new List<LoadedImageData> { data };
+                // One pictured lead plus the rest of the user's normal burst (1-20 total).
+                foreach (var extra in await LoadImagesUntilAsync(Math.Clamp(amount, 1, 20) - 1))
+                {
+                    extra.Monitor = PickMonitor(settings);
+                    extra.Geometry = CalculateGeometry(extra.Width, extra.Height, extra.Monitor, scale);
+                    images.Add(extra);
+                }
 
                 await DispatcherHelper.RunOnUIAsync(() =>
                 {
-                    ShowImages(new List<LoadedImageData> { data }, soundPath, false, customDuration: durationMs, suppressHaptic: suppressHaptic, oneShotGen: oneShotGen);
+                    ShowImages(images, soundPath, false, customDuration: durationMs, suppressHaptic: suppressHaptic, oneShotGen: oneShotGen);
                 });
             }
             catch (Exception ex)
@@ -1271,6 +1324,7 @@ namespace ConditioningControlPanel.Services
             var clone = new LoadedImageData
             {
                 FilePath = source.FilePath,
+                ClipPath = source.ClipPath,
                 Width = source.Width,
                 Height = source.Height,
                 FrameDelay = source.FrameDelay,
@@ -1608,7 +1662,7 @@ namespace ConditioningControlPanel.Services
                 
                 for (int attempt = 0; attempt < 10; attempt++)
                 {
-                    if (imageData.IsRemix || !IsOverlapping(finalX, finalY, geom.Width, geom.Height))
+                    if (imageData.BubbleOriginPx != null || imageData.IsRemix || !IsOverlapping(finalX, finalY, geom.Width, geom.Height))
                         break;
 
                     // MUST go through PickSpawnPoint, not a raw re-randomize: this loop used to
@@ -1648,6 +1702,7 @@ namespace ConditioningControlPanel.Services
                 window.Left = finalX;
                 window.Top = finalY;
                 window.Frames = imageData.Frames;
+                window.ClipPath = imageData.ClipPath;
                 // #1194: the user's GIF speed slider, applied once here rather than per tick.
                 window.FrameDelay = ScaleFrameDelay(imageData.FrameDelay, settings.FlashGifSpeedMultiplier);
                 window.StartTime = DateTime.Now;
@@ -1745,6 +1800,16 @@ namespace ConditioningControlPanel.Services
                 var isLucky = multiplier > 1;
                 window.IsLucky = isLucky;
 
+                // Natasha's favourite: about one flash in ten wears red and is 3:00 on the tab
+                // when it shows. Never a hydra copy, a remix mirror, a v2 preview or a picture a
+                // bubble delivered (that bubble had its own roll), and only while the row can charge.
+                var natasha = hydraGeneration == 0 && !imageData.RemixMirror && !imageData.PreviewV2
+                    && imageData.BubbleOriginPx == null
+                    && App.Chaster?.CanBook(Chaster.NatashasFavourite.EventId) == true
+                    && Chaster.NatashasFavourite.Roll(_random);
+                window.IsNatasha = natasha;
+                var natashaGlow = natasha && PerformanceProfile.AllowGlow(perfTier);
+
                 if (isLucky)
                 {
                     PlayLuckyFlashSound();
@@ -1757,10 +1822,12 @@ namespace ConditioningControlPanel.Services
                 var sparkleBoostTier = App.SkillTree?.GetSparkleBoostTier() ?? 0;
                 bool glowEnabled = (App.Settings?.Current?.FlashGlowEnabled ?? true)
                                    && PerformanceProfile.AllowGlow(perfTier);
-                if (glowEnabled && (isLucky || sparkleBoostTier > 0))
+                if ((glowEnabled && (isLucky || sparkleBoostTier > 0)) || natashaGlow)
                 {
                     var glowColor = isLucky
                         ? System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00) // Gold
+                        : natashaGlow
+                        ? System.Windows.Media.Color.FromRgb(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B)
                         : System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4); // Hot pink
 
                     double blurRadius, glowOpacity;
@@ -1773,6 +1840,13 @@ namespace ConditioningControlPanel.Services
                     {
                         blurRadius = sparkleBoostTier switch { 1 => 25, 2 => 35, _ => 45 };
                         glowOpacity = sparkleBoostTier switch { 1 => 0.5, 2 => 0.6, _ => 0.7 };
+                    }
+
+                    // Natasha's red is a thin halo, under the lucky gold and the sparkle pink.
+                    if (natashaGlow && !isLucky && (sparkleBoostTier == 0 || !glowEnabled))
+                    {
+                        blurRadius = Chaster.NatashasFavourite.HaloBlurDip;
+                        glowOpacity = Chaster.NatashasFavourite.HaloOpacity;
                     }
 
                     // Cap the blur radius per tier (Quality ~24, Balanced ~18).
@@ -1829,6 +1903,7 @@ namespace ConditioningControlPanel.Services
                     window.Background = System.Windows.Media.Brushes.Transparent;
                     content = border;
                     window.GlowEffect = glowEffect;   // tracked so SafeCloseFlashWindow can stop its animations + free the native blur target
+                    if (natashaGlow && !isLucky) glowEffect.BeginAnimation(DropShadowEffect.OpacityProperty, NatashaBlink(glowOpacity));
 
                     // Host mode expands the bookkeeping rect (the gaze rect) to match the glow-expanded
                     // visual. Per-window mode must NOT resize the window here: the shell is already
@@ -1888,7 +1963,7 @@ namespace ConditioningControlPanel.Services
                     // Flashes v2: a hydra child inherits the parent's kind (its own start state
                     // is rolled at spawn); an original resolves the picker through ownership and
                     // MotionLevel. The classic and solid paths never move.
-                    window.MotionStyle = imageData.PreviewV2
+                    window.MotionStyle = imageData.BubbleOriginPx != null ? FlashMotionStyle.Still : imageData.PreviewV2
                         ? FlashMotion.Resolve(FlashMotionStyle.DriftBounce,
                             true, true, MotionFx.Level, _random)
                         : ResolveMotionStyle(settings, inheritMotion);
@@ -1968,6 +2043,8 @@ namespace ConditioningControlPanel.Services
                     ForceTopmost(window);
                 }
 
+                window.BubbleDelivery = imageData.BubbleOriginPx != null;
+
                 // PHASE F — luminance sync. One bool test when the feature is off. Runs after the
                 // visual is up so it can never delay the flash, and rides the flash's own lifetime
                 // through the mixer's auto-zero (no hide hook, so no way to leave the layer stuck).
@@ -1976,6 +2053,16 @@ namespace ConditioningControlPanel.Services
                 lock (_lockObj)
                 {
                     _activeWindows.Add(window);
+                }
+
+                // Natasha's favourite: the red one showed. +3:00 on the tab (inert unless the row is on).
+                // The pop lands on the flash itself (physical px: this rect is in the monitor's DIPs,
+                // the same convention the shared host's Place uses).
+                if (natasha)
+                {
+                    var popDpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
+                    App.Chaster?.NoteAt("natasha", new System.Windows.Point(
+                        (window.Left + window.Width / 2) * popDpi, (window.Top + window.Height / 2) * popDpi));
                 }
             }
             catch (Exception ex)
@@ -2222,6 +2309,44 @@ namespace ConditioningControlPanel.Services
             image.Clip = clip;
         }
 
+        /// <summary>
+        /// The pendulums already hanging on this monitor, for <see cref="FlashMotion.Create"/> to
+        /// hang the next one clear of. Null when there are none, which is the common case and the
+        /// one where a pendulum keeps the top centre it has always had.
+        ///
+        /// <para>Reads the state bag rather than the layer item: a burst spawns every flash in one
+        /// pass and the earlier ones are still converting frames off the dispatcher, so their
+        /// LayerItem is null and their pivots would otherwise be invisible to this one. Matched on
+        /// the whole monitor rect the motion was BUILT against (which a v2 preview narrows to a
+        /// lane), so a second screen's pendulums never crowd this one's band.</para>
+        /// </summary>
+        private List<PendulumNeighbour>? LivePendulumsOn(double bx, double by, double bw, double bh)
+        {
+            List<PendulumNeighbour>? taken = null;
+            // Under _lockObj like every other walk of this list: Stop and CloseAllWindows mutate it
+            // off this call's back, and the InvalidOperationException would be caught and logged to
+            // Debug by SpawnFlashWindow's outer try - a flash that silently never appears.
+            lock (_lockObj)
+            {
+                foreach (var w in _activeWindows)
+                {
+                    var m = w.MotionState;
+                    if (m == null || m.Style != FlashMotionStyle.Pendulum) continue;
+                    // A flash that has been DRAGGED or flung is no longer hanging from anything -
+                    // FlashDrag rewrites its style, and the bounds moves that follow it (the work
+                    // area re-clamp) no longer match the monitor rect this spawn was built from, so
+                    // it drops out of the set. That is intended: a picture under the hand is not a
+                    // pendulum and has no pivot to stay clear of. A FADING one does still count -
+                    // it is on screen until the fade ends, which is exactly when it stops mattering.
+                    if (!FlashPendulumRig.SameMonitor(m.BoundsX, m.BoundsY, m.BoundsW, m.BoundsH,
+                                                      bx, by, bw, bh)) continue;
+                    (taken ??= new List<PendulumNeighbour>())
+                        .Add(new PendulumNeighbour(m.PivotX, FlashPendulumRig.EffectivePhase(m)));
+                }
+            }
+            return taken;
+        }
+
         private FlashMotionStyle ResolveMotionStyle(AppSettings settings, FlashMotionStyle? inherit)
         {
             var picked = inherit ?? settings.FlashMotionStyle;
@@ -2273,8 +2398,8 @@ namespace ConditioningControlPanel.Services
 
             // Flashes v2: roll the motion here on the UI thread (MotionFx.Level, _random) before the
             // off-thread conversion. The spawn monitor converts to world px like the window rect;
-            // a pendulum re-homes under the monitor's top centre and the rope is clamped on screen.
-            // Authored previews stay in a peripheral lane instead of crossing the active game.
+            // a pendulum hangs clear of the ones already on that monitor and the rope is clamped on
+            // screen. Authored previews stay in a peripheral lane instead of crossing the active game.
             double bx = monitor.X * dpi, by = monitor.Y * dpi, bw = monitor.Width * dpi, bh = monitor.Height * dpi;
             if (imageData.PreviewV2)
             {
@@ -2284,9 +2409,15 @@ namespace ConditioningControlPanel.Services
             FlashMotionState? motionState = motion == FlashMotionStyle.Still ? null
                 : FlashMotion.Create(motion, x, y, w, h,
                     bx, by, bw, bh,
-                    MotionFx.Level, _random);
+                    MotionFx.Level, _random,
+                    motion == FlashMotionStyle.Pendulum ? LivePendulumsOn(bx, by, bw, bh) : null);
 
             if (imageData.PreviewV2 && motionState != null) { motionState.Vx *= .35; motionState.Vy *= .35; }
+            // Kept on the state bag from the moment it is rolled, not only once the layer item
+            // exists: in a burst the flashes before this one are still converting frames off the
+            // dispatcher and have no LayerItem yet, and they are exactly the neighbours the next
+            // pendulum has to hang clear of. The layer item takes this very instance.
+            window.MotionState = motionState;
             window.LayerSpawnPending = true;
 
             _ = Task.Run(() =>
@@ -2321,7 +2452,13 @@ namespace ConditioningControlPanel.Services
                     {
                         window.LayerSpawnPending = false;
                         if (frames == null)
-                            return;   // conversion failed — the heartbeat sweeps the itemless window
+                        {
+                            // Conversion failed - the heartbeat sweeps the itemless window. Drop
+                            // the motion with it: a pendulum with no picture would go on reserving
+                            // its pivot against the next spawn until the sweep came round.
+                            window.MotionState = null;
+                            return;
+                        }
 
                         // The flash may have been clicked away, expired or torn down (Stop /
                         // CloseAllWindows) while converting — dispose instead of spawning.
@@ -2337,6 +2474,13 @@ namespace ConditioningControlPanel.Services
                         window.LayerItem = layer.Spawn(frames, x, y, w, h,
                             paddingPx, cornerRadiusPx, skGlowColor, glowSigmaPx,
                             glowOpacity, luckyPulse, motionState);
+                        window.LayerItem.NatashaCue = window.IsNatasha;
+                        if (imageData.BubbleOriginPx is { } origin)
+                        {
+                            window.LayerItem.BubbleOriginPx = origin;
+                            window.LayerItem.BubbleDiameterPx = imageData.BubbleDiameterPx;
+                            window.LayerItem.EntranceMotion = MotionFx.Level;
+                        }
                         frames = null;   // ownership transferred — FlashLayer.Remove disposes them
 
                         if (window.IsClickable)
@@ -2903,6 +3047,8 @@ namespace ConditioningControlPanel.Services
                     // quantiser, not the frame rate, is what bounds its writes.
                     var cheapAlpha = window.UsesHost;
                     var winFadeSeconds = ResolveFadeSeconds(fadeSeconds, fullRamp: cheapAlpha || window.UsesLayer);
+                    if (window.BubbleDelivery && showThisWindow)
+                        winFadeSeconds = window.UsesLayer || MotionFx.Level == MotionLevel.Off ? 0 : .18;
                     var fadeStep = winFadeSeconds > 0 ? dt / winFadeSeconds : 1.0;
 
                     var currentAlpha = cheapAlpha ? window.VisualOpacity : window.FadeAlpha;
@@ -2944,6 +3090,18 @@ namespace ConditioningControlPanel.Services
                         window.Top = moving.Y / d;
                         window.Width = moving.W / d;
                         window.Height = moving.H / d;
+                    }
+
+                    if (window.ClipPath != null && window.ClipPlayer == null && !window.ClipAttempted
+                        && (window.LayerItem != null || window.ImageControl != null))
+                    {
+                        window.ClipAttempted = true;
+                        window.ClipPlayer = FlashClipPlayer.Start(window.ClipPath, window.Frames[0].PixelWidth,
+                            window.Frames[0].PixelHeight, frame =>
+                            {
+                                if (window.LayerItem is { } item) item.SetClipFrame(frame);
+                                else if (window.ImageControl != null) window.ImageControl.Source = frame;
+                            }, App.Settings?.Current.FlashGifSpeedMultiplier ?? 1);
                     }
 
                     // Animate GIF frames
@@ -3508,9 +3666,8 @@ namespace ConditioningControlPanel.Services
         /// rather than file paths — consumers must route those through
         /// <see cref="LoadRemoteStillForOverlayAsync"/> and must not run any file-shaped probe
         /// (<c>File.Exists</c>, <c>FileInfo.Length</c>, <c>AnimatedWebp.IsAnimated</c>) on one.
-        /// <see cref="IsRemotePath"/> is the test. Remote entries NEVER animate (owner decision
-        /// B2: the provider has no usable GIFs), so a consumer that treats them as stills is
-        /// correct, not degraded.
+        /// <see cref="IsRemotePath"/> is the test. Animated consumers use LoadRemoteFaceAsync;
+        /// still overlays can borrow the clip poster through LoadRemoteStillForOverlayAsync.
         /// </summary>
         public List<string> GetChaosImagePaths(int count)
         {
@@ -3654,30 +3811,10 @@ namespace ConditioningControlPanel.Services
 
         #region Remote media (Phase 3 - Contract 2)
 
-        // Remote stills as a THIRD flash pool, next to disk images and content-pack images.
-        // The draw in GetNextImages was already a weighted choice between two pools, so this
-        // extends it rather than running a parallel pipeline - one place decides where a flash
-        // comes from, which is the only way the ratio, the disabled set and the fallbacks stay
-        // consistent with each other.
-        //
-        // STILLS ONLY, and that is not a temporary limitation (planning/remote-media B2, owner
-        // decision 2). Scrolller has no usable GIFs: its "GIF" filter means "animated content"
-        // and delivers webm/mp4 with STATIC webp/jpg posters - six of those posters were
-        // byte-checked and are plain VP8 with no ANIM chunk, so even the SKCodec path cannot
-        // animate them. Local GIF flashes keep animating; remote ones never will. Do not add a
-        // webm path here.
-        //
-        // A REMOTE FLASH NEVER WAITS ON THE NETWORK. The ready pool only ever contains URLs
-        // whose bytes are already resident in RemoteMediaCache, warmed by the background
-        // prefetch below. If a URL falls out of the cache before it is drawn it is dropped from
-        // the pool instead of re-fetched on the flash's critical path, and if the pool is empty
-        // the draw silently falls through to the local pools - a remote source that is down
-        // must look like "the user has no remote content", never like broken flashes.
-        //
-        // The paths this pool yields ARE the https URLs. A sentinel scheme was the alternative,
-        // but the raw URL degrades better everywhere a flash path leaks: Path.GetExtension
-        // still reports ".webp", File.Exists is simply false, and the media-history preview
-        // (BitmapImage.UriSource) actually renders it.
+        // Online clips are a third pool beside disk and pack images. Scrolller's GIF
+        // feed supplies silent WebM/MP4; posters cover decoder startup and budget fallback.
+        // Clips are materialized before entering the ready pool. Each draw consumes a URL,
+        // and selection generations prevent stale downloads repopulating a changed pool.
 
         /// <summary>Consumer id for the flash tenant in the coordinator registry. Its own
         /// rotation state and dwell store, so flashes and the For You feed cannot fight over
@@ -3687,22 +3824,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>Warm the pool up to here. Deliberately just under RemoteMediaCache's
         /// 64-entry cap: a bigger ready pool would mostly be URLs the cache had already
         /// evicted, which TryTakeRemoteUrl would then discard on the way out.</summary>
-        private const int RemoteReadyTarget = 24;
+        private const int RemoteReadyTarget = 12;
 
         /// <summary>Hard ceiling on the ready pool (URL strings only - the bytes are bounded
         /// by RemoteMediaCache, not by this).</summary>
-        private const int RemoteReadyMax = 60;
+        private const int RemoteReadyMax = 24;
 
         /// <summary>Minimum gap between batch fetches. ScrolllerSource is already throttled to
         /// ~1 req/s process-wide; this stops a flash-heavy preset from queueing behind that
         /// gate faster than it drains.</summary>
-        private const int RemotePrefetchGapSeconds = 8;
+        private const int RemotePrefetchGapSeconds = 1;
 
         /// <summary>URLs whose bytes are ALREADY in RemoteMediaCache. Guarded by
         /// <see cref="_remoteLock"/>, never by <see cref="_lockObj"/>: the prefetch runs on a
         /// background thread and must never be able to block a draw. Lock order is
         /// _lockObj -> _remoteLock, and nothing on the remote side ever takes _lockObj.</summary>
-        private readonly List<string> _remoteReady = new();
+        private readonly RemoteFlashPool _remoteReady = new();
         private readonly object _remoteLock = new();
         private bool _remoteFetchInFlight;
         private DateTime _remoteLastFetchUtc = DateTime.MinValue;
@@ -3752,8 +3889,19 @@ namespace ConditioningControlPanel.Services
         /// on a fetch. Cheap enough to call on every draw: three field reads when the pool is
         /// already full or a fetch is in flight.
         /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Path, string Poster)> RemoteClips = new();
+
+        private void RefreshRemoteSelection()
+        {
+            lock (_remoteLock)
+            {
+                if (_remoteReady.Select(RemoteFlashChannels())) _remoteLastFetchUtc = DateTime.MinValue;
+            }
+        }
+
         private void EnsureRemotePrefetch()
         {
+            RefreshRemoteSelection();
             if (!RemoteFlashesEnabled()) return;
 
             lock (_remoteLock)
@@ -3782,15 +3930,21 @@ namespace ConditioningControlPanel.Services
                 var ct = _remoteCts.Token;
                 if (ct.IsCancellationRequested) return;
 
-                // GifStill, not Image and not Any: flash images fetch scrolller's GIF filter
-                // ONLY (owner decision 2026-08-12, matching the web's GalleryFilter usage) and
-                // the source maps each GIF post to its still poster — so this surface still
-                // only ever receives renderable image entries, and a video entry reaching the
-                // pool (a black flash) stays impossible.
-                var coordinator = FypOnlineCoordinator.For(RemoteConsumerId, RemoteFlashChannels, FeedMediaKind.GifStill);
-                var (entries, error) = await coordinator.FetchBatchAsync(ct).ConfigureAwait(false);
+                int generation;
+                lock (_remoteLock) generation = _remoteReady.Generation;
+                var coordinator = FypOnlineCoordinator.For(RemoteConsumerId, RemoteFlashChannels, FeedMediaKind.GifClip);
+                var entries = new List<Fyp.FypAssetManifest.Entry>();
+                string? error = null;
+                // Small portions from several channels prevent one page dominating the pool.
+                for (int batch = 0; batch < 3; batch++)
+                {
+                    var result = await coordinator.FetchBatchAsync(ct).ConfigureAwait(false);
+                    entries.AddRange(result.Entries.Take(4));
+                    error = result.Error;
+                    if (ct.IsCancellationRequested) return;
+                }
 
-                if (error != null)
+                if (error != null && entries.Count == 0)
                 {
                     // Transport failure. The coordinator is already backing the channel off; all
                     // this surface has to do is keep whatever is still warm and stay quiet.
@@ -3807,23 +3961,27 @@ namespace ConditioningControlPanel.Services
                     lock (_remoteLock) full = _remoteReady.Count >= RemoteReadyMax;
                     if (full) break;
 
-                    if (!RemoteMediaFormats.Validate(entry, FeedMediaKind.Image, out var reason))
+                    if (!RemoteMediaFormats.Validate(entry, FeedMediaKind.GifClip, out var reason))
                     {
                         App.Logger?.Debug("FlashService: dropped remote entry {Id}: {Reason}", entry?.Id, reason);
                         continue;
                     }
 
-                    // Download now, on this background thread, so the draw later is a pure
-                    // memory read. A failure here just means this one still never joins the pool.
-                    if (!await RemoteMediaCache.PrefetchAsync(entry.Url, ct).ConfigureAwait(false)) continue;
-
+                    var url = entry.SmallUrl ?? entry.Url;
+                    if (string.IsNullOrEmpty(entry.PosterUrl)) continue;
+                    var path = await RemoteMediaCache.MaterializeAsync(url, ct).ConfigureAwait(false);
+                    if (path == null) continue;
+                    if (!await RemoteMediaCache.PrefetchAsync(entry.PosterUrl, ct).ConfigureAwait(false))
+                    { RemoteMediaCache.ReleaseTempFile(path); continue; }
+                    RefreshRemoteSelection();
                     lock (_remoteLock)
                     {
-                        if (!_remoteReady.Contains(entry.Url))
-                        {
-                            _remoteReady.Add(entry.Url);
-                            warmed++;
-                        }
+                        if (generation != _remoteReady.Generation) { RemoteMediaCache.ReleaseTempFile(path); return; }
+                        if (RemoteClips.Count >= 512)
+                            foreach (var key in RemoteClips.Keys.Take(128))
+                                if (RemoteClips.TryRemove(key, out var old)) RemoteMediaCache.ReleaseTempFile(old.Path);
+                        RemoteClips[url] = (path, entry.PosterUrl);
+                        if (_remoteReady.Add(generation, url)) warmed++;
                     }
                 }
 
@@ -3831,7 +3989,7 @@ namespace ConditioningControlPanel.Services
                 {
                     int ready;
                     lock (_remoteLock) ready = _remoteReady.Count;
-                    App.Logger?.Information("FlashService: warmed {Warmed} remote still(s), {Ready} ready", warmed, ready);
+                    App.Logger?.Information("FlashService: warmed {Warmed} remote clip(s), {Ready} ready", warmed, ready);
                 }
             }
             catch (OperationCanceledException) { } // swallow: teardown
@@ -3848,28 +4006,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>Ready-pool size, for the draw's "is there anything at all" checks.</summary>
         private int RemoteReadyCount()
         {
-            lock (_remoteLock) return _remoteReady.Count;
+            lock (_remoteLock) return _remoteReady.Available;
         }
 
         /// <summary>
-        /// A remote URL that is still resident in the byte cache, or null. Drawn WITH
-        /// replacement, like both local pools. Anything the cache has since evicted is dropped
-        /// from the pool here rather than handed out - that is what keeps the promise that a
-        /// remote flash never waits on the network.
+        /// Consume a ready clip URL. Missing materialized files are discarded.
+        /// Consuming draws lets prefetch rotate through the remaining selected channels.
         /// Caller must hold <see cref="_lockObj"/> (this reads <see cref="_random"/>).
         /// </summary>
         private string? TryTakeRemoteUrl()
         {
+            RefreshRemoteSelection();
             lock (_remoteLock)
             {
-                while (_remoteReady.Count > 0)
-                {
-                    int index = _random.Next(_remoteReady.Count);
-                    var url = _remoteReady[index];
-                    if (RemoteMediaCache.IsCached(url)) return url;
-                    _remoteReady.RemoveAt(index);
-                }
-                return null;
+                Func<string, bool> usable = url =>
+                    RemoteClips.TryGetValue(url, out var clip) && File.Exists(clip.Path);
+                return _remoteReady.Take(_random, usable) ?? _remoteReady.TakeShown(usable);
             }
         }
 
@@ -3907,6 +4059,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private async Task<LoadedImageData?> LoadRemoteImageAsync(string url, int decodeMax)
         {
+            if (RemoteClips.ContainsKey(url)) return await LoadRemoteFaceAsync(url, decodeMax, true);
             try
             {
                 // A bounded wait even though the bytes should already be resident: if the entry
@@ -3973,16 +4126,16 @@ namespace ConditioningControlPanel.Services
 
         /// <param name="allowAnimated">False for the single-bitmap overlay caller, which only ever
         /// reads frame 0 - decoding a whole GIF there would be pure waste.</param>
-        private static LoadedImageData? DecodeRemoteStill(string url, Stream stream, int decodeMax, bool allowAnimated = true)
+        internal static LoadedImageData? DecodeRemoteStill(string url, Stream stream, int decodeMax, bool allowAnimated = true)
         {
             var data = new LoadedImageData { FilePath = url };
 
-            // #1007: an ANIMATED remote GIF gets the same SKCodec frame decode (and the same frame
+            // Animated remote GIF/WebP gets the same SKCodec frame decode (and the same frame
             // budget: decodeMax edge, <=60 frames, <=30MB kept) as a local one in LoadGifFrames,
-            // via the stream overload. Sniffed from the bytes because the URL usually carries no
-            // usable extension. Still/single-frame GIFs return null here and fall through to the
+            // via the stream overload. SKCodec detects the format because remote URLs often
+            // have no usable extension. Still/single-frame GIFs return null here and fall through to the
             // WIC still path below, exactly like the local loader's fallback.
-            if (allowAnimated && StreamLooksLikeGif(stream))
+            if (allowAnimated)
             {
                 try
                 {
@@ -4149,6 +4302,12 @@ namespace ConditioningControlPanel.Services
         /// <param name="decodeMax">Cap on the longest edge of the decoded bitmap.</param>
         internal static async Task<BitmapSource?> LoadRemoteStillForOverlayAsync(string url, int decodeMax)
         {
+            var data = await LoadRemoteFaceAsync(url, decodeMax, false).ConfigureAwait(false);
+            return data != null && data.Frames.Count > 0 ? data.Frames[0] : null;
+        }
+
+        internal static async Task<LoadedImageData?> LoadRemoteFaceAsync(string url, int decodeMax, bool animate)
+        {
             try
             {
                 // Bounded even though this should be a pure memory read: if the entry was evicted
@@ -4158,16 +4317,18 @@ namespace ConditioningControlPanel.Services
                 // is static — the overlays are static singletons and hold no service reference.
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-                using var stream = await RemoteMediaCache.OpenAsync(url, cts.Token).ConfigureAwait(false);
+                bool isClip = RemoteClips.TryGetValue(url, out var clip);
+                using var stream = await RemoteMediaCache.OpenAsync(isClip ? clip.Poster : url, cts.Token).ConfigureAwait(false);
                 if (stream == null) return null;
 
                 // CPU-bound; the stream stays alive for it because this await is inside the using.
                 Stream captured = stream;
                 int max = Math.Clamp(decodeMax, 64, 4096);
-                var data = await Task.Run(() => DecodeRemoteStill(url, captured, max, allowAnimated: false)).ConfigureAwait(false);
+                var data = await Task.Run(() => DecodeRemoteStill(url, captured, max, allowAnimated: animate)).ConfigureAwait(false);
 
+                if (data != null && isClip && animate) data.ClipPath = clip.Path;
                 // Frozen by DecodeRemoteStill, so it is safe to hand across to the UI thread.
-                return data != null && data.Frames.Count > 0 ? data.Frames[0] : null;
+                return data;
             }
             catch (OperationCanceledException) { return null; }
             catch (Exception ex)
@@ -4427,17 +4588,18 @@ namespace ConditioningControlPanel.Services
             // saved string can differ from the runtime relative path by separator or case
             // (Windows is case-insensitive at the filesystem level), causing the unchecked
             // image to slip through the filter.
-            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
+            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0 || App.Settings?.Current?.DisabledAssetFolders.Count > 0)
             {
                 var basePath = App.EffectiveAssetsPath;
                 static string Norm(string p) => p.Replace('\\', '/');
                 var disabled = new HashSet<string>(
                     App.Settings.Current.DisabledAssetPaths.Select(Norm),
                     StringComparer.OrdinalIgnoreCase);
+                var folders = App.Settings.Current.DisabledAssetFolders.ToArray();
                 files = files.Where(f =>
                 {
                     var relativePath = Norm(Path.GetRelativePath(basePath, f));
-                    return !disabled.Contains(relativePath);
+                    return !disabled.Contains(relativePath) && !AssetFolderExclusion.IsUnderAny(relativePath, folders);
                 }).ToList();
             }
 
@@ -4464,6 +4626,7 @@ namespace ConditioningControlPanel.Services
             {
                 _imageList.Clear();  // forces RefreshImageLists() on the next draw
                 _packImageList.Clear();
+                lock (_remoteLock) { _remoteReady.Clear(); _remoteLastFetchUtc = DateTime.MinValue; }
                 _soundQueue = new Queue<string>();
 
                 lock (_cacheLock)
@@ -4714,6 +4877,10 @@ namespace ConditioningControlPanel.Services
                     window.ImageControl.Source = null;
                     window.ImageControl = null;
                 }
+                window.ClipPlayer?.Dispose();
+                window.ClipPlayer = null;
+                window.ClipPath = null;
+                window.ClipAttempted = false;
                 window.Frames.Clear();
 
                 // Stop the glow's animations BEFORE dropping the content. A lucky proc starts
@@ -4751,6 +4918,9 @@ namespace ConditioningControlPanel.Services
                         if (shatter != null) _flashLayer?.BeginShatter(item, shatter);
                         else _flashLayer?.Remove(item);
                     }
+                    // Dropped with the item: a dead pendulum must not keep reserving its pivot
+                    // against the next one (LivePendulumsOn walks the live windows).
+                    window.MotionState = null;
                     window.IsFadingOut = false;
                     // The state bag is still a real Window: constructing it registered it in
                     // Application.Windows, and only Close() removes it — returning without a
@@ -5014,6 +5184,14 @@ namespace ConditioningControlPanel.Services
         public FlashMotionStyle MotionStyle { get; set; }
 
         /// <summary>
+        /// Flashes v2, compositor only: the motion this spawn rolled, from the moment it was
+        /// rolled. The layer item takes the same instance, so this is the LIVE state while the
+        /// flash is up - and it exists during the off-thread frame conversion, which LayerItem
+        /// does not. FlashService.LivePendulumsOn reads it to hang the next pendulum clear.
+        /// </summary>
+        public FlashMotionState? MotionState { get; set; }
+
+        /// <summary>
         /// Flashes v2 wave 2, compositor only: true when THIS teardown is a hand dismissing the
         /// flash rather than its timer running out, a one-shot being retired or the run stopping.
         /// Set by OnFlashClicked immediately before the close and read once, in
@@ -5049,6 +5227,10 @@ namespace ConditioningControlPanel.Services
         /// (see FlashService.ShouldWriteAlpha) - reading the window's own Opacity back as "current"
         /// would stall the ramp on every frame whose step lands under the epsilon.
         /// </summary>
+        internal FlashClipPlayer? ClipPlayer;
+        internal string? ClipPath;
+        internal bool ClipAttempted;
+        public bool BubbleDelivery { get; set; }
         public double FadeAlpha { get; set; }
 
         /// <summary>
@@ -5143,6 +5325,8 @@ namespace ConditioningControlPanel.Services
         /// Whether this flash triggered a lucky proc (golden glow effect)
         /// </summary>
         public bool IsLucky { get; set; }
+        /// <summary>Natasha's favourite: wears the red cue and booked 3:00 when it showed.</summary>
+        public bool IsNatasha { get; set; }
 
         /// <summary>
         /// Drives a subtle inflate effect on the flash content during Focus
@@ -5181,6 +5365,7 @@ namespace ConditioningControlPanel.Services
 
     internal class LoadedImageData
     {
+        internal string? ClipPath;
         public string FilePath { get; set; } = "";
         public List<BitmapSource> Frames { get; } = new();
         public int Width { get; set; }
@@ -5194,6 +5379,8 @@ namespace ConditioningControlPanel.Services
         public bool RemixMirror { get; set; }
         public bool Peripheral { get; set; }
         public bool PreviewV2 { get; set; }
+        public System.Windows.Point? BubbleOriginPx { get; set; }
+        public double BubbleDiameterPx { get; set; }
     }
 
     internal class ImageGeometry

@@ -129,7 +129,6 @@ export function createCasinoDecor({ scene }) {
   let time = 0;
   return {
     root,
-    setOverview(on) { canopy.visible = !on; },
     update(dt, still) {
       if (still) return;
       time += Math.min(.05, Math.max(0, dt));

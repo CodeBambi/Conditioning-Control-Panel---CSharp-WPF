@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cardValue, rankLabel, suitOf, totalOf, readHand, readState, legalOf, defaultStake, controls, classify, createIntent, mayRetry,
-  moveBody, owedFor, shownSp, RETRY,
+  moveBody, owedFor, shownSp, flightValue, RETRY,
 } from '../hand.js';
 
 const open = { id: 'h_1_x', step: 0, stake: 1, dealer: ['9d'], hands: [{ cards: ['Th', '4c'], bet: 1, done: false, doubled: false, split: false, total: 14, soft: false }],
@@ -99,3 +99,16 @@ test('LAW I: a settled return is owed until it shows, never beyond what was cred
   assert.equal(shownSp(42, 4), 38); assert.equal(shownSp(2, 4), 0);
 });
 
+test("THE BANK's flight value: only a real number pins the chip, null releases it", () => {
+  assert.equal(flightValue(null), null, 'Number(null) is 0 and finite, so null must be tested first');
+  assert.equal(flightValue(undefined), null);
+  assert.equal(flightValue(''), null, 'Number("") is 0 too');
+  assert.equal(flightValue('  '), null);
+  assert.equal(flightValue(NaN), null);
+  assert.equal(flightValue(Infinity), null);
+  assert.equal(flightValue([]), null, 'Number([]) is 0');
+  assert.equal(flightValue(0), 0, 'a genuine zero balance still pins');
+  assert.equal(flightValue(42), 42);
+  assert.equal(flightValue('42'), null, 'only a real number pins it');
+  assert.equal(flightValue(41.6), 42);
+});

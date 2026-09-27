@@ -12,8 +12,9 @@ namespace ConditioningControlPanel
     /// </summary>
     public static class CoreModsHooks
     {
-        /// <summary>The brain's turn log resets on a mod switch.</summary>
-        public static volatile Action? ModSwitched;
+        /// <summary>The brain's turn log resets on a mod switch. The argument is the new
+        /// companion's name when the switch changed persona, otherwise null.</summary>
+        public static volatile Action<string?>? ModSwitched;
 
         /// <summary>The bark rules reload when a built-in mod's content is replaced in place.</summary>
         public static volatile Action? ReloadBarkRules;

@@ -44,6 +44,7 @@ public static class AssetPresetService
         if (preset == null) return null;
 
         s.DisabledAssetPaths = new HashSet<string>(preset.DisabledAssetPaths ?? new HashSet<string>());
+        s.DisabledAssetFolders = new HashSet<string>(preset.DisabledAssetFolders ?? new HashSet<string>());
         preset.LastUsed = DateTime.Now;
         s.CurrentAssetPresetId = preset.Id;
         return preset;

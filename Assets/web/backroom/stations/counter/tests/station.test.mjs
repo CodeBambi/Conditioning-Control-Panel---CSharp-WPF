@@ -47,8 +47,12 @@ test('Back is on screen before state answers; Escape stands up; hostBack hides t
   const hosted = room({ on: '*' });
   const hs = await mount(hosted.ctx);
   await hs.open();
-  assert.ok(hosted.root.all('counter-back').every((b) => b.hidden));
+  // In the room the header chip stays drawn in the room's corner (one Back for every station, 2026-09-18) and
+  // shared/back.css hides #br-back under it; the closed card's own Back still defers to the host.
+  assert.ok(hosted.root.all('counter-back').every((b) => !b.hidden));
+  assert.ok(hosted.root.all('counter-closed-back').every((b) => b.hidden));
   assert.equal(hosted.root.one('counter-station').dataset.hostBack, '');
+  assert.equal(hosted.root.one('counter-station').dataset.ownBack, '');
   hs.destroy();
 });
 

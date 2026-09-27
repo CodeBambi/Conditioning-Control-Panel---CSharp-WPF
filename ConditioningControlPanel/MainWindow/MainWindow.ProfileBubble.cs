@@ -204,12 +204,25 @@ namespace ConditioningControlPanel
                     _profileBubblePhotoBrush = null;
                 }
 
+                RefreshProfileBubbleTierBadge();
+
                 if (ProfileBubblePopup?.IsOpen == true) RefreshProfileMenu();
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("RefreshProfileBubble: {E}", ex.Message);
             }
+        }
+
+        /// <summary>Basic / Prime badge on the bubble's rim, from the canonical gates.</summary>
+        private void RefreshProfileBubbleTierBadge()
+        {
+            if (ProfileBubbleTierBadge == null) return;
+            var patreon = App.Patreon;
+            var tier = patreon?.HasLabAccess == true ? 2 : patreon?.HasPremiumAccess == true ? 1 : 0;
+            var art = tier > 0 ? Controls.TierBadge.TierArt(tier) : null;
+            ProfileBubbleTierBadge.Source = art;
+            ProfileBubbleTierBadge.Visibility = art != null ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private static readonly SolidColorBrush ProfileBubbleNeutralBrush = MakeFrozenBrush(0x3D, 0x3D, 0x60);

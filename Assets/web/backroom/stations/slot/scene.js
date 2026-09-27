@@ -358,7 +358,9 @@ export async function createScene(o) {
   }
   function paint(t, force = false) {
     for (let r = 0; r < 3; r++) {
-      const n = strips[r].length || 1, c = reelCanvas[r], ctx = c.getContext('2d');
+      const n = strips[r].length || 1, c = reelCanvas[r];
+      if (!c) continue;
+      const ctx = c.getContext('2d');
       let dirty = false; const changed = [];
       for (let j = 0; j < strips[r].length; j++) {
         const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
@@ -405,7 +407,7 @@ export async function createScene(o) {
     owned.push(...reelTex);
     paint(performance.now(), true);
   }
-  setStrips([]);
+  // Keep the room's painted reels until the authoritative strip arrives.
   // Keep the final dealt picture on the very same room mesh after standing up.
   // The copied canvas owns no media element and replaces only this cabinet's map image.
   if(shared) retainReels=()=>{
@@ -540,11 +542,13 @@ export async function createScene(o) {
     return { play, arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6, band, closeSeat };
   }
   const aim = (pos, lookAt) => { camera.position.copy(pos); camera.lookAt(lookAt); };
+  let sharedSize = '';
   function resize() {
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+    cancelPull();
     if (shared) {
-      const stretch=shared.fixture.userData.slotStretch||1,nextWidth=CELL.hw*(shared.fixture.userData.slotStretchX||1)/stretch;
-      if(Math.abs(nextWidth-cell.hw)>.01){cell={...CELL,hw:nextWidth};CW=cell.hh*2;CH=cell.hw*2;setStrips(strips);}
+      const stretch=shared.fixture.userData.slotStretch||1,nextWidth=Math.max(1,Math.round(CELL.hw*(shared.fixture.userData.slotStretchX||1)/stretch));
+      if(Math.abs(nextWidth-cell.hw)>.01){cell={...CELL,hw:nextWidth};CW=cell.hh*2;CH=cell.hw*2;if(reelTex.some(Boolean))setStrips(strips);}
       const look = get('cam_target').getWorldPosition(new THREE.Vector3());
       const forward = new THREE.Vector3(0,0,1).transformDirection(rig.matrixWorld);
       poses = { play:{pos:camera.position.clone(),look,dist:camera.position.distanceTo(look),right:new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),forward)}, band:null, closeSeat:false, drop:0 };
@@ -1091,7 +1095,14 @@ export async function createScene(o) {
   if (!shared) rig.position.y = -poses.drop;
   if (!shared) aim(poses.arrive.pos, poses.arrive.look);
   setFace('idle0_0');
-  if (shared) releaseView = shared.register({ update:() => { try { update(performance.now()); } catch(err) { if(look.gif){look={...look,gif:null};setStrips(strips);} else if(!frameFailed)console.error('[slot] shared frame failed',err); frameFailed=true; } } });
+  if (shared) releaseView = shared.register({ update:() => { try {
+    // The room can settle its viewport after the browser's resize event. Read its
+    // final shape here, before painting controls or handling the next touch.
+    if (shared.ready) {
+      const key = [canvas.clientWidth, canvas.clientHeight, shared.fixture.userData.slotStretch, shared.fixture.userData.slotStretchX].join('|');
+      if (key !== sharedSize) { resize(); sharedSize = key; }
+    }
+    update(performance.now()); } catch(err) { if(look.gif){look={...look,gif:null};setStrips(strips);} else if(!frameFailed)console.error('[slot] shared frame failed',err); frameFailed=true; } } });
   else raf = requestAnimationFrame(loop);
 
   return {

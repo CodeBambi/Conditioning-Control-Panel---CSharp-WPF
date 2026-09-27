@@ -462,6 +462,8 @@ namespace ConditioningControlPanel
                     return;
                 StopEngine();
             }
+            // Circe's bill holds the exit for a few seconds, then calls back in here.
+            if (TryShowExitBill(() => BtnExit_Click(sender, e))) return;
             _exitRequested = true;
             EnsureSessionRestoredForExit();
             SaveSettings();

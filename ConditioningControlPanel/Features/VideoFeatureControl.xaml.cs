@@ -324,7 +324,9 @@ namespace ConditioningControlPanel.Features
                     else return;
                 }
 
-                App.Video?.TriggerVideo();
+                // userInitiated: a guard that stands this video down (today the For You feed) must
+                // say so rather than leave the button looking broken (#1239).
+                App.Video?.TriggerVideo(userInitiated: true);
             }
             catch (Exception ex)
             {

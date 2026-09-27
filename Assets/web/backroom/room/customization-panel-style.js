@@ -1,5 +1,5 @@
 export const catalogueStyle=`
-body:has(.br-custom-panel:not([hidden])) :is(.br-hint,.br-crosshair,.br-sp,.br-bell){visibility:hidden}
+body:has(.br-custom-panel:not([hidden])) :is(.br-hint,.br-crosshair,.br-prompt,.br-sp,.br-bell){visibility:hidden}
 body:has(.br-custom-panel:not([hidden])) .br-nav{right:calc(50vw + 12px)}
 .br-custom-panel{position:fixed;right:0;top:0;bottom:0;width:50vw;z-index:30;display:flex;flex-direction:column;box-sizing:border-box;color:#f7e5ef;font:13px/1.35 "Segoe UI",system-ui,sans-serif;pointer-events:auto}
 .br-custom-panel:before{content:"";position:absolute;left:-5px;top:0;bottom:0;width:7px;z-index:5;background:#f3d5a0;border:2px solid #160b21;transform:rotate(1deg);pointer-events:none}

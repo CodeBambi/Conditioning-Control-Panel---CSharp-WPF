@@ -593,6 +593,18 @@
                                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
                                                         <TextBlock Text="🎤 Surprise me with mantras" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"/>
                                                         <TextBlock x:Name="TxtAutonomyVoiceHint" x:FieldModifier="internal" Text="{loc:Str takeover_voice_hint_off}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}"/>
+                                                        <!-- Only up while the hint is about a MISSING or unloadable model
+                                                             (MainWindow.Autonomy.cs owns that). The instruction used to be a
+                                                             path nobody could find, so this opens it and creates it on the way. -->
+                                                        <Button x:Name="BtnAutonomyOpenModels" x:FieldModifier="internal"
+                                                                Content="{loc:Str btn_open_models_folder}" Visibility="Collapsed"
+                                                                HorizontalAlignment="Left" Margin="0,5,0,0"
+                                                                Style="{DynamicResource OutlineButton}"
+                                                                BorderBrush="{StaticResource TabHueBorderBrush}"
+                                                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                FontSize="11" Padding="9,3"
+                                                                ToolTip="{loc:Str tooltip_open_models_folder}"
+                                                                Click="BtnAutonomyOpenModels_Click"/>
                                                     </StackPanel>
                                                     <CheckBox Grid.Column="1" x:Name="ChkAutonomyVoice" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
                                                               VerticalAlignment="Center" Checked="ChkAutonomyVoice_Changed" Unchecked="ChkAutonomyVoice_Changed"/>

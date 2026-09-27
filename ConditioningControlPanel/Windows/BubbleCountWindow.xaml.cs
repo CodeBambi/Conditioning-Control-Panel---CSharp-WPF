@@ -548,6 +548,8 @@ namespace ConditioningControlPanel
                     VerticalAlignment = VerticalAlignment.Stretch,
                     Background = Brushes.Black
                 };
+                // The letterbox is the native static control, not WPF: paint it black (#1258).
+                VideoHostBlackFill.Attach(this);
                 VideoDiag.Log("BUBBLE", $"win[{tag}]: VideoView built +{sw.ElapsedMilliseconds}ms");
 
                 // The player is built by VideoService under _libVLCLock, registered for wedge

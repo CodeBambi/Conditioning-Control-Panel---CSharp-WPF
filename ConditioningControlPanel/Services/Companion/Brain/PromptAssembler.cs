@@ -186,6 +186,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly Func<DateTime> _localClock;
         private readonly Func<IReadOnlyList<(string Title, string Url)>> _linkPool;
         private readonly Func<DateTime?> _personaFence;
+        private readonly Func<DateTime?> _identityFence;
         private readonly Func<string?> _lockdownContext;
 
         /// <param name="systemPromptProvider">
@@ -200,11 +201,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// <param name="personaFence">The persona-switch fence moment
         /// (<see cref="Models.AppSettings.PersonaVoiceFenceUtc"/>); injectable for tests. Null
         /// (no value) means no fence.</param>
+        /// <param name="identityFence">The companion-CHANGED fence moment
+        /// (<see cref="Models.AppSettings.PersonaIdentityFenceUtc"/>); injectable for tests.</param>
         public PromptAssembler(IMemoryStore memory, RecentRecommendations recommendations,
             Func<string>? systemPromptProvider = null, Func<DateTime>? localClock = null,
             Func<IReadOnlyList<(string Title, string Url)>>? linkPool = null,
             Func<DateTime?>? personaFence = null,
-            Func<string?>? lockdownContext = null)
+            Func<string?>? lockdownContext = null,
+            Func<DateTime?>? identityFence = null)
         {
             // Deliberately NOT `?? new MemoryStore()`. The production MemoryStore constructor is not
             // inert — it loads memory.json, starts a MemorySignalWriter and registers a shutdown
@@ -217,12 +221,19 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _localClock = localClock ?? (() => DateTime.Now);
             _linkPool = linkPool ?? DefaultLinkPool;
             _personaFence = personaFence ?? DefaultPersonaFence;
+            _identityFence = identityFence ?? DefaultIdentityFence;
             _lockdownContext = lockdownContext ?? DefaultLockdownContext;
         }
 
         private static DateTime? DefaultPersonaFence()
         {
             try { return App.Settings?.Current?.PersonaVoiceFenceUtc; }
+            catch { return null; }
+        }
+
+        private static DateTime? DefaultIdentityFence()
+        {
+            try { return App.Settings?.Current?.PersonaIdentityFenceUtc; }
             catch { return null; }
         }
 
@@ -291,6 +302,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// and the model needs the conversational thread), and <see cref="TurnKind.BarkEcho"/>
         /// lines are kept (they are her scripted recorded voice, true regardless of preset — and
         /// dropping them would break the "never contradict what you said aloud" rule).</para>
+        ///
+        /// <para>A mod switch that changes the COMPANION, not just the preset, is the harder case
+        /// and gets the harder cut: <see cref="Models.AppSettings.PersonaIdentityFenceUtc"/> takes
+        /// every pre-switch turn off the wire whatever its role, because a window still opening
+        /// with the user's "hi Circe, ..." reads to a small model as one unbroken conversation with
+        /// Circe and it answers as Circe under the new prompt (Kathryn, 2026-09-14).</para>
         /// </summary>
         internal IReadOnlyList<CompanionTurn> FenceHistoryToPersona(IReadOnlyList<CompanionTurn> window)
         {
@@ -299,13 +316,27 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             DateTime? fence;
             try { fence = _personaFence(); }
             catch { return window; }
-            if (fence == null) return window;
+
+            DateTime? identityFence;
+            try { identityFence = _identityFence(); }
+            catch { identityFence = null; }
+
+            if (fence == null && identityFence == null) return window;
 
             var kept = new List<CompanionTurn>(window.Count);
-            int dropped = 0;
+            int dropped = 0, cut = 0;
             foreach (var turn in window)
             {
-                if (turn.Kind is (TurnKind.AssistantChat or TurnKind.AmbientReply) && turn.Utc < fence.Value)
+                // The companion themselves changed: everything said to or by the old one goes,
+                // including the user's own lines. See PersonaSwitchRules.
+                if (!PersonaSwitchRules.SurvivesIdentityFence(turn.Utc, identityFence))
+                {
+                    cut++;
+                    continue;
+                }
+                if (fence != null
+                    && turn.Kind is (TurnKind.AssistantChat or TurnKind.AmbientReply)
+                    && turn.Utc < fence.Value)
                 {
                     dropped++;
                     continue;
@@ -313,10 +344,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 kept.Add(turn);
             }
 
-            if (dropped == 0) return window;
+            if (dropped == 0 && cut == 0) return window;
             App.Logger?.Information(
-                "[AI-PROMPT] persona fence dropped {Dropped} pre-switch assistant turn(s) from the wire window",
-                dropped);
+                "[AI-PROMPT] persona fence dropped {Dropped} pre-switch assistant turn(s) and cut {Cut} turn(s) from before a companion change",
+                dropped, cut);
             return kept;
         }
 

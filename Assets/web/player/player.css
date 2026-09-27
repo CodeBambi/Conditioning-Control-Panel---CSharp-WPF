@@ -48,12 +48,11 @@ body.hide-cursor * {
   z-index: 1;
 }
 
-/* Blurred fill behind a letterboxed clip. scale(1.1) hides the transparent
-   edge bleed that a 40px blur pulls in from outside the frame. */
+/* Blurred fill behind a letterboxed clip. The canvas is ~1/20 of the screen and
+   already blurred and dimmed when it is painted (player.js paintBackdrop), so
+   stretching it is the rest of the blur and costs the GPU nothing per frame. */
 #bg {
   object-fit: cover;
-  filter: blur(40px) brightness(0.7);
-  transform: scale(1.1);
   z-index: 0;
   display: none;
 }

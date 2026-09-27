@@ -291,3 +291,32 @@ html:has(.slot-station[data-shared-room]) body .br-nav { left:120px; }
   html:has(.slot-station[data-shared-room]) body .br-nav { top:64px;left:12px; }
   html:has(.slot-station[data-shared-room]) #__opt-btn { top:64px !important;left:auto !important;right:12px !important; }
 }
+
+/* "KEEP PLAYING" (freeplay.js, desk tester 2026-09-18). The choice sits over the Spin key, the honest line
+   over that: "Free play, nothing to win" is on the cabinet's face before the press, never only after it. A
+   landing hold (data-hold) softens the ending copy - the status, the state note, the comp chip - and the key's
+   own "spins left" line is blank for the same window (station.js sync), back on the idle screen. */
+.slot-keep { position: absolute; z-index: 4; right: 22px; bottom: calc(max(18px, var(--br-sill, 0px)) + 58px); min-width: 120px;
+  min-height: 32px; padding: 6px 14px; font-size: 11px; letter-spacing: .4px; border-radius: 30px; }
+.slot-freeplay { position: absolute; z-index: 4; right: 22px; bottom: calc(max(18px, var(--br-sill, 0px)) + 98px); max-width: 200px;
+  padding: 4px 10px; border-radius: 30px; background: #201229e8; border: 1px solid #ffcf6b66; color: #ffe3f2; font-size: 11px;
+  line-height: 1.3; text-align: center; pointer-events: none; }
+.slot-station[data-hold] :is(.slot-status, .slot-state-note, .slot-comp) { opacity: .28; transition: opacity .3s ease-out; }
+@media (max-width: 800px) {
+  .slot-keep { right: 12px; bottom: calc(max(12px, var(--br-sill, 0px)) + 52px); min-width: 96px; }
+  .slot-freeplay { right: 12px; bottom: calc(max(12px, var(--br-sill, 0px)) + 90px); max-width: 160px; font-size: 10px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .slot-station .slot-keep { right: 10px; bottom: calc(max(10px, var(--br-sill, 0px)) + 42px); min-width: 104px; min-height: 28px; padding: 4px 10px; font-size: 10px; }
+  .slot-station .slot-freeplay { right: 10px; bottom: calc(max(10px, var(--br-sill, 0px)) + 76px; max-width: 150px; font-size: 10px; }
+}
+/* In the shared room the Spin key is projected at 80% down the middle: the choice hangs under it, the line under that. */
+.slot-station[data-shared-room] .slot-keep { left: 50%; right: auto; bottom: auto; top: calc(80% + 50px); transform: translateX(-50%);
+  min-width: 0; min-height: 26px; height: 26px; padding: 3px 10px; font-size: 10px; }
+.slot-station[data-shared-room] .slot-keep:active { transform: translate(-50%, 2px); }
+.slot-station[data-shared-room] .slot-freeplay { left: 50%; right: auto; bottom: auto; top: calc(80% + 82px); transform: translateX(-50%);
+  white-space: nowrap; max-width: none; font-size: 10px; padding: 3px 8px; }
+@media (max-height: 500px) and (orientation: landscape) {
+  .slot-station[data-shared-room] .slot-keep { top: calc(80% + 32px); min-height: 22px; height: 22px; padding: 1px 8px; font-size: 9px; }
+  .slot-station[data-shared-room] .slot-freeplay { top: calc(80% + 58px); font-size: 9px; }
+}

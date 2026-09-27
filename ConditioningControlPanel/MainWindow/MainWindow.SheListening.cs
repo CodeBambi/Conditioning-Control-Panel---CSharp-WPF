@@ -448,6 +448,13 @@ namespace ConditioningControlPanel
             // is open", not "a device exists" - armed. Everything else leaves it a still disc.
             SetSheListeningStatusPulse(armed);
 
+            // The folder button rides with the status line, so it is up exactly while that line is
+            // about a model. Decided on EVERY path: a mic arriving, or a model finally loading,
+            // has to take it away again.
+            if (SheListeningTab.BtnSL_OpenModels != null)
+                SheListeningTab.BtnSL_OpenModels.Visibility =
+                    !available && SpeechModelIsTheProblem() ? Visibility.Visible : Visibility.Collapsed;
+
             if (!available)
             {
                 SheListeningTab.SL_StatusDot.Fill = new SolidColorBrush(Color.FromRgb(0x5A, 0x4A, 0x6A));

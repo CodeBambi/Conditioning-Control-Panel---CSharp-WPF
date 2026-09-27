@@ -694,6 +694,38 @@ namespace ConditioningControlPanel.Views.Tabs
         /// lives only in RackEntryStyle's Height setter, so there is one owner of it.</summary>
         private const double ActiveTileHeight = 56;
 
+        /// <summary>The checked tile caption's right inset: enough room for the state dot.</summary>
+        internal const double TileLabelInset = 26;
+
+        /// <summary>Where the checked tile's v2 pill is right-anchored, just inside the dot's slot.</summary>
+        internal const double TilePillInset = 24;
+
+        /// <summary>Clear air between the caption's last glyph (or its ellipsis) and the pill.</summary>
+        internal const double TileLabelGap = 8;
+
+        /// <summary>
+        /// Holds the checked tile's caption off the v2 pill while the pill is worn, and gives the
+        /// room straight back when it is not - so an account owning nothing keeps the full caption
+        /// width it has always had.
+        ///
+        /// <para>The tile has no columns: caption, pill and dot are three right-anchored children
+        /// over one picture, so the caption's own inset is the only thing holding it off the pill.
+        /// The pill is MEASURED rather than allowed for by a hand-counted number - it is two
+        /// glyphs of 7px bold inside four paddings and a border, and the day someone renames the
+        /// badge or bumps the type a guessed constant silently stops clearing it.</para>
+        /// </summary>
+        internal static void ApplyTileCaptionInset(Border? pill, TextBlock? label, bool worn)
+        {
+            if (label == null) return;
+            var inset = TileLabelInset;
+            if (worn && pill != null)
+            {
+                pill.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                inset = TilePillInset + pill.DesiredSize.Width + TileLabelGap;
+            }
+            label.Margin = new Thickness(12, 0, inset, 0);
+        }
+
         /// <summary>
         /// The resting row: art (or emoji) chip | caption | state dot.
         ///
@@ -823,6 +855,12 @@ namespace ConditioningControlPanel.Views.Tabs
             // column trick as the NEW pill above: a column of its own on THIS row only, and the
             // dot still takes the last column. Built collapsed; RefreshV2Pills lights it from
             // ownership, on load and again whenever a prize lands.
+            //
+            // THE DOT GETS ITS OWN COLUMN TOO (Tock, tier2 2026-09-19: "V2 showing under the LED
+            // indicator"). Both used to resolve to ColumnDefinitions.Count - 1, which is the SAME
+            // column once this block has added one - and the state dot, added second, drew on top
+            // of the pill. Flash and Bubble Pop are the only rows that carry both, and they are
+            // exactly the two rows the v2 prizes badge.
             if (V2PillFamily(e.Key) != null)
             {
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -835,6 +873,10 @@ namespace ConditioningControlPanel.Views.Tabs
 
             if (e.Dot != null)
             {
+                // Its own column, always: a row with a NEW or a v2 pill has already taken the
+                // one that was last, and two children in one Auto column stack rather than sit
+                // side by side.
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 e.DotShape = new Ellipse
                 {
                     Width = 7,
@@ -842,8 +884,6 @@ namespace ConditioningControlPanel.Views.Tabs
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(6, 0, 2, 0),
                 };
-                // Last column, not a fixed 2: the NEW pill above inserts a column on the row
-                // it badges (v6.8.0). Unbadged rows still resolve to 2.
                 Grid.SetColumn(e.DotShape, grid.ColumnDefinitions.Count - 1);
                 grid.Children.Add(e.DotShape);
             }
@@ -916,7 +956,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 Foreground = Brushes.White,
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                Margin = new Thickness(12, 0, 26, 0),
+                Margin = new Thickness(12, 0, TileLabelInset, 0),
             };
             tile.Children.Add(e.TileLabel);
 
@@ -924,7 +964,7 @@ namespace ConditioningControlPanel.Views.Tabs
             // caption keeps its room. See RefreshV2Pills.
             if (V2PillFamily(e.Key) != null)
             {
-                e.TileV2Pill = Features.FeatureCard.NewV2Badge(new Thickness(0, 0, 24, 0), compact: true);
+                e.TileV2Pill = Features.FeatureCard.NewV2Badge(new Thickness(0, 0, TilePillInset, 0), compact: true);
                 e.TileV2Pill.HorizontalAlignment = HorizontalAlignment.Right;
                 e.TileV2Pill.VerticalAlignment = VerticalAlignment.Center;
                 e.TileV2Pill.Visibility = Visibility.Collapsed;
@@ -1473,7 +1513,11 @@ namespace ConditioningControlPanel.Views.Tabs
                 if (fam == null) continue;
                 var vis = (fam == "flash" ? flash : bubbles) ? Visibility.Visible : Visibility.Collapsed;
                 if (e.V2Pill != null) e.V2Pill.Visibility = vis;
-                if (e.TileV2Pill != null) e.TileV2Pill.Visibility = vis;
+                if (e.TileV2Pill != null)
+                {
+                    e.TileV2Pill.Visibility = vis;
+                    ApplyTileCaptionInset(e.TileV2Pill, e.TileLabel, vis == Visibility.Visible);
+                }
             }
         }
 
