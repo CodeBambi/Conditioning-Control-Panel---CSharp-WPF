@@ -20,13 +20,53 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.11.1";
+        public const string AppVersion = "6.11.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.11.1 - Locktober
+        public const string CurrentPatchNotes = @"v6.11.2 - Locktober
+
+NEW IN 6.11.2: TWO NEW GAMES
+
+BREAKOUT
+- a brick breaker that starts grey and earns its colour. break enough and the whole screen breaks out: pictures, music, juice.
+- the music and the hits share one key and one beat, so every bounce lands on the song.
+- Story: eight walls, each with its own twist (a tide, a spiral dome, swinging weights, an eye that watches back), and an ending.
+- Endless: new boards dealt forever, mixing every Story twist, plus portals. anything that touches a portal comes out the other one: balls, shots, power-ups, pictures.
+- the longer a rally lasts, the faster the ball gets. lose your last ball and it calms down again.
+- two ways in:
+  - Breakout Demo: free for everyone, no account needed. the first three Story walls.
+  - Breakout: tier 2. all eight walls, the ending, and Endless.
+- both are on the launcher and on Play, marked NEW. it has its own volume sliders.
+
+PIECE BY PIECE
+- chess, with pieces that have a lot of personality. every capture is a little show, and no two pieces take the same way.
+- play the computer at three levels (Relaxed, Club, Sharp), with or without a clock, or play online.
+- Classic keeps it clean. Distraction lets the board get in the way: a slow turn and a spiral starts eating the squares until only the grid is left.
+- the crowd reacts to real play: applause, gasps, whistles.
+- every game can be replayed move by move from the results card.
+- free for everyone. playing the computer needs nothing at all, not even an account. playing online needs you signed in.
+- on the launcher and on Play, marked NEW.
+
+CIRCE'S TAB
+- the lock line on top is now a little Chaster card: your lock, its time left, and one click to open it on chaster.app (or to make a lock there if you have none).
+- the Pause button shows its name. it was an empty oval before.
+
+FRIENDS
+- pokes, invites and friend requests pop in the corner, not only in the drawer.
+
+FIXES
+- Stop can no longer freeze the app while the audio shuts down.
+- the session recap waits for a lock card or a pop quiz to finish instead of opening under it.
+- AI Effect Control keeps your setting when your tier cannot be checked for a moment.
+- launcher cards update right after a mod switch or an unlock.
+- Strict Lock holds in Bubble Count during Lockdown.
+- Customise remembers the companion look for each mod.
+- mouse back and forward buttons move between tabs.
+- a file from Just For You opens straight away.
+- Sort pays a small bonus for a fast finish.
 
 NEW IN 6.11.1
 
@@ -102,7 +142,7 @@ FIXES
 - Racing Thoughts: Esc pauses instead of closing the game, and a BambiCloud level opens behind the game and starts when you press play.
 - the log says why Lovense or the local AI failed.
 
-full nerd changelog in pull requests 1501 through 1729.";
+full nerd changelog in pull requests 1501 through 1759.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
