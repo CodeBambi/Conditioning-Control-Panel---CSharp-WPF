@@ -39,6 +39,13 @@
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.2" />
   </ItemGroup>
 
+  <!-- Keincheck: an MCP server inside the running app so an AI agent can inspect and drive the
+       real UI (tree, properties, clicks, screenshots) on http://127.0.0.1:3001. Debug only - a
+       server that can click and type in the app has no business in a Release build. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <PackageReference Include="Keincheck" Version="0.12.0" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- The ported palette keeps the .xaml extension it has in the WPF head, so a diff against
          ConditioningControlPanel/Resources/Theme/ stays readable. The SDK only globs *.axaml,

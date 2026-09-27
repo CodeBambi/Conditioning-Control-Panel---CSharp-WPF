@@ -1,5 +1,8 @@
 using System;
 using Avalonia;
+#if DEBUG
+using Keincheck;
+#endif
 
 namespace ConditioningControlPanel.Avalonia
 {
@@ -75,7 +78,13 @@ namespace ConditioningControlPanel.Avalonia
             if (Array.IndexOf(args, "--x11-probe") >= 0)
                 return X11OverlayProbe.Run();
 
-            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            var app = BuildAvaloniaApp();
+#if DEBUG
+            // Keincheck MCP server on http://127.0.0.1:3001, Debug builds only. Kept out of
+            // BuildAvaloniaApp so the XAML previewer does not start a second server.
+            app = app.UseMcpServer();
+#endif
+            app.StartWithClassicDesktopLifetime(args);
             return 0;
         }
 
