@@ -159,6 +159,10 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Mouse back / forward (MainWindow.TabHistory.cs). After the three window keys above,
+            // which never change the tab on screen.
+            NoteTabHistory(tab);
+
             // Bark hook: announce navigation (gated/chanced in the rules so it isn't spammy).
             // Routed through BarkTabAliases so renamed tabs keep answering to their old bark key.
             try
