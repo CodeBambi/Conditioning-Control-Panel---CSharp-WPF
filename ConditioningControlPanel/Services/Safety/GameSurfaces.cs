@@ -51,6 +51,8 @@ internal static class GameSurfaces
         new("dtrh", () => Chaos.DtrhHostService.IsActive, Chaos.DtrhHostService.CloseActive),
         new("arcademy", () => Arcademy.ArcademyHostService.IsActive, Arcademy.ArcademyHostService.CloseActive),
         new("backroom", () => BackRoom.BackRoomHostService.IsActive, () => BackRoom.BackRoomHostService.CloseActive("panic")),
+        new("breakoutdemo", () => BackRoom.BackRoomHostService.IsBreakoutDemoActive, () => BackRoom.BackRoomHostService.CloseActive("panic")),
+        new("breakout", () => BackRoom.BackRoomHostService.IsBreakoutFullActive, () => BackRoom.BackRoomHostService.CloseActive("panic")),
         new("fyp", () => Fyp.FypHostService.IsActive, Fyp.FypHostService.Close),
         new("justdrop", () => JustDrop.JustDropHostService.IsActive, JustDrop.JustDropHostService.CloseActive),
         // The four the two copies had missed. Racing Thoughts is the reported one; the other three

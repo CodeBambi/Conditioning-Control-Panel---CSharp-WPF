@@ -194,6 +194,10 @@ internal static class BackRoomHostService
     private static bool _disposing;
     private static bool _openingRace;
     private static bool _racePage;
+    private static bool _breakoutPage, _breakoutDemo, _lastFullAccess;
+    private static DispatcherTimer? _accessWatch;
+    private static PatreonService? _accessPatreon;
+    private static SubscribeStarService? _accessSubscribeStar;
     private static int _roomGeneration;
     private static bool _panicSuspended;
     private static bool _minimised;
@@ -215,6 +219,10 @@ internal static class BackRoomHostService
     }
 
     public static bool IsActive => _host != null;
+    public static bool IsRoomActive => _host != null && !_breakoutPage;
+    internal static bool IsBreakoutActive => _host != null && _breakoutPage;
+    internal static bool IsBreakoutDemoActive => IsBreakoutActive && _breakoutDemo;
+    internal static bool IsBreakoutFullActive => IsBreakoutActive && !_breakoutDemo;
 
     /// <summary>
     /// What a signed-out Launch does instead of opening the room: the account sign-in. Settable so
@@ -229,16 +237,23 @@ internal static class BackRoomHostService
     /// friends drawer, the launcher), so the sign-in gate lives here once. The room's balance,
     /// stations and prizes are the account's; a signed-out room could only fail at every table.
     /// </summary>
-    public static void Launch()
+    public static void Launch() => LaunchCore(null);
+    internal static void LaunchBreakout(bool demo) => LaunchCore(demo);
+
+    private static void LaunchCore(bool? breakoutDemo)
     {
-        if (_host != null) { _host.FocusWeb(); return; }
-        if (Launcher.LauncherCatalogue.NeedsAccount)
+        if (_host != null && _breakoutPage == breakoutDemo.HasValue &&
+            (!breakoutDemo.HasValue || _breakoutDemo == breakoutDemo.Value)) { _host.FocusWeb(); return; }
+        if (!breakoutDemo.HasValue && Launcher.LauncherCatalogue.NeedsAccount)
         {
             App.Logger?.Information("BackRoomHostService: refused, nobody is signed in");
             try { RequestSignIn(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom sign-in"); }
             return;
         }
-        try { App.EmiDesk?.NoteOpen("backroom"); } catch (Exception ex) { Diag.Swallowed(ex); }
+        if (_host != null) DisposeAll();
+        _breakoutPage = breakoutDemo.HasValue;
+        _breakoutDemo = breakoutDemo == true;
+        try { if (!_breakoutPage) App.EmiDesk?.NoteOpen("backroom"); } catch (Exception ex) { Diag.Swallowed(ex); }
 
         try
         {
@@ -272,7 +287,7 @@ internal static class BackRoomHostService
 
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
             {
-                StartUrl = StartUrl,
+                StartUrl = _breakoutPage ? BreakoutHostService.StartUrl : StartUrl,
                 PrimaryHost = "ccp.game",
                 Mappings = mappings,
                 UserDataFolderName = "backroom",
@@ -281,7 +296,7 @@ internal static class BackRoomHostService
                 StartFullscreen = false,
                 OwnedByMainWindow = true,
                 CenterOnMainWindow = true,
-                WindowTitle = ProductName,
+                WindowTitle = _breakoutPage ? "Breakout" : ProductName,
                 LogTag = "BackRoom",
                 ExtraBrowserArguments = BrowserArguments + DebugBrowserArguments(),
                 OnReady = () => _bridge?.OnReady(),
@@ -361,6 +376,7 @@ internal static class BackRoomHostService
 
     private static void OnRoomMessage(JObject message)
     {
+        if (_breakoutPage && (string?)message["type"] == "game-open") return;
         if ((string?)message["type"] != "game-open") { _bridge?.Handle(message); return; }
         if ((string?)message["game"] != "race" || _openingRace) return;
         string? refusal = !RacingAccess.CanLaunch ? "locked" : CaucusHostService.IsActive ? "busy" : null;
@@ -487,6 +503,8 @@ internal static class BackRoomHostService
             type = "init",
             protocol = BackRoomBridge.Protocol,
             racingTracks = RacingAccess.OwnedTracks,
+            breakout = BreakoutAccess.Current(_breakoutPage && _breakoutDemo),
+            breakoutStandalone = _breakoutPage,
             sp = s?.SkillPoints ?? 0,
             reduced = motion != Models.MotionLevel.Full,
             invertLook = s?.BackRoomInvertLook ?? false,
@@ -511,6 +529,8 @@ internal static class BackRoomHostService
         return new
         {
             type = "settings", motion = MotionWire(motion), intensity = IntensityWire(s, motion),
+            breakout = BreakoutAccess.Current(_breakoutPage && _breakoutDemo),
+            breakoutStandalone = _breakoutPage,
             reduced = motion != Models.MotionLevel.Full, gates = GatesWire(s), intensityChoice = IntensityChoiceWire(s),
             invertLook = s?.BackRoomInvertLook ?? false,
             media = MediaWire(s), audio = AudioWire(s),
@@ -573,6 +593,7 @@ internal static class BackRoomHostService
 
     private static void HookSettings(bool on)
     {
+        HookBreakoutAccess(on);
         try
         {
             if (_hookedSettings != null) _hookedSettings.PropertyChanged -= OnSettingChanged;
@@ -598,6 +619,7 @@ internal static class BackRoomHostService
     private static void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_bridge == null || sender is not Models.AppSettings s) return;
+        if (e.PropertyName is nameof(Models.AppSettings.UnifiedId)) PushBreakoutAccess();
         if (e.PropertyName == nameof(Models.AppSettings.SkillPoints)) _bridge.OnSpChanged(s.SkillPoints, "earn");
         if (e.PropertyName != null && SettingsFrameProperties.Contains(e.PropertyName)) _bridge.PushSettings(SettingsMessage());
         // The pool is keyed to a niche selection, so a selection change makes everything in it stale. The
@@ -616,6 +638,34 @@ internal static class BackRoomHostService
         }
     }
 
+    private static void HookBreakoutAccess(bool on)
+    {
+        _accessWatch?.Stop(); _accessWatch = null;
+        if (_accessPatreon != null) _accessPatreon.TierChanged -= OnBreakoutTierChanged;
+        if (_accessSubscribeStar != null) _accessSubscribeStar.TierChanged -= OnBreakoutTierChanged;
+        _accessPatreon = null; _accessSubscribeStar = null;
+        if (!on) return;
+        _lastFullAccess = BreakoutAccess.FullAllowed;
+        _accessPatreon = App.Patreon; _accessSubscribeStar = App.SubscribeStar;
+        if (_accessPatreon != null) _accessPatreon.TierChanged += OnBreakoutTierChanged;
+        if (_accessSubscribeStar != null) _accessSubscribeStar.TierChanged += OnBreakoutTierChanged;
+        // Quiet grace expiry and cached grants do not always raise a provider event.
+        _accessWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _accessWatch.Tick += (_, _) => PushBreakoutAccess();
+        _accessWatch.Start();
+    }
+
+    private static void OnBreakoutTierChanged(object? sender, Models.PatreonTier tier)
+        => OnUi(PushBreakoutAccess);
+
+    private static void PushBreakoutAccess()
+    {
+        if (_host == null || _bridge == null) return;
+        var allowed = BreakoutAccess.FullAllowed;
+        if (allowed == _lastFullAccess) return;
+        _lastFullAccess = allowed;
+        _bridge.PushSettings(SettingsMessage());
+    }
     private static void DisposeAll()
     {
         if (_disposing) return;
@@ -627,6 +677,7 @@ internal static class BackRoomHostService
             _bridge?.CloseNow();
             if (_racePage) CaucusHostService.DetachFromRoom();
             _racePage = false;
+            _breakoutPage = _breakoutDemo = false;
             HookSettings(false);
             BackRoomFxServices.Viewport = null;
             var host = _host;
