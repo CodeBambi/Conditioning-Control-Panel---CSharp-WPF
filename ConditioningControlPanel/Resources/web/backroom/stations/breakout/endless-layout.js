@@ -1,3 +1,4 @@
+import { PORTAL_FAMILIES, populatePortalBoard } from './portal-layout.js';
 import { createPendulums, advancePendulum, curtainPose } from './pendulum.js';
 import { tidePose, TIDE_COLS } from './tide.js';
 import { REFORM_WORDS, reformLayout } from './reform.js';
@@ -23,8 +24,8 @@ export function seededRandom(seed) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
-function deck(seed, cycle) {
-  const rng = seededRandom(`${seed}:deck:${cycle}`), a = [...FAMILIES];
+function deck(seed, cycle, families=FAMILIES) {
+  const rng = seededRandom(`${seed}:deck:${cycle}`), a = [...families];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]];
   }
@@ -33,6 +34,13 @@ function deck(seed, cycle) {
 function familyAt(seed, index) {
   if (index % 4 === 3) return 'cascade';
   if (index === 0) return FAMILIES[0];
+  if (index >= 10) {
+    const seat=index-Math.floor((index+1)/4)-8, cycle=Math.floor(seat/10);
+    const extended=n=>n===0?[...PORTAL_FAMILIES,...deck(seed,0)]:deck(seed,`portal:${n}`,[...FAMILIES,...PORTAL_FAMILIES]);
+    const a=extended(cycle), previous=cycle?extended(cycle-1).at(-1):deck(seed,0).at(-1);
+    if(a[0]===previous)[a[0],a[1]]=[a[1],a[0]];
+    return a[seat%a.length];
+  }
   const seat = index - Math.floor((index + 1) / 4) - 1;
   const cycle = Math.floor(seat / FAMILIES.length), a = deck(seed, cycle);
   const previous = cycle ? deck(seed, cycle - 1).at(-1) : FAMILIES[0];
@@ -95,6 +103,7 @@ export function endlessBoard(seed, index, w = 1280, h = 720) {
     }
   };
 
+  if (PORTAL_FAMILIES.includes(kind)) return populatePortalBoard(board,{w,h,rng,add,hinges});
   if (kind === 'pendulum-orbit') {
     board.name = 'Slingshot garden'; board.mechanics = ['dome', 'pendulums']; board.dome = true;
     hinges();

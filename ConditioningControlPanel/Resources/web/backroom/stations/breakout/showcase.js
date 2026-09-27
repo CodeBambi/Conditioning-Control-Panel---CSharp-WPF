@@ -8,9 +8,9 @@ import {createShowcasePilot} from './showcase-pilot.js';
 
 const $=s=>document.querySelector(s), canvas=$('canvas');
 const scenes=[
- {from:0,title:'SLINGSHOT GARDEN',warmup:30,duration:18,launchX:.44},
- {from:2,title:'TIDAL CHIMES',warmup:25,duration:18,launchX:.5},
- {from:5,title:'MOVING MANTRA',warmup:3,duration:24,launchX:.5},
+ {from:13,title:'DEMOLITION EXPRESS',warmup:13,duration:12,launchX:.32},
+ {from:12,title:'SPIRAL DELIVERY',warmup:12,duration:14,launchX:.78},
+ {from:10,title:'BACKDOOR',warmup:0,duration:12,launchX:.38},
 ];
 const words=['BREATHE','RELAX','SOFT','FOCUS','STILL','DEEPER'];
 const names=['cheer','giggle','flirt','adoring','blowkiss','entrancing','sultry','praise'];
@@ -19,7 +19,7 @@ const audio=createAudio({bpm:96});
 audio.setMix('bed',.42);audio.setMix('sfx',.6);audio.setMix('word',0);
 let game=null,renderer=null,pilot=null,elapsed=0,shown=0,acc=0,last=0,selected=0,paused=false,sound=false,warming=false,captionUntil=0,captionPriority=0;
 const DT=1/120;
-const captions={pendulumAnchorHit:['Hinge taking damage',1],pendulumRelease:['Hinge broken. The demolition ball is free.',3],demolitionCapture:['Caught by the spiral...',4],demolitionLaunch:['Launched toward the next hinge.',5],reform:['The surviving bricks gather into a new word.',2],capture:['The spiral catches the ball.',1],spiral:['Back into the board.',1],split:['One ball becomes several.',2]};
+const captions={pendulumAnchorHit:['Hinge taking damage',1],pendulumRelease:['Hinge broken. The demolition ball is free.',3],demolitionCapture:['Caught by the spiral...',4],demolitionLaunch:['The spiral launches the weight back into the bricks.',5],reform:['The surviving bricks gather into a new word.',2],capture:['The spiral catches the ball.',1],spiral:['Back into the board.',1],split:['One ball becomes several.',2]};
 function onEvent(name,data={}){
  if(warming||!game)return;
  renderer?.onGameEvent(name,data);
@@ -31,7 +31,7 @@ function onEvent(name,data={}){
   if(name==='pendulumRelease')audio.pendulumRelease({x:(data.x??640)/1280});
   if(name==='metronome')audio.metronome(data.accent);
  }
- const c=captions[name];
+ const c=name==='portalTransit' ? [{ball:'Through the portal, behind the wall.',powerup:'The portal carries the power-up across.',pop:'A falling payload takes the portal.',bubble:'A picture bubble crosses intact.',demolition:'The freed weight takes the portal toward the spiral.',laser:'The laser takes the shortcut.'}[data.kind] || 'Through the portal.',3] : captions[name];
  if(c&&(shown>=captionUntil||c[1]>=captionPriority)){
   $('#caption').textContent=c[0];captionUntil=shown+(c[1]>=3?3:1.8);captionPriority=c[1];
  }
