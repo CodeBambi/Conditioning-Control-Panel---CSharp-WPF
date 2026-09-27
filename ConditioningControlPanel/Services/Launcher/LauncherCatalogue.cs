@@ -224,11 +224,11 @@ public static class LauncherCatalogue
 
         G("breakoutdemo", null, "●", Tile(0x8C, 0xF5, 0xC8), Always, Never,
             () => BackRoom.BreakoutHostService.LaunchDemo(),
-            () => BackRoom.BreakoutHostService.IsActive, requiresAccount: false, isNew: true);
+            () => BackRoom.BackRoomHostService.IsBreakoutDemoActive, requiresAccount: false, isNew: true);
         G("breakout", null, "●", Tile(0x55, 0xB7, 0xFF), Always,
             () => !BackRoom.BreakoutAccess.FullAllowed,
             () => BackRoom.BreakoutHostService.LaunchFull(),
-            () => BackRoom.BreakoutHostService.IsActive, isNew: true);
+            () => BackRoom.BackRoomHostService.IsBreakoutFullActive, isNew: true);
 
         // Racing Thoughts: a Back Room unlock since 2026-09-18. Without a track the tile is the
         // mystery card pointing at the counter; the entry stays Available so a shortcut still

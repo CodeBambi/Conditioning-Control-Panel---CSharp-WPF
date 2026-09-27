@@ -404,7 +404,7 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     {
         StopApp();
         var settings = App.Settings?.Current;
-        var sub = (settings?.BackRoomSubVolume ?? 100) / 100.0f;
+        var sub = BackRoomHostService.SubVolume(settings, BackRoomHostService.IsBreakoutActive) / 100.0f;
         var volume = (float)Math.Pow(Math.Clamp(sub, 0f, 1f), 1.5);
         if (volume <= 0f) return false;   // a deliberate mute: the host still owns the word, it is just silent
         var handle = App.Audio?.PlayOneShot(path, volume, "br-word");

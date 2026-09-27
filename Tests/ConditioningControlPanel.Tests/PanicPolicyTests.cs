@@ -507,7 +507,9 @@ public class PanicPolicyTests
     [InlineData("chaos", "App.Chaos?.IsDescending == true")]
     [InlineData("dtrh", "Chaos.DtrhHostService.IsActive")]
     [InlineData("arcademy", "Arcademy.ArcademyHostService.IsActive")]
-    [InlineData("backroom", "BackRoom.BackRoomHostService.IsActive")]
+    [InlineData("backroom", "BackRoom.BackRoomHostService.IsRoomActive")]
+    [InlineData("breakoutdemo", "BackRoom.BackRoomHostService.IsBreakoutDemoActive")]
+    [InlineData("breakout", "BackRoom.BackRoomHostService.IsBreakoutFullActive")]
     [InlineData("fyp", "Fyp.FypHostService.IsActive")]
     [InlineData("justdrop", "JustDrop.JustDropHostService.IsActive")]
     // Sep 19 2026: the four the two hand-written copies of this list had missed, which is how
