@@ -92,7 +92,8 @@ export async function mount(ctx) {
   let shutdownCover = null, officeEnding = null;
   let menuOpen = true, flavourOpen = false;
   let selectedMode = q.get('endless') === '1' ? 'endless' : 'story';
-  let savedRun = readCheckpoint(store), previewRun = previewCheckpoint(q), startFresh = false;
+  // A preview link is a local dev aid: hosted, it would overwrite the player's real checkpoint at its first boundary.
+  let savedRun = readCheckpoint(store), previewRun = globalThis.chrome?.webview ? null : previewCheckpoint(q), startFresh = false;
   let activeEndless = false, boundary = null, constructingGame = false, lastBoardLabel = '';
   function menuRun() { return startFresh ? null : previewRun || savedRun; }
   function syncModeMenu() {
@@ -101,7 +102,7 @@ export async function mount(ctx) {
     el.querySelector('[data-mode="endless"]').hidden = !access.endless;
     el.querySelector('[data-mode="story"] span').textContent = access.demo ? '3 free levels' : '8 levels';
     el.querySelector('.bo-modes').classList.toggle('is-demo', access.demo);
-    el.querySelector('.bo-menu-kicker').textContent = access.demo ? 'STORY DEMO' : 'THE BACK ROOM';
+    el.querySelector('.bo-menu-kicker').textContent = access.demo ? 'STORY DEMO' : 'BREAKOUT';
     for (const button of el.querySelectorAll('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === selectedMode));
     ui.play.innerHTML = (resume && !previewRun ? 'Continue' : 'Play') + ' <span aria-hidden="true">&#9656;</span>';
     el.querySelector('[data-menu="new-run"]').hidden = !endless || !savedRun;
@@ -176,7 +177,7 @@ export async function mount(ctx) {
           <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
           <span class="bo-menu-ball"></span><span class="bo-menu-paddle"></span>
         </div>
-        <p class="bo-menu-kicker">THE BACK ROOM</p>
+        <p class="bo-menu-kicker">BREAKOUT</p>
         <h1 id="bo-menu-title">BREAK<span>OUT</span></h1>
         <p class="bo-menu-line">Find your colour.</p>
         <div class="bo-modes" role="group" aria-label="Game mode">

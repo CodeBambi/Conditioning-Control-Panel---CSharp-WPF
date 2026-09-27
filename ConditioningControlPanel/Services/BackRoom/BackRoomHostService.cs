@@ -59,9 +59,19 @@ internal static class BackRoomHostService
         => (s?.BackRoomFxIntensity ?? BackRoomFxIntensity.Normal).ToString().ToLowerInvariant();
 
     /// <summary>A <c>room-option</c> the bridge already validated, written to the settings and saved (10.14).
-    /// UI thread: the settings listeners run there.</summary>
-    internal static void ApplyRoomOption(Models.AppSettings s, BackRoomBridge.RoomOption option)
+    /// UI thread: the settings listeners run there. A standalone Breakout page keeps its own three levels
+    /// (owner, 2026-09-27): its sliders never move the casino's.</summary>
+    internal static void ApplyRoomOption(Models.AppSettings s, BackRoomBridge.RoomOption option, bool breakout = false)
     {
+        if (breakout)
+        {
+            switch (option.Key)
+            {
+                case BackRoomBridge.OptionSubVolume when option.Level is { } bsub: s.BreakoutSubVolume = bsub; return;
+                case BackRoomBridge.OptionSfxVolume when option.Level is { } bsfx: s.BreakoutSfxVolume = bsfx; return;
+                case BackRoomBridge.OptionMusicVolume when option.Level is { } bmus: s.BreakoutMusicVolume = bmus; return;
+            }
+        }
         switch (option.Key)
         {
             case BackRoomBridge.OptionTunnel: s.BackRoomTunnel = option.On; break;
@@ -96,6 +106,8 @@ internal static class BackRoomHostService
         nameof(Models.AppSettings.BackRoomMediaSubsOff),
         nameof(Models.AppSettings.BackRoomSubVolume), nameof(Models.AppSettings.BackRoomSfxVolume),
         nameof(Models.AppSettings.BackRoomMusicVolume),
+        nameof(Models.AppSettings.BreakoutSubVolume), nameof(Models.AppSettings.BreakoutSfxVolume),
+        nameof(Models.AppSettings.BreakoutMusicVolume),
         nameof(Models.AppSettings.MediaSource), nameof(Models.AppSettings.RemoteMediaRatio),
     };
 
@@ -165,13 +177,17 @@ internal static class BackRoomHostService
     }
 
     /// <summary><c>init.audio</c> / <c>settings.audio</c>: the room's own three levels as 0..1, which is what the
-    /// kit's bus setters and the music element take. Not the app's volumes (10.21).</summary>
-    internal static object AudioWire(Models.AppSettings? s) => new
+    /// kit's bus setters and the music element take. Not the app's volumes (10.21). Breakout reads its own.</summary>
+    internal static object AudioWire(Models.AppSettings? s, bool breakout = false) => new
     {
-        sub = (s?.BackRoomSubVolume ?? 100) / 100.0,
-        sfx = (s?.BackRoomSfxVolume ?? 100) / 100.0,
-        music = (s?.BackRoomMusicVolume ?? 15) / 100.0,
+        sub = SubVolume(s, breakout) / 100.0,
+        sfx = ((breakout ? s?.BreakoutSfxVolume : s?.BackRoomSfxVolume) ?? 100) / 100.0,
+        music = ((breakout ? s?.BreakoutMusicVolume : s?.BackRoomMusicVolume) ?? 15) / 100.0,
     };
+
+    /// <summary>The spoken word's level for whichever page is open: the room's, or Breakout's own.</summary>
+    internal static int SubVolume(Models.AppSettings? s, bool breakout)
+        => (breakout ? s?.BreakoutSubVolume : s?.BackRoomSubVolume) ?? 100;
 
     /// <summary>DEBUG only: <c>CCP_BACKROOM_CDP_PORT</c> opens a remote debugging port on the room's
     /// own browser process (its own user data folder, so no other host shares these arguments) for
@@ -238,6 +254,20 @@ internal static class BackRoomHostService
     /// stations and prizes are the account's; a signed-out room could only fail at every table.
     /// </summary>
     public static void Launch() => LaunchCore(null);
+
+    /// <summary>
+    /// Asked before another mode replaces the open one (owner, 2026-09-27: ask first, never close a run
+    /// silently). True leaves the open game. Settable so a test can answer without a dialog.
+    /// </summary>
+    internal static Func<Window?, bool> ConfirmSwitch { get; set; } = owner =>
+    {
+        var body = Loc.Get("launcher_switch_body");
+        var title = Loc.Get("launcher_switch_title");
+        var answer = owner != null
+            ? MessageBox.Show(owner, body, title, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No)
+            : MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+        return answer == MessageBoxResult.Yes;
+    };
     internal static void LaunchBreakout(bool demo) => LaunchCore(demo);
 
     private static void LaunchCore(bool? breakoutDemo)
@@ -250,7 +280,16 @@ internal static class BackRoomHostService
             try { RequestSignIn(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom sign-in"); }
             return;
         }
-        if (_host != null) DisposeAll();
+        if (_host != null)
+        {
+            _host.FocusWeb();
+            bool leave;
+            try { leave = ConfirmSwitch(_host.Window); }
+            catch (Exception ex) { Diag.Swallowed(ex, "backroom switch prompt"); leave = false; }
+            if (!leave) return;
+            // The prompt is modal: panic or the title-bar X may have closed the game meanwhile.
+            if (_host != null) DisposeAll();
+        }
         _breakoutPage = breakoutDemo.HasValue;
         _breakoutDemo = breakoutDemo == true;
         try { if (!_breakoutPage) App.EmiDesk?.NoteOpen("backroom"); } catch (Exception ex) { Diag.Swallowed(ex); }
@@ -313,7 +352,9 @@ internal static class BackRoomHostService
                 w.Activated += (_, _) => OnWindowActivated();
             }
             App.Logger?.Information("BackRoomHostService: launched");
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom);
+            App.Friends?.SetActivity(_breakoutPage
+                ? ConditioningControlPanel.Services.Friends.PresenceActivity.Breakout
+                : ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom);
         }
         catch (Exception ex)
         {
@@ -363,7 +404,7 @@ internal static class BackRoomHostService
                 SetOption = option => OnUi(() =>
                 {
                     if (App.Settings?.Current is not { } s) return;
-                    ApplyRoomOption(s, option);
+                    ApplyRoomOption(s, option, _breakoutPage);
                     App.Settings.Save();
                 }),
                 SetSp = sp => { if (generation == _roomGeneration && !_racePage && App.Settings?.Current is { } s) s.SkillPoints = sp; },
@@ -512,7 +553,7 @@ internal static class BackRoomHostService
             motion = MotionWire(motion),
             intensity = IntensityWire(s, motion),
             lang = LocalizationManager.Instance.CurrentLanguage,
-            gates = GatesWire(s), media = MediaWire(s), audio = AudioWire(s),
+            gates = GatesWire(s), media = MediaWire(s), audio = AudioWire(s, _breakoutPage),
             intensityChoice = IntensityChoiceWire(s),
             lex = Lex(LocalizationManager.Instance.KeysWithPrefix(LexPrefix), Loc.Get),
             stations = BackRoomApi.Ops.Keys.ToArray(),
@@ -533,7 +574,7 @@ internal static class BackRoomHostService
             breakoutStandalone = _breakoutPage,
             reduced = motion != Models.MotionLevel.Full, gates = GatesWire(s), intensityChoice = IntensityChoiceWire(s),
             invertLook = s?.BackRoomInvertLook ?? false,
-            media = MediaWire(s), audio = AudioWire(s),
+            media = MediaWire(s), audio = AudioWire(s, _breakoutPage),
         };
     }
 
@@ -593,7 +634,8 @@ internal static class BackRoomHostService
 
     private static void HookSettings(bool on)
     {
-        HookBreakoutAccess(on);
+        // Only the full game can lose access mid-run; the room and the explicit demo never change.
+        HookBreakoutAccess(on && _breakoutPage && !_breakoutDemo);
         try
         {
             if (_hookedSettings != null) _hookedSettings.PropertyChanged -= OnSettingChanged;

@@ -5952,6 +5952,8 @@
   "launcher_game_breakoutdemo_blurb": "Los primeros 3 niveles de Historia. Gratis.",
   "launcher_game_breakout_title": "Breakout",
   "launcher_game_breakout_blurb": "8 niveles de Historia y modo Infinito procedural.",
+  "launcher_switch_title": "¿Salir de tu partida?",
+  "launcher_switch_body": "Hay otro juego abierto. ¿Salir y empezar este?",
   "launcher_game_goon_title": "[ES] Goon Game",
   "launcher_game_goon_blurb": "[ES] Hold on as long as you can.",
   "launcher_game_piecebypiece_title": "[ES] Piece by Piece",

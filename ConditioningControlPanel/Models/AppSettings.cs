@@ -5355,6 +5355,31 @@ namespace ConditioningControlPanel.Models
             set { _backRoomMusicVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
+        private int _breakoutSubVolume = 100, _breakoutSfxVolume = 100, _breakoutMusicVolume = 15;
+        /// <summary>Standalone Breakout's own voice level (0-100), separate from the Back Room's (owner, 2026-09-27).</summary>
+        [JsonProperty]
+        public int BreakoutSubVolume
+        {
+            get => _breakoutSubVolume;
+            set { _breakoutSubVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        /// <summary>Standalone Breakout's own sound effects level (0-100).</summary>
+        [JsonProperty]
+        public int BreakoutSfxVolume
+        {
+            get => _breakoutSfxVolume;
+            set { _breakoutSfxVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        /// <summary>Standalone Breakout's own music level (0-100). Default 15, the level the page scales its bed from.</summary>
+        [JsonProperty]
+        public int BreakoutMusicVolume
+        {
+            get => _breakoutMusicVolume;
+            set { _breakoutMusicVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
         private bool _videoForceHardwareDecoding = false;
         /// <summary>
         /// Force GPU (DXVA) hardware decoding for mandatory videos. Default OFF — mandatory videos

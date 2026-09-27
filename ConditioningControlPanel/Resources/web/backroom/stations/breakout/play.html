@@ -124,11 +124,14 @@ if (isHosted) {
 
 station = await mount(ctx);
 const sit = document.getElementById('sit');
+/* The host's contract (room/main.js): settle inside 300 ms, then exit-done, or the window waits out its forced close. */
+const settle = () => Promise.race([station?.close().catch(() => {}), new Promise(r => setTimeout(r, 250))]);
 async function stand() {
+  if (hostInit.breakoutStandalone) { await settle(); bridge.send({ type: 'exit', station: 'breakout' }); bridge.send({ type: 'exit-done' }); return; }
   await station.close();
-  if (hostInit.breakoutStandalone) { bridge.send({ type: 'exit', station: 'breakout' }); return; }
   sit.hidden = false; sit.focus();
 }
+if (isHosted) bridge.on('close', async () => { await settle(); bridge.send({ type: 'exit-done' }); });
 async function open() { sit.hidden = true; await station.open(); if (isHosted) bridge.send({ type: 'station-open', station: 'breakout' }); }
 sit.onclick = open;
 await open();
