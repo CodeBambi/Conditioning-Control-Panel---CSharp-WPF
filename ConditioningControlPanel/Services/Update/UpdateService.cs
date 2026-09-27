@@ -20,13 +20,17 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.11.2";
+        public const string AppVersion = "6.11.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.11.2 - Locktober
+        public const string CurrentPatchNotes = @"v6.11.3 - Locktober
+
+NEW IN 6.11.3
+- Breakout on the desktop now draws its effects inside the game window, like on the web: washes, pictures, the spiral and the subliminal words stay in the game instead of covering every screen.
+- the pictures still come from your own picks, Scrolller or your folders.
 
 NEW IN 6.11.2: TWO NEW GAMES
 
@@ -142,7 +146,7 @@ FIXES
 - Racing Thoughts: Esc pauses instead of closing the game, and a BambiCloud level opens behind the game and starts when you press play.
 - the log says why Lovense or the local AI failed.
 
-full nerd changelog in pull requests 1501 through 1759.";
+full nerd changelog in pull requests 1501 through 1760.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
