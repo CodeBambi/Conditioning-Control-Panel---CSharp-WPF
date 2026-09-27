@@ -6580,6 +6580,7 @@
   "companion_v2_familiarity_hint": "대화를 통해 친숙해집니다. 만료되거나 잠금 해제할 것은 없습니다.",
   "companion_perk_unlock": "레벨 {0}부터 사용 가능",
   "companion_perk_picker": "특성",
+  "companion_perk_change": "특성 변경",
   "companion_perk_hint": "한 번에 하나. 외형이나 성격을 바꾸지 않고 XP 방식을 바꿉니다.",
   "companion_perk_name_0": "Pink Rush",
   "companion_perk_name_1": "Hands Off",

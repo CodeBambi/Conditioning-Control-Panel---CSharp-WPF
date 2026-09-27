@@ -140,7 +140,11 @@ namespace ConditioningControlPanel
             _maxUnlockedSet = GetAvatarSetForLevel(playerLevel);
 
             // Load user's saved avatar selection, or use max unlocked
-            _selectedAvatarSet = App.Settings?.Current?.SelectedAvatarSet ?? _maxUnlockedSet;
+            // (the look last picked in the active mod wins over the last look picked anywhere).
+            _selectedAvatarSet = Services.Companion.ModAvatarLooks.StoredFor(
+                                     App.Settings?.Current?.ModAvatarSet, App.Mods?.ActiveModId,
+                                     GetUnlockedAvatarSets(playerLevel))
+                                 ?? App.Settings?.Current?.SelectedAvatarSet ?? _maxUnlockedSet;
             // Preserve a supported custom set (8+); clamp the level sets to what is unlocked.
             if (App.Mods?.GetCustomAvatarSets()?.Any(c => c.SetNumber == _selectedAvatarSet) != true)
                 _selectedAvatarSet = Math.Clamp(_selectedAvatarSet, 1, _maxUnlockedSet);

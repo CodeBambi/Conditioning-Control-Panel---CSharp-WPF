@@ -2301,6 +2301,20 @@ namespace ConditioningControlPanel.Models
             set { _modDefaultAssetPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
         }
 
+        private Dictionary<string, int> _modAvatarSet = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Per mod id, the companion look (avatar set or portrait skin) last switched to in that
+        /// mod, put back when the mod is switched to again. A missing key = never switched there;
+        /// <see cref="SelectedAvatarSet"/> is the fallback. Local only. See
+        /// Services/Companion/ModAvatarLooks.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, int> ModAvatarSet
+        {
+            get => _modAvatarSet;
+            set { _modAvatarSet = new Dictionary<string, int>(value ?? new Dictionary<string, int>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
         private string? _currentAssetPresetId = null;
         /// <summary>
         /// ID of the currently selected asset preset, or null if none selected.

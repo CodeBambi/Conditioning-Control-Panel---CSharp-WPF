@@ -6580,6 +6580,7 @@
   "companion_v2_familiarity_hint": "Знакомство развивается в беседе. Ничего не истекает и не требует разблокировки.",
   "companion_perk_unlock": "Доступно с уровня {0}",
   "companion_perk_picker": "Бонус",
+  "companion_perk_change": "Сменить бонус",
   "companion_perk_hint": "По одному. Меняет механику XP, сохраняя внешность и характер.",
   "companion_perk_name_0": "Pink Rush",
   "companion_perk_name_1": "Hands Off",

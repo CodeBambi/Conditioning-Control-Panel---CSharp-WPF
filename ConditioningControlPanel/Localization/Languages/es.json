@@ -6580,6 +6580,7 @@
   "companion_v2_familiarity_hint": "La familiaridad crece al conversar. Nada caduca ni requiere desbloqueos.",
   "companion_perk_unlock": "Disponible en el nivel {0}",
   "companion_perk_picker": "Ventaja",
+  "companion_perk_change": "Cambiar ventaja",
   "companion_perk_hint": "Una a la vez. Cambia la XP sin cambiar el aspecto ni la personalidad.",
   "companion_perk_name_0": "Pink Rush",
   "companion_perk_name_1": "Hands Off",

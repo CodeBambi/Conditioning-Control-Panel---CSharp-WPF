@@ -402,10 +402,12 @@ namespace ConditioningControlPanel
             _selectedAvatarSet = setNumber;
             _useAnimatedAvatar = HasAnimatedAvatar(setNumber);
 
-            // Save selection
+            // Save selection, globally and for the mod in use, so a switch to another mod and back
+            // puts this look back on (ModAvatarLooks).
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.SelectedAvatarSet = setNumber;
+                Services.Companion.ModAvatarLooks.Store(App.Settings.Current.ModAvatarSet, App.Mods?.ActiveModId, setNumber);
                 App.Settings.Save();
             }
 
@@ -639,6 +641,20 @@ namespace ConditioningControlPanel
                 else
                 {
                     var supportedSets = GetUnlockedAvatarSets(playerLevel);
+
+                    // Put back the look last picked in THIS mod, then the last look picked anywhere.
+                    // A single-emote mod (above) pins set 1 without saving it, so without this a trip
+                    // to Bambi Sleep and back left an Infection Control look on set 1 (tester, 6.11.1).
+                    var remembered = Services.Companion.ModAvatarLooks.ForModSwitch(
+                        App.Settings?.Current?.ModAvatarSet, App.Mods?.ActiveModId,
+                        App.Settings?.Current?.SelectedAvatarSet ?? _currentAvatarSet, _currentAvatarSet, supportedSets);
+                    if (remembered != _currentAvatarSet && supportedSets.Contains(remembered))
+                    {
+                        App.Logger?.Information("Mod switch: restoring avatar set {Set} (was {OldSet})", remembered, _currentAvatarSet);
+                        _currentAvatarSet = _selectedAvatarSet = remembered;
+                        if (App.Settings?.Current != null) App.Settings.Current.SelectedAvatarSet = remembered;
+                    }
+
                     if (supportedSets.Length > 0 && !supportedSets.Contains(_currentAvatarSet))
                     {
                         var oldSet = _currentAvatarSet;

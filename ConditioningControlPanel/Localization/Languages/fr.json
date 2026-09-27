@@ -6580,6 +6580,7 @@
   "companion_v2_familiarity_hint": "La familiarité grandit au fil des échanges. Rien à débloquer, rien ne disparaît.",
   "companion_perk_unlock": "Disponible au niveau {0}",
   "companion_perk_picker": "Bonus",
+  "companion_perk_change": "Changer de bonus",
   "companion_perk_hint": "Un seul à la fois. Modifie les XP sans changer le look ni la personnalité.",
   "companion_perk_name_0": "Pink Rush",
   "companion_perk_name_1": "Hands Off",
