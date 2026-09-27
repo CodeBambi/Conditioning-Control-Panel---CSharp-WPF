@@ -30,6 +30,7 @@ import { routeFinaleAudio } from './finale-audio.js';
 import { WORD_KEYS } from './word-fx.js';
 import { createVoice } from '../../shared/hypno/voice.js';
 import { createHostFx } from './host-fx.js';
+import { createPageFx, routeFx } from './page-fx.js';
 import { createPerfPanel } from './perf.js';
 import { createRenderBudget } from './render-budget.js';
 import { createHaptics } from './haptics.js';
@@ -67,7 +68,7 @@ export async function mount(ctx) {
     (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const t = (k, f) => { try { const v = typeof ctx.lex === 'function' ? ctx.lex(k, f) : f; return v || f; } catch (e) { return f; } };
 
-  let el = null, canvas = null, game = null, renderer = null, media = null, subs = null, audio = null, host = null, haptics = null, gamepad = null;
+  let el = null, canvas = null, game = null, renderer = null, media = null, subs = null, audio = null, host = null, pageFx = null, haptics = null, gamepad = null;
   // Word bricks may speak; near-ball text stays silent.
   let voice = null, lastSay = -Infinity;
   const roomLevels=globalThis.__backroom?.levels;
@@ -143,7 +144,7 @@ export async function mount(ctx) {
   }
   function returnToMenu() {
     if (!saveEndless()) { ui.paused.querySelector('.bo-save-note').textContent = 'This browser could not save. Resume to keep playing, or try again.'; return; }
-    activeEndless = false; menuOpen = true;
+    activeEndless = false; menuOpen = true; pageFx?.cancelAll();
     mouseLock?.release(); setPaused(false); audio?.stop(); audioOn = false;
     ui.menu.hidden = false; ui['ghost-hint'].hidden = true; ui['run-hud'].hidden = true;
     el.classList.add('is-menu'); moved = false; el.classList.remove('is-played');
@@ -294,7 +295,7 @@ export async function mount(ctx) {
     ui.paused.querySelector('[data-menu="save-menu"]').hidden = !activeEndless;
     ui.paused.querySelector('.bo-save-note').hidden = !activeEndless;
     ui.paused.querySelector('.bo-save-note').textContent = 'Continue restarts this board with its starting colour. Best combo kept.';
-    if (p) mouseLock?.release();                     // the card needs a visible pointer
+    if (p) { mouseLock?.release(); pageFx?.cancelAll(); }   // the card needs a visible pointer and a clear field
     const best = game ? game.snapshot().comboBest | 0 : 0, line = ui.paused.querySelector('.bo-best');   // the one quiet place the best combo shows
     if (line) { line.hidden = best < 3; line.textContent = 'Best combo x' + best; }
     try { if (p) audio.stop(!!document.hidden); else if (audioOn) audio.start(); } catch (e) { /* noop */ }
@@ -671,7 +672,11 @@ export async function mount(ctx) {
     gamepad = createGamepad();
     sawHit = typeof game.snapshot().combo === 'number';   // a v2 sim emits 'hit'; the raw names are then cosmetic only
     const gates = ctx.gates || {};
-    const fx = typeof ctx.fx === 'function' ? ctx.fx : null;
+    // The desktop draws the five big-beat effects inside the game window, like the web (owner, 2026-09-27);
+    // the site shim already does that in-page, so the web keeps ctx.fx as it is.
+    const hosted = !!globalThis.chrome?.webview;
+    pageFx = hosted ? createPageFx({ parent: el, media: () => media, reduced }) : null;
+    const fx = routeFx({ hosted, fx: typeof ctx.fx === 'function' ? ctx.fx : null, page: pageFx });
     subs = createSubliminals({ words: () => media.words, enabled: gates.subliminal !== false, fx, w: W, h: H });
     try { voice = createVoice(); } catch (e) { voice = null; }   // null unhosted (dev.html): the harness stays mute
     host = createHostFx({ fx, reduced });
@@ -826,7 +831,7 @@ export async function mount(ctx) {
       syncKeys();
     });
     on(window, 'blur', () => { if (moved) setPaused(true); });
-    on(document, 'visibilitychange', () => { if (document.hidden && moved) setPaused(true); });
+    on(document, 'visibilitychange', () => { if (document.hidden) pageFx?.cancelAll(); if (document.hidden && moved) setPaused(true); });
     if (ui.back) on(ui.back, 'click', back);
     on(window,'keydown',e=>{
       if(e.key!=='F2' || globalThis.chrome?.webview)return;
@@ -846,6 +851,8 @@ export async function mount(ctx) {
     running = false;
     shutdownCover?.remove();shutdownCover=null;
     officeEnding?.dispose();officeEnding=null;
+    try { pageFx && pageFx.dispose(); } catch (e) { /* noop */ }
+    pageFx = null;
     game?.dispose();
     diagnostics?.dispose(); diagnostics = null;
     if (raf) cancelAnimationFrame(raf); raf = 0;
@@ -866,7 +873,7 @@ export async function mount(ctx) {
   function suspend(onOff) {
     suspended = !!onOff;
     officeEnding?.suspend(suspended);
-    if (suspended) { try { voice && voice.stop(); } catch (e) { /* noop */ } }
+    if (suspended) { pageFx?.cancelAll(); try { voice && voice.stop(); } catch (e) { /* noop */ } }
     if (!audio) return;
     try { if (suspended) audio.stop(true); else if (audioOn && !paused) audio.start(); } catch (e) { /* noop */ }
     if (!suspended) lastT = 0;
@@ -879,5 +886,5 @@ export async function mount(ctx) {
 
   return { open, close, suspend, destroy,
     /* dev harness only */
-    get game() { return game; }, get renderer() { return renderer; }, get media() { return media; }, get audio() { return audio; } };
+    get game() { return game; }, get renderer() { return renderer; }, get media() { return media; }, get audio() { return audio; }, get pageFx() { return pageFx; } };
 }

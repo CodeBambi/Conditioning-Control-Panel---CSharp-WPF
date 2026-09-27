@@ -58,7 +58,7 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
       const src = await one(gif.url);
       if (!src) return;
       if (disposed || list.length >= MAX_RESIDENT) { try { src.dispose(); } catch (e) { /* noop */ } return; }
-      list.push({ key: gif.key, src });
+      list.push({ key: gif.key, src, url: gif.url });
     }));
     if (disposed) { for (const s of list) { try { s.src.dispose(); } catch (e) { /* noop */ } } return null; }
     return { list, words: Array.isArray(dealt.words) ? dealt.words.filter(w => w && w.text).map(w => ({ key: w.key, text: String(w.text) })) : [] };
@@ -101,6 +101,8 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
     /** How many resident pictures can play (a still counts as not animated). */
     animated: () => sources.filter(s => s.src && s.src.animated).length,
     keys: () => sources.map(s => s.key),
+    /** The dealt url behind a resident key (the in-page effects show it at full size), or null. */
+    urlOf(key) { const s = sources.find(x => x.key === key); return s && s.url ? s.url : null; },
     frame(i) { const k = idx(i); return k < 0 ? null : sources[k].src.canvas; },
     /** Where source i sits this frame (field coords); the renderer or the station calls it before tick(). */
     mark(i, x, y) { const k = idx(i); if (k < 0) return; const s = sources[k]; if (!s.at) s.at = { x, y }; else { s.at.x = x; s.at.y = y; } },
