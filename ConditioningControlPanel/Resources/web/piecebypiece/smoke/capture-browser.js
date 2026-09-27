@@ -42,7 +42,7 @@
   }
   const step = seconds => { for(let t=0;t<seconds;t+=1/60){B.anim.update(1/60);B.jiggle.system.update(1/60);B.dust.update(1/60,B.view.camera,B.view.renderer);} };
   const overlap = (a,b) => a.max.x > b.min.x+.0001 && a.min.x < b.max.x-.0001 && a.max.y > b.min.y+.0001 && a.min.y < b.max.y-.0001 && a.max.z > b.min.z+.0001 && a.min.z < b.max.z-.0001;
-  for(const type of ['p','n','b','r','q','k']) for(const side of ['w','b']) for(const crowded of [false,true]) for(let variant=0;variant<(type==='q'?5:1);variant++) {
+  for(const type of ['p','n','b','r','q','k']) for(const side of ['w','b']) for(const crowded of [false,true]) for(let variant=0;variant<(type==='q'?5:['n','b','r'].includes(type)?2:1);variant++) {
     const pieces=setup(type,side,crowded?'k':'p',crowded); B.pieces.move('d4','d5');
     const style=B.anim.stats().acts[0]; ok(!!style,type+' signature starts');
     for(let frame=0;frame<Math.ceil((style.end + .1) * 60);frame++) {
@@ -66,10 +66,16 @@
     ok(events.filter(e=>e.name==='hit').length===1,type+' one hit');
     ok(events.filter(e=>e.name==='land'&&e.capture).length===1,type+' one landing');
     ok(events.filter(e=>e.name==='sunk').length===1,type+' one exit');
-    ok(events.filter(e=>e.name==='dissolve').length===(type==='r'||style.variation==='royal-fling'?0:1),type+' dissolve except launch');
+    ok(events.filter(e=>e.name==='dissolve').length===(style.variation==='side-swing'||style.variation==='royal-fling'?0:1),type+' dissolve except launch');
     ok(!B.anim.busy(),type+' settles');
     if(style.variation==='triple-bash') ok(events.filter(e=>e.name==='contact').length===2,'queen has two light contacts before the squash');
     cases++;
+  }
+  const {createRepertoire,EXTRA_ACTS}=await import('./board/repertoire.js');
+  for(const seed of [0,.99]) for(const type of ['n','b','r']) {
+    const deck=createRepertoire(ACTS,()=>seed);let last;const seen=new Set();
+    for(let i=0;i<8;i++) {const act=deck(type);ok(act!==last,'repertoire avoids adjacent repeats');seen.add(act.name);last=act;}
+    ok(seen.has(ACTS[type].name)&&seen.has(EXTRA_ACTS[type].name),'both attacks appear');
   }
   const {createQueenDeck}=await import('./board/queen.js');
   for(const seed of [0,.25,.99]) {
@@ -80,8 +86,9 @@
       ok(seen.size===5,'each shuffle plays every queen attack');
     }
   }
-  const planted=setup('b','w','r'), base=planted.victim.position.clone();
-  B.pieces.move('d4','d5');step(B.anim.stats().acts[0].approach + .80);
+  let planted;
+  do { planted=setup('b','w','r'); B.pieces.move('d4','d5'); } while(B.anim.stats().acts[0].variation!=='double-whip');
+  const base=planted.victim.position.clone();step(B.anim.stats().acts[0].approach + .80);
   ok(Math.hypot(planted.victim.position.x-base.x,planted.victim.position.z-base.z)<.0001,'first slap keeps victim base planted');
   const firstBend=Math.hypot(planted.victim.userData.capturePose.x,planted.victim.userData.capturePose.z);
   ok(firstBend>.08,'first slap bends victim');step(.34);

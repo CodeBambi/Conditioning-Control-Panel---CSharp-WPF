@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { siliconePoint } from './silicone.js';
 import { hopPlan, hopAt } from './hops.js';
 import { createQueenDeck, queenBash, QUEEN_ACTS } from './queen.js';
+import { createRepertoire, extraPose } from './repertoire.js';
 import { impactDelay, impactTime, impactPulse } from './impact.js';
 
 export const ACTS = Object.freeze({
@@ -17,7 +18,7 @@ const clamp = t => Math.max(0, Math.min(1, t));
 const smooth = t => { t = clamp(t); return t * t * t * (t * (t * 6 - 15) + 10); };
 const phase = (t, a, b) => smooth((t - a) / (b - a));
 const arrivals = { p: .50, n: .50 };
-const stepStarts = { b: .48, r: .48, q: .70, k: .70 };
+const stepStarts = { b: .48, r: .48, q: .70, k: .70, kick: .46, sweep: .50 };
 const up = new THREE.Vector3(0, 1, 0);
 const yaw = p => p.userData.side === 'b' ? Math.PI : 0;
 const skins = p => p.userData.materials || [p.userData.material];
@@ -68,7 +69,7 @@ export function captureBounds(piece, box = new THREE.Box3()) {
 }
 
 export function createChoreography({ group, emit, landed, reduced }) {
-  const acts = [], nextQueen = createQueenDeck();
+  const acts = [], nextQueen = createQueenDeck(), nextAct = createRepertoire(ACTS);
   const box = new THREE.Box3();
   const restore = (piece, scale) => {
     piece.scale.copy(scale); piece.rotation.set(0, yaw(piece), 0);
@@ -96,7 +97,7 @@ export function createChoreography({ group, emit, landed, reduced }) {
   }
   function start(piece, victim, from, to) {
     settle(piece);
-    const type = piece.userData.type, spec = type === 'q' ? nextQueen() : ACTS[type];
+    const type = piece.userData.type, spec = type === 'q' ? nextQueen() : nextAct(type);
     const motion = spec.motion || type;
     const d = to.clone().sub(from).setY(0).normalize();
     if (d.lengthSq() < .1) d.set(0, 0, piece.userData.side === 'w' ? -1 : 1);
@@ -113,6 +114,9 @@ export function createChoreography({ group, emit, landed, reduced }) {
     if (motion === 'k') a.near.copy(a.target).addScaledVector(d, -a.height * .94);
     a.sideways = new THREE.Vector3(-d.z, 0, d.x);
     a.contactHeight = Math.max(.18, Math.min(.55, a.vHeight * .36));
+    if (motion === 'sweep') a.contactHeight = Math.min(.24, a.vHeight * .22);
+    a.sideStrike = ['b', 'r', 'kick', 'sweep'].includes(motion);
+    a.contactDirection = motion === 'b' ? a.sideways.clone().negate() : motion === 'kick' ? d.clone() : a.sideways.clone();
     if (motion === 'p' || motion === 'n') a.near.copy(a.target).addScaledVector(d, -Math.min(.65, from.distanceTo(to) * .5));
     a.impactDelay = a.low ? 0 : impactDelay(motion);
     a.approach = hopPlan(from, a.near);
@@ -209,12 +213,13 @@ export function createChoreography({ group, emit, landed, reduced }) {
         // Dissolve in place before entering the occupied square. No rolling or flying.
         at.lerp(a.to, phase(t, .30, .46));
       } else if (type === 'p' || type === 'n') {
-        const launch = type === 'n' ? .30 : .16;
+        const heavy = spec.name === 'heavy-squash';
+        const launch = heavy ? .32 : type === 'n' ? .30 : .16;
         const leap = clamp((t - launch) / (hit - launch));
         at.lerp(a.target, phase(t, launch + .08, hit - .10));
-        at.y = Math.sin(Math.PI * leap) * (type === 'n' ? 1.65 : 1.0) + phase(t, launch, launch + .20) * a.vHeight;
+        at.y = Math.sin(Math.PI * leap) * (heavy ? .65 : type === 'n' ? 1.65 : 1.0) + phase(t, launch, launch + .20) * a.vHeight;
         const crouch = phase(t, .02, launch * .70) * (1 - phase(t, launch * .70, launch + .06));
-        sy = 1 - .28 * crouch;
+        sy = 1 - (heavy ? .12 : .28) * crouch;
         flex.tip.addScaledVector(d, -.20 * crouch);
         at.addScaledVector(d, -.12 * crouch);
         if (type === 'n') tilt = -Math.PI * 2 * phase(t, launch + .12, hit - .10);
@@ -271,6 +276,9 @@ export function createChoreography({ group, emit, landed, reduced }) {
           flex.twist = -.25 * swing * ready * release;
           at.addScaledVector(lateral, -.065 * phase(age, 0, .065) * (1 - phase(age, .09, .26)));
         }
+        if (type === 'kick' || type === 'sweep') {
+          const extra = extraPose(a,t,age,at,flex); tilt = extra.tilt; spin = extra.spin;
+        }
         if (age >= stepStarts[type]) {
           const step = hopAt(a.step, age - stepStarts[type]);
           at.lerp(a.to, step.travel); at.y = step.height;
@@ -317,11 +325,12 @@ export function createChoreography({ group, emit, landed, reduced }) {
             tip = 7 * phase(age, .10, .90);
           } else {
             // Velocity transfers at contact, followed by the slower fall at full size.
-            reaction = lateral.clone().negate();
+            reaction = a.contactDirection;
             const kick = (1 - Math.exp(-age * 40)) * Math.exp(-age * 9);
             const fall = 1 - Math.exp(-age * 10);
-            tip = 1.50 * fall;
-            pos.addScaledVector(reaction, .65 * (1 - Math.exp(-age * 6)));
+            tip = (type === 'kick' ? 2.65 : 1.50) * fall;
+            pos.addScaledVector(reaction, (type === 'kick' ? 1.10 : .65) * (1 - Math.exp(-age * 6)));
+            if (type === 'kick') pos.y = .18 * Math.sin(Math.PI * clamp(age / .55));
             impactFlex.tip.copy(reaction).multiplyScalar(.36 * kick);
             impactFlex.lag.copy(reaction).multiplyScalar(-.28 * kick);
             impactFlex.stretch = -.15 * kick;
@@ -329,22 +338,22 @@ export function createChoreography({ group, emit, landed, reduced }) {
         }
         if (!a.low) {
           let contactAge = realTime - hit, strength = 1;
-          let direction = type === 'r' ? lateral : type === 'b' ? lateral.clone().negate() : up.clone().negate();
-          let centre = type === 'r' ? a.contactHeight / a.vHeight : type === 'b' ? .72 : .88;
+          let direction = a.sideStrike ? a.contactDirection : up.clone().negate();
+          let centre = a.sideStrike && type !== 'b' ? a.contactHeight / a.vHeight : type === 'b' ? .72 : .88;
           if (t < hit && type === 'b') { contactAge = t - .70; direction = lateral; strength = .65; }
           if (t < hit && spec.name === 'triple-bash') { contactAge = t - (t >= .83 ? .83 : .48); strength = .55; }
           const pulse = impactPulse(contactAge, a.vHeight);
           impactFlex.dent = direction.clone().multiplyScalar(.11 * pulse.dent * strength);
           impactFlex.dentAt = centre + ((centre < .5 ? .85 : .30) - centre) * pulse.travel;
           // A tall neck trails the struck body; short victims mainly compress.
-          if (type === 'b' || type === 'r') {
+          if (a.sideStrike) {
             impactFlex.lag.addScaledVector(direction, -.16 * pulse.wave * strength);
             impactFlex.tip.addScaledVector(direction, .10 * pulse.wave * strength);
           } else impactFlex.bulge = .10 * pulse.dent * strength;
         }
         pose(v, a.vScale, pos, tip, 0, reaction, 0, vs, shrink, impactFlex);
         clearAbove(v, obstacles);
-        const fade = a.low ? phase(age, 0, .12) : type === 'r' ? 0 : phase(age, type === 'k' ? .40 : type === 'b' ? .32 : .20, type === 'k' ? .70 : type === 'b' ? .65 : .48);
+        const fade = a.low ? phase(age, 0, .12) : type === 'r' ? 0 : phase(age, type === 'k' ? .40 : a.sideStrike ? .32 : .20, type === 'k' ? .70 : a.sideStrike ? .65 : .48);
         if (fade > 0 && !a.dissolving) { a.dissolving = true; emit('dissolve', { object: v, low: a.low }); }
         if (v.userData.jiggleUniforms) v.userData.jiggleUniforms.uDissolve.value = a.low ? 0 : fade;
         for (const m of skins(v)) { m.opacity = 1 - fade; m.transparent = fade > 0; m.depthWrite = fade === 0; }
@@ -355,12 +364,12 @@ export function createChoreography({ group, emit, landed, reduced }) {
         const stomp = type === 'p' || type === 'n';
         // Stomp contact is the first landing, not the later move onto the empty square.
         const elapsed = Math.max(0, t - (stomp ? hit : arrival)), fade = 1 - phase(t, spec.end - .22, spec.end);
-        const damping = a.type === 'p' ? 10 : 4.5;
+        const damping = a.type === 'p' || a.type === 'r' ? 10 : 4.5;
         const ring = -Math.sin(elapsed * 23) * Math.exp(-elapsed * damping) * fade;
         const delayed = -Math.sin(elapsed * 23 - .45) * Math.exp(-elapsed * damping) * phase(elapsed, 0, .04) * fade;
         flex.tip.addScaledVector(d, .22 * ring).addScaledVector(lateral, .12 * delayed);
         flex.lag.addScaledVector(d, -.32 * delayed);
-        flex.stretch += (stomp ? .26 : .08) * ring;
+        flex.stretch += (a.type === 'r' ? .065 : stomp ? .26 : .08) * ring;
         // Travel and impacts stretch the spine; its planted base does not rock.
         if (type === 'p' || type === 'n') {
           flex.stretch += sy - 1; sy = 1;
@@ -385,12 +394,12 @@ export function createChoreography({ group, emit, landed, reduced }) {
       const wantedY = p.position.y;
       if ((type === 'p' || type === 'n') && t >= hit) a.lift = 0;
       p.position.y += (a.lift || 0) * Math.exp(-dt * 18);
-      const sideStrike = ['b', 'r'].includes(type) && !a.low && !a.gone;
+      const sideStrike = a.sideStrike && !a.low && !a.gone;
       // Side contacts separate horizontally. A vertical solver turns every slap into a headbutt.
       if (sideStrike && age === 0) clearSide(p, captureVolumes(v), d.clone().negate());
       clearAbove(p, a.gone || sideStrike ? obstacles : [...obstacles, ...captureVolumes(v)]);
       if (sideStrike && age > 0) {
-        const away = type === 'r' ? a.fly : lateral.clone().negate();
+        const away = a.contactDirection;
         for (let pass = 0; pass < 8; pass++) {
           const before = v.position.clone();
           clearSide(v, captureVolumes(p), away);
@@ -408,9 +417,9 @@ export function createChoreography({ group, emit, landed, reduced }) {
       }
       if (t >= hit && !a.struck) {
         a.struck = true;
-        if (!a.low) emit('hit', { piece: a.type, sound: spec.sound, impact: type === 'r' ? 'fling' : type === 'b' ? 'slap' : 'squash', victim: v.userData.type, height: a.vHeight,
-          direction: (type === 'b' ? lateral.clone().negate() : type === 'r' ? lateral : d).clone(),
-          manner: 'signature', world: { x: a.target.x, y: type === 'r' ? a.contactHeight : Math.min(a.vHeight, .65), z: a.target.z } });
+        if (!a.low) emit('hit', { piece: a.type, sound: spec.sound, impact: type === 'r' ? 'fling' : a.sideStrike ? 'slap' : 'squash', victim: v.userData.type, height: a.vHeight,
+          direction: (a.sideStrike ? a.contactDirection : d).clone(),
+          manner: 'signature', world: { x: a.target.x, y: a.sideStrike && type !== 'b' ? a.contactHeight : Math.min(a.vHeight, .65), z: a.target.z } });
       }
       if (!a.low) {
         if (type === 'r' && age > .04 && age < .40 && !a.gone) {
@@ -429,9 +438,11 @@ export function createChoreography({ group, emit, landed, reduced }) {
             }
           }
         }
-        if (type === 'p' || type === 'n') cue(a, 'square-hop', type === 'p' ? .16 : .30, 'hop');
+        if (type === 'p' || type === 'n') cue(a, 'square-hop', spec.name === 'heavy-squash' ? .32 : type === 'p' ? .16 : .30, 'hop');
         if (type === 'n' && a.type !== 'q') { cue(a, 'hooves', .02, 'hooves'); cue(a, 'neigh', .30, 'neigh'); }
         if (type === 'n' && a.type === 'q') cue(a, 'flip', .30, 'spin');
+        if (type === 'kick') { cue(a, 'hooves', .08, 'hooves'); cue(a, 'snort', .37, 'neigh'); cue(a, 'kick-air', hit - .13, 'sweep'); }
+        if (type === 'sweep') { cue(a, 'coil', .25, 'stretch'); cue(a, 'sweep-low', hit - .13, 'sweep'); }
         if (type === 'r') cue(a, 'charge', .32, 'charge');
         if (spec.name === 'triple-bash') {
           cue(a, 'final-charge', .97, 'stretch');
