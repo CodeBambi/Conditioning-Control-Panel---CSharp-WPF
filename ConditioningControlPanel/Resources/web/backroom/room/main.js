@@ -557,6 +557,7 @@ async function start(init) {
     lex: (init.lex && typeof init.lex === 'object') ? init.lex : {},
     open: typeof init.open === 'boolean' ? init.open : null,
     welcomeSeen: init.welcomeSeen === true,
+    breakout: init.breakout,
   });
   state.levels = readLevels(init.audio);
   state.media = readMedia(init.media);
@@ -571,6 +572,7 @@ async function start(init) {
     state.motion = String(m.motion || state.motion);
     state.intensity = String(m.intensity || state.intensity);
     state.reduced = !!m.reduced;
+    if (m.breakout) state.breakout = m.breakout;
     if (typeof m.invertLook === 'boolean') state.invertLook = m.invertLook;
     if (m.gates && typeof m.gates === 'object') state.gates = readGates(m.gates);
     state.intensityChoice = readChoice(m.intensityChoice, state.intensityChoice);

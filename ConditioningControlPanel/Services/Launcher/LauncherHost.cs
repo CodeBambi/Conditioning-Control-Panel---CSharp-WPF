@@ -307,10 +307,10 @@ public static partial class LauncherHost
         var entry = LauncherCatalogue.Find(id);
         if (entry == null) return false;
 
-        if (LauncherCatalogue.NeedsAccount)
+        if (entry.NeedsAccount)
         {
-            // Every game needs an account. With the launcher up, its sign-in flow takes over;
-            // otherwise the caller shows the launcher, which wears the same rule on every tile.
+            // Account-bound entries use the launcher sign-in flow; the free demo is exempt.
+            // Otherwise the caller shows the launcher, whose tile carries the same account rule.
             Log.Information("[Launcher] {Id} refused: nobody is signed in", entry.Id);
             if (IsShown)
             {

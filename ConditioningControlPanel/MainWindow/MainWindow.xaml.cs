@@ -2757,6 +2757,7 @@ namespace ConditioningControlPanel
                 // brush itself, so replacing the brush would repaint nothing.
                 var playHeroMap = new (string resourcePath, ImageBrush? brush, int decodeWidth, string surfaceId)[]
                 {
+                    ("features/goon_game_tile.png",     PlayTab?.PlayGoonHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/lab_gaze_hero.png",      PlayTab?.PlayGazeHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/lab_focusgaze_hero.png", PlayTab?.PlayFocusHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/lab_quiz_hero.png",      PlayTab?.PlayIntakeHeroBrush,   512, ModArtFramingRegistry.SurfacePlayCard),

@@ -1,3 +1,5 @@
+import { readCheckpoint, writeCheckpoint, checkpointFromSnapshot, newEndlessSeed, previewCheckpoint } from './endless-save.js';
+import { breakoutAccess } from './access.js';
 import { createOfficeEnding } from './office-ending.js';
 import {currentMusic} from '../../shared/sound/music.js';
 /* ============================================================================
@@ -41,7 +43,7 @@ const num = (q, k, d) => (q.has(k) && !Number.isNaN(Number(q.get(k))) ? Number(q
 const DEV_KEY = 'bo.dev.open', FOCUS_R = 140, REDEAL_WALLS = 3;
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private window */ } },
+  set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
 };
 
 function loadCss() {
@@ -57,6 +59,8 @@ export async function mount(ctx) {
   const hostBack = !!ctx.hostBack;
   let diagnostics = null;
   const q = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
+  const readAccess = () => breakoutAccess(ctx.breakout, { hosted: !!globalThis.chrome?.webview, demo: !globalThis.chrome?.webview && q.get('demo') === '1' });
+  let access = readAccess();
   const renderBudget = createRenderBudget(q.has('software') || prefersSoftwareCanvas());
   let budgetResize = false;
   const reduced = !!ctx.reduced || q.has('still') ||
@@ -68,13 +72,13 @@ export async function mount(ctx) {
   let voice = null, lastSay = -Infinity;
   const roomLevels=globalThis.__backroom?.levels;
   const savedLevel=(key,fallback)=>{const v=store.get('bo.audio.'+key);return v!==null&&Number.isFinite(Number(v))?Math.max(0,Math.min(1,Number(v))):fallback;};
-  const audioLevels={music:roomLevels?.music??currentMusic()?.volume??savedLevel('music',1),sfx:roomLevels?.sfx??savedLevel('sfx',1),sub:roomLevels?.sub??savedLevel('sub',1)};
+  const audioLevels={music:ctx.audio?.music??roomLevels?.music??currentMusic()?.volume??savedLevel('music',1),sfx:ctx.audio?.sfx??roomLevels?.sfx??savedLevel('sfx',1),sub:ctx.audio?.sub??roomLevels?.sub??savedLevel('sub',1)};
   function applyAudioLevel(key,value,commit=false){
     audioLevels[key]=value;
     if(roomLevels){roomLevels[commit?'commit':'preview'](key,value);}
     else if(key==='music')currentMusic()?.setVolume(value);
-    if(commit)store.set('bo.audio.'+key,String(value));
-    if(key==='music'){const synth=roomLevels||currentMusic()?Math.min(1,value/.15):value;audio?.setMix('bed',synth);audio?.setMix('sub',synth);}
+    if(commit) { store.set('bo.audio.'+key,String(value)); ctx.commitAudio?.(key,value); }
+    if(key==='music'){const synth=roomLevels||ctx.audio||currentMusic()?Math.min(1,value/.15):value;audio?.setMix('bed',synth);audio?.setMix('sub',synth);}
     else audio?.setMix(key==='sub'?'word':'sfx',value);
   }
   const SAY_GAP_S = 2.5, VOICE_LEVEL = 0.35;
@@ -87,6 +91,65 @@ export async function mount(ctx) {
   }
   let shutdownCover = null, officeEnding = null;
   let menuOpen = true, flavourOpen = false;
+  let selectedMode = q.get('endless') === '1' ? 'endless' : 'story';
+  // A preview link is a local dev aid: hosted, it would overwrite the player's real checkpoint at its first boundary.
+  let savedRun = readCheckpoint(store), previewRun = globalThis.chrome?.webview ? null : previewCheckpoint(q), startFresh = false;
+  let activeEndless = false, boundary = null, constructingGame = false, lastBoardLabel = '';
+  function menuRun() { return startFresh ? null : previewRun || savedRun; }
+  function syncModeMenu() {
+    if (!access.endless) selectedMode = 'story';
+    const endless = selectedMode === 'endless', resume = endless && menuRun();
+    el.querySelector('[data-mode="endless"]').hidden = !access.endless;
+    el.querySelector('[data-mode="story"] span').textContent = access.demo ? '3 free levels' : '8 levels';
+    el.querySelector('.bo-modes').classList.toggle('is-demo', access.demo);
+    el.querySelector('.bo-menu-kicker').textContent = access.demo ? 'STORY DEMO' : 'BREAKOUT';
+    for (const button of el.querySelectorAll('[data-mode]')) button.setAttribute('aria-pressed', String(button.dataset.mode === selectedMode));
+    ui.play.innerHTML = (resume && !previewRun ? 'Continue' : 'Play') + ' <span aria-hidden="true">&#9656;</span>';
+    el.querySelector('[data-menu="new-run"]').hidden = !endless || !savedRun;
+    ui['run-note'].textContent = endless ? (resume ? 'Board ' + (resume.from + 1) + (previewRun ? '. Ready when you are.' : '. Continue restarts this board.') : 'Fresh boards. Familiar tricks. No last life.') : access.demo ? 'Three levels. Find your colour. The full game adds five more and Endless.' : 'Eight levels. Find your colour.';
+  }
+  function saveEndless() {
+    if (!activeEndless || !boundary || !game) return false;
+    const best = game.snapshot().comboBest || 0;
+    const next = { ...boundary, bestCombo: Math.max(boundary.bestCombo, best) };
+    if (!writeCheckpoint(store, next)) return false;
+    boundary = savedRun = next;
+    return true;
+  }
+  function syncEndless(s) {
+    const board = s.endlessBoard;
+    ui['run-hud'].hidden = !s.endless;
+    if (activeEndless && (!boundary || boundary.from !== s.stats.walls)) {
+      boundary = checkpointFromSnapshot(s); saveEndless();
+    }
+    const label = s.endless && board ? 'ENDLESS / ' + (s.stats.walls + 1) + ' / ' + board.name : '';
+    if (label === lastBoardLabel) return;
+    lastBoardLabel = label; ui['run-hud'].hidden = !label;
+    ui['run-hud'].querySelector('b').textContent = label;
+    ui['run-hud'].querySelector('span').textContent = board ? (board.breather ? 'A LITTLE BREATHER' : (board.mechanics || []).join(' + ').toUpperCase()) : '';
+  }
+  function makeGame(run = null) {
+    game?.dispose(); constructingGame = true;
+    try {
+      game = createGame({ storyLimit: access.storyLimit, audio: { beat: audio.beat, now: audio.now }, onEvent,
+        ...(q.has('n') ? { breakoutN: num(q, 'n', 20) } : {}),
+        saturation: Math.max(0, Math.min(1, num(q, 'sat', .15))),
+        speedScale: Number(el.querySelector('.bo-option-pace')?.value) || num(q, 'speed', .55), reduced,
+        ...(run && access.endless ? { endless: true, seed: run.seed, from: run.from, savedSaturation: run.savedSaturation, bestCombo: run.bestCombo } : {}) });
+    } finally { constructingGame = false; }
+    if (q.has('nolose')) game.setNoLose(true);
+    if (media?.words && game.setWords) game.setWords(media.words.map(w => w.text));
+    lastSat = -1; lastState = ''; lastTimeScale = 1; lastBoardLabel = '';
+  }
+  function returnToMenu() {
+    if (!saveEndless()) { ui.paused.querySelector('.bo-save-note').textContent = 'This browser could not save. Resume to keep playing, or try again.'; return; }
+    activeEndless = false; menuOpen = true;
+    mouseLock?.release(); setPaused(false); audio?.stop(); audioOn = false;
+    ui.menu.hidden = false; ui['ghost-hint'].hidden = true; ui['run-hud'].hidden = true;
+    el.classList.add('is-menu'); moved = false; el.classList.remove('is-played');
+    startFresh = false; previewRun = null; syncModeMenu();
+    ui.play.focus({ preventScroll: true });
+  }
   let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;
   let lastSat = -1, lastState = '', lastTimeScale = 1, lastCombo = 0, lastSp = 0, sawHit = false, sourceChanged = false;
@@ -114,11 +177,16 @@ export async function mount(ctx) {
           <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
           <span class="bo-menu-ball"></span><span class="bo-menu-paddle"></span>
         </div>
-        <p class="bo-menu-kicker">THE BACK ROOM</p>
+        <p class="bo-menu-kicker">BREAKOUT</p>
         <h1 id="bo-menu-title">BREAK<span>OUT</span></h1>
         <p class="bo-menu-line">Find your colour.</p>
-        <button class="bo-play" type="button">Start <span aria-hidden="true">&#9656;</span></button>
-        <div class="bo-menu-actions"><button type="button" data-menu="options">Options</button><button type="button" data-menu="exit">Exit</button></div>
+        <div class="bo-modes" role="group" aria-label="Game mode">
+          <button type="button" data-mode="story" aria-pressed="true"><b>Story</b><span>8 levels</span></button>
+          <button type="button" data-mode="endless" aria-pressed="false"><b>Endless</b><span>Always something new</span></button>
+        </div>
+        <p class="bo-run-note" aria-live="polite"></p>
+        <button class="bo-play" type="button">Play <span aria-hidden="true">&#9656;</span></button>
+        <div class="bo-menu-actions"><button type="button" data-menu="new-run" hidden>New run</button><button type="button" data-menu="options">Options</button><button type="button" data-menu="exit">Exit</button></div>
         <p class="bo-menu-controls">Move your mouse or drag to steer.<br>Arrow keys to move. Space to launch.</p>
       </section>
       <section class="bo-flavour" hidden role="dialog" aria-modal="true" aria-labelledby="bo-flavour-title">
@@ -134,10 +202,11 @@ export async function mount(ctx) {
         <span class="bo-sp"><b>0</b> ${t('br_breakout_sp', 'SP')}</span>
         <span class="bo-combo" hidden>0</span>
       </div>
+      <div class="bo-run-hud" hidden role="status" aria-live="polite"><b></b><span></span></div>
       <p class="bo-hint">${t('br_breakout_hint_move', 'move to play')}</p>
       <p class="bo-ghost-hint" hidden></p>
       <button class="bo-pause-button" type="button" aria-label="Pause game">&#9208; Pause</button>
-      <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><p class="bo-best" hidden></p><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="options">Options</button></div></div>
+      <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><p class="bo-best" hidden></p><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="save-menu" hidden>Save and menu</button><p class="bo-save-note" hidden>Continue restarts this board with its starting colour. Best combo kept.</p><button type="button" data-menu="options">Options</button></div></div>
       <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><fieldset class="bo-pictures" hidden><legend>Pictures</legend><div class="bo-pic-tabs" role="group" aria-label="Flavour"></div><div class="bo-pic-niches" aria-label="Niches inside"></div><form class="bo-pic-add"><span aria-hidden="true">r/</span><input type="text" aria-label="Add a niche" placeholder="add a niche" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" maxlength="60"><button type="submit">Add</button></form><p class="bo-pic-note" aria-live="polite"></p></fieldset><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><label class="bo-lock-row"><span><input type="checkbox" data-mouselock>Capture the mouse while playing</span></label><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>A click captures the mouse; Escape frees it and pauses.</p><button type="button" data-menu="close-options">Back</button></div></section>
       <button class="bo-gear" type="button" aria-label="${t('br_breakout_dev', 'dev toggles')}" aria-expanded="false"></button>
       <div class="bo-dev" hidden>
@@ -176,11 +245,15 @@ export async function mount(ctx) {
     const endingActions=document.createElement('div');endingActions.className='bo-ending-actions';endingActions.hidden=true;
     endingActions.innerHTML='<span class="bo-ending-status" role="status">You broke out.</span><button type="button" data-ending="replay">Play again</button><button type="button" data-ending="menu">Menu</button>';
     el.append(endingActions);ui.endingActions=endingActions;
+    const demoCard = document.createElement('section'); demoCard.className = 'bo-demo-complete'; demoCard.hidden = true;
+    demoCard.setAttribute('role','dialog'); demoCard.setAttribute('aria-modal','true'); demoCard.setAttribute('aria-labelledby','bo-demo-title');
+    demoCard.innerHTML = '<div class="bo-pause-card"><p>THREE LEVELS CLEARED</p><h2 id="bo-demo-title">A little colour goes a long way.</h2><p>The full game has all eight Story levels and Endless. Included with Tier 2.</p><button type="button" data-demo="replay">Play again</button><button type="button" data-demo="menu">Menu</button></div>';
+    el.append(demoCard); ui.demoCard = demoCard;
     officeEnding=createOfficeEnding(el,{reduced,actions:endingActions});
     const perfSlot=document.createElement('div');perfSlot.className='bo-perf-slot';
     el.querySelector('.bo-dev').append(perfSlot);
     canvas = el.querySelector('.bo-stage');
-    for (const k of ['hud', 'sp', 'combo', 'hint', 'ghost-hint', 'paused', 'gear', 'dev', 'dev-stats', 'back', 'menu', 'play']) ui[k] = el.querySelector('.bo-' + k);
+    for (const k of ['hud', 'sp', 'combo', 'hint', 'ghost-hint', 'paused', 'gear', 'dev', 'dev-stats', 'back', 'menu', 'play', 'run-note', 'run-hud']) ui[k] = el.querySelector('.bo-' + k);
     const rungs = el.querySelector('.bo-rungs');
     RUNG_NAMES.forEach((name, i) => {
       const lab = document.createElement('label');
@@ -192,9 +265,10 @@ export async function mount(ctx) {
     for (const key of WORD_KEYS) { const b = document.createElement('button'); b.type = 'button'; b.dataset.word = key; b.textContent = key.toLowerCase(); wordsRow.appendChild(b); }
     // Hidden for now (owner, 2026-09-21): players see no gear and no panel, and a panel left open last time stays shut.
     // F2 still brings both back for whoever knows it; ?dev or the dev.html harness opens with them showing.
-    const tools = q.has('dev') || (typeof location !== 'undefined' && location.pathname.endsWith('/dev.html'));
+    const tools = !globalThis.chrome?.webview && (q.has('dev') || (typeof location !== 'undefined' && location.pathname.endsWith('/dev.html')));
     ui.gear.hidden = !tools;
     setDevOpen(tools && store.get(DEV_KEY) === '1');
+    syncModeMenu();
   }
   function setDevOpen(open) {
     ui.dev.hidden = !open; ui.gear.setAttribute('aria-expanded', String(!!open)); el.classList.toggle('is-dev', !!open);
@@ -210,12 +284,16 @@ export async function mount(ctx) {
     lastCombo = c;
   }
   /** The ending is running (the core hit at the spiral centre onward): the mouse is free for its card and never re-taken. */
-  const endingUnderway = () => { const f = game?.snapshot().finale; return !!f && (f.phase === 'outro' || f.phase === 'interrupt'); };
+  const endingUnderway = () => { if (game?.snapshot().demoComplete) return true; const f = game?.snapshot().finale; return !!f && (f.phase === 'outro' || f.phase === 'interrupt'); };
   function setPaused(p) {
+    if (p && game?.snapshot().demoComplete) return;
     officeEnding?.suspend(p);
     if (paused === p) return;
     input.left = input.right = input.launch = false; keysDown.l = keysDown.r = false; touchDrag = null;
     paused = p; ui.paused.hidden = !p; el.classList.toggle('is-paused', p);
+    ui.paused.querySelector('[data-menu="save-menu"]').hidden = !activeEndless;
+    ui.paused.querySelector('.bo-save-note').hidden = !activeEndless;
+    ui.paused.querySelector('.bo-save-note').textContent = 'Continue restarts this board with its starting colour. Best combo kept.';
     if (p) mouseLock?.release();                     // the card needs a visible pointer
     const best = game ? game.snapshot().comboBest | 0 : 0, line = ui.paused.querySelector('.bo-best');   // the one quiet place the best combo shows
     if (line) { line.hidden = best < 3; line.textContent = 'Best combo x' + best; }
@@ -224,7 +302,15 @@ export async function mount(ctx) {
   }
   function beginGame() {
     if (!menuOpen || !game) return;
-    game.replayEntrance();
+    access = readAccess(); if (!access.endless) selectedMode = 'story';
+    if (selectedMode === 'endless') {
+      const resume = menuRun();
+      const run = resume || { seed: newEndlessSeed(savedRun?.seed), from: 0, bestCombo: 0 };
+      makeGame(run); boundary = null; activeEndless = true;
+      previewRun = null; startFresh = false;
+    } else { if (game.snapshot().endless || game.snapshot().demoComplete || game.snapshot().storyLimit !== access.storyLimit) makeGame(); activeEndless = false; boundary = null; }
+    setSp(0); setCombo(0); moved = false; el.classList.remove('is-played');
+    game.replayEntrance(); syncEndless(game.snapshot());
     menuOpen = false; ui.menu.hidden = true; el.classList.remove('is-menu');
     // Reallocate the visible surface after the menu. Keep the simulation intact.
     resize(true);
@@ -310,6 +396,7 @@ export async function mount(ctx) {
   const hitAu = (kind, d) => au('hit', kind, { combo: (d && d.combo) || 0, x: d && Number.isFinite(d.x) ? d.x / game.snapshot().w : 0.5 });
 
   function onEvent(name, d) {
+    if (constructingGame || !game) return;
     if (diagnostics && ['brickDamage', 'brick', 'hit', 'irisHit', 'irisCore', 'word', 'capture', 'spiral', 'breakout', 'relapse', 'wall', 'burst'].includes(name)) diagnostics.log('game-event', { name, kind: d?.kind, combo: d?.combo });
     d = d || {};
     if (name === 'breakout') d = { ...d, gifIndex: media ? media.keys().indexOf(pick()) : -1 };
@@ -321,6 +408,12 @@ export async function mount(ctx) {
     try { cued = !!(audio && typeof audio.cue === 'function' && audio.cue(name, { ...d, xN: Number.isFinite(d.x) ? d.x / s.w : 0.5, sat: s.sat, state: s.state, combo: s.combo })); } catch (e) { /* audio optional */ }
     try { haptics?.onEvent(name, d, s); } catch (e) { /* haptics optional */ }
     switch (name) {
+      case 'demoComplete':
+        mouseLock?.release(); input.launch = input.left = input.right = false;
+        ui.demoCard.hidden = false; ui['ghost-hint'].hidden = true;
+        el.classList.add('is-demo-complete'); audio?.stop(); audioOn = false; haptics?.stop();
+        ui.demoCard.querySelector('button').focus();
+        break;
       case 'finaleCoreReached':
         mouseLock?.release();                        // the ending card wants a visible pointer, from this frame on
         shutdownCover?.remove();
@@ -514,7 +607,7 @@ export async function mount(ctx) {
     const frameMs = lastT ? ts-lastT : 1000/60;
     const dt = Math.min(0.05, frameMs/1000);
     lastT = ts;
-    if (menuOpen || suspended || paused) { try { haptics?.stop(); } catch (e) { /* noop */ } diagnostics?.idle(); renderBudget.idle(ts); return; }
+    if (menuOpen || suspended || paused || game.snapshot().demoComplete) { try { haptics?.stop(); } catch (e) { /* noop */ } diagnostics?.idle(); renderBudget.idle(ts); return; }
     if (mouseLock?.locked && endingUnderway()) mouseLock.release();   // backstop for the release on finaleCoreReached (a dev jump skips the event)
     const perfStart = performance.now();
     if (budgetResize) { resize(); budgetResize = false; }
@@ -524,7 +617,7 @@ export async function mount(ctx) {
     const perfSim = diagnostics ? performance.now() : 0;
     input.launch = false;
     const s = game.snapshot(), now = ts / 1000;
-    syncAudio(s);
+    syncAudio(s); syncEndless(s);
     try { haptics?.frame(s, now); } catch (e) { /* haptics optional */ }
     if(shutdownCover && s.finale?.phase==='outro') {
       const t=s.finale.outroAge,p=Math.max(0,Math.min(1,(t-2.9)/.63));
@@ -565,17 +658,14 @@ export async function mount(ctx) {
   /* ------------------------------------------------------------ lifecycle */
   async function open() {
     if (el) return;
-    menuOpen = true; flavourOpen = false;
+    menuOpen = true; flavourOpen = false; activeEndless = false; boundary = null; savedRun = readCheckpoint(store);
     build();
     if (q.has('perf')) { diagnostics = createPerfPanel(el.querySelector('.bo-perf-slot'));setDevOpen(true); }
     audio = createAudio({ bpm: num(q, 'bpm', 96) });
     for(const key of Object.keys(audioLevels))applyAudioLevel(key,audioLevels[key]);
     media = createMedia({ ctx, still: reduced, count: 8 });
-    // The sim paces on the bed but never plays: every sound is routed from onEvent, so nothing fires twice.
-    const beatShim = { beat: audio.beat, now: audio.now };
-    game = createGame({ audio: beatShim, onEvent, ...(q.has('n') ? { breakoutN: num(q, 'n', 20) } : {}), saturation: Math.max(0, Math.min(1, num(q, 'sat', 0.15))),
-      speedScale: num(q, 'speed', 0.55), reduced });
-    if (q.has('nolose')) game.setNoLose(true);
+    el.querySelector('.bo-option-pace').value = String(num(q, 'speed', .55));
+    makeGame();
     renderer = createRenderer(canvas, { reduced, media, software: q.has('software') || prefersSoftwareCanvas() });
     haptics = createHaptics({ ctx, reduced, enabled: !q.has('nohaptics') });
     gamepad = createGamepad();
@@ -594,6 +684,29 @@ export async function mount(ctx) {
     if (window.visualViewport) on(window.visualViewport, 'resize', resize);
     on(window, 'br-media-changed', () => { sourceChanged = true; });
     on(ui.play, 'click', pressStart);
+    if (ctx.onSettings) off.push(ctx.onSettings(frame => {
+      if (frame.audio) for (const key of Object.keys(audioLevels)) {
+        const value = frame.audio[key]; if (Number.isFinite(value)) applyAudioLevel(key,Math.max(0,Math.min(1,value)));
+      }
+      const next = readAccess(); if (next.storyLimit === access.storyLimit) return;
+      saveEndless(); access = next; selectedMode = 'story'; activeEndless = false; boundary = null;
+      mouseLock?.release(); setPaused(false); closeFlavour(); audio?.stop(); audioOn = false;
+      makeGame(); menuOpen = true; ui.menu.hidden = false; ui.demoCard.hidden = true;
+      el.querySelector('.bo-options').hidden = true; ui['run-hud'].hidden = true; ui['ghost-hint'].hidden = true;
+      el.classList.remove('is-demo-complete'); el.classList.add('is-menu'); syncModeMenu();
+    }));
+    on(ui.demoCard, 'click', e => {
+      const action = e.target.closest('[data-demo]')?.dataset.demo; if (!action) return;
+      ui.demoCard.hidden = true; el.classList.remove('is-demo-complete');
+      makeGame(); menuOpen = true; ui.menu.hidden = false; el.classList.add('is-menu'); syncModeMenu();
+      if (action === 'replay') beginGame(); else ui.play.focus();
+    });
+    on(ui.menu, 'click', e => {
+      const button = e.target.closest('[data-mode]'); if (!button) return;
+      if (button.dataset.mode === 'endless' && !access.endless) return;
+      selectedMode = button.dataset.mode; startFresh = false; syncModeMenu();
+    });
+    on(window, 'pagehide', saveEndless);
     ui.flavour = el.querySelector('.bo-flavour');
     const grid = ui.flavour.querySelector('.bo-flavour-grid');
     for (const f of FLAVOURS) {
@@ -616,6 +729,8 @@ export async function mount(ctx) {
     on(el,'click',e=>{
       const button=e.target.closest('[data-menu]');if(!button)return;
       const action=button.dataset.menu;
+      if(action==='new-run'){startFresh=true;previewRun=null;syncModeMenu();pressStart();}
+      if(action==='save-menu')returnToMenu();
       if(action==='resume'){setPaused(false);canvas.focus();if(e.pointerType!=='touch'&&!endingUnderway())mouseLock?.request({pointerType:'mouse'});}   // the Resume click is the gesture that re-takes the mouse; the ending keeps it free
       if(action==='exit'&&globalThis.chrome?.webview)back();
       if(action==='options'){
@@ -674,7 +789,7 @@ export async function mount(ctx) {
     on(window, 'keydown', (e) => {
       const typing=e.target instanceof HTMLElement&&(e.target.isContentEditable||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'||(e.target.tagName==='INPUT'&&!['range','checkbox','radio','button'].includes(e.target.type)));
       if(!options.hidden){if(e.key==='Escape'){e.preventDefault();options.hidden=true;closePictures();optionsFrom?.focus();}return;}
-      if(typing)return;
+      if(typing || game.snapshot().demoComplete)return;
       if(!menuOpen&&game.snapshot().finale?.phase!=='outro'&&(e.key==='Escape'||e.key.toLowerCase()==='p')){
         e.preventDefault();setPaused(!paused);if(paused)el.querySelector('[data-menu="resume"]').focus();else canvas.focus();return;
       }
@@ -714,7 +829,7 @@ export async function mount(ctx) {
     on(document, 'visibilitychange', () => { if (document.hidden && moved) setPaused(true); });
     if (ui.back) on(ui.back, 'click', back);
     on(window,'keydown',e=>{
-      if(e.key!=='F2')return;
+      if(e.key!=='F2' || globalThis.chrome?.webview)return;
       e.preventDefault();e.stopImmediatePropagation();
       const show=ui.dev.hidden;
       ui.gear.hidden=!show;setDevOpen(show);if(show)syncDev();
@@ -727,6 +842,7 @@ export async function mount(ctx) {
   }
 
   async function close() {
+    saveEndless(); activeEndless = false; boundary = null;
     running = false;
     shutdownCover?.remove();shutdownCover=null;
     officeEnding?.dispose();officeEnding=null;
