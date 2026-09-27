@@ -1,3 +1,5 @@
+import { identity, onIdentity } from './bridge.js';
+
 /* ============================================================================
  * hud.js - the screen furniture: two clocks, one status line, the tally, and
  * the meter drawn as the frame of the screen warming.
@@ -109,6 +111,10 @@ export function createHud(opts = {}) {
     dots: pick('hud-dots'),
     chip: { w: pick('chip-w'), b: pick('chip-b') },
     tally: { w: pick('tally-w'), b: pick('tally-b') },
+    names: { w: pick('name-w'), b: pick('name-b') },
+    tags: { w: pick('turn-w'), b: pick('turn-b') },
+    captures: { w: pick('captured-w'), b: pick('captured-b') },
+    focus: pick('piece-focus'),
     // the online block; every node optional, a page without it is a quieter HUD
     online: {
       root: pick('hud-online'),
@@ -125,6 +131,8 @@ export function createHud(opts = {}) {
     },
   };
 
+  if (el.status) el.status.dataset.hudOwned = 'true';
+  let deal = null;
   let active = 'w';         // whose clock is running
   let over = null;          // the gameover payload, once it lands
   let meter = 0;
@@ -149,20 +157,20 @@ export function createHud(opts = {}) {
 
   /* ---- the sliding light -------------------------------------------------- */
 
-  /** Put the line and the status column under whichever chip is on the move. */
-  function place(instant) {
-    const chip = el.chip[active];
-    if (!chip) return;
-    const y = chip.offsetTop + chip.offsetHeight;
-    const set = (node, dy) => {
-      if (!node) return;
-      if (instant) node.style.transition = 'none';
-      node.style.transform = 'translateY(' + Math.round(y + dy) + 'px)';
-      if (instant) { void node.offsetWidth; node.style.transition = ''; }
-    };
-    set(el.line, T.gapLine);
-    set(el.col, T.gapStatus);
+  // The turn changes inside fixed cards, so controls never move under a pointer.
+  function place() {
     if (el.line) el.line.classList.toggle('on', !over);
+  }
+
+  function paintNames() {
+    const own = identity().displayName || window.PBP?.settings?.playerName;
+    const seat = deal?.match?.side || (game?.seats?.length === 1 ? game.seats[0] : null);
+    for (const side of ['w', 'b']) {
+      const supplied = deal?.players?.[side];
+      const name = typeof supplied === 'string' ? supplied : supplied?.name;
+      const label = name || (online && side === seat ? own : online ? deal?.match?.opponent?.name : '') || (side === 'w' ? 'White' : 'Black');
+      if (el.names[side]) { el.names[side].textContent = label; el.names[side].title = label; }
+    }
   }
 
   function setActive(side, instant) {
@@ -181,6 +189,11 @@ export function createHud(opts = {}) {
     try { if (game && game.rules && game.rules.inCheck() && !over) checked = game.rules.turn(); } catch { checked = null; }
     for (const s of ['w', 'b']) {
       if (el.chip[s]) el.chip[s].classList.toggle('check', s === checked);
+      if (el.tags[s]) el.tags[s].textContent = over ? '' : s === checked ? 'In check' : s === active ? 'To move' : '';
+    }
+    if (!over && el.status) {
+      const name = el.names[active]?.textContent || sideWord(active);
+      el.status.textContent = checked ? name + ' is in check' : name + ' to move';
     }
   }
 
@@ -196,7 +209,7 @@ export function createHud(opts = {}) {
   /** Under 30 s the mover's digits go red; the chip shivers on each tick. */
   function paintLow(snap) {
     const left = snap && typeof snap[active] === 'number' ? snap[active] : null;
-    const low = left != null && left < T.lowMs && !over;
+    const low = !snap?.untimed && left != null && Number.isFinite(left) && left < T.lowMs && !over;
     for (const s of ['w', 'b']) {
       if (el.chip[s]) el.chip[s].classList.toggle('low', low && s === active);
     }
@@ -211,8 +224,17 @@ export function createHud(opts = {}) {
     if (!game || !game.rules) return;
     let position;
     try { position = game.rules.position(); } catch { return; }
+    const history = game.rules.chess?.history({ verbose: true }) || [];
+    const glyph = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛' };
     for (const s of ['w', 'b']) {
       if (el.tally[s]) el.tally[s].textContent = tallyWord(position, s);
+      const taken = history.filter(m => m.color === s && m.captured).map(m => m.captured);
+      if (el.captures[s]) {
+        el.captures[s].textContent = taken.map(t => glyph[t] || '').join('');
+        const label = taken.length ? 'Captured: ' + taken.map(t => NAMES[t]).join(', ') : 'No captures';
+        el.captures[s].setAttribute('aria-label', label);
+        el.captures[s].title = label;
+      }
     }
   }
 
@@ -264,7 +286,7 @@ export function createHud(opts = {}) {
   function noteText() {
     if (flash) return flash;
     if (drawOffer() === 'me') return 'draw offered';
-    if (away) return 'he seems to have left';
+    if (away) return 'Opponent disconnected';
     return '';
   }
 
@@ -304,6 +326,7 @@ export function createHud(opts = {}) {
 
   /** A new deal. The mode on the `local` event is the word; the getter is the fallback. */
   function newDeal(p) {
+    if (p) deal = p;
     let isOnline = false;
     try { isOnline = !!(game && game.isOnline); } catch { isOnline = false; }
     if (p && typeof p.mode === 'string') isOnline = p.mode === 'online';
@@ -312,6 +335,8 @@ export function createHud(opts = {}) {
     away = false;
     flash = '';
     stopAsking();
+    paintNames();
+    paintCheck();
     paintOnline();
   }
 
@@ -341,8 +366,15 @@ export function createHud(opts = {}) {
 
   /* ---- wiring ------------------------------------------------------------- */
 
+  unbind.push(onIdentity(() => { paintNames(); paintCheck(); }));
+  on('piece-focus', (p) => {
+    if (!el.focus) return;
+    const names = { p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King' };
+    el.focus.textContent = p?.square ? (names[p.piece] || 'Piece') + ' · ' + p.square + (p.selected ? ' · Choose a highlighted square' : '') : 'Click a piece, then a square. Or drag.';
+    el.focus.classList.toggle('selected', !!p?.selected);
+  });
   on('clock', (snap) => {
-    if (snap && snap.active && snap.active !== active && !over) setActive(snap.active);
+    if (snap && snap.active && snap.active !== active && !over) { setActive(snap.active); paintCheck(); }
     paintLow(snap);
   });
   on('turn', (p) => {
@@ -372,6 +404,7 @@ export function createHud(opts = {}) {
       el.chip[s].classList.remove('low', 'check', 'shiver', 'shiver-hard');
     }
     if (el.line) el.line.classList.remove('on');
+    for (const tag of Object.values(el.tags)) if (tag) tag.textContent = '';
     stopAsking();
     paintOnline();
   });
@@ -417,6 +450,7 @@ export function createHud(opts = {}) {
   newDeal(null);
 
   function dispose() {
+    if (el.status) delete el.status.dataset.hudOwned;
     if (moves) { try { moves.dispose(); } catch { /* already gone */ } moves = null; }
     for (const off of unbind) { try { off(); } catch { /* already gone */ } }
     unbind.length = 0;
