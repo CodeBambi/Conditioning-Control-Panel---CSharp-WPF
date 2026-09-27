@@ -19,6 +19,20 @@
       ok(Math.abs(first.ring)>.1,'wobble starts at touchdown');
     }
   }
+  const {impactTime,impactDelay,impactPulse}=await import('./board/impact.js');
+  for(const motion of ['p','n','b','r','k']) {
+    const delay=impactDelay(motion); let previous=0;
+    for(let t=0;t<2;t+=1/240) {const mapped=impactTime(t,1,delay);ok(mapped>=previous-1e-10,'impact clock is monotone');previous=mapped;}
+    ok(Math.abs(impactTime(.99,1,delay)-.99)<1e-10,'no pause before contact');
+    ok(Math.abs(impactTime(2,1,delay)-(2-delay))<1e-10,'bounded contact delay');
+  }
+  const {siliconePoint}=await import('./board/silicone.js');
+  const dent={x:0,z:0,dx:.10,dy:0,dz:0,dentAt:.55};
+  const near=siliconePoint({x:-.15,y:.55,z:0},1,dent),far=siliconePoint({x:.15,y:.55,z:0},1,dent);
+  ok(near.x>-.15&&Math.abs(far.x-.15)<1e-10,'dent affects the struck side');
+  ok(siliconePoint({x:-.15,y:0,z:0},1,dent).x===-.15,'dent leaves the planted base fixed');
+  ok(impactPulse(.015,1).dent>0&&impactPulse(.015,1).wave===0,'local dent precedes travelling wobble');
+  ok(impactPulse(.08,1.4).wave>impactPulse(.08,.6).wave,'tall victims flex more');
   function setup(type = 'p', side = 'w', victim = 'r', crowded = false) {
     P.bus.emit('local', {}); B.pieces.setPosition({});
     const map = {d4:{type, side},d5:{type:victim,side:side==='w'?'b':'w'}};

@@ -1,3 +1,17 @@
+## Contact weight
+
+Heavy contacts briefly ease the actors to a near-stop 18 ms after impact,
+then resume, adding 24-48 ms to the action. Game input and clocks keep running.
+The first visible landing compression is immediate, and the queen's first two
+bashes retain their quick rhythm. Victims dent locally on the struck side,
+followed by a height-weighted travelling bend. CPU contact checks, skin,
+outlines and shadows share the dent deformation.
+
+Squashes add a low dust ring; flung victims leave a short pooled trail.
+Impact sounds vary slightly in pitch with lower voices for heavier attackers.
+An occasional small stretch or crown twist finishes the existing settle.
+Reduced motion skips the extra motion, and mute follows the existing mix.
+
 ## Queen replacement and compact rook recoil
 
 The queen now draws from a five-attack shuffle bag: triple bash, double slap,

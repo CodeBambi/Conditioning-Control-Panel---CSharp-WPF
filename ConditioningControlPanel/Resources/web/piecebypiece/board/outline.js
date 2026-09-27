@@ -154,7 +154,7 @@ export function createOutline({ group, bus = null }) {
       // Share the spring's objects: the hull reads the same bend the skin does.
       shader.uniforms.uBend = u.uBend;
       shader.uniforms.uAct = u.uAct;
-      shader.uniforms.uLag = u.uLag; shader.uniforms.uFlex = u.uFlex; shader.uniforms.uTwist = u.uTwist; shader.uniforms.uBulge = u.uBulge;
+      shader.uniforms.uLag = u.uLag; shader.uniforms.uFlex = u.uFlex; shader.uniforms.uTwist = u.uTwist; shader.uniforms.uBulge = u.uBulge; shader.uniforms.uDent = u.uDent;
       shader.uniforms.uDissolve = u.uDissolve;
       shader.fragmentShader = 'varying vec3 vPbpPosition; uniform float uDissolve;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', `

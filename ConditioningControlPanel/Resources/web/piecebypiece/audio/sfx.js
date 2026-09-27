@@ -81,6 +81,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   let wet = null;            // the delay's return, beside the master
   let meter = 0;
   let wetLevel = 0;          // what the wet gain was last asked for
+  let cuePitch = 1;
   let drift = 0;             // cents, applied to every new voice
   let lowClock = false;      // the mover is under lowClockMs
   const log = [];
@@ -155,8 +156,8 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     const env = ctx.createGain();
     osc.type = type;
     tune(osc);
-    osc.frequency.setValueAtTime(hz, t0);
-    if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), t0 + sec);
+    osc.frequency.setValueAtTime(hz * cuePitch, t0);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo * cuePitch), t0 + sec);
     env.gain.setValueAtTime(0.0001, t0);
     env.gain.exponentialRampToValueAtTime(gain, t0 + 0.005);
     env.gain.exponentialRampToValueAtTime(0.0001, t0 + sec);
@@ -181,8 +182,8 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     tune(src);
     const f = ctx.createBiquadFilter();
     f.type = type;
-    f.frequency.setValueAtTime(from, t0);
-    if (to !== from) f.frequency.exponentialRampToValueAtTime(to, t0 + sec);
+    f.frequency.setValueAtTime(from * cuePitch, t0);
+    if (to !== from) f.frequency.exponentialRampToValueAtTime(to * cuePitch, t0 + sec);
     const env = ctx.createGain();
     env.gain.setValueAtTime(0.0001, t0);
     env.gain.exponentialRampToValueAtTime(gain, t0 + (attack != null ? Math.min(attack, sec * 0.5) : Math.min(0.03, sec * 0.3)));
@@ -287,8 +288,11 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     const v = volume();
     if (v <= 0) return false;
     if (master.gain.value !== v) master.gain.value = v;
+    const varied = ['hop', 'hopland', 'land', 'stomp', 'headbutt', 'whip', 'launch', 'rebound'].includes(name);
+    const mass = { p: 1.08, n: 1, b: 1.04, r: .89, q: .96, k: .86 }[opts.piece] || 1;
+    cuePitch = varied ? mass * (.97 + Math.random() * .06) : 1;
     try { cues[name](opts); } catch (e) { console.warn('[pbp] cue failed ' + name, e); return false; }
-    log.push({ name, opts, at: ctx.currentTime, state: ctx.state });
+    log.push({ name, opts, pitch: cuePitch, at: ctx.currentTime, state: ctx.state });
     if (log.length > TUNING.logSize) log.shift();
     return true;
   }
@@ -334,7 +338,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   });
   on('hit', p => { if (['q', 'r', 'b'].includes(p?.piece)) play('rebound'); });
   on('captureCue', p => { if (p?.name) play(p.name); });
-  on('hit', p => { play(p?.sound || (p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip')); });
+  on('hit', p => { play(p?.sound || (p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip'), { piece: p?.piece, height: p?.height }); });
   on('check', () => { checkArmed = true; startPulse(); });
   on('turn', () => {
     lastSecond = -1;
