@@ -84,7 +84,7 @@ public class RampLinkLabelTests
     [Fact]
     public void TheOldMysteryLabelIsGoneEverywhere()
     {
-        var dir = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");
         Assert.True(files.Length == 9, "expected 9 language files, found " + files.Length);
 

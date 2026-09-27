@@ -119,7 +119,7 @@ public class LauncherMelodyTests
     [Fact]
     public void Every_rung_has_a_rendered_note_on_disk()
     {
-        var dir = Repo("ConditioningControlPanel", "Resources", "sounds", "launcher");
+        var dir = Repo("Assets", "sounds", "launcher");
         for (int rung = 0; rung < LauncherMelody.Rungs; rung++)
         {
             var file = Path.Combine(dir, $"wood_{rung:00}.wav");

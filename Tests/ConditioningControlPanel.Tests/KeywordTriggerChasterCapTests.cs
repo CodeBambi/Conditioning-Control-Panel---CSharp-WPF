@@ -199,7 +199,7 @@ public class KeywordTriggerChasterCapTests
         while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
             dir = dir.Parent;
         Assert.True(dir != null, "could not locate the repo root");
-        var json = File.ReadAllText(Path.Combine(dir!.FullName, "ConditioningControlPanel", "Resources", "AwarenessPresets", "chastity.json"));
+        var json = File.ReadAllText(Path.Combine(dir!.FullName, "Assets", "AwarenessPresets", "chastity.json"));
         var preset = JsonConvert.DeserializeObject<KeywordTriggerPreset>(json);
 
         var s = KeywordTriggerChasterImport.Summarise(preset!.Triggers);

@@ -57,7 +57,7 @@ namespace ConditioningControlPanel.Services
         /// meaning the player said yes before. A version-bump re-install keeps that answer.</summary>
         public bool ChasterTimeWasAllowed(string presetId)
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             if (settings == null || string.IsNullOrEmpty(presetId)) return false;
             var prefix = TriggerIdPrefix + presetId + ":";
             return KeywordTriggerChasterImport.AnyEnabled(

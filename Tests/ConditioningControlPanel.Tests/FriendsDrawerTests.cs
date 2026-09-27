@@ -108,7 +108,7 @@ public class FriendsDrawerTests
         foreach (var r in Enum.GetValues<AddResult>()) keys.Add(FriendsDrawerRules.AddResultKey(r));
         foreach (var r in ReportReason.All) keys.Add("friends_menu_report_" + r);
 
-        var dir = System.IO.Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
             var json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(System.IO.Path.Combine(dir, lang + ".json")));

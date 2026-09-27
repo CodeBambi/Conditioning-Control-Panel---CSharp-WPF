@@ -444,7 +444,7 @@ public class PatreonReconnectRuleTests
     [Fact]
     public void TheNewKeysAreInAllNineLanguages()
     {
-        var dir = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");
         Assert.Equal(9, files.Length);
 

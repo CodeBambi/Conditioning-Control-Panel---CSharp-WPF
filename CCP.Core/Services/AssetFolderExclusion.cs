@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services;
 
@@ -109,7 +110,7 @@ public static class AssetFolderExclusion
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("AssetFolderExclusion: could not list {Folder}: {Error}", folder, ex.Message);
+                Log.Debug("AssetFolderExclusion: could not list {Folder}: {Error}", folder, ex.Message);
             }
         }
         return Expand(disabledPaths, folders, listing);
