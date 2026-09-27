@@ -75,13 +75,22 @@ namespace ConditioningControlPanel.Tests
         public void Every_effect_reader_goes_through_the_gate()
         {
             var app = Path.Combine(RepoRoot(), "ConditioningControlPanel");
-            var raw = new Regex(@"\.AllowAiToControlEffects\s*(!=|==)\s*true|!settings\.AllowAiToControlEffects\b");
+            // Any mention of the property in code (not a comment) is a read, except the gate itself,
+            // the settings model (declaration, defaults, Clone) and the click handler's own write.
+            // A narrower pattern (== true / != true) let `if (cp.AllowAiToControlEffects)` through.
+            var mention = new Regex(@"\bAllowAiToControlEffects\b");
+            var clickWrite = new Regex(@"\bAllowAiToControlEffects\s*=\s*on\s*;");
             var offenders = Directory.EnumerateFiles(app, "*.cs", SearchOption.AllDirectories)
                 .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
                          && !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar))
-                .Where(f => !f.EndsWith("AiEffectControlGate.cs", StringComparison.Ordinal))
-                .Where(f => raw.IsMatch(File.ReadAllText(f)))
-                .Select(Path.GetFileName)
+                .Where(f => !f.EndsWith("AiEffectControlGate.cs", StringComparison.Ordinal)
+                         && !f.EndsWith("CompanionPromptSettings.cs", StringComparison.Ordinal))
+                .SelectMany(f => File.ReadAllLines(f)
+                    .Select((line, i) => (f, i, line))
+                    .Where(t => mention.IsMatch(t.line)
+                             && !t.line.TrimStart().StartsWith("//")
+                             && !clickWrite.IsMatch(t.line)))
+                .Select(t => $"{Path.GetFileName(t.f)}:{t.i + 1}: {t.line.Trim()}")
                 .ToList();
             Assert.Empty(offenders);
         }
