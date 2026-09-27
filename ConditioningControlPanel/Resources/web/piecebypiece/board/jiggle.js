@@ -65,13 +65,15 @@ export const TUNING = Object.freeze({
   substep: 1 / 240,         // the spring is stiff, so integrate it small
 });
 
-const CACHE_KEY = 'pbp-jiggle-1';
-const DEPTH_KEY = 'pbp-jiggle-depth-1';
+const CACHE_KEY = 'pbp-jiggle-2';
+const DEPTH_KEY = 'pbp-jiggle-depth-2';
 const T = TUNING;
 const f = (n) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 
 const PRELUDE = `
+varying vec3 vPbpPosition;
 uniform vec2 uBend;
+uniform float uAct;
 uniform float uSquash;
 uniform float uHeight;
 uniform float uPhase;
@@ -85,11 +87,12 @@ const BEND_VERTEX = `#include <begin_vertex>
   float wb = pow(h, ${f(T.bendWeightPow)});
   float ws = pow(h, ${f(T.squashWeightPow)});
   vec2 wave = uBend * (sin(h * ${f(T.rippleWaves)} - uTime * ${f(T.rippleSpeed)} + uPhase) * ${f(T.rippleGain)});
-  vec2 off = (uBend + wave) * wb;
+  vec2 off = (uBend + wave * (1.0 - uAct)) * wb;
   transformed.y *= (1.0 - uSquash * ws);
   transformed.xz *= (1.0 + ${f(T.volumeGain)} * uSquash);
   transformed.x += off.x;
   transformed.z += off.y;
+  vPbpPosition = transformed;
 }`;
 
 // The normal is rotated by the derivative of the bend and rescaled by the
@@ -141,6 +144,15 @@ export function createJiggle() {
     const hook = (shader, renderer) => {
       if (prior) prior(shader, renderer);
       shader.uniforms.uBend = u.uBend;
+      shader.uniforms.uAct = u.uAct;
+      shader.uniforms.uDissolve = u.uDissolve;
+      shader.fragmentShader = 'varying vec3 vPbpPosition; uniform float uDissolve;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', `
+        #include <clipping_planes_fragment>
+        vec3 cell = floor(vPbpPosition * 38.0);
+        float crumb = fract(sin(dot(cell, vec3(12.9898, 78.233, 39.425))) * 43758.5453);
+        if (uDissolve > 0.0 && crumb < uDissolve) discard;
+      `);
       shader.uniforms.uSquash = u.uSquash;
       shader.uniforms.uHeight = u.uHeight;
       shader.uniforms.uPhase = u.uPhase;
@@ -178,6 +190,8 @@ export function createJiggle() {
   function attach(piece) {
     if (states.has(piece)) return states.get(piece);
     const u = {
+      uAct: { value: 0 },
+      uDissolve: { value: 0 },
       uBend: { value: new THREE.Vector2(0, 0) },
       uSquash: { value: 0 },
       uHeight: { value: 1 },
@@ -310,6 +324,13 @@ export function createJiggle() {
     const idle = wobble > 0.001 && !prefersReducedMotion() ? wobble * T.idleAmp : 0;
     for (const [piece, s] of states) {
       if (!piece.parent) { states.delete(piece); continue; }
+      if (piece.userData.capturePose) {
+        const act = piece.userData.capturePose;
+        s.bend.set(0, 0); s.vel.set(0, 0); s.squash = s.sVel = 0; s.forced.set(0, 0);
+        s.u.uBend.value.set(act.x, act.z); s.u.uSquash.value = 0;
+        s.u.uAct.value = 1; continue;
+      }
+      s.u.uAct.value = 0;
       for (let i = 0; i < steps; i++) step(s, h);
       s.bend.x = THREE.MathUtils.clamp(s.bend.x, -T.maxBend, T.maxBend);
       s.bend.y = THREE.MathUtils.clamp(s.bend.y, -T.maxBend, T.maxBend);

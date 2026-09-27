@@ -4,7 +4,7 @@
 <style>
 *{box-sizing:border-box}body{margin:0;background:#21142f;color:#f7e9f3;font:15px system-ui}header{padding:18px 24px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;border-bottom:1px solid #63405f}h1{font-size:19px;margin:0}p{margin:4px 0;color:#c5adc7;font-size:13px}nav{display:flex;gap:7px;flex-wrap:wrap}button,a{font:inherit;color:inherit;border:1px solid #79526f;border-radius:9px;padding:9px 13px;background:#38243f;cursor:pointer;text-decoration:none}button[aria-pressed=true]{background:#dc98be;color:#27162d}button:hover,a:hover{border-color:#ffc5e5}button:focus-visible,a:focus-visible{outline:2px solid #fff;outline-offset:3px}.tools{margin-left:auto;display:flex;gap:9px;align-items:center}label{white-space:nowrap;font-size:13px}iframe{width:100%;height:calc(100vh - 155px);min-height:430px;border:0;display:block}footer{padding:12px 24px;display:flex;gap:18px;align-items:center}#caption{font-weight:600;color:#ffc3e2}small{color:#bba4c2} @media(max-width:800px){header{padding:12px}.tools{margin-left:0}iframe{height:65vh}footer{flex-wrap:wrap}}
 </style>
-<header><div><h1>Piece by Piece</h1><p>18 captures. Pick a piece and watch its next take.</p></div><nav id="pieces"></nav><div class="tools"><button id="replay">Another take</button><button id="auto" aria-pressed="true">Auto play</button><label><input id="reduced" type="checkbox"> Reduced motion</label><a href="../index.html?hotseat=1">Play chess</a></div></header>
+<header><div><h1>Piece by Piece</h1><p>Six pieces. Six signature captures. Click a piece to watch.</p></div><nav id="pieces"></nav><div class="tools"><button id="replay">Replay capture</button><button id="auto" aria-pressed="true">Auto play</button><label><input id="reduced" type="checkbox"> Reduced motion</label><a href="../index.html?hotseat=1">Play chess</a></div></header>
 <iframe id="game" src="../index.html?hotseat=1" title="Chess capture preview"></iframe>
 <footer><span id="caption" aria-live="polite">Loading the pieces...</span><small>Drag with the right mouse button to orbit. Scroll to zoom.</small></footer>
 <script type="module">
@@ -24,14 +24,14 @@ function play(){
  const map={a1:{type:'r',side:'w'},h1:{type:'n',side:'w'},a8:{type:'b',side:'b'},h8:{type:'k',side:'b'}};
  map[from]={type,side:'w'};map[to]={type:['p','n','b','r','q'][victim++%5],side:'b'};
  B.pieces.setPosition(map);B.setSide('w',true);
- B.view.cameraRig.set({radius:8.4,phi:.93,target:[-.25,.15,-.2]},true);
+ B.view.cameraRig.set({theta:.75,radius:8.4,phi:.98,target:[-.25,.5,-.2]},true);
  for(const b of document.querySelectorAll('[data-type]'))b.setAttribute('aria-pressed',b.dataset.type===type);
  caption.textContent=names[type]+' is ready';
  timer=setTimeout(()=>{
    B.pieces.move(from,to);
-   const id=B.anim.stats().tumbles[0]?.variation||'capture';
+   const id=B.anim.stats().acts[0]?.variation||'capture';
    caption.textContent=names[type]+' / '+id.replaceAll('-',' ');
-   if(auto)timer=setTimeout(()=>{if(++beat%3===0){const keys=Object.keys(names);type=keys[(keys.indexOf(type)+1)%keys.length];}play();},2400);
+   if(auto)timer=setTimeout(()=>{if(++beat%3===0){const keys=Object.keys(names);type=keys[(keys.indexOf(type)+1)%keys.length];}play();},3100);
  },450);
 }
 document.getElementById('replay').onclick=play;

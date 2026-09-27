@@ -2,19 +2,31 @@
 
 ## Current implementation, 2026-09-27
 
-`board/captures.js` now supplies 18 ordinary captures, three per attacker type.
-A shuffled bag exhausts each type's variants before refilling and prevents adjacent repeats.
-Pawn: bump, stomp, tumble. Knight: pounce, somersault, ricochet.
-Bishop: sweep, twirl, flick. Rook: shove, bowl, bumpers.
-Queen: pirouette, dismiss, curtsy. King: bow, royal-bump, topple.
-Arrival remains 300 ms, or 440 ms for a knight; victim reactions last up to 1040 ms after arrival.
-The victim flinches before contact, deflects sideways for visibility, and stays supported while rotating.
-Stomp, pirouette and bow also give the attacker a brief interruptible follow-through.
-Reduced motion uses a slide and short tip/fade. Tap or Space/Enter skips capture tails.
-Drag direction comes from the logical source square; promotion transfers an active flight to the new model.
-The optional bishop whip retains its existing explicit setting and is not part of the shuffled deck.
-`dev/captures.html` is the local showcase. `smoke/capture-smoke.mjs` checks the deck and trajectories;
-`smoke/capture-browser.js` runs through the existing shot tool's `--eval` input.
+`board/choreography.js` owns the six signature captures approved in the owner's second pass.
+This replaces the shuffled reaction deck and its 300/440 ms capture deadline.
+
+| Attacker | Action | Contact | Settled |
+| --- | --- | --- | --- |
+| Pawn | Squat, jump with the flat base, squash the victim | 720 ms | 1550 ms |
+| Knight | Hoofbeats, whinny, backflip, base-first landing | 900 ms | 1800 ms |
+| Bishop | Draw back, extend the tentacle, slap, retract | 700 ms | 1600 ms |
+| King | Lean back, headbutt, recover and slide | 820 ms | 1750 ms |
+| Queen | Headstand, swing the base around the head, recover | 1000 ms | 2050 ms |
+| Rook | Approach, charge, swing and launch beyond the board | 1000 ms | 2150 ms |
+
+Moves, legality and clocks commit immediately. Tap or Space/Enter settles any act.
+Reduced motion dissolves in place before a short slide, settling in 460 ms.
+Capture ownership transfers on promotion; undo, recapture and rematch cancel cleanly.
+Clearance uses 24 body sections derived from loaded meshes, with live bend/rotation/scale.
+The attacker stays above contact surfaces; neighbouring pieces are never displaced.
+All victims except the rook's launch break into a surface dissolve with 210 pooled motes.
+The silhouette and shadow share the dissolve mask. Reduced motion uses 18 quiet motes.
+Sounds use the existing volume/mute path and Web Audio, including a stylised horse whinny.
+No voice synthesis, external recordings or paid services are used.
+
+`dev/captures.html` is the interactive showcase. `smoke/capture-browser.js` runs via
+the existing shot tool's `--eval` input and checks contact, clearance and interruption.
+The older deck in `captures.js` and optional `?whip=1` path are retained for compatibility.
 
 ## Historical choreography proposals
 

@@ -26,7 +26,7 @@ import * as THREE from 'three';
 
 /** Every number that decides how a landing looks. */
 export const TUNING = Object.freeze({
-  pool: 256,               // motes alive at once; a burst past this recycles the oldest
+  pool: 1536,               // motes alive at once; a burst past this recycles the oldest
   count: 14,               // motes per landing
   countReduced: 6,
   life: 0.5,               // seconds a mote lives
@@ -222,6 +222,27 @@ export function createDust({ scene, bus = null }) {
     bursts++;
   }
 
+  function dissolve({ object: piece, low = false }) {
+    const points = piece?.userData.captureShape;
+    if (!points?.length) return;
+    const v = new THREE.Vector3(), bend = piece.userData.capturePose;
+    const h = piece.userData.jiggleUniforms?.uHeight.value || 1;
+    const base = new THREE.Color(piece.userData.side === 'b' ? 0xad77cf : 0xffbad8);
+    const count = low ? 18 : 210;
+    for (let i = 0; i < count; i++) {
+      v.copy(points[Math.floor(Math.random() * points.length)]);
+      const w = Math.min(1, Math.max(0, v.y / h)) ** 2;
+      if (bend) { v.x += bend.x * w; v.z += bend.z * w; }
+      v.multiply(piece.scale).applyQuaternion(piece.quaternion).add(piece.position);
+      const a = Math.random() * Math.PI * 2, reach = low ? .025 : .12 + Math.random() * .40;
+      tmp.copy(base).lerp(cream, Math.random() * .7);
+      mote(v.x, v.y, v.z, Math.cos(a) * reach, low ? 0 : .15 + Math.random() * .3,
+        Math.sin(a) * reach, low ? .035 : .035 + Math.random() * .055,
+        low ? 0 : .08, low ? .18 : .48 + Math.random() * .40, tmp);
+    }
+    upload(); bursts++;
+  }
+
   let unsub = null;
   if (bus && typeof bus.on === 'function') {
     unsub = bus.on('land', (p) => {
@@ -235,8 +256,10 @@ export function createDust({ scene, bus = null }) {
     const unsubAccent = bus.on('captureAccent', (p) => {
       if (!reduced() && p?.world) puff(p.world, p.height, 'hit', p.piece);
     });
+    const unsubDissolve = bus.on('dissolve', dissolve);
+    const unsubLocal = bus.on('local', () => { spawn.fill(-1e9); upload(); for (const f of flashes) f.mesh.visible = false; for (const r of rings) r.mesh.visible = false; });
     const unsubLand = unsub;
-    unsub = () => { unsubLand(); unsubHit(); unsubAccent(); };
+    unsub = () => { unsubLand(); unsubHit(); unsubAccent(); unsubDissolve(); unsubLocal(); };
   }
 
   function update(dt, camera, renderer) {
