@@ -243,6 +243,14 @@
 .bo-lock-row span { display:flex;flex-direction:row;align-items:center;gap:9px; }
 .bo-lock-row input { width:16px;height:16px;margin:0;accent-color:#e7b2ef; }
 
+.bo-demo-complete { position:absolute;inset:0;z-index:35;display:grid;place-items:center;padding:24px;background:#100c1cdd; }
+.bo-demo-complete[hidden] { display:none; }
+.bo-demo-complete h2 { font-size:28px;letter-spacing:0; }
+.bo-demo-complete p { max-width:360px;font:15px/1.6 system-ui;letter-spacing:0; }
+.bo-station.is-demo-complete .bo-pause-button,.bo-station.is-demo-complete .bo-hint { display:none; }
+.bo-modes.is-demo { grid-template-columns:1fr; }
+.bo-modes button[hidden] { display:none; }
+
 /* Story and Endless share the same cabinet, controls and picture preferences. */
 .bo-modes { display:grid;grid-template-columns:1fr 1fr;gap:10px;width:min(420px,100%); }
 .bo-modes button { display:flex;flex-direction:column;gap:5px;align-items:center;padding:14px 12px;border:1px solid #67516e;border-radius:12px;background:#211728;color:#cbbbce;cursor:pointer;touch-action:manipulation; }

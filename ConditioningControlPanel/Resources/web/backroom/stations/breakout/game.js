@@ -13,6 +13,7 @@ import { shieldY } from './words/let-go.js';
 import { endlessBoard, seededRandom } from './endless-layout.js';
 import { advanceEndlessDemolition } from './endless-physics.js';
 import { transitPortal } from './portals.js';
+import { rallyBoost, RALLY_RAMP_S } from './rally-speed.js';
 /* ============================================================================
  * stations/breakout/game.js - the sim. DOM-free so `node --test` can drive it.
  *
@@ -161,7 +162,7 @@ export function layoutWord(word) {
 
 export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEvent = () => {}, breakoutN,
   saturation = 0.15, speedScale = 0.55, words = DEFAULT_WORDS, reduced = false, brickStrength = STRENGTH_BY_WALL, greyMetal = true,
-  endless = false, seed = 1, from = 0, savedSaturation, bestCombo = 0 } = {}) {
+  endless = false, seed = 1, from = 0, savedSaturation, bestCombo = 0, storyLimit = 8 } = {}) {
   const runtimeRandom = rng;
   let boardRandom = null;
   rng = () => boardRandom ? boardRandom() : runtimeRandom();
@@ -172,6 +173,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   const resume = !!endless && Number.isFinite(savedSaturation);
   const boardIndex = endless ? clamp(Math.floor(Number(from) || 0), 0, 999999) : 0;
   const g = {
+    storyLimit: clamp(Number.isFinite(Number(storyLimit)) ? Math.floor(Number(storyLimit)) : 8, 1, 8), demoComplete: false, rally: 0,
     endless: !!endless, endlessSeed: Number(seed) >>> 0, endlessBoard: null, portals: [],
     w, h, breakoutN: nextBreakoutN(), speedScale, noLose: false,   // dev: the floor bounces, the ball never drops
     reduced: !!reduced,                            // reduced motion: no tumble, the bubble appears at the brick
@@ -199,7 +201,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     return (g.time / spb()) % 1;
   };
   // One beat bottom-to-top at saturation 0, one and a half at 1 (breathing pace); never below a floor.
-  const targetSpeed = () => Math.max(220, g.speedScale * h / (spb() * (1 + 0.5 * g.sat)));
+  const targetSpeed = () => Math.max(220, g.speedScale * h / (spb() * (1 + 0.5 * g.sat))) * rallyBoost(g.rally);
   const setTimeScale = (s) => { if (s !== g.timeScale) { g.timeScale = s; au('setTimeScale', s); } };
 
   /* ------------------------------------------------------------ wall */
@@ -592,6 +594,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   /** The slow-motion fall: the ball keeps dropping under the paddle for 0.5 s of real time, then the grey cut. */
   function startRelapse(b) {
     if ((g.finale && g.finale.phase !== 'released') || g.state !== 'colour' || g.transition || g.balls.some(other => other !== b && !other.lost && !other.falling)) return;
+    g.rally = 0;
     g.transition = { kind: 'relapse', t: 0 };
     g.combo = 0;
     g.smear = { x: b.x, y: Math.min(b.y, h - 4), a: 1 }; g.smearFading = false;
@@ -600,6 +603,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function relapse(at) {
     flushClearing();                                  // a wall owed by the last-brick moment lands before the cut, so its saturation is saved
+    if (g.demoComplete) return;
     g.perfectStreak = 0; g.layerArmed = { melody: true, arp: true };
     powers.reset();
     g.transition = null; setTimeScale(1); wordSim.endAll();
@@ -639,6 +643,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     emit('breakout', { x: g.breakoutAt.x, y: g.breakoutAt.y, sat: g.sat, count:breakouts });
   }
   function lostAll(last) {
+    g.rally = 0;
     powers.reset();
     if (g.finale && g.finale.phase !== 'released') { respawn(g.state === 'grey'); return; }
     if (g.state === 'colour') {
@@ -663,6 +668,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
   }
   function breakBrick(br, ball) {
+    if (g.demoComplete) return;
     if (!br.alive) return;
     const f = g.finale;
     if (f && f.phase !== 'released' && !(br.finaleDefense && (f.phase === 'approach' || f.phase === 'locked'))) {
@@ -934,11 +940,22 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     return false;
   }
   function wallCleared() {
+    if (g.demoComplete) return;
     if (g.clearing?.wall) g.clearing = null;          // the held wall is this one
     g.lastBrickDone = false;
     g.stats.walls++; g.stats.sp = Math.min(20, g.stats.sp + 1);
     addSat(0.1);
     au('wallCleared');
+    if (!g.endless && g.storyLimit < 8 && g.stats.walls >= g.storyLimit) {
+      g.demoComplete = true;
+      powers.reset(); wordSim.endAll();
+      g.balls = []; g.pops = []; g.colliders = []; g.well = null;
+      g.transition = null; g.clearing = null; g.freeze = 0; g.hitStopMs = 0; g.acc = 0;
+      g.pendingBreakout = false; g.breakoutShield = null; setTimeScale(1);
+      emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra });
+      emit('demoComplete', { levels: g.storyLimit, walls: g.stats.walls });
+      return;
+    }
     buildWall(); g.wallAge = 0; g.landRow = 0; g.tail = 0; g.tailDrop = 0;
     if (g.endless) { respawn(g.state === 'grey'); g.launchTimer = 0; }
     emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra });
@@ -1401,6 +1418,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function tick(dt, input) {
     g.time += dt; g.wallAge += dt;
+    // Adapted from the parked feel-3 live-rally clock. Board changes keep the rally.
+    if (g.balls.some(b => !b.stuck && !b.lost && !b.falling)) g.rally = Math.min(RALLY_RAMP_S, g.rally + dt);
     updateTide(dt); updateFinaleFormation(dt); updatePendulums(dt);
     // Quiet landing ticks accompany the slower wall entrance.
     while (g.landRow < (g.spell ? 5 : BRICK.rows) && g.wallAge >= 0.56 + g.landRow * 0.04) {
@@ -1439,6 +1458,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
   }
   function step(dt, input = {}) {
+    if (g.demoComplete) return;
     dt = Math.min(Math.max(0, dt), 0.1);
     if (updateFinale(dt, input)) return;
     if (g.spell?.complete) {
@@ -1448,6 +1468,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         else { startSpellRound(); cycleSpellLetters(); }
       }
     }
+    if (g.demoComplete) return;
     const ph = beatPhase();
     g.downbeat = ph < g.beatPhase; g.beatPhase = ph;  // the phase wrapped: a beat boundary fell inside this frame
     if (g.smear && g.smearFading) { g.smear.a -= dt; if (g.smear.a <= 0) { g.smear = null; g.smearFading = false; } }
@@ -1467,6 +1488,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (g.nearMissT > 0) g.nearMissT = Math.max(0, g.nearMissT - dt);
     // The last-brick moment runs on the wall clock: slow-mo while it lasts, then the wall it was holding back.
     if (g.clearing && (g.clearing.t -= dt) <= 0) flushClearing();
+    if (g.demoComplete) return;
     updateReform(dt);
     updateIris(dt);
     wordSim.advance(dt);                              // wall-clock: a word that slows the game does not slow itself
@@ -1478,9 +1500,10 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     setTimeScale(Math.min(tr && tr.kind === 'relapse' ? 0.35 : g.clearing ? LAST_SCALE : g.nearMissT > 0 ? 0.4 : 1, g.mod.timeScale));
     movePaddle(dt, input);
     if(!g.transition)powers.step(dt);
+    if (g.demoComplete) return;
     g.acc += dt * g.timeScale;
     let guard = 0;
-    while (g.acc >= STEP && guard++ < 24) { g.acc -= STEP; tick(STEP, input); if (g.freeze > 0 || g.hitStopMs > 0 || ['interrupt','outro'].includes(g.finale?.phase)) { g.acc = 0; break; } }
+    while (g.acc >= STEP && guard++ < 24) { g.acc -= STEP; tick(STEP, input); if (g.demoComplete || g.freeze > 0 || g.hitStopMs > 0 || ['interrupt','outro'].includes(g.finale?.phase)) { g.acc = 0; break; } }
     if (tr && tr.kind === 'relapse' && tr.t >= 1) relapse(g.balls[0] || g.smear);
   }
 
@@ -1503,7 +1526,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     /* dev and test hooks */
     replayEntrance() { g.wallAge = 0; g.landRow = 0; },
     jumpToWall(n) {
-      g.stats.walls = Math.max(0, Math.floor(Number(n) || 1) - 1);
+      g.demoComplete = false; g.rally = 0;
+      g.stats.walls = Math.min(!g.endless && g.storyLimit < 8 ? g.storyLimit - 1 : Infinity, Math.max(0, Math.floor(Number(n) || 1) - 1));
       wordSim.endAll(); g.colliders = []; g.pops = []; g.well = null;
       g.hitStopMs = 0; g.freeze = 0; g.pendingBreakout = false; g.transition = null; g.clearing = null; g.lastBrickDone = false;
       buildWall(); g.wallAge = 2; g.landRow = 99; respawn(g.state === 'grey');
@@ -1511,7 +1535,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     },
     /** Debug shortcuts map the three playable finale beats, not a new ending. */
     jumpToFinaleBeat(beat) {
-      if (g.endless) return;
+      if (g.endless || g.storyLimit < 8) return;
       this.jumpToWall(8);
       if (beat === 'opening') return;
       if (!['words', 'rings', 'spiral', 'remaining'].includes(beat)) return;

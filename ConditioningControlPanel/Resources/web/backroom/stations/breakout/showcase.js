@@ -8,7 +8,7 @@ import {createShowcasePilot} from './showcase-pilot.js';
 
 const $=s=>document.querySelector(s), canvas=$('canvas');
 const scenes=[
- {from:13,title:'DEMOLITION EXPRESS',warmup:13,duration:12,launchX:.32},
+ {from:13,title:'DEMOLITION EXPRESS',warmup:4,duration:12,launchX:.30},
  {from:12,title:'SPIRAL DELIVERY',warmup:12,duration:14,launchX:.78},
  {from:10,title:'BACKDOOR',warmup:0,duration:12,launchX:.38},
 ];

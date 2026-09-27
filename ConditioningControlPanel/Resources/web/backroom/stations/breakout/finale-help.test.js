@@ -59,5 +59,6 @@ test('live paddle bounce receives help without speed change; midflight remains u
  assert.equal(before.b.vx,0);assert.ok(after.b.vx>0 && after.b.vy<0);
  assert.ok(Math.abs(Math.hypot(before.b.vx,before.b.vy)-Math.hypot(after.b.vx,after.b.vy))<1e-8);
  const vx=after.b.vx,vy=after.b.vy;after.game.step(.02,{x:200});
- assert.equal(after.b.vx,vx);assert.equal(after.b.vy,vy);
+ assert.ok(Math.abs(Math.atan2(after.b.vy,after.b.vx)-Math.atan2(vy,vx))<1e-12);
+ assert.ok(Math.hypot(after.b.vx,after.b.vy)>Math.hypot(vx,vy),'the rally ramp changes speed, not midflight aim');
 });

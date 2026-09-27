@@ -1,3 +1,4 @@
+import { drawPendulumTrail } from './pendulum-trail.js';
 import { durabilityColour, brickHueOf, brickHueIndex, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle, wordTrailPoints, WORD_TRAIL } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups,glyphIdle} from './powerups-render.js';
@@ -363,9 +364,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
           g.beginPath();g.moveTo(p.pivotX,p.pivotY);g.lineTo(p.x,p.y);g.stroke();g.setLineDash([]);
         }
         if(!reduced && p.trail.length>1) {
-          g.strokeStyle=col(p.mode==='orbit'?MINT:(p.mode==='sweep'||p.mode==='flight')?GOLD:PINK,mix,.2+p.energy*.3);
-          g.lineWidth=p.mode==='sweep'||p.mode==='flight'?16:p.mode==='orbit'?10:5;g.beginPath();
-          p.trail.forEach((v,i)=>i?g.lineTo(v.x,v.y):g.moveTo(v.x,v.y));g.stroke();
+          const tint=p.mode==='orbit'?MINT:(p.mode==='sweep'||p.mode==='flight')?GOLD:PINK;
+          drawPendulumTrail(g,p,alpha=>col(tint,mix,alpha));
         }
       } else {
         g.translate(p.x,p.y);
