@@ -21,7 +21,8 @@ namespace ConditioningControlPanel
         private void NoteTabHistory(string tab)
         {
             if (_tabHistoryReplaying) return;
-            _tabHistory.Navigate(tab);
+            // "lab" and "play" are one view: record the view, or Back lands on the same page.
+            _tabHistory.Navigate(CanonicalTabKey(tab));
         }
 
         private void InitializeTabHistoryInput()
@@ -67,6 +68,11 @@ namespace ConditioningControlPanel
         private bool TabHistoryStep(bool back)
         {
             if (App.Lockdown?.IsActive == true) return false;
+            // A card over the panel (tutorial step, startup modal, remote/homework overlay, leash
+            // gate) holds the page on purpose; the side buttons must not switch the tab under it.
+            if (App.Tutorial?.IsActive == true || App.StartupLadder?.IsModalUp == true) return false;
+            if (RemoteControlOverlay?.Visibility == Visibility.Visible) return false;
+            if (_leashGate?.IsUp == true) return false;
             var target = back ? _tabHistory.Back() : _tabHistory.Forward();
             if (target == null) return false;
             _tabHistoryReplaying = true;

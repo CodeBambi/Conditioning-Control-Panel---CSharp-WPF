@@ -17,6 +17,13 @@ public class FypFileMenuTests
     }
 
     [Fact]
+    public void LibraryGif_ResolvesUnderTheRoot()
+    {
+        var path = FypFileMenu.ResolveLocal(Root, "images/a/b.gif");
+        Assert.Equal(Path.Combine(Root, "images", "a", "b.gif"), path);
+    }
+
+    [Fact]
     public void OnlineId_HasNoFile()
     {
         Assert.Null(FypFileMenu.ResolveLocal(Root, "scrolller/sissyhypno/abc"));
@@ -27,6 +34,13 @@ public class FypFileMenuTests
     [InlineData("videos/../../outside.mp4")]
     [InlineData("C:/Windows/notepad.exe")]
     [InlineData("videos/a\".mp4")]
+    [InlineData(".temp/remote.mp4")]
+    [InlineData("videos/.cache/clip.mp4")]
+    [InlineData("videos/run.exe")]
+    [InlineData("videos/shortcut.lnk")]
+    [InlineData("images/still.png")]
+    [InlineData("other/clip.mp4")]
+    [InlineData("clip.mp4")]
     [InlineData("")]
     [InlineData(null)]
     public void UnsafeIds_AreRefused(string? id)
