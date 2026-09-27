@@ -334,7 +334,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   });
   on('hit', p => { if (['q', 'r', 'b'].includes(p?.piece)) play('rebound'); });
   on('captureCue', p => { if (p?.name) play(p.name); });
-  on('hit', p => { play(p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip'); });
+  on('hit', p => { play(p?.sound || (p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip')); });
   on('check', () => { checkArmed = true; startPulse(); });
   on('turn', () => {
     lastSecond = -1;

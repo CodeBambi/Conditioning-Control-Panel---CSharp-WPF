@@ -6,7 +6,7 @@
   await new Promise(r => setTimeout(r, 200));
   let passed = 0, events = [], cases = 0;
   const {hopPlan,hopAt}=await import('./board/hops.js');
-  for (const name of ['land', 'sunk', 'hit', 'dissolve']) P.bus.on(name, e => events.push({ name, ...e }));
+  for (const name of ['land', 'sunk', 'hit', 'dissolve', 'contact']) P.bus.on(name, e => events.push({ name, ...e }));
   const ok = (v, msg) => { if (!v) throw Error(msg); passed++; };
   for (const distance of [1, 3, 5]) {
     const plan=hopPlan({x:0,z:0},{x:distance,z:0});
@@ -28,7 +28,7 @@
   }
   const step = seconds => { for(let t=0;t<seconds;t+=1/60){B.anim.update(1/60);B.jiggle.system.update(1/60);B.dust.update(1/60,B.view.camera,B.view.renderer);} };
   const overlap = (a,b) => a.max.x > b.min.x+.0001 && a.min.x < b.max.x-.0001 && a.max.y > b.min.y+.0001 && a.min.y < b.max.y-.0001 && a.max.z > b.min.z+.0001 && a.min.z < b.max.z-.0001;
-  for(const type of ['p','n','b','r','q','k']) for(const side of ['w','b']) for(const crowded of [false,true]) {
+  for(const type of ['p','n','b','r','q','k']) for(const side of ['w','b']) for(const crowded of [false,true]) for(let variant=0;variant<(type==='q'?5:1);variant++) {
     const pieces=setup(type,side,crowded?'k':'p',crowded); B.pieces.move('d4','d5');
     const style=B.anim.stats().acts[0]; ok(!!style,type+' signature starts');
     for(let frame=0;frame<Math.ceil((style.end + .1) * 60);frame++) {
@@ -52,8 +52,19 @@
     ok(events.filter(e=>e.name==='hit').length===1,type+' one hit');
     ok(events.filter(e=>e.name==='land'&&e.capture).length===1,type+' one landing');
     ok(events.filter(e=>e.name==='sunk').length===1,type+' one exit');
-    ok(events.filter(e=>e.name==='dissolve').length===(type==='r'?0:1),type+' dissolve except launch');
-    ok(!B.anim.busy(),type+' settles');cases++;
+    ok(events.filter(e=>e.name==='dissolve').length===(type==='r'||style.variation==='royal-fling'?0:1),type+' dissolve except launch');
+    ok(!B.anim.busy(),type+' settles');
+    if(style.variation==='triple-bash') ok(events.filter(e=>e.name==='contact').length===2,'queen has two light contacts before the squash');
+    cases++;
+  }
+  const {createQueenDeck}=await import('./board/queen.js');
+  for(const seed of [0,.25,.99]) {
+    const deck=createQueenDeck(()=>seed);let last;
+    for(let cycle=0;cycle<4;cycle++) {
+      const seen=new Set();
+      for(let i=0;i<5;i++) {const act=deck();ok(act!==last,'queen does not repeat adjacent attacks');seen.add(act.name);last=act;}
+      ok(seen.size===5,'each shuffle plays every queen attack');
+    }
   }
   const planted=setup('b','w','r'), base=planted.victim.position.clone();
   B.pieces.move('d4','d5');step(B.anim.stats().acts[0].approach + .80);

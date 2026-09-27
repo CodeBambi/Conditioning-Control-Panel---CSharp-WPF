@@ -1,3 +1,16 @@
+## Queen replacement and compact rook recoil
+
+The queen now draws from a five-attack shuffle bag: triple bash, double slap,
+backflip, charged fling and spring stomp. Each appears once per bag with no
+adjacent repeat across bags. The breakdance motion is retired. The first two
+bashes briefly compress the planted victim; the final bash squashes it before
+the queen hops onto its square. Only the final contact commits the visual
+capture event. Each attack uses its matching contact sound and particles.
+
+The rook keeps the long tense charge, but its recoil now reverses in about
+0.12 seconds and settles by 0.32 seconds with very little axial stretch.
+Queen fling uses the same compact rebound. Approved models are unchanged.
+
 # Piece by Piece - the captures
 
 ## Current implementation, 2026-09-27
