@@ -5,7 +5,7 @@ export function hopPlan(from, to) {
   const count = distance < .04 ? 0 : distance <= 1.25 ? 2 : Math.ceil(distance);
   const small = distance / Math.max(1, count) < .65;
   const beat = small ? .32 : .40, flightEnd = beat - .10;
-  return { count, beat, flightEnd, height: small ? .13 : .26, duration: count * beat };
+  return { count, beat, flightEnd, small, height: small ? .13 : .26, duration: count * beat };
 }
 export function hopAt(plan, time) {
   if (!plan.count) return { travel: 1, height: 0, flight: 1, ring: 0 };

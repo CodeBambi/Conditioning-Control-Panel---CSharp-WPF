@@ -218,6 +218,10 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     },
     hop() { tone('sine', 160, .10, .09, { slideTo: 340 }); hiss(.035, .035, { from: 700, to: 1600 }); },
     hopland() { tone('sine', 150, .12, .14, { slideTo: 65 }); hiss(.035, .055, { from: 1800, to: 400 }); },
+    rebound() {
+      tone('sine', 220, .16, .065, { at: .045, slideTo: 380 });
+      tone('triangle', 380, .12, .035, { at: .13, slideTo: 190, filterHz: 1000 });
+    },
     stretch() { tone('triangle', 145, .30, .065, { slideTo: 310, filterHz: 900 }); },
     tension() {
       for (let i = 0; i < 5; i++) tone('triangle', 210 + i * 14, .065, .04 + i * .004, { at: i * .06, slideTo: 170 + i * 12, filterHz: 950 });
@@ -325,11 +329,12 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     if (!p || !p.ok) play('boing');
   });
   on('land', (p) => {
-    if (!p || p.refused) return;
+    if (!p || p.refused || p.skipped) return;
     play(p.capture && !['whip', 'signature'].includes(p.manner) ? 'capture' : 'land', { height: p.height });
   });
+  on('hit', p => { if (['q', 'r', 'b'].includes(p?.piece)) play('rebound'); });
   on('captureCue', p => { if (p?.name) play(p.name); });
-  on('hit', p => { play(p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip'); });
+  on('hit', p => { play(p?.sound || (p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip')); });
   on('check', () => { checkArmed = true; startPulse(); });
   on('turn', () => {
     lastSecond = -1;
