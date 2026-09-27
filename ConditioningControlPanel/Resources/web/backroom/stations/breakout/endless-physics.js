@@ -1,3 +1,5 @@
+import {transitPortal} from './portals.js';
+import {SWEEP_SECONDS,BUMPER_SECONDS} from './pendulum.js';
 // Demolition balls share the dome's field, but never its ordinary-ball slot.
 const TAU = Math.PI * 2;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -15,6 +17,7 @@ function launch(p, g, emit) {
   const ty = target ? target.y + target.h / 2 : g.h * .18;
   const distance = Math.hypot(tx - p.x, ty - p.y) || 1;
   const speed = Math.min(650, Math.max(390, g.speed * 1.35 || 480));
+  delete p.portalFlightLimit;
   p.mode = 'flight'; p.age = 0; p.vx = (tx - p.x) / distance * speed;
   p.vy = (ty - p.y) / distance * speed; p.demolitionCooldown = 1.1;
   p.struck.clear(); p.pulse = 1; p.orbitWell = null;
@@ -22,8 +25,14 @@ function launch(p, g, emit) {
 }
 
 /** Advance only the new states. A released sweep can be caught by a live dome. */
-export function advanceEndlessDemolition(p, g, dt, emit = () => {}) {
+export function advanceEndlessDemolition(p, g, dt, emit = () => {}, previous = null) {
   if (!g.endless || p.mode === 'hung' || p.mode === 'spent') return;
+  if(p.mode==='sweep' && previous && dt>0) {
+    p.vx=(p.x-previous.x)/dt;p.vy=(p.y-previous.y)/dt;
+    if(transitPortal(p,previous,g.portals,{kind:'demolition',emit})) {
+      p.mode='flight';p.portalFlightLimit=SWEEP_SECONDS+BUMPER_SECONDS;dt=0;
+    }
+  }
   p.demolitionCooldown = Math.max(0, (p.demolitionCooldown || 0) - dt);
   const well = g.state === 'colour' && g.well?.persistent ? g.well : null;
   if (p.mode === 'orbit') {
@@ -37,7 +46,9 @@ export function advanceEndlessDemolition(p, g, dt, emit = () => {}) {
     if (p.age >= 1.05) launch(p, g, emit);
   } else if (p.mode === 'flight') {
     p.age += dt; p.pulse = Math.max(0, p.pulse - dt * 3);
+    const old={x:p.x,y:p.y};
     p.x += p.vx * dt; p.y += p.vy * dt;
+    transitPortal(p,old,g.portals,{kind:'demolition',emit});
     const top = p.r + 12, bottom = g.h * .72 - p.r;
     if (p.x < p.r || p.x > g.w - p.r) {
       p.x = clamp(p.x, p.r, g.w - p.r); p.vx *= -1;
@@ -45,7 +56,7 @@ export function advanceEndlessDemolition(p, g, dt, emit = () => {}) {
     if (p.y < top || p.y > bottom) {
       p.y = clamp(p.y, top, bottom); p.vy *= -1;
     }
-    if (p.age >= DEMOLITION_FLIGHT_SECONDS) { p.mode = 'spent'; p.trail.length = 0; return; }
+    if (p.age >= (p.portalFlightLimit ?? DEMOLITION_FLIGHT_SECONDS)) { p.mode = 'spent'; p.trail.length = 0; return; }
   }
   if (well && ['sweep', 'flight'].includes(p.mode) && !p.demolitionCooldown &&
       (p.demolitionCaptures || 0) < DEMOLITION_CAPTURES &&
