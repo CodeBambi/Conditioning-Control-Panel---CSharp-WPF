@@ -4722,16 +4722,8 @@ namespace ConditioningControlPanel.Services
 
         private void StopCurrentSound()
         {
-            try
-            {
-                _currentSound?.Stop();
-                _currentSound?.Dispose();
-                _currentAudioFile?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Error stopping flash sound: {Error}", ex.Message);
-            }
+            // Engine stop calls this first, on the UI thread (#1295): no waveOutReset here.
+            WaveOutTeardown.Release(_currentSound, _currentAudioFile, "flash-sound");
 
             _currentSound = null;
             _currentAudioFile = null;

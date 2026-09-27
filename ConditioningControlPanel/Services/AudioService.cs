@@ -840,16 +840,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void StopSound()
         {
-            try
-            {
-                _soundPlayer?.Stop();
-                _soundPlayer?.Dispose();
-                _soundFile?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Error stopping sound: {Error}", ex.Message);
-            }
+            // Off this thread and waited out properly (#1295): callers include the UI thread.
+            WaveOutTeardown.Release(_soundPlayer, _soundFile, "sound");
 
             _soundPlayer = null;
             _soundFile = null;
