@@ -15,6 +15,8 @@ import { createDrag } from './board/drag.js';
 import { createGlyphs } from './board/glyphs.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
+import { createSolo } from './game/solo.js';
+import { createTurnHandoff } from './ui/turn-handoff.js';
 import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
@@ -79,6 +81,7 @@ function main() {
     auto: Number(params.get('auto')) || 0,
   });
   const game = createDriverSwitch(hotseat);
+  anim.setClock?.(() => game.clock);
 
   const drag = createDrag({ view, pieces, anim, bus, game, jiggle });
   board.drag = drag;
@@ -87,6 +90,8 @@ function main() {
   // object from the start so a reader never has to care whether that has
   // happened yet: it is simply null until it has.
   window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: false } };
+  board.turnHandoff = createTurnHandoff({ bus, game, board, menuOpen: () => !!window.PBP.door?.isUp() });
+  { const dispose = view.dispose; view.dispose = () => { board.turnHandoff.dispose(); dispose(); }; }
   /**
    * Deal an online game onto this board. The front door calls it with the Match
    * its lobby handed back; everything after that - the seat, the clocks, the
@@ -121,6 +126,8 @@ function main() {
   // --- J: the feel (outline, dust, sound) ---
   // Settings are merged, never replaced: the host bridge may have filled some.
   window.PBP.settings = Object.assign({ outline: true, sfxVolume: 0.6 }, window.PBP.settings || {});
+  jiggle.bindBus(bus);
+  { const dispose = view.dispose; view.dispose = () => { jiggle.dispose(); dispose(); }; }
   anim.bindBus(bus, (v) => view.projectPoint(v));   // anim.js speaks `land` and `sunk`
   // Loaded late and guarded, so a missing module never holds the game. The
   // per-frame updates ride on view.render, which the loop calls last, after
@@ -133,8 +140,14 @@ function main() {
   const renderBase = view.render;
   view.render = () => {
     for (const fn of feelLate) fn(feelDt);
-    renderBase();
+    if (board.juice) { board.juice.update(feelDt); board.juice.render(renderBase); }
+    else renderBase();
   };
+  import('./board/juice.js').then(m => {
+    board.juice = m.createJuice({ bus, camera: view.camera });
+    const dispose = view.dispose;
+    view.dispose = () => { board.juice.dispose(); dispose(); };
+  }).catch(e => console.warn('[pbp] impact camera missing', e));
   import('./board/outline.js').then((m) => {
     board.outline = m.createOutline({ group: view.pieceGroup, bus });
     feelLate.push((dt) => board.outline.update(dt, view.camera, view.renderer));
@@ -145,6 +158,8 @@ function main() {
   }).catch((e) => console.warn('[pbp] dust missing', e));
   Promise.all([import('./audio/sfx.js'), import('./board/scene.js')]).then(([m, sc]) => {
     board.sfx = m.createSfx({ bus, game, group: view.pieceGroup, squareOf: sc.worldToSquare, root: dom.fx });
+    feelLate.push(() => board.sfx.update());
+    const dispose = view.dispose; view.dispose = () => { board.sfx.dispose(); dispose(); };
   }).catch((e) => console.warn('[pbp] sfx missing', e));
   // --- end J ---
   // --- K: a room to reflect, and where he just came from ---
@@ -237,6 +252,12 @@ function main() {
     board.motes = m.createMotes({ scene: view.scene });
     feelLate.push((dt) => board.motes.update(dt, view.camera, view.renderer));
   }).catch((e) => console.warn('[pbp] motes missing', e));
+  import('./board/turn-spiral.js').then(m => {
+    board.turnSpiral = m.createTurnSpiral({ view, game, bus, menuOpen: () => !!window.PBP.door?.isUp() });
+    feelLate.push(dt => board.turnSpiral.update(dt));
+    const dispose = view.dispose;
+    view.dispose = () => { board.turnSpiral.dispose(); dispose(); };
+  }).catch(e => console.warn('[pbp] turn spiral missing', e));
   // --- end T ---
   // Esc closes the board - but never mid-drag, where it is "put the piece back".
   window.addEventListener('keydown', (e) => {
@@ -248,7 +269,7 @@ function main() {
   window.addEventListener('keydown', (e) => {
     if ((e.key === ' ' || e.key === 'Enter') && anim.whipping && anim.whipping()) { anim.skip(); e.preventDefault(); }
   });
-  dom.canvas.addEventListener('pointerdown', () => { if (anim.whipping && anim.whipping()) anim.skip(); }, { capture: true });
+
   // --- end Q ---
   signalReady();
 
@@ -259,6 +280,7 @@ function main() {
     view.update(dt);
     pieces.update(dt);
     anim.update(dt);
+    board.turnHandoff.update(dt);
     drag.update(dt);
     jiggle.update(dt);   // last: it reads what everything else just decided
     if (window.PBP.game && window.PBP.game.update) window.PBP.game.update(dt);
@@ -278,11 +300,19 @@ function main() {
   // landed (net/lobbyServer.js, another lane's), else the mock, and ?lobby=mock
   // asks for the mock on purpose.
   const dealAtOnce = params.has('hotseat') || Number(params.get('auto')) > 0 || params.get('door') === '0';
-  function startGame({ mode = 'hotseat', match = null } = {}) {
+  function startGame({ mode = 'hotseat', match = null, options = {}, restore = null } = {}) {
     window.PBP.match = match;                         // the online lane reads this
     // an online seat is built and switched in by net/online.js; the hotseat's
     // reset-and-start is not what it wants
     if (mode === 'online' && match) { window.PBP.startOnline(match); return; }
+    if (mode === 'solo') {
+      const solo = createSolo({ bus, board, hud: dom.hud, options, restore });
+      game.switchTo(solo);
+      bus.emit('newgame', { ply: solo.plies() });
+      bus.emit('local', { sides: solo.seats, mode, me: solo.seats[0], players: { [solo.seats[0]]: window.PBP.settings.playerName || 'You', [solo.seats[0] === 'w' ? 'b' : 'w']: solo.record().opponent } });
+      solo.start();
+      return;
+    }
     // A finished online seat may still be in the chair from the last game
     // (it stays for the end card). Reset-and-start against it would resync
     // the finished match and fire its gameover a second time, so the hotseat

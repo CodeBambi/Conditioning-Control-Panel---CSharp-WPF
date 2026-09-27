@@ -11,6 +11,7 @@ MENU with the men already standing on the board behind it.
 
 | path | clicks | what happens |
 |---|---|---|
+| Play solo | **2** | strip, PLAY SOLO. Starts against the local computer with the remembered side and strength, untimed by default. Continue restores an unfinished solo game. |
 | Quick match (online) | **2** | strip, QUICK MATCH. You are put in the lobby as "looking"; when the server pairs you the match-found beat runs 3-2-1 and the board deals itself. No third click; a tap on the board during the count starts it now. |
 | Play here (hotseat) | **2** | strip, PLAY HERE. Deals at once. |
 | Join a specific player | **3** | strip, LOBBY, the JOIN pill on a name. The other side's accept is one tap on their card (PLAY). |
@@ -35,7 +36,7 @@ lobby while looking there is no primary, so the waiting dot breathes instead. No
 
 Screens:
 
-- **menu** - title, QUICK MATCH (primary), PLAY HERE, then lobby / past games / profile as links. The
+- **menu** - title, PLAY SOLO (primary), PLAY A FRIEND, TWO PLAYERS HERE, and CONTINUE when a solo save exists. Side, computer strength and clock sit inside Solo options. Past games and profile remain links. The
   foot says how to leave and who you are at the board.
 - **lobby** - "N at the board - you are visible as <name>", the incoming ask line when there is one,
   QUICK MATCH, then the list: name, how long they have waited, JOIN. Empty state is a sentence and the
@@ -53,10 +54,10 @@ Screens:
 - **profile** - the name you show as (typed here in a plain browser; hosted, it is the account's
   display name off `pbp:identity` and the box is read-only, because that is the name the server
   lists), then games / wins / losses / draws / streak / taken / favourite piece / time at the board /
-  rating. Rating reads **unrated** until the server rates; the door invents no number.
-- **end** - waits 1400 ms so the board's own end beat lands first, then: the result line with THE THUD
+  moves played. These are local history counts, with no invented rating or season promise.
+- **end** - waits 1400 ms so the board's own end beat lands first, then: the actual result reason with THE THUD
   (a loss adds a SHIVER after it: sympathy, never silence), the tally line, `#door-recap` (empty, the
-  XP and recap lane fills it), REMATCH (primary), BACK TO THE DOOR.
+  XP and recap lane fills it), REMATCH (primary), REVIEW GAME and MENU. An online rematch requests a fresh challenge and waits for acceptance and the server-assigned seat.
 
 Reduced motion (`PBP.settings.reducedMotion` or the OS query) sets `.still`: every animation and
 transition is cut, classes still land, so each screen simply is where it should be.
@@ -89,3 +90,17 @@ transition is cut, classes still land, so each screen simply is where it should 
 through `smoke/shot.mjs` (`--eval` levers on `window.PBP.door.debug` and `window.PBP.lobby.debug`; a
 fake transport through `net/api.js` for the online seat; `door.debug.host` for the hosted states),
 failing on any console error.
+
+## Gameplay pass, September 2026
+
+- `game/solo.js` wraps the shared local referee with one human seat, bounded worker search and a saved SAN history. Difficulty labels are Relaxed, Club and Sharp; they are not Elo ratings.
+- Solo starts untimed. Timed local choices are 5 or 15 minutes. Save and menu stops the local clock and worker; Continue restores the same history. A live online match cannot be hidden through this local menu action.
+- `game/preferences.js` owns local Classic/Distraction, sound and motion choices. Classic keeps the capture performances, particles and sounds. Distraction adds the existing media ramp; host and OS motion restrictions remain authoritative.
+- Player cards show names, clocks, captured pieces, material and the turn. Camera views stay stable between turns. Selecting a playable piece finishes the previous performance; presentation runs faster under clock pressure without altering chess time.
+- Promotion always offers Queen, Rook, Bishop and Knight. Keyboard letters select; Escape cancels the uncommitted move. Timed games continue counting while the choice is open.
+- Replay uses the original move hooks for adjacent forward steps and waits for a capture to finish before autoplay advances. Backward steps and scrubbing rebuild the position immediately.
+- Idle pieces have visible planted-body breathing and frequent, type-specific gestures in both modes. Nearby pieces notice moves and heavy contacts; all idle behavior yields to live animation and is disabled by reduced motion.
+- In Distraction, a turn longer than 10 seconds grows one Loom field over the board, reaching full opacity at 22 seconds with the grid still visible. A move dissolves it over 0.8 seconds. Online recipes use match/ply/position and server turn age, shared by both seats using Distraction. Local saved games restart the current turn age on Continue. Reduced motion keeps a still Loom field and a plain fade without particles; Classic, menus and replay do not grow the field.
+
+- Turn handoffs show a small, nonblocking card after a move settles. Solo search runs during the animation, but the reply waits for the card (650 ms, 200 ms below 30 seconds, no delay below 10). Human input and online clocks remain immediate.
+- The audience uses short nonspoken applause, approval swells, disapproval and whistles through the game sound control. Reactions are rate-limited; negative reactions require a completed, uncompensated loss of a moved major piece, rather than guessing move quality from a capture alone.

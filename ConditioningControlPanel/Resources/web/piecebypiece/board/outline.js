@@ -24,22 +24,23 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { SILICONE_GLSL } from './silicone.js';
 import { TUNING as J } from './jiggle.js';
 
 /** Every number that decides how the line looks. */
 export const TUNING = Object.freeze({
-  widthPx: 2.0,             // rest width on screen, any distance
-  heldWidthPx: 3.6,         // while the man is in the hand
-  colorWhite: 0xFF2D95,     // white men: hotter than the board's pink so it reads on it
-  colorBlack: 0xB0157A,     // black men: deep magenta, reads on cream and on pink
+  widthPx: 0.85,             // rest width on screen, any distance
+  heldWidthPx: 2.2,         // while the man is in the hand
+  colorWhite: 0x79365E,     // plum contour against the pale pink body
+  colorBlack: 0x372544,     // dark plum contour against the lavender body
   heldColor: 0xFFC2E4,      // both sides brighten toward this in the hand
-  hoverWidthPx: 2.6,        // the man under the cursor (drag.js sets userData.hover)
+  hoverWidthPx: 1.5,        // the man under the cursor (drag.js sets userData.hover)
   hoverMix: 0.4,            // and how far toward heldColor he brightens
   flickerColor: 0xFFFFFF,   // check: the king's line snaps between his colour and this
   flickerHz: 9,
   flickerSec: 0.7,
   ease: 14,                 // width and colour follow their targets at this rate (1/s)
-  cacheKey: 'pbp-hull-1',
+  cacheKey: 'pbp-hull-3',
 });
 
 const T = TUNING;
@@ -48,7 +49,9 @@ const f = (n) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 // The same flex jiggle.js applies to the visible skin, applied to the hull's
 // copy of the geometry, plus the bent normal it needs to push out along.
 const PRELUDE = `
+varying vec3 vPbpPosition;
 uniform vec2 uBend;
+uniform float uAct;
 uniform float uSquash;
 uniform float uHeight;
 uniform float uPhase;
@@ -56,6 +59,7 @@ uniform float uTime;
 uniform float uPixel;
 uniform float uWidth;
 uniform float uSign;
+${SILICONE_GLSL}
 float pbpH(float y) { return clamp(y / max(uHeight, 0.0001), 0.0, 1.0); }
 `;
 
@@ -66,16 +70,19 @@ vec3 pbpN = normal;
   float wb = pow(h, ${f(J.bendWeightPow)});
   float ws = pow(h, ${f(J.squashWeightPow)});
   vec2 wave = uBend * (sin(h * ${f(J.rippleWaves)} - uTime * ${f(J.rippleSpeed)} + uPhase) * ${f(J.rippleGain)});
-  vec2 off = (uBend + wave) * wb;
+  vec2 off = (uBend + wave * (1.0 - uAct)) * wb;
   transformed.y *= (1.0 - uSquash * ws);
   transformed.xz *= (1.0 + ${f(J.volumeGain)} * uSquash);
   transformed.x += off.x;
   transformed.z += off.y;
+  if (uAct > 0.5) transformed = siliconePoint(position);
+  vPbpPosition = transformed;
   vec2 slope = uBend * (${f(J.bendWeightPow)} * pow(h, ${f(J.bendWeightPow - 1)}) / max(uHeight, 0.0001));
   pbpN.y -= slope.x * pbpN.x + slope.y * pbpN.z;
   float sy = max(1.0 - uSquash * pow(h, ${f(J.squashWeightPow)}), 0.05);
   float sxz = max(1.0 + ${f(J.volumeGain)} * uSquash, 0.05);
   pbpN = normalize(vec3(pbpN.x / sxz, pbpN.y / sy, pbpN.z / sxz));
+  if (uAct > 0.5) pbpN = normalize(siliconeFrame(normal, h));
 }`;
 
 // Pushed out in VIEW space by (pixels x world-per-pixel-at-1m x distance), so
@@ -146,6 +153,15 @@ export function createOutline({ group, bus = null }) {
     mat.onBeforeCompile = (shader) => {
       // Share the spring's objects: the hull reads the same bend the skin does.
       shader.uniforms.uBend = u.uBend;
+      shader.uniforms.uAct = u.uAct;
+      shader.uniforms.uLag = u.uLag; shader.uniforms.uFlex = u.uFlex; shader.uniforms.uTwist = u.uTwist; shader.uniforms.uBulge = u.uBulge; shader.uniforms.uDent = u.uDent;
+      shader.uniforms.uDissolve = u.uDissolve;
+      shader.fragmentShader = 'varying vec3 vPbpPosition; uniform float uDissolve;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', `
+        #include <clipping_planes_fragment>
+        float crumb = fract(sin(dot(floor(vPbpPosition * 38.0), vec3(12.9898, 78.233, 39.425))) * 43758.5453);
+        if (uDissolve > 0.0 && crumb < uDissolve) discard;
+      `);
       shader.uniforms.uSquash = u.uSquash;
       shader.uniforms.uHeight = u.uHeight;
       shader.uniforms.uPhase = u.uPhase;
