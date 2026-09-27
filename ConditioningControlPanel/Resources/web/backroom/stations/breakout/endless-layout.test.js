@@ -27,7 +27,7 @@ test('seeded schedules offer every family, no immediate repeats, and a regular b
       assert.ok(b.bricks.filter(x => !x.pendulumAnchor && !x.strength).length >= 30);
       assert.ok(b.bricks.filter(x => x.split).length <= 3, 'authored multiball stays sparse');
     }
-    assert.equal(kinds.size, 8);
+    assert.equal(kinds.size, 11);
     for (const pair of ['dome+pendulums', 'dome+tide', 'tide+pendulums', 'reform+dome']) assert.ok(pairs.has(pair));
   }
 });
@@ -89,4 +89,24 @@ test('fixed seeds vary shapes beyond repeating a finite list of walls', () => {
   assert.equal(layouts.size, 200);
   assert.throws(() => endlessBoard(1, -1), RangeError);
   assert.throws(() => endlessBoard(1, Infinity), RangeError);
+});
+
+test('small portal recipes keep both exit faces clear for balls and demolition weights', () => {
+  for(let seed=0;seed<200;seed++)for(const index of [10,12,13]) {
+    const b=endlessBoard(seed,index);
+    assert.equal(b.portals.length,2);assert.equal(b.portals[0].pair,b.portals[1].pair);
+    for(const p of b.portals)for(const r of [8,26])for(const sign of [-1,0,1])for(const face of [-1,1]) {
+      assert.equal(p.halfLength,65);assert.equal(p.depth,16);
+      const tangent=(p.halfLength-r)*sign,nx=Math.cos(p.angle),ny=Math.sin(p.angle);
+      const cx=p.x+nx*(r+p.depth+2)*face-ny*tangent,cy=p.y+ny*(r+p.depth+2)*face+nx*tangent;
+      assert.ok(cx-r>0&&cx+r<1280&&cy-r>0&&cy+r<590,'full emergence stays in court above paddle');
+      for(const brick of b.bricks) {
+        const co=Math.cos(brick.angle||0),si=Math.sin(brick.angle||0);
+        const dx=cx-brick.x-brick.w/2,dy=cy-brick.y-brick.h/2;
+        const ax=Math.abs(dx*co+dy*si)-brick.w/2,ay=Math.abs(-dx*si+dy*co)-brick.h/2;
+        assert.ok(Math.hypot(Math.max(0,ax),Math.max(0,ay))>=r,`${b.kind} exit overlaps brick`);
+      }
+    }
+    if(index===12)assert.ok(b.bricks.some(x=>x.portalCargo&&x.spiral)&&b.bricks.some(x=>x.portalCargo&&x.gif>=0));
+  }
 });

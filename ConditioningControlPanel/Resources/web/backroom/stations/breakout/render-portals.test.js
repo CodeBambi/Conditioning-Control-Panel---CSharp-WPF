@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPortalRenderer, portalViewTransform, portalLensTransform, inverseWorldTransform, PORTAL_BUFFER } from './render-portals.js';
+import { createPortalRenderer, portalViewTransform, portalLensTransform, portalEndStyle, portalApproachSide, inverseWorldTransform, PORTAL_BUFFER } from './render-portals.js';
 import CUES from './cues/endless.js';
 import REACTIONS from './reactions/endless.js';
 const point = (m,p) => ({ x:m.a*p.x+m.c*p.y+m.e, y:m.b*p.x+m.d*p.y+m.f });
 const near = (a,b) => assert.ok(Math.abs(a-b)<1e-8, a+' != '+b);
-const portals = [{id:0,pair:'a',x:200,y:250,angle:.2,halfLength:72},{id:1,pair:'a',x:1060,y:260,angle:Math.PI*.8,halfLength:72}];
+const portals = [{id:0,pair:'a',x:200,y:250,angle:.2,halfLength:65},{id:1,pair:'a',x:1060,y:260,angle:Math.PI*.8,halfLength:72}];
 const identity={a:1,b:0,c:0,d:1,e:0,f:0};
 function context(log,transform=identity) {
   return new Proxy({}, { get(t,k) {
@@ -29,6 +29,27 @@ test('portal lens frames the forward destination without mirrored chirality', ()
   assert.ok(m.a*m.d-m.b*m.c>0);
 });
 
+test('both portal faces preview their matching exit side', () => {
+  const entry={...portals[0],angle:0},exit={...portals[1],angle:0};
+  assert.equal(portalApproachSide(entry,{balls:[{x:entry.x-60,y:entry.y,vx:20,vy:0}]}),-1);
+  assert.equal(portalApproachSide(entry,{balls:[{x:entry.x+60,y:entry.y,vx:-20,vy:0}]}),1);
+  assert.equal(portalApproachSide(entry,{balls:[{x:entry.x+60,y:entry.y,vx:-20,vy:0}],colliders:[{x:entry.x-20,y:entry.y,vx:20,vy:0}]}),1,'approaching ball has priority over a closer payload');
+  assert.equal(portalApproachSide(entry,{balls:[{x:entry.x+600,y:entry.y,vx:-20,vy:0}]},-1),-1,'distant objects keep the held face');
+  const m=portalLensTransform(entry,exit,-1),seen=point(m,{x:exit.x-220,y:exit.y});
+  near(seen.x,entry.x);near(seen.y,entry.y);
+});
+
+test('blue and orange identities remain distinct in grey and their transit particles match', () => {
+  const blue=portalEndStyle(portals[0],portals),orange=portalEndStyle(portals[1],portals);
+  assert.equal(blue.label,'A');assert.equal(orange.label,'B');assert.ok(blue.rgb[2]>blue.rgb[0]);assert.ok(orange.rgb[0]>orange.rgb[2]);
+  assert.notDeepEqual(portalEndStyle(portals[0],portals,true).rgb,portalEndStyle(portals[1],portals,true).rgb);
+  const particles=[],stamps=[];
+  REACTIONS.portalTransit({reduced:false,colour:true,stamps:{push:x=>stamps.push(x)},P:{implode:(...x)=>particles.push(x),spray:(...x)=>particles.push(x),burst:(...x)=>particles.push(x)}},
+    {entryId:0,exitId:1,pair:'a',fromX:1,fromY:2,x:3,y:4,vx:100,vy:0},{portals});
+  assert.deepEqual(stamps[0].rgb,blue.rgb);assert.deepEqual(stamps[1].rgb,orange.rgb);
+  assert.deepEqual(particles[0][2],blue.rgb);assert.deepEqual(particles[1][4],orange.rgb);
+});
+
 test('world capture removes rotated and translated camera transforms', () => {
   const camera={a:2,b:1,c:-1,d:2,e:90,f:-20},world={x:370,y:210};
   const undone=point(inverseWorldTransform(camera),point(camera,world));near(undone.x,world.x);near(undone.y,world.y);
@@ -47,7 +68,11 @@ for(const reduced of [false,true])test('one bounded world snapshot serves both l
     assert.equal(bufferLog.filter(x=>x[0]==='drawImage'&&x[1]===source).length,2,'one capture per frame');
     assert.equal(mainLog.filter(x=>x[0]==='drawImage'&&x[1]===buffers[0]).length,4,'both mouths use the same capture');
     assert.equal(mainLog.some(x=>x[0]==='drawImage'&&x[1]===source),false,'no self-copy feedback');
-    assert.ok(mainLog.some(x=>x[0]==='fillText'&&x[1]==='A'),'paired labels stay visible in grey');
+    assert.equal(mainLog.some(x=>x[0]==='fillText'&&['A','B'].includes(x[1])),false,'a single pair has no labels');
+    const extra=portals.map((p,i)=>({...p,id:i+2,pair:'b',y:p.y+200}));
+    mainLog.length=0;fx.draw(g,source,{...s,portals:[...portals,...extra]},{now:3,dt:.016,reduced});
+    for(const label of ['A','B'])assert.equal(mainLog.filter(x=>x[0]==='fillText'&&x[1]===label).length,2,'both ends of each pair share a label');
+    assert.ok(mainLog.some(x=>x[0]==='ellipse'&&x[3]===16&&x[4]===65),'smaller opening matches the mouth depth');
     assert.equal(JSON.stringify(s),before,'view leaves all physics state unchanged');
     fx.dispose();
   } finally {globalThis.document=old;}

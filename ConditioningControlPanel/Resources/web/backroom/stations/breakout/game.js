@@ -1014,7 +1014,16 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       if(brickOverlap(nx,ny,radius,g.bricks)>brickOverlap(c.x,c.y,radius,g.bricks)+.01) {
         c.vx=-c.vx;c.vy=-c.vy;
       } else { c.x=nx;c.y=ny; }
-      if (transitPortal(c,previous,g.portals,{radius:c.r*1.15,kind:'bubble',emit})) c.solid=false;
+      if (transitPortal(c,previous,g.portals,{radius,kind:'bubble',emit})) {
+        c.solid=false;
+        // Grown pictures fit through a small mouth; seat only an obstructed exit safely.
+        if (brickOverlap(c.x,c.y,radius,g.bricks)>0 || c.x<radius+12 || c.x>w-radius-12 ||
+            c.y<Math.max(radius+12,h*.30) || c.y>h-radius-76) {
+          Object.assign(c,openPayloadSpot(c.x,c.y,radius,g.bricks,w,h,
+            [...g.colliders.filter(other=>other!==c&&!other.fading),
+              ...g.portals.map(p=>({x:p.x,y:p.y,r:p.halfLength}))]));
+        }
+      }
       if (c.x < c.r) { c.x = c.r; c.vx = Math.abs(c.vx); } else if (c.x > w - c.r) { c.x = w - c.r; c.vx = -Math.abs(c.vx); }
       const bottom=h-c.r*1.15-76, top=Math.max(c.r*1.15+12,h*.30);
       if (c.y < top) { c.y = top; c.vy = Math.abs(c.vy); } else if (c.y > bottom) { c.y = bottom; c.vy = -Math.abs(c.vy); }
