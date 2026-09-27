@@ -1959,10 +1959,13 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
+                // The switch shows the EFFECTIVE value (#1307): unticked while Tier 2 is not
+                // confirmed, without touching the saved choice.
+                var effectsOn = ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow;
                 if (CompanionTab.ChkCapEffects != null)
-                    CompanionTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
+                    CompanionTab.ChkCapEffects.IsChecked = effectsOn;
                 if (CompanionTab.EffectPermsPanel != null)
-                    CompanionTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
+                    CompanionTab.EffectPermsPanel.Visibility = effectsOn
                         ? Visibility.Visible : Visibility.Collapsed;
 
                 // Effect permission grid
