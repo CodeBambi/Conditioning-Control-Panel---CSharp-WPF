@@ -349,6 +349,7 @@ export function createOnlineMatch({
     hud.b.textContent = formatClock(s.b);
     hud.w.classList.toggle('on', s.active === 'w' && !over);
     hud.b.classList.toggle('on', s.active === 'b' && !over);
+    if (hud.status.dataset?.hudOwned) return;
     if (over) { hud.status.textContent = statusLine(over); return; }
     if (rules.inCheck()) { hud.status.textContent = 'check'; return; }
     hud.status.textContent = rules.turn() === me ? 'your move' : 'waiting for his move';
