@@ -219,6 +219,10 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     },
     hop() { tone('sine', 160, .10, .09, { slideTo: 340 }); hiss(.035, .035, { from: 700, to: 1600 }); },
     hopland() { tone('sine', 150, .12, .14, { slideTo: 65 }); hiss(.035, .055, { from: 1800, to: 400 }); },
+    kick() {
+      tone('triangle', 155, .14, .34, { slideTo: 52 });
+      hiss(.055, .16, { from: 1800, to: 380 });
+    },
     rebound() {
       tone('sine', 220, .16, .065, { at: .045, slideTo: 380 });
       tone('triangle', 380, .12, .035, { at: .13, slideTo: 190, filterHz: 1000 });
@@ -288,7 +292,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     const v = volume();
     if (v <= 0) return false;
     if (master.gain.value !== v) master.gain.value = v;
-    const varied = ['hop', 'hopland', 'land', 'stomp', 'headbutt', 'whip', 'launch', 'rebound'].includes(name);
+    const varied = ['hop', 'hopland', 'land', 'stomp', 'headbutt', 'whip', 'launch', 'rebound', 'kick'].includes(name);
     const mass = { p: 1.08, n: 1, b: 1.04, r: .89, q: .96, k: .86 }[opts.piece] || 1;
     cuePitch = varied ? mass * (.97 + Math.random() * .06) : 1;
     try { cues[name](opts); } catch (e) { console.warn('[pbp] cue failed ' + name, e); return false; }
@@ -336,7 +340,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     if (!p || p.refused || p.skipped) return;
     play(p.capture && !['whip', 'signature'].includes(p.manner) ? 'capture' : 'land', { height: p.height });
   });
-  on('hit', p => { if (['q', 'r', 'b'].includes(p?.piece)) play('rebound'); });
+  on('hit', p => { if (['q', 'r', 'b'].includes(p?.piece) || p?.sound === 'kick') play('rebound'); });
   on('captureCue', p => { if (p?.name) play(p.name); });
   on('hit', p => { play(p?.sound || (p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip'), { piece: p?.piece, height: p?.height }); });
   on('check', () => { checkArmed = true; startPulse(); });

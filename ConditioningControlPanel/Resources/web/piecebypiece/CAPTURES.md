@@ -1,3 +1,14 @@
+## Expanded repertoire
+
+Rook alternates its charged fling with a compact heavy squash (contact 840 ms).
+Knight alternates its backflip with a rear kick (920 ms): turn away, load the
+front, kick with the broad rear base, recoil and hop home. Bishop alternates
+its double slap with a low sweep (1040 ms), tipping the victim from its base.
+Each two-choice bag starts randomly, then alternates without adjacent repeats.
+Queen keeps its five-choice shuffle. Timings exclude the approach hops.
+New contacts use existing collision envelopes, immediate victim deformation,
+dissolve, dust and audio settings. No sculpt or game-rule changes.
+
 The pawn/plug has a firmer response: capture bend is 45% of the shared amount,
 stretch is 55%, and landing oscillation decays faster. Ordinary hop, drag and
 idle flex are also reduced. Its deliberate capture squash is preserved.
