@@ -9,12 +9,17 @@ This replaces the shuffled reaction deck and its 300/440 ms capture deadline.
 | --- | --- | --- | --- |
 | Pawn | Squat, jump with the flat base, squash the victim | 720 ms | 2180 ms |
 | Knight | Hoofbeats, whinny, backflip, base-first landing | 900 ms | 2360 ms |
-| Bishop | Two tentacle slaps, recoil between strikes, retract | 590 / 1020 ms | 2480 ms |
+| Bishop | Flexible tentacle whips left-to-right, then right-to-left | 700 / 1200 ms | 2850 ms |
 | King | Stretch, bow and press the victim to the floor, recover | 900 ms | 2640 ms |
-| Queen | Headstand, swing the base around the head, recover | 1000 ms | 2460 ms |
-| Rook | Approach, charge, swing and launch beyond the board | 1000 ms | 2460 ms |
+| Queen | Flexed headstand, lagging body and orbiting base | 1150 ms | 2900 ms |
+| Rook | Sideways catapult windup, bat swing, recoil and launch | 1050 ms | 2800 ms |
 
-All six acts finish with a damped bounce, squash/stretch and tip wobble.
+All six acts finish with elastic spine settling: the middle and tip lag each other while
+the base stays planted. `board/silicone.js` shares the curved spine across skin, jewellery,
+outline, depth, contact bounds and dissolve particles. The curve rotates each cross section
+along its tangent, stretches axially, twists and carries a delayed mid-body bend.
+The queen anchors her deformed head through the sweep. The rook launches sideways and
+recoils without following its victim into the air.
 Transition curves have zero acceleration at their endpoints; clearance height releases gradually.
 The queen and king use the approved sculpted GLBs from ce4c208d3, for both colours.
 `build_pieces.py` produces procedural alternatives and must not overwrite the shipping sculpts.
