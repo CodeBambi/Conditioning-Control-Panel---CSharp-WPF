@@ -28,3 +28,7 @@ For a reproducible colour preview, append &seed=2709&board=1&sat=.85. Board is o
 The full Breakout suite passed 380 tests. New tests cover 200 generator seeds, exact restoration, bounded geometry, native hinge release through spiral capture and launch into a second hinge, simultaneous ordinary-ball capture, clear transitions beyond board eight, and checkpoint validation. Browser checks covered the opening board, mode selection, Save and menu, and Continue.
 
 This is an isolated playable prototype. No production deployment, release bump or server change is included. Play feel, long-session variety and the mix balance remain the purpose of the owner's test.
+
+## Watchable gameplay
+
+Open showcase.html on the same local server for three looping gameplay highlights with an automatic paddle, optional sound, replay, and direct play links. The showcase uses the actual engine and renderer, advances to highlights through ordinary paddle inputs, and never writes checkpoints. Slingshot garden starts at 30 seconds, Tidal chimes at 25 seconds, and Moving mantra at 3 seconds. The first two contain natural hinge releases; no artificial brick breaks, ball relocation, or noLose is used.
