@@ -2009,7 +2009,7 @@ namespace ConditioningControlPanel.Services
                     }
 
                     _triggerAudioFile = new AudioFileReader(path);
-                    _triggerPlayer = new WaveOutEvent();
+                    _triggerPlayer = WaveOutTeardown.NewWaveOut();
                     App.Audio?.ApplyPreferredDevice(_triggerPlayer);
 
                     // Apply volume curve (same as AudioService)
@@ -2041,13 +2041,8 @@ namespace ConditioningControlPanel.Services
         {
             lock (_audioLock)
             {
-                try
-                {
-                    _triggerPlayer?.Stop();
-                    _triggerPlayer?.Dispose();
-                    _triggerAudioFile?.Dispose();
-                }
-                catch { }
+                // Off this thread (#1295): callers include the UI thread, and this runs under _audioLock.
+                WaveOutTeardown.Release(_triggerPlayer, _triggerAudioFile, "keyword-trigger");
 
                 _triggerPlayer = null;
                 _triggerAudioFile = null;

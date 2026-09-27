@@ -595,14 +595,12 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Stops and disposes a pair. Never called with <see cref="_audioLock"/> held: waveOutReset
         /// and waveOutClose take NAudio's own locks and can be raced by the playback thread, so this
-        /// service's lock deliberately stays out of them.
+        /// service's lock deliberately stays out of them. Stop and PlaybackStopped both land here
+        /// for the same pair, from the UI thread and the playback thread at once, so the actual
+        /// work is handed to <see cref="WaveOutTeardown"/>: once per pair, off both threads (#1295).
         /// </summary>
         private static void DisposePair(WaveOutEvent? waveOut, AudioFileReader? reader)
-        {
-            try { waveOut?.Stop(); } catch { }
-            try { waveOut?.Dispose(); } catch { }
-            try { reader?.Dispose(); } catch { }
-        }
+            => WaveOutTeardown.Release(waveOut, reader, "mindwipe");
 
         private void SchedulePlayerCleanup(bool cleanupA)
         {
