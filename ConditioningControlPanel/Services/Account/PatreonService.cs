@@ -211,9 +211,11 @@ namespace ConditioningControlPanel.Services
         ///
         /// #1048: the AI-effect-control repair in MainWindow.UpdateUnlockablesVisibility read that
         /// unresolved false as a lapse and force-cleared + SAVED AllowAiToControlEffects on every
-        /// single launch, so the switch could never survive a restart. Any DESTRUCTIVE entitlement
-        /// repair must wait for this; advisory UI (lockbands, badges) may keep reading the raw
-        /// properties, because a lockband that appears for a second and then goes away costs
+        /// single launch, so the switch could never survive a restart. Waiting for this was not
+        /// enough (#1307): it also flips when validation threw, so that repair is gone and the tier
+        /// check moved to the point of use (AiEffectControlGate). Prefer that shape: never write a
+        /// setting from an entitlement read. Advisory UI (lockbands, badges) may keep reading the
+        /// raw properties, because a lockband that appears for a second and then goes away costs
         /// nothing.
         /// </summary>
         public bool EntitlementResolved { get; private set; }

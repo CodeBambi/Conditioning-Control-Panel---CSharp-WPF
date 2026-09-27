@@ -647,7 +647,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// </summary>
         private string? BuildEnrichmentContent()
         {
-            if (App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects != true) return null;
+            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow) return null;
             try
             {
                 var currentTime = DateTime.Now.ToString("yyyy-M-dd dddd h:mm:ss tt");
@@ -777,7 +777,7 @@ namespace ConditioningControlPanel.Services.AIService
                 else sys.Content = systemPrompt;
 
                 // Optional enrichment block right after the system message (only when effects on).
-                var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
+                var effectsEnabled = ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow;
                 var oldEnrichment = _messages.FirstOrDefault(m => m.Content?.Contains("[CONTEXT BLOCK — NOT DIALOGUE]") == true);
 
                 if (effectsEnabled)

@@ -594,7 +594,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// </summary>
         private void InsertEnrichmentIfEnabled(List<MessageDto> messages)
         {
-            if (App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects != true) return;
+            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow) return;
 
             try
             {
@@ -639,7 +639,7 @@ namespace ConditioningControlPanel.Services.AIService
             if (string.IsNullOrWhiteSpace(content))
                 return null;
 
-            var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
+            var effectsEnabled = ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow;
             if (!effectsEnabled)
             {
                 // Strip context-tag echoes BEFORE moderation, matching the cloud path's
