@@ -23,7 +23,11 @@ public sealed partial class FriendsService
     {
         if (!InviteDestination.IsValid(destination)) return Task.FromResult(SendResult.Refused);
         bool wantsCode = destination == InviteDestination.Goon || destination == InviteDestination.Remote;
-        if (wantsCode)
+        if (destination == InviteDestination.Chess)
+        {
+            if (!InviteDestination.IsChallengeId(code)) return Task.FromResult(SendResult.Refused);
+        }
+        else if (wantsCode)
         {
             if (code == null || !FriendsApi.IsJoinCode(code)) return Task.FromResult(SendResult.Refused);
         }

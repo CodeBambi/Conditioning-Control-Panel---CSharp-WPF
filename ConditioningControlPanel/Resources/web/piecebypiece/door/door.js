@@ -36,7 +36,7 @@
 import { buildReplay, showReplayStep, resultLine } from './replay.js';
 import { readSolo, soloOptions } from '../game/save.js';
 import { requestRematch } from '../net/rematch.js';
-import { isHosted, identity, whenIdentity } from '../bridge.js';
+import { isHosted, identity, whenIdentity, postToHost } from '../bridge.js';
 import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, outcome, fmtDuration, fmtMoves, fmtWhen } from './store.js';
 
 /** Every number the door decides with. */
@@ -567,9 +567,38 @@ export function createDoor(opts = {}) {
     unbind.push(bus.on('gameover', onGameOver));
   }
 
+  // ---------------------------------------------------------------- friends drawer
+  /**
+   * An intent from the desktop's friends drawer (host frame `pbp:friend`):
+   *   { mode: 'challenge', friendId }   challenge that friend; the challenge id goes back to
+   *                                     the host (`pbp:friend-challenge`) so the drawer can send
+   *                                     it as the invite, and the lobby waits for the yes
+   *   { mode: 'accept', challengeId }   the friend's side: take it up, straight to the board
+   * A live online game is never interrupted; the host hears null and says so.
+   */
+  function friend(intent) {
+    const m = intent || {};
+    const tell = (challengeId) => { try { postToHost({ type: 'pbp:friend-challenge', friendId: m.friendId || null, challengeId: challengeId || null }); } catch { /* no host */ } };
+    const busy = current && current.mode === 'online' && !game.isOver();
+    if (busy || !lobby) { if (m.mode === 'challenge') tell(null); return; }
+    if (m.mode === 'challenge' && m.friendId) {
+      if (screen !== 'lobby') show('lobby');
+      let told = false;
+      const said = (id) => { if (!told) { told = true; tell(id); } };
+      look(afterHost(() => lobby.challenge(String(m.friendId), { onChallengeId: said }))
+        .catch((err) => { said(null); throw err; }));
+      return;
+    }
+    if (m.mode === 'accept' && m.challengeId && typeof lobby.acceptChallenge === 'function') {
+      if (screen !== 'lobby') show('lobby');
+      look(afterHost(() => lobby.acceptChallenge(String(m.challengeId))));
+    }
+  }
+
   return {
     show,
     hide,
+    friend,
     isUp: () => screen !== null,
     screen: () => screen,
     /** For the harness: the door's state, and levers to pull. */

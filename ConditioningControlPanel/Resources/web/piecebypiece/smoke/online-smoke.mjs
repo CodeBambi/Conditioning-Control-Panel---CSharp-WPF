@@ -797,6 +797,7 @@ function lobbyServerFixture() {
       return json(200, { ok: true, challenge_id: 'c_mine', expires_in_sec: 300 });
     }
     if (route === `${api.BASE}/challenge/c_theirs/accept`) return json(200, { ok: true, match_id: 'm_accepted', color: 'b' });
+    if (route === `${api.BASE}/challenge/c_0123456789abcdef/accept`) return json(200, { ok: true, match_id: 'm_friend', color: 'b' });
     if (route.startsWith(`${api.BASE}/challenge/`) && route.endsWith('/decline')) return json(200, { ok: true, declined: true });
     if (route.startsWith(`${api.BASE}/match/`)) {
       const id = route.split('/')[4];
@@ -906,6 +907,21 @@ function lobbyServerFixture() {
   let gone = null;
   try { await lobby.challenge('p_gonegonegone'); } catch (e) { gone = e.message; }
   eq('challenging a ghost rejects with the door\'s own word', gone, 'left');
+
+  // The friends drawer: the challenge id is handed out the moment the server mints it...
+  let minted = null;
+  const toFriend = lobby.challenge('u_friend0001', { onChallengeId: (id) => { minted = id; } });
+  toFriend.catch(() => {});
+  for (let i = 0; i < 20 && !minted; i++) await new Promise((r) => setTimeout(r, 5));
+  eq('a friend challenge hands its id to the drawer', minted, 'c_mine');
+  eq('...and names the friend as the target', fx.st.challengeBody.target, 'u_friend0001');
+  lobby.cancel();
+  // ...and the friend takes it up by id, straight into a Match.
+  const fm = await lobby.acceptChallenge('c_0123456789abcdef');
+  eq('a friend invite accepts by challenge id', fm.id, 'm_friend');
+  let junk = null;
+  try { await lobby.acceptChallenge('not-a-challenge'); } catch (e) { junk = e.message; }
+  eq('a malformed challenge id is refused', junk, 'left');
 
   lobby.dispose();
   eq('a page with no host and no account gets no server lobby', createServerLobby({ api }), null);

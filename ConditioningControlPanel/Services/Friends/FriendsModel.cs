@@ -99,13 +99,25 @@ public static class InviteDestination
     public const string BackRoom = "backroom";
     public const string Remote = "remote";
     public const string Ramp = "ramp";
+    /// <summary>Piece by Piece. The code is the server's challenge id (<c>c_</c> + 16 hex),
+    /// minted by <c>/v2/pbp/challenge</c> with the friend as target.</summary>
+    public const string Chess = "chess";
 
-    public static readonly IReadOnlyList<string> All = new[] { Goon, BackRoom, Remote, Ramp };
+    public static readonly IReadOnlyList<string> All = new[] { Goon, BackRoom, Remote, Ramp, Chess };
 
     /// <summary>Seconds an invite stays answerable. Mirrored server-side.</summary>
     public const int LifetimeSeconds = 90;
 
     public static bool IsValid(string? id) => id != null && All.Contains(id);
+
+    /// <summary>The chess invite's code: a Piece by Piece challenge id, <c>c_</c> + 16 lowercase hex.</summary>
+    public static bool IsChallengeId(string? s)
+    {
+        if (s == null || s.Length != 18 || s[0] != 'c' || s[1] != '_') return false;
+        for (int i = 2; i < s.Length; i++)
+            if (!((s[i] >= '0' && s[i] <= '9') || (s[i] >= 'a' && s[i] <= 'f'))) return false;
+        return true;
+    }
 }
 
 /// <summary>A watch is a REFERENCE the receiver resolves, never a URL. Catalogue = an
