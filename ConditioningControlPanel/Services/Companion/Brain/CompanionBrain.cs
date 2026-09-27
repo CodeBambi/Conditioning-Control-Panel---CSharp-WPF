@@ -315,7 +315,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // The effects envelope is not prose: JSON scaffolding + effects blow through
                 // the 100-token chat cap and get guillotined mid-string. Size the budget to
                 // what we asked the model to produce. See AiCallOptions.ChatWithEffects.
-                var effectsOn = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
+                var effectsOn = ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow;
                 var options = effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat;
                 var offered = _preview() && !ConversationDelivery.CardFollows(input)
                     ? ConversationDelivery.Select(Activities(), input, Session.Turns) : Array.Empty<CompanionActivity>();
@@ -561,7 +561,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         private static void ExecuteAcceptedCommands(IReadOnlyList<Models.AiCommandData> commands)
         {
-            if (App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects != true || App.Commands == null) return;
+            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow || App.Commands == null) return;
             App.Commands.BeginBatch();
             foreach (var command in commands) App.Commands.ExecuteCommand(command);
         }

@@ -39,9 +39,9 @@ namespace ConditioningControlPanel.Services.Commands
             }
 
             // Master gate.
-            if (!settings.AllowAiToControlEffects)
+            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOn(settings, App.Patreon?.HasLabAccess == true))
             {
-                App.Logger?.Information("AiCommandService: master toggle OFF — dropping {Cmd}", commandData.Command);
+                App.Logger?.Information("AiCommandService: master toggle off or no Tier 2 - dropping {Cmd}", commandData.Command);
                 return;
             }
 
