@@ -2,15 +2,15 @@
 import * as THREE from 'three';
 
 export const ACTS = Object.freeze({
-  p: { name: 'lamp-stomp', hit: .72, end: 1.55 },
-  n: { name: 'backflip', hit: .90, end: 1.80 },
-  b: { name: 'tentacle-slap', hit: .70, end: 1.60 },
-  k: { name: 'headbutt', hit: .82, end: 1.75 },
-  q: { name: 'breakdance', hit: 1.00, end: 2.05 },
-  r: { name: 'home-run', hit: 1.00, end: 2.15 },
+  p: { name: 'lamp-stomp', hit: .72, end: 2.18 },
+  n: { name: 'backflip', hit: .90, end: 2.36 },
+  b: { name: 'double-slap', hit: 1.02, end: 2.48 },
+  k: { name: 'royal-squash', hit: .90, end: 2.64 },
+  q: { name: 'breakdance', hit: 1.00, end: 2.46 },
+  r: { name: 'home-run', hit: 1.00, end: 2.46 },
 });
 const clamp = t => Math.max(0, Math.min(1, t));
-const smooth = t => { t = clamp(t); return t * t * (3 - 2 * t); };
+const smooth = t => { t = clamp(t); return t * t * t * (t * (t * 6 - 15) + 10); };
 const phase = (t, a, b) => smooth((t - a) / (b - a));
 const up = new THREE.Vector3(0, 1, 0);
 const yaw = p => p.userData.side === 'b' ? Math.PI : 0;
@@ -102,7 +102,7 @@ export function createChoreography({ group, emit, landed, reduced }) {
     a.radius = Math.max(box.copy(captureBounds(piece)).getSize(scratch).x, scratch.z) / 2;
     a.vRadius = Math.max(box.copy(captureBounds(victim)).getSize(scratch).x, scratch.z) / 2;
     a.near = a.target.clone().addScaledVector(d, -(a.radius + a.vRadius + .12));
-    if (type === 'k') a.near.addScaledVector(d, -.32);
+    if (type === 'k') a.near.copy(a.target).addScaledVector(d, -a.height * .94);
     a.obstacles = group.children.filter(p => p !== piece && p !== victim && p.userData.type)
       .map(p => ({ piece: p, box: captureBounds(p).clone() }));
     a.ceiling = Math.max(1.35, ...a.obstacles.map(o => o.box.max.y)) + .12;
@@ -114,6 +114,7 @@ export function createChoreography({ group, emit, landed, reduced }) {
   }
   function pose(piece, scale, position, tilt, spin, direction, bend = 0, sy = 1, shrink = 1) {
     piece.scale.copy(scale).multiplyScalar(shrink); piece.scale.y *= sy;
+    piece.scale.x /= Math.sqrt(sy); piece.scale.z /= Math.sqrt(sy);
     piece.position.copy(position);
     const axis = new THREE.Vector3().crossVectors(up, direction);
     piece.quaternion.setFromAxisAngle(up, yaw(piece) + spin);
@@ -168,8 +169,22 @@ export function createChoreography({ group, emit, landed, reduced }) {
       } else {
         at.lerp(a.near, phase(t, 0, .30));
         const wind = Math.sin(Math.PI * phase(t, .30, hit));
-        if (type === 'b') { bend = -.24 * wind + (a.radius + a.vRadius + .13) * phase(t, hit - .13, hit) * (1 - phase(age, .02, .24)); tilt = -.13 * wind; }
-        if (type === 'k') { tilt = -.22 * wind + .90 * phase(t, hit - .20, hit) * (1 - phase(age, .03, .33)); bend = .10 * phase(t, hit - .20, hit) * (1 - phase(age, .03, .33)); }
+        if (type === 'b') {
+          const first = phase(t, .40, .59) * (1 - phase(t, .63, .80));
+          const second = phase(t, .83, hit) * (1 - phase(age, .03, .28));
+          bend = -.20 * wind + (a.radius + a.vRadius + .20) * (first + second);
+          tilt = -.10 * wind + .42 * (first + second); spin = .16 * first - .12 * second;
+          sy = 1 - (1 - Math.max(.58, Math.min(1, a.vHeight / a.height))) * (first + second);
+        }
+        if (type === 'k') {
+          const reach = phase(t, .46, hit), press = phase(age, 0, .32);
+          const recover = 1 - phase(age, .40, .83);
+          sy = 1 + .20 * phase(t, .25, .52) * (1 - phase(t, .62, hit + .20));
+          tilt = -.15 * wind + (1.05 * reach + .58 * press) * recover;
+          bend = .22 * reach * recover;
+          // The tall body bows all the way down, holding pressure before rising.
+          at.addScaledVector(d, .12 * press * recover);
+        }
         if (type === 'q') {
           const invert = phase(t, .30, .68) * (1 - phase(age, .14, .58));
           tilt = -2.48 * invert; spin = -Math.PI * 2 * (1 - phase(t, .60, hit));
@@ -179,12 +194,12 @@ export function createChoreography({ group, emit, landed, reduced }) {
           at.y = Math.max(0, -a.height * Math.cos(tilt)) * invert;
         }
         if (type === 'r') { tilt = -.48 * wind + .48 * phase(t, hit - .13, hit) * (1 - phase(age, .04, .27)); at.addScaledVector(d, -.15 * wind + .10 * phase(t, hit - .13, hit) * (1 - phase(age, .04, .27))); sy = 1 - .16 * wind; }
-        at.lerp(a.to, phase(age, .32, .72));
+        at.lerp(a.to, phase(age, type === 'k' ? .55 : .32, type === 'k' ? 1.02 : .72));
       }
       if (!a.gone) {
         let pos = a.target.clone(), tip = 0, shrink = 1, vs = 1;
         if (!a.low && age > 0) {
-          if (type === 'p' || type === 'n') vs = 1 - .88 * phase(age, 0, .19);
+          if (type === 'p' || type === 'n' || type === 'k') vs = 1 - .88 * phase(age, 0, type === 'k' ? .32 : .19);
           else if (type === 'r') {
             const travel = phase(age, .13, .75);
             pos.addScaledVector(d, a.exitDistance * travel);
@@ -196,17 +211,33 @@ export function createChoreography({ group, emit, landed, reduced }) {
             pos.addScaledVector(d, .12 * phase(age, 0, .22));
           }
         }
+        if (!a.low && type === 'b' && t < hit) tip = .28 * phase(t, .59, .67) * (1 - phase(t, .72, .94));
         pose(v, a.vScale, pos, tip, 0, d, 0, vs, shrink);
         clearAbove(v, obstacles);
-        const fade = a.low ? phase(age, 0, .12) : type === 'r' ? 0 : phase(age, .20, .48);
+        const fade = a.low ? phase(age, 0, .12) : type === 'r' ? 0 : phase(age, type === 'k' ? .40 : .20, type === 'k' ? .70 : .48);
         if (fade > 0 && !a.dissolving) { a.dissolving = true; emit('dissolve', { object: v, low: a.low }); }
         if (v.userData.jiggleUniforms) v.userData.jiggleUniforms.uDissolve.value = a.low ? 0 : fade;
         for (const m of skins(v)) { m.opacity = 1 - fade; m.transparent = fade > 0; m.depthWrite = fade === 0; }
         if (fade >= 1 || (type === 'r' && age > .95 && !a.low)) exit(a);
       }
+      if (!a.low) {
+        const arrival = hit + (type === 'k' ? 1.02 : .72);
+        const settle = clamp((t - arrival) / (spec.end - arrival));
+        const envelope = Math.sin(Math.PI * settle) * Math.pow(1 - settle, 2);
+        const ring = Math.sin(settle * Math.PI * 5);
+        at.y += .38 * envelope * Math.abs(ring);
+        sy += .22 * envelope * Math.cos(settle * Math.PI * 5);
+        bend += .45 * envelope * ring;
+        tilt += .09 * envelope * ring;
+      }
       pose(p, a.scale, at, tilt, spin, facing, bend, sy);
       // A genuine contact surface: attacker and victim envelopes touch, never overlap.
+      const wantedY = p.position.y;
+      p.position.y += (a.lift || 0) * Math.exp(-dt * 18);
       clearAbove(p, a.gone ? obstacles : [...obstacles, ...captureVolumes(v)]);
+      const lift = p.position.y - wantedY;
+      a.lift = Math.max(lift, (a.lift || 0) * Math.exp(-dt * 18));
+      p.position.y = wantedY + a.lift;
       if (t >= hit && !a.struck) {
         a.struck = true;
         if (!a.low) emit('hit', { piece: type, victim: v.userData.type, height: a.vHeight,
@@ -216,7 +247,10 @@ export function createChoreography({ group, emit, landed, reduced }) {
         if (type === 'n') { cue(a, 'hooves', .02, 'hooves'); cue(a, 'neigh', .18, 'neigh'); }
         if (type === 'r') cue(a, 'charge', .32, 'charge');
         if (type === 'q') cue(a, 'spin', .57, 'spin');
-        if (type === 'b') cue(a, 'sweep', hit - .12, 'sweep');
+        if (type === 'b') {
+          cue(a, 'sweep-one', .44, 'sweep'); cue(a, 'slap-one', .59, 'whip');
+          cue(a, 'sweep-two', hit - .16, 'sweep');
+        }
       }
       if (t >= (a.low ? .46 : spec.end)) { finish(a, false, false); acts.splice(i, 1); }
     }

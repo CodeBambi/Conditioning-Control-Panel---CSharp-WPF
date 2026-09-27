@@ -273,6 +273,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     root.userData = {
       type, side, material: mat, materials: mats,
       scaleBase: art ? art.height : HEIGHT[type],
+      artSource: art?.source || 'placeholder',
       phase: Math.random() * Math.PI * 2,
     };
     if (jiggle) jiggle.attach(root);
@@ -403,6 +404,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
    *   -> { geometry, trims: [{geometry, material}], height }
    */
   async function loadArt(url) {
+    url += '?v=sculpted-0927';
     const head = await fetch(url, { method: 'HEAD' });
     if (!head.ok) return null;
     if (!loader) {
@@ -425,6 +427,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     let height = 0;
     for (const m of meshes) if (m.geometry.boundingBox) height = Math.max(height, m.geometry.boundingBox.max.y);
     return {
+      source: url,
       geometry: meshes[body].geometry,
       trims: meshes.filter((_, i) => i !== body),
       height: height > 0.05 ? height : 1,
