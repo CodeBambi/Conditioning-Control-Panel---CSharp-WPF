@@ -302,7 +302,8 @@ namespace ConditioningControlPanel.Services
                 DisposeOutput(); // release the previous clip before opening the next
 
                 _reader = new AudioFileReader(path) { Volume = EffectiveVolume() };
-                _output = new WaveOutEvent { DesiredLatency = 200 };
+                _output = WaveOutTeardown.NewWaveOut();
+                _output.DesiredLatency = 200;
                 App.Audio?.ApplyPreferredDevice(_output);
                 _output.Init(_reader);
                 _output.PlaybackStopped += OnPlaybackStopped;
@@ -386,11 +387,10 @@ namespace ConditioningControlPanel.Services
                 if (_output != null)
                 {
                     _output.PlaybackStopped -= OnPlaybackStopped;
-                    _output.Stop();
-                    _output.Dispose();
-                    _output = null;
                 }
-                _reader?.Dispose();
+                // Stop + dispose off this thread, readers after the device reports out (#1295).
+                WaveOutTeardown.Release(_output, _reader, "mantra-chant");
+                _output = null;
                 _reader = null;
             }
             catch (Exception ex) { App.Logger?.Debug("MantraChantService.DisposeOutput error: {Error}", ex.Message); }

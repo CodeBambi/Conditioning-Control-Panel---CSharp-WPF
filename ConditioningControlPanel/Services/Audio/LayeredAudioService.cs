@@ -115,7 +115,7 @@ namespace ConditioningControlPanel.Services.Audio
 
                 try
                 {
-                    _output = App.Audio?.CreateWaveOut() ?? new WaveOutEvent();
+                    _output = App.Audio?.CreateWaveOut() ?? WaveOutTeardown.NewWaveOut();
                     App.Audio?.ApplyPreferredDevice(_output);
                     _output.Init(_master);
                     _output.Play();
@@ -219,14 +219,10 @@ namespace ConditioningControlPanel.Services.Audio
 
         private void StopInternal()
         {
-            try { _output?.Stop(); } catch { }
-            try { _output?.Dispose(); } catch { }
+            // Handed off, not done here: this runs under _lock and usually on the UI thread, and
+            // the readers must outlive the playback thread still pulling from them (#1295).
+            WaveOutTeardown.Release(_output, _readers.ToArray(), "layers");
             _output = null;
-
-            foreach (var r in _readers)
-            {
-                try { r.Dispose(); } catch { }
-            }
             _readers.Clear();
             _trackVolumes.Clear();
 
