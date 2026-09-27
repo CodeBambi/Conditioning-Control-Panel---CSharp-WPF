@@ -56,3 +56,12 @@ export function capturePose(style, seconds, reduced = false) {
     done: fade >= 1,
   };
 }
+
+// Presentation only: the real game clock is never paused or sped up.
+export function presentationRate(clock) {
+  const state = clock?.snapshot?.();
+  if (!state || state.total === 0) return 1;
+  const remaining = [state.w, state.b].filter(value => Number.isFinite(value) && value >= 0);
+  const least = remaining.length ? Math.min(...remaining) : Infinity;
+  return least < 10000 ? 2.8 : least < 30000 ? 1.8 : 1;
+}

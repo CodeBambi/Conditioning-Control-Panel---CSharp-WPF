@@ -191,3 +191,14 @@
 
 /* reduced motion: state, not travel */
 .door.still *, .door.still { animation: none !important; transition: none !important; }
+
+/* Setup stays behind one disclosure; the play choices remain the front door. */
+.door-card { overflow-y: auto; background: rgba(20,20,46,.94); }
+.door-setup { font-size: 13px; color: var(--pbp-cream); }
+.door-setup summary { cursor: pointer; padding: 6px 0; }
+.door-settings { display: grid; gap: 12px; padding: 12px 0 4px; }
+.door-settings label { display: grid; grid-template-columns: 100px 1fr; align-items: center; gap: 10px; }
+.door-settings select { min-width: 0; padding: 8px; color: var(--pbp-cream); background: #262641; border: 1px solid #76718c; border-radius: 8px; font: inherit; }
+.door-settings select:focus-visible, .door-setup summary:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 3px; }
+.door-sub, .door-foot { opacity: .8; }
+@media (max-width: 480px) { .door-btn { letter-spacing: .06em; padding: 0 10px; } .door-settings label { grid-template-columns: 80px 1fr; } }

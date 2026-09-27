@@ -34,6 +34,8 @@
  * ==========================================================================*/
 
 import { Chess } from '../vendor/chess.js';
+import { readSolo, soloOptions } from '../game/save.js';
+import { requestRematch } from '../net/rematch.js';
 import { isHosted, identity, whenIdentity } from '../bridge.js';
 import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, outcome, fmtDuration, fmtMoves, fmtWhen } from './store.js';
 
@@ -80,6 +82,7 @@ export function createDoor(opts = {}) {
   root.append(veil, card);
 
   let screen = null;            // 'menu' | 'lobby' | 'found' | 'games' | 'profile' | 'replay' | 'end' | null (in game)
+  let setup = soloOptions();
   let current = null;           // the game in progress: { mode, match, startedAt, captures }
   let lastEnd = null;           // the record of the last finished game, for the end card + rematch
   let looking = false;
@@ -125,7 +128,7 @@ export function createDoor(opts = {}) {
     if (screen === 'replay' && name !== 'replay') closeReplay();
     if (screen === 'lobby' && name !== 'lobby' && name !== 'found') leaveLobby();
     screen = name;
-    if (name === 'lobby' && !offList) enterLobby();
+    if ((name === 'lobby' || (name === 'end' && lastEnd?.mode === 'online')) && !offList) enterLobby();
     root.hidden = false;
     root.className = 'door up screen-' + name + (still() ? ' still' : '') + (looking ? ' looking' : '');
     for (const el of [hudEl(), camEl()]) if (el) el.classList.add('parked');
@@ -134,7 +137,7 @@ export function createDoor(opts = {}) {
   }
 
   function hide() {
-    if (screen === 'lobby') leaveLobby();
+    if (screen === 'lobby' || screen === 'end') leaveLobby();
     if (screen === 'replay') closeReplay();
     screen = null;
     root.hidden = true;
@@ -150,6 +153,10 @@ export function createDoor(opts = {}) {
     card.append(body);
     if (screen === 'profile') { const inp = body.querySelector('input'); if (inp && !inp.readOnly) inp.addEventListener('change', () => setPlayerName(inp.value)); }
     if (screen === 'replay') { const r = body.querySelector('.door-scrub'); if (r) r.addEventListener('input', () => stepReplay(Number(r.value))); }
+    for (const input of body.querySelectorAll('[data-setup]')) input.addEventListener('change', () => {
+      setup = soloOptions({ ...setup, [input.dataset.setup]: input.value });
+      const label = card.querySelector('[data-act=solo] .k'); if (label) label.textContent = setup.level + ' computer';
+    });
     const focus = body.querySelector('.door-btn.primary') || body.querySelector('button');
     if (focus && !still()) later(() => { try { focus.focus({ preventScroll: true }); } catch { /* fine */ } }, 60);
   }
@@ -158,14 +165,24 @@ export function createDoor(opts = {}) {
   const me = () => playerName(settings());
 
   function menu() {
+    const saved = readSolo();
+    const option = (value, text, selected) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${text}</option>`;
     return `
       <h1 class="door-title"><b>piece by piece</b></h1>
-      <button type="button" class="door-btn primary" data-act="quick">quick match <span class="k">online</span></button>
-      <button type="button" class="door-btn" data-act="hotseat">play here <span class="k">two players, one board</span></button>
+      <p class="door-h">Your next move.</p>
+      ${saved ? `<button type="button" class="door-btn primary" data-act="continue">Continue game <span class="k">${esc(fmtMoves(saved.moves.length))}</span></button>` : ''}
+      <button type="button" class="door-btn ${saved ? '' : 'primary'}" data-act="solo">Play solo <span class="k">${esc(setup.level)} computer</span></button>
+      <button type="button" class="door-btn" data-act="lobby">Play a friend <span class="k">online</span></button>
+      <button type="button" class="door-btn" data-act="hotseat">Two players here <span class="k">one board</span></button>
+      <details class="door-setup"><summary>Solo setup</summary><div class="door-settings">
+        <label>Opponent<select data-setup="level">${option('relaxed', 'Relaxed - a gentle warm-up', setup.level)}${option('club', 'Club - looks one reply ahead', setup.level)}${option('sharp', 'Sharp - plans further ahead', setup.level)}</select></label>
+        <label>Your pieces<select data-setup="side">${option('w', 'White', setup.side)}${option('b', 'Black', setup.side)}${option('random', 'Surprise me', setup.side)}</select></label>
+        <label>Clock<select data-setup="clockMs">${option('0', 'Untimed', String(setup.clockMs))}${option('300000', '5 minutes each', String(setup.clockMs))}${option('900000', '15 minutes each', String(setup.clockMs))}</select></label>
+        ${saved ? '<p class="door-sub">A new solo game replaces your unfinished one.</p>' : ''}
+      </div></details>
       <div class="door-links">
-        <button type="button" class="door-link" data-act="lobby">lobby</button>
-        <button type="button" class="door-link" data-act="games">past games</button>
-        <button type="button" class="door-link" data-act="profile">profile</button>
+        <button type="button" class="door-link" data-act="games">Past games</button>
+        <button type="button" class="door-link" data-act="profile">Profile</button>
       </div>
       <div class="door-foot"><span>esc leaves the board</span><span class="name">at the board as <b>${esc(me())}</b></span></div>`;
   }
@@ -279,6 +296,7 @@ export function createDoor(opts = {}) {
         <p class="tally">${esc(how || '')} &middot; ${esc(fmtMoves(g.plies))} &middot; ${(caps.w || 0) + (caps.b || 0)} taken &middot; ${esc(fmtDuration(g.durationMs))}</p>
         <div id="door-recap"></div>
       </div>
+      ${ask ? `<div class="door-ask"><span><b>${esc(ask.name)}</b> wants a rematch</span><button type="button" class="door-pill" data-act="accept">Play</button><button type="button" class="door-link" data-act="decline">Decline</button></div>` : ''}
       <button type="button" class="door-btn primary" data-act="rematch">rematch</button>
       <button type="button" class="door-btn" data-act="menu">back to the door</button>`;
   }
@@ -295,16 +313,18 @@ export function createDoor(opts = {}) {
     // The host first: a signed-out account has nothing to enter with, and
     // the screen has to say so rather than sit on an empty list.
     await askHost();
+    if (!['lobby', 'end'].includes(screen)) return;
     if (signedOut || !lobby) { if (screen === 'lobby') render(); return; }
     try { await lobby.enter({ name: me() }); } catch { /* the door still opens */ }
+    if (!['lobby', 'end'].includes(screen)) { lobby.leave(); return; }
     if (offList) offList();
     offList = lobby.onList((l) => { people = l || []; if (screen === 'lobby') render(); });
     if (offAsk) offAsk();
     offAsk = lobby.onChallenge((offer) => {
-      if (screen !== 'lobby' || ask) { try { offer.decline(); } catch { /* fine */ } return; }
+      if (!['lobby', 'end'].includes(screen) || ask) { try { offer.decline(); } catch { /* fine */ } return; }
       ask = offer;
       sfx('pop');
-      ask.timer = later(() => { if (ask === offer) { try { offer.decline(); } catch { /* fine */ } ask = null; if (screen === 'lobby') render(); } }, T.askTimeoutMs);
+      ask.timer = later(() => { if (ask === offer) { try { offer.decline(); } catch { /* fine */ } ask = null; if (['lobby', 'end'].includes(screen)) render(); } }, T.askTimeoutMs);
       render();
     });
     try { people = await lobby.list(); } catch { people = []; }
@@ -390,10 +410,11 @@ export function createDoor(opts = {}) {
   }
 
   // ---------------------------------------------------------------- the game itself
-  function deal(mode, match = null) {
-    current = { mode, match, startedAt: Date.now(), captures: { w: 0, b: 0 } };
+  function deal(mode, match = null, restore = null) {
+    current = { mode, match, options: setup, startedAt: Date.now() - (restore?.durationMs || 0), captures: { w: 0, b: 0 } };
+    if (restore) for (const [i, san] of restore.moves.entries()) if (san.includes('x')) current.captures[i % 2 ? 'b' : 'w']++;
     hide();
-    startGame({ mode, match });
+    startGame({ mode, match, options: setup, restore });
   }
 
   function onCapture(p) { if (current && p && p.by) current.captures[p.by] = (current.captures[p.by] || 0) + 1; }
@@ -407,9 +428,9 @@ export function createDoor(opts = {}) {
     // been corrected by the server after the deal), else the lobby's word
     const seat = (rec.me === 'w' || rec.me === 'b') ? rec.me : (m ? m.side : null);
     lastEnd = saveGame({
-      mode: current.mode, me: seat, opponent: m ? m.opponent.name : 'a friend here',
+      mode: current.mode, me: seat, opponent: rec.opponent || (m ? m.opponent.name : 'a friend here'),
       moves: rec.moves || [], plies: rec.plies || 0, result: rec.result || null,
-      durationMs: Date.now() - current.startedAt, captures: { ...current.captures }, clocks: rec.clocks || null,
+      durationMs: rec.durationMs ?? (Date.now() - current.startedAt), captures: { ...current.captures }, clocks: rec.clocks || null,
     });
     const finished = current;
     current = null;
@@ -420,8 +441,11 @@ export function createDoor(opts = {}) {
   function rematch() {
     const prev = lastEnd && lastEnd.rematchOf;
     if (prev && prev.mode === 'online' && prev.match) {
-      const swapped = { ...prev.match, side: prev.match.side === 'w' ? 'b' : 'w' };
-      deal('online', swapped);
+      show('lobby');
+      if (lobby) look(afterHost(() => requestRematch(lobby, prev.match)));
+    } else if (prev?.mode === 'solo') {
+      setup = prev.options || setup;
+      deal('solo');
     } else {
       deal('hotseat');
     }
@@ -488,6 +512,8 @@ export function createDoor(opts = {}) {
       // the lobby is asked only once the host has said who we are, and not at
       // all for nobody (afterHost); look() reads the quiet rejection as a re-render
       case 'quick': if (screen !== 'lobby') show('lobby'); if (lobby) look(afterHost(() => lobby.quickMatch())); break;
+      case 'solo': deal('solo'); break;
+      case 'continue': { const saved = readSolo(); if (saved) deal('solo', null, saved); else render(); break; }
       case 'hotseat': deal('hotseat'); break;
       case 'lobby': show('lobby'); break;
       case 'games': show('games'); break;
