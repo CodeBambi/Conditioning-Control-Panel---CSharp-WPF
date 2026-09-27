@@ -18,7 +18,7 @@ All six acts finish with elastic spine settling: the middle and tip lag each oth
 the base stays planted. Pawn and knight start their main flex at stomp contact, before the victim dissolves. King and queen hop into their final square and rebound on arrival. Landing sound fires at final touchdown, before the quiet tail. Knight and bishop anticipate with a short compressed windup. `board/silicone.js` shares the curved spine across skin, jewellery,
 outline, depth, contact bounds and dissolve particles. The curve rotates each cross section
 along its tangent, stretches axially, twists and carries a delayed mid-body bend.
-The queen plants her head on the floor as the pivot and sweeps her base at victim-dependent lower-body height. The rook coils sideways, strikes low, launches sideways and
+The queen approaches her head-pivot setup directly, arches in place, then sweeps the middle of her base into the victim at body height. The pivot distance follows the approach length and her reach. Bishop and queen transfer momentum sideways at contact: the first bishop slap jolts and bends the target, the reverse slap knocks it down. Both victims fall at full size before dissolving. The rook coils sideways, strikes low, launches sideways and
 recoils without following its victim into the air.
 Transition curves have zero acceleration at their endpoints; clearance height releases gradually.
 The queen and king use the approved sculpted GLBs from ce4c208d3, for both colours.
