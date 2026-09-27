@@ -32,7 +32,7 @@ function play(){
    B.pieces.move(from,to);
    const id=B.anim.stats().acts[0]?.variation||'capture';
    caption.textContent=names[type]+' / '+id.replaceAll('-',' ');
-   if(auto)timer=setTimeout(()=>{if(++beat%3===0){const keys=Object.keys(names);type=keys[(keys.indexOf(type)+1)%keys.length];}play();},type==='q'?4500:3900);
+   if(auto)timer=setTimeout(()=>{if(++beat%3===0){const keys=Object.keys(names);type=keys[(keys.indexOf(type)+1)%keys.length];}play();},(B.anim.stats().acts[0]?.end || 3.9)*1000+350);
  },450);
 }
 document.getElementById('replay').onclick=play;

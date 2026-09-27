@@ -5,8 +5,20 @@
   window.requestAnimationFrame = () => 0;
   await new Promise(r => setTimeout(r, 200));
   let passed = 0, events = [], cases = 0;
+  const {hopPlan,hopAt}=await import('./board/hops.js');
   for (const name of ['land', 'sunk', 'hit', 'dissolve']) P.bus.on(name, e => events.push({ name, ...e }));
   const ok = (v, msg) => { if (!v) throw Error(msg); passed++; };
+  for (const distance of [1, 3, 5]) {
+    const plan=hopPlan({x:0,z:0},{x:distance,z:0});
+    ok(plan.count===(distance===1?2:distance),'hop count follows board squares');
+    for(let i=0;i<plan.count;i++) {
+      const land=i*plan.beat+plan.flightEnd;
+      const first=hopAt(plan,land+.01),last=hopAt(plan,land+.08);
+      ok(first.height<.0001 && last.height<.0001,'landing stays on floor');
+      ok(Math.abs(first.travel-last.travel)<.0001,'no sliding during landing rebound');
+      ok(Math.abs(first.ring)>.1,'wobble starts at touchdown');
+    }
+  }
   function setup(type = 'p', side = 'w', victim = 'r', crowded = false) {
     P.bus.emit('local', {}); B.pieces.setPosition({});
     const map = {d4:{type, side},d5:{type:victim,side:side==='w'?'b':'w'}};
@@ -19,7 +31,7 @@
   for(const type of ['p','n','b','r','q','k']) for(const side of ['w','b']) for(const crowded of [false,true]) {
     const pieces=setup(type,side,crowded?'k':'p',crowded); B.pieces.move('d4','d5');
     const style=B.anim.stats().acts[0]; ok(!!style,type+' signature starts');
-    for(let frame=0;frame<Math.ceil((ACTS[type].end + .1) * 60);frame++) {
+    for(let frame=0;frame<Math.ceil((style.end + .1) * 60);frame++) {
       step(1/60);
       const p=pieces.attacker,v=pieces.victim;
       if(!B.anim.stats().acts.length) continue;
@@ -44,7 +56,7 @@
     ok(!B.anim.busy(),type+' settles');cases++;
   }
   const planted=setup('b','w','r'), base=planted.victim.position.clone();
-  B.pieces.move('d4','d5');step(.80);
+  B.pieces.move('d4','d5');step(B.anim.stats().acts[0].approach + .80);
   ok(Math.hypot(planted.victim.position.x-base.x,planted.victim.position.z-base.z)<.0001,'first slap keeps victim base planted');
   const firstBend=Math.hypot(planted.victim.userData.capturePose.x,planted.victim.userData.capturePose.z);
   ok(firstBend>.08,'first slap bends victim');step(.34);
@@ -58,18 +70,18 @@
     ok(B.sfx.log().some(e=>e.name==='hop'),type+' hop cue plays');
   }
   P.bus.emit('local',{});B.pieces.setPosition({});B.pieces.setPosition({d2:{type:'q',side:'w'}});events=[];
-  B.pieces.move('d2','d7');step(1.2);ok(events.filter(e=>e.name==='land').length===1,'long hop sequence has one final landing');
+  B.pieces.move('d2','d7');step(2.2);ok(events.filter(e=>e.name==='land').length===1,'long hop sequence has one final landing');
   ok(B.sfx.log().some(e=>e.name==='hopland'),'intermediate hop has landing sound');
-  for(const time of [0,.1,.8,1.2]) {setup('n');B.pieces.move('d4','d5');step(time);B.anim.skip();step(3.1);ok(events.filter(e=>e.name==='sunk').length===1,'skip one exit');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'skip one landing');}
-  setup('p');B.pieces.remove('d5');B.pieces.move('d4','e5');step(3.1);ok(events.some(e=>e.name==='land'&&e.capture),'en passant');
-  setup('r');B.pieces.move('d4','d5');step(.1);B.pieces.setPosition({d5:{type:'r',side:'w'},d6:{type:'q',side:'b'}});B.pieces.move('d6','d5');step(3.1);ok(events.filter(e=>e.name==='sunk').length===2,'rapid recapture');
-  setup('p');B.pieces.pieceAt('d4').position.set(-.5,0,-.5);B.pieces.move('d4','d5');ok(B.anim.stats().acts.length===1,'drag released exactly at target still captures');step(3.1);
+  for(const time of [0,.1,.8,1.2]) {setup('n');B.pieces.move('d4','d5');step(time);B.anim.skip();step(5.5);ok(events.filter(e=>e.name==='sunk').length===1,'skip one exit');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'skip one landing');}
+  setup('p');B.pieces.remove('d5');B.pieces.move('d4','e5');step(5.5);ok(events.some(e=>e.name==='land'&&e.capture),'en passant');
+  setup('r');B.pieces.move('d4','d5');step(.1);B.pieces.setPosition({d5:{type:'r',side:'w'},d6:{type:'q',side:'b'}});B.pieces.move('d6','d5');step(5.5);ok(events.filter(e=>e.name==='sunk').length===2,'rapid recapture');
+  setup('p');B.pieces.pieceAt('d4').position.set(-.5,0,-.5);B.pieces.move('d4','d5');ok(B.anim.stats().acts.length===1,'drag released exactly at target still captures');step(5.5);
   P.game.reset();P.game.rules.reset('1r5k/P7/8/8/8/8/8/K7 w - - 0 1');P.game.start();events=[];
-  ok(!!P.game.tryMove('a7','b8','q'),'capture promotion legal');step(3.1);ok(B.pieces.pieceAt('b8').userData.type==='q','promotion model');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'promotion capture');
-  P.game.reset();P.game.rules.reset('7k/8/8/3p4/4P3/8/8/K7 w - - 0 1');P.game.start();events=[];P.game.tryMove('e4','d5');step(.1);P.game.takeBack();step(3.1);
+  ok(!!P.game.tryMove('a7','b8','q'),'capture promotion legal');step(5.5);ok(B.pieces.pieceAt('b8').userData.type==='q','promotion model');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'promotion capture');
+  P.game.reset();P.game.rules.reset('7k/8/8/3p4/4P3/8/8/K7 w - - 0 1');P.game.start();events=[];P.game.tryMove('e4','d5');step(.1);P.game.takeBack();step(5.5);
   ok(B.pieces.pieceAt('e4')?.userData.side==='w'&&B.pieces.pieceAt('d5')?.userData.side==='b','undo restores board');
-  setup('p');B.pieces.move('d4','d5');step(3.1);events=[];B.pieces.move('d5','d6');step(.5);ok(events.filter(e=>e.name==='land'&&!e.capture).length===1,'next quiet move is not another capture');
+  setup('p');B.pieces.move('d4','d5');step(5.5);events=[];B.pieces.move('d5','d6');step(.8);ok(events.filter(e=>e.name==='land'&&!e.capture).length===1,'next quiet move is not another capture');
   P.settings.reducedMotion=true;setup('n');B.pieces.move('d4','d5');step(.6);ok(!B.anim.busy(),'reduced motion settles quickly');ok(!events.some(e=>e.name==='hit'),'reduced skips slapstick');P.settings.reducedMotion=false;
-  setup();B.pieces.move('d4','d5');step(.1);P.bus.emit('local',{});events=[];step(3.1);ok(!events.length,'reset has no late events');
+  setup();B.pieces.move('d4','d5');step(.1);P.bus.emit('local',{});events=[];step(5.5);ok(!events.length,'reset has no late events');
   return {passed,cases};
 })()
