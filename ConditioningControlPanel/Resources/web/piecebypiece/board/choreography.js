@@ -13,13 +13,14 @@ export const ACTS = Object.freeze({
 const clamp = t => Math.max(0, Math.min(1, t));
 const smooth = t => { t = clamp(t); return t * t * t * (t * (t * 6 - 15) + 10); };
 const phase = (t, a, b) => smooth((t - a) / (b - a));
+const arrivals = { p: .67, n: .67, b: .72, k: 1.02, q: .82, r: .72 };
 const up = new THREE.Vector3(0, 1, 0);
 const yaw = p => p.userData.side === 'b' ? Math.PI : 0;
 const skins = p => p.userData.materials || [p.userData.material];
 const scratch = new THREE.Vector3(), rotation = new THREE.Quaternion();
 
 // Keep the actual body and jewellery vertices, excluding shadow discs and outline shells.
-// Bounds and dissolve positions use the same quadratic bend as the vertex shader.
+// Bounds and dissolve positions use the same flexible spine as the vertex shader.
 function shape(piece) {
   if (piece.userData.captureShape) return piece.userData.captureShape;
   const points = [];
@@ -106,6 +107,9 @@ export function createChoreography({ group, emit, landed, reduced }) {
     a.near = a.target.clone().addScaledVector(d, -(a.radius + a.vRadius + .12));
     if (type === 'k') a.near.copy(a.target).addScaledVector(d, -a.height * .94);
     a.sideways = new THREE.Vector3(-d.z, 0, d.x);
+    a.contactHeight = Math.max(.18, Math.min(.55, a.vHeight * .36));
+    a.queenReach = a.height * .78;
+    a.queenAnchor = a.target.clone().addScaledVector(d, -(a.queenReach + a.radius + a.vRadius - .04));
     a.fly = type === 'r' ? a.sideways.clone() : d.clone();
     a.obstacles = group.children.filter(p => p !== piece && p !== victim && p.userData.type)
       .map(p => ({ piece: p, box: captureBounds(p).clone() }));
@@ -185,11 +189,15 @@ export function createChoreography({ group, emit, landed, reduced }) {
         // Dissolve in place before entering the occupied square. No rolling or flying.
         at.lerp(a.to, phase(t, .30, .46));
       } else if (type === 'p' || type === 'n') {
-        const leap = phase(t, .16, hit);
-        at.lerp(a.target, phase(t, .24, hit - .10));
-        at.y = Math.sin(Math.PI * leap) * (type === 'n' ? 1.65 : 1.0) + phase(t, .16, .36) * a.vHeight;
-        if (t < .16) sy = 1 - .22 * Math.sin(Math.PI * t / .16);
-        if (type === 'n') tilt = -Math.PI * 2 * phase(t, .28, hit - .13);
+        const launch = type === 'n' ? .30 : .16;
+        const leap = phase(t, launch, hit);
+        at.lerp(a.target, phase(t, launch + .08, hit - .10));
+        at.y = Math.sin(Math.PI * leap) * (type === 'n' ? 1.65 : 1.0) + phase(t, launch, launch + .20) * a.vHeight;
+        const crouch = phase(t, .02, launch * .70) * (1 - phase(t, launch * .70, launch + .06));
+        sy = 1 - .28 * crouch;
+        flex.tip.addScaledVector(d, -.20 * crouch);
+        at.addScaledVector(d, -.12 * crouch);
+        if (type === 'n') tilt = -Math.PI * 2 * phase(t, launch + .12, hit - .10);
         if (t >= hit) {
           const flatten = phase(age, 0, .19);
           at.copy(a.target); at.y = a.vHeight * (1 - .88 * flatten) + .018;
@@ -198,54 +206,63 @@ export function createChoreography({ group, emit, landed, reduced }) {
         }
       } else {
         at.lerp(a.near, phase(t, 0, .30));
-        const wind = Math.sin(Math.PI * phase(t, .30, hit));
         if (type === 'b') {
-          const ready = phase(t, .26, .50), release = 1 - phase(age, .14, .58);
+          const ready = phase(t, .28, .52), release = 1 - phase(age, .14, .58);
           const sweep = -.82 + 1.64 * phase(t, .54, .86) - 1.64 * phase(t, 1.04, 1.36);
           const trail = -.82 + 1.64 * phase(t - .09, .54, .86) - 1.64 * phase(t - .09, 1.04, 1.36);
+          const coil = phase(t, .30, .51) * (1 - phase(t, .55, .70));
+          at.addScaledVector(d, -.10 * coil);
           flex.tip.copy(d).multiplyScalar((a.radius + a.vRadius + .12) * ready * release).addScaledVector(lateral, sweep * ready * release);
           flex.lag.copy(lateral).multiplyScalar((trail - sweep) * .72 * ready * release);
-          flex.stretch = .22 * ready * release;
+          flex.stretch = .22 * ready * release - .16 * coil;
+          flex.tip.addScaledVector(d, -.28 * coil);
           flex.drop = (Math.min(a.height * .90, a.vHeight * .85) - a.height * 1.22) * ready * release;
           flex.twist = -.35 * sweep * ready * release;
         }
         if (type === 'k') {
-          const reach = phase(t, .46, hit), press = phase(age, 0, .32);
-          const recover = 1 - phase(age, .40, .83);
-          flex.stretch = .20 * phase(t, .25, .52) * (1 - phase(t, .62, hit + .20));
-          flex.tip.copy(d).multiplyScalar(a.height * .84 * reach * recover);
-          flex.lag.copy(d).multiplyScalar(-a.height * .26 * reach * recover);
-          flex.drop = (a.vHeight * (1 - .88 * press) + .04 - a.height * (1 + flex.stretch)) * reach * recover;
+          const charge = phase(t, .30, .66) * (1 - phase(t, .73, hit));
+          const reach = phase(t, hit - .16, hit), press = phase(age, 0, .11);
+          const recover = 1 - phase(age, .30, .83);
+          flex.stretch = .22 * charge;
+          flex.tip.copy(d).multiplyScalar(a.height * (.87 * reach * recover - .22 * charge));
+          flex.lag.copy(d).multiplyScalar(a.height * (.15 * charge - .30 * reach * recover));
+          flex.drop = (a.vHeight * (1 - .88 * press) + .025 - a.height * (1 + flex.stretch)) * reach * recover;
+          at.addScaledVector(d, -.10 * charge);
         }
         if (type === 'q') {
-          const invert = phase(t, .27, .69) * (1 - phase(age, .20, .70));
-          const orbit = -Math.PI * 2 * (1 - phase(t, .60, hit + .12));
-          tilt = -2.42 * invert; facing = d.clone().applyAxisAngle(up, orbit);
-          flex.tip.copy(facing).multiplyScalar(.55 * invert);
-          flex.lag.copy(facing).multiplyScalar(-.72 * invert).addScaledVector(lateral, .25 * Math.sin(orbit) * invert);
-          flex.stretch = .15 * invert; flex.twist = -.65 * Math.sin(orbit) * invert;
+          const invert = phase(t, .24, .65) * (1 - phase(age, .24, .82));
+          // The crown is the pivot. The flat base sweeps at the victim's lower body.
+          const orbit = -2.25 + 3.15 * phase(t, .70, hit + .28);
+          tilt = -Math.PI / 2 * invert; facing = d.clone().applyAxisAngle(up, orbit);
+          const baseHeight = Math.max(a.radius + .03, a.contactHeight);
+          flex.tip.set(0, -baseHeight * invert, 0);
+          flex.lag.set(0, .46 * invert, 0).addScaledVector(lateral, -.32 * Math.sin(orbit) * invert);
+          flex.drop = (a.queenReach - a.height) * invert;
+          flex.twist = -.35 * Math.sin(orbit) * invert;
           headPin = invert;
         }
         if (type === 'r') {
-          const ready = phase(t, .30, .68), release = 1 - phase(age, .17, .68);
-          const swing = -1.0 + 2.05 * phase(t, .84, hit + .21);
-          const trail = -1.0 + 2.05 * phase(t - .11, .84, hit + .21);
-          flex.tip.copy(lateral).multiplyScalar(swing * ready * release).addScaledVector(d, (a.radius + a.vRadius) * phase(t, .70, .98) * release);
-          flex.lag.copy(lateral).multiplyScalar((trail - swing) * .75 * ready * release);
-          flex.stretch = .16 * ready * release; flex.drop = -.26 * a.height * ready * release;
-          flex.twist = -.55 * swing * ready * release;
-          at.addScaledVector(lateral, -.16 * phase(age, 0, .18) * (1 - phase(age, .28, .67)));
+          const ready = phase(t, .30, .72), release = 1 - phase(age, .16, .62);
+          const swing = -.95 + 1.90 * phase(t, hit - .17, hit + .17);
+          const trail = -.95 + 1.90 * phase(t - .07, hit - .17, hit + .17);
+          const reach = (a.radius + a.vRadius + .12) * phase(t, .67, hit) * release;
+          flex.tip.copy(lateral).multiplyScalar(swing * ready * release).addScaledVector(d, reach);
+          flex.lag.copy(lateral).multiplyScalar((trail - swing) * .85 * ready * release);
+          flex.stretch = .12 * ready * release;
+          flex.drop = (a.contactHeight - a.height * 1.12) * ready * release;
+          flex.twist = -.60 * swing * ready * release;
+          at.addScaledVector(lateral, -.20 * phase(age, 0, .14) * (1 - phase(age, .23, .66)));
         }
-        at.lerp(a.to, phase(age, type === 'k' ? .55 : .32, type === 'k' ? 1.02 : .72));
+        at.lerp(a.to, phase(age, type === 'k' ? .55 : .32, arrivals[type]));
       }
       if (!a.gone) {
         let pos = a.target.clone(), tip = 0, shrink = 1, vs = 1;
         if (!a.low && age > 0) {
-          if (type === 'p' || type === 'n' || type === 'k') vs = 1 - .88 * phase(age, 0, type === 'k' ? .32 : .19);
+          if (type === 'p' || type === 'n' || type === 'k') vs = 1 - .88 * phase(age, 0, type === 'k' ? .11 : .19);
           else if (type === 'r') {
-            const travel = phase(age, 0, .75);
+            const travel = 1 - Math.pow(1 - clamp(age / .75), 2);
             pos.addScaledVector(a.fly, a.exitDistance * travel);
-            pos.y = (a.ceiling + .8) * phase(age, 0, .13) + 1.1 * Math.sin(Math.PI * travel);
+            pos.y = .90 * Math.sin(Math.PI * travel);
             tip = 7 * phase(age, .10, .90);
           } else {
             tip = 1.5 * phase(age, 0, .22);
@@ -263,47 +280,55 @@ export function createChoreography({ group, emit, landed, reduced }) {
         if (fade >= 1 || (type === 'r' && age > .95 && !a.low)) exit(a);
       }
       if (!a.low) {
-        const arrival = hit + (type === 'k' ? 1.02 : .72);
-        const elapsed = Math.max(0, t - arrival), fade = 1 - phase(t, spec.end - .22, spec.end);
-        const ring = Math.sin(elapsed * 18) * Math.exp(-elapsed * 4.5) * fade;
-        const delayed = Math.sin(elapsed * 18 - .65) * Math.exp(-elapsed * 4.5) * phase(elapsed, 0, .10) * fade;
+        const arrival = hit + arrivals[type];
+        const elapsed = Math.max(0, t - (a.touchdown ?? arrival)), fade = 1 - phase(t, spec.end - .22, spec.end);
+        const ring = -Math.sin(elapsed * 23) * Math.exp(-elapsed * 4.5) * fade;
+        const delayed = -Math.sin(elapsed * 23 - .45) * Math.exp(-elapsed * 4.5) * phase(elapsed, 0, .04) * fade;
         flex.tip.addScaledVector(d, .22 * ring).addScaledVector(lateral, .12 * delayed);
         flex.lag.addScaledVector(d, -.32 * delayed);
         flex.stretch += .12 * ring;
         // Travel and impacts stretch the spine; its planted base does not rock.
         if (type === 'p' || type === 'n') {
           flex.stretch += sy - 1; sy = 1;
-          flex.tip.addScaledVector(d, -.20 * Math.sin(Math.PI * phase(t, .16, hit)));
+          flex.tip.addScaledVector(d, -.20 * Math.sin(Math.PI * phase(t, type === 'n' ? .30 : .16, hit)));
           flex.lag.addScaledVector(d, .18 * Math.sin(Math.PI * phase(t, .25, hit + .12)));
         }
       }
       pose(p, a.scale, at, tilt, spin, facing, bend, sy, 1, flex);
       if (headPin) {
         const head = worldVertex(p, { x: 0, y: p.userData.jiggleUniforms.uHeight.value, z: 0 }).clone();
-        const anchor = a.near.clone(); anchor.y = .04;
+        const anchor = a.queenAnchor.clone(); anchor.y = .003;
         p.position.addScaledVector(anchor.sub(head), headPin);
         p.position.y -= Math.min(0, captureBounds(p).min.y);
       }
       // A genuine contact surface: attacker and victim envelopes touch, never overlap.
       const wantedY = p.position.y;
       p.position.y += (a.lift || 0) * Math.exp(-dt * 18);
-      const sideHit = type === 'r' && age > 0 && !a.low && !a.gone;
-      clearAbove(p, a.gone || sideHit ? obstacles : [...obstacles, ...captureVolumes(v)]);
-      if (sideHit) {
-        clearSide(v, captureVolumes(p), a.fly);
+      const sideStrike = ['b', 'q', 'r'].includes(type) && !a.low && !a.gone;
+      // Side contacts separate horizontally. A vertical solver turns every slap into a headbutt.
+      if (sideStrike && age === 0) clearSide(p, captureVolumes(v), d.clone().negate());
+      clearAbove(p, a.gone || sideStrike ? obstacles : [...obstacles, ...captureVolumes(v)]);
+      if (sideStrike && age > 0) {
+        const away = type === 'r' ? a.fly : d;
+        clearSide(v, captureVolumes(p), away);
         clearAbove(v, obstacles);
-        clearSide(v, captureVolumes(p), a.fly);
+        clearSide(v, captureVolumes(p), away);
       }
       const lift = p.position.y - wantedY;
       a.lift = Math.max(lift, (a.lift || 0) * Math.exp(-dt * 18));
       p.position.y = wantedY + a.lift;
+      const arrival = a.low ? .46 : hit + arrivals[type];
+      if (!a.landed && t >= arrival - .035 && p.position.y < .035) {
+        a.touchdown = t; a.landed = true;
+        landed(p, a.to, false, { capture: true, manner: 'signature', skipped: false });
+      }
       if (t >= hit && !a.struck) {
         a.struck = true;
         if (!a.low) emit('hit', { piece: type, victim: v.userData.type, height: a.vHeight,
-          manner: 'signature', world: { x: a.target.x, y: Math.min(a.vHeight, .65), z: a.target.z } });
+          manner: 'signature', world: { x: a.target.x, y: ['q', 'r'].includes(type) ? a.contactHeight : Math.min(a.vHeight, .65), z: a.target.z } });
       }
       if (!a.low) {
-        if (type === 'n') { cue(a, 'hooves', .02, 'hooves'); cue(a, 'neigh', .18, 'neigh'); }
+        if (type === 'n') { cue(a, 'hooves', .02, 'hooves'); cue(a, 'neigh', .30, 'neigh'); }
         if (type === 'r') cue(a, 'charge', .32, 'charge');
         if (type === 'q') cue(a, 'spin', .57, 'spin');
         if (type === 'b') {
