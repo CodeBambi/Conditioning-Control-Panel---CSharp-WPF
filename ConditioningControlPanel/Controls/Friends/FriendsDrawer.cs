@@ -748,7 +748,34 @@ public sealed partial class FriendsDrawer : Border
         var settings = FootButton("", Loc.Get("friends_settings"));
         settings.Tag = "friends-settings";
         settings.Click += (_, _) => { SettingsRequested?.Invoke(); CloseRequested?.Invoke(); };
-        g.Children.Add(settings);
+
+        // The bell: corner notices for pokes, knocks and requests. Off keeps the Inbox rows and the cue.
+        var bellOn = App.Settings?.Current?.FriendNotificationsEnabled != false;
+        var bellGlyph = new TextBlock
+        {
+            Text = "",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 13,
+            Foreground = bellOn ? FriendsLook.LilacBrush : FriendsLook.DimBrush,
+        };
+        var bell = FriendsLook.Pill(bellGlyph, Brushes.Transparent, FriendsLook.MutedBrush, Brushes.Transparent, 9,
+            new Thickness(8, 6, 8, 6), FriendsLook.HoverBrush);
+        bell.Tag = "friends-notices";
+        bell.ToolTip = Loc.Get(bellOn ? "friends_notices_on" : "friends_notices_off");
+        bell.Click += (_, _) =>
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FriendNotificationsEnabled = !s.FriendNotificationsEnabled;
+            try { App.Settings?.Save(); } catch { }
+            FriendsSfx.Click();
+            bellGlyph.Foreground = s.FriendNotificationsEnabled ? FriendsLook.LilacBrush : FriendsLook.DimBrush;
+            bell.ToolTip = Loc.Get(s.FriendNotificationsEnabled ? "friends_notices_on" : "friends_notices_off");
+        };
+        var left = new StackPanel { Orientation = Orientation.Horizontal };
+        left.Children.Add(settings);
+        left.Children.Add(bell);
+        g.Children.Add(left);
 
         var add = FootButton("", Loc.Get("friends_add_title"));
         add.Tag = "friends-add-open";
@@ -977,6 +1004,13 @@ public sealed partial class FriendsDrawer : Border
     internal string? OpenFriendId => _openId;
 
     internal string? OpenPicker => _picker;
+
+    /// <summary>Opens a friend's card (a corner notice clicked). Leaves it open if it already is.</summary>
+    internal void OpenOn(string friendId)
+    {
+        if (_openId == friendId) return;
+        Toggle(friendId);
+    }
 
     /// <summary>Opens or folds a friend's card. One card open at a time.</summary>
     internal void Toggle(string friendId)
