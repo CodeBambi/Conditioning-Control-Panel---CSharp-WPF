@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Models
     /// <para><b>Why this and not <c>System.Windows.Rect</c>.</b> The framing table and the
     /// resolve rules are pure data and pure arithmetic, and they belong in Core next to the mod
     /// manifest that carries them. A bare <c>Rect</c> resolves to <c>System.Windows.Rect</c>,
-    /// which a net8.0 assembly cannot name - the trap CLAUDE.md warns about - and it was the only
+    /// which a net10.0 assembly cannot name - the trap CLAUDE.md warns about - and it was the only
     /// thing keeping the table, and behind it the settings model, in the WPF head.</para>
     ///
     /// <para>Deliberately not a geometry type: no operators, no intersection, no union. Nothing

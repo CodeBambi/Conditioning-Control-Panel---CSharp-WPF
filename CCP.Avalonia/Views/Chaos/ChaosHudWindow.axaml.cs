@@ -41,7 +41,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///    <c>WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE</c>, and <c>SetWindowPos(HWND_TOPMOST)</c> via
     ///    <c>ChaosWindowZ</c>. Both map without a shim: the ex-styles are
     ///    <c>ShowInTaskbar="False"</c> + <c>ShowActivated="False"</c> in the XAML, and the
-    ///    topmost re-assert is <c>Topmost</c>. No <c>DllImport</c> survives - a net8.0 head has
+    ///    topmost re-assert is <c>Topmost</c>. No <c>DllImport</c> survives - a net10.0 head has
     ///    no user32. <c>X11Overlay.SetClickThrough</c> is deliberately NOT called: this HUD is
     ///    interactive, and WPF never set <c>WS_EX_TRANSPARENT</c> on it either (the unpainted
     ///    alpha-0 region is click-through by itself on both platforms).

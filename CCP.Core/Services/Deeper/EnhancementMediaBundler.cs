@@ -714,7 +714,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 long shrunkBy = fileLen - lastCcpStart;
                 fs.Seek(4, SeekOrigin.Begin);
                 var oldSz = new byte[4];
-                fs.Read(oldSz, 0, 4);
+                fs.ReadExactly(oldSz, 0, 4);
                 uint old = ReadUInt32LE(oldSz, 0);
                 uint @new = (uint)Math.Max(0, (long)old - shrunkBy);
                 fs.Seek(4, SeekOrigin.Begin);

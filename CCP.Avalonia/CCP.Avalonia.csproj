@@ -4,13 +4,13 @@
     The cross-platform head. This replaces WPF, it does not sit beside it: the owner's decision is
     one UI codebase for Windows and Linux, so a feature is written once and both platforms get it.
 
-    net8.0 with no -windows suffix and no RuntimeIdentifier, same as CCP.Core, so the target
+    net10.0 with no -windows suffix and no RuntimeIdentifier, same as CCP.Core, so the target
     framework itself forbids a WPF reference from creeping back in.
   -->
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>            <!-- 'WinExe' just suppresses the console window; it is not Windows-specific -->
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>ConditioningControlPanel.Avalonia</RootNamespace>

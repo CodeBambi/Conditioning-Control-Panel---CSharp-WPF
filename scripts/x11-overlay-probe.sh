@@ -46,7 +46,5 @@ if [ "$#" -gt 0 ]; then
   exit $?
 fi
 
-# Only the .NET 10 runtime is installed on some dev boxes while everything here targets
-# net8.0, so roll forward rather than pinning the machine to an extra runtime.
-DISPLAY="$NESTED" WAYLAND_DISPLAY="" DOTNET_ROLL_FORWARD=LatestMajor \
+DISPLAY="$NESTED" WAYLAND_DISPLAY="" \
   dotnet run --project "$ROOT/CCP.Avalonia/CCP.Avalonia.csproj" -c Release --no-build -- --x11-probe

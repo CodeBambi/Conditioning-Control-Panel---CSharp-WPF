@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <b>Win32 is gone.</b> The only P/Invoke here was
     ///    <c>SetWindowLong(GWL_EXSTYLE, WS_EX_TOOLWINDOW)</c> in <c>SourceInitialized</c>, to keep
     ///    the window out of Alt+Tab. That is <c>ShowInTaskbar="False"</c> in the .axaml, so nothing
-    ///    is lost and no <c>user32</c> reference reaches this net8.0 head.
+    ///    is lost and no <c>user32</c> reference reaches this net10.0 head.
     ///  - <b>Screens.</b> <c>System.Windows.Forms.Screen</c> + <c>BubbleCountWindow.GetDpiForScreen</c>
     ///    become <see cref="Screen"/> from <c>Window.Screens</c>. The DPI division drops out with
     ///    them: WPF's Left/Top are DIPs, Avalonia's <c>Position</c> is physical pixels, which is

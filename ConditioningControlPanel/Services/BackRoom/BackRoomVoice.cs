@@ -25,7 +25,7 @@ namespace ConditioningControlPanel.Services.BackRoom;
 /// <item><b>preset</b>: a bundled Back Room word clip, <c>Resources/Audio/backroom/words/words.json</c>
 /// (normalised phrase -&gt; file name). Ships empty; the owner generates the files.</item>
 /// <item><b>tts</b>: Windows speech, rendered to a wav here and played like any other clip. No package:
-/// <c>Windows.Media.SpeechSynthesis</c> comes with the project's own <c>net8.0-windows10.0.19041.0</c>.</item>
+/// <c>Windows.Media.SpeechSynthesis</c> comes with the project's own <c>net10.0-windows10.0.19041.0</c>.</item>
 /// <item><b>none</b>: the page keeps its speechSynthesis as the last fallback (the phone playtest, where
 /// there is no host at all, and any path that threw here).</item>
 /// </list>
