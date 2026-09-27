@@ -11,14 +11,9 @@
  * The landing squash is not a scale any more: it is handed to jiggle.js, which
  * bends and squashes the mesh itself so the man lands like silicone.
  *
- * Legacy whip timing below is retained for the optional whip. Ordinary captures
- * use captures.js: contact at arrival, then a bounded, skippable victim tail.
- * Legacy capture order: the victim starts tipping the frame
- * the move is played, the taker lands captureLand seconds later as the victim
- * hits the board, and only then does the victim roll away and sink. The dust
- * and the squelch ride the taker's landing, so the ear reads "he landed on
- * him". A knight takes longer to arrive (he hops), so his victim waits the
- * difference before he starts to fall and the beat still lands the same.
+ * Default captures use choreography.js: each attacker anticipates, contacts,
+ * displaces and settles. Logical moves and clocks remain immediate; tapping
+ * skips the presentation. The older optional whip keeps its own timeline.
  *
  * Bus events this file emits, once bindBus(bus, project) has been called (the
  * board is silent without it; the dust and the sound listen):
@@ -45,13 +40,12 @@
  * else. The victim's SHIVER (house book) is a forced tremor across the whip
  * line at the crack: no colour, no emissive, a flinch and nothing more.
  *
- * Gate: window.PBP.settings.whip (default FALSE). The owner has parked the
- * capture animations, so the whip is built but off: a bishop takes the plain
- * way, like a rook, unless the setting is true (boot.js reads ?whip=1 into
- * it for dev pages and harnesses). whipOn() is the one place that asks.
+ * Gate: window.PBP.settings.whip (default FALSE). Only the explicit legacy
+ * dev switch selects the old whip. The signature slap is the default.
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createChoreography } from './choreography.js';
 import { TUNING as TUNE } from './jiggle.js';
 import { WHIP_TUNING as W, whipBend, whipTimes, shiverAt } from './whip.js';
 import { TRAVEL, createCaptureDeck, capturePose } from './captures.js';
@@ -125,6 +119,7 @@ export function createAnim({ group, jiggle = null }) {
     // whip is finished on the spot rather than left driving a man in flight.
     if (bus && typeof bus.on === 'function') bus.on('takeback', () => skip());
     if (bus && typeof bus.on === 'function') bus.on('local', () => {
+      acts.clear();
       // A rematch must not inherit a late landing or captured-piece arrival.
       for (const f of flourishes) { f.piece.position.copy(f.at); f.piece.rotation.set(0, baseYaw(f.piece), 0); }
       for (const t of tumbles) group.remove(t.piece);
@@ -143,6 +138,7 @@ export function createAnim({ group, jiggle = null }) {
       screen: project(at),
     }, extra || {}));
   }
+  const acts = createChoreography({ group, emit: (name, payload) => emit(name, payload), landed, reduced: prefersReducedMotion });
   // --- end J ---
 
   /** Landing flex. `travel` is the world x/z the man just crossed, or null. */
@@ -163,8 +159,9 @@ export function createAnim({ group, jiggle = null }) {
    */
   function slide(piece, from, to = null, hop = null, opts = {}) {
     if (!from) return;
-    const dest = to || piece.position.clone();
-    if (from.distanceToSquared(dest) < 1e-6) return;
+    const dest = (to || piece.position).clone();
+    acts.settle(piece);
+    if (from.distanceToSquared(dest) < 1e-6 && !fresh(tumbles).length) return;
     piece.userData.busy = true;   // hands the piece to us; idle wobble stands off
     const d = piece.userData;
     // A fast next move or undo takes ownership from the previous flight.
@@ -175,6 +172,13 @@ export function createAnim({ group, jiggle = null }) {
     const travel = TRAVEL[d.type] || TRAVEL.p;
     const low = prefersReducedMotion();
     const pendingVictim = fresh(tumbles).find((v) => v.piece !== piece && v.piece.userData.side !== d.side);
+    if (pendingVictim && !opts.finish && !(d.type === 'b' && whipOn())) {
+      tumbles.splice(tumbles.indexOf(pendingVictim), 1);
+      d.tookOne = true;
+      acts.start(piece, pendingVictim.piece, opts.origin || from, dest);
+      return;
+    }
+    if (knight && !low && !refused) emit('captureCue', { name: 'hooves', piece: 'n' });
     if (pendingVictim) d.tookOne = true; // includes en passant, whose victim is on another square
     const s = {
       piece, from: from.clone(), to: dest, t: 0, fresh: true, refused,
@@ -288,6 +292,7 @@ export function createAnim({ group, jiggle = null }) {
    * victim off the board. A click mid-whip, a take-back, or the harness.
    */
   function skip() {
+    acts.skip();
     for (const f of flourishes) {
       if (!f.piece.userData.held && !f.piece.userData.pose) {
         f.piece.position.copy(f.at); f.piece.rotation.set(0, baseYaw(f.piece), 0);
@@ -372,6 +377,7 @@ export function createAnim({ group, jiggle = null }) {
 
   /** Tipped over, one roll, then down through the board and gone. */
   function tumble(piece) {
+    acts.settle(piece);
     // A piece captured in mid-flight belongs to its reaction now, not its previous move.
     for (let i = slides.length - 1; i >= 0; i--) if (slides[i].piece === piece) {
       piece.position.copy(slides[i].to); slides.splice(i, 1);
@@ -403,6 +409,7 @@ export function createAnim({ group, jiggle = null }) {
   }
 
   function update(dt) {
+    acts.update(dt);
     for (let i = flourishes.length - 1; i >= 0; i--) {
       const f = flourishes[i], d = f.piece.userData;
       if (!f.piece.parent || d.held || d.busy || d.pose || prefersReducedMotion()) {
@@ -513,7 +520,7 @@ export function createAnim({ group, jiggle = null }) {
 
     for (let i = buzzes.length - 1; i >= 0; i--) {
       const b = buzzes[i];
-      if (sliding(b.piece) || whips.some((w) => w.piece === b.piece)) continue;   // let it land (or finish the whip) before it rattles
+      if (b.piece.userData.capturePose || sliding(b.piece) || whips.some((w) => w.piece === b.piece)) continue;   // let it land (or finish the whip) before it rattles
       if (!b.home) b.home = { x: b.piece.position.x, z: b.piece.position.z };
       b.t += dt;
       const p = Math.min(1, b.t / T.buzzSec);
@@ -548,6 +555,7 @@ export function createAnim({ group, jiggle = null }) {
     hooks: {
       onMoved: (piece, from, origin) => slide(piece, from, null, null, { origin }),
       onReplaced: (old, next) => {
+        acts.replace(old, next);
         for (const s of slides) if (s.piece === old) {
           next.position.copy(old.position); next.userData.busy = true;
           next.userData.tookOne = s.capture; s.piece = next;
@@ -555,11 +563,12 @@ export function createAnim({ group, jiggle = null }) {
       },
       onCaptured: (piece) => tumble(piece),
     },
-    busy: () => slides.length + tumbles.length + whips.length > 0,
+    busy: () => acts.busy() || slides.length + tumbles.length + whips.length > 0,
  /** True while a bishop is still owed his square; skip() ends it. The ring after that is scenery. */
-    whipping: () => whips.some((w) => !w.stepped) || slides.some((s) => s.whip || s.finish) || tumbles.some((t) => t.style),
+    whipping: () => acts.busy() || whips.some((w) => !w.stepped) || slides.some((s) => s.whip || s.finish) || tumbles.some((t) => t.style),
     /** For the harness: what is in flight right now. */
     stats: () => ({
+      acts: acts.stats(),
       slides: slides.map((s) => ({ type: s.piece.userData.type, t: s.t, delay: s.delay, dur: s.dur, hop: s.hop, knight: s.knight, whip: !!s.whip, finish: s.finish })),
       tumbles: tumbles.map((t) => ({ type: t.piece.userData.type, t: t.t, delay: t.delay, hold: !!t.hold, variation: t.style?.id })),
       whips: whips.map((w) => ({ t: w.t, cracked: w.cracked, stage: whipBend(w.t, W).stage })),

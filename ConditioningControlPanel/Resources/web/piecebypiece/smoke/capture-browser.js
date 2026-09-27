@@ -1,79 +1,58 @@
 (async () => {
   const P = window.PBP, B = P.board;
-  P.ramp?.setEnabled(false);
-  B.setWobble(0); B.setCameraSway(0); B.setSide('w', true);
-  let queue = [];
-  window.requestAnimationFrame = fn => { queue.push(fn); return queue.length; };
-  await new Promise(r => setTimeout(r, 300));
-  let passed = 0, events = [];
-  for (const name of ['land', 'sunk']) P.bus.on(name, e => events.push({ name, ...e }));
+  const { captureVolumes, captureBounds } = await import('./board/choreography.js');
+  P.ramp?.setEnabled(false); P.game.clock.stop(); B.setWobble(0); B.setCameraSway(0);
+  window.requestAnimationFrame = () => 0;
+  await new Promise(r => setTimeout(r, 200));
+  let passed = 0, events = [], cases = 0;
+  for (const name of ['land', 'sunk', 'hit', 'dissolve']) P.bus.on(name, e => events.push({ name, ...e }));
   const ok = (v, msg) => { if (!v) throw Error(msg); passed++; };
-  function setup(type = 'p') {
-    P.bus.emit('local', {});
-    B.pieces.setPosition({ d4: {type, side:'w'}, d5: {type:'p', side:'b'} });
-    events = [];
+  function setup(type = 'p', side = 'w', victim = 'r', crowded = false) {
+    P.bus.emit('local', {}); B.pieces.setPosition({});
+    const map = {d4:{type, side},d5:{type:victim,side:side==='w'?'b':'w'}};
+    if(crowded) for(const sq of ['c3','d3','e3','c4','e4','c5','e5','c6','d6','e6']) map[sq]={type:'k',side:'b'};
+    B.pieces.setPosition(map); events=[];
+    return { attacker:B.pieces.pieceAt('d4'), victim:B.pieces.pieceAt('d5'), others:B.view.pieceGroup.children.filter(p=>!['d4','d5'].includes(p.userData.square)) };
   }
-  function step(seconds) { for (let t = 0; t < seconds; t += .005) { B.anim.update(.005); B.jiggle.system.update(.005); } }
-  const variations = {};
-  for (const type of ['p','n','b','r','q','k']) {
-    variations[type] = [];
-    for (let n = 0; n < 3; n++) {
-      setup(type); B.pieces.move('d4','d5');
-      const style = B.anim.stats().tumbles[0]?.variation;
-      variations[type].push(style);
-      step(.445);
-      ok(events.filter(e=>e.name==='land' && e.capture).length === 1, type+' arrival emits one capture');
-      const at = B.pieces.pieceAt('d5').position;
-      ok(Math.hypot(at.x + .5, at.z + .5) < .001, type+' occupies its square');
-      step(1.15);
-      ok(events.filter(e=>e.name==='sunk').length === 1, type+' emits one victim exit');
-      ok(!B.anim.busy(), type+' animation settles');
+  const step = seconds => { for(let t=0;t<seconds;t+=1/60){B.anim.update(1/60);B.jiggle.system.update(1/60);B.dust.update(1/60,B.view.camera,B.view.renderer);} };
+  const overlap = (a,b) => a.max.x > b.min.x+.0001 && a.min.x < b.max.x-.0001 && a.max.y > b.min.y+.0001 && a.min.y < b.max.y-.0001 && a.max.z > b.min.z+.0001 && a.min.z < b.max.z-.0001;
+  for(const type of ['p','n','b','r','q','k']) for(const side of ['w','b']) for(const crowded of [false,true]) {
+    const pieces=setup(type,side,crowded?'k':'p',crowded); B.pieces.move('d4','d5');
+    const style=B.anim.stats().acts[0]; ok(!!style,type+' signature starts');
+    for(let frame=0;frame<135;frame++) {
+      step(1/60);
+      const p=pieces.attacker,v=pieces.victim;
+      if(!B.anim.stats().acts.length) continue;
+      const av=captureVolumes(p);
+      const blockers=pieces.others.filter(x=>x.parent===B.view.pieceGroup);
+      if(v.parent===B.view.pieceGroup)blockers.push(v);
+      for(const other of blockers) {
+        const bv=captureVolumes(other);
+        if(av.some(a=>bv.some(b=>overlap(a,b))))throw Error(type+' '+side+' crowded='+crowded+' attacker overlaps '+other.userData.square+' frame='+frame);
+      }
+      if(v.parent===B.view.pieceGroup) {
+        const vv=captureVolumes(v);
+        for(const other of pieces.others) if(vv.some(a=>captureVolumes(other).some(b=>overlap(a,b)))) throw Error(type+' victim hits neighbour frame='+frame);
+        ok(captureBounds(v).min.y>=-.0001,type+' victim above board');
+      }
+      ok(captureBounds(p).min.y>=-.0001,type+' attacker above board');
     }
-    ok(new Set(variations[type]).size === 3, type+' has three distinct captures');
+    ok(events.filter(e=>e.name==='hit').length===1,type+' one hit');
+    ok(events.filter(e=>e.name==='land'&&e.capture).length===1,type+' one landing');
+    ok(events.filter(e=>e.name==='sunk').length===1,type+' one exit');
+    ok(events.filter(e=>e.name==='dissolve').length===(type==='r'?0:1),type+' dissolve except launch');
+    ok(!B.anim.busy(),type+' settles');cases++;
   }
-  for (const time of [0,.10,.32,.60]) {
-    setup('n'); B.pieces.move('d4','d5'); step(time); B.anim.skip(); step(1.8);
-    ok(events.filter(e=>e.name==='sunk').length === 1, 'skip emits one exit at '+time);
-    ok(events.filter(e=>e.name==='land' && e.capture).length === 1, 'skip preserves landing at '+time);
-  }
-  setup(); B.pieces.remove('d5'); B.pieces.move('d4','e5'); step(1.8);
-  ok(events.some(e=>e.name==='land' && e.capture), 'en passant is a capture');
-  setup('r'); B.pieces.move('d4','d5'); step(.10);
-  B.pieces.setPosition({d5:{type:'r',side:'w'},d6:{type:'q',side:'b'}});
-  B.pieces.move('d6','d5'); step(1.8);
-  ok(events.filter(e=>e.name==='sunk').length===2, 'rapid recapture exits both victims');
-  ok(!B.anim.busy(), 'rapid recapture settles');
-  setup('p');
-  B.pieces.pieceAt('d4').position.set(-.5,.3,-.5); // a held piece released over its target
-  B.pieces.move('d4','d5'); step(.55);
-  const taken = B.view.pieceGroup.children.find(p=>p.userData.side==='b');
-  ok(taken.position.z < -.5, 'drag release preserves the logical impact direction'); step(1.2);
-  P.game.reset();
-  P.game.rules.reset('1r5k/P7/8/8/8/8/8/K7 w - - 0 1'); P.game.start(); events=[];
-  ok(!!P.game.tryMove('a7','b8','q'), 'legal capture promotion'); step(.445);
-  ok(B.pieces.pieceAt('b8').userData.type==='q', 'promotion replaces the model');
-  ok(events.filter(e=>e.name==='land'&&e.capture).length===1, 'promotion retains capture contact');step(1.2);
-  P.game.reset();
-  P.game.rules.reset('7k/8/8/3p4/4P3/8/8/K7 w - - 0 1'); P.game.start(); events=[];
-  P.game.tryMove('e4','d5');step(.1);P.game.takeBack();step(1.8);
-  ok(B.pieces.pieceAt('e4')?.userData.side==='w' && B.pieces.pieceAt('d5')?.userData.side==='b', 'undo restores both pieces');
-  ok(events.filter(e=>e.name==='sunk').length===1, 'undo settles one victim without a late second exit');
-  P.bus.emit('local', {}); B.pieces.setPosition({});
-  B.pieces.setPosition({d4:{type:'p',side:'w'},d5:{type:'p',side:'b'},e4:{type:'q',side:'w'},e5:{type:'r',side:'b'},f4:{type:'r',side:'w'}});events=[];
-  B.pieces.move('d4','d5');B.pieces.move('e4','e5');B.pieces.move('f4','f5');
-  ok(B.anim.stats().tumbles.every(t=>!!t.variation), 'batched captures each own a distinct victim');step(1.8);
-  ok(events.filter(e=>e.name==='land'&&e.capture).length===2, 'batched quiet move does not inherit a capture');
-  P.settings.reducedMotion = true;
-  setup('n'); B.pieces.move('d4','d5');
-  ok(B.anim.stats().slides[0].hop===0, 'reduced motion has no knight jump');
-  step(.75); ok(!B.anim.busy(), 'reduced capture settles promptly');
-  ok(B.jiggle.system.stats().reduced, 'jiggle respects the in-app setting');
-  P.settings.reducedMotion = false;
-  setup(); B.pieces.move('d4','d5'); step(.1); P.bus.emit('local', {}); events=[]; step(2);
-  ok(!events.length, 'new match has no stale animation events');
-  B.pieces.setPosition(P.game.rules.position());
-  let now = performance.now();
-  window.__reviewStep = ms => { for(let t=0;t<ms;t+=16.667){now+=16.667;const q=queue;queue=[];for(const fn of q)fn(now);} };
-  window.__reviewStep(1700);
-  return { passed, variations };
+  for(const time of [0,.1,.8,1.2]) {setup('n');B.pieces.move('d4','d5');step(time);B.anim.skip();step(2.3);ok(events.filter(e=>e.name==='sunk').length===1,'skip one exit');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'skip one landing');}
+  setup('p');B.pieces.remove('d5');B.pieces.move('d4','e5');step(2.4);ok(events.some(e=>e.name==='land'&&e.capture),'en passant');
+  setup('r');B.pieces.move('d4','d5');step(.1);B.pieces.setPosition({d5:{type:'r',side:'w'},d6:{type:'q',side:'b'}});B.pieces.move('d6','d5');step(2.4);ok(events.filter(e=>e.name==='sunk').length===2,'rapid recapture');
+  setup('p');B.pieces.pieceAt('d4').position.set(-.5,0,-.5);B.pieces.move('d4','d5');ok(B.anim.stats().acts.length===1,'drag released exactly at target still captures');step(2.4);
+  P.game.reset();P.game.rules.reset('1r5k/P7/8/8/8/8/8/K7 w - - 0 1');P.game.start();events=[];
+  ok(!!P.game.tryMove('a7','b8','q'),'capture promotion legal');step(2.4);ok(B.pieces.pieceAt('b8').userData.type==='q','promotion model');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'promotion capture');
+  P.game.reset();P.game.rules.reset('7k/8/8/3p4/4P3/8/8/K7 w - - 0 1');P.game.start();events=[];P.game.tryMove('e4','d5');step(.1);P.game.takeBack();step(2.4);
+  ok(B.pieces.pieceAt('e4')?.userData.side==='w'&&B.pieces.pieceAt('d5')?.userData.side==='b','undo restores board');
+  setup('p');B.pieces.move('d4','d5');step(2.4);events=[];B.pieces.move('d5','d6');step(.5);ok(events.filter(e=>e.name==='land'&&!e.capture).length===1,'next quiet move is not another capture');
+  P.settings.reducedMotion=true;setup('n');B.pieces.move('d4','d5');step(.6);ok(!B.anim.busy(),'reduced motion settles quickly');ok(!events.some(e=>e.name==='hit'),'reduced skips slapstick');P.settings.reducedMotion=false;
+  setup();B.pieces.move('d4','d5');step(.1);P.bus.emit('local',{});events=[];step(2.4);ok(!events.length,'reset has no late events');
+  return {passed,cases};
 })()

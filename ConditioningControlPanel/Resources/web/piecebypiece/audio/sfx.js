@@ -198,6 +198,31 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   };
 
   const cues = {
+    hooves() {
+      for (const at of [0, .085, .21, .295]) {
+        tone('triangle', at < .2 ? 680 : 510, .045, .12, { at, slideTo: 290 });
+        hiss(.025, .07, { at, from: 1900, to: 700, attack: .002 });
+      }
+    },
+    // A short stylised horse whinny, not speech or a voice service.
+    neigh() {
+      const t = ctx.currentTime, osc = ctx.createOscillator(), env = ctx.createGain();
+      const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 2300;
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(470, t);
+      osc.frequency.exponentialRampToValueAtTime(1020, t + .11);
+      for (let i = 1; i <= 14; i++) osc.frequency.linearRampToValueAtTime(850 - i * 29 + Math.sin(i * 2.4) * 115, t + .11 + i * .035);
+      env.gain.setValueAtTime(.0001, t); env.gain.exponentialRampToValueAtTime(.055, t + .065);
+      env.gain.exponentialRampToValueAtTime(.0001, t + .64);
+      osc.connect(filter); filter.connect(env); env.connect(master); osc.start(t); osc.stop(t + .66);
+    },
+    stomp() { cues.land({ height: .8 }); tone('sine', 95, .22, .22, { slideTo: 40 }); hiss(.11, .09, { from: 1700, to: 300 }); },
+    headbutt() { tone('sine', 125, .26, .42, { slideTo: 38 }); tone('triangle', 620, .055, .13, { slideTo: 180 }); },
+    sweep() { hiss(.16, .10, { from: 450, to: 4800, attack: .06 }); },
+    spin() { hiss(.38, .11, { from: 350, to: 2400, attack: .15 }); tone('triangle', 240, .22, .055, { slideTo: 490 }); },
+    breakdance() { cues.whip(); tone('triangle', 190, .20, .16, { slideTo: 65 }); },
+    charge() { tone('triangle', 75, .45, .12, { slideTo: 190 }); hiss(.40, .055, { from: 200, to: 1600, attack: .17 }); },
+    launch() { tone('sine', 80, .28, .45, { slideTo: 30 }); hiss(.055, .20, { from: 3500, to: 500, attack: .002 }); hiss(.40, .09, { from: 2200, to: 250, at: .06 }); },
     grab() { const P = TUNING.pop; tone('sine', P.from, P.sec, P.gain, { slideTo: P.to }); },
     tick() { const P = TUNING.tick; tone('triangle', P.hz, P.sec, P.gain); },
     land({ height = 1 } = {}) {
@@ -295,9 +320,10 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   });
   on('land', (p) => {
     if (!p || p.refused) return;
-    play(p.capture && p.manner !== 'whip' ? 'capture' : 'land', { height: p.height });
+    play(p.capture && !['whip', 'signature'].includes(p.manner) ? 'capture' : 'land', { height: p.height });
   });
-  on('hit', () => { play('whip'); });
+  on('captureCue', p => { if (p?.name) play(p.name); });
+  on('hit', p => { play(p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip'); });
   on('check', () => { checkArmed = true; startPulse(); });
   on('turn', () => {
     lastSecond = -1;

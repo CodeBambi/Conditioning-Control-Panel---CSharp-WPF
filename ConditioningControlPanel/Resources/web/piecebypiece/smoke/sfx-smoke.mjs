@@ -155,6 +155,11 @@ sfx.play('draw');
 expect(names().at(-1) === 'draw', 'draw sting plays by hand');
 expect(sfx.play('cardOpen') && sfx.play('cardClose'), 'card whooshes play by hand');
 
+for (const name of ['hooves','neigh','stomp','headbutt','whip','sweep','spin','breakdance','charge','launch']) {
+  const before = fake.started.length;
+  expect(sfx.play(name) && fake.started.length > before, name + ' schedules its sound');
+}
+
 doc.hidden = true; doc.fire('visibilitychange');
 expect(sfx.state().volume === 0 && !sfx.play('grab'), 'hidden tab: master to 0 and nothing schedules');
 doc.hidden = false; doc.fire('visibilitychange');
@@ -163,7 +168,7 @@ win.PBP.settings.sfxVolume = 0.25;
 sfx.play('tick');
 expect(Math.abs(sfx.state().volume - 0.25) < 1e-9, 'settings.sfxVolume is read on play');
 win.PBP.settings.sfxVolume = 0;
-expect(!sfx.play('tick'), 'volume 0 schedules nothing');
+expect(!sfx.play('tick') && !sfx.play('neigh') && !sfx.play('launch'), 'volume 0 silences new capture sounds too');
 
 expect(Object.isFrozen(TUNING), 'TUNING is frozen');
 expect(fake.wires.some((w) => w[0] === 'gain' && w[1] === 'destination'), 'the master reaches the destination');

@@ -48,7 +48,9 @@ const f = (n) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 // The same flex jiggle.js applies to the visible skin, applied to the hull's
 // copy of the geometry, plus the bent normal it needs to push out along.
 const PRELUDE = `
+varying vec3 vPbpPosition;
 uniform vec2 uBend;
+uniform float uAct;
 uniform float uSquash;
 uniform float uHeight;
 uniform float uPhase;
@@ -66,11 +68,12 @@ vec3 pbpN = normal;
   float wb = pow(h, ${f(J.bendWeightPow)});
   float ws = pow(h, ${f(J.squashWeightPow)});
   vec2 wave = uBend * (sin(h * ${f(J.rippleWaves)} - uTime * ${f(J.rippleSpeed)} + uPhase) * ${f(J.rippleGain)});
-  vec2 off = (uBend + wave) * wb;
+  vec2 off = (uBend + wave * (1.0 - uAct)) * wb;
   transformed.y *= (1.0 - uSquash * ws);
   transformed.xz *= (1.0 + ${f(J.volumeGain)} * uSquash);
   transformed.x += off.x;
   transformed.z += off.y;
+  vPbpPosition = transformed;
   vec2 slope = uBend * (${f(J.bendWeightPow)} * pow(h, ${f(J.bendWeightPow - 1)}) / max(uHeight, 0.0001));
   pbpN.y -= slope.x * pbpN.x + slope.y * pbpN.z;
   float sy = max(1.0 - uSquash * pow(h, ${f(J.squashWeightPow)}), 0.05);
@@ -146,6 +149,14 @@ export function createOutline({ group, bus = null }) {
     mat.onBeforeCompile = (shader) => {
       // Share the spring's objects: the hull reads the same bend the skin does.
       shader.uniforms.uBend = u.uBend;
+      shader.uniforms.uAct = u.uAct;
+      shader.uniforms.uDissolve = u.uDissolve;
+      shader.fragmentShader = 'varying vec3 vPbpPosition; uniform float uDissolve;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', `
+        #include <clipping_planes_fragment>
+        float crumb = fract(sin(dot(floor(vPbpPosition * 38.0), vec3(12.9898, 78.233, 39.425))) * 43758.5453);
+        if (uDissolve > 0.0 && crumb < uDissolve) discard;
+      `);
       shader.uniforms.uSquash = u.uSquash;
       shader.uniforms.uHeight = u.uHeight;
       shader.uniforms.uPhase = u.uPhase;
