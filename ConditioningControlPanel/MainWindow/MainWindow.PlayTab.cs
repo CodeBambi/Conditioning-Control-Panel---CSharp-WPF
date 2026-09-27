@@ -43,6 +43,10 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class MainWindow
     {
+        internal void LaunchPlayBreakoutDemo() => Services.BackRoom.BreakoutHostService.LaunchDemo();
+        internal void LaunchPlayBreakout() => Services.BackRoom.BreakoutHostService.LaunchFull();
+        internal void LaunchPlayGoon() => Services.GoonGame.GoonHostService.Launch();
+
         // ---- tuning ----------------------------------------------------------------------
 
         // The race-06/race-07 stack hooked PrizeGrants.GrantsChanged here to repaint a
@@ -83,6 +87,7 @@ namespace ConditioningControlPanel
                 // Feature names come from the SAME loc keys the cards themselves render, so the
                 // band, the click's refusal and the card title are one string in every language -
                 // a Japanese user no longer reads a Japanese refusal about an English subject.
+                SetLockbandVisible(tab.PlayLockBreakout, !Services.BackRoom.BreakoutAccess.FullAllowed);
                 SetLockband(tab.PlayLockGaze, TierGate.RequiresLab(Loc.Get("label_gaze_minigame")));
                 SetLockband(tab.PlayLockFocusGaze, TierGate.RequiresLab(Loc.Get("label_focus_gaze")));
                 SetLockband(tab.PlayLockRemote, TierGate.RequiresPremium(Loc.Get("tab_remote_control"), "remote"));
