@@ -327,8 +327,37 @@
                             <TextBlock Text="{loc:Str chaster_account_linked}" FontSize="12" Margin="6,0,0,0"
                                        Foreground="#5FFFD0" VerticalAlignment="Center"/>
                             <Rectangle Width="1" Height="16" Fill="{DynamicResource GlassBorderBrush}" Margin="10,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtAccountLock" FontSize="12" MaxWidth="220" TextTrimming="CharacterEllipsis"
-                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            <!-- A little Chaster: the lock, its time left, and the way to it on chaster.app. -->
+                            <Button x:Name="BtnChasterSite" Cursor="Hand" VerticalAlignment="Center" FocusVisualStyle="{x:Null}"
+                                    Click="BtnChasterSite_Click">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Chip" Height="26" CornerRadius="13" Padding="8,0,10,0"
+                                                Background="#26FFFFFF" BorderBrush="#40FFFFFF" BorderThickness="1">
+                                            <ContentPresenter VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Chip" Property="Background" Value="#44FFFFFF"/>
+                                                <Setter TargetName="Chip" Property="BorderBrush" Value="#99FF6B8A"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <StackPanel Orientation="Horizontal">
+                                    <!-- a small padlock -->
+                                    <Canvas Width="10" Height="12" VerticalAlignment="Center" Margin="0,0,6,0">
+                                        <Path Data="M2,5.5 L2,3.5 A3,3 0 0 1 8,3.5 L8,5.5" Stroke="#FF8FA3" StrokeThickness="1.4"/>
+                                        <Rectangle Canvas.Top="5" Width="10" Height="7" RadiusX="1.5" RadiusY="1.5" Fill="#FF8FA3"/>
+                                    </Canvas>
+                                    <TextBlock x:Name="TxtAccountLock" FontSize="12" MaxWidth="170" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtAccountLeft" FontFamily="Consolas, Courier New" FontSize="12" FontWeight="Bold"
+                                               Foreground="#FF8FA3" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                    <TextBlock Text="&#x2197;" FontSize="12" Margin="7,0,0,0" Foreground="{DynamicResource TextSecondaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                             <Border BorderBrush="#99FF6B8A" BorderThickness="1" CornerRadius="13" Height="26" Margin="10,0,0,0"
                                     VerticalAlignment="Center">
                                 <Button x:Name="BtnAccountUnlink" Style="{StaticResource CirceLink}" Content="{loc:Str chaster_unlink}"
@@ -341,10 +370,28 @@
                     <Border x:Name="PausePill" VerticalAlignment="Center" Visibility="Collapsed" Margin="0,0,10,0"
                             Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
                             BorderThickness="1.5" CornerRadius="19" Height="38" ToolTip="{loc:Str chaster_pause_tip}">
-                        <Button x:Name="BtnPause" Style="{StaticResource CirceLink}" Padding="14,0" VerticalAlignment="Center"
+                        <!-- Own template: CirceLink binds its text to Content, which drew a TextBlock
+                             content as nothing (the blank oval testers asked about). -->
+                        <Button x:Name="BtnPause" Cursor="Hand" FocusVisualStyle="{x:Null}" VerticalAlignment="Center"
                                 Click="BtnPause_Click">
-                            <TextBlock x:Name="TxtPause" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource TextLightBrush}" Text="{loc:Str chaster_pause}"/>
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="Transparent" Padding="14,0">
+                                        <ContentPresenter VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- two bars while running, a play arrow while paused -->
+                                <Canvas Width="10" Height="12" VerticalAlignment="Center" Margin="0,0,7,0">
+                                    <Rectangle x:Name="PauseBarA" Width="3" Height="12" RadiusX="1" RadiusY="1" Fill="{DynamicResource TextLightBrush}"/>
+                                    <Rectangle x:Name="PauseBarB" Canvas.Left="7" Width="3" Height="12" RadiusX="1" RadiusY="1" Fill="{DynamicResource TextLightBrush}"/>
+                                    <Path x:Name="PlayArrow" Data="M0,0 L10,6 L0,12 Z" Fill="#E0B052" Visibility="Collapsed"/>
+                                </Canvas>
+                                <TextBlock x:Name="TxtPause" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextLightBrush}" Text="{loc:Str chaster_pause}"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Button>
                     </Border>
                     <!-- The master switch as a glass pill. Its rim takes the tab's red while it runs. -->

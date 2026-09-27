@@ -278,6 +278,8 @@
   "chaster_account_open": "Seite öffnen",
   "chaster_account_hint": "CCP fügt deinem Chaster-Schloss Zeit hinzu",
   "chaster_account_strip_tip": "Dieser PC ist mit deinem Chaster-Konto verknüpft",
+  "chaster_site_open_tip": "Open this lock on chaster.app",
+  "chaster_site_make_tip": "No lock yet. Make one on chaster.app",
   "chaster_unlink_confirm_title": "Chaster trennen",
   "chaster_unlink_confirm_body": "Chaster von diesem PC trennen?\n\nDer Deckel bleibt hier. Zeit, die schon auf dem Schloss ist, bleibt dort.",
   "chaster_link_denied": "Chaster hat abgelehnt. Nichts wurde verknüpft.",

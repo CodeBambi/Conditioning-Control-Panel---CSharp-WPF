@@ -278,6 +278,8 @@
   "chaster_account_open": "ページを開く",
   "chaster_account_hint": "CCPがChasterのロックに時間を足します",
   "chaster_account_strip_tip": "このPCはChasterアカウントと連携しています",
+  "chaster_site_open_tip": "Open this lock on chaster.app",
+  "chaster_site_make_tip": "No lock yet. Make one on chaster.app",
   "chaster_unlink_confirm_title": "Chasterの連携解除",
   "chaster_unlink_confirm_body": "このPCとChasterの連携を解除しますか？\n\nツケはここに残ります。すでにロックに乗った時間はそのままです。",
   "chaster_link_denied": "Chasterに断られました。何も連携されていません。",

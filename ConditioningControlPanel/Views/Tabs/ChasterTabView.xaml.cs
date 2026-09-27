@@ -228,7 +228,7 @@ namespace ConditioningControlPanel.Views.Tabs
             var snapshot = chaster?.Lock;
             var lookup = chaster?.LockLookup ?? LockLookup.Unlinked;
             var linked = chaster?.IsLinked == true;
-            TxtAccountLock.Text = AccountLockLine(chaster);
+            PaintChasterChip(chaster);
 
             if (!linked)
             {
@@ -863,6 +863,25 @@ namespace ConditioningControlPanel.Views.Tabs
             await ConfirmAndUnlinkAsync(Window.GetWindow(this));
 
         /// <summary>The account line in the strip and in Settings: the lock's name, or that there is none.</summary>
+        /// <summary>The little Chaster in the account strip: the lock as Chaster itself counts it
+        /// (no pending tab added), and a click through to it on chaster.app.</summary>
+        private void PaintChasterChip(ChasterService? chaster)
+        {
+            TxtAccountLock.Text = AccountLockLine(chaster);
+            var snapshot = chaster?.IsLinked == true ? chaster.Lock : null;
+            var left = snapshot?.Remaining(DateTime.UtcNow);
+            TxtAccountLeft.Text = left is { } l ? (snapshot!.IsFrozen ? "❄ " : "") + ChasterWebLinks.Short(l) : "";
+            TxtAccountLeft.Visibility = left is null ? Visibility.Collapsed : Visibility.Visible;
+            BtnChasterSite.ToolTip = Loc.Get(snapshot == null ? "chaster_site_make_tip" : "chaster_site_open_tip");
+        }
+
+        private void BtnChasterSite_Click(object sender, RoutedEventArgs e)
+        {
+            var chaster = App.Chaster;
+            var url = ChasterWebLinks.For(chaster?.IsLinked == true ? chaster.Lock : null);
+            Helpers.BrowserLauncher.OpenUrlOrPrompt(url, "Chaster");
+        }
+
         internal static string AccountLockLine(ChasterService? chaster)
         {
             var snapshot = chaster?.Lock;
@@ -1033,6 +1052,8 @@ namespace ConditioningControlPanel.Views.Tabs
         private void PaintPause(bool paused)
         {
             TxtPause.Text = Loc.Get(paused ? "chaster_paused" : "chaster_pause");
+            PauseBarA.Visibility = PauseBarB.Visibility = paused ? Visibility.Collapsed : Visibility.Visible;
+            PlayArrow.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
             TxtPause.Foreground = paused ? Frozen(Color.FromRgb(0xE0, 0xB0, 0x52)) : (Brush)FindResource("TextLightBrush");
             PausePill.BorderBrush = paused ? Frozen(Color.FromRgb(0xE0, 0xB0, 0x52)) : (Brush)FindResource("GlassBorderBrush");
             PausePill.ToolTip = Loc.Get(paused ? "chaster_paused_tip" : "chaster_pause_tip");

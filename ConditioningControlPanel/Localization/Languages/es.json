@@ -278,6 +278,8 @@
   "chaster_account_open": "Abrir página",
   "chaster_account_hint": "CCP añade tiempo a tu candado de Chaster",
   "chaster_account_strip_tip": "Este PC está vinculado a tu cuenta de Chaster",
+  "chaster_site_open_tip": "Open this lock on chaster.app",
+  "chaster_site_make_tip": "No lock yet. Make one on chaster.app",
   "chaster_unlink_confirm_title": "Desvincular Chaster",
   "chaster_unlink_confirm_body": "¿Desvincular Chaster de este PC?\n\nLa cuenta se queda aquí. El tiempo que ya está en el candado se queda allí.",
   "chaster_link_denied": "Chaster dijo que no. No se vinculó nada.",
