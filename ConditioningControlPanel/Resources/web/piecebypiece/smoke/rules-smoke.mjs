@@ -242,6 +242,28 @@ eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000),
   ok('and there is no taking that back', game.takeBack(9000) === null);
 }
 
+// Untimed games never flag, and saved SAN retains full repetition history.
+{
+  let elapsed = 0, flags = 0;
+  const clock = createClock({ perSideMs: 0, now: () => elapsed, onFlag: () => flags++ });
+  clock.start('w'); elapsed = 3600000; clock.debit('w', 9999999);
+  eq('untimed cannot flag', flags, 0);
+  eq('untimed display', formatClock(clock.remaining('w')), 'Untimed');
+  ok('untimed snapshot marks mode', clock.snapshot().untimed && clock.snapshot().total === 0);
+  clock.stop();
+  const moves = ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1'];
+  const game = createHotseat({ bus: createBus(), board: stubBoard(), clockMs: 0, restore: { moves, clocks: { total: 0 } } });
+  game.start();
+  eq('resume keeps complete history', game.record().moves, moves);
+  eq('resume keeps ply count', game.plies(), 7);
+  game.tryMove('f6', 'g8');
+  eq('resume preserves repetition draw', game.result()?.reason, 'threefold repetition');
+  game.dispose();
+  const timed = createClock({ perSideMs: 60000, now: () => elapsed });
+  timed.restore({ w: 20000, b: 40000 }); timed.start('w'); elapsed += 2000;
+  eq('restored clock runs from saved value', timed.remaining('w'), 18000);
+  timed.stop();
+}
 // --- report ----------------------------------------------------------------
 function stubBoard() {
   const moves = [];
