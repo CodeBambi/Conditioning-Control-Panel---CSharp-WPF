@@ -26,6 +26,7 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
   const left = { w: initial, b: initial };
   let active = null;
   let since = 0;
+  let turnStartedMs = 0;
   let timer = null;
   let flagged = null;
 
@@ -55,8 +56,10 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
     if (flagged) return;
     drain();
     if (flagged) return;
+    const started = now();
+    if (active !== side) turnStartedMs = started;
     active = side;
-    since = now();
+    since = started;
     if (untimed) { if (onTick) onTick(snapshot()); return; }
     if (!timer) { timer = setInterval(tick, TICK_MS); timer.unref?.(); } // unref: node tests never hang on a clock
   }
@@ -73,6 +76,8 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
     /** Hand the move over: charge the mover, run the other side's clock. */
     press(next) { start(next); },
     snapshot,
+    // Reading presentation age never drains, pauses, or otherwise changes a clock.
+    turnElapsedMs: () => active ? Math.max(0, now() - turnStartedMs) : 0,
     remaining(side) { drain(); return left[side]; },
     flagged: () => flagged,
     isRunning: () => active !== null,
