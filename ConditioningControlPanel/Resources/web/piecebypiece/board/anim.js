@@ -49,7 +49,7 @@ import { createChoreography } from './choreography.js';
 import { hopPlan, hopAt } from './hops.js';
 import { TUNING as TUNE } from './jiggle.js';
 import { WHIP_TUNING as W, whipBend, whipTimes, shiverAt } from './whip.js';
-import { TRAVEL, createCaptureDeck, capturePose } from './captures.js';
+import { TRAVEL, createCaptureDeck, capturePose, presentationRate } from './captures.js';
 
 /** Every number that decides how a move plays. One place, on purpose. */
 export const TUNING = Object.freeze({
@@ -96,6 +96,7 @@ const skins = (piece) => piece.userData.materials
 const baseYaw = (piece) => (piece.userData.side === 'b' ? Math.PI : 0);
 
 export function createAnim({ group, jiggle = null }) {
+  let clockSource = null;
   const slides = [];
   const tumbles = [];
   const buzzes = [];
@@ -338,6 +339,15 @@ export function createAnim({ group, jiggle = null }) {
       skip();
       return;
     }
+    // An actual next pick also owns the square an ordinary hop was heading to.
+    for (const s of slides) {
+      s.piece.position.copy(s.to);
+      s.piece.rotation.set(0, baseYaw(s.piece), 0);
+      s.piece.userData.busy = false;
+      landed(s.piece, s.to, s.refused, { capture: s.capture, skipped: true });
+    }
+    slides.length = 0;
+    shivers.length = 0;
     // Settle ordinary capture tails too. Emitting sunk lets parade undo remove it once.
     for (let i = tumbles.length - 1; i >= 0; i--) finishVictim(i);
   }
@@ -415,6 +425,7 @@ export function createAnim({ group, jiggle = null }) {
   }
 
   function update(dt) {
+    dt *= presentationRate(typeof clockSource === 'function' ? clockSource() : clockSource);
     acts.update(dt);
     for (let i = flourishes.length - 1; i >= 0; i--) {
       const f = flourishes[i], d = f.piece.userData;
@@ -580,6 +591,7 @@ export function createAnim({ group, jiggle = null }) {
 
   return {
     update, squash, slide, tumble, buzz, springBack, bindBus, skip,
+    setClock(source) { clockSource = source; },
     hooks: {
       onMoved: (piece, from, origin) => slide(piece, from, null, null, { origin }),
       onReplaced: (old, next) => {

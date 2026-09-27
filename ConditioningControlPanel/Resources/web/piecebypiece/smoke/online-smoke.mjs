@@ -60,6 +60,8 @@ import { createOnlineMatch, createRemoteClock, parseUci, toUci, ABANDON_MS } fro
 import { createServerLobby, POLL_MS, CHALLENGE_TICKS } from '../net/lobbyServer.js';
 import { createDriverSwitch } from '../net/online.js';
 import { createHotseat } from '../game/hotseat.js';
+import { requestRematch } from '../net/rematch.js';
+import { presentationRate } from '../board/captures.js';
 
 let passed = 0;
 const failures = [];
@@ -767,6 +769,7 @@ function lobbyServerFixture() {
         : json(200, { ok: true, waiting: true, queued_ms: 100 });
     }
     if (route === `${api.BASE}/challenge`) {
+      st.challengeBody = body;
       if (body.target === 'p_gonegonegone') return json(404, { error: 'no_such_player' });
       st.outgoing = [{ challenge_id: 'c_mine', to: lobby[0], time_control: { initial_ms: 600000, increment_ms: 0 }, status: 'pending' }];
       return json(200, { ok: true, challenge_id: 'c_mine', expires_in_sec: 300 });
@@ -818,11 +821,11 @@ function lobbyServerFixture() {
   await lobby.debug.refresh();
   eq('and not offered again on the next poll', offers.length, 1);
 
-  const m = offers[0].accept();
-  ok('accept answers synchronously, as door.js requires', !!m && typeof m === 'object');
-  eq('with the opponent already named', m.opponent.name, 'velvet');
-  await m.ready;
-  eq('and the match filled in behind it', [m.id, m.side, m.clockMs], ['m_accepted', 'b', 600000]);
+  const accepting = offers[0].accept();
+  ok('accept waits for server consent and seat assignment', typeof accepting?.then === 'function');
+  const m = await accepting;
+  eq('with the confirmed opponent named', m.opponent.name, 'velvet');
+  eq('and the confirmed match assigned', [m.id, m.side, m.clockMs], ['m_accepted', 'b', 600000]);
   eq('the page heard about it too', seenOnline.length, 1);
 
   // Quick match: waiting, then paired, resolved through the poll.
@@ -854,6 +857,28 @@ function lobbyServerFixture() {
   const cm = await asked;
   eq('a challenge resolves with a Match', cm.id, 'm_fromchallenge');
   eq('and the SIDE came from the match, not from a guess', cm.side, 'b');
+
+  // A rematch is a new accepted challenge. The server may choose either seat.
+  const replay = requestRematch(lobby, cm);
+  await settle(6);
+  eq('rematch requests swapped sides', fx.st.challengeBody.color, 'w');
+  eq('rematch keeps the previous time control', fx.st.challengeBody.time_control, cm.state.time_control);
+  fx.st.outgoing = [{ challenge_id: 'c_mine', status: 'accepted', match_id: 'm_rematch' }];
+  await lobby.debug.refresh();
+  const fresh = await replay;
+  eq('rematch gets a fresh id and the server seat', [fresh.id, fresh.side], ['m_rematch', 'b']);
+  const stale = requestRematch(lobby, cm).then(() => null, err => err.message);
+  await settle(6);
+  fx.st.outgoing = [{ challenge_id: 'c_mine', status: 'accepted', match_id: cm.id }];
+  await lobby.debug.refresh();
+  eq('a finished match id cannot be recycled', await stale, 'not ready');
+  const missingSeat = requestRematch(lobby, cm).then(() => null, err => err.message);
+  await settle(6);
+  fx.st.matchYou = null;
+  fx.st.outgoing = [{ challenge_id: 'c_mine', status: 'accepted', match_id: 'm_unknown' }];
+  await lobby.debug.refresh();
+  eq('a rematch never guesses the side when the server omits it', await missingSeat, 'not ready');
+  fx.st.matchYou = 'b';
 
   // A player who is not there any more.
   let gone = null;
@@ -1026,6 +1051,14 @@ function lobbyServerFixture() {
 }
 
 /* ------------------------------------------------------------------------- */
+
+for (const [left, expected] of [[900000, 1], [29999, 1.8], [9999, 2.8]]) {
+  const snapshot = { w: left, b: 900000, total: 900000 };
+  eq(`presentation pace at ${left} ms`, presentationRate({ snapshot: () => snapshot }), expected);
+  eq('presentation never changes clock balances', snapshot.w, left);
+}
+eq('untimed games keep full performances', presentationRate({ snapshot: () => ({ w: 0, b: 0, total: 0 }) }), 1);
+eq('previews keep full performances', presentationRate(null), 1);
 
 api.setTransport(null);
 

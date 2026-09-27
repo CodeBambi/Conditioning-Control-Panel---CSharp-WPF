@@ -15,6 +15,7 @@ import { createDrag } from './board/drag.js';
 import { createGlyphs } from './board/glyphs.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
+import { createSolo } from './game/solo.js';
 import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
@@ -79,6 +80,7 @@ function main() {
     auto: Number(params.get('auto')) || 0,
   });
   const game = createDriverSwitch(hotseat);
+  anim.setClock?.(() => game.clock);
 
   const drag = createDrag({ view, pieces, anim, bus, game, jiggle });
   board.drag = drag;
@@ -254,7 +256,7 @@ function main() {
   window.addEventListener('keydown', (e) => {
     if ((e.key === ' ' || e.key === 'Enter') && anim.whipping && anim.whipping()) { anim.skip(); e.preventDefault(); }
   });
-  dom.canvas.addEventListener('pointerdown', () => { if (anim.whipping && anim.whipping()) anim.skip(); }, { capture: true });
+
   // --- end Q ---
   signalReady();
 
@@ -284,11 +286,19 @@ function main() {
   // landed (net/lobbyServer.js, another lane's), else the mock, and ?lobby=mock
   // asks for the mock on purpose.
   const dealAtOnce = params.has('hotseat') || Number(params.get('auto')) > 0 || params.get('door') === '0';
-  function startGame({ mode = 'hotseat', match = null } = {}) {
+  function startGame({ mode = 'hotseat', match = null, options = {}, restore = null } = {}) {
     window.PBP.match = match;                         // the online lane reads this
     // an online seat is built and switched in by net/online.js; the hotseat's
     // reset-and-start is not what it wants
     if (mode === 'online' && match) { window.PBP.startOnline(match); return; }
+    if (mode === 'solo') {
+      const solo = createSolo({ bus, board, hud: dom.hud, options, restore });
+      game.switchTo(solo);
+      bus.emit('newgame', { ply: solo.plies() });
+      bus.emit('local', { sides: solo.seats, mode, me: solo.seats[0], players: { [solo.seats[0]]: window.PBP.settings.playerName || 'You', [solo.seats[0] === 'w' ? 'b' : 'w']: solo.record().opponent } });
+      solo.start();
+      return;
+    }
     // A finished online seat may still be in the chair from the last game
     // (it stays for the end card). Reset-and-start against it would resync
     // the finished match and fire its gameover a second time, so the hotseat
