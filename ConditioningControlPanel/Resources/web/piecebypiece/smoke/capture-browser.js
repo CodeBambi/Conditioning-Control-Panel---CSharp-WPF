@@ -1,6 +1,6 @@
 (async () => {
   const P = window.PBP, B = P.board;
-  const { captureVolumes, captureBounds } = await import('./board/choreography.js');
+  const { ACTS, captureVolumes, captureBounds } = await import('./board/choreography.js');
   P.ramp?.setEnabled(false); P.game.clock.stop(); B.setWobble(0); B.setCameraSway(0);
   window.requestAnimationFrame = () => 0;
   await new Promise(r => setTimeout(r, 200));
@@ -19,7 +19,7 @@
   for(const type of ['p','n','b','r','q','k']) for(const side of ['w','b']) for(const crowded of [false,true]) {
     const pieces=setup(type,side,crowded?'k':'p',crowded); B.pieces.move('d4','d5');
     const style=B.anim.stats().acts[0]; ok(!!style,type+' signature starts');
-    for(let frame=0;frame<180;frame++) {
+    for(let frame=0;frame<Math.ceil((ACTS[type].end + .1) * 60);frame++) {
       step(1/60);
       const p=pieces.attacker,v=pieces.victim;
       if(!B.anim.stats().acts.length) continue;

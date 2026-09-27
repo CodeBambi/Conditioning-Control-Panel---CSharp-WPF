@@ -10,12 +10,12 @@ This replaces the shuffled reaction deck and its 300/440 ms capture deadline.
 | Pawn | Squat, jump with the flat base, squash the victim | 720 ms | 2180 ms |
 | Knight | Hoofbeats, whinny, backflip, base-first landing | 900 ms | 2360 ms |
 | Bishop | Flexible tentacle whips left-to-right, then right-to-left | 700 / 1200 ms | 2850 ms |
-| King | Lean back, fast head smash, floor squash, recover | 900 ms | 2640 ms |
-| Queen | Flexed headstand, lagging body and orbiting base | 1150 ms | 2900 ms |
-| Rook | Sideways catapult windup, bat swing, recoil and launch | 1050 ms | 2800 ms |
+| King | Lean back, swollen-head smash, floor squash, retract and hop | 900 ms | 2640 ms |
+| Queen | Arch onto the head, lift/coil base, whip, recoil and hop | 1580 ms | 3350 ms |
+| Rook | Catapult windup, trembling hold, fast swing, recoil and launch | 1300 ms | 2950 ms |
 
 All six acts finish with elastic spine settling: the middle and tip lag each other while
-the base stays planted. Landing sound and settling flex start together at touchdown, before the final quiet tail. Knight and bishop anticipate with a short compressed windup. `board/silicone.js` shares the curved spine across skin, jewellery,
+the base stays planted. Pawn and knight start their main flex at stomp contact, before the victim dissolves. King and queen hop into their final square and rebound on arrival. Landing sound fires at final touchdown, before the quiet tail. Knight and bishop anticipate with a short compressed windup. `board/silicone.js` shares the curved spine across skin, jewellery,
 outline, depth, contact bounds and dissolve particles. The curve rotates each cross section
 along its tangent, stretches axially, twists and carries a delayed mid-body bend.
 The queen plants her head on the floor as the pivot and sweeps her base at victim-dependent lower-body height. The rook coils sideways, strikes low, launches sideways and
