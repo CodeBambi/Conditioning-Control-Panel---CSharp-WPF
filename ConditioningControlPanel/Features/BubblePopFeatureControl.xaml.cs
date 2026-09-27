@@ -24,6 +24,9 @@ namespace ConditioningControlPanel.Features
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             Services.Prizes.PrizeGrants.GrantsChanged += OnGrantsChanged;
+            RowGetBubblesV2.Configure(Services.Prizes.V2PurchaseRule.BubblesPrizeId,
+                "v2_get_bubble_blurb", "label_bubbles_v2_box");
+            RowGetBubblesV2.RowChanged += OnGetRowChanged;
             RebuildMotionPicker();
             RebindToCurrentSettings();
             // The egg hint names the active persona, and the hero/side plates are mod art; the
@@ -44,7 +47,13 @@ namespace ConditioningControlPanel.Features
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
             Services.BubbleService.AmbientXpBudgetChanged -= OnAmbientXpBudgetChanged;
             if (App.Webcam != null) App.Webcam.OnTrackingStateChanged -= OnWebcamTrackingStateChanged;
+            RowGetBubblesV2.RowChanged -= OnGetRowChanged;
         }
+
+        // The Get it row decides its own visibility; the box only needs to know whether anything is
+        // left in it. The row repaints on its own schedule (a counter read landing, a sign-in),
+        // which is why the box is re-measured from the row and not from ownership alone.
+        private void OnGetRowChanged(object? sender, EventArgs e) => RebuildMotionPicker();
 
         /// <summary>
         /// The camera raises this off the UI thread, so the repaint is marshalled and swallowed on
@@ -153,7 +162,6 @@ namespace ConditioningControlPanel.Features
                 SelectMotion(s.BubbleMotionStyle);
                 ChkBubbleGazePop.IsChecked = s.BubbleGazePopEnabled;
                 ChkBrainDrainBubble.IsChecked = s.BubbleBrainDrainEnabled;
-                ChkMagnetBubble.IsChecked = s.BubbleMagnetEnabled;
 
                 // Easter-egg hint (companion auto-pops a lingering effect bubble): name the active persona.
                 var persona = App.Mods?.ActiveModId switch
@@ -194,7 +202,8 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.BubbleGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggersEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggerChance) ||
-                e.PropertyName == nameof(Models.AppSettings.BubbleTriggerVariants))
+                e.PropertyName == nameof(Models.AppSettings.BubbleTriggerVariants) ||
+                e.PropertyName == nameof(Models.AppSettings.BubbleBrainDrainEnabled))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -309,7 +318,12 @@ namespace ConditioningControlPanel.Features
             bool spiral = Services.AmbientBubbleMotion.SpiralInOwned;
             // The BOX is what collapses now, not the row: Motion and the Brain Drain bubble both
             // arrive with the v2 prizes, so with none owned there is nothing in here to show.
-            V2Box.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
+            ChkBrainDrainBubble.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
+            // A one-item picker is configuration with no capability behind it, so the row goes with
+            // the dials. The BOX stays up while the Get it row has something to offer.
+            MotionRow.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
+            V2Box.Visibility = rain || spiral || !RowGetBubblesV2.IsRowHidden
+                ? Visibility.Visible : Visibility.Collapsed;
             V2BoxBadge.Content ??= FeatureCard.NewV2Badge(new Thickness(0));
             bool wasLoading = _isLoading;
             _isLoading = true;
@@ -419,20 +433,6 @@ namespace ConditioningControlPanel.Features
             var s = App.Settings?.Current;
             if (s == null) return;
             s.BubbleBrainDrainEnabled = ChkBrainDrainBubble.IsChecked ?? false;
-            App.Settings?.Save();
-        }
-
-        /// <summary>
-        /// The Magnet bubble (Bubbles v2, wave 2). Same shape as the Brain Drain row above: default
-        /// ON, so buying the prize is the only opt-in and this row is the way back out. It grants
-        /// nothing on its own - the roll also asks PrizeGrants every time (see MagnetBubble.RollPool).
-        /// </summary>
-        private void ChkMagnetBubble_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.BubbleMagnetEnabled = ChkMagnetBubble.IsChecked ?? false;
             App.Settings?.Save();
         }
 

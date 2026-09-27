@@ -1,8 +1,8 @@
 /* ============================================================================
- * stations/breakout/words/sink.js - the SINK trigger (heavy, 1.6 s).
- * The screen falls into the monitor and you go with it: slow-mo to 0.3x with a
- * fast ease in and a smooth ease out over the last 0.8 s, the whole field drops
- * about 12% toward the ball (g.mod.zoom below 1: the renderer's own field zoom,
+ * stations/breakout/words/sink.js - the SINK trigger (heavy, 0.8 s).
+ * The screen falls into the monitor and you go with it: slow-mo to 0.90x with a
+ * fast ease in and a smooth ease out over the last 0.4 s, the whole field drops
+ * about 2.5% toward the ball (g.mod.zoom below 1: the renderer's own field zoom,
  * since a transform set in render.world is undone by the hook's save/restore)
  * into a pit of darkening rings, a violet vignette
  * closes from the sides and opens again, the top band leans in. A low sub glide
@@ -13,7 +13,7 @@
  * Contract: see ../word-fx.js (sim / render / sound hooks, fx and R shapes).
  * ==========================================================================*/
 
-const DUR = 1.6, SLOW = 0.3, IN_S = 0.18, OUT_S = 0.8, SCALE = 0.12;
+const DUR = 0.8, SLOW = 0.90, IN_S = 0.18, OUT_S = 0.4, SCALE = 0.025;
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const easeOut = t => 1 - (1 - clamp01(t)) ** 3;
 const smooth = t => { t = clamp01(t); return t * t * (3 - 2 * t); };
@@ -57,6 +57,10 @@ export default {
       const d = depth(fx.t), { x, y } = anchor(s, R);
       if (d <= 0) return;
       const rMax = Math.hypot(R.W, R.H) * 0.6;
+      // The renderer paints an opaque field immediately after world hooks.
+      // Only its zoom margins can show this pit; do not shade the covered centre.
+      ctx.save(); ctx.beginPath();
+      ctx.rect(-R.W, -R.H, R.W * 3, R.H * 3); ctx.rect(0, 0, R.W, R.H); ctx.clip('evenodd');
       const pit = ctx.createRadialGradient(x, y, rMax * 0.15, x, y, rMax);
       pit.addColorStop(0, R.col(R.VIOLET, R.mix, 0.35)); pit.addColorStop(0.5, R.col([40, 18, 70], R.mix, 0.9)); pit.addColorStop(1, 'rgba(6,2,14,1)');
       ctx.fillStyle = pit; ctx.fillRect(-R.W, -R.H, R.W * 3, R.H * 3);
@@ -65,6 +69,7 @@ export default {
         const rr = rMax * (0.22 + 0.16 * i) * (1 - 0.1 * d * i / 5);
         ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
       }
+      ctx.restore();
     },
     /** The vignette closes from the sides, the top band leans in. */
     over(ctx, s, fx, R) {
@@ -72,37 +77,31 @@ export default {
       const v = reduced ? 0.45 : vignette(fx.phase);
       if (v <= 0.001) return;
       const { x, y } = anchor(s, R);
-      const rIn = reduced ? R.W * 0.55 : R.W * (0.62 - 0.32 * v), rOut = Math.hypot(R.W, R.H) * 0.62;
+      const rIn = reduced ? R.W * 0.55 : R.W * (0.62 - 0.16 * v), rOut = Math.hypot(R.W, R.H) * 0.62;
       const grd = ctx.createRadialGradient(x, y, rIn, x, y, rOut);
-      grd.addColorStop(0, 'rgba(60,20,110,0)'); grd.addColorStop(0.55, `rgba(50,16,96,${0.45 * v})`); grd.addColorStop(1, `rgba(12,4,30,${0.92 * v})`);
+      grd.addColorStop(0, 'rgba(60,20,110,0)'); grd.addColorStop(0.55, `rgba(50,16,96,${0.22 * v})`); grd.addColorStop(1, `rgba(12,4,30,${0.46 * v})`);
       ctx.fillStyle = grd; ctx.fillRect(-R.W, -R.H, R.W * 3, R.H * 3);   // past the field: the margin the drop leaves is vignetted too
       if (!reduced) {
         const top = ctx.createLinearGradient(0, -R.H * 0.2, 0, R.H * 0.38);
-        top.addColorStop(0, `rgba(10,3,28,${0.85 * v})`); top.addColorStop(1, 'rgba(10,3,28,0)');
+        top.addColorStop(0, `rgba(10,3,28,${0.42 * v})`); top.addColorStop(1, 'rgba(10,3,28,0)');
         ctx.fillStyle = top; ctx.fillRect(-R.W, -R.H * 0.2, R.W * 3, R.H * 0.58);
       }
     },
-    /** The picture goes soft and runs: a blurred copy of the frame over itself, then vertical strips sliding down
+    /** The picture goes soft and runs: vertical strips sliding down
      *  by different amounts, so the field melts while it sinks (owner, 2026-09-19: "a little blur/melt"). */
     post(ctx, s, fx, R) {
-      if (R.reduced) return;
+      if (R.reduced || s.reduced) return;
       const d = depth(fx.t);
       if (d <= 0.02) return;
       const src = R.frame(melt.canvas); melt.canvas = src;
       const cw = R.cw, ch = R.ch;
-      // Blur: one full-frame draw through a canvas filter, a few device px at full depth.
-      const blur = (1.5 + 2.5 * d) * (cw / 780);
-      if ('filter' in ctx) {
-        ctx.save(); ctx.globalAlpha = 0.55 * d; ctx.filter = `blur(${blur.toFixed(1)}px)`;
-        ctx.drawImage(src, 0, 0); ctx.restore();
-      }
-      // Melt: 16 strips, each sliding down by its own amount that grows with depth, drawn at low alpha so the
+      // Melt: 8 strips, each sliding down by its own amount that grows with depth, drawn at low alpha so the
       // picture drips without losing the ball.
-      const n = 16, sw = Math.ceil(cw / n), t = fx.t;
-      ctx.save(); ctx.globalAlpha = 0.28 * d;
+      const n = 8, sw = Math.ceil(cw / n), t = fx.t;
+      ctx.save(); ctx.globalAlpha = 0.14 * d;
       for (let i = 0; i < n; i++) {
         const k = 0.5 + 0.5 * Math.sin(i * 1.7 + t * 2.1);
-        const dy = (6 + 34 * k) * d * (ch / 1688);
+        const dy = (1.5 + 8 * k) * d * (ch / 1688);
         ctx.drawImage(src, i * sw, 0, sw, ch, i * sw, dy, sw, ch);
       }
       ctx.restore();
@@ -110,7 +109,7 @@ export default {
   },
   sound(synth, fx) {
     const t = synth.now;
-    synth.duck(0.6, 1.0, 0.6);
+    synth.duck(0.6, 0.4, 0.4);
     synth.play([
       synth.tone(110, 1.2, 0.2, { hzTo: 55, wave: 'sine', attack: 0.1, lp: 420, lpTo: 160 }),                 // the sub glide, one octave down
       synth.noise(360, 0.32, 0.14, { hzTo: 70, type: 'lowpass', q: 0.7, attack: 0.08 }),                      // the whoomp

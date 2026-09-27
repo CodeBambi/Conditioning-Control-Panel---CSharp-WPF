@@ -35,8 +35,10 @@ namespace ConditioningControlPanel.Launcher;
 /// </summary>
 public partial class LauncherWindow
 {
-    /// <summary>The art row is star-sized so a tile takes the height its row hands it; this is
-    /// the floor under the plate, the same number <see cref="LauncherGridLayout.MinArtHeight"/> is.</summary>
+    /// <summary>The art row is star-sized and the text block under it is a fixed height, so the
+    /// plate takes exactly what the row has left - and the row is sized in
+    /// <see cref="LauncherGridLayout"/> to leave it a 16:9 landscape. This is the floor under it,
+    /// the same number <see cref="LauncherGridLayout.MinArtHeight"/> is.</summary>
     private const double TileArtMinHeight = LauncherGridLayout.MinArtHeight;
     private const double TileTiltDegrees = 1.2;
     private const double TileArtParallaxPx = 7;
@@ -161,8 +163,14 @@ public partial class LauncherWindow
         body.Children.Add(plate);
 
         // --- title, blurb, play ---
-        // Margins and the Play height are part of LauncherGridLayout.MinTileHeight's sum.
-        var text = new StackPanel { Margin = new Thickness(16, 8, 16, 12) };
+        // Fixed height, every line of it, so the art above lands on a true 16:9 and every card's
+        // title sits on the same line whether its blurb wraps to one line or two. The numbers are
+        // LauncherGridLayout's, which is also what sizes the grid.
+        var text = new StackPanel
+        {
+            Margin = new Thickness(16, LauncherGridLayout.TextPadTop, 16, LauncherGridLayout.TextPadBottom),
+            Height = LauncherGridLayout.TextHeight - LauncherGridLayout.TextPadTop - LauncherGridLayout.TextPadBottom,
+        };
         Grid.SetRow(text, 1);
         var textLight = ((SolidColorBrush)FindResource("TextLightBrush")).Color;
         var titleBrush = new SolidColorBrush(textLight);
@@ -172,12 +180,15 @@ public partial class LauncherWindow
             FontSize = 19, FontWeight = FontWeights.SemiBold,
             FontFamily = new FontFamily("/Fonts/#Fredoka, Segoe UI"),
             Foreground = titleBrush, TextTrimming = TextTrimming.CharacterEllipsis,
+            Height = LauncherGridLayout.TitleHeight, VerticalAlignment = VerticalAlignment.Center,
         });
         text.Children.Add(new TextBlock
         {
             Text = revealed ? entry.Blurb : Loc.Get("launcher_mystery_blurb"),
-            FontSize = 14, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource("TextSecondaryBrush"), MinHeight = 20,
+            FontSize = 14, Margin = new Thickness(0, LauncherGridLayout.BlurbGap, 0, 0),
+            TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = (Brush)FindResource("TextSecondaryBrush"),
+            Height = LauncherGridLayout.BlurbHeight,
         });
         var play = BuildPlayButton(entry, locked, needsAccount, revealed ? null : "launcher_mystery_play");
         play.PreviewMouseLeftButtonDown += Press_Down;
@@ -250,7 +261,7 @@ public partial class LauncherWindow
         {
             Content = label,
             Style = (Style)FindResource("LauncherPlay"),
-            Height = 40, Margin = new Thickness(0, 8, 0, 0),
+            Height = LauncherGridLayout.PlayHeight, Margin = new Thickness(0, LauncherGridLayout.PlayGap, 0, 0),
             Background = fill,
             BorderBrush = new SolidColorBrush(Lighten(hue, 0.25)),
             Foreground = new SolidColorBrush(Lighten(hue, 0.45)),

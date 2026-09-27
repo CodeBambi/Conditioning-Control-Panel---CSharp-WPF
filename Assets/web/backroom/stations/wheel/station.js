@@ -134,7 +134,14 @@ export async function mount(ctx) {
       <div class="wheel-loading">${t('br_wheel_loading', 'Dusting off the wheel')}</div>`;
     root.querySelector('.wheel-back').onclick = back;
     root.querySelector('.wheel-card-back').onclick = back;
-    if (hostBack) { root.dataset.hostBack = ''; root.querySelector('.wheel-back').hidden = true; root.querySelector('.wheel-card-back').hidden = true; }
+    if (hostBack) {
+      root.dataset.hostBack = '';
+      // Seated in the room (ctx.stage) the station keeps its own Back in the room's corner, the way the slot does
+      // (tester, 2026-09-18: the slot had a Back on the desk and the wheel did not); shared/back.css hides #br-back under it.
+      root.querySelector('.wheel-back').hidden = !ctx.stage;
+      if (ctx.stage) root.dataset.ownBack = '';
+      root.querySelector('.wheel-card-back').hidden = true;
+    }
     root.querySelector('.wheel-spin').onclick = () => press();
     return root;
   }

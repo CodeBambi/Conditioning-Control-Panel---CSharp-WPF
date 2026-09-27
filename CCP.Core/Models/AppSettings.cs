@@ -2174,6 +2174,25 @@ namespace ConditioningControlPanel.Models
             }
         }
 
+        private HashSet<string> _disabledAssetFolders = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Folders unticked as a whole, relative to EffectiveAssetsPath and forward-slashed. Files
+        /// added to them later inherit the exclusion (AssetFolderExclusion, ccp-bugs #1231).
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> DisabledAssetFolders
+        {
+            get => _disabledAssetFolders;
+            set
+            {
+                _disabledAssetFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (value != null)
+                    foreach (var p in value)
+                        if (!string.IsNullOrEmpty(p)) _disabledAssetFolders.Add(Services.AssetFolderExclusion.Norm(p));
+                OnPropertyChanged();
+            }
+        }
+
         private bool _useAssetWhitelist = false;
         /// <summary>
         /// When true, files in DisabledAssetPaths are excluded from use.
@@ -2734,6 +2753,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _launcherSkipToPanel;
             set { _launcherSkipToPanel = value; OnPropertyChanged(); }
+        }
+
+        // The launcher's own cues: the hover melody, the clicks, the open and exit stings. The
+        // speaker button in its title bar writes this. It is the launcher's chrome only and never
+        // touches a session, a game or the master volume (that lives behind the Media button).
+        private bool _launcherSoundEnabled = true;
+        public bool LauncherSoundEnabled
+        {
+            get => _launcherSoundEnabled;
+            set { _launcherSoundEnabled = value; OnPropertyChanged(); }
         }
 
         private bool _panicKeyEnabled = true; // ESC to stop
@@ -4909,19 +4938,26 @@ namespace ConditioningControlPanel.Models
             set { _brainDrainHighRefresh = value; OnPropertyChanged(); }
         }
 
-        private int _brainDrainBlurStrength = 50; // 1-100
+        private int _brainDrainBlurStrength = 50; // 0-100
         /// <summary>
-        /// Strength of the Brain Drain SCREEN BLUR (1-100). Deliberately separate from
+        /// Strength of the Brain Drain SCREEN BLUR (0-100). Deliberately separate from
         /// <see cref="BrainDrainIntensity"/>, which is the AUDIO half's per-minute trigger
         /// probability - the rework gave the visual its own dial. Drives both the gaussian
         /// sigma and the draw alpha on the compositor layer (see BrainDrainLayer.SetIntensity);
         /// applied live via OverlayService's settings hook while the overlay is showing.
+        ///
+        /// <para><b>ZERO IS OFF, and off is a real setting.</b> The floor was 1 until 2026-09-21,
+        /// and 1 is not off: the alpha curve starts at its own floor there, so the quietest blur
+        /// the app offered was still a visible haze (accessibility report 2026-09-20, "doesn't go
+        /// below 1% which still hurts my eyes"). Zero takes the picture away and leaves the audio
+        /// half running - see <c>Services/Notifications/BrainDrainVisualPolicy</c>. Widening the
+        /// range rewrites nobody's saved choice: a file holding 1 still loads as 1.</para>
         /// </summary>
         [JsonProperty]
         public int BrainDrainBlurStrength
         {
             get => _brainDrainBlurStrength;
-            set { _brainDrainBlurStrength = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+            set { _brainDrainBlurStrength = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
         private bool _brainDrainMeltEnabled = false;
@@ -5073,6 +5109,157 @@ namespace ConditioningControlPanel.Models
         {
             get => _backRoomInvertLook;
             set { _backRoomInvertLook = value; OnPropertyChanged(); }
+        }
+
+        private bool _friendsPresenceShared;
+        /// <summary>
+        /// FRIENDS (2026-09-23): whether this account publishes what it is doing to its friends list.
+        /// Off by default; the drawer asks once. Never synced, never in a preset.
+        /// </summary>
+        [JsonProperty]
+        public bool FriendsPresenceShared
+        {
+            get => _friendsPresenceShared;
+            set { _friendsPresenceShared = value; OnPropertyChanged(); }
+        }
+
+        // ---- CHASTER: Circe's tab (Services/Chaster) ----
+        // Device-local on purpose, like the link itself: none of these ride the cloud profile.
+        private bool _chasterTabEnabled;
+        private bool _chasterConsentSeen;
+        private string? _chasterLockId;
+        private List<string> _chasterPrices = new();
+
+        /// <summary>The master switch. Off by default; with it off nothing is ever booked, linked or not.</summary>
+        [JsonProperty]
+        public bool ChasterTabEnabled
+        {
+            get => _chasterTabEnabled;
+            set { _chasterTabEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// The player has read what switching the tab on means (the cap, the floor, that Panic never
+        /// adds, one push a day) and pressed "I understand". Set once, by the inline consent card the
+        /// page shows on the FIRST switch-on and never again. It gates nothing on its own: the master
+        /// switch above is still what the service reads.
+        /// </summary>
+        [JsonProperty]
+        public bool ChasterConsentSeen
+        {
+            get => _chasterConsentSeen;
+            set { _chasterConsentSeen = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>The lock the tab settles to. Null = nothing is pushed until the player picks one,
+        /// even when only one lock exists.</summary>
+        [JsonProperty]
+        public string? ChasterLockId
+        {
+            get => _chasterLockId;
+            set { _chasterLockId = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>The price rows the player switched on (TabPrices ids). Every price is opt-in, so this starts empty.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> ChasterPrices
+        {
+            get => _chasterPrices;
+            set { _chasterPrices = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private int _chasterDailyLimitMinutes = 180;
+        private int _chasterBacklogLimitMinutes = 720;
+
+        /// <summary>The most a day can add to the lock, in minutes (owner default 3 hours).
+        /// Clamped by TabLimits when read, so a hand edit cannot go past 12 hours.</summary>
+        [JsonProperty]
+        public int ChasterDailyLimitMinutes
+        {
+            get => _chasterDailyLimitMinutes;
+            set { _chasterDailyLimitMinutes = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>The most unpaid time the tab holds, in minutes (owner default 12 hours).</summary>
+        [JsonProperty]
+        public int ChasterBacklogLimitMinutes
+        {
+            get => _chasterBacklogLimitMinutes;
+            set { _chasterBacklogLimitMinutes = value; OnPropertyChanged(); }
+        }
+
+        private int _chasterDailyLimitPendingMinutes;
+        private DateTime? _chasterDailyLimitPendingAtUtc;
+        private int _chasterBacklogLimitPendingMinutes;
+        private DateTime? _chasterBacklogLimitPendingAtUtc;
+
+        /// <summary>A raise of the daily limit waiting to land (LimitChange: a raise waits 24 hours,
+        /// a lowering applies at once). 0 = none waiting.</summary>
+        [JsonProperty]
+        public int ChasterDailyLimitPendingMinutes
+        {
+            get => _chasterDailyLimitPendingMinutes;
+            set { _chasterDailyLimitPendingMinutes = value; OnPropertyChanged(); }
+        }
+
+        [JsonProperty]
+        public DateTime? ChasterDailyLimitPendingAtUtc
+        {
+            get => _chasterDailyLimitPendingAtUtc;
+            set { _chasterDailyLimitPendingAtUtc = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>A raise of the backlog limit waiting to land. 0 = none waiting.</summary>
+        [JsonProperty]
+        public int ChasterBacklogLimitPendingMinutes
+        {
+            get => _chasterBacklogLimitPendingMinutes;
+            set { _chasterBacklogLimitPendingMinutes = value; OnPropertyChanged(); }
+        }
+
+        [JsonProperty]
+        public DateTime? ChasterBacklogLimitPendingAtUtc
+        {
+            get => _chasterBacklogLimitPendingAtUtc;
+            set { _chasterBacklogLimitPendingAtUtc = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>The daily limit with its waiting raise, as one value for LimitChange.</summary>
+        [JsonIgnore]
+        public ConditioningControlPanel.Services.Chaster.LimitSetting ChasterDayLimit
+        {
+            get => new(ChasterDailyLimitMinutes, ChasterDailyLimitPendingMinutes, ChasterDailyLimitPendingAtUtc);
+            set { ChasterDailyLimitMinutes = value.Minutes; ChasterDailyLimitPendingMinutes = value.PendingMinutes; ChasterDailyLimitPendingAtUtc = value.PendingAtUtc; }
+        }
+
+        /// <summary>The backlog limit with its waiting raise, as one value for LimitChange.</summary>
+        [JsonIgnore]
+        public ConditioningControlPanel.Services.Chaster.LimitSetting ChasterBacklogLimit
+        {
+            get => new(ChasterBacklogLimitMinutes, ChasterBacklogLimitPendingMinutes, ChasterBacklogLimitPendingAtUtc);
+            set { ChasterBacklogLimitMinutes = value.Minutes; ChasterBacklogLimitPendingMinutes = value.PendingMinutes; ChasterBacklogLimitPendingAtUtc = value.PendingAtUtc; }
+        }
+
+        private bool _chasterPaused;
+
+        /// <summary>The Circe's tab page's pause button: nothing books and nothing is pushed while
+        /// it is down. Instant both ways, survives a restart.</summary>
+        [JsonProperty]
+        public bool ChasterPaused
+        {
+            get => _chasterPaused;
+            set { _chasterPaused = value; OnPropertyChanged(); }
+        }
+
+        private bool _chasterRelockPastEnd;
+
+        /// <summary>Opt-in (owner, 2026-09-23): when the lock's timer already ran out, a push first
+        /// catches its end up to now so the price locks it again. Off by default.</summary>
+        [JsonProperty]
+        public bool ChasterRelockPastEnd
+        {
+            get => _chasterRelockPastEnd;
+            set { _chasterRelockPastEnd = value; OnPropertyChanged(); }
         }
 
         // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----
@@ -5781,6 +5968,22 @@ namespace ConditioningControlPanel.Models
         {
             get => _personaVoiceFenceUtc;
             set { _personaVoiceFenceUtc = value; OnPropertyChanged(); }
+        }
+
+        private DateTime? _personaIdentityFenceUtc;
+        /// <summary>
+        /// UTC moment the companion's NAME last changed under the user - a mod switch from one
+        /// companion to a different one. The voice fence above keeps the user's own pre-switch
+        /// turns, which is right for a preset change and wrong here: "hi Circe, ..." still sitting
+        /// in the window reads as one unbroken conversation with Circe, so the model answers as
+        /// Circe under a CCP Default prompt (Kathryn, 2026-09-14). Turns older than this moment
+        /// leave the WIRE window entirely, whatever their role. Nothing is deleted: the stored
+        /// session, the visible bubbles and the memory panel keep everything.
+        /// </summary>
+        public DateTime? PersonaIdentityFenceUtc
+        {
+            get => _personaIdentityFenceUtc;
+            set { _personaIdentityFenceUtc = value; OnPropertyChanged(); }
         }
 
         private List<PersonalityPreset> _userPersonalityPresets = new();

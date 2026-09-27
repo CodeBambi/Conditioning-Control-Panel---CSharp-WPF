@@ -92,8 +92,14 @@ public static class FlashMotion
     /// <paramref name="bx"/>..<paramref name="bh"/> the spawn monitor, both world px. A Still result
     /// (Still picked, or level Off) keeps the spawn rect and never moves.
     /// </summary>
+    /// <param name="neighbours">
+    /// The pendulums already hanging on this monitor, or null when there are none. A pendulum hangs
+    /// away from them and picks its phase off the nearest one; without it every pendulum in a burst
+    /// hung from the same nail and the swings stacked. Ignored by every other style.
+    /// </param>
     public static FlashMotionState Create(FlashMotionStyle style, double x, double y, double w, double h,
-        double bx, double by, double bw, double bh, MotionLevel level, Random rng)
+        double bx, double by, double bw, double bh, MotionLevel level, Random rng,
+        IReadOnlyList<PendulumNeighbour>? neighbours = null)
     {
         var s = new FlashMotionState
         {
@@ -116,15 +122,24 @@ public static class FlashMotion
         else if (style == FlashMotionStyle.Pendulum)
         {
             s.Style = FlashMotionStyle.Pendulum;
-            s.PivotX = bx + bw / 2.0;
             s.PivotY = by;
             s.AmpRad = Lerp(PendulumAmpMinDeg, PendulumAmpMaxDeg, rng.NextDouble()) * Math.PI / 180.0 * scale;
             s.Omega = 2.0 * Math.PI / Lerp(PendulumPeriodMinSec, PendulumPeriodMaxSec, rng.NextDouble());
-            s.Phase = rng.NextDouble() * 2.0 * Math.PI;
             // The spawn Y decides the rope; clamp so the swinging picture stays on the monitor.
+            // Measured against the CENTRE pivot, which is the roomiest one there is, so the band
+            // below is the slack this rope leaves over - never slack it does not have.
             var (ropeMin, ropeMax) = RopeRange(bw, bh, w, h, s.AmpRad);
             var wanted = (y + h / 2.0) - s.PivotY;
             s.Rope = ropeMax >= ropeMin ? Math.Clamp(wanted, ropeMin, ropeMax) : ropeMin;
+            // ...and the rope decides how far off centre this one may hang. A lone pendulum still
+            // takes the top centre exactly as it always did; the second one on the monitor moves
+            // as far away as the band allows, and if the picture is too wide for a band at all,
+            // the phase is what keeps the two apart. See FlashPendulumRig.
+            var span = FlashPendulumRig.PivotSpan(bw, w, h, s.Rope, s.AmpRad);
+            s.PivotX = FlashPendulumRig.ChoosePivot(bx + bw / 2.0, span, neighbours, rng);
+            s.Phase = neighbours == null || neighbours.Count == 0
+                ? rng.NextDouble() * 2.0 * Math.PI
+                : FlashPendulumRig.ChoosePhase(s.PivotX, w, neighbours, rng);
             s.AngleRad = s.AmpRad * Math.Sin(s.Phase);
             ApplyHang(s);
         }

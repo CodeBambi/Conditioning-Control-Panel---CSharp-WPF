@@ -608,7 +608,7 @@ namespace ConditioningControlPanel.Controls
         private static ImageSource? _artStamp;
         private static bool _artT1Tried, _artT2Tried, _artStampTried;
 
-        private static ImageSource? TierArt(int tier)
+        internal static ImageSource? TierArt(int tier)
         {
             if (tier >= 2)
             {

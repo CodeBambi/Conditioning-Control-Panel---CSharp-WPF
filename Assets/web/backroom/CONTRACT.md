@@ -69,6 +69,8 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `fx-tunnel` | `station, level` | Continuous tunnel vision level 0..1, at most 10 a second, no reply (10.13.B). |
 | `fx-release` | `token, station` | Fade out what that `fx` token still holds on screen, no reply (10.13.B). |
 | `melt` | `station, left` | Current melted spins left, sent whenever it changes. |
+| `haptic` | `station, level, ms, tag?` | One flat toy pulse, or a stop at `level:0`. No reply (10.23). |
+| `landed` | `station:'slot', i, tapeId?, side?` | A server outcome just played (`tape.land`, never a demo row). The host books Circe's tab off ITS copy of that outcome's line. No reply (10.24). |
 | `arcade-open` | `game:'race'` | The player tapped the unlocked arcade cabinet (2026-09-18). The host opens that game as a guest surface IN THE ROOM'S WINDOW (its own WebView2 over the room's, `ChaosWebViewHost.Options.MountIn`), hides the room's page and sends `suspend {on:true, reason:'arcade'}`. Answered with exactly one `arcade`. Unhosted, the page never sends it. |
 
 ### 2.2 Host -> page
@@ -488,8 +490,10 @@ export async function mount(ctx) {
 - **Playing GIFs (amended 2026-09-13).** Dealt GIFs play, decoded in the page with WebCodecs
   `ImageDecoder` (Chromium 94+, no vendored decoder; a page without it shows the first frame). Caps: a
   picture advances only while a screen showing it is inside the camera frustum (not in the room view,
-  not while a station holds the room), at most 12 frames a second, into a canvas texture of at most
-  384 px on the long edge, and at most one new decode per rendered frame. Still (reduced, Calm, Motion
+  not while a station holds the room), at its own frame delays up to 30 frames a second (amended
+  2026-09-18; was 12, which lurched on spirals), into a canvas texture of at most 384 px on the long
+  edge, one decode in flight per picture, and at most eight decode starts per rendered frame across
+  the wall (four per 1/6 s in Performance). Still (reduced, Calm, Motion
   still) shows the first frame.
 - **The SP chip (`ctx.spReadout`, amended 2026-09-14).** The room's HUD chip is the only SP on screen
   and the room owns its rule: it always shows Law I `shownSp` = `state.sp` minus what the tape still
@@ -1525,8 +1529,7 @@ texture and a new uniform per screen. The bell goes in the HUD.
 - Fetched by `room/main.js` on room open and again after each `station-close`. **Never polled while seated**,
   and never while a station holds the screen.
 - **One line on screen at a time**, rotating through the entries every **8,000 ms**, newest first, wrapping.
-  No sound at any intensity (Brake 1). Hidden under the existing `br-visiting` class and in the room view
-  (`br-overview`), exactly as the Visit prompt is. Reduced motion and Calm: the line still rotates (it is
+  No sound at any intensity (Brake 1). Hidden under the existing `br-visiting` class, exactly as the Visit prompt is. Reduced motion and Calm: the line still rotates (it is
   text, not motion) but it cross-fades in 0 ms instead of 200 ms.
 - Relative time comes from `entry.t` against the CLIENT clock, display only (Law I): under 60 s
   `br_bell_ago_now`, under 60 min `br_bell_ago_min`, under 24 h `br_bell_ago_hour`, else `br_bell_ago_day`.
@@ -2409,6 +2412,58 @@ Back Room flashes accept a drag and release without V2 ownership. A third of rel
 
 Roulette exit exception requested 2026-09-17: block station exit while requesting/playing a spin or while interactive browser flashes remain, including a 500 ms double-click grace after removal. Background tap-to-exit is restricted to the bottom 8 percent (maximum 60 px); explicit Back works once the guard clears. This supersedes unconditional Back during roulette play. Desktop landscape uses a higher camera angle; compact phone framing stays intact. All Back Room flash previews are 20 percent larger and drift at varied slow speeds when motion is enabled.
 
+## 10.23 Station haptics (2026-09-21)
+A station may ask the host to pulse the player's toy (the app's Lovense / Intiface integration). One frame, no reply:
+
+```json
+{ "type": "haptic", "station": "breakout", "level": 0.45, "ms": 120, "tag": "perfect" }
+{ "type": "haptic", "station": "breakout", "level": 0, "ms": 0, "tag": "stop" }
+```
+
+- **A pulse is FLAT.** `level` 0..1 held for `ms`, then the toy stops by itself. There is no pattern on this wire and
+  there must never be one: a Lovense pattern command averages its keyframes into one level for the duration, and a
+  repeat of the SAME level inside a second is silently dropped. A station that wants texture sends distinct levels, at
+  about three a second, and nudges a repeated level by one toy step (0.05). Per-hit ticks at 10 Hz do not reach a toy.
+- **`level: 0` is the stop**, whatever `ms` says. A station sends it whenever play is held (pause, menu, suspend,
+  close), once, not every frame. The host also stops the toy by itself wherever it cancels fx: `suspend`, `close`,
+  `exit`, `station-close` and the window going away.
+- **Validation (the page is untrusted).** `station` must be a station id; `level` and `ms` must be finite numbers or
+  the frame is dropped; `level` is clamped to 0..1 and `ms` to 20..1500; `tag` is a short plain token
+  (`[A-Za-z0-9_.-]{1,24}`) for the log only, anything else reads as empty. While the room is suspended or closing a
+  pulse is dropped and a stop still lands.
+- **The host decides whether the toy takes it** (`Services/Haptics/BackRoomHapticDirector`): nothing happens with
+  haptics off or no device connected, the host rate limits again (one pulse per 80 ms, six per rolling second), the
+  newest accepted pulse replaces the one in play, and a Buttplug device gets the duration doubled (capped at 1500) for
+  its command latency. Pulses are mixer transients: the user's master intensity and cap apply, they ride over a video
+  or audio-sync layer without replacing it, and a stop cancels the room's pulse only.
+- **Everywhere else the frame is harmless.** The phone and web shims match message types one by one and ignore this
+  one. On the web the same pulse goes to `navigator.vibrate` and to `vibrationActuator.playEffect('dual-rumble')` on
+  any connected gamepad, page-side (`stations/breakout/haptics.js`); neither exists on the host's wire.
+- Haptics stay on under reduced motion and Motion Off: a pulse is not motion. Calm does not scale them; the user's
+  haptic intensity does. First caller: the Breakout cabinet (`planPulse` in its `haptics.js` is the map from game
+  event to pulse; GREY is a faint brick tick and nothing else).
+
+## 10.24 Circe's tab: "this spin was real" (2026-09-24)
+The Chaster tab (`Services/Chaster`) prices two slot moments: a `melt` line books the `melt` row and the jackpot line
+(`emi3`) wipes the tab. A free "Keep playing" row fires the same `fx.melt` / `fx.jackpot` as a paid one, so the tab
+NEVER books off an effect. It books off the server's own outcomes:
+
+```json
+{ "type": "landed", "station": "slot", "tapeId": "t_a771...", "i": 3 }
+{ "type": "landed", "station": "slot", "side": true, "i": 0 }
+```
+
+- The page sends one frame from `tape.land` (the `onLanded` callback), which only ever runs for an outcome off a
+  server tape or freeze. A demo row never reaches `tape.land`. Comp spins and free spins are server outcomes and count.
+- The frame names WHICH outcome played, nothing else: a main-tape outcome by `tapeId` and its index, the freeze in play
+  by `side: true` and its index. A `line` on the frame is ignored.
+- The host (`BackRoomTabLedger`) writes down every slot `tape` (with `outcomes`) and `freeze.outcomes` it relays,
+  refusal bodies included (`tape_unplayed` carries the stored tape), and looks the line up there. An outcome books
+  once per window; a main-tape index below the `played` the server reported when the tape was relayed (a resumed tape)
+  never books; at most 4 landings are read in any second; an unknown tape, index or station is dropped silently.
+- The page and the web shims send and ignore this frame freely: on the web nothing listens, and a frame without a host
+  costs nothing.
+
 ## Casino and racing window transfer (2026-09-17)
 The racing cabinet opens Racing Thoughts in the current window with `game-open {game:"race"}`. The host acknowledges `game-open-result` and finishes the room close handshake before transferring its browser. Race init sets `settings.returnToCasino`; normal exit returns to `/backroom/index.html?raceReturn=1`. A bounded one-use camera pose survives; no balance or reward state is restored from it. The separate Play entry retains normal exit behavior. Native callbacks are invalidated on transfer, and each run may settle rewards once. Preview uses the same camera contract with a local-ledger-only adapter and full same-origin navigation.
 
@@ -2421,3 +2476,10 @@ window and sends `init.settings.racingTracks` itself. The web room has no host o
 `/backroom/racing/race.html?casino=1&back=...`. The race's web router (cclabs-web `scripts/race-web-ext/host/index.js`)
 reads it only when `?casino=1` is on the URL and sends it as `racingTracks` (plus `returnToCasino: true`); through the
 door with no record the race owns nothing. Off the door the field stays absent and the race keeps its web contract.
+
+### Camera control preference
+
+The room Options switch `dragLook` (Click and drag to look) is opt-in and defaults off.
+It persists per device in `br.dragLook.v1` localStorage, like room quality, without a host message.
+When on, mouse clicks never request pointer lock; existing drag-to-look and click-to-visit controls apply.
+Touch controls and camera inversion keep their existing behavior. Switching releases any pointer lock.

@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:ctrl="clr-namespace:ConditioningControlPanel.Controls"
              mc:Ignorable="d" d:DesignWidth="760">
 
     <!-- ================================================================
@@ -181,6 +182,45 @@
             </Grid>
         </Border>
 
+        <!-- Chaster: linked or not, which lock, and the way in or out. -->
+        <Border x:Name="ChasterLoginCard" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="#FF6B8A" BorderThickness="1">
+            <Grid>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="#FF6B8A"/>
+                <Grid Margin="15,12,15,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <ctrl:ChasterAccountBadge x:Name="ChasterBadge" AvatarSize="30" ShowName="False"
+                                              Visibility="Collapsed" Margin="0,0,10,0"/>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtChasterStatus" Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtChasterInfo" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnChasterOpen" Content="{loc:Str chaster_account_open}"
+                                Background="Transparent" Foreground="{DynamicResource TextLightBrush}"
+                                BorderBrush="#FF6B8A" BorderThickness="1" Padding="12,7" Margin="0,0,8,0"
+                                FontWeight="Bold" FontSize="12" Cursor="Hand"
+                                Click="BtnChasterOpen_Click"/>
+                        <Button x:Name="BtnChasterLink" Content="{loc:Str chaster_link}"
+                                Background="#FF6B8A" Foreground="White"
+                                BorderThickness="0" Padding="15,8"
+                                FontWeight="Bold" FontSize="12" Cursor="Hand"
+                                Click="BtnChasterLink_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
         <!-- ==== MOVED from PatreonTabView.xaml:100-124 ====
              Starts Collapsed; MainWindow.Patreon.cs:UpdateAccountLinkingUI owns it. -->
         <Border x:Name="AccountLinkingSection" x:FieldModifier="internal" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="0" Margin="0,0,0,12"
@@ -195,6 +235,14 @@
                                FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
                     <TextBlock Text="{loc:Str label_link_both_providers_to_access_your_account_fr}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                    <!-- Shown only by the prominent Reconnect state: the server still says patron,
+                         this PC holds no Patreon token, and premium is off because of it.
+                         MainWindow.Patreon.cs:UpdateAccountLinkingUI owns the visibility. -->
+                    <TextBlock x:Name="TxtPatreonReconnectHint" x:FieldModifier="internal"
+                               Text="{loc:Str label_patreon_reconnect_hint}"
+                               Foreground="#FFFF424D" FontSize="11" TextWrapping="Wrap"
+                               Margin="0,0,0,10" Visibility="Collapsed"/>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <Button x:Name="BtnLinkPatreon" x:FieldModifier="internal"

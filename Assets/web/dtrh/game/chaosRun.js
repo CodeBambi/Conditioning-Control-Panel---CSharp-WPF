@@ -57,6 +57,7 @@ import { createOverlays } from './overlays.js';
 import { createWarren } from './warren.js';
 import { createLessonTracker } from './lessons.js';
 import { createSessionMetrics } from '../engine/sessionMetrics.js';
+import { createRunBooker } from './runExit.js';
 import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
 import { createLessonCard } from './lessonCard.js';
@@ -486,6 +487,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let heartbeatCd = 0;
   const STATS_FLUSH_SEC = 15;   // how often the per-asset engagement delta is posted home
   let statsFlushCd = STATS_FLUSH_SEC;
+  const PROGRESS_PING_SEC = 10; // how often the host's fallback run snapshot is refreshed
+  let progressPingCd = PROGRESS_PING_SEC;
   let dvdWasActive = false;
   const discovered = new Set();
   let toys = [];
@@ -538,6 +541,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     try { if (guide && guide.onEvent(event, data)) return; } catch (e) { /* the tee must never eat a bark */ }
     bridge.send({ type: 'bark', event, ...(data || {}) });
   };
+  // Banking a descent, once, whichever exit gets there first (runExit.js).
+  const booker = createRunBooker((m) => bridge.send(m));
   // Haptics: a low-rate depth/state feed for the host's DtrhHapticDirector — the
   // toy's ambient layer is a literal depth gauge, so it rides the game's own
   // intensity() signal (region bands + endless lift) plus the Surfacing melt.
@@ -601,6 +606,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     lessons.onPayloadFired(kind);   // blindfold's screen-busy window
     metrics.noteEffect(kind);       // session telemetry: effects shown + est. on-screen seconds
+    // ccp-bugs #1244: the 2026-07 cutover moved every effect in-world, and with the
+    // native fire-payload went the only signal the toy ever had that a flash had
+    // landed. Nothing here talks to the device; this is one bark the host's haptic
+    // director maps to an accent (DtrhHapticDirector.PayloadAccents), so the
+    // flashes and the washes are felt again. Audio payloads are not visual: skip.
+    if (kind !== 'audio') bark('effect-fired', { kind, detonation: !!isDetonation });
   };
   const heavyActive = () => covered || performance.now() < heavyUntil;
   const bankGold = (amount, x, y) => {
@@ -3793,6 +3804,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     estimCharges = 0; rabbitCallPending = 0; rabbitStormSec = 0; thoughtAccum = 0;
     heartbeatCd = 0;
     statsFlushCd = STATS_FLUSH_SEC;
+    progressPingCd = PROGRESS_PING_SEC;
     scriptedDraftActive = false;
     finalLandingActive = false;
     vnHold = false;   // a run torn down mid-beat must not carry a stuck field-freeze into the next descent
@@ -3856,6 +3868,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         // #647: the OPTIONAL centre spiral rides the whole fall (no-op when the toggle is off).
         try { payloadFx?.showPinnedSpiral(); } catch (e) { /* ignore */ }
         bridge.send({ type: 'run-started', difficulty: cfg.difficulty, mode: 'dtrh-web' });
+        booker.begin();   // this descent is now bookable, by whichever exit reaches it
         // Fresh descent: dress the opening chamber. applyRegionSky covers the
         // wall plaster, drift voice AND the chamber's visual grade (Region I's
         // warm dusk fades in over the user-theme hub look during the GO beat) -
@@ -3879,6 +3892,39 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         if (st.welcomeShower) spawnWelcomeShower();
       },
     });
+  }
+
+  /** Everything the host needs to bank this descent. Sent at the recap, on an
+   *  Escape exit, and periodically while falling so a killed window still pays. */
+  function runSummary() {
+    return {
+      score: st.score,
+      durationSec: st.runDurationSec,
+      elapsedSec: st.elapsedSec,
+      difficulty: cfg.difficulty,
+      difficultyMult: cfg.difficultyMult,
+      sparkGainMult: cfg.sparkGainMult,
+      bestCombo: st.bestCombo,
+      defused: st.defused,
+      detonated: st.detonated,
+      trickleDrops: st.trickleDrops,
+      dripFeedMaxed: st.maxedBoons.has('drip_feed'),
+      endless: !!st.endless,
+      // local-only session telemetry: JS-side counters folded with st's own; the
+      // host adds its natively-measured video/voice totals + sums into the store.
+      sessionStats: metrics.snapshot(st, ctx.nav.getDepth()),
+    };
+  }
+
+  /** Leaving mid-fall (Escape held, the host asking the page to wind down). The
+   *  descent is banked exactly as an early surfacing is - DtRH is no-lose and the
+   *  pause menu's "surface" already pays - but no recap is dealt: nobody is
+   *  looking at the page by then. */
+  function abandonRun() {
+    if (state !== 'running' || !st) return false;
+    const booked = booker.end(runSummary(), { abandoned: true });
+    if (booked) state = 'recap';
+    return booked;
   }
 
   function endRun(ranFullCourse) {
@@ -3933,23 +3979,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       }
     }
 
-    bridge.send({
-      type: 'run-ended',
-      score: st.score,
-      durationSec: st.runDurationSec,
-      elapsedSec: st.elapsedSec,
-      difficulty: cfg.difficulty,
-      difficultyMult: cfg.difficultyMult,
-      sparkGainMult: cfg.sparkGainMult,
-      bestCombo: st.bestCombo,
-      defused: st.defused,
-      detonated: st.detonated,
-      trickleDrops: st.trickleDrops,
-      dripFeedMaxed: st.maxedBoons.has('drip_feed'),
-      // local-only session telemetry: JS-side counters folded with st's own; the
-      // host adds its natively-measured video/voice totals + sums into the store.
-      sessionStats: metrics.snapshot(st, ctx.nav.getDepth()),
-    });
+    booker.end(runSummary(), { ranFullCourse: !!ranFullCourse });
     overlays.showRecap({
       score: st.score,
       difficulty: cfg.difficulty,
@@ -4389,6 +4419,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         // periodically post the per-asset engagement delta home (cheap; skips when empty)
         statsFlushCd -= dt;
         if (statsFlushCd <= 0) { statsFlushCd = STATS_FLUSH_SEC; flushAssetStats(); }
+        // ...and a run snapshot the host banks if the window dies without a word
+        // (closing the frame gives the page no chance to send anything).
+        progressPingCd -= dt;
+        if (progressPingCd <= 0) {
+          progressPingCd = PROGRESS_PING_SEC;
+          try { booker.progress(runSummary()); } catch (e) { /* a snapshot must never kill the frame */ }
+        }
       }
       // Grab-in-the-tube: power-up cards only drift/spawn while actually falling.
       if (ctx && ctx.powerupDrops) ctx.powerupDrops.setSpawnEnabled(state === 'running' && !heldNow());
@@ -4467,6 +4504,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     surface() {
       if (state === 'running') endRun(false);
     },
+
+    /** Leaving the page mid-fall (Escape held, or the host winding us down). Banks
+     *  the descent without a recap; a no-op once the run is already booked. */
+    abandonRun() { return abandonRun(); },
 
     onPayout(m) {
       // A rank-up card was shown - persist it so the next recap doesn't repeat it

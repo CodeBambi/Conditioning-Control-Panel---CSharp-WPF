@@ -19,11 +19,10 @@ namespace ConditioningControlPanel.Services
     /// SubscribeStar's OAuth client form REQUIRES an https:// redirect URL, so we
     /// cannot register a raw http://localhost loopback the way Patreon does. Instead
     /// the redirect target is the proxy's https callback
-    /// (https://codebambi-proxy.vercel.app/substar/callback), which performs the
-    /// client_secret token exchange server-side, stashes the result in Redis keyed
-    /// by the CSRF state, and then 302-redirects the browser to our local listener
-    /// (http://localhost:47834/callback/?state=...). We then POST /substar/exchange
-    /// to pull the tokens back. Everything else (validate / refresh / cache / DPAPI
+    /// (https://codebambi-proxy.vercel.app/substar/callback), which stores no token: it
+    /// binds the code to the state's PKCE challenge and 302-redirects the browser to our
+    /// local listener (http://localhost:47834/callback/?code=...&state=...). We then POST
+    /// /substar/token with the code and our verifier; the proxy adds the client_secret. Everything else (validate / refresh / cache / DPAPI
     /// storage) reuses the Patreon plumbing and model types, since the proxy returns
     /// identical response shapes and SubscribeStar tiers map 1:1 onto Patreon tiers.
     /// </summary>
@@ -142,6 +141,11 @@ namespace ConditioningControlPanel.Services
                 }
                 var state = Convert.ToHexString(stateBytes);
 
+                // PKCE: the proxy binds the code to this state's challenge, and only the holder of
+                // the verifier can trade it. A consent link started by someone else is useless to them.
+                var verifier = Chaster.ChasterClient.NewVerifier();
+                var challenge = Chaster.ChasterClient.Challenge(verifier);
+
                 // Start local HTTP listener for the proxy's final redirect.
                 _callbackListener = new HttpListener();
                 var callbackUrl = $"http://localhost:{LocalCallbackPort}/callback/";
@@ -152,8 +156,8 @@ namespace ConditioningControlPanel.Services
 
                 // Open browser to the proxy authorize endpoint. The proxy redirects to
                 // SubscribeStar using its registered https redirect_uri, so we do NOT
-                // pass redirect_uri here (only the CSRF state, which round-trips).
-                var authUrl = $"{ProxyBaseUrl}/substar/authorize?state={state}";
+                // pass redirect_uri here (only the CSRF state, which round-trips, and the PKCE challenge).
+                var authUrl = $"{ProxyBaseUrl}/substar/authorize?state={state}&code_challenge={challenge}&code_challenge_method=S256";
 
                 // Robust open with fallbacks; on total failure copies the link to the clipboard
                 // and prompts the user (machines with no default browser otherwise fail silently —
@@ -177,6 +181,7 @@ namespace ConditioningControlPanel.Services
                 var context = await getContextTask;
                 var query = context.Request.QueryString;
                 var returnedState = query["state"];
+                var code = query["code"];
                 var error = query["error"];
 
                 // Send response to browser
@@ -193,9 +198,13 @@ namespace ConditioningControlPanel.Services
                     throw new Exception($"SubscribeStar authorization failed: {error}");
                 }
 
-                // The proxy already exchanged the code (it holds the client_secret) and
-                // stashed the tokens under this state. Pull them down via /substar/exchange.
-                await ExchangeViaProxyAsync(state);
+                if (string.IsNullOrEmpty(code))
+                {
+                    throw new Exception("SubscribeStar sign-in returned no code. Please try again.");
+                }
+
+                // The proxy holds the client_secret; it trades the code only against our verifier.
+                await ExchangeViaProxyAsync(code, state, verifier);
 
                 // Validate subscription immediately
                 await ValidateSubscriptionAsync(forceRefresh: true);
@@ -291,11 +300,11 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Pull the proxy-exchanged tokens for this OAuth session and store them.
+        /// Trade the one-time code (plus our PKCE verifier) for tokens at the proxy and store them.
         /// </summary>
-        private async Task ExchangeViaProxyAsync(string state)
+        private async Task ExchangeViaProxyAsync(string code, string state, string verifier)
         {
-            var response = await _httpClient.PostAsJsonAsync("/substar/exchange", new { state });
+            var response = await _httpClient.PostAsJsonAsync("/substar/token", new { code, state, code_verifier = verifier });
 
             if (!response.IsSuccessStatusCode)
             {

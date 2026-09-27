@@ -8,6 +8,7 @@
         xmlns:local="clr-namespace:ConditioningControlPanel"
         xmlns:views="clr-namespace:ConditioningControlPanel.Views.Tabs"
         xmlns:controls="clr-namespace:ConditioningControlPanel.Controls"
+        xmlns:friends="clr-namespace:ConditioningControlPanel.Controls.Friends"
         xmlns:poss="clr-namespace:ConditioningControlPanel.Services.Possession"
         Title="Conditioning Control Panel"
         Height="943" Width="1563"
@@ -1382,7 +1383,11 @@
                          it used to host was a native child HWND, and an HWND on the rail stole
                          the pointer from NavSidebar and made the flyout open and shut on a loop.
                          See Controls/SpiralRailHost.cs. -->
-                    <controls:SpiralRailHost x:Name="SpiralRail"/>
+                    <!-- 2026-09-21 (owner): the medallion left the rail and CIRCE'S TAB took its slot.
+                         The Spiral Room keeps its other doors (the You row, the fuse chip, the Trainer
+                         Card plate, the account menu row). Controls/SpiralRailHost.cs stays in the tree:
+                         SpiralGlyph still reads its StageNumeral. See Controls/ChasterRailChip.cs. -->
+                    <controls:ChasterRailChip x:Name="ChasterRail"/>
                     <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
                     <!-- THE FUSE RAIL CHIP (CONTRACT-FUSE-0816 2.2). A gold clock that appears
                          seven days before the migration ceremony, shakes harder the closer it gets,
@@ -1477,6 +1482,9 @@
                          of those). Self-wiring like the fuse chip: adding the element is the whole
                          integration. See Controls/EmiDock.xaml. -->
                     <controls:EmiDock x:Name="EmiDockChip"/>
+                    <!-- FRIENDS: you, bottom-left, the Hearthstone way. Opens the friends drawer upward over the
+                         rail. Self-wiring and not a door, like the dock chip above. See Controls/Friends/FriendsRailChip.cs. -->
+                    <friends:FriendsRailChip x:Name="FriendsChip"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -1939,8 +1947,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_10_0_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_10_0_let_the_games_begin}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_10_3_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_10_3_let_the_games_begin}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -2095,6 +2103,17 @@
                                     <DropShadowEffect Color="#FFD700" BlurRadius="12" ShadowDepth="0" Opacity="0.9"/>
                                 </Ellipse.Effect>
                             </Ellipse>
+                            <!-- Tier badge (Basic gold / Prime cyan), tucked over the bottom-right rim.
+                                 Painted by RefreshProfileBubble; collapsed for free accounts. The Grid
+                                 does not clip, so the negative margin hangs it past the circle. -->
+                            <Image x:Name="ProfileBubbleTierBadge" Width="30" Stretch="Uniform"
+                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                   Margin="0,0,-12,-5" Visibility="Collapsed" IsHitTestVisible="False"
+                                   RenderTransformOrigin="0.5,0.5">
+                                <Image.RenderTransform>
+                                    <RotateTransform Angle="-12"/>
+                                </Image.RenderTransform>
+                            </Image>
                         </Grid>
                     </Button>
                     <!-- The bubble's account menu. StaysOpen + manual close-grace timers, same
@@ -2489,6 +2508,9 @@
                      "spiral" is in ChromeFxNav's Airspace set for the same reason - a browser HWND
                      does not follow a RenderTransform, so this tab crossfades and never slides. -->
                 <views:SpiralTabView x:Name="SpiralTab" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Circe's tab ("chaster"): the Chaster link and the price-per-event tab.
+                     Door: the padlock at the foot of the rail. See Views/Tabs/ChasterTabView.xaml.cs. -->
+                <views:ChasterTabView x:Name="ChasterTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
                 <!-- Lab Tab — RETIRED in Phase 6 of the UX restructure; LabTabView.xaml(.cs) deleted.
                      Its cards live on the Play wall below and "lab" is a permanent ShowTab alias onto it,

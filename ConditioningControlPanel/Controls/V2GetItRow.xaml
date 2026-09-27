@@ -1,0 +1,43 @@
+<UserControl x:Class="ConditioningControlPanel.Controls.V2GetItRow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             ToolTip="{loc:Str tooltip_v2_get}">
+    <!-- The standalone way to buy a v2 prize (owner decision, 2026-09-19): one line of what it adds,
+         the price in Sparkle Points, and a button. It sits inside the v2 box and is the ONLY thing
+         in there while the account owns nothing, which is why the box no longer collapses whole.
+         Every state comes from V2PurchaseRule; this file only draws it. -->
+    <StackPanel Margin="0,2,0,2" AutomationProperties.AutomationId="V2GetRow">
+        <TextBlock x:Name="TxtBlurb" TextWrapping="Wrap" FontSize="12" Opacity="0.85"
+                   Foreground="{StaticResource TextLightBrush}"/>
+        <Grid Margin="0,6,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" x:Name="TxtStatus" TextWrapping="Wrap" FontSize="11.5"
+                       VerticalAlignment="Center" Margin="0,0,10,0" Opacity="0.82"
+                       Foreground="{StaticResource TextLightBrush}"
+                       AutomationProperties.AutomationId="V2GetStatus"/>
+
+            <!-- The wallet's own diamond, at the wallet's gold, so the price reads as the same
+                 currency the header is counting. -->
+            <StackPanel Grid.Column="1" x:Name="PricePlate" Orientation="Horizontal"
+                        VerticalAlignment="Center" Margin="0,0,10,0" Visibility="Collapsed">
+                <Path Data="M0,8 L6,0 12,8 6,16 Z M0,8 L12,8 M6,0 L4,8 6,16 8,8 Z"
+                      Width="10" Height="14" Stretch="Fill" Fill="#FFD580" Stroke="#FFF0C5"
+                      StrokeThickness="0.7" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <TextBlock x:Name="TxtPrice" Text="0" FontSize="14" FontWeight="Bold" Foreground="#FFF0CA"
+                           VerticalAlignment="Center"
+                           AutomationProperties.AutomationId="V2GetPrice"
+                           AutomationProperties.Name="{loc:Str v2_get_confirm_title}"/>
+            </StackPanel>
+
+            <Button Grid.Column="2" x:Name="BtnGet" Style="{StaticResource SmallPinkButton}"
+                    MinWidth="74" Click="BtnGet_Click"
+                    AutomationProperties.AutomationId="V2GetButton"/>
+        </Grid>
+    </StackPanel>
+</UserControl>

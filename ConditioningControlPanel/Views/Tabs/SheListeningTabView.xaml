@@ -133,6 +133,19 @@
                                                    Foreground="{StaticResource TextLightBrush}" FontSize="15" FontWeight="Bold"/>
                                         <TextBlock x:Name="SL_StatusSub" x:FieldModifier="internal" Text=""
                                                    Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        <!-- Up only when the status line is about a missing or unloadable
+                                             speech model (MainWindow.SheListening.cs owns that). It creates
+                                             the folder on the way, so the instruction can never name a
+                                             place that is not there. -->
+                                        <Button x:Name="BtnSL_OpenModels" x:FieldModifier="internal"
+                                                Content="{loc:Str btn_open_models_folder}" Visibility="Collapsed"
+                                                HorizontalAlignment="Left" Margin="0,7,0,0"
+                                                Style="{DynamicResource OutlineButton}"
+                                                BorderBrush="{StaticResource TabHueBorderBrush}"
+                                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                                FontSize="11" Padding="10,4"
+                                                ToolTip="{loc:Str tooltip_open_models_folder}"
+                                                Click="BtnSL_OpenModels_Click"/>
                                     </StackPanel>
                                 </Grid>
                             </Grid>

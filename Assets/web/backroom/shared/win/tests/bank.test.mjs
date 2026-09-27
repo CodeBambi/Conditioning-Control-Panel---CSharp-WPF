@@ -204,3 +204,23 @@ test('nonsense in, a settled run out - createBankRun never throws', () => {
   assert.equal(createBankRun({ n: -4 }).n, 1);
   assert.equal(createBankRun({ n: NaN, toValue: 'x' }).settled, 0);
 });
+
+/* step() hands back a FRAME ({ shown, tokens, events, ... }); only skip() hands back a bare event array.
+ * Every station bank feeds its own play() an array, so a bank that plays the frame itself throws
+ * "events is not iterable" and takes the whole settle down with it - which is what the card and the
+ * roulette tables did on their reduced-motion path (Law VI, mode 'state') until 2026-09-19. */
+test('a station bank plays step().events, never the frame step() returned', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { fileURLToPath } = await import('node:url');
+  const { resolve, dirname } = await import('node:path');
+  const stations = resolve(dirname(fileURLToPath(import.meta.url)), '../../../stations');
+  const offenders = [];
+  for (const id of ['cards', 'roulette', 'slot', 'wheel']) {
+    const src = await readFile(resolve(stations, id, 'bank.js'), 'utf8');
+    for (const raw of src.split('\n')) {
+      const line = raw.trim();
+      if (line.includes('play(') && line.includes('.step(') && !/\.step\([^)]*\)\s*\.events/.test(line)) offenders.push(id + ': ' + line);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});

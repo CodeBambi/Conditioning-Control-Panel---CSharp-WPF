@@ -11,10 +11,12 @@
        The host window is already OS-level fullscreen borderless, so this page
        NEVER calls requestFullscreen (plan trap #6) and draws no chrome at all.
 
-       #bg only decodes while blurBackground is on (body.has-bg); the rest of the
-       time its src is torn down so we are not paying for two decoders. -->
+       #bg is a tiny canvas painted from #fg a few times a second while
+       blurBackground is on (body.has-bg). It used to be a second <video> decoding
+       the same file under a full-screen 40px CSS blur, which dropped frames on
+       some GPUs (#1257). -->
   <div id="stage">
-    <video id="bg" muted playsinline preload="auto" disablepictureinpicture></video>
+    <canvas id="bg" width="96" height="54"></canvas>
     <video id="fg" playsinline preload="auto" disablepictureinpicture></video>
   </div>
   <!-- Attention-check targets (attentionShow / attentionHide). The only

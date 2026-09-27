@@ -80,6 +80,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             }
 
             _ = WatchChannelAsync(webrtc, isHost: true, _cts.Token);
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.GoonHosting);
             return code;
         }
 
@@ -98,6 +99,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             }
 
             _ = WatchChannelAsync(webrtc, isHost: false, _cts.Token);
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Goon);
             return true;
         }
 
@@ -241,6 +243,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             }
 
             try { cts?.Cancel(); } catch { /* already gone */ }
+            if (match != null) App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
 
             match?.Dispose();
             if (transport != null)

@@ -1,3 +1,4 @@
+import { readDragLook, saveDragLook } from './look-preference.js';
 import { intro } from './intro.js';
 import { createWelcome, shouldShow } from './welcome.js';
 import { createRacePortal, consumeRoomPose } from './race-portal.js';
@@ -19,7 +20,8 @@ import { setWheelFace } from './wheel-face.js';
  *                                         on the exact spot and facing.
  *   A tap on the room while seated, or a
  *   step back (S, down, the stick)      -> the same close, through the same Back.
- *   Back / Escape in the room view     -> back to walking.
+ *   Back / Escape with the Stations list open -> the list closes.
+ *   Escape with the mouse captured     -> the mouse is freed (pointer lock), nothing else.
  *   Back / Escape in the room          -> `exit`, then `exit-done` once settled.
  *   host `close` (app exit, panic)     -> settle inside 300 ms, `exit-done`.
  *
@@ -69,7 +71,7 @@ const readGates = (g) => {
 const INTENSITIES = ['calm', 'normal', 'full'];
 const readChoice = (v, fallback) => (INTENSITIES.includes(v) ? v : fallback);
 
-const state = { sp: 0, reduced: false, invertLook: false, motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false,
+const state = { sp: 0, reduced: false, invertLook: false, dragLook: readDragLook(), motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false,
   // The room's own picture source and mix, both owned by the host. These defaults only hold for the
   // few frames before init lands, and they are the quiet ones on purpose.
   media: { source: 'auto', effective: 'local', subs: [], off: [], cap: 8, consented: false },
@@ -213,11 +215,18 @@ function paintMotion() {
   if (!hud) return;
   hud.motion(still(), forcedStill());
   hud.options({ intensityChoice: state.intensityChoice, forcedCalm: !!state.reduced, tunnel: state.gates.tunnel,
-                melt: state.gates.melt, invertLook: state.invertLook, media: state.media, levels: state.levels });
+                melt: state.gates.melt, invertLook: state.invertLook, dragLook: state.dragLook, media: state.media, levels: state.levels });
 }
 
 /** The room's Options (10.14): tell the host and show the press at once; the host's settings frame has the last word. */
 function setOption(key, value) {
+  if (key === 'dragLook') {
+    state.dragLook = !!value;
+    saveDragLook(state.dragLook);
+    scene?.freeLook();
+    paintMotion();
+    return;
+  }
   if (key === 'intensity') {
     if (!INTENSITIES.includes(value)) return;
     state.intensityChoice = value;
@@ -317,8 +326,11 @@ function setSp(sp) {
 }
 
 async function visit(row) {
-  if (leaving || visiting || !scene || !loader || scene.overview || scene.transitioning || scene.seated) return;
-  if(row?.key==='race'){await openRace();return;}
+  if (leaving || visiting || !scene || !loader || scene.transitioning || scene.seated) return;
+  scene.freeLook();   // a station, card or panel is taking the screen: the mouse is the player's again
+  // The annex doors (room/annex.js): the race door is the same door as the cabinet, the locked ones only rattle.
+  if(row?.key==='race'||row?.portal==='race'){await openRace();return;}
+  if(row?.portal==='locked'){scene.annex?.refuse(row.key);return;}
   if(raceOpening)return;
   if(row?.key==='customization'){scene.customization.open();return;}
   visiting = true;
@@ -344,7 +356,7 @@ async function back(reason) {
   if(scene?.customization?.dismiss())return;
   if (loader && (loader.current || visiting)) { await returnToRoom(); return; }
   if (hud && hud.optionsOpen) { hud.closeOptions(); return; }
-  if (scene && scene.overview) { scene.setOverview(false); hud.overview(false); return; }
+  if (hud && hud.stationsOpen) { hud.closeStations(); return; }
   leave(reason || 'back');
 }
 
@@ -372,9 +384,8 @@ const hudButton = (t) => {
   const b = t && t.closest ? t.closest('button') : null;
   return b && b.closest(HUD) ? b : null;
 };
-/** Walking, or a station or card on screen. Only the room view and a boot that never finished take HUD keys. */
-const hudKeysOff = () => visiting || !!(loader && loader.current)
-  || (document.documentElement.classList.contains('br-ready') && !(scene && scene.overview));
+/** Walking, or a station or card on screen. Only a boot that never finished takes HUD keys. */
+const hudKeysOff = () => visiting || !!(loader && loader.current) || document.documentElement.classList.contains('br-ready');
 
 /* Space and Enter never re-press the room's chrome (desk run: a clicked Back kept focus, and a later
  * Space closed the station, then the whole room). A HUD button drops focus when the pointer lets go,
@@ -420,6 +431,8 @@ function wireExits() {
     // The first-visit card is the top rung: Escape closes it and nothing else in the room hears the press.
     if (welcome?.dismiss()) { e.preventDefault(); return; }
     e.preventDefault();
+    // The Esc that frees a captured mouse (pointer lock) is only that: the browser may or may not hand us the key.
+    if (scene?.lookJustFreed?.()) return;
     if (scene?.dismissEmi()) return;
     back('key');
   }, true);
@@ -599,8 +612,8 @@ async function start(init) {
   hud = createHud({
     root: $('#br-room-ui'), lex, label, music, quality, levels,
     onVisit: (row) => visit(row),
-    onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
-    onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },
+    // The Stations list is a way INTO a game: walk to the approach, then visit, exactly as E there would.
+    onGo: (row) => { if (scene) scene.go(row).then((ok) => { if (ok) visit(row); }); },
     onMotion: () => { if (forcedStill()) return; state.userStill = !state.userStill; paintMotion();
       const frame={motion:state.userStill?'off':state.motion,intensity:state.intensity,reduced:state.reduced,gates:state.gates};
       for(const fn of Array.from(settingsListeners)){try{fn(frame);}catch(e){bridge.log('warn','onSettings threw: '+e);}}
@@ -659,6 +672,7 @@ async function start(init) {
       still: still(),
       cameraMotion:()=>({off:state.userStill||state.motion==='off'||state.motion==='still',reduced:state.reduced||state.motion==='reduced'||state.intensity==='calm'}),
       invertLook: () => state.invertLook,
+      dragLook: () => state.dragLook,
       onProgress: (f) => { hud.progress(f); intro.progress(f); },
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),
@@ -679,8 +693,15 @@ async function start(init) {
   // Loading the shop is independent of the room reveal; unavailable servers leave the furnished room usable.
   scene.customization.configureShop({ request: requestDecorations, getBalance: () => state.sp,
     onBalance: sp => { if (!leaving) setSp(sp); } }).catch(e => bridge.log('warn', 'Room Service unavailable: ' + e));
-  // M toggles the view inside the scene; keep the HUD in step after it has.
-  window.addEventListener('keydown', (e) => { if (e.code === 'KeyM') setTimeout(() => hud.overview(scene.overview), 0); });
+  // M opens the Stations list while walking (never over a station, card or panel); the mouse is freed for it.
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyM' || e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.target?.closest?.('input,textarea,select,[contenteditable]')) return;
+    if (leaving || seated() || welcome || scene.seated || scene.transitioning || scene.held || scene.documents.opened || scene.customization?.opened) return;
+    e.preventDefault();
+    scene.freeLook();
+    hud.toggleStations();
+  });
   if (racingOwnership) scene.setPrizes(racingOwnership);
   const returnPose = consumeRoomPose();
   if (returnPose) scene.pose(returnPose.position, returnPose.yaw, returnPose.pitch);

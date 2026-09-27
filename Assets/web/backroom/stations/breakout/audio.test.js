@@ -1,6 +1,10 @@
+import {createGame} from './game.js';
+import {routeFinaleAudio} from './finale-audio.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, timeScaleCents, LOOP_STEPS, MIN_LEAD_S, WOBBLE_CENTS } from './audio.js';
+import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, timeScaleCents, LOOP_STEPS, MIN_LEAD_S, WOBBLE_CENTS,
+  PAUSE_FADE_S, PAUSE_CUTOFF, PERFECT_GUARD_S, GREY_LEVEL, TICK_MS, createVoiceBag, VOICE_LEVEL, VOICE_FADE_S, VOICE_RELEASE_S } from './audio.js';
+import { ROOT_HZ } from '../../shared/sound/kit.js';
 
 /* ---- a fake Web Audio graph: enough surface for the module, every scheduled start is counted ---- */
 function fakeContext() {
@@ -82,7 +86,7 @@ test('curves: cutoff is exponential 300..12k, layers fade in above their thresho
   assert.ok(Math.abs(hitCutoff(1) - 9600) < 1e-6);
 });
 
-test('before start(): every method is a no-op, the beat still runs on the fallback clock', () => {
+test('before start(): cues stay silent and grey tempo applies to the fallback clock', () => {
   const { audio, ctx } = make();
   const t0 = audio.now();
   assert.ok(t0 >= 0 && t0 < 1);
@@ -92,7 +96,7 @@ test('before start(): every method is a no-op, the beat still runs on the fallba
   audio.setSaturation(0.6); audio.setState('grey');
   assert.equal(ctx(), null, 'no context is built before a gesture');
   assert.ok(audio.beat.nextSixteenth(audio.now()) > audio.now());
-  assert.equal(audio.beat.spb, 60 / 96);
+  assert.equal(audio.beat.spb, 60 / (96 * .72));
 });
 
 test('start() is idempotent, builds one context, resumes it, and the bed schedules ahead', () => {
@@ -161,11 +165,37 @@ test('relapse goes grey by itself, breakout comes back to colour; one-shots sche
   audio.destroy();
 });
 
-test('stop suspends, start resumes, destroy closes and makes everything a no-op', () => {
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const FADE_MS = PAUSE_FADE_S * 1000 + 60;
+
+test('stop sweeps down and parks the bed with the context still running; stop(true) suspends; start opens up; destroy closes', async () => {
   const { audio, ctx } = make();
   audio.start();
   const c = ctx();
+  assert.equal(audio.pauseLevel, 1, 'the gate is open from the first start: no fade-in on a fresh context');
+  const origin = audio.beat.origin;
   audio.stop();
+  assert.equal(c.state, 'running', 'no dead cut: the context runs through the fade');
+  assert.ok(audio.pausing);
+  assert.ok(audio.pauseLevel < 0.001, 'the gate glides shut');
+  assert.equal(audio.pauseCutoff, PAUSE_CUTOFF, 'under a closing low-pass');
+  await wait(FADE_MS);
+  assert.equal(c.state, 'running', 'an in-game pause never suspends: the output stream stays open (the crunch report, 2026-09-22)');
+  assert.equal(audio.pausing, false);
+  assert.equal(audio.parked, true, 'the bed scheduler idles instead');
+  const written = c.log.starts.length; c.currentTime += 2; await wait(TICK_MS * 3);
+  assert.equal(c.log.starts.length, written, 'nothing is written into a closed gate while parked');
+  audio.start();
+  assert.equal(audio.parked, false);
+  assert.equal(c.state, 'running');
+  assert.equal(audio.pauseLevel, 1);
+  assert.ok(audio.pauseCutoff > 15000, 'the filter is open again');
+  assert.equal(audio.beat.origin, origin, 'the same grid on the way back');
+  c.currentTime += 0.5; await wait(TICK_MS * 3);
+  assert.ok(c.log.starts.length > written, 'the bed writes again once started');
+  // A hidden page releases the context after the same fade.
+  audio.stop(true);
+  await wait(FADE_MS);
   assert.equal(c.state, 'suspended');
   audio.start();
   assert.equal(c.state, 'running');
@@ -221,8 +251,302 @@ test('slow-mo pitches the bed down two semitones at 0.35, straight at 1; grey ad
   audio.setTimeScale(1);
   assert.equal(audio.bedDetuneCents + 0, 0);
   audio.setState('grey');
-  assert.equal(audio.wobbleDepth, WOBBLE_CENTS, 'grey: +-8 cents');
+  assert.equal(audio.wobbleDepth, 18, 'every grey entry uses the established distorted scene');
   audio.setState('colour');
   assert.ok(audio.wobbleDepth < 0.01, 'colour: the wobble is gone');
+  audio.destroy();
+});
+
+test('tempo changes keep beat helpers consistent', () => {
+  const beat=createBeat(96);
+  beat.setTempo(96*.72);
+  assert.ok(Math.abs(beat.spb-60/(96*.72))<1e-9);
+  assert.equal(beat.stepIndex(beat.sixteenth*8),8);
+  beat.setTempo(96);
+  assert.equal(beat.spb,.625);
+});
+
+test('browser beat-only integration plays finale static, metal and scene changes exactly once',()=>{
+ const {audio,ctx}=make();audio.start();
+ const calls=[];const routed={...audio};
+ for(const name of ['finaleInterrupt','finaleGrey','metal'])routed[name]=(...args)=>{calls.push([name,...args]);return audio[name](...args);};
+ const game=createGame({rng:()=>.5,audio:{beat:audio.beat,now:audio.now},onEvent:(n,d)=>routeFinaleAudio(n,d,routed,1280)});
+ const advance=t=>{for(let i=0;i<Math.ceil(t/.05);i++)game.step(.05);};
+ game.jumpToWall(8);advance(2);game.step(.02,{launch:true});
+ let start=ctx().log.starts.length;game.breakBrick(0);
+ assert.equal(calls.filter(c=>c[0]==='finaleInterrupt').length,1);
+ assert.ok(ctx().log.starts.slice(start).some(n=>n.k==='noise'),'freeze schedules audible static');
+ advance(4.05);assert.equal(game.snapshot().finale.phase,'locked');
+ assert.ok(calls.some(c=>c[0]==='finaleGrey'&&c[1]===true));
+ assert.ok(Math.abs(audio.beat.spb-60/(96*.72))<1e-9);
+ start=ctx().log.starts.length;game.breakBrick(0);
+ assert.equal(calls.filter(c=>c[0]==='metal').length,1);
+ assert.ok(ctx().log.starts.slice(start).filter(n=>n.k==='tone').length>=3,'sealed brick schedules metallic partials');
+ const defense=game.snapshot().bricks.findIndex(b=>b.finaleDefense);game.breakBrick(defense);
+ assert.equal(calls.filter(c=>c[0]==='metal').length,1,'defensive row has ordinary hits');
+ game.breakoutNow();advance(.6);
+ assert.ok(calls.some(c=>c[0]==='finaleGrey'&&c[1]===false));assert.equal(audio.beat.spb,.625);
+ audio.destroy();
+});
+
+
+test('every ordinary grey entry slows the existing music scene and colour restores it',()=>{
+ const {audio}=make({bpm:120});
+ audio.setState('colour');assert.equal(audio.beat.spb,.5);
+ audio.setState('grey');assert.ok(Math.abs(audio.beat.spb-.5/.72)<1e-9);
+ audio.setState('grey');assert.ok(Math.abs(audio.beat.spb-.5/.72)<1e-9);
+ audio.setState('colour');assert.equal(audio.beat.spb,.5);
+ audio.destroy();
+});
+
+/* ---- the polish pass: the damage tink, the pause sweep, the perfect double-trigger guard ---- */
+const longest = notes => Math.max(...notes.map(n => n.dur));
+const loudest = notes => Math.max(...notes.map(n => n.level));
+const brightest = notes => Math.max(...notes.filter(n => n.k === 'tone').map(n => n.lp || Infinity));
+
+test('damage is a tink: shorter, duller, quieter and drier than the brick it did not break, still in key', () => {
+  const { audio } = make();
+  audio.start();
+  for (const sat of [0, 0.5, 1]) {
+    audio.setSaturation(sat);
+    const tink = audio.hitNotes('damage', 0, 0.3), brick = audio.hitNotes('brick', 0, 0.3);
+    assert.ok(tink.length > 0);
+    assert.ok(longest(tink) <= longest(brick) / 2, 'at most half the ring');
+    assert.ok(loudest(tink) <= loudest(brick) / 2, 'at most half the level');
+    assert.ok(brightest(tink) <= brightest(brick), 'never brighter than the brick');
+    assert.ok(brightest(tink) <= hitCutoff(sat), 'and still under the saturation cutoff');
+    assert.ok(tink.every(n => !n.wet), 'dry: no room send, the break owns the room');
+    assert.ok(brick.some(n => n.wet));
+    assert.equal(tink[0].hz, ROOT_HZ, 'the fundamental is the root: in key');
+    assert.ok(tink.every(n => n.pan === 0.3), 'panned to the brick');
+  }
+  audio.setState('grey');
+  const dull = audio.hitNotes('damage', 0, 0.5), knock = audio.hitNotes('brick', 0, 0.5);
+  assert.equal(dull.length, 1, 'grey stays one dull voice');
+  assert.ok(dull[0].dur < knock[0].dur && dull[0].level < knock[0].level && dull[0].lp <= 500);
+  const c = audio.context, n0 = c.log.starts.length;
+  audio.setState('colour');
+  assert.ok(audio.hit('damage', { x: 0.2 }) > 0, 'routed through hit() like every other kind');
+  assert.equal(c.log.starts.length - n0, 3);
+  audio.destroy();
+});
+
+test('pause sweep: start() inside the fade cancels the suspend; the context never stops', async () => {
+  const { audio, ctx } = make();
+  audio.start();
+  const c = ctx();
+  let suspends = 0; const suspend = c.suspend; c.suspend = () => { suspends++; return suspend(); };
+  audio.stop(true);
+  assert.ok(audio.pausing);
+  audio.start();
+  assert.equal(audio.pausing, false, 'the pending suspend is gone');
+  assert.equal(audio.parked, false, 'and the bed never parked');
+  assert.equal(audio.pauseLevel, 1, 'and the gate is on its way back up');
+  await wait(FADE_MS);
+  assert.equal(suspends, 0);
+  assert.equal(c.state, 'running');
+  audio.destroy();
+});
+
+test('pause sweep: stop twice is one fade and one suspend; stop while suspended and stop after destroy are no-ops', async () => {
+  const { audio, ctx } = make();
+  audio.stop();                                   // before any context exists
+  audio.start();
+  const c = ctx();
+  let suspends = 0; const suspend = c.suspend; c.suspend = () => { suspends++; return suspend(); };
+  audio.stop(true); audio.stop(true); audio.stop(true);
+  await wait(FADE_MS);
+  assert.equal(suspends, 1);
+  audio.stop(true);
+  assert.equal(audio.pausing, false, 'already suspended: nothing to fade');
+  audio.start(); audio.stop(true); audio.destroy();
+  await wait(FADE_MS);
+  assert.equal(suspends, 1, 'destroy() drops the pending suspend');
+  assert.equal(c.state, 'closed');
+  audio.stop();
+});
+
+test('pause sweep: a start() that lands while suspend() is still settling resumes afterwards', async () => {
+  const { audio, ctx } = make();
+  audio.start();
+  const c = ctx();
+  let settle = null;
+  c.suspend = () => new Promise(r => { settle = () => { c.state = 'suspended'; r(); }; });
+  audio.stop(true);
+  await wait(FADE_MS);
+  assert.ok(settle, 'suspend() was asked for');
+  audio.start();                                  // the state still reads running, so a plain resume would be skipped
+  settle(); await wait(5);
+  assert.equal(c.state, 'running');
+  audio.destroy();
+});
+
+test('pause sweep leaves the master, the music gate and the duck buses alone', () => {
+  const { audio, ctx } = make();
+  audio.start();
+  const c = ctx(), n0 = c.log.nodes;
+  audio.setMaster(0.4); audio.duck(0.6, 1, 0.5);
+  audio.stop(); audio.start();
+  assert.equal(c.log.nodes, n0, 'no new nodes: the sweep reuses its one gate and one filter');
+  assert.equal(audio.pauseLevel, 1);
+  audio.destroy();
+});
+
+test('perfect: a streak cue stamps the moment and perfect() skips exactly once inside the guard window', () => {
+  const { audio, ctx } = make({ bpm: 120 });
+  audio.start();
+  const c = ctx();
+  c.currentTime = 2;
+  let n = c.log.starts.length;
+  assert.equal(audio.cue('perfect', { streak: 1 }), false, 'the first perfect has no cue');
+  audio.perfect();
+  assert.equal(c.log.starts.length - n, 3, 'so the older stamp plays unchanged');
+  n = c.log.starts.length;
+  assert.equal(audio.cue('perfect', { streak: 3, xN: 0.5 }), true);
+  assert.equal(c.log.starts.length - n, 3, 'the streak stamp');
+  audio.perfect();
+  assert.equal(c.log.starts.length - n, 3, 'station.js calling au(perfect) in the same moment adds nothing');
+  audio.perfect();
+  assert.equal(c.log.starts.length - n, 6, 'the guard is spent: another caller (a finished spell) still gets its stamp');
+  n = c.log.starts.length;
+  audio.cue('perfect', { streak: 4 });
+  c.currentTime = 2 + PERFECT_GUARD_S * 4;
+  audio.perfect();
+  assert.equal(c.log.starts.length - n, 6, 'a stale guard never eats a later perfect');
+  audio.destroy();
+});
+
+test('the grey world sits a little lower: the whole mix dips, colour brings it back, the master is left alone', () => {
+  assert.ok(GREY_LEVEL >= .6 && GREY_LEVEL < .85, 'slightly lower, not a mute');
+  const { audio } = make({ master: 0.5 });
+  assert.equal(audio.greyLevel, 1, 'no graph, no dip');
+  audio.start();
+  assert.equal(audio.greyLevel, 1);
+  audio.setState('grey'); assert.equal(audio.greyLevel, GREY_LEVEL);
+  audio.setMaster(0.9); assert.equal(audio.greyLevel, GREY_LEVEL, 'a volume change does not undo the dip');
+  audio.breakout(); assert.equal(audio.state, 'colour'); assert.equal(audio.greyLevel, 1);
+  audio.relapse(); assert.equal(audio.greyLevel, GREY_LEVEL, 'a relapse dips again');
+  audio.destroy(); assert.equal(audio.greyLevel, 1);
+});
+
+test('the eye voice loads from the station own assets first, and the three clips are really there', async () => {
+  const fs = await import('node:fs'), src = fs.readFileSync(new URL('./audio.js', import.meta.url), 'utf8');
+  assert.ok(src.indexOf("./assets/voice/drift-") > 0 && src.indexOf("./assets/voice/drift-") < src.indexOf('dtrh/assets/barks'), 'own assets before the cross-tree fallback');
+  for (let i = 1; i <= 3; i++) assert.ok(fs.statSync(new URL('./assets/voice/drift-' + i + '.mp3', import.meta.url)).size > 100000, 'a real mp3, not a pointer');
+});
+
+test('ten in-game pause cycles never suspend, never stack the bed, and keep the grid (the crunch report, 2026-09-22)', async () => {
+  const { audio, ctx } = make();
+  audio.start();
+  const c = ctx();
+  let suspends = 0; const suspend = c.suspend; c.suspend = () => { suspends++; return suspend(); };
+  const origin = audio.beat.origin;
+  const rate = async () => { const n = c.log.starts.length; c.currentTime += 1; await wait(TICK_MS * 3); return c.log.starts.length - n; };
+  const before = await rate();
+  for (let i = 0; i < 10; i++) { audio.stop(); await wait(FADE_MS); audio.start(); c.currentTime += 0.5; await wait(TICK_MS * 2); }
+  const after = await rate();
+  assert.equal(suspends, 0);
+  assert.equal(c.state, 'running');
+  assert.equal(audio.beat.origin, origin);
+  assert.ok(after <= before + 2 && after >= before - 2, `one bed, not eleven: ${before} then ${after} voices a second`);
+  audio.destroy();
+});
+
+test('a bed voice drops its detune inputs when it ends, so dead voices are not kept alive by the slow-mo source', async () => {
+  let c = null; const dropped = [];
+  const AudioContext = function () {
+    c = fakeContext();
+    const cs = c.createConstantSource, cg = c.createGain;
+    c.createConstantSource = () => { const n = cs(); n.disconnect = (...a) => dropped.push(['const', ...a]); return n; };
+    c.createGain = () => { const n = cg(); const d = n.disconnect; n.disconnect = (...a) => { if (a.length) dropped.push(['gain', ...a]); return d.apply(n, a); }; return n; };
+    return c;
+  };
+  const audio = createAudio({ AudioContext });
+  audio.start(); c.state = 'running';
+  const oscs = []; const co = c.createOscillator; c.createOscillator = () => { const o = co(); oscs.push(o); return o; };
+  c.currentTime += 0.3; await wait(TICK_MS * 3);
+  const bed = oscs.filter(o => o.onended); assert.ok(bed.length > 0, 'the bed wrote voices');
+  for (const o of bed) o.onended();
+  const params = new Set(dropped.filter(d => d[1] && typeof d[1] === 'object').map(d => d[1]));
+  assert.ok(bed.some(o => params.has(o.detune)), 'each ended voice disconnected the detune feeds from its own detune param');
+  audio.destroy();
+});
+
+/* ---- the iris voice: whole recordings from a shuffle bag, one at a time ---- */
+function seeded(seed) { let x = seed >>> 0 || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
+
+test('voice bag: never the same clip twice running, every clip heard before any comes round again', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const bag = createVoiceBag(3, seeded(seed));
+    const draws = Array.from({ length: 60 }, () => bag.next());
+    for (let i = 1; i < draws.length; i++) assert.notEqual(draws[i], draws[i - 1], `seed ${seed}: repeat at draw ${i}`);
+    for (let r = 0; r < 20; r++) assert.deepEqual([...draws.slice(r * 3, r * 3 + 3)].sort(), [0, 1, 2], `seed ${seed}: round ${r} is a full pass`);
+    assert.ok(draws.every(d => d >= 0 && d < 3));
+  }
+  assert.equal(createVoiceBag(0).next(), -1, 'no clips: nothing to draw');
+  const one = createVoiceBag(1); assert.equal(one.next(), 0); assert.equal(one.next(), 0, 'one clip is the only clip');
+});
+
+// Warms three fake recordings of different lengths through the real warmIrisVoice path (stubbed fetch + decode).
+async function warmVoices(audio, ctx, durations) {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(4) });
+  let n = 0;
+  ctx.decodeAudioData = async () => ({ duration: durations[n++ % durations.length], numberOfChannels: 1 });
+  try { await audio.warmIrisVoice(); } finally { globalThis.fetch = realFetch; }
+}
+function recordSources(c) {
+  const spans = [];
+  const inner = c.createBufferSource;
+  c.createBufferSource = () => { const s = inner(); const rec = { buffer: null, start: null, stop: null }; spans.push(rec);
+    const start0 = s.start.bind(s); s.start = t => { rec.buffer = s.buffer; rec.start = t; start0(t); }; s.stop = t => { rec.stop = t; }; return s; };
+  return spans;
+}
+
+test('irisVoice plays one WHOLE recording per call: the span equals the buffer duration, with its own short fades', async () => {
+  const { audio, ctx } = make({ rng: seeded(7) });
+  audio.start(); const c = ctx(); c.currentTime = 10;
+  await warmVoices(audio, c, [23.43, 17.74, 18.47]);
+  const spans = recordSources(c);
+  assert.equal(audio.irisVoice(), true);
+  assert.equal(spans.length, 1, 'one source, not four slices');
+  const [v] = spans;
+  assert.equal(v.start, 10);
+  assert.ok(Math.abs((v.stop - v.start) - v.buffer.duration) < 1e-9, 'the clip runs for its real length, never a fixed window');
+  assert.ok(VOICE_FADE_S >= 0.03 && VOICE_FADE_S <= 0.06, 'a click guard, not an envelope');
+  assert.equal(VOICE_LEVEL, 0.35);
+});
+
+test('irisVoice never repeats the last clip, visits all three, and drops a call while a line is still playing', async () => {
+  const { audio, ctx } = make({ rng: seeded(3) });
+  audio.start(); const c = ctx(); c.currentTime = 0;
+  await warmVoices(audio, c, [23.43, 17.74, 18.47]);
+  const spans = recordSources(c);
+  const played = [];
+  for (let i = 0; i < 12; i++) {
+    const before = spans.length;
+    assert.equal(audio.irisVoice(), true, `call ${i} starts a line`);
+    const v = spans[before];
+    played.push(v.buffer.duration);
+    assert.equal(audio.irisVoice(), false, 'a second call inside the line is dropped: the eye never talks over itself');
+    assert.equal(spans.length, before + 1);
+    c.currentTime = v.stop + 0.5;   // the line has ended, the next core hit may speak
+  }
+  for (let i = 1; i < played.length; i++) assert.notEqual(played[i], played[i - 1], `back-to-back repeat at line ${i}`);
+  assert.equal(new Set(played.slice(0, 3)).size, 3, 'the first three lines are the three recordings');
+});
+
+test('irisVoiceRelease fades the playing line over 150 ms instead of cutting it', async () => {
+  const { audio, ctx } = make({ rng: seeded(5) });
+  audio.start(); const c = ctx(); c.currentTime = 4;
+  await warmVoices(audio, c, [23.43, 17.74, 18.47]);
+  const spans = recordSources(c);
+  audio.irisVoice();
+  c.currentTime = 6;
+  audio.irisVoiceRelease();
+  assert.ok(Math.abs(spans[0].stop - (6 + VOICE_RELEASE_S)) < 1e-9, 'the source stops at the end of the fade');
+  assert.equal(audio.irisVoice(), true, 'after a release the next call speaks again');
+  audio.irisVoiceRelease(); audio.irisVoiceRelease();   // idempotent
+  assert.equal(audio.irisVoice(), true);
   audio.destroy();
 });

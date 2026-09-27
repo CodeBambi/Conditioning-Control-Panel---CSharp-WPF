@@ -19,6 +19,7 @@ import { createHostMediaSource } from './hostMedia.js';
 import { detectMode } from './shared/capability.js';
 import { createChaosGame } from './game/chaosRun.js';
 import { setLoomSpirals } from './engine/loomSpirals.js';
+import { createExit, installExitHold } from './exit.js';
 
 const dom = {
   canvas: document.getElementById('sf-canvas'),
@@ -69,7 +70,7 @@ async function maybeStart() {
       hostState,
       runSetup: initMsg.runSetup,
       modId: initMsg.modId,   // active persona (Bambi/Sissy/Circe) for the VN portrait
-      requestExit: () => { bridge.send({ type: 'exit' }); shutdown(); },
+      requestExit: () => leave(),
     });
     engine = await mod.start({
       canvas: dom.canvas,
@@ -124,6 +125,17 @@ function shutdown() {
   bridge.send({ type: 'exit-done' });
 }
 
+// Every way out of the page except a killed window. Bank the descent FIRST: a
+// timed run reaches its own clock and pays there, but an endless one has no
+// clock, so leaving is how it always ends and the run counter never moved
+// (Beppu, 2026-09-20). The booker refuses a second booking, so a run that
+// already surfaced through the recap is not paid twice.
+const leave = createExit({
+  send: (m) => bridge.send(m),
+  getGame: () => game,
+  shutdown,
+});
+
 bridge.on('init', (m) => {
   initMsg = m;
   setModContent(m.modContent);   // creator mods: the mod's own DTRH content (or null)
@@ -177,7 +189,7 @@ bridge.on('loom-list', (m) => {
   if (game && game.onLoomList) game.onLoomList(list);      // the Boudoir pane's rack
 });
 bridge.on('loom-result', (m) => { if (game && game.onLoomResult) game.onLoomResult(m); });
-bridge.on('end-run', () => shutdown());
+bridge.on('end-run', () => { try { game && game.abandonRun && game.abandonRun(); } catch (e) { /* ignore */ } shutdown(); });
 bridge.on('ping', (m) => bridge.send({ type: 'pong', t: m.t }));
 
 // The dive's master mute is a WEB switch - it silences page media but never the
@@ -197,20 +209,7 @@ let lastBeat = 0;
 
 // Exit UX (M1): HOLD Escape ~1.2s to leave (a tap stays the engine's pause toggle).
 // A radial fill on the HUD would be nicer - that arrives with the pause menu in M3.
-let escDownAt = 0, escTimer = 0;
-window.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape' || e.repeat) return;
-  escDownAt = performance.now();
-  escTimer = setTimeout(() => {
-    bridge.send({ type: 'exit' });
-    shutdown();
-  }, 1200);
-});
-window.addEventListener('keyup', (e) => {
-  if (e.key !== 'Escape') return;
-  clearTimeout(escTimer);
-  escDownAt = 0;
-});
+installExitHold({ target: window, leave });
 
 bridge.announceReady();
 bridge.log('boot: ready posted, waiting for init + manifest');

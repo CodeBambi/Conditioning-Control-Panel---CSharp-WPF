@@ -48,6 +48,22 @@ namespace ConditioningControlPanel.Services
         public bool IsInstalled(string presetId)
             => GetPreset(presetId)?.MasterEnabled == true;
 
+        /// <summary>What activating this preset would put on a Chaster lock: how many add-time
+        /// actions and the minutes per fire. Empty when it carries none.</summary>
+        public KeywordTriggerChasterImport.Summary ChasterSummary(string presetId)
+            => KeywordTriggerChasterImport.Summarise(GetPreset(presetId)?.Triggers);
+
+        /// <summary>True when the preset's live clones already have Chaster time switched on,
+        /// meaning the player said yes before. A version-bump re-install keeps that answer.</summary>
+        public bool ChasterTimeWasAllowed(string presetId)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null || string.IsNullOrEmpty(presetId)) return false;
+            var prefix = TriggerIdPrefix + presetId + ":";
+            return KeywordTriggerChasterImport.AnyEnabled(
+                settings.KeywordTriggers.Where(t => t.Id?.StartsWith(prefix, StringComparison.Ordinal) == true));
+        }
+
         /// <summary>
         /// Installs a preset by cloning its triggers into the user's KeywordTriggers list,
         /// injecting its canned phrase pools, and flipping MasterEnabled.
@@ -55,8 +71,13 @@ namespace ConditioningControlPanel.Services
         /// If AI is currently unavailable, AvatarCommentActions on the cloned triggers
         /// are disabled (action.Enabled = false). They are re-enabled automatically by
         /// <see cref="RefreshAiGating"/> when AI becomes available later.
+        ///
+        /// Chaster add-time actions arrive OFF unless <paramref name="allowChasterTime"/> is true:
+        /// a preset must never put time on a lock without the player saying yes to it first
+        /// (<see cref="ChasterSummary"/> + the import confirm dialog). The user can switch each one
+        /// on later in the preset's editor.
         /// </summary>
-        public bool InstallPreset(string presetId)
+        public bool InstallPreset(string presetId, bool allowChasterTime = false)
         {
             var settings = CoreSettings.Current;
             var preset = GetPreset(presetId);
@@ -96,6 +117,9 @@ namespace ConditioningControlPanel.Services
                 {
                     clone.RebuildActionsFromFlatFields();
                 }
+
+                if (!allowChasterTime)
+                    KeywordTriggerChasterImport.DisableAll(new[] { clone });
 
                 settings.KeywordTriggers.Add(clone);
             }

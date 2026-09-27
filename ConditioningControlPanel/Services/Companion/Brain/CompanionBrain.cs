@@ -448,13 +448,23 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// «OldCompanion said aloud: …» next to the new mod's echoes, and the model answers with a
         /// two-speaker roleplay transcript (observed 2026-08-13 after Bambi → Drone). The echoes
         /// are flavor, never persisted, and replay from the new mod's bark_rules.json anyway.
+        ///
+        /// <para><paramref name="newCompanionName"/> is non-null only when the switch changed WHO
+        /// the companion is (<see cref="PersonaSwitchRules.ChangesPersona"/>). It writes the
+        /// boundary this log kind was built for: a <see cref="TurnKind.SystemNote"/> never reaches
+        /// a model, so it costs the prompt nothing, and it is what makes a read of session.json
+        /// show where one companion stopped and the next started. The cut itself is the identity
+        /// fence in <see cref="PromptAssembler.FenceHistoryToPersona"/>.</para>
         /// </summary>
-        public void OnModSwitched()
+        public void OnModSwitched(string? newCompanionName = null)
         {
             var purged = Session.RemoveAll(t => t.Kind == TurnKind.BarkEcho);
             if (purged > 0)
                 App.Logger?.Information(
                     "CompanionBrain: mod switch purged {Count} stale bark echo(es) from the window", purged);
+
+            if (!string.IsNullOrWhiteSpace(newCompanionName))
+                Session.Append(TurnKind.SystemNote, "companion changed to " + newCompanionName!.Trim());
         }
 
         // ===================== misc =====================

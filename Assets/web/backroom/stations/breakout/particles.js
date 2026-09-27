@@ -30,6 +30,14 @@ export function createParticles({ max = 600, rng = Math.random } = {}) {
       add({ kind: 'dot', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - rise, life, max: life, rgb, gv, r: r0 + rng() * r1 });
     }
   }
+  /** Brief expanding puffs, pooled and capped like the other impact particles. */
+  function smoke(x, y, rgb, n = 10) {
+    for (let i = 0; i < n; i++) {
+      const a = rng() * TAU, speed = 15 + rng() * 45, life = .3 + rng() * .3;
+      add({ kind: 'smoke', x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 20,
+        life, max: life, rgb, gv: -15, r: 2 + rng() * 3 });
+    }
+  }
   /** The mirror of burst: dots start out on a ring and fall INWARD toward (x, y). */
   function implode(x, y, rgb, n, speed, life, { from = 90 } = {}) {
     for (let i = 0; i < n; i++) {
@@ -96,7 +104,10 @@ export function createParticles({ max = 600, rng = Math.random } = {}) {
         continue;
       }
       p.x += p.vx * dt; p.y += p.vy * dt; p.vy += p.gv * dt;
-      if (p.kind === 'dot') {
+      if (p.kind === 'smoke') {
+        g.fillStyle = col(p.rgb, mix, t * .28); g.beginPath();
+        g.arc(p.x, p.y, p.r + (1 - t) * 12, 0, TAU); g.fill();
+      } else if (p.kind === 'dot') {
         g.fillStyle = col(p.rgb, mix, t); g.beginPath(); g.arc(p.x, p.y, p.r * t, 0, 7); g.fill();
       } else if (p.kind === 'rect') {
         p.rot += p.vr * dt;
@@ -114,6 +125,6 @@ export function createParticles({ max = 600, rng = Math.random } = {}) {
     }
   }
 
-  return { burst, implode, spray, rects, shatter, sparkle, crop, after, step,
+  return { smoke, burst, implode, spray, rects, shatter, sparkle, crop, after, step,
     clear() { list.length = 0; pending.length = 0; }, count: () => list.length, list };
 }

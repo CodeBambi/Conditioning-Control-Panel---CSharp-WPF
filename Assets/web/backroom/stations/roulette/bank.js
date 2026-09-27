@@ -101,7 +101,7 @@ export function createBank({ layer, onTick, onLand, onDone }) {
       startMs = performance.now();
       src = from; dst = to;
       run = createBankRun({ kind: 'pay', n: count, fromValue, toValue, rollupMs, reduced, startMs });
-      if (run.mode === 'state') { play(run.step(startMs)); return 'state'; }   // Law VI: no tokens, the cue still plays
+      if (run.mode === 'state') { play(run.step(startMs).events); return 'state'; }   // Law VI: no tokens, the cue still plays
       els = Array.from({ length: count }, () => {
         const e = document.createElement('i');
         e.className = 'roul-token';

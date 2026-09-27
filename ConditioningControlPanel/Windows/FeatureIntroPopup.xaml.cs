@@ -97,8 +97,8 @@ namespace ConditioningControlPanel
         /// so suppressing it (unspent) is always safe and delaying it never is. It belongs to no
         /// door, so it neither claims nor is blocked by the per-door budget.
         /// </summary>
-        internal static void ShowCelebrationIfFirstTime(Window? owner) =>
-            ShowCore(CelebrationKey, owner, paced: false, doorKey: null);
+        internal static void ShowCelebrationIfFirstTime(Window? owner, string key = CelebrationKey) =>
+            ShowCore(key, owner, paced: false, doorKey: null);
 
         /// <summary>
         /// Keys currently in the presenter's hands, so a tab that is shown twice during startup
@@ -730,24 +730,29 @@ namespace ConditioningControlPanel
                 }
             },
 
-            [FeatureIntroPopup.CelebrationKey] = new FeatureIntroContent
+            [FeatureIntroPopup.CelebrationKey] = Celebration(FeatureIntroPopup.CelebrationKey, "Premium"),
+            // One card per tier (TierCelebration), so a Basic -> Prime upgrade celebrates again.
+            [Services.TierCelebration.KeyT1] = Celebration(Services.TierCelebration.KeyT1, "Premium"),
+            [Services.TierCelebration.KeyT2] = Celebration(Services.TierCelebration.KeyT2, "Prime"),
+        };
+
+        private static FeatureIntroContent Celebration(string key, string tierName) => new()
+        {
+            Key = key,
+            Glyph = "💖",
+            RailTitle = "Thank You",
+            Title = "💖  " + tierName + " Unlocked",
+            Tagline = "Your support keeps the Lab running - and it just opened every door.",
+            Accent = "#FF69B4",
+            Bullets = new[]
             {
-                Key = FeatureIntroPopup.CelebrationKey,
-                Glyph = "💖",
-                RailTitle = "Thank You",
-                Title = "💖  Premium Unlocked",
-                Tagline = "Your support keeps the Lab running - and it just opened every door.",
-                Accent = "#FF69B4",
-                Bullets = new[]
-                {
-                    "All the exclusive tabs are yours: Takeover, Remote Control, She's Listening, Blink Trainer, Haptics, Awareness, Lockdown, Graded Intake.",
-                    "Your companion's AI limits go up, and premium quests, programs and exclusive achievements switch on.",
-                    "Look for the Premium Rail on the Dashboard - one flip per feature, all in one strip.",
-                    "Each exclusive tab introduces itself the first time you open it. Wander."
-                },
-                Footer = "Everything lives under the Exclusives menu. Enjoy - you earned it.",
-                DismissLabel = "Let's go 💖"
-            }
+                "All the exclusive tabs are yours: Takeover, Remote Control, She's Listening, Blink Trainer, Haptics, Awareness, Lockdown, Graded Intake.",
+                "Your companion's AI limits go up, and premium quests, programs and exclusive achievements switch on.",
+                "Look for the Premium Rail on the Dashboard - one flip per feature, all in one strip.",
+                "Each exclusive tab introduces itself the first time you open it. Wander."
+            },
+            Footer = "Everything lives under the Exclusives menu. Enjoy - you earned it.",
+            DismissLabel = "Let's go 💖"
         };
     }
 }

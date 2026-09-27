@@ -135,6 +135,7 @@ namespace ConditioningControlPanel.Services.Quiz
                     Mappings = mappings,
                     UserDataFolderName = "browser_data_intake",
                     InputEnabled = true,
+                    IsGame = true,   // the startup ladder goes quiet while a game is up
                     // Window mode is REMEMBERED (AppSettings.IntakeFullscreen), so the window is
                     // BUILT in the mode the player left it in rather than flipping a beat after
                     // boot. A recovery relaunch always comes back windowed: if the page wedged

@@ -24,11 +24,11 @@ export function createRotation(tracks = TRACKS, random = Math.random) {
 export function createMusic({ volume = .15, master = .8, AudioCtor = globalThis.Audio,
   host = globalThis.window, page = globalThis.document, storage = null } = {}) {
   const rotation = createRotation();
-  let audio, context = null, gain = null, armed = false, disposed = false;
+  let audio, context = null, gain = null, drive = null, scene = 'normal', armed = false, disposed = false;
   let failures = 0, retry = 0, pageAway = false, needsNext = false, contextUnavailable = false, hostSuspended = false;
   const clamp = value => Math.max(0, Math.min(1, Number(value) || 0));
   let level = clamp(volume); master = clamp(master);
-  const blocked = () => disposed || hostSuspended || pageAway || page.hidden || !level;
+  const blocked = () => disposed || scene === 'freeze' || hostSuspended || pageAway || page.hidden || !level;
   const silenceContext = operation => { try { context?.[operation]()?.catch?.(() => {}); } catch {} };
   const cancelRetry = () => { clearTimeout(retry); retry = 0; };
   const apply = () => {
@@ -38,8 +38,16 @@ export function createMusic({ volume = .15, master = .8, AudioCtor = globalThis.
       gain.gain.value = level * (context.__brMasterGain ? 1 : master);
     } else audio.volume = level * master;
   };
+  function applyScene() {
+    audio.playbackRate=scene==='grey'?.72:1;
+    audio.preservesPitch=scene!=='grey';
+    if(drive) {
+      if(scene==='grey') {const curve=new Float32Array(256);for(let i=0;i<256;i++){const x=i/127.5-1;curve[i]=Math.tanh(x*1.4)/Math.tanh(1.4);}drive.curve=curve;}
+      else drive.curve=null;
+    }
+  }
   function attachAudio() {
-    audio = new AudioCtor(); audio.preload = 'none'; audio.dataset.brMusic = '1';
+    audio = new AudioCtor(); audio.preload = 'none'; audio.dataset.brMusic = '1'; applyScene();
     audio.addEventListener('ended', ended); audio.addEventListener('error', error); audio.addEventListener('playing', playing);
   }
   function detachAudio() {
@@ -54,8 +62,10 @@ export function createMusic({ volume = .15, master = .8, AudioCtor = globalThis.
       if (!Ctor) return;
       candidate = new Ctor();
       const node = candidate.createGain(); node.connect(candidate.destination);
-      source = candidate.createMediaElementSource(audio); source.connect(node);
-      context = candidate; gain = node; apply();
+      source = candidate.createMediaElementSource(audio);
+      if(typeof candidate.createWaveShaper==='function') {drive=candidate.createWaveShaper();source.connect(drive);drive.connect(node);}
+      else source.connect(node);
+      context = candidate; gain = node; applyScene(); apply();
     } catch {
       try { candidate?.close()?.catch?.(() => {}); } catch {}
       // Once captured by WebAudio an element cannot return to native output.
@@ -91,6 +101,11 @@ export function createMusic({ volume = .15, master = .8, AudioCtor = globalThis.
   host.addEventListener('pointerdown', arm, {passive:true}); host.addEventListener('keydown', arm);
   page.addEventListener('visibilitychange', visibility);
   const api = {
+    setScene(next) {
+      if(disposed)return;
+      scene=['freeze','grey'].includes(next)?next:'normal';applyScene();
+      if(scene==='freeze')pause();else play();
+    },
     get volume() { return level; },
     get disposed() { return disposed; },
     suspend(on) { if (disposed) return; hostSuspended = !!on; if (hostSuspended) pause(); else play(); },
@@ -125,3 +140,9 @@ export function getMusic(options = {}) {
   singleton = createMusic({ ...options, volume, storage });
   return singleton;
 }
+
+/** Scene effects never create another soundtrack or change saved volume. */
+export function setMusicScene(scene) { singleton?.setScene(scene); }
+
+/** Read the current soundtrack without creating or starting a player. */
+export function currentMusic() { return singleton && !singleton.disposed ? singleton : null; }

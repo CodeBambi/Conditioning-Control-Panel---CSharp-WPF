@@ -929,6 +929,7 @@ public class BubbleService : IDisposable
                 // Outside sessions, bubbles are always clickable (no UI toggle exists for this setting)
                 var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;
                 var bubble = CreateAmbientBubble(screen, isClickable);
+                MarkIfNatasha(bubble);
                 _bubbles.Add(bubble);
 
                 App.Logger?.Debug("Spawned bubble, total: {Count}", _bubbles.Count);
@@ -977,6 +978,7 @@ public class BubbleService : IDisposable
                 var screen = screens[_random.Next(screens.Length)];
                 var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;
                 var bubble = CreateAmbientBubble(screen, isClickable);
+                MarkIfNatasha(bubble);
                 _bubbles.Add(bubble);
 
                 App.Logger?.Debug("SpawnOnce: spawned trigger bubble, total: {Count}", _bubbles.Count);
@@ -989,6 +991,20 @@ public class BubbleService : IDisposable
     }
 
     private void OnPop(Bubble bubble) => AwardAmbientPop(bubble);
+
+    /// <summary>Natasha's favourite: about one ambient bubble in ten wears red, and only while
+    /// that price can actually land (tab on, linked, row on, no safety hold). Rolled per spawn
+    /// so a field never carries a cue it cannot charge.</summary>
+    private void MarkIfNatasha(Bubble bubble)
+    {
+        try
+        {
+            if (App.Chaster?.CanBook(Chaster.NatashasFavourite.EventId) == true
+                && Chaster.NatashasFavourite.Roll(_random))
+                bubble.MarkNatasha();
+        }
+        catch (Exception ex) { Diag.Swallowed(ex, "natasha mark"); }
+    }
 
     /// <summary>The standard ambient-pop reward: lucky roll, pop sound, XP, achievement, haptic.
     /// Shared by plain bubbles (<see cref="OnPop"/>) and trigger bubbles (whose benign-pop path
@@ -1029,6 +1045,9 @@ public class BubbleService : IDisposable
 
         // Track for achievement
         App.Achievements?.TrackBubblePopped();
+
+        // Natasha's favourite: the red one popped. +3:00 on the tab (inert unless the row is on).
+        if (bubble.IsNatasha) App.Chaster?.NoteAt("natasha", bubble.CenterPx);
 
         // Haptic feedback with combo system
         _ = App.Haptics?.BubblePopAsync();
@@ -1110,9 +1129,8 @@ public class BubbleService : IDisposable
         // and losing the grant removes it without rewriting the user's chosen variant list.
         bool v2Owned = AmbientBubbleMotion.AnyV2Owned;
         var ids = BrainDrainBubble.RollPool(s.BubbleTriggerVariants, v2Owned, s.BubbleBrainDrainEnabled);
-        // Same arrangement for the Magnet bubble: owned AND switched on, added live rather than
-        // stored, so each v2 bubble is one more equally-weighted id in the same roll.
-        ids = MagnetBubble.RollPool(ids, v2Owned, s.BubbleMagnetEnabled);
+        // Pull is retired, including ids retained by older saved selections.
+        ids = ids.Where(id => id != MagnetBubble.VariantId).ToArray();
         if (ids.Count == 0) return null;
         if (_random.Next(100) >= Math.Clamp(s.BubbleTriggerChance, 0, 100)) return null;
         return BuildTriggerSpec(ids[_random.Next(ids.Count)]);
@@ -1157,7 +1175,7 @@ public class BubbleService : IDisposable
             {
                 return new EffectBubbleSpec
                 {
-                    VariantId = BrainDrainBubble.VariantId,   // no sprite ships: wears the tinted bubble.png
+                    VariantId = BrainDrainBubble.VariantId,   // ships braindrain_melt.png
                     Payload = new BrainDrainMeltPayload(),
                     SizePx = 220,
                     Tint = System.Windows.Media.Color.FromRgb(
@@ -1169,26 +1187,7 @@ public class BubbleService : IDisposable
                     TreatLifeMs = 7000,
                 };
             }
-            if (id == MagnetBubble.VariantId)
-            {
-                return new EffectBubbleSpec
-                {
-                    VariantId = MagnetBubble.VariantId,   // no sprite ships: wears the tinted bubble.png
-                    // Deliberately NO payload: this bubble's whole content is how it moves and what
-                    // the pop is worth, and a null payload also keeps the companion easter egg off it
-                    // (IsAmbientEffectBubble wants a payload) - an avatar pop would collect the
-                    // early-window bonus the user was supposed to earn.
-                    Payload = null,
-                    SizePx = 200,
-                    Tint = System.Windows.Media.Color.FromRgb(
-                        MagnetBubble.TintR, MagnetBubble.TintG, MagnetBubble.TintB),
-                    Label = MagnetBubble.Label,
-                    IsLive = false,
-                    FuseMs = 0,
-                    Motion = motion ?? ChaosMotion.FloatUp,
-                    TreatLifeMs = 7000,
-                };
-            }
+            if (id == MagnetBubble.VariantId) return null; // Retired, including old saved selections.
             var v = ChaosBubbleVariants.All.FirstOrDefault(x => x.Id == id);
             if (v == null) return null;
             var spec = ChaosBubbleVariants.Build(v, intensity: 0.3, motionOverride: motion, ambient: true);
@@ -2420,7 +2419,13 @@ internal class Bubble
     private readonly bool _useHost;     // AppSettings.ChaosBubbleSharedHost && chaos bubble — see the spawn block
     private readonly bool _useLayer;    // UnifiedOverlayHost: render on the compositor BubbleLayer (also window-less)
     private Compositor.BubbleLayer.BubbleItem? _layerItem;   // this bubble's draw-state on the layer (null off-layer)
-    private Image? _teaseFaceImg;       // the tease face's frame Image (read per-frame for the layer's current frame)
+    private string? _flashFacePath;
+    private FlashClipPlayer? _faceClip;
+    private List<BitmapSource>? _faceFrames;
+    private double _faceFrameMs;
+    private long _faceStartedMs;
+    private double FaceDiameter => BubbleFace.Diameter(_size, _isTease);
+    private Image? _bubbleFaceImg;       // the tease face's frame Image (read per-frame for the layer's current frame)
     private SkiaSharp.SKPoint[][]? _crackPts;   // brittle crack polylines in DIP (0.._size box) for the layer
     private readonly FrameworkElement _fxTarget;   // where glow/opacity apply: _window (per-window) or _grid (host)
     private double _winDim;   // the (quantized) square window side this bubble uses; held so AnimateFrame can re-centre without resizing the window (see spawn — resizing churns the layered DIB)
@@ -2601,6 +2606,8 @@ internal class Bubble
     private bool _hasVariantSprite;   // a per-variant sprite replaced the tinted bubble.png
     private bool _isDrainBubble;      // Bubbles v2 Brain Drain bubble: breathes, glows violet
     private bool _isMagnetBubble;     // Bubbles v2 Magnet bubble: homes on the cursor, pulses steel blue
+    private bool _isNatasha;          // Natasha's favourite: faint red halo, blinks red now and then, +3:00 on pop
+    private DropShadowEffect? _natashaGlow;   // per-window path only: the halo, flared on the blink
     private double _magnetLifeMs;     // its full treat life, the denominator of the early window
     private Chaos.MagnetBubble.Velocity _magnetV;   // its free velocity, DIPs per frame
     private readonly bool _isAmbientTrigger;        // a dashboard trigger bubble (payload or not)
@@ -2738,6 +2745,40 @@ internal class Bubble
         _isAmbientTrigger && _isAlive && !_isDestroyed && !_isPopping;
     /// <summary>Bubbles v2 Magnet bubble: the cursor-homing kind.</summary>
     internal bool IsMagnetBubble => _isMagnetBubble;
+
+    internal bool IsNatasha => _isNatasha;
+
+    /// <summary>Deal this bubble to Natasha. Called right after construction, so the draw
+    /// state may already exist on either render path: the halo is added to whichever is up.
+    /// Never replaces a glow the bubble already wears (a lucky gold, a magnet blue).</summary>
+    internal void MarkNatasha()
+    {
+        _isNatasha = true;
+        if (!PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier)) return;
+        try
+        {
+            if (_layerItem != null)
+            {
+                if (_layerItem.HasGlow) return;
+                _layerItem.HasGlow = true;
+                _layerItem.GlowColor = new SkiaSharp.SKColor(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B);
+                _layerItem.GlowBlurDip = (float)Chaster.NatashasFavourite.HaloBlurDip;
+                _layerItem.GlowOpacity = (float)Chaster.NatashasFavourite.HaloOpacity;
+            }
+            else if (_bubbleImage != null && _bubbleImage.Effect == null)
+            {
+                _natashaGlow = new DropShadowEffect
+                {
+                    Color = Color.FromRgb(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B),
+                    BlurRadius = Math.Min(Chaster.NatashasFavourite.HaloBlurDip, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
+                    ShadowDepth = 0,
+                    Opacity = Chaster.NatashasFavourite.HaloOpacity
+                };
+                _bubbleImage.Effect = _natashaGlow;
+            }
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+    }
     /// <summary>
     /// What THIS pop is worth as a multiple of the ordinary ambient-pop XP. 1 for every bubble in
     /// the game but the Magnet, which pays double when it is taken inside its early window (and
@@ -2862,6 +2903,12 @@ internal class Bubble
             }
         }
 
+        // Natasha's favourite: a thin red halo, only when nothing louder is already on.
+        if (!hasGlow && _isNatasha && PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+        {
+            glowColor = new SkiaSharp.SKColor(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B);
+            glowBlur = (float)Chaster.NatashasFavourite.HaloBlurDip; glowOp = (float)Chaster.NatashasFavourite.HaloOpacity; hasGlow = true;
+        }
         var item = new Compositor.BubbleLayer.BubbleItem
         {
             DpiScale = (float)_dpiScale,
@@ -2880,8 +2927,8 @@ internal class Bubble
             HasShine = ChaosSkiaFxOverlay.Enabled && !_hasVariantSprite && _spec != null,
             IsEcho = _spec?.IsEcho == true,
             EchoColor = _spec != null ? new SkiaSharp.SKColor(_spec.Tint.R, _spec.Tint.G, _spec.Tint.B, 110) : default,
-            IsTease = _isTease,
-            TeaseInnerDip = (float)(_size * 0.86),
+            HasFace = _bubbleFaceImg?.Source != null,
+            TeaseInnerDip = (float)FaceDiameter,
             HasGlow = hasGlow,
             GlowColor = glowColor,
             GlowBlurDip = glowBlur,
@@ -2906,6 +2953,7 @@ internal class Bubble
         it.Scale = (float)currentScale;
         it.Angle = (float)_angle;
         it.Opacity = (float)opacity;
+        it.RedWash = _isNatasha && !_isPopping ? (float)Chaster.NatashasFavourite.WashAlphaAt(_timeAlive) : 0f;
 
         if (_fuseRing != null)
         {
@@ -2922,7 +2970,9 @@ internal class Bubble
         if (_freezeAura != null) it.FreezeAuraOpacity = (float)_freezeAura.Opacity;
         if (_brittleCracks != null) it.BrittleOpacity = (float)_brittleCracks.Opacity;
         if (_teaseShine != null) it.TeaseShineOpacity = (float)_teaseShine.Opacity;
-        if (_teaseFaceImg != null) it.TeaseSource = _teaseFaceImg.Source as System.Windows.Media.Imaging.BitmapSource;
+        it.HasFace = _bubbleFaceImg?.Source != null;
+        it.LiveFace = _faceClip != null;
+        if (_bubbleFaceImg != null) it.FaceSource = _bubbleFaceImg.Source as System.Windows.Media.Imaging.BitmapSource;
         if (_shieldRing != null) it.ShieldOpacity = (float)_shieldRing.Opacity;
         if (_prismGhost != null) it.PrismOpacity = (float)_prismGhost.Opacity;
         if (_hintEl != null) it.HintOpacity = _hintEl.Visibility == Visibility.Visible ? (float)_hintEl.Opacity : 0f;
@@ -2994,6 +3044,8 @@ internal class Bubble
         _onDestroy = onDestroy;
         _isClickable = isClickable;
         _spec = spec;
+        if (spec?.VariantId == "flash" && spec.Payload is FlashPayload flash)
+            flash.UseFlashSettings = true;
         _onBenignPop = onBenignPop;
         _onDefuse = onDefuse;
         _onDetonate = onDetonate;
@@ -3197,7 +3249,7 @@ internal class Bubble
         // the shared bubble image otherwise.
         // GG sweeper rabbits share the "darter" VariantId but wear their own amber sprite so
         // they read as a different rabbit from the catchable pink one (falls back to darter.png).
-        var variantSprite = spec == null ? null
+        var variantSprite = spec == null ? null : spec.VariantId == "flash" ? image
             : (spec.IsSweeper ? ChaosArt.Resolve("bubbles", "sweeper") : null)
               ?? ChaosArt.Resolve("bubbles", spec.VariantId);
         if (variantSprite != null)
@@ -3515,6 +3567,9 @@ internal class Bubble
         // Frozen field (freeze-bubble power-up): a chaos bubble that isn't mid-pop holds its
         // position + fuse, but still falls through to the visual block so its aura keeps pulsing.
         bool frozen = _spec != null && !_isPopping && _isChaosFrozen?.Invoke() == true;
+        if (_faceFrames is { Count: > 0 } frames && _bubbleFaceImg != null && !_isPopping)
+            _bubbleFaceImg.Source = frames[BubbleFace.FrameAt(Environment.TickCount64 - _faceStartedMs,
+                _faceFrameMs, frames.Count, MotionFx.Level)];
 
         if (_isPopping)
         {
@@ -4134,6 +4189,10 @@ internal class Bubble
             // shallower than the drain's breathe, which is how the two tell themselves apart.
             if (_isMagnetBubble && !_isPopping)
                 opacity *= Chaos.MagnetBubble.RingPulseAt(_timeAlive);
+            // Natasha's favourite, per-window path: the halo itself flares on the blink (the
+            // compositor path draws a wash over the body instead; same clock, same envelope).
+            if (_natashaGlow != null && !_isPopping)
+                _natashaGlow.Opacity = Chaster.NatashasFavourite.HaloOpacity + 2.0 * Chaster.NatashasFavourite.WashAlphaAt(_timeAlive);
             _fxTarget.Opacity = opacity;
             if (_useLayer)
             {
@@ -4452,7 +4511,7 @@ internal class Bubble
             }
             else if (_isFreeze) { ShowChaosEffectLabel(); _onFreezeCaught?.Invoke(this); }   // good pickup → fires the freeze power-up
             else if (_spec.IsLive) { ShowChaosLabel("SNAP", SnapColor); _onDefuse?.Invoke(this); }  // snapped in time → no effect, but confirm the catch
-            else { ShowChaosEffectLabel(); _onBenignPop?.Invoke(this); }                      // treat → its effect fires
+            else { PrepareFlashDelivery(); ShowChaosEffectLabel(); _onBenignPop?.Invoke(this); }                      // treat → its effect fires
             _onChainTrigger?.Invoke(this);   // Chain Reaction boon: let the burst sweep overlapping neighbours
         }
         else
@@ -4630,6 +4689,7 @@ internal class Bubble
         }
         catch (Exception ex) { Diag.Swallowed(ex); }
         ShowChaosEffectLabel();   // the live effect is firing → flash its color-coded word at the bubble
+        PrepareFlashDelivery();
         _onDetonate?.Invoke(this);
         // Pop/burst animation + Destroy handled by AnimateFrame().
     }
@@ -4700,7 +4760,8 @@ internal class Bubble
 
         // The Tease: a glossy dark face wearing a gif clipped inside the bubble circle — the
         // bait. Sits over the tint, under the pulsing ✖ label.
-        if (_spec.IsTease) BuildTeaseFace();
+        if (_spec.IsTease) BuildBubbleFace(PickTeaseGif());
+        else if (_spec.VariantId == "flash") PrepareFlashFace();
 
         // Label / emoji — skipped when a per-variant sprite is present (the sprite carries its
         // own glyph, so drawing the label too would double the icon). Absent a sprite the bubble
@@ -4928,15 +4989,35 @@ internal class Bubble
     /// across spawns, with the sliding shine as their shimmer. No pool folder → just the
     /// glossy face + ✖ (the bubble still reads).
     /// </summary>
-    private void BuildTeaseFace()
+    private async void PrepareFlashFace()
+    {
+        try
+        {
+            // Pool selection can decrypt a pack. Keep that work off the dispatcher.
+            var path = await Task.Run(() => App.Flash?.GetChaosImagePaths(1).FirstOrDefault());
+            if (_isDestroyed || _isPopping || path == null) return;
+            _flashFacePath = path;
+            BuildBubbleFace(path);
+        }
+        catch (Exception ex) { App.Logger?.Debug("Bubble face: {Error}", ex.Message); }
+    }
+
+    private void PrepareFlashDelivery()
+    {
+        if (_spec?.Payload is not FlashPayload flash || _bubbleFaceImg?.Source == null) return;
+        flash.ImagePath = _flashFacePath;
+        flash.OriginPx = CenterPx;
+        flash.FaceDiameterPx = FaceDiameter * _dpiScale;
+    }
+
+    private void BuildBubbleFace(string? path)
     {
         // No teasebubble clip available → DON'T lay an opaque dark disc over the sprite (that
         // read as a plain black circle when the pool folder was empty). The tease.png sprite
         // already carries the glossy bubble + neon ✖, so it reads fine on its own.
-        string? path = PickTeaseGif();
         if (path == null) return;
 
-        double inner = _size * 0.86;
+        double inner = FaceDiameter;
         var face = new Grid
         {
             Width = inner, Height = inner,
@@ -4945,7 +5026,16 @@ internal class Bubble
             VerticalAlignment = VerticalAlignment.Center,
             Clip = new EllipseGeometry(new Point(inner / 2, inner / 2), inner / 2, inner / 2),
         };
-        face.Children.Add(new System.Windows.Shapes.Ellipse
+        var edgeMask = new RadialGradientBrush
+        {
+            Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5),
+            RadiusX = .5, RadiusY = .5,
+        };
+        edgeMask.GradientStops.Add(new GradientStop(Colors.White, BubbleFace.EdgeFadeStart));
+        edgeMask.GradientStops.Add(new GradientStop(Colors.Transparent, 1));
+        edgeMask.Freeze();
+        face.OpacityMask = edgeMask;
+        if (_isTease) face.Children.Add(new System.Windows.Shapes.Ellipse
         {
             Width = inner, Height = inner,
             Fill = new SolidColorBrush(Color.FromRgb(0x14, 0x07, 0x0C)),
@@ -4963,7 +5053,7 @@ internal class Bubble
             RenderOptions.SetBitmapScalingMode(img, PerformanceProfile.ScalingMode(PerformanceProfile.CurrentTier));
             bool animate = false;
             bool isGif = path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
-            bool isAnimatedWebp = !isGif
+            bool isAnimatedWebp = !FlashService.IsRemotePath(path) && !isGif
                 && path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
                 && AnimatedWebp.IsAnimated(path);
             if ((isGif || isAnimatedWebp)
@@ -4971,9 +5061,14 @@ internal class Bubble
             {
                 long len = 0;
                 try { len = new FileInfo(path).Length; } catch (Exception ex) { Diag.Swallowed(ex); }
-                animate = len > 0 && len <= ChaosTuning.TEASE_ANIMATED_MAX_BYTES;
+                // Flash thumbnails are bounded by decoded memory, not compressed file size.
+                animate = len > 0 && (!_isTease || len <= ChaosTuning.TEASE_ANIMATED_MAX_BYTES);
             }
-            if (animate)
+            if (FlashService.IsRemotePath(path))
+            {
+                _ = LoadRemoteFaceAsync(img, path, Math.Max(64, (int)inner));
+            }
+            else if (animate)
             {
                 _teaseAnimated = true;
                 _teaseAnimatedAlive++;
@@ -4984,8 +5079,12 @@ internal class Bubble
                 // GIF tease leaked its animator + full frame buffer and stayed subscribed to
                 // CompositionTarget.Rendering (#486). Held in _teaseImg so Destroy can
                 // Detach it: the Forever clock pins the Image until cleared.
-                _teaseImg = img;
-                AnimatedWebp.AttachAnimation(img, path, Math.Max(64, (int)inner));
+                if (_isTease)
+                {
+                    _teaseImg = img;
+                    AnimatedWebp.AttachAnimation(img, path, Math.Max(64, (int)inner));
+                }
+                else _ = LoadAnimatedFaceAsync(img, path, Math.Max(64, (int)inner));
             }
             else
             {
@@ -5012,13 +5111,13 @@ internal class Bubble
                                 if (_teaseStillCache.Count > 12) _teaseStillCache.Clear();
                                 _teaseStillCache[file] = bmp;
                             }
-                            Application.Current?.Dispatcher.BeginInvoke(() => { try { img.Source = bmp; } catch (Exception ex) { Diag.Swallowed(ex); } });
+                            Application.Current?.Dispatcher.BeginInvoke(() => { try { if (!_isDestroyed && !_isPopping) img.Source = bmp; } catch (Exception ex) { Diag.Swallowed(ex); } });
                         }
                         catch (Exception ex) { Diag.Swallowed(ex); }
                     });
                 }
             }
-            _teaseFaceImg = img;   // layer mode reads its current Source each frame for the Skia frame
+            _bubbleFaceImg = img;   // layer mode reads its current Source each frame for the Skia frame
             face.Children.Add(img);
         }
 
@@ -5032,6 +5131,66 @@ internal class Bubble
         };
         face.Children.Add(_teaseShine);
         _grid.Children.Add(face);
+    }
+
+    private async Task LoadAnimatedFaceAsync(Image image, string path, int size)
+    {
+        try
+        {
+            var decoded = await Task.Run(() => AnimatedWebp.DecodeFrames(path, size, 60, 6));
+            if (_isDestroyed || _isPopping) return;
+            if (decoded is { } animation)
+            {
+                _faceFrames = animation.Frames;
+                _faceFrameMs = animation.FrameDelay.TotalMilliseconds;
+                _faceStartedMs = Environment.TickCount64;
+                image.Source = animation.Frames[0];
+            }
+            else
+            {
+                var still = await Task.Run(() =>
+                {
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.DecodePixelWidth = size;
+                    bitmap.UriSource = new Uri(path, UriKind.Absolute);
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+                    return bitmap;
+                });
+                if (!_isDestroyed && !_isPopping) image.Source = still;
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("Bubble animation: {Error}", ex.Message); }
+    }
+
+    private async Task LoadRemoteFaceAsync(Image image, string path, int size)
+    {
+        bool animate = _teaseAnimatedAlive < PerformanceProfile.MaxAnimatedTeaseBubbles(PerformanceProfile.CurrentTier);
+        if (animate) { _teaseAnimated = true; _teaseAnimatedAlive++; }
+        var data = await FlashService.LoadRemoteFaceAsync(path, size, animate);
+        if (_isDestroyed || _isPopping) return;
+        if (data is { Frames.Count: > 0 })
+        {
+            image.Source = data.Frames[0];
+            if (data.ClipPath != null)
+            {
+                _faceClip = FlashClipPlayer.Start(data.ClipPath, data.Width, data.Height, frame =>
+                {
+                    if (!_isDestroyed && !_isPopping && MotionFx.Level != MotionLevel.Off) image.Source = frame;
+                });
+                if (_faceClip != null) return;
+            }
+            if (data.Frames.Count > 1)
+            {
+                _faceFrames = data.Frames;
+                _faceFrameMs = data.FrameDelay.TotalMilliseconds;
+                _faceStartedMs = Environment.TickCount64;
+                return;
+            }
+        }
+        if (_teaseAnimated) { _teaseAnimated = false; _teaseAnimatedAlive--; }
     }
 
     /// <summary>One random clip from the teasebubble pool folder (listing cached, rescanned
@@ -5121,6 +5280,9 @@ internal class Bubble
         // Release this tease's animated-gif budget slot (process-wide cap).
         if (_teaseAnimated) { _teaseAnimated = false; _teaseAnimatedAlive = Math.Max(0, _teaseAnimatedAlive - 1); }
         if (_teaseImg != null) { AnimatedWebp.Detach(_teaseImg); _teaseImg = null; }
+        _faceClip?.Dispose(); _faceClip = null;
+        _faceFrames = null;
+        if (_bubbleFaceImg != null) _bubbleFaceImg.Source = null;
 
         // Drop the visual tree + decoded-bitmap references NOW. Window.Close() alone defers
         // teardown to finalization, which lags badly under chaos's rapid spawn/close churn and

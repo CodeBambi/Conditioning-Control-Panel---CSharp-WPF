@@ -1,4 +1,4 @@
-using ConditioningControlPanel.Models;
+﻿using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Flash;
 using SkiaSharp;
 
@@ -48,6 +48,12 @@ public sealed class FlashLayer : BaseLayer
         public int FrameIndex;
         /// <summary>Gaze-dwell inflate about center, 1.0..1.1 (SetGazeDwellProgress parity).</summary>
         public double DwellScale = 1.0;
+        internal System.Windows.Point? BubbleOriginPx;
+        internal double BubbleDiameterPx;
+        internal MotionLevel EntranceMotion;
+        internal System.Windows.Rect? EntranceTarget;
+        internal double EntranceAlpha = 1;
+        internal double EntranceProgress = 1;
 
         /// <summary>Flashes v2 motion, null or Still for a classic held flash. Stepped by Update.</summary>
         public FlashMotionState? Motion;
@@ -67,6 +73,8 @@ public sealed class FlashLayer : BaseLayer
         internal SKColor GlowColor;
         internal float GlowSigmaPx;
         internal double GlowOpacity;
+        /// <summary>Natasha's favourite: a short red blink across the picture now and then.</summary>
+        internal bool NatashaCue;
         internal bool LuckyPulse;
 
         internal double ElapsedSec;          // pulse clock, advanced by Update
@@ -79,6 +87,16 @@ public sealed class FlashLayer : BaseLayer
         internal double LastOpacity = double.NaN;
         internal int LastFrameIndex = -1;
         internal double LastDwellScale = double.NaN;
+
+        internal void SetClipFrame(System.Windows.Media.Imaging.BitmapSource source)
+        {
+            if (Shatter != null || Frames == null) return;
+            var next = SkiaWpfInterop.ToSKImage(source);
+            foreach (var old in Frames) old.Dispose();
+            Frames = new[] { next };
+            FrameIndex = 0;
+            LastFrameIndex = -1;
+        }
 
         internal void ReleaseFrames()
         {
@@ -199,6 +217,19 @@ public sealed class FlashLayer : BaseLayer
         {
             var item = _items[i];
             item.ElapsedSec += delta.TotalSeconds;
+            if (item.Shatter == null && item.BubbleOriginPx is { } origin)
+            {
+                item.EntranceTarget ??= new System.Windows.Rect(item.X, item.Y, item.W, item.H);
+                var sample = FlashDelivery.Sample(origin, item.BubbleDiameterPx,
+                    item.EntranceTarget.Value, item.ElapsedSec, MotionFx.Level == MotionLevel.Off
+                        ? MotionLevel.Off : item.EntranceMotion);
+                item.X = (float)sample.Rect.X; item.Y = (float)sample.Rect.Y;
+                item.W = (float)sample.Rect.Width; item.H = (float)sample.Rect.Height;
+                item.EntranceAlpha = sample.Alpha;
+                item.EntranceProgress = sample.Progress;
+                _dirty = true;
+                if (sample.Progress >= 1 && sample.Alpha >= 1) item.BubbleOriginPx = null;
+            }
 
             if (item.Shatter is { } shatter)
             {
@@ -263,7 +294,7 @@ public sealed class FlashLayer : BaseLayer
 
             if (!rect.IntersectsWith(boundsPx)) continue;   // cull to this monitor (the AABB)
 
-            var alpha = (byte)Math.Clamp(item.Opacity * 255, 0, 255);
+            var alpha = (byte)Math.Clamp(item.Opacity * item.EntranceAlpha * 255, 0, 255);
             var image = frames[Math.Clamp(item.FrameIndex, 0, frames.Length - 1)];
 
             int saves = canvas.Save();
@@ -291,9 +322,25 @@ public sealed class FlashLayer : BaseLayer
             // The image sits PaddingPx inside the bookkeeping rect (glow inset), letterboxed
             // uniform like Stretch.Uniform - geometry preserves aspect, so fit is a no-op in
             // practice, but the 50px minimum clamp can distort slightly on tiny images.
-            var inner = new SKRect(rect.Left + item.PaddingPx, rect.Top + item.PaddingPx,
-                rect.Right - item.PaddingPx, rect.Bottom - item.PaddingPx);
+            var padding = item.PaddingPx * (float)item.EntranceProgress;
+            var inner = new SKRect(rect.Left + padding, rect.Top + padding,
+                rect.Right - padding, rect.Bottom - padding);
             var fit = UniformFit(image.Width, image.Height, inner);
+            if (item.EntranceProgress < 1)
+            {
+                // Start with the same circle and center crop used by the bubble face.
+                var radius = (float)(Math.Min(inner.Width, inner.Height) * .5 * (1 - item.EntranceProgress)
+                    + item.CornerRadiusPx * item.EntranceProgress);
+                canvas.ClipRoundRect(new SKRoundRect(inner, radius), antialias: true);
+                var scale = Math.Max(inner.Width / image.Width, inner.Height / image.Height);
+                var fw = image.Width * scale; var fh = image.Height * scale;
+                fit = new SKRect(inner.MidX - fw / 2, inner.MidY - fh / 2,
+                    inner.MidX + fw / 2, inner.MidY + fh / 2);
+                _imagePaint.Color = new SKColor(255, 255, 255, alpha);
+                canvas.DrawImage(image, fit, _imagePaint);
+                canvas.RestoreToCount(saves);
+                continue;
+            }
 
             if (item.HasGlow)
             {
@@ -319,7 +366,7 @@ public sealed class FlashLayer : BaseLayer
                 }
                 _fillPaint.MaskFilter = item.BlurCache;
                 _fillPaint.Color = item.GlowColor.WithAlpha(
-                    (byte)Math.Clamp(glowAlpha * item.Opacity * 255, 0, 255));
+                    (byte)Math.Clamp(glowAlpha * item.Opacity * item.EntranceAlpha * 255, 0, 255));
                 canvas.DrawRoundRect(new SKRoundRect(fit, item.CornerRadiusPx), _fillPaint);
                 _fillPaint.MaskFilter = null;
 
@@ -345,6 +392,17 @@ public sealed class FlashLayer : BaseLayer
 
             _imagePaint.Color = new SKColor(255, 255, 255, alpha);
             canvas.DrawImage(image, fit, _imagePaint);
+            if (item.NatashaCue)
+            {
+                var wash = Chaster.NatashasFavourite.WashAlphaAt(item.ElapsedSec);
+                if (wash > 0.003)
+                {
+                    _fillPaint.MaskFilter = null;
+                    _fillPaint.Color = new SKColor(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B,
+                        (byte)Math.Clamp(wash * alpha, 0, 255));
+                    canvas.DrawRoundRect(new SKRoundRect(fit, item.CornerRadiusPx), _fillPaint);
+                }
+            }
             canvas.RestoreToCount(saves);
         }
     }

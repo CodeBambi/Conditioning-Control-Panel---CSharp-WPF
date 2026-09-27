@@ -122,6 +122,10 @@ namespace ConditioningControlPanel
                 UpdateDiscordTabUI();
                 UpdateBannerWelcomeMessage();
                 UpdateAccountLinkingUI();
+                // The prize counter is cached per account: its prices, its door and any refusal it
+                // recorded belong to whoever was signed in. Without this the next account reads the
+                // last one's "Not enough Sparkle Points".
+                App.V2Purchase?.Invalidate();
 
                 if (!isSameAccount)
                 {
@@ -356,6 +360,11 @@ namespace ConditioningControlPanel
             // block, the block-seen flag and the fetch floor, and raises BlockChanged
             // so the surface disarms (which resets the fill coordinator with it).
             App.Descent?.Reset();
+
+            // The prize counter's cache belongs to the account that was just signed out: its
+            // prices, its door and any refusal it recorded. Ownership itself is already
+            // account-bound (OwnershipService drops another account's grants).
+            App.V2Purchase?.Invalidate();
 
             // Update all UI
             UpdateQuickLoginUI();

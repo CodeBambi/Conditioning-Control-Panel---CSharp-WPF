@@ -968,7 +968,9 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             try
             {
                 var media = new Media(libvlc, new Uri(path));
-                var player = new VlcMediaPlayer(libvlc) { Volume = 0 };
+                // Silent through :no-audio; Volume = 0 zeroed every player's sound (LibVlcSilence).
+                media.AddOption(LibVlcSilence.NoAudioOption);
+                var player = new VlcMediaPlayer(libvlc);
                 view.MediaPlayer = player;
 
                 // Random offset for variety: jump to a position somewhere in the

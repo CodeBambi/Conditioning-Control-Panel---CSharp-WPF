@@ -24,5 +24,23 @@ namespace ConditioningControlPanel.Models
         /// higher of server and local wins, clamped to the cap.
         /// </summary>
         public static int MergeMax(int server, int local) => Clamp(Math.Max(server, local));
+
+        /// <summary>
+        /// A skill purchase the server refused for balance. The client credits level-ups and bubble
+        /// milestones the moment they happen, but the server only credits them at its next sync and
+        /// counts bubbles from the season's start, so its 100-bubble boundaries fall on different
+        /// pops than ours (ccp-bugs #1268 #1269). While ours runs ahead, the wallet shows a point the
+        /// purchase will not honour. Returns the server's number when it refused for balance and is
+        /// below ours, so every surface shows what a purchase is judged on; null keeps local.
+        /// Nothing is lost: the server credits the same point at its own boundary and MergeMax
+        /// raises us back on that sync.
+        /// </summary>
+        public static int? AdoptAfterRefusal(int local, int? server, int cost)
+        {
+            if (!server.HasValue) return null;
+            var s = Clamp(server.Value);
+            if (s >= cost || s >= local) return null;
+            return s;
+        }
     }
 }

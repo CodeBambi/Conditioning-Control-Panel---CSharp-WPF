@@ -148,7 +148,7 @@ const ops = (s) => s.map((x) => (x.op === 'beat' ? 'beat:' + x.id : x.op));
 
 test('the callout for a settled hand and the winning cards in dealt order (callout.js)', () => {
   assert.equal(WIN_HOLD_MS, 2000, 'Deal waits FX_DELAY_MS + CALLOUT_MS from the settle frame at least');
-  assert.deepEqual(Object.keys(CALLOUTS).sort(), ['cards.bloom', 'cards.dealer_bust', 'cards.streak', 'cards.sweep', 'cards.win']);
+  assert.deepEqual(Object.keys(CALLOUTS).sort(), ['cards.bloom', 'cards.dealer_bust', 'cards.lose', 'cards.push', 'cards.streak', 'cards.sweep', 'cards.win']);
   for (const c of Object.values(CALLOUTS)) assert.ok(/^br_callout_[a-z_]+$/.test(c.key) && c.fallback && ['small', 'big', 'hero'].includes(c.tier));
   assert.deepEqual(calloutFor('cards.win'), { key: 'br_callout_winner', fallback: 'Winner', tier: 'small' });
   assert.equal(calloutFor('cards.win', { bloomed: true }), null, 'a blackjack said its name at the bloom; its plain settle says nothing');
@@ -156,7 +156,12 @@ test('the callout for a settled hand and the winning cards in dealt order (callo
   assert.equal(calloutFor('cards.dealer_bust').tier, 'small');
   assert.equal(calloutFor('cards.streak').key, 'br_callout_hot_hand');
   assert.deepEqual(calloutFor('cards.sweep', { bloomed: true }), { key: 'br_callout_sweep', fallback: 'Sweep', tier: 'hero' }, 'a sweep is bigger than the bloom and still shows');
-  for (const id of ['cards.lose', 'cards.push', 'cards.deal', 'cards.hit', 'cards.sit', 'nope']) assert.equal(calloutFor(id), null, id);
+  // (tester, 2026-09-18) a loss and a push name themselves at the win's size, and a bloom never silences them
+  assert.deepEqual(calloutFor('cards.lose'), { key: 'br_callout_dealer_wins', fallback: 'Dealer Wins', tier: 'small' });
+  assert.deepEqual(calloutFor('cards.push'), { key: 'br_callout_push', fallback: 'Push', tier: 'small' });
+  assert.equal(calloutFor('cards.lose', { bloomed: true }).key, 'br_callout_dealer_wins');
+  assert.equal(calloutFor('cards.push').tier, calloutFor('cards.win').tier, 'the same size as Winner');
+  for (const id of ['cards.deal', 'cards.hit', 'cards.sit', 'nope']) assert.equal(calloutFor(id), null, id);
 
   assert.deepEqual(winningCards(bj), [{ owner: 0, slot: 0 }, { owner: 0, slot: 1 }], 'a one-hand win: its cards in slot order');
   assert.deepEqual(winningCards(lose), [], 'a loss lights nothing');

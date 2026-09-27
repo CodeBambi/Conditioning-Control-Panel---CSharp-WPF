@@ -216,9 +216,28 @@ internal static class BackRoomHostService
 
     public static bool IsActive => _host != null;
 
+    /// <summary>
+    /// What a signed-out Launch does instead of opening the room: the account sign-in. Settable so
+    /// a test can see the refusal without a MainWindow.
+    /// </summary>
+    internal static Action RequestSignIn { get; set; } = () =>
+        // MainWindowRef, not Application.Current.MainWindow: that can be the launcher or null in the tray.
+        (App.MainWindowRef ?? Application.Current?.MainWindow as MainWindow)?.OpenUnifiedLoginDialog();
+
+    /// <summary>
+    /// Every door into the casino ends here (Play card, Exclusives, the Sparkle wallet, EMI, the
+    /// friends drawer, the launcher), so the sign-in gate lives here once. The room's balance,
+    /// stations and prizes are the account's; a signed-out room could only fail at every table.
+    /// </summary>
     public static void Launch()
     {
         if (_host != null) { _host.FocusWeb(); return; }
+        if (Launcher.LauncherCatalogue.NeedsAccount)
+        {
+            App.Logger?.Information("BackRoomHostService: refused, nobody is signed in");
+            try { RequestSignIn(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom sign-in"); }
+            return;
+        }
         try { App.EmiDesk?.NoteOpen("backroom"); } catch (Exception ex) { Diag.Swallowed(ex); }
 
         try
@@ -258,6 +277,7 @@ internal static class BackRoomHostService
                 Mappings = mappings,
                 UserDataFolderName = "backroom",
                 InputEnabled = true,
+                IsGame = true,   // the startup ladder goes quiet while a game is up
                 StartFullscreen = false,
                 OwnedByMainWindow = true,
                 CenterOnMainWindow = true,
@@ -278,6 +298,7 @@ internal static class BackRoomHostService
                 w.Activated += (_, _) => OnWindowActivated();
             }
             App.Logger?.Information("BackRoomHostService: launched");
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom);
         }
         catch (Exception ex)
         {
@@ -320,6 +341,10 @@ internal static class BackRoomHostService
                 CloseWindow = OnRoomClosed,
                 Schedule = Schedule,
                 NoteEvent = key => App.FeatureDayLog?.Note(key),
+                // 10.23: a station's flat pulses reach the toy; the director gates on the haptics settings.
+                Haptic = Haptics.BackRoomHapticDirector.OnHaptic,
+                // 10.24: a slot outcome the server dealt really landed; Circe's tab reads its line.
+                SlotLanded = ConditioningControlPanel.Services.Chaster.ChasterHooks.SlotLanded,
                 SetOption = option => OnUi(() =>
                 {
                     if (App.Settings?.Current is not { } s) return;
@@ -616,6 +641,7 @@ internal static class BackRoomHostService
             // sweep still clears anything a crash left behind.
             _panicSuspended = _minimised = false;
             App.Logger?.Information("BackRoomHostService: closed");
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
         }
         finally { _disposing = false; }
     }

@@ -185,6 +185,7 @@ namespace ConditioningControlPanel.Services
                 ConnectPin = pin;
                 Tier = tier;
                 IsActive = true;
+                App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Remote);
                 _consecutivePollFailures = 0;
                 _consecutivePollSuccesses = 0;
                 _totalCommandsReceived = 0;
@@ -363,6 +364,7 @@ namespace ConditioningControlPanel.Services
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
             }
 
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
             SessionEnded?.Invoke(this, EventArgs.Empty);
         }
 
@@ -1126,6 +1128,8 @@ namespace ConditioningControlPanel.Services
                         // Light tier
                         case "trigger_flash":
                             App.Flash?.TriggerFlashOnce();
+                            // Circe's tab: what the controller sends lands on the wearer's tab.
+                            try { App.Chaster?.Note("remote_media"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster remote hook"); }
                             break;
 
                         case "trigger_subliminal":
@@ -1235,6 +1239,7 @@ namespace ConditioningControlPanel.Services
                         // Standard tier
                         case "trigger_video":
                             App.Video?.TriggerVideo();
+                            try { App.Chaster?.Note("remote_video"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster remote hook"); }
                             break;
 
                         case "start_video":

@@ -165,6 +165,7 @@ internal static class CaucusHostService
                 // Own browser profile: the descent's WebView2 state stays untouched.
                 UserDataFolderName = "browser_data_race",
                 InputEnabled = true,
+                IsGame = true,   // the startup ladder goes quiet while a game is up
                 // A normal titled window at launch; the page's fullscreen-set toggles the
                 // borderless mode through the host (never the browser Fullscreen API, which
                 // would take Esc away from the page).
@@ -191,6 +192,7 @@ internal static class CaucusHostService
             if (_devTrackLog) ArmDevTrackDrive();
             if (_devOpenCloud) DevAfter(3, () => OpenCloudWindow());
             App.Logger?.Information("CaucusHostService: launched");
+            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Race);
         }
         catch (Exception ex)
         {
@@ -681,6 +683,7 @@ internal static class CaucusHostService
             _meta = null;
             _exiting = false;
             App.Logger?.Information("CaucusHostService: closed");
+            App.Friends?.SetActivity(returnToRoom != null ? ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom : ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
             returnToRoom?.Invoke();
         }
         finally { _disposing = false; }

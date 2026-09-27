@@ -321,7 +321,7 @@ namespace ConditioningControlPanel
             // this. Settings is created later in OnStartup; the delegate reads it lazily.
             CoreSettings.ServiceProvider = () => Settings;
             // The mod service's side effects on a switch, and what it asks the head.
-            CoreModsHooks.ModSwitched = () => Brain?.OnModSwitched();
+            CoreModsHooks.ModSwitched = newCompanionName => Brain?.OnModSwitched(newCompanionName);
             CoreModsHooks.ReloadBarkRules = () => Bark?.ReloadRules();
             CoreModsHooks.EventAccentHexProvider = () => LiveEvent?.AccentHex;
             CoreModsHooks.ActiveCompanionProvider = () => Companion?.ActiveCompanion;
@@ -452,8 +452,29 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    Notifications?.Show(verdict.Reason, NotificationType.Warning, TimeSpan.FromSeconds(8),
-                        Loc.Get("tiergate_see_tiers"), () => MainWindowRef?.ShowAppInfoPopup());
+                    // A patron whose Patreon grant died on this PC is being refused a door they paid
+                    // for, and "upgrade your pledge" is the wrong sentence to hand them. When
+                    // PatreonReconnectRule says the row is in its prominent Reconnect state - linked
+                    // server-side, no token here, premium off - the refusal says what actually
+                    // happened and its button repairs it instead of selling them a tier they hold.
+                    var row = PatreonReconnectRule.Decide(
+                        hasUnifiedId: !string.IsNullOrEmpty(Settings?.Current?.UnifiedId),
+                        linkedServerSide: Settings?.Current?.HasLinkedPatreon == true,
+                        desktopAuthenticated: Patreon?.IsAuthenticated == true,
+                        hasPremiumNow: Patreon?.HasPremiumAccess == true,
+                        whitelisted: Patreon?.IsWhitelisted == true);
+
+                    if (row.Prominent)
+                    {
+                        Notifications?.Show(Loc.Get("tiergate_denied_reconnect"), NotificationType.Warning,
+                            TimeSpan.FromSeconds(10), Loc.Get("tiergate_reconnect_action"),
+                            () => MainWindowRef?.StartPatreonReconnectFromGate());
+                    }
+                    else
+                    {
+                        Notifications?.Show(verdict.Reason, NotificationType.Warning, TimeSpan.FromSeconds(8),
+                            Loc.Get("tiergate_see_tiers"), () => MainWindowRef?.ShowAppInfoPopup());
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -888,6 +909,8 @@ namespace ConditioningControlPanel
         public static DailyFreeService? DailyFree { get; private set; }
         /// <summary>Back Room prize ownership, server snapshots held in memory (see Services/Prizes/OwnershipService).</summary>
         public static Services.Prizes.OwnershipService? Ownership { get; private set; }
+        /// <summary>Buying a v2 prize from the options panel (see Services/Prizes/V2PurchaseService).</summary>
+        public static Services.Prizes.V2PurchaseService? V2Purchase { get; private set; }
         /// <summary>Eight-hole intake punch card (see IntakePunchCardService).</summary>
         public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
@@ -917,8 +940,15 @@ namespace ConditioningControlPanel
 
         public static PatreonService Patreon { get; private set; } = null!;
         public static SubscribeStarService SubscribeStar { get; private set; } = null!;
+        /// <summary>The Chaster link and Circe's tab. Inert until the player links an account AND switches the tab on.</summary>
+        public static Services.Chaster.ChasterService? Chaster { get; private set; }
         public static UpdateService Update { get; private set; } = null!;
         public static ProfileSyncService ProfileSync { get; private set; } = null!;
+
+        /// <summary>FRIENDS (2026-09-23): the friend list, presence and the preset inbox. Null until
+        /// startup builds it and after exit; every caller guards with <c>App.Friends?.</c>.</summary>
+        public static Services.Friends.IFriendsService? Friends { get; private set; }
+        private static Services.Friends.FriendsService? _friendsService;
 
         /// <summary>
         /// THE DESCENT — reader for the server's `descent` block (the vat, the stage
@@ -2397,6 +2427,7 @@ namespace ConditioningControlPanel
             // later in OnStartup, so this only moves the entitlement READ earlier.
             Patreon = new PatreonService();
             SubscribeStar = new SubscribeStarService();
+            Chaster = Services.Chaster.ChasterService.CreateForApp();
 
             splash?.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
@@ -2442,6 +2473,31 @@ namespace ConditioningControlPanel
             // CCP_PRIZE_GRANTS desk-test override. The static PrizeGrants facade the effect lanes call forwards here.
             Ownership = new Services.Prizes.OwnershipService();
             Services.Prizes.PrizeGrants.Attach(Ownership);
+            // Buying a v2 prize from the options panel instead of the Back Room (owner decision,
+            // 2026-09-19). Pure constructor: the counter is read only when a "Get it" row is put on
+            // screen. The relay is the room's own, so a reply applies its prizes block.
+            //
+            // adoptSp is NULL on the relay on purpose: it would adopt the `sp` in any reply,
+            // including a plain counter/state read, and a read must never lower a wallet a local
+            // level-up has already credited. The service knows which op answered and hands the
+            // balance here instead (V2WalletAdoption is the rule).
+            V2Purchase = new Services.Prizes.V2PurchaseService(
+                new Services.BackRoom.BackRoomApi(null, Services.BackRoom.BackRoomApi.AppIdentity, adoptSp: null),
+                () => Services.BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
+                Services.Prizes.V2PurchaseRule.OwnsPrize,
+                () => Settings?.Current?.SkillPoints ?? 0,
+                // The account is captured when the reply lands and checked AGAIN inside the
+                // marshalled write, the `canAdopt` shape BackRoomBridge.AdoptSp uses: the write
+                // runs after an await, so the player may be somebody else by then.
+                (account, fromBuy, sp) => Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                {
+                    if (Settings?.Current is not { } s) return;
+                    var same = string.Equals(Services.BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
+                        account, StringComparison.Ordinal);
+                    if (!Services.Prizes.V2WalletAdoption.Decide(same, fromBuy, sp, s.SkillPoints, out var next)) return;
+                    s.SkillPoints = next;
+                    Settings.Save();
+                })));
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); Patreon is constructed above too.
             Programs = new Services.Program.ProgramService();
@@ -2658,6 +2714,16 @@ namespace ConditioningControlPanel
             // - moves within about a minute instead of whenever something unrelated
             // next happens to sync.
             ProfileSync.AttachXpNudge();
+            // FRIENDS: builds with no request; the poll reads the account itself on every tick
+            // (there is no sign-out event), and a loaded profile is the sign-in moment to poll now.
+            try
+            {
+                _friendsService = Services.Friends.FriendsService.CreateForApp();
+                Friends = _friendsService;
+                ProfileSync.ProfileLoaded += (_, _) => _friendsService?.Kick();
+                _friendsService.Start();
+            }
+            catch (Exception ex) { Logger?.Warning("Friends service failed to start: {E}", ex.Message); }
             // Constructing it costs nothing and issues no request: it fetches only when a
             // surface asks. The ungated 60s background poll that used to start here was
             // retired in the Redis bandwidth pass (2026-09-15) - the cross-device XP adopt
@@ -2703,7 +2769,8 @@ namespace ConditioningControlPanel
                 {
                     try
                     {
-                        KeywordPresets.InstallPreset(presetId);
+                        // A re-install keeps the player's earlier answer on Chaster time.
+                        KeywordPresets.InstallPreset(presetId, KeywordPresets.ChasterTimeWasAllowed(presetId));
                     }
                     catch (Exception ex)
                     {
@@ -2774,6 +2841,11 @@ namespace ConditioningControlPanel
             // and Speech all have to exist first, and this is the first point at which they all do.
             try { EmiDesk?.WireAppEvents(); }
             catch (Exception exWire) { Logger?.Debug(exWire, "[EmiDesk] app event wiring failed"); }
+
+            // Friends: what a poke, an invite or a watch does when it lands. Attaches itself to
+            // App.Friends whenever that exists; harmless while it is null.
+            try { Services.Friends.FriendsLanding.Start(); }
+            catch (Exception exFl) { Logger?.Debug(exFl, "[Friends] landing start failed"); }
 
             // Initialize content packs service
             ContentPacks = new ContentPackService();
@@ -2947,6 +3019,11 @@ namespace ConditioningControlPanel
             // Initialize SubscribeStar (validate subscription in background). Shares
             // the unified account + premium gate with Patreon (see PatreonService gate).
             _ = SubscribeStar.InitializeAsync();
+            // Circe's tab settles once a day, at the first chance: a minute after launch, then on
+            // the hour in case the app sits in the tray across midnight. Never at exit, where a
+            // call cut off mid-flight could land on the lock and not on the tab.
+            Chaster?.StartSettle();
+            if (Chaster != null) Services.Chaster.ChasterHooks.Attach(Chaster);
 
             // Initialize Discord OAuth (validate session in background)
             _ = InitializeDiscordAsync();
@@ -3992,6 +4069,15 @@ namespace ConditioningControlPanel
             {
                 // Initialize Patreon authentication
                 await Patreon.InitializeAsync();
+
+                // The account page's Patreon row is painted at window load, which happens while the
+                // line above is still in flight - and the validate is what decides whether this PC
+                // holds a grant that works. Repaint it once the answer is in, or a patron whose
+                // grant died sees the row only on their NEXT launch. DispatcherPriority.Normal:
+                // Loaded is starved here and would silently never run.
+                MainWindowRef?.Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Normal,
+                    new Action(() => MainWindowRef?.RefreshAccountLinkingRow()));
 
                 // If authenticated, load cloud profile and start heartbeat
                 if (Patreon.IsAuthenticated)
@@ -5974,6 +6060,8 @@ Application State:
             Patreon?.Dispose();
             Update?.Dispose();
             ProfileSync?.Dispose();
+            _friendsService?.Dispose();
+            Friends = null;
             Leaderboard?.Dispose();
             DiscordRpc?.Dispose();
             Discord?.Dispose();

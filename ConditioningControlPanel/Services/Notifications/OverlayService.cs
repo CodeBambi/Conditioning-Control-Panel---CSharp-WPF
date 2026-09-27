@@ -2162,6 +2162,17 @@ public class OverlayService : IDisposable
             return;
         }
 
+        // Strength 0 is the slider's "no picture" position, and it has to be refused HERE rather
+        // than passed down: BrainDrainLayer.AlphaFor clamps its input up to 1, so a zero that got
+        // this far would arrive on screen as the faintest haze instead of as nothing. Above the
+        // EMI hook for the same reason the withheld gate is: she must not react to an effect the
+        // user did not get. The audio half is elsewhere and is untouched by this.
+        if (BrainDrainVisualPolicy.IsSilent(intensity))
+        {
+            App.Logger?.Debug("Brain Drain visual skipped - blur strength is 0 (the audio half is unaffected)");
+            return;
+        }
+
         // EMI Desk (MOMENTS 4.B). Below the withheld gate on purpose: she must never react to an
         // effect the user did not get.
         try { App.EmiDesk?.Fire("brainDrainOn", new { n = intensity, melt }); } catch { }
@@ -3675,7 +3686,12 @@ public class OverlayService : IDisposable
             return;
         }
 
-        bool featureWantsIt = settings.BrainDrainEnabled;
+        // A blur strength of 0 means the base feature does not want the PICTURE, which is the same
+        // shape as it being switched off: the blur comes down through the hold-respecting branch
+        // below (so a Deeper band or a timed effect keeps its own drain), and BrainDrainService
+        // keeps playing the audio on its own schedule.
+        bool featureWantsIt = BrainDrainVisualPolicy.WantsBlur(
+            settings.BrainDrainEnabled, settings.BrainDrainBlurStrength);
         if (featureWantsIt)
         {
             if (!BrainDrainShowing)

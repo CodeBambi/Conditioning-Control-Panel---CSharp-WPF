@@ -243,6 +243,7 @@ namespace ConditioningControlPanel
             // IsVisibleChanged (Loaded fires once) and disposes the embed on the way out, so
             // leaving the tab leaves no idle Chromium behind it.
             if (SpiralTab != null) SpiralTab.Visibility = Visibility.Collapsed;
+            if (ChasterTab != null) ChasterTab.Visibility = Visibility.Collapsed;
             if (AppSettingsTab != null) AppSettingsTab.Visibility = Visibility.Collapsed;
 
             // Phase 1: no more per-tab style swapping. The rail's active state is a real
@@ -343,7 +344,13 @@ namespace ConditioningControlPanel
                     {
                         DeeperTab.Visibility = Visibility.Visible;
                         AnimateTabIn(DeeperTab);
-                        RefreshDeeperLibraryUI();
+                        // The hub's lazy init is what unblocks ApplyDeeperFilterAndSort, so it has to
+                        // run on EVERY door into this tab, not only the rail entry: the Play card, the
+                        // Ctrl+K row and the Settings jumps are all bare ShowTab calls, and before this
+                        // they landed on a scanned-but-never-projected list (pills reading 0, no rows,
+                        // no empty state). Idempotent, and it does the first scan itself, so only a
+                        // later show pays for a second one.
+                        if (!InitializeDeeperHub()) RefreshDeeperLibraryUI();
                         // Phase 2: the Deeper hub's device/monitor pickers moved to
                         // Settings → Devices, so there is nothing to populate here. The refresh
                         // below still fills the consent + calibration status cells, which are
@@ -568,6 +575,18 @@ namespace ConditioningControlPanel
                         // same "explain it where it exists" rule descent-vat follows on the
                         // Trainer Card.
                         if (SpiralTab.IsShowingSpiral) MaybeShowFeatureIntro("descent-spiral", "spiral");
+                    }
+                    break;
+
+                // CIRCE'S TAB. Its door is the padlock chip in the rail's pinned cluster, which is
+                // not a door medallion, so the key has no NavDoorMap row: nothing expands and no
+                // "you are here" ring lights, the same as the spiral medallion it replaced.
+                case "chaster":
+                    if (ChasterTab != null)
+                    {
+                        ChasterTab.Visibility = Visibility.Visible;
+                        AnimateTabIn(ChasterTab);
+                        ChasterTab.OnTabShown();
                     }
                     break;
 

@@ -220,40 +220,51 @@
                     <helpers:EmojiTextBlock Text="{loc:Str label_link_to_ramp}"
                                             Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"
                                             Margin="0,0,0,6"/>
+                    <!-- Every chip carries a tooltip naming the dial it moves. "Master" and "Sub"
+                         read as two mystery words sitting next to four visual effects (general
+                         chat 2026-09-16), and a ramp quietly pulling the master volume down is the
+                         first thing support asks about when someone's audio drifts - so those two
+                         say "volume" in the label itself, not only in the tip. -->
                     <WrapPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6"
+                                    ToolTip="{loc:Str tooltip_ramp_link_flash}">
                             <CheckBox x:Name="ChkLinkFlash" Style="{StaticResource ToggleStyle}"
                                       Checked="Link_Changed" Unchecked="Link_Changed"/>
                             <TextBlock Text="{loc:Str label_flash}" Foreground="{StaticResource TextLightBrush}"
                                        FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6"
+                                    ToolTip="{loc:Str tooltip_ramp_link_spiral}">
                             <CheckBox x:Name="ChkLinkSpiral" Style="{StaticResource ToggleStyle}"
                                       Checked="Link_Changed" Unchecked="Link_Changed"/>
                             <TextBlock Text="{loc:Str label_spiral}" Foreground="{StaticResource TextLightBrush}"
                                        FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6"
+                                    ToolTip="{loc:Str tooltip_ramp_link_pink}">
                             <CheckBox x:Name="ChkLinkPink" Style="{StaticResource ToggleStyle}"
                                       Checked="Link_Changed" Unchecked="Link_Changed"/>
                             <TextBlock Text="{loc:Str label_pink}" Foreground="{StaticResource TextLightBrush}"
                                        FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6"
+                                    ToolTip="{loc:Str tooltip_ramp_link_master}">
                             <CheckBox x:Name="ChkLinkMaster" Style="{StaticResource ToggleStyle}"
                                       Checked="Link_Changed" Unchecked="Link_Changed"/>
-                            <TextBlock Text="{loc:Str setting_master}" Foreground="{StaticResource TextLightBrush}"
+                            <TextBlock Text="{loc:Str label_ramp_link_master}" Foreground="{StaticResource TextLightBrush}"
                                        FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6"
+                                    ToolTip="{loc:Str tooltip_ramp_link_sub}">
                             <CheckBox x:Name="ChkLinkSub" Style="{StaticResource ToggleStyle}"
                                       Checked="Link_Changed" Unchecked="Link_Changed"/>
-                            <TextBlock Text="{loc:Str label_sub}" Foreground="{StaticResource TextLightBrush}"
+                            <TextBlock Text="{loc:Str label_ramp_link_sub}" Foreground="{StaticResource TextLightBrush}"
                                        FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                         <!-- Brain Drain rides the ramp like the spiral does. The BLUR strength, not
                              the audio trigger rate - see RampLinkBrainDrain. -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    ToolTip="{loc:Str tooltip_ramp_link_braindrain}">
                             <CheckBox x:Name="ChkLinkBrainDrain" Style="{StaticResource ToggleStyle}"
                                       Checked="Link_Changed" Unchecked="Link_Changed"/>
                             <TextBlock Text="{loc:Str label_braindrain}" Foreground="{StaticResource TextLightBrush}"

@@ -37,6 +37,7 @@ namespace ConditioningControlPanel.Views.Tabs
         // --- linking ---
         internal System.Windows.Controls.Border AccountLinkingSection => SectionAccount.AccountLinkingSection;
         internal System.Windows.Controls.Button BtnLinkPatreon => SectionAccount.BtnLinkPatreon;
+        internal System.Windows.Controls.TextBlock TxtPatreonReconnectHint => SectionAccount.TxtPatreonReconnectHint;
         internal System.Windows.Controls.Button BtnLinkDiscord => SectionAccount.BtnLinkDiscord;
 
         // --- cloud backup ---

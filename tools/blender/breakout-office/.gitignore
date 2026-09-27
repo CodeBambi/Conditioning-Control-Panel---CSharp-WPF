@@ -1,0 +1,11 @@
+*.blend
+*.blend1
+*-frames/
+*-manifest.json
+*-render.json
+motion-frames/
+final-frames/
+office-*.png
+office-*.mp4
+office-*.jpg
+manifest.json
