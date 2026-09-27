@@ -8,6 +8,7 @@
  * payload-free).
  * ==========================================================================*/
 import POWER from './reactions/power.js';
+import ENDLESS from './reactions/endless.js';
 
-export const REACTIONS = { ...POWER };
+export const REACTIONS = { ...POWER, ...ENDLESS };
 export default REACTIONS;
