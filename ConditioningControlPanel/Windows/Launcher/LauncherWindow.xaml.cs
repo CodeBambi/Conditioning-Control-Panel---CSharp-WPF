@@ -114,6 +114,7 @@ public partial class LauncherWindow : Window
 
             LauncherSfx.Open();
             FxOnShown(_firstShow);
+            EdgeOnShown();
             _firstShow = false;
         }
         catch (Exception ex) { Log.Warning(ex, "[Launcher] OnShown failed"); }
@@ -125,6 +126,7 @@ public partial class LauncherWindow : Window
         StopOpenTables();
         RestoreRootOpacity();
         try { FxOnHidden(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnHidden threw"); }
+        EdgeOnHidden();
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -158,6 +160,7 @@ public partial class LauncherWindow : Window
             lockdown.LockdownDeactivated -= OnLockdownChanged;
         }
         try { FxOnClosed(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnClosed threw"); }
+        EdgeOnClosed();
         TierBadgeFxStop();
     }
 
