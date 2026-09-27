@@ -262,7 +262,7 @@ export function createJiggle() {
   function impulse(piece, { bend = null, squash = 0, local = false } = {}) {
     const s = stateOf(piece);
     if (!s) return;
-    const g = gain() / s.world;
+    const g = gain() / s.world * (piece.userData.type === 'p' ? .60 : 1);
     if (bend) {
       const v = local ? dir.set(bend[0], 0, bend[1]) : toLocal(piece, bend[0], bend[1]);
       s.vel.x += v.x * g;
@@ -344,8 +344,9 @@ export function createJiggle() {
       s.bend.y = THREE.MathUtils.clamp(s.bend.y, -T.maxBend, T.maxBend);
       s.squash = THREE.MathUtils.clamp(s.squash, -T.maxSquash, T.maxSquash);
       if (idle && !piece.userData.busy && !piece.userData.held) {
-        s.forced.x += Math.sin(clock * T.idleFreq + s.phase) * idle;
-        s.forced.y += Math.cos(clock * T.idleFreq * T.idleCross + s.phase * 1.7) * idle;
+        const firmness = piece.userData.type === 'p' ? .40 : 1;
+        s.forced.x += Math.sin(clock * T.idleFreq + s.phase) * idle * firmness;
+        s.forced.y += Math.cos(clock * T.idleFreq * T.idleCross + s.phase * 1.7) * idle * firmness;
       }
       s.u.uBend.value.set(s.bend.x + s.forced.x, s.bend.y + s.forced.y);
       s.u.uSquash.value = s.squash;

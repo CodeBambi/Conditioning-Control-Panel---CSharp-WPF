@@ -1,3 +1,7 @@
+The pawn/plug has a firmer response: capture bend is 45% of the shared amount,
+stretch is 55%, and landing oscillation decays faster. Ordinary hop, drag and
+idle flex are also reduced. Its deliberate capture squash is preserved.
+
 ## Contact weight
 
 Heavy contacts briefly ease the actors to a near-stop 18 ms after impact,

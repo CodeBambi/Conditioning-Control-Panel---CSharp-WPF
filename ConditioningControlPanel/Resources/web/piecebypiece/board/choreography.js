@@ -148,6 +148,12 @@ export function createChoreography({ group, emit, landed, reduced }) {
       }
       act.stretch = flex.stretch; act.drop = flex.drop; act.twist = flex.twist; act.bulge = flex.bulge || 0;
     }
+    // The short plug has a firm body; keep its deliberate capture squash in root scale.
+    if (piece.userData.type === 'p') {
+      for (const key of ['x', 'z', 'lx', 'lz', 'twist']) act[key] *= .45;
+      act.stretch *= .55; act.bulge *= .55;
+      for (const key of ['dx', 'dy', 'dz']) act[key] = (act[key] || 0) * .55;
+    }
     piece.userData.capturePose = act;
     const b = captureBounds(piece, box);
     piece.position.y -= Math.min(0, b.min.y); // rotated bases, crowns and heads stay above the board
@@ -349,8 +355,9 @@ export function createChoreography({ group, emit, landed, reduced }) {
         const stomp = type === 'p' || type === 'n';
         // Stomp contact is the first landing, not the later move onto the empty square.
         const elapsed = Math.max(0, t - (stomp ? hit : arrival)), fade = 1 - phase(t, spec.end - .22, spec.end);
-        const ring = -Math.sin(elapsed * 23) * Math.exp(-elapsed * 4.5) * fade;
-        const delayed = -Math.sin(elapsed * 23 - .45) * Math.exp(-elapsed * 4.5) * phase(elapsed, 0, .04) * fade;
+        const damping = a.type === 'p' ? 10 : 4.5;
+        const ring = -Math.sin(elapsed * 23) * Math.exp(-elapsed * damping) * fade;
+        const delayed = -Math.sin(elapsed * 23 - .45) * Math.exp(-elapsed * damping) * phase(elapsed, 0, .04) * fade;
         flex.tip.addScaledVector(d, .22 * ring).addScaledVector(lateral, .12 * delayed);
         flex.lag.addScaledVector(d, -.32 * delayed);
         flex.stretch += (stomp ? .26 : .08) * ring;
