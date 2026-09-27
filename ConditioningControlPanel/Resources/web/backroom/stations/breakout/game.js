@@ -10,6 +10,8 @@ import { IRIS_ARMS, IRIS_LIFE, IRIS_INTERVAL, irisPose } from './iris.js';
 import { TIDE_ROWS, TIDE_COLS, tidePose } from './tide.js';
 import { CURTAIN_ROWS, CURTAIN_COLS, ANCHOR_GUARDS, createPendulums, curtainPose, advancePendulum, releasePendulum, collidePendulum } from './pendulum.js';
 import { shieldY } from './words/let-go.js';
+import { endlessBoard, seededRandom } from './endless-layout.js';
+import { advanceEndlessDemolition } from './endless-physics.js';
 /* ============================================================================
  * stations/breakout/game.js - the sim. DOM-free so `node --test` can drive it.
  *
@@ -157,19 +159,26 @@ export function layoutWord(word) {
 }
 
 export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEvent = () => {}, breakoutN,
-  saturation = 0.15, speedScale = 0.55, words = DEFAULT_WORDS, reduced = false, brickStrength = STRENGTH_BY_WALL, greyMetal = true } = {}) {
+  saturation = 0.15, speedScale = 0.55, words = DEFAULT_WORDS, reduced = false, brickStrength = STRENGTH_BY_WALL, greyMetal = true,
+  endless = false, seed = 1, from = 0, savedSaturation, bestCombo = 0 } = {}) {
+  const runtimeRandom = rng;
+  let boardRandom = null;
+  rng = () => boardRandom ? boardRandom() : runtimeRandom();
   // Explicit N is a fixed dev override; ordinary sit-downs use the shrinking sequence.
   let fixedBreakoutN = breakoutN == null ? null : Math.max(1, Math.floor(Number(breakoutN) || BREAKOUT_COUNTS[0]));
   let breakouts = 0;
   const nextBreakoutN = () => fixedBreakoutN ?? BREAKOUT_COUNTS[Math.min(breakouts, BREAKOUT_COUNTS.length - 1)];
+  const resume = !!endless && Number.isFinite(savedSaturation);
+  const boardIndex = endless ? clamp(Math.floor(Number(from) || 0), 0, 999999) : 0;
   const g = {
+    endless: !!endless, endlessSeed: Number(seed) >>> 0, endlessBoard: null,
     w, h, breakoutN: nextBreakoutN(), speedScale, noLose: false,   // dev: the floor bounces, the ball never drops
     reduced: !!reduced,                            // reduced motion: no tumble, the bubble appears at the brick
-    sat: 0, savedSat: saturation, state: 'grey', greyBricks: 0,
+    sat: resume ? clamp(savedSaturation, 0, 1) : 0, savedSat: resume ? clamp(savedSaturation, 0, 1) : saturation, state: resume ? 'colour' : 'grey', greyBricks: 0,
     force: {}, rungs: rungsFor(0, 'grey', null), speed: 0,
     paddle: { x: w / 2, w: PADDLE.baseW, h: PADDLE.h, y: h - 40, stretch: 0, tug: 0, vx: 0 },
     balls: [], bricks: [], colliders: [], well: null, pops: [],
-    stats: { bricks: 0, walls: 0, sp: 0 }, combo: 0, comboBest: 0, time: 0, freeze: 0, pendingBreakout: false, breakoutAt: null, breakoutShield: null,
+    stats: { bricks: 0, walls: boardIndex, sp: 0 }, combo: 0, comboBest: endless ? Math.max(0, Math.floor(Number(bestCombo) || 0)) : 0, time: 0, freeze: 0, pendingBreakout: false, breakoutAt: null, breakoutShield: null,
     wallAge: 2, landRow: 99, wobble: { side: '', t: 0 }, crackFired: false, acc: 0, launchTimer: 0,
     // contract v2
     transition: null, timeScale: 1, hitStopMs: 0, smear: null, smearFading: false, fractures: 0, shatterWall: false,
@@ -200,14 +209,37 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       jelly: 0, jellyIn: 0, push: { dx: 0, dy: 0 }, pushT: 0, push0: { dx: 0, dy: 0 }, ...extra };
   }
   function buildWall() {
+    if (g.endless) { boardRandom = seededRandom(`${g.endlessSeed}:payloads:${g.stats.walls}`); g.wordIx = 0; }
     powers.reset();
     const bricks = [];
-    const mantra = g.stats.walls === 2;
-    const dome = g.stats.walls === 3;
+    const board = g.endless ? endlessBoard(g.endlessSeed, g.stats.walls, w, h) : null;
+    g.endlessBoard = board;
+    const mantra = !g.endless && g.stats.walls === 2;
+    const dome = g.endless ? !!board.dome : g.stats.walls === 3;
     g.dome = dome;
+    if (g.endless) {
+      for (const ball of g.balls) { ball.orbit = null; ball.domeCooldown = 0; ball.domeBoost = 0; }
+      g.well = null; g.pops = []; g.colliders = []; wordSim.endAll();
+    }
     if (g.well?.persistent) { for (const ball of g.balls) ball.orbit = null; g.well = null; }
     g.spell = null; g.reform = null; g.iris = null; g.tide = null; g.finale = null; g.pendulums = null;
-    if (g.stats.walls === 7) {
+    if (board) {
+      g.pendulums = board.pendulums || null;
+      g.tide = board.tide ? {age: 0} : null;
+      g.reform = board.reform ? {index: 0, word: REFORM_WORDS[0], beats: 0, lastPhase: g.beatPhase, every: Math.max(1, Math.round(5 / spb())), moving: 0, stopped: false} : null;
+      for (const cell of board.bricks) {
+        const special = cell.pendulumAnchor || cell.pendulumGuard || cell.strength || cell.spiral || cell.split || cell.word || cell.gif >= 0;
+        const face = !special && rng() < .15 ? rng() * 8 : -1, gif = Math.floor(face);
+        const word = !special && gif < 0 && rng() < WORD_BRICK_P ? g.words[g.wordIx++ % g.words.length] : null;
+        const spiral = !special && gif < 0 && !word && !dome && rng() < SPIRAL_BRICK_P ? WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)] : null;
+        bricks.push(mkBrick(cell.x, cell.y, cell.w, cell.h, cell.row, cell.col, {
+          gif, tier: gif >= 0 ? bubbleTier(face % 1) : 0, word, spiral,
+          split: !special && rng() < SPLIT_CHANCE, wordAt: word ? .6 + rng() * WORD_SWAP_S : 0, ...cell
+        }));
+      }
+      g.mantra = null;
+      if (dome && g.state === 'colour') spawnDome();
+    } else if (g.stats.walls === 7) {
       g.finale = { phase: 'forming', age: 0, wordClock: 0, wordIndex: 0, bursts: [],
         centreX:w/2, centreY:h*.28, coreRadius:32, stage:1, stageAge:0, stageComplete:false, feedClock:0, feedIndex:0 };
       g.sat = g.state === 'grey' ? g.savedSat : g.sat; g.state = 'colour'; g.savedSat = g.sat;
@@ -338,20 +370,22 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       }
       g.mantra = null;
     }
-    const jackpotSeats = bricks.filter(b=>!b.strength);
+    const jackpotSeats = bricks.filter(b=>!b.strength && (!g.endless || (!b.pendulumAnchor && !b.pendulumGuard)));
     if (jackpotSeats.length) jackpotSeats[Math.floor(rng() * jackpotSeats.length)].jackpot = true;   // keep payloads off authored armour
-    distributeStrength(bricks, brickStrength[g.stats.walls], rng);
+    distributeStrength(bricks, g.endless ? {two: board.breather ? 0 : .08, three: board.breather ? 0 : .02} : brickStrength[g.stats.walls], rng);
     g.bricks = bricks; g.wallBrickCount = bricks.length;
     for(const br of bricks)powers.assign(br);
     distributeGreyMetal(bricks, g.breakoutN, g.greyBricks, greyMetal);
     g.fractures = g.state === 'grey' ? Math.min(1, g.greyBricks / g.breakoutN) : 0; g.shatterWall = false;
+    boardRandom = null;
     if (mantra) emit('mantra', { word: g.mantra });
   }
   function updatePendulums(dt) {
     const pendulums=g.pendulums;
     if(!pendulums || g.wallAge<1.9)return;
     for(const p of pendulums) {
-      advancePendulum(p,dt,w,h,g.reduced);
+      if (!['orbit','flight'].includes(p.mode)) advancePendulum(p,dt,w,h,g.reduced);
+      if (g.endless) advanceEndlessDemolition(p,g,dt,emit);
       for(const br of g.bricks) if(br.alive && br.curtain && br.pendulumId===p.id && p.mode==='hung')
         Object.assign(br,curtainPose(p,br.curtainRow,br.curtainCol));
       // Collapse the freed curtain in a bounded cascade; sweeps hit neighbouring curtains and anchors.
@@ -360,12 +394,13 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         if(g.pendulums!==pendulums)return;
         if(!br.alive || p.struck.has(br) || p.mode==='hung' || p.mode==='spent')continue;
         const own=br.curtain && br.pendulumId===p.id;
-        const contact=p.mode==='sweep' && rotatedBrickContact({x:p.x,y:p.y,r:p.r},br);
+        const contact=(p.mode==='sweep' || p.mode==='flight') && rotatedBrickContact({x:p.x,y:p.y,r:p.r},br);
         if((own && collapsed<1 && p.collapseClock<=0) || contact) {
           if(own){collapsed++;p.collapseClock=.065;}
           p.struck.add(br);
+          if (g.endless && p.mode === 'flight') br.hp = 1;
           if (own && br.strength) br.hp = 1; // A released curtain crushes its own reinforced pieces.
-          breakBrick(br,{x:p.x,y:p.y,vx:p.toX-p.fromX,vy:-100});
+          breakBrick(br,{x:p.x,y:p.y,vx:p.vx ?? p.toX-p.fromX,vy:p.vy ?? -100});
         }
       }
     }
@@ -373,7 +408,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   function updateTide(dt) {
     if (!g.tide) return;
     g.tide.age += dt;
-    for (const brick of g.bricks) if (brick.alive) {
+    for (const brick of g.bricks) if (brick.alive && (!g.endless || brick.endlessTide)) {
       Object.assign(brick, tidePose(brick.row, brick.col, g.tide.age, w, h, g.reduced));
     }
   }
@@ -438,7 +473,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (!beat || g.transition) return;
     r.beats++; emit('metronome', { accent: r.beats % r.every === 0 });
     if (r.stopped || r.beats % r.every !== 0) return;
-    const alive = g.bricks.filter(b => b.alive);
+    const alive = g.bricks.filter(b => b.alive && (!g.endless || b.endlessReform));
     const next = nextReformIndex(r.index, alive.length);
     if (next < 0 || (next === r.index && r.word === 'I')) { r.stopped = true; return; }
     if (next === r.index) return;
@@ -642,7 +677,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       au('metal', {x:br.x/w}); emit('metalHit',{x:br.x+br.w/2,y:br.y+br.h/2}); pushBrick(br, ball); return;
     }
     // A grey final wall-7 brick is the gate, but repeated impacts still earn escape.
-    if (g.stats.walls === 6 && g.state === 'grey' && g.bricks.filter(b=>b.alive).length === 1) {
+    if (!g.endless && g.stats.walls === 6 && g.state === 'grey' && g.bricks.filter(b=>b.alive).length === 1) {
       au('metal', {x:br.x/w}); emit('metalHit',{x:br.x+br.w/2,y:br.y+br.h/2}); pushBrick(br, ball); finaleProgress(ball); return;
     }
     if (metalActive(br, g.state)) {
@@ -679,7 +714,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     emit('brick', { x: cx, y: cy, w: br.w, h: br.h, color: br.color, row: br.row, col: br.col, gif: br.gif >= 0, gifIndex: br.gif,
       spiral: br.spiral, jackpot: br.jackpot, letter: br.letter, word: br.word, ghost: grey, sat: g.sat, plus });
     if(br.pendulumAnchor) {
-      const p=g.pendulums[br.pendulumId];releasePendulum(p,w);
+      const p=g.pendulums.find(p=>p.id===br.pendulumId);releasePendulum(p,w);
+      if (g.endless && g.well?.persistent) { p.toX=g.well.x; p.toY=g.well.y; }
       au('pendulumRelease',{x:cx/w});emit('pendulumRelease',{x:cx,y:cy});
     }
     if(br.irisCore) emit('irisCore', {x:cx,y:cy,arm:br.arm,duration:4});
@@ -900,6 +936,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     addSat(0.1);
     au('wallCleared');
     buildWall(); g.wallAge = 0; g.landRow = 0; g.tail = 0; g.tailDrop = 0;
+    if (g.endless) { respawn(g.state === 'grey'); g.launchTimer = 0; }
     emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra });
   }
 
@@ -1268,6 +1305,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
         return;
       }
       if(g.wallAge>=1.9) for(const p of g.pendulums||[]) {
+        if (p.mode === 'orbit' || p.mode === 'flight') continue;
         if(collidePendulum(b,p,targetSpeed()*g.mod.ballSpeed)) {
           au('metal',{x:p.x/w});emit('pendulumHit',{x:p.x,y:p.y});break;
         }
@@ -1429,8 +1467,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   };
   const powers=createPowerups(g,{rng,emit,newBall,damage:breakBrick,maxBalls:MAX_BALLS,beatTime});
   buildWall();
-  respawn(true);
-  au('setSaturation', g.sat); au('setState', 'grey');
+  respawn(g.state === 'grey');
+  au('setSaturation', g.sat); au('setState', g.state);
 
   return {
     step,
@@ -1448,6 +1486,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     },
     /** Debug shortcuts map the three playable finale beats, not a new ending. */
     jumpToFinaleBeat(beat) {
+      if (g.endless) return;
       this.jumpToWall(8);
       if (beat === 'opening') return;
       if (!['words', 'rings', 'spiral', 'remaining'].includes(beat)) return;
