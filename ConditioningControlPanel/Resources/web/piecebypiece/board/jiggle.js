@@ -26,6 +26,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { SILICONE_GLSL } from './silicone.js';
 import { TRAVEL } from './captures.js';
 
 /** Every number that decides how the men feel. One place, on purpose. */
@@ -65,8 +66,8 @@ export const TUNING = Object.freeze({
   substep: 1 / 240,         // the spring is stiff, so integrate it small
 });
 
-const CACHE_KEY = 'pbp-jiggle-2';
-const DEPTH_KEY = 'pbp-jiggle-depth-2';
+const CACHE_KEY = 'pbp-jiggle-4';
+const DEPTH_KEY = 'pbp-jiggle-depth-4';
 const T = TUNING;
 const f = (n) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 
@@ -78,6 +79,7 @@ uniform float uSquash;
 uniform float uHeight;
 uniform float uPhase;
 uniform float uTime;
+${SILICONE_GLSL}
 float pbpH(float y) { return clamp(y / max(uHeight, 0.0001), 0.0, 1.0); }
 `;
 
@@ -92,6 +94,7 @@ const BEND_VERTEX = `#include <begin_vertex>
   transformed.xz *= (1.0 + ${f(T.volumeGain)} * uSquash);
   transformed.x += off.x;
   transformed.z += off.y;
+  if (uAct > 0.5) transformed = siliconePoint(position);
   vPbpPosition = transformed;
 }`;
 
@@ -106,6 +109,7 @@ const BEND_NORMAL = `#include <beginnormal_vertex>
   float sy = max(1.0 - uSquash * pow(h, ${f(T.squashWeightPow)}), 0.05);
   float sxz = max(1.0 + ${f(T.volumeGain)} * uSquash, 0.05);
   objectNormal = normalize(vec3(objectNormal.x / sxz, objectNormal.y / sy, objectNormal.z / sxz));
+  if (uAct > 0.5) objectNormal = normalize(siliconeFrame(normal, h));
 }`;
 
 function prefersReducedMotion() {
@@ -145,6 +149,7 @@ export function createJiggle() {
       if (prior) prior(shader, renderer);
       shader.uniforms.uBend = u.uBend;
       shader.uniforms.uAct = u.uAct;
+      shader.uniforms.uLag = u.uLag; shader.uniforms.uFlex = u.uFlex; shader.uniforms.uTwist = u.uTwist; shader.uniforms.uBulge = u.uBulge;
       shader.uniforms.uDissolve = u.uDissolve;
       shader.fragmentShader = 'varying vec3 vPbpPosition; uniform float uDissolve;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', `
@@ -191,6 +196,7 @@ export function createJiggle() {
     if (states.has(piece)) return states.get(piece);
     const u = {
       uAct: { value: 0 },
+      uLag: { value: new THREE.Vector2() }, uFlex: { value: new THREE.Vector2() }, uTwist: { value: 0 }, uBulge: { value: 0 },
       uDissolve: { value: 0 },
       uBend: { value: new THREE.Vector2(0, 0) },
       uSquash: { value: 0 },
@@ -328,7 +334,8 @@ export function createJiggle() {
         const act = piece.userData.capturePose;
         s.bend.set(0, 0); s.vel.set(0, 0); s.squash = s.sVel = 0; s.forced.set(0, 0);
         s.u.uBend.value.set(act.x, act.z); s.u.uSquash.value = 0;
-        s.u.uAct.value = 1; continue;
+        s.u.uLag.value.set(act.lx || 0, act.lz || 0); s.u.uFlex.value.set(act.stretch || 0, act.drop || 0);
+        s.u.uTwist.value = act.twist || 0; s.u.uBulge.value = act.bulge || 0; s.u.uAct.value = 1; continue;
       }
       s.u.uAct.value = 0;
       for (let i = 0; i < steps; i++) step(s, h);

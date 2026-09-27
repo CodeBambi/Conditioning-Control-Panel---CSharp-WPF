@@ -12,6 +12,7 @@ const names={p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'};
 const moves={p:['d4','e5'],n:['c3','d5'],b:['c4','d5'],r:['d3','d5'],q:['d3','d5'],k:['d4','d5']};
 let P,type='p',auto=true,timer,beat=0,victim=0;
 const frame=document.getElementById('game'),caption=document.getElementById('caption');
+for(const event of ['pointerdown','keydown'])document.addEventListener(event,()=>P?.board?.sfx?.wake(),{capture:true});
 for(const [key,name] of Object.entries(names)){
  const b=document.createElement('button');b.textContent=name;b.dataset.type=key;b.setAttribute('aria-pressed',key===type);
  b.onclick=()=>{type=key;beat=0;play();};document.getElementById('pieces').append(b);
@@ -31,7 +32,7 @@ function play(){
    B.pieces.move(from,to);
    const id=B.anim.stats().acts[0]?.variation||'capture';
    caption.textContent=names[type]+' / '+id.replaceAll('-',' ');
-   if(auto)timer=setTimeout(()=>{if(++beat%3===0){const keys=Object.keys(names);type=keys[(keys.indexOf(type)+1)%keys.length];}play();},3500);
+   if(auto)timer=setTimeout(()=>{if(++beat%3===0){const keys=Object.keys(names);type=keys[(keys.indexOf(type)+1)%keys.length];}play();},(B.anim.stats().acts[0]?.end || 3.9)*1000+350);
  },450);
 }
 document.getElementById('replay').onclick=play;

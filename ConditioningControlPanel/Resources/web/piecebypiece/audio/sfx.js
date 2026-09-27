@@ -216,6 +216,12 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       env.gain.exponentialRampToValueAtTime(.0001, t + .64);
       osc.connect(filter); filter.connect(env); env.connect(master); osc.start(t); osc.stop(t + .66);
     },
+    hop() { tone('sine', 160, .10, .09, { slideTo: 340 }); hiss(.035, .035, { from: 700, to: 1600 }); },
+    hopland() { tone('sine', 150, .12, .14, { slideTo: 65 }); hiss(.035, .055, { from: 1800, to: 400 }); },
+    stretch() { tone('triangle', 145, .30, .065, { slideTo: 310, filterHz: 900 }); },
+    tension() {
+      for (let i = 0; i < 5; i++) tone('triangle', 210 + i * 14, .065, .04 + i * .004, { at: i * .06, slideTo: 170 + i * 12, filterHz: 950 });
+    },
     stomp() { cues.land({ height: .8 }); tone('sine', 95, .22, .22, { slideTo: 40 }); hiss(.11, .09, { from: 1700, to: 300 }); },
     headbutt() { tone('sine', 125, .26, .42, { slideTo: 38 }); tone('triangle', 620, .055, .13, { slideTo: 180 }); },
     sweep() { hiss(.16, .10, { from: 450, to: 4800, attack: .06 }); },

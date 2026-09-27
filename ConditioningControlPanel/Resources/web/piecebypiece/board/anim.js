@@ -46,6 +46,7 @@
 
 import * as THREE from 'three';
 import { createChoreography } from './choreography.js';
+import { hopPlan, hopAt } from './hops.js';
 import { TUNING as TUNE } from './jiggle.js';
 import { WHIP_TUNING as W, whipBend, whipTimes, shiverAt } from './whip.js';
 import { TRAVEL, createCaptureDeck, capturePose } from './captures.js';
@@ -238,6 +239,11 @@ export function createAnim({ group, jiggle = null }) {
         }
       }
     }
+    if (!low && !refused && !s.whip && !s.finish) {
+      s.hopPlan = hopPlan(from, dest); s.dur = Math.max(.01, s.hopPlan.duration - .10);
+      s.hop = s.hopPlan.height;
+    }
+    s.hopIndex = -1; s.launchIndex = -1;
     slides.push(s);
     piece.position.copy(from);
   }
@@ -440,9 +446,25 @@ export function createAnim({ group, jiggle = null }) {
       s.t += dt;
       if (s.t < s.delay) continue;   // the rook waits for his king to go first
       const p = Math.min(1, (s.t - s.delay) / s.dur);
-      s.piece.position.lerpVectors(s.from, s.to, ease(p));
-      s.piece.position.y = s.to.y + (s.knight ? 4 * p * (1 - p) : Math.sin(Math.PI * p)) * s.hop;
-      if (s.lean) leanTo(s, p);
+      const hopping = s.hop > 0 && !prefersReducedMotion();
+      const plan = s.hopPlan;
+      const hop = plan ? hopAt(plan, s.t - s.delay) : null;
+      if (hopping && plan) {
+        for (let j = 0; j < plan.count; j++) {
+          const age = s.t - s.delay - j * plan.beat;
+          if (age >= .04 && s.launchIndex < j) {
+            jiggle?.impulse(s.piece, { squash: -1.8 });
+            emit('captureCue', { name: 'hop', piece: s.piece.userData.type }); s.launchIndex = j;
+          }
+          if (age >= plan.flightEnd && s.hopIndex < j) {
+            squash(s.piece, [s.to.x - s.from.x, s.to.z - s.from.z]);
+            if (j < plan.count - 1) emit('captureCue', { name: 'hopland', piece: s.piece.userData.type }); s.hopIndex = j;
+          }
+        }
+      }
+      s.piece.position.lerpVectors(s.from, s.to, hop ? hop.travel : ease(p));
+      s.piece.position.y += hopping ? (hop ? hop.height : Math.sin(Math.PI * p) * s.hop) : 0;
+      if (s.lean && hopping) leanTo(s, hop ? hop.flight : p);
       if (p >= 1) {
         s.piece.position.copy(s.to);
         if (s.lean) s.piece.rotation.set(0, baseYaw(s.piece), 0);
@@ -460,8 +482,8 @@ export function createAnim({ group, jiggle = null }) {
           continue;
         }
         landed(s.piece, s.to, s.refused, s.finish ? { manner: 'whip', stage: 'square' } : { capture: s.capture, variation: s.style?.id });
-        squash(s.piece, [s.to.x - s.from.x, s.to.z - s.from.z]);
-        if (s.knight && jiggle) jiggle.impulse(s.piece, { squash: T.knightLand });
+        if (!plan) squash(s.piece, [s.to.x - s.from.x, s.to.z - s.from.z]);
+        if (s.knight && jiggle && !plan) jiggle.impulse(s.piece, { squash: T.knightLand });
         if (s.style && ['stomp', 'pirouette', 'bow'].includes(s.style.id) && !prefersReducedMotion()) {
           flourishes.push({ piece: s.piece, id: s.style.id, at: s.to.clone(), t: 0 });
         }

@@ -23,6 +23,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { worldVertex } from './choreography.js';
 
 /** Every number that decides how a landing looks. */
 export const TUNING = Object.freeze({
@@ -225,15 +226,11 @@ export function createDust({ scene, bus = null }) {
   function dissolve({ object: piece, low = false }) {
     const points = piece?.userData.captureShape;
     if (!points?.length) return;
-    const v = new THREE.Vector3(), bend = piece.userData.capturePose;
-    const h = piece.userData.jiggleUniforms?.uHeight.value || 1;
+    const v = new THREE.Vector3();
     const base = new THREE.Color(piece.userData.side === 'b' ? 0xad77cf : 0xffbad8);
     const count = low ? 18 : 210;
     for (let i = 0; i < count; i++) {
-      v.copy(points[Math.floor(Math.random() * points.length)]);
-      const w = Math.min(1, Math.max(0, v.y / h)) ** 2;
-      if (bend) { v.x += bend.x * w; v.z += bend.z * w; }
-      v.multiply(piece.scale).applyQuaternion(piece.quaternion).add(piece.position);
+      v.copy(worldVertex(piece, points[Math.floor(Math.random() * points.length)]));
       const a = Math.random() * Math.PI * 2, reach = low ? .025 : .12 + Math.random() * .40;
       tmp.copy(base).lerp(cream, Math.random() * .7);
       mote(v.x, v.y, v.z, Math.cos(a) * reach, low ? 0 : .15 + Math.random() * .3,

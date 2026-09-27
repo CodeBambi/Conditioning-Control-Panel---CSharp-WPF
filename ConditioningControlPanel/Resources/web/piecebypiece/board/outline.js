@@ -24,6 +24,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { SILICONE_GLSL } from './silicone.js';
 import { TUNING as J } from './jiggle.js';
 
 /** Every number that decides how the line looks. */
@@ -39,7 +40,7 @@ export const TUNING = Object.freeze({
   flickerHz: 9,
   flickerSec: 0.7,
   ease: 14,                 // width and colour follow their targets at this rate (1/s)
-  cacheKey: 'pbp-hull-1',
+  cacheKey: 'pbp-hull-3',
 });
 
 const T = TUNING;
@@ -58,6 +59,7 @@ uniform float uTime;
 uniform float uPixel;
 uniform float uWidth;
 uniform float uSign;
+${SILICONE_GLSL}
 float pbpH(float y) { return clamp(y / max(uHeight, 0.0001), 0.0, 1.0); }
 `;
 
@@ -73,12 +75,14 @@ vec3 pbpN = normal;
   transformed.xz *= (1.0 + ${f(J.volumeGain)} * uSquash);
   transformed.x += off.x;
   transformed.z += off.y;
+  if (uAct > 0.5) transformed = siliconePoint(position);
   vPbpPosition = transformed;
   vec2 slope = uBend * (${f(J.bendWeightPow)} * pow(h, ${f(J.bendWeightPow - 1)}) / max(uHeight, 0.0001));
   pbpN.y -= slope.x * pbpN.x + slope.y * pbpN.z;
   float sy = max(1.0 - uSquash * pow(h, ${f(J.squashWeightPow)}), 0.05);
   float sxz = max(1.0 + ${f(J.volumeGain)} * uSquash, 0.05);
   pbpN = normalize(vec3(pbpN.x / sxz, pbpN.y / sy, pbpN.z / sxz));
+  if (uAct > 0.5) pbpN = normalize(siliconeFrame(normal, h));
 }`;
 
 // Pushed out in VIEW space by (pixels x world-per-pixel-at-1m x distance), so
@@ -150,6 +154,7 @@ export function createOutline({ group, bus = null }) {
       // Share the spring's objects: the hull reads the same bend the skin does.
       shader.uniforms.uBend = u.uBend;
       shader.uniforms.uAct = u.uAct;
+      shader.uniforms.uLag = u.uLag; shader.uniforms.uFlex = u.uFlex; shader.uniforms.uTwist = u.uTwist; shader.uniforms.uBulge = u.uBulge;
       shader.uniforms.uDissolve = u.uDissolve;
       shader.fragmentShader = 'varying vec3 vPbpPosition; uniform float uDissolve;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', `
