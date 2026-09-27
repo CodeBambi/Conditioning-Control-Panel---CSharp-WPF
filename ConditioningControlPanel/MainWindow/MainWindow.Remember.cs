@@ -74,7 +74,13 @@ namespace ConditioningControlPanel
             if (rc == null) return;
 
             // Conditioning config (Preset.ApplyTo touches only config, never progression).
-            rc.Preset?.ApplyTo(s);
+            if (rc.Preset != null)
+            {
+                // Mid-Lockdown the strict flags stay on (#1282).
+                bool strictBefore = s.StrictLockEnabled, bubbleStrictBefore = s.BubbleCountStrictLock;
+                rc.Preset.ApplyTo(s);
+                Services.LockdownStrictHold.RestoreAfterApply(s, strictBefore, bubbleStrictBefore);
+            }
 
             // Browser mute.
             s.BrowserVideoMuted = rc.BrowserMuted;
