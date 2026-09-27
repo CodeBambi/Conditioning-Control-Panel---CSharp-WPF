@@ -33,7 +33,7 @@
  * whose invented names a desktop player would try to join.
  * ==========================================================================*/
 
-import { Chess } from '../vendor/chess.js';
+import { buildReplay, showReplayStep, resultLine } from './replay.js';
 import { readSolo, soloOptions } from '../game/save.js';
 import { requestRematch } from '../net/rematch.js';
 import { isHosted, identity, whenIdentity } from '../bridge.js';
@@ -58,13 +58,6 @@ function reducedMotion(settings) {
     if (settings && settings().reducedMotion) return true;
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   } catch { return false; }
-}
-
-/** The position map the board wants, off a chess.js instance (mirrors rules.position). */
-function positionOf(chess) {
-  const map = {};
-  for (const row of chess.board()) for (const cell of row) if (cell) map[cell.square] = { type: cell.type, side: cell.color };
-  return map;
 }
 
 export function createDoor(opts = {}) {
@@ -124,11 +117,17 @@ export function createDoor(opts = {}) {
 
   // ---------------------------------------------------------------- show / hide
   function show(name) {
+    if (current && !game.isOver() && current.startedAt) {
+      if (current.mode === 'online') return;
+      toMenu();
+      if (name === 'menu') return;
+    }
     if (name === 'replay' && !replay) name = 'games';
     if (screen === 'replay' && name !== 'replay') closeReplay();
-    if (screen === 'lobby' && name !== 'lobby' && name !== 'found') leaveLobby();
+    if (['lobby', 'end'].includes(screen) && !['lobby', 'found', 'end'].includes(name)) leaveLobby();
     screen = name;
     if ((name === 'lobby' || (name === 'end' && lastEnd?.mode === 'online')) && !offList) enterLobby();
+    board.drag?.suspend?.(true);
     root.hidden = false;
     root.className = 'door up screen-' + name + (still() ? ' still' : '') + (looking ? ' looking' : '');
     for (const el of [hudEl(), camEl()]) if (el) el.classList.add('parked');
@@ -141,6 +140,7 @@ export function createDoor(opts = {}) {
     if (screen === 'replay') closeReplay();
     screen = null;
     root.hidden = true;
+    board.drag?.suspend?.(false);
     root.className = 'door';
     for (const el of [hudEl(), camEl()]) if (el) el.classList.remove('parked');
     try { board.setCameraSway(0); } catch { /* no rig */ }
@@ -260,9 +260,9 @@ export function createDoor(opts = {}) {
       <div class="door-stats">
         ${stat(s.games, 'games')}${stat(s.wins, 'wins', true)}${stat(s.losses, 'losses')}
         ${stat(s.draws, 'draws')}${stat(s.streak, 'streak', s.streak > 1)}${stat(s.captures, 'taken')}
-        ${stat(s.favourite || '-', 'favourite')}${stat(fmtDuration(s.ms), 'at the board')}${stat(s.rating == null ? 'unrated' : s.rating, 'rating')}
+        ${stat(s.favourite || '-', 'favourite')}${stat(fmtDuration(s.ms), 'at the board')}${stat(fmtMoves(s.plies), 'played')}
       </div>
-      <div class="door-foot"><span>esc - back</span><span>rating comes with the season</span></div>`;
+      <div class="door-foot"><span>esc - back</span><span>history on this device</span></div>`;
   }
 
   function replayScreen() {
@@ -284,21 +284,17 @@ export function createDoor(opts = {}) {
   function end() {
     const g = lastEnd || {};
     const o = outcome(g);
-    const res = g.result || {};
-    let line;
-    if (o === 'win') line = 'you win'; else if (o === 'loss') line = 'you lose'; else if (o === 'draw') line = 'a draw';
-    else line = res.winner ? (res.winner === 'w' ? 'white wins' : 'black wins') : 'a draw';
-    const how = res.reason && res.reason !== res.result ? res.reason : res.result;
-    const caps = g.captures || { w: 0, b: 0 };
+    const line = resultLine(g);
     return `
       <div class="door-end">
         <p class="result ${o || ''}">${esc(line)}</p>
-        <p class="tally">${esc(how || '')} &middot; ${esc(fmtMoves(g.plies))} &middot; ${(caps.w || 0) + (caps.b || 0)} taken &middot; ${esc(fmtDuration(g.durationMs))}</p>
+        <p class="tally">${esc(fmtMoves(g.plies))} &middot; ${esc(fmtDuration(g.durationMs))}</p>
         <div id="door-recap"></div>
       </div>
       ${ask ? `<div class="door-ask"><span><b>${esc(ask.name)}</b> wants a rematch</span><button type="button" class="door-pill" data-act="accept">Play</button><button type="button" class="door-link" data-act="decline">Decline</button></div>` : ''}
-      <button type="button" class="door-btn primary" data-act="rematch">rematch</button>
-      <button type="button" class="door-btn" data-act="menu">back to the door</button>`;
+      <button type="button" class="door-btn primary" data-act="rematch">Rematch</button>
+      <button type="button" class="door-btn" data-act="watch" data-id="${esc(g.id)}">Review game</button>
+      <button type="button" class="door-link" data-act="menu">Menu</button>`;
   }
 
   function waitWord(since) {
@@ -411,7 +407,7 @@ export function createDoor(opts = {}) {
 
   // ---------------------------------------------------------------- the game itself
   function deal(mode, match = null, restore = null) {
-    current = { mode, match, options: setup, startedAt: Date.now() - (restore?.durationMs || 0), captures: { w: 0, b: 0 } };
+    current = { mode, match, options: restore?.options || setup, startedAt: Date.now() - (restore?.durationMs || 0), captures: { w: 0, b: 0 } };
     if (restore) for (const [i, san] of restore.moves.entries()) if (san.includes('x')) current.captures[i % 2 ? 'b' : 'w']++;
     hide();
     startGame({ mode, match, options: setup, restore });
@@ -424,13 +420,16 @@ export function createDoor(opts = {}) {
     let rec = {};
     try { rec = game.record ? game.record() : {}; } catch { rec = {}; }
     const m = current.match;
+    const history = game.rules.chess.history({ verbose: true });
+    const captures = { w: 0, b: 0 };
+    for (const move of history) if (move.captured) captures[move.color]++;
     // the seat off the record when the driver knows it (an online seat may have
     // been corrected by the server after the deal), else the lobby's word
     const seat = (rec.me === 'w' || rec.me === 'b') ? rec.me : (m ? m.side : null);
     lastEnd = saveGame({
       mode: current.mode, me: seat, opponent: rec.opponent || (m ? m.opponent.name : 'a friend here'),
-      moves: rec.moves || [], plies: rec.plies || 0, result: rec.result || null,
-      durationMs: rec.durationMs ?? (Date.now() - current.startedAt), captures: { ...current.captures }, clocks: rec.clocks || null,
+      moves: rec.moves || [], plies: rec.plies || 0, result: rec.result || null, fen: rec.fen || history[0]?.before,
+      durationMs: rec.durationMs ?? (Date.now() - current.startedAt), captures, clocks: rec.clocks || null,
     });
     const finished = current;
     current = null;
@@ -452,6 +451,10 @@ export function createDoor(opts = {}) {
   }
 
   function toMenu() {
+    if (current?.mode === 'online' && !game.isOver()) return;
+    current = null;
+    board.anim?.skip?.();
+    game.clock?.stop?.();
     // A finished online seat stays in the chair for the end card, so the
     // board under the card is the finished position. The menu wants the
     // hotseat's fresh one, and that only exists once the switch has gone
@@ -464,44 +467,42 @@ export function createDoor(opts = {}) {
 
   // ---------------------------------------------------------------- replay
   function openReplay(id) {
+    if (current?.mode === 'online' && !game.isOver()) return;
     const g = getGame(id);
     if (!g) return;
-    const chess = new Chess();
-    const positions = [positionOf(chess)];
-    const marks = [null];
-    for (const san of g.moves || []) {
-      let mv = null;
-      try { mv = chess.move(san); } catch { mv = null; }
-      if (!mv) break;
-      positions.push(positionOf(chess));
-      marks.push({ from: mv.from, to: mv.to });
-    }
-    replay = { moves: (g.moves || []).slice(0, positions.length - 1), positions, marks, i: 0, timer: null,
-               title: `${g.opponent || 'a friend here'} - ${fmtWhen(g.at)}` };
+    if (current) toMenu();
+    leaveLobby();
+    try { replay = buildReplay(g); } catch { return; }
+    replay.title = `${g.opponent || 'a friend here'} - ${fmtWhen(g.at)}`;
+    board.anim?.setClock?.(null);
     show('replay');
     stepReplay(0);
   }
-  function stepReplay(i) {
+  function stepReplay(i, animate = false) {
     if (!replay) return;
-    replay.i = Math.max(0, Math.min(replay.positions.length - 1, i));
-    try { board.pieces.setPosition(replay.positions[replay.i]); } catch { /* no board */ }
-    const mk = replay.marks[replay.i];
-    try { const m = board.drag && board.drag.markers; if (m && m.setLastMove) m.setLastMove(mk ? mk.from : null, mk ? mk.to : null); } catch { /* no markers */ }
-    try { board.setSide(replay.i % 2 === 0 ? 'w' : 'b'); } catch { /* no rig */ }
-    if (replay.i === replay.positions.length - 1 && replay.timer) stopReplay();
+    showReplayStep(board, replay, i, animate && !still());
+    if (replay.i === replay.moves.length && replay.timer) stopReplay();
     if (screen === 'replay') render();
   }
   function playReplay() {
     if (!replay || replay.timer) return;
-    if (replay.i >= replay.positions.length - 1) stepReplay(0);
-    const tickFn = () => { if (!replay || !replay.timer) return; stepReplay(replay.i + 1); if (replay && replay.timer) replay.timer = later(tickFn, T.replayStepMs); };
-    replay.timer = later(tickFn, T.replayStepMs);
+    if (replay.i >= replay.moves.length) stepReplay(0);
+    const tickFn = () => {
+      if (!replay || !replay.timer) return;
+      if (board.anim?.busy?.()) { replay.timer = later(tickFn, 150); return; }
+      stepReplay(replay.i + 1, true);
+      if (replay?.timer) replay.timer = later(tickFn, T.replayStepMs);
+    };
+    replay.timer = later(tickFn, 200);
     render();
   }
   function stopReplay() { if (replay && replay.timer) { clearTimeout(replay.timer); timers.delete(replay.timer); replay.timer = null; } }
   function closeReplay() {
     stopReplay();
     replay = null;
+    board.anim?.setClock?.(() => game.clock);
+    board.anim?.skip?.();
+    game.switchBack?.();
     try { const m = board.drag && board.drag.markers; if (m && m.setLastMove) m.setLastMove(null, null); } catch { /* fine */ }
     try { game.reset(); board.pieces.setPosition(game.rules.position()); board.setSide('w', true); } catch { /* fine */ }
   }
@@ -522,13 +523,13 @@ export function createDoor(opts = {}) {
       case 'cancel': try { if (lobby) lobby.cancel(); } catch { /* fine */ } break;
       // accepting is a round trip on a server; the mock answers at once and
       // Promise.resolve makes both read the same
-      case 'accept': if (ask) { const a = ask; ask = null; if (a.timer) clearTimeout(a.timer); Promise.resolve(a.accept()).then((m) => { if (m) matched(m); }); } break;
+      case 'accept': if (ask) { const a = ask; ask = null; if (a.timer) clearTimeout(a.timer); Promise.resolve(a.accept()).then((m) => { if (m) matched(m); }).catch(() => { sfx('squelch'); if (screen) render(); }); } break;
       case 'decline': if (ask) { try { ask.decline(); } catch { /* fine */ } if (ask.timer) clearTimeout(ask.timer); ask = null; render(); } break;
       case 'go': go(); break;
       case 'watch': openReplay(id); break;
       case 'rstart': stopReplay(); stepReplay(0); break;
       case 'rprev': stopReplay(); stepReplay(replay ? replay.i - 1 : 0); break;
-      case 'rnext': stopReplay(); stepReplay(replay ? replay.i + 1 : 0); break;
+      case 'rnext': stopReplay(); stepReplay(replay ? replay.i + 1 : 0, true); break;
       case 'rplay': if (replay && replay.timer) { stopReplay(); render(); } else playReplay(); break;
       case 'rematch': rematch(); break;
       case 'menu': toMenu(); break;
@@ -561,6 +562,7 @@ export function createDoor(opts = {}) {
   window.addEventListener('keydown', onKey, { capture: true });
   veil.addEventListener('pointerdown', onStageTap);
   if (bus) {
+    unbind.push(bus.on('menu-request', toMenu));
     unbind.push(bus.on('capture', onCapture));
     unbind.push(bus.on('gameover', onGameOver));
   }

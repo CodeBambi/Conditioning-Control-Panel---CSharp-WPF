@@ -202,3 +202,6 @@
 .door-settings select:focus-visible, .door-setup summary:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 3px; }
 .door-sub, .door-foot { opacity: .8; }
 @media (max-width: 480px) { .door-btn { letter-spacing: .06em; padding: 0 10px; } .door-settings label { grid-template-columns: 80px 1fr; } }
+
+.door-end .result { font-size: clamp(22px, 3vw, 30px); line-height: 1.25; }
+.door-end .tally { opacity: .8; letter-spacing: .05em; }
