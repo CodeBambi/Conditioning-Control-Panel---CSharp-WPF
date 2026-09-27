@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from './game.js';
 import {advanceEndlessDemolition} from './endless-physics.js';
+import {brickOverlap} from './placement.js';
 const mouths=(angle=0)=>[{id:'in',pair:'p',x:200,y:300,angle,halfLength:150},
  {id:'out',pair:'p',x:900,y:300,angle:Math.PI,halfLength:150}];
 function rig() {
@@ -42,8 +43,8 @@ test('picture and spiral seeds transit before an expired seed blooms near the ex
   assert.equal(spiral?!!g.well:g.colliders.length===1,true);
  }
 });
-test('large picture bubbles pass an aperture that fits and retain age and hit count',()=>{
- const {g,events,advance}=rig();
+test('large picture bubbles touch a narrow mouth and retain age and hit count',()=>{
+ const {g,events,advance}=rig();g.portals.forEach(p=>p.halfLength=35);
  const c={x:200.05,y:300,r:60,vx:-24,vy:0,hits:2,pulse:0,alpha:1,fading:false,solid:true,
   gif:0,tier:3,age:4,jelly:0,jnx:0,jny:0,ph:0};g.colliders=[c];advance(1);
  assert.equal(events.filter(e=>e.kind==='bubble').length,1);assert.ok(c.x>750);
@@ -91,4 +92,25 @@ test('reduced motion retains physical picture and spiral delivery without tumbli
   assert.equal(events.filter(e=>e.name==='burst').length,1);assert.equal(pop.done,true);
   assert.ok(events.find(e=>e.name==='burst').x>700);
  }
+});
+
+test('real balls transit from the back and through a grazing rim without centre crossing',()=>{
+ for(const [x,y,vx] of [[178,300,400],[216,370,-400]]) {
+  const {g,events,advance}=rig();g.portals.forEach(p=>p.halfLength=65);
+  const b={x,y,vx,vy:0,r:8,stuck:false,lost:false,falling:false,ghost:false,
+   orbit:null,spin:0,trail:[],squash:0,aimed:10};g.balls=[b];advance(3);
+  const event=events.find(e=>e.name==='portalTransit'&&e.kind==='ball');assert.ok(event);
+  assert.equal(event.entrySide,vx>0?-1:1);
+  assert.ok(vx>0?b.x>900:b.x<900);assert.ok(b.x>800);
+ }
+});
+test('a grown bubble is seated safely only when its portal exit is obstructed',()=>{
+ const {g,events,advance}=rig();g.portals.forEach(p=>p.halfLength=65);
+ Object.assign(g.bricks[0],{x:740,y:270,w:80,h:70,angle:0});
+ const c={x:320,y:300,r:104,vx:-24,vy:0,hits:2,pulse:0,alpha:1,fading:false,solid:true,
+  gif:0,tier:3,age:4,jelly:0,jnx:0,jny:0,ph:0};g.colliders=[c];advance(1);
+ const event=events.find(e=>e.kind==='bubble');assert.ok(event);
+ assert.equal(brickOverlap(c.x,c.y,c.r*1.15,g.bricks),0);
+ assert.ok(Math.hypot(c.x-event.x,c.y-event.y)>1);assert.equal(c.hits,2);assert.ok(c.age>4);
+ advance(60);assert.equal(events.filter(e=>e.kind==='bubble').length,1,'seating must not drop the bubble into another mouth');
 });
