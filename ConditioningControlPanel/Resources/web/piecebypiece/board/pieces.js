@@ -63,9 +63,9 @@ function lathe(points, segments = 40) {
 
 /** Every number the silicone and its contact patch are made of. */
 export const SKIN_TUNING = Object.freeze({
-  roughness: 0.33,
-  clearcoat: 0.42,          // was 0.6: a hard gloss over a dark body is a shell
-  clearcoatRoughness: 0.28,
+  roughness: 0.43,
+  clearcoat: 0.26,          // was 0.6: a hard gloss over a dark body is a shell
+  clearcoatRoughness: 0.38,
   sheen: 0.72,
   sheenRoughness: 0.52,
   // Fake subsurface. Not transmission and not thickness: those two are what
@@ -298,9 +298,11 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
 
   /** Position map: { e1: {type:'k', side:'w'}, ... }. Rebuilds only what moved. */
   function setPosition(map) {
+    const replacements = new Map();
     for (const [sq, piece] of [...bySquare]) {
       const want = map[sq];
       if (!want || want.type !== piece.userData.type || want.side !== piece.userData.side) {
+        if (want?.side === piece.userData.side) replacements.set(sq, piece);
         group.remove(piece);
         bySquare.delete(sq);
       }
@@ -310,6 +312,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
       const { type, side } = map[sq];
       const piece = build(type, side);
       place(piece, sq);
+      if (replacements.has(sq)) hooks.onReplaced?.(replacements.get(sq), piece);
       group.add(piece);
       bySquare.set(sq, piece);
     }
@@ -332,7 +335,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     const was = piece.position.clone();
     place(piece, to);
     bySquare.set(to, piece);
-    if (hooks.onMoved) hooks.onMoved(piece, was);
+    if (hooks.onMoved) hooks.onMoved(piece, was, squareToWorld(from, 0));
     return piece;
   }
 

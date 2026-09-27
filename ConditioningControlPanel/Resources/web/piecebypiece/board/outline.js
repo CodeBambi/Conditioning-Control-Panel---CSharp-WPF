@@ -28,12 +28,12 @@ import { TUNING as J } from './jiggle.js';
 
 /** Every number that decides how the line looks. */
 export const TUNING = Object.freeze({
-  widthPx: 2.0,             // rest width on screen, any distance
-  heldWidthPx: 3.6,         // while the man is in the hand
-  colorWhite: 0xFF2D95,     // white men: hotter than the board's pink so it reads on it
-  colorBlack: 0xB0157A,     // black men: deep magenta, reads on cream and on pink
+  widthPx: 0.85,             // rest width on screen, any distance
+  heldWidthPx: 2.2,         // while the man is in the hand
+  colorWhite: 0x79365E,     // plum contour against the pale pink body
+  colorBlack: 0x372544,     // dark plum contour against the lavender body
   heldColor: 0xFFC2E4,      // both sides brighten toward this in the hand
-  hoverWidthPx: 2.6,        // the man under the cursor (drag.js sets userData.hover)
+  hoverWidthPx: 1.5,        // the man under the cursor (drag.js sets userData.hover)
   hoverMix: 0.4,            // and how far toward heldColor he brightens
   flickerColor: 0xFFFFFF,   // check: the king's line snaps between his colour and this
   flickerHz: 9,

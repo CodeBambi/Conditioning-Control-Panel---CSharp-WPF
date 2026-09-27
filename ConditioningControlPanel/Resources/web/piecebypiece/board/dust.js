@@ -195,7 +195,7 @@ export function createDust({ scene, bus = null }) {
     const low = reduced();
     const gain = kind === 'capture' ? T.captureGain : kind === 'refused' ? T.refusedGain : kind === 'hit' ? T.hitGain : 1;
     const h = Math.max(0.4, Math.min(1.6, height));
-    const n = Math.round((low ? T.countReduced : T.count) * (kind === 'capture' ? 1.4 : 1));
+    const n = Math.round((low ? T.countReduced : T.count) * (kind === 'capture' ? 2.1 : 1));
     const lifeSec = low ? T.lifeReduced : T.life;
     const reach = T.spread * h * gain * (low ? 0.6 : 1);
     for (let i = 0; i < n; i++) {
@@ -232,8 +232,11 @@ export function createDust({ scene, bus = null }) {
       if (!p || !p.world) return;
       puff(p.world, p.height, 'hit', p.victim);
     });
+    const unsubAccent = bus.on('captureAccent', (p) => {
+      if (!reduced() && p?.world) puff(p.world, p.height, 'hit', p.piece);
+    });
     const unsubLand = unsub;
-    unsub = () => { unsubLand(); unsubHit(); };
+    unsub = () => { unsubLand(); unsubHit(); unsubAccent(); };
   }
 
   function update(dt, camera, renderer) {

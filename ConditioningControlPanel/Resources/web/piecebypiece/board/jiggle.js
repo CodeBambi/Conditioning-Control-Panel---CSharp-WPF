@@ -26,6 +26,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { TRAVEL } from './captures.js';
 
 /** Every number that decides how the men feel. One place, on purpose. */
 export const TUNING = Object.freeze({
@@ -106,7 +107,7 @@ const BEND_NORMAL = `#include <beginnormal_vertex>
 
 function prefersReducedMotion() {
   if (typeof window === 'undefined') return false;
-  if (window.PBP && window.PBP.reducedMotion) return true;
+  if (window.PBP && (window.PBP.reducedMotion || window.PBP.settings?.reducedMotion)) return true;
   try { return !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   catch { return false; }
 }
@@ -257,7 +258,7 @@ export function createJiggle() {
   function land(piece, travel = null) {
     const s = stateOf(piece);
     if (!s) return;
-    const hard = piece.userData.tookOne ? T.captureGain : 1;
+    const hard = (piece.userData.tookOne ? T.captureGain : 1) * (TRAVEL[piece.userData.type]?.gain || 1);
     piece.userData.tookOne = false;
     let bx = 0, bz = 0;
     if (travel) {
@@ -292,11 +293,12 @@ export function createJiggle() {
   }
 
   function step(s, dt) {
-    s.vel.x += (-T.bendStiffness * s.bend.x - T.bendDamping * s.vel.x) * dt;
-    s.vel.y += (-T.bendStiffness * s.bend.y - T.bendDamping * s.vel.y) * dt;
+    const damping = TRAVEL[s.piece.userData.type]?.damping || 1;
+    s.vel.x += (-T.bendStiffness * s.bend.x - T.bendDamping * damping * s.vel.x) * dt;
+    s.vel.y += (-T.bendStiffness * s.bend.y - T.bendDamping * damping * s.vel.y) * dt;
     s.bend.x += s.vel.x * dt;
     s.bend.y += s.vel.y * dt;
-    s.sVel += (-T.squashStiffness * s.squash - T.squashDamping * s.sVel) * dt;
+    s.sVel += (-T.squashStiffness * s.squash - T.squashDamping * damping * s.sVel) * dt;
     s.squash += s.sVel * dt;
   }
 

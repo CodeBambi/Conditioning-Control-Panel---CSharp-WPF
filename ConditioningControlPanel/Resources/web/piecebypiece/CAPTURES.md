@@ -1,5 +1,26 @@
 # Piece by Piece - the captures
 
+## Current implementation, 2026-09-27
+
+`board/captures.js` now supplies 18 ordinary captures, three per attacker type.
+A shuffled bag exhausts each type's variants before refilling and prevents adjacent repeats.
+Pawn: bump, stomp, tumble. Knight: pounce, somersault, ricochet.
+Bishop: sweep, twirl, flick. Rook: shove, bowl, bumpers.
+Queen: pirouette, dismiss, curtsy. King: bow, royal-bump, topple.
+Arrival remains 300 ms, or 440 ms for a knight; victim reactions last up to 1040 ms after arrival.
+The victim flinches before contact, deflects sideways for visibility, and stays supported while rotating.
+Stomp, pirouette and bow also give the attacker a brief interruptible follow-through.
+Reduced motion uses a slide and short tip/fade. Tap or Space/Enter skips capture tails.
+Drag direction comes from the logical source square; promotion transfers an active flight to the new model.
+The optional bishop whip retains its existing explicit setting and is not part of the shuffled deck.
+`dev/captures.html` is the local showcase. `smoke/capture-smoke.mjs` checks the deck and trajectories;
+`smoke/capture-browser.js` runs through the existing shot tool's `--eval` input.
+
+## Historical choreography proposals
+
+The older timings and proposed routines below are retained for reference. The implementation above wins.
+
+
 Twelve ways to take a man, two per piece. One is built (the bishop's whip, `board/whip.js`);
 the rest are specified to the same envelope so any of them can be built next without
 re-opening the timing argument.
