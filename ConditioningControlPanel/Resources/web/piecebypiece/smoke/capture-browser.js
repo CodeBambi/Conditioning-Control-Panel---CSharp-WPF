@@ -19,7 +19,7 @@
   for(const type of ['p','n','b','r','q','k']) for(const side of ['w','b']) for(const crowded of [false,true]) {
     const pieces=setup(type,side,crowded?'k':'p',crowded); B.pieces.move('d4','d5');
     const style=B.anim.stats().acts[0]; ok(!!style,type+' signature starts');
-    for(let frame=0;frame<135;frame++) {
+    for(let frame=0;frame<180;frame++) {
       step(1/60);
       const p=pieces.attacker,v=pieces.victim;
       if(!B.anim.stats().acts.length) continue;
@@ -43,16 +43,16 @@
     ok(events.filter(e=>e.name==='dissolve').length===(type==='r'?0:1),type+' dissolve except launch');
     ok(!B.anim.busy(),type+' settles');cases++;
   }
-  for(const time of [0,.1,.8,1.2]) {setup('n');B.pieces.move('d4','d5');step(time);B.anim.skip();step(2.3);ok(events.filter(e=>e.name==='sunk').length===1,'skip one exit');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'skip one landing');}
-  setup('p');B.pieces.remove('d5');B.pieces.move('d4','e5');step(2.4);ok(events.some(e=>e.name==='land'&&e.capture),'en passant');
-  setup('r');B.pieces.move('d4','d5');step(.1);B.pieces.setPosition({d5:{type:'r',side:'w'},d6:{type:'q',side:'b'}});B.pieces.move('d6','d5');step(2.4);ok(events.filter(e=>e.name==='sunk').length===2,'rapid recapture');
-  setup('p');B.pieces.pieceAt('d4').position.set(-.5,0,-.5);B.pieces.move('d4','d5');ok(B.anim.stats().acts.length===1,'drag released exactly at target still captures');step(2.4);
+  for(const time of [0,.1,.8,1.2]) {setup('n');B.pieces.move('d4','d5');step(time);B.anim.skip();step(3.1);ok(events.filter(e=>e.name==='sunk').length===1,'skip one exit');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'skip one landing');}
+  setup('p');B.pieces.remove('d5');B.pieces.move('d4','e5');step(3.1);ok(events.some(e=>e.name==='land'&&e.capture),'en passant');
+  setup('r');B.pieces.move('d4','d5');step(.1);B.pieces.setPosition({d5:{type:'r',side:'w'},d6:{type:'q',side:'b'}});B.pieces.move('d6','d5');step(3.1);ok(events.filter(e=>e.name==='sunk').length===2,'rapid recapture');
+  setup('p');B.pieces.pieceAt('d4').position.set(-.5,0,-.5);B.pieces.move('d4','d5');ok(B.anim.stats().acts.length===1,'drag released exactly at target still captures');step(3.1);
   P.game.reset();P.game.rules.reset('1r5k/P7/8/8/8/8/8/K7 w - - 0 1');P.game.start();events=[];
-  ok(!!P.game.tryMove('a7','b8','q'),'capture promotion legal');step(2.4);ok(B.pieces.pieceAt('b8').userData.type==='q','promotion model');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'promotion capture');
-  P.game.reset();P.game.rules.reset('7k/8/8/3p4/4P3/8/8/K7 w - - 0 1');P.game.start();events=[];P.game.tryMove('e4','d5');step(.1);P.game.takeBack();step(2.4);
+  ok(!!P.game.tryMove('a7','b8','q'),'capture promotion legal');step(3.1);ok(B.pieces.pieceAt('b8').userData.type==='q','promotion model');ok(events.filter(e=>e.name==='land'&&e.capture).length===1,'promotion capture');
+  P.game.reset();P.game.rules.reset('7k/8/8/3p4/4P3/8/8/K7 w - - 0 1');P.game.start();events=[];P.game.tryMove('e4','d5');step(.1);P.game.takeBack();step(3.1);
   ok(B.pieces.pieceAt('e4')?.userData.side==='w'&&B.pieces.pieceAt('d5')?.userData.side==='b','undo restores board');
-  setup('p');B.pieces.move('d4','d5');step(2.4);events=[];B.pieces.move('d5','d6');step(.5);ok(events.filter(e=>e.name==='land'&&!e.capture).length===1,'next quiet move is not another capture');
+  setup('p');B.pieces.move('d4','d5');step(3.1);events=[];B.pieces.move('d5','d6');step(.5);ok(events.filter(e=>e.name==='land'&&!e.capture).length===1,'next quiet move is not another capture');
   P.settings.reducedMotion=true;setup('n');B.pieces.move('d4','d5');step(.6);ok(!B.anim.busy(),'reduced motion settles quickly');ok(!events.some(e=>e.name==='hit'),'reduced skips slapstick');P.settings.reducedMotion=false;
-  setup();B.pieces.move('d4','d5');step(.1);P.bus.emit('local',{});events=[];step(2.4);ok(!events.length,'reset has no late events');
+  setup();B.pieces.move('d4','d5');step(.1);P.bus.emit('local',{});events=[];step(3.1);ok(!events.length,'reset has no late events');
   return {passed,cases};
 })()

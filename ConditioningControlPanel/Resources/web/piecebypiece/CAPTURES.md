@@ -7,12 +7,17 @@ This replaces the shuffled reaction deck and its 300/440 ms capture deadline.
 
 | Attacker | Action | Contact | Settled |
 | --- | --- | --- | --- |
-| Pawn | Squat, jump with the flat base, squash the victim | 720 ms | 1550 ms |
-| Knight | Hoofbeats, whinny, backflip, base-first landing | 900 ms | 1800 ms |
-| Bishop | Draw back, extend the tentacle, slap, retract | 700 ms | 1600 ms |
-| King | Lean back, headbutt, recover and slide | 820 ms | 1750 ms |
-| Queen | Headstand, swing the base around the head, recover | 1000 ms | 2050 ms |
-| Rook | Approach, charge, swing and launch beyond the board | 1000 ms | 2150 ms |
+| Pawn | Squat, jump with the flat base, squash the victim | 720 ms | 2180 ms |
+| Knight | Hoofbeats, whinny, backflip, base-first landing | 900 ms | 2360 ms |
+| Bishop | Two tentacle slaps, recoil between strikes, retract | 590 / 1020 ms | 2480 ms |
+| King | Stretch, bow and press the victim to the floor, recover | 900 ms | 2640 ms |
+| Queen | Headstand, swing the base around the head, recover | 1000 ms | 2460 ms |
+| Rook | Approach, charge, swing and launch beyond the board | 1000 ms | 2460 ms |
+
+All six acts finish with a damped bounce, squash/stretch and tip wobble.
+Transition curves have zero acceleration at their endpoints; clearance height releases gradually.
+The queen and king use the approved sculpted GLBs from ce4c208d3, for both colours.
+`build_pieces.py` produces procedural alternatives and must not overwrite the shipping sculpts.
 
 Moves, legality and clocks commit immediately. Tap or Space/Enter settles any act.
 Reduced motion dissolves in place before a short slide, settling in 460 ms.

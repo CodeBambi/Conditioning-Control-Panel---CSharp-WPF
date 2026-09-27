@@ -12,7 +12,6 @@ from piecekit import *   # noqa: F401,F403
 
 OUT = arg('--out', os.path.join(HERE, 'out'))
 SHEET = arg('--sheet', '')
-BLEND = arg('--blend', '')
 ONLY = arg('--only', '')
 ONLY = set(ONLY.split(',')) if ONLY else None
 os.makedirs(OUT, exist_ok=True)
@@ -158,8 +157,8 @@ def queen(P):
         # the base is lumpy stone
         r += 0.012 * fbm(Vector((math.cos(th), math.sin(th), z * 3)), 2, 3.0) * (1 - smooth(0.16, 0.26, z))
         # two spiral veins, opposite hands, over the shaft
-        r += helix(th, z, 1.6, 2, 0.006, 0.28, 1.08, power=2.5)
-        r += helix(th, z, -1.1, 3, 0.003, 0.28, 1.08, power=3.0, phase=1.0)
+        r += helix(th, z, 1.6, 2, 0.011, 0.28, 1.08, power=2.5)
+        r += helix(th, z, -1.1, 3, 0.007, 0.28, 1.08, power=3.0, phase=1.0)
         return r
     def colour(t, th, r, co):
         z = t * H
@@ -167,7 +166,7 @@ def queen(P):
         c = mix(body_c, pale_c, 0.5 * smooth(0.5, 1.0, math.sin(2 * th - TAU * 1.6 * z) ** 2))
         c = mix(c, pale_c, 0.4 * smooth(1.02, 1.15, z))
         return mix(base, c, smooth(0.20, 0.27, z))
-    b = Body('queen').surface(H, radius, colour, nz=100, nseg=60)
+    b = Body('queen').surface(H, radius, colour, nz=140, nseg=64)
     # a small horn out of the front of the base
     def horn_col(co, n):
         return base_c
@@ -178,12 +177,12 @@ def queen(P):
     silver_c = rgb(0xDDE3F0)
     def sc(co, n):
         return silver_c
-    t.torus((0, 0, 1.10), 0.074, 0.014, sc, segs=40, sides=8)
+    t.torus((0, 0, 1.115), 0.062, 0.008, sc, segs=40, sides=8)
     for i in range(5):
         a = TAU * i / 5 + math.pi / 2
-        x, y = 0.074 * math.cos(a), 0.074 * math.sin(a)
-        h = 0.095 if i == 0 else 0.070
-        t.cone((x, y, 1.103), (x * 1.28, y * 1.28, 1.103 + h), 0.017, sc, segs=10)
+        x, y = 0.062 * math.cos(a), 0.062 * math.sin(a)
+        h = 0.055 if i == 0 else 0.038
+        t.cone((x, y, 1.118), (x * 1.05, y * 1.05, 1.118 + h), 0.009, sc, segs=10)
     tiara = t.build(metal('silver', 0xDDE3F0, 0.28))
     tiara.data.color_attributes.remove(tiara.data.color_attributes[0])
     return body, [tiara]
@@ -197,8 +196,8 @@ def king(P):
     def radius(t, th):
         z = t * H
         r = prof(z)
-        r += helix(th, z, 1.1, 2, 0.009, 0.36, 1.02, power=2.2)
-        r += helix(th, z, -0.8, 1, 0.005, 0.30, 1.00, power=3.0, phase=2.0)
+        r += helix(th, z, 1.1, 2, 0.016, 0.36, 1.02, power=2.2)
+        r += helix(th, z, -0.8, 1, 0.010, 0.30, 1.00, power=3.0, phase=2.0)
         r += 0.010 * smooth(1.00, 1.05, z) * (1 - smooth(1.08, 1.14, z)) * (0.5 + 0.5 * math.cos(th - FRONT + math.pi))
         return r
     def colour(t, th, r, co):
@@ -207,7 +206,7 @@ def king(P):
         v = helix(th, z, 1.1, 2, 1.0, 0.36, 1.02, power=2.2)
         c = mix(c, dark_c, 0.35 * smooth(0.2, 0.9, v))
         return mix(c, top_c, smooth(1.02, 1.25, z))
-    b = Body('king').surface(H, radius, colour, nz=100, nseg=56)
+    b = Body('king').surface(H, radius, colour, nz=150, nseg=64)
     def ball_col(co, n):
         return mix(dark_c, body_c, 0.5 + 0.5 * n.z)
     for sx in (-1, 1):
@@ -219,12 +218,12 @@ def king(P):
     gold_c = rgb(0xFFA030)
     def gc(co, n):
         return gold_c
-    c.torus((0, 0, 1.195), 0.105, 0.017, gc, segs=48, sides=8)
+    c.torus((0, 0, 1.205), 0.095, 0.010, gc, segs=48, sides=8)
     for i in range(6):
         a = TAU * i / 6
-        x, y = 0.105 * math.cos(a), 0.105 * math.sin(a)
-        c.cone((x, y, 1.198), (x * 1.28, y * 1.28, 1.315), 0.022, gc, segs=10)
-        c.sphere((x * 1.28, y * 1.28, 1.313), 0.017, gc, u=10, v=6)
+        x, y = 0.095 * math.cos(a), 0.095 * math.sin(a)
+        c.cone((x, y, 1.208), (x * 1.08, y * 1.08, 1.285), 0.014, gc, segs=10)
+        c.sphere((x * 1.08, y * 1.08, 1.283), 0.011, gc, u=10, v=6)
     crown = c.build(metal('gold', 0xFFA030, 0.25))
     crown.data.color_attributes.remove(crown.data.color_attributes[0])
     return body, [crown]
@@ -250,9 +249,6 @@ for col, (name, fn) in enumerate(RECIPES):
         for m in body.data.materials:
             m.name = f'{m.name}{suffix}_built'
         built.append(body)
-
-if BLEND:
-    bpy.ops.wm.save_as_mainfile(filepath=BLEND)
 
 if SHEET:
     sheet(SHEET, cols=len(RECIPES), rows=len(SIDES), pitch=1.0)

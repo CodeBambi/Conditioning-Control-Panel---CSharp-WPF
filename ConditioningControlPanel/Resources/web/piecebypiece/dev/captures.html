@@ -31,7 +31,7 @@ function play(){
    B.pieces.move(from,to);
    const id=B.anim.stats().acts[0]?.variation||'capture';
    caption.textContent=names[type]+' / '+id.replaceAll('-',' ');
-   if(auto)timer=setTimeout(()=>{if(++beat%3===0){const keys=Object.keys(names);type=keys[(keys.indexOf(type)+1)%keys.length];}play();},3100);
+   if(auto)timer=setTimeout(()=>{if(++beat%3===0){const keys=Object.keys(names);type=keys[(keys.indexOf(type)+1)%keys.length];}play();},3500);
  },450);
 }
 document.getElementById('replay').onclick=play;
@@ -40,7 +40,7 @@ document.getElementById('reduced').onchange=play;
 frame.onload=async()=>{
  for(let i=0;i<100;i++){
   P=frame.contentWindow.PBP;
-  if(P?.board?.pieces?.pieceAt('e1')?.userData.scaleBase>1.2)break;
+  if(['d1','e1','d8','e8'].every(sq=>P?.board?.pieces?.pieceAt(sq)?.userData.artSource?.includes('.glb')))break;
   await new Promise(r=>setTimeout(r,100));
  }
  if(!P){caption.textContent='The board could not load.';return;}
