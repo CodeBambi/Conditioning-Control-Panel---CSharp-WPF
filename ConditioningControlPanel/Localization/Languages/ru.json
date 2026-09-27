@@ -268,6 +268,8 @@
   "chaster_account_open": "Открыть страницу",
   "chaster_account_hint": "CCP добавляет время на твой замок в Chaster",
   "chaster_account_strip_tip": "Этот ПК привязан к твоему аккаунту Chaster",
+  "chaster_site_open_tip": "Open this lock on chaster.app",
+  "chaster_site_make_tip": "No lock yet. Make one on chaster.app",
   "chaster_unlink_confirm_title": "Отвязать Chaster",
   "chaster_unlink_confirm_body": "Отвязать Chaster от этого ПК?\n\nСчёт останется здесь. Время, которое уже на замке, останется там.",
   "chaster_link_denied": "Chaster отказал. Ничего не привязано.",

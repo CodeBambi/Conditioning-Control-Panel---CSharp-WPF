@@ -273,6 +273,8 @@
   "chaster_account_open": "打开页面",
   "chaster_account_hint": "CCP 会给你的 Chaster 锁加时",
   "chaster_account_strip_tip": "这台电脑已关联你的 Chaster 账号",
+  "chaster_site_open_tip": "Open this lock on chaster.app",
+  "chaster_site_make_tip": "No lock yet. Make one on chaster.app",
   "chaster_unlink_confirm_title": "解除 Chaster 关联",
   "chaster_unlink_confirm_body": "要解除这台电脑与 Chaster 的关联吗？\n\n账本留在这里。已经记到锁上的时间留在那边。",
   "chaster_link_denied": "Chaster 拒绝了。没有关联任何东西。",
