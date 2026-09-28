@@ -219,16 +219,33 @@ namespace ConditioningControlPanel.Avalonia
                         Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
-                desktop.MainWindow.Closed += (_, _) =>
+                desktop.MainWindow.Closed += (_, _) => StopDesktopOverlays();
+                // Tray: restore, wake, Stop everything (the no-hotkey panic control) and the real Exit.
+                try
                 {
-                    CoreFlash.Stop();
-                    CoreSubliminal.Stop();
-                    Views.Overlays.FlashOverlay.CloseAll();
-                    Views.Overlays.SubliminalOverlay.CloseAll();
-                    Views.Overlays.BouncingTextOverlay.Stop();
-                };
+                    shell.CreateTray();
+                    // WPF MainWindow.xaml.cs:3594: StartMinimized sends the shown window to the tray.
+                    // Only with a tray host to come back through; without one the window stays up.
+                    if (Settings.Current.StartMinimized && shell.TrayHostPresent())
+                    {
+                        void ToTray(object? s, EventArgs e) { shell.Opened -= ToTray; shell.Hide(); }
+                        shell.Opened += ToTray;
+                    }
+                }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "Tray icon unavailable; X closes the app"); }
             }
             base.OnFrameworkInitializationCompleted();
+        }
+
+        /// <summary>Stops every desktop overlay and its schedule. <paramref name="final"/> is the shell
+        /// closing; the tray's Stop everything passes false so the overlays can be started again.</summary>
+        internal static void StopDesktopOverlays(bool final = true)
+        {
+            CoreFlash.Stop();
+            CoreSubliminal.Stop();
+            Views.Overlays.FlashOverlay.CloseAll(final);
+            Views.Overlays.SubliminalOverlay.CloseAll();
+            Views.Overlays.BouncingTextOverlay.Stop();
         }
 
         private string ResolveEffectiveAssetsPath()
@@ -246,6 +263,8 @@ namespace ConditioningControlPanel.Avalonia
         private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
         {
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
+
+            try { (((IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!).MainWindow as Views.Windows.MainShellWindow)?.Tray?.Dispose(); } catch { }
 
             // Restore any app we ducked; a pending Unduck would otherwise die with the process.
             try { Platform.LibVlcAudio.Instance?.Shutdown(); } catch { }

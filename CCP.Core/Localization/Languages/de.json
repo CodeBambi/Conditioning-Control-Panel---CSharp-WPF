@@ -5389,6 +5389,7 @@
   "tray_wake_bambi": "Bambi aufwecken",
   "tray_wake": "Sie aufwecken",
   "tray_show": "Fenster anzeigen",
+  "tray_stop_everything": "Alles stoppen",
   "btn_stop_session_no": "Weitermachen",
   "btn_stop_session_yes": "Session stoppen",
   "dialog_stop_session_penalty": "\n(Pausenabzug: -{0} XP, du hättest also {1} XP bekommen.)",

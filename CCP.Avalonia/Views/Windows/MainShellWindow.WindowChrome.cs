@@ -18,7 +18,8 @@
 //
 // Members dropped (App.*/avatar-tube/Win32 only):
 //   private void EnsureSessionRestoredForExit(…)
-//   protected override void OnClosing(…)          // session save, tray, Bark, Lockdown
+//   protected override void OnClosing(…)          // tray half ported in MainShellWindow.Tray.cs;
+//                                                  // session save, Bark, Lockdown still missing
 //   protected override void OnDpiChanged(…)       // queues the work-area re-fit; see WorkAreaFit
 //   protected override void OnStateChanged(…)     // avatar re-attach, Bark, taskbar thumbnail
 //   private void HideAvatarTube(…)                // called by BtnMinimize_Click below
@@ -78,9 +79,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnClose_Click(object? sender, RoutedEventArgs e)
         {
             CoreBark.NotifyUiAction("close");
-            // ponytail: the WPF handler also runs EnsureSessionRestoredForExit and the tray/
-            // minimise-to-tray preference. Both are services; this closes the window, which is
-            // what the button says it does.
+            // Close() goes to the tray via OnClosing (MainShellWindow.Tray.cs) when a tray host exists.
+            // ponytail: the WPF handler also runs EnsureSessionRestoredForExit (session service).
             Close();
         }
     }

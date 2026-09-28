@@ -5389,6 +5389,7 @@
   "tray_wake_bambi": "Acordar a Bambi",
   "tray_wake": "Acordar",
   "tray_show": "Mostrar a janela",
+  "tray_stop_everything": "Parar tudo",
   "btn_stop_session_no": "Continuar",
   "btn_stop_session_yes": "Parar a sessão",
   "dialog_stop_session_penalty": "\n(Penalidade por pausa: -{0} XP, então você teria ganho {1} XP.)",

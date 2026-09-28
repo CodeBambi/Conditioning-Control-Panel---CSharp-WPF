@@ -117,6 +117,7 @@
                       Link="Resources\descent\%(RecursiveDir)%(Filename)%(Extension)" />
     <AvaloniaResource Include="..\Assets\features\*.png"
                       Link="Resources\features\%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\app.ico" Link="Resources\app.ico" />
     <AvaloniaResource Include="..\Assets\*.png"
                       Link="Resources\%(Filename)%(Extension)" />
 
