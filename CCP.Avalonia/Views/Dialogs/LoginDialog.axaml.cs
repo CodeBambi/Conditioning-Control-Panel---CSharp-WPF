@@ -713,8 +713,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             ProfileAdopt.ApplyUserData(CoreSettings.Current, user, authToken, DateTime.UtcNow);
             CoreSettings.Save();
+            CoreAccount.UnifiedUserId = user.UnifiedId; // before the load: its push is gated on signed in
             ProfileLoad = AccountSeed.LoadProfileAsync(); // WPF MainWindow.Login.cs:170
-            CoreAccount.UnifiedUserId = user.UnifiedId;
 
             // WPF UpdateServiceProperties
             if (provider == "patreon" && AccountSeed.Patreon is { } p) { p.UnifiedUserId = user.UnifiedId; p.DisplayName = user.DisplayName; }

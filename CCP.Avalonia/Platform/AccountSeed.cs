@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 
 /// <summary>Seeds <see cref="CoreAccount"/> from Core's <see cref="ProviderSubscription"/>s and <see cref="DiscordAccount"/>,
 /// tokens via CoreSecrets. FAIL CLOSED: a provider that cannot be built seeds nothing; CoreAccount turns a throw into "no".
-/// Read-only cloud load (unit 6); no sync push (unit 7), no Rich Presence.</summary>
+/// Cloud load (unit 6), then the known-fields-only push and heartbeat (unit 7c, Core <see cref="SyncPush"/>); no Rich Presence.</summary>
 internal static class AccountSeed
 {
     internal static ProviderSubscription? Patreon { get; private set; }
@@ -86,7 +86,8 @@ internal static class AccountSeed
     /// <summary>
     /// WPF ProfileSyncService.LoadProfileAsync's V2 read-before-write (ReadServerProfileBeforePushAsync), READ-ONLY:
     /// GET /v2/user/profile, follow the curve epoch, offer a tier rise, adopt take-higher (Core <see cref="ProfileAdopt"/>).
-    /// ponytail: no push, heartbeat or season-recap nudge - the push is unit 7, the others the next layer.
+    /// Then, as WPF LoadProfileAsync does after the read, the heartbeat and the push (<see cref="Sync"/>; unseeded = none).
+    /// ponytail: no season-recap nudge - the next layer.
     /// </summary>
     /// <param name="v2">Tests only.</param>
     internal static async Task<bool> LoadProfileAsync(V2AuthService? v2 = null)
@@ -99,6 +100,9 @@ internal static class AccountSeed
             return false;
         }
     }
+
+    /// <summary>The push, seeded by the app at startup only: unseeded (every test that does not set it) nothing is pushed.</summary>
+    internal static SyncPush? Sync;
 
     /// <summary>Tests only: the client every default-path load and restore uses.</summary>
     internal static Func<V2AuthService> NewV2 = () => new V2AuthService();
@@ -121,6 +125,12 @@ internal static class AccountSeed
         ProfileAdopt.AdoptReadBeforeWrite(s, user);
         CoreSettings.Save();
         Log.Information("Profile load: Level {Level} ({Xp} XP into level) after adopt", s.PlayerLevel, (int)s.PlayerXP);
+        if (Sync is { } sync)
+        {
+            sync.MarkLoaded(user.Achievements);
+            sync.StartHeartbeat();
+            await sync.PushAsync("after load");
+        }
         return true;
     }
 
@@ -138,10 +148,13 @@ internal static class AccountSeed
     /// <summary>
     /// WPF BtnQuickLogout_Click + the identity half of ClearAccountData (MainWindow.Login.cs:320-410):
     /// every provider out, identity and the rotated auth token (#455) cleared. Tokens and identity ONLY.
-    /// ponytail: no pre-logout sync, no progression / XP-watermark clear; both ship with the push (unit 7).
+    /// Order (unit 7c): pre-logout push if loaded -> stop heartbeat -> providers and identity -> progression clear
+    /// (Core <see cref="ProgressionClear"/> + achievements, WPF ClearProgressionData) -> the loaded flag reset.
     /// </summary>
-    internal static void Logout()
+    internal static async Task Logout()
     {
+        if (Sync is { Loaded: true } sync) await sync.PushAsync("pre-logout");
+        Sync?.StopHeartbeat();
         SecretStore.ClearFailed = false;
         Patreon?.Logout();
         Discord?.Logout();
@@ -153,7 +166,10 @@ internal static class AccountSeed
         s.UserDisplayName = null;
         s.HasLinkedDiscord = false;
         s.HasLinkedPatreon = false;
+        ProgressionClear.Apply(s);
         CoreSettings.Save();
+        App.Achievements?.Reset();
+        Sync?.Reset();
     }
 
     /// <summary>All three validate at once, as WPF starts them (App.xaml.cs). Never throws.</summary>

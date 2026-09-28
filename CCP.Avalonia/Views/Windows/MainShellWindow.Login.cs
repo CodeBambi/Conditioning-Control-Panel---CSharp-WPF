@@ -70,10 +70,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        /// <summary>WPF BtnQuickLogout_Click minus the pre-logout sync (unit 7).</summary>
+        /// <summary>WPF BtnQuickLogout_Click (AccountSeed.Logout carries the pre-logout sync and progression clear).</summary>
         internal async void Logout()
         {
-            AccountSeed.Logout();
+            await AccountSeed.Logout();
             UpdateQuickLoginUI();
             if (SecretStore.ClearFailed)
                 await MessageDialog.ShowAsync(this, Loc.Get("title_error"), Loc.Get("logout_not_complete_body"));

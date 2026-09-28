@@ -1,0 +1,171 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using ConditioningControlPanel.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Serilog;
+
+namespace ConditioningControlPanel.Services
+{
+    /// <summary>
+    /// <c>POST /v2/user/sync</c> for a head that loaded only <c>GET /v2/user/profile</c> (WPF ProfileSyncService.SyncProfileAsync,
+    /// cut to what is known): the body carries ONLY <see cref="Sent"/>, achievements = server-loaded ∪ local. Gates, all
+    /// required: signed in, loaded THIS session (<see cref="MarkLoaded"/>; stricter than WPF's defaults-guard), the 30 s
+    /// cooldown and the XP watermark. Also the 120 s heartbeat and the coalesced XP nudge. No periodic push (WPF has none).
+    /// ponytail: no restore-from-backup reconcile, 401 recovery or heartbeat adopt - add with the features that need them.
+    /// </summary>
+    public sealed class SyncPush
+    {
+        public const SyncBody.Field Sent = SyncBody.Field.UnifiedId | SyncBody.Field.Xp | SyncBody.Field.Level
+            | SyncBody.Field.DescentEpoch | SyncBody.Field.Achievements;
+        public static readonly TimeSpan Cooldown = TimeSpan.FromSeconds(30);
+        public static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(120);
+        private static readonly TimeSpan NudgeSettle = TimeSpan.FromSeconds(3), NudgeCooldownSlack = TimeSpan.FromSeconds(2);
+        private const string ServerUrl = "https://codebambi-proxy.vercel.app";
+
+        private readonly HttpClient _http;
+        private readonly HttpMessageHandler? _handler;
+        private readonly Func<IEnumerable<string>?> _localAchievements;
+        private readonly Func<bool> _inSession;
+        private readonly SemaphoreSlim _gate = new(1, 1);
+        private string[] _serverAchievements = Array.Empty<string>();
+        private Timer? _heartbeat;
+        private int _nudgePending;
+
+        /// <summary>Tests only.</summary>
+        public Func<DateTime> UtcNow = () => DateTime.UtcNow;
+
+        public bool Loaded { get; private set; }
+        public DateTime? LastSyncTime { get; private set; }
+
+        /// <param name="localAchievements">This install's unlocked achievement ids.</param>
+        /// <param name="inSession">The heartbeat's in_session.</param>
+        /// <param name="handler">Test seam; null is the real network.</param>
+        public SyncPush(Func<IEnumerable<string>?> localAchievements, Func<bool> inSession, HttpMessageHandler? handler = null)
+        {
+            (_localAchievements, _inSession, _handler) = (localAchievements, inSession, handler);
+            _http = V2AuthService.Configure(handler == null ? new HttpClient() : new HttpClient(handler));
+        }
+
+        /// <summary>The profile load succeeded: the baseline pushes are allowed against.</summary>
+        public void MarkLoaded(IEnumerable<string>? serverAchievements)
+        {
+            _serverAchievements = serverAchievements?.ToArray() ?? Array.Empty<string>();
+            Loaded = true;
+        }
+
+        /// <summary>Logout: nothing is pushed until the next load.</summary>
+        public void Reset()
+        {
+            StopHeartbeat();
+            Loaded = false;
+            _serverAchievements = Array.Empty<string>();
+            LastSyncTime = null;
+        }
+
+        private static bool SignedIn(AppSettings s) => !s.OfflineMode && !string.IsNullOrEmpty(s.UnifiedId) && CoreAccount.IsLoggedIn;
+
+        /// <summary>The body: known fields only. Xp is the TOTAL, as WPF sends it.</summary>
+        public static SyncBody Body(AppSettings s, IEnumerable<string> achievements) => new()
+        {
+            Known = Sent,
+            UnifiedId = s.UnifiedId,
+            Xp = (int)ProfileAdopt.TotalXp(s),
+            Level = s.PlayerLevel,
+            DescentEpoch = Descent.DescentEpochs.ClientEpoch,
+            Achievements = achievements.Distinct().OrderBy(a => a, StringComparer.Ordinal).ToList(),
+        };
+
+        public async Task<bool> PushAsync(string reason)
+        {
+            var s = CoreSettings.Current;
+            if (!Loaded || !SignedIn(s)) { Log.Debug("Profile sync skipped ({Reason}) - not loaded this session or not signed in", reason); return false; }
+            if (!await _gate.WaitAsync(0)) return false;
+            try
+            {
+                if (LastSyncTime is { } last && UtcNow() - last < Cooldown) { Log.Debug("Profile sync skipped - cooldown active"); return false; }
+                var totalXp = ProfileAdopt.TotalXp(s);
+                var watermark = ProfileAdopt.ActiveXpWatermark(s);
+                if (watermark > 0 && totalXp < watermark)
+                {
+                    Log.Error("[XP watermark] Sync REFUSED — would push {Xp} XP, below the {Watermark} XP last agreed", (int)totalXp, (int)watermark);
+                    return false;
+                }
+                var id = s.UnifiedId!;
+                var body = JsonConvert.SerializeObject(Body(s, _serverAchievements.Concat(_localAchievements() ?? Array.Empty<string>())));
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/sync");
+                if (!string.IsNullOrEmpty(s.AuthToken)) request.Headers.Add("X-Auth-Token", s.AuthToken);
+                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+                SyncBody.SignRequest(request, id, body);
+                Log.Information("Syncing profile ({Reason}) - Level: {Level}, TotalXP: {Xp}", reason, s.PlayerLevel, (int)totalXp);
+                using var response = await _http.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Contract D: merged tombstone; the head's recovery re-signs in and reloads.
+                    if (V2AuthService.MergedRecovery is { } merged && await merged(response, json)) return false;
+                    if (response.StatusCode == (HttpStatusCode)429)
+                    {
+                        LastSyncTime = UtcNow();
+                        Log.Warning("V2 Profile sync rate-limited by server (429), will retry later");
+                        return false;
+                    }
+                    Log.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)", (int)response.StatusCode, json.Length);
+                    return false;
+                }
+                LastSyncTime = UtcNow();
+                Log.Information("V2 Profile synced successfully ({Bytes} bytes)", json.Length);
+                try { ProfileAdopt.ApplySyncResponse(s, JObject.Parse(json), UtcNow()); }
+                catch (Exception ex) { Log.Debug("V2 Sync: Could not parse server flags: {Error}", ex.Message); }
+                CoreSettings.Save();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Profile sync failed");
+                return false;
+            }
+            finally { _gate.Release(); }
+        }
+
+        /// <summary>WPF NudgeSyncSoon: one coalesced push, 3 s out or just past the cooldown.</summary>
+        public void Nudge(string reason)
+        {
+            if (!Loaded || Interlocked.Exchange(ref _nudgePending, 1) == 1) return;
+            var wait = NudgeSettle;
+            if (LastSyncTime is { } last && UtcNow() - last < Cooldown) wait = Cooldown - (UtcNow() - last) + NudgeCooldownSlack;
+            _ = Task.Delay(wait).ContinueWith(async _ =>
+            {
+                Interlocked.Exchange(ref _nudgePending, 0);
+                await PushAsync(reason);
+            }, TaskScheduler.Default);
+        }
+
+        /// <summary>WPF StartHeartbeat: one now, then every 120 s.</summary>
+        public void StartHeartbeat()
+        {
+            if (_heartbeat != null) return;
+            _heartbeat = new Timer(_ => _ = HeartbeatAsync(), null, TimeSpan.Zero, HeartbeatInterval);
+            Log.Information("Heartbeat started (every {Seconds}s)", HeartbeatInterval.TotalSeconds);
+        }
+
+        public void StopHeartbeat()
+        {
+            Interlocked.Exchange(ref _heartbeat, null)?.Dispose();
+        }
+
+        /// <summary>WPF's four fields (Core <see cref="SyncBody.Heartbeat"/>); is_active true, as WPF with no idle tracker.</summary>
+        public Task<bool> HeartbeatAsync()
+        {
+            var s = CoreSettings.Current;
+            if (!SignedIn(s)) return Task.FromResult(false);
+            return new V2AuthService(() => s, _handler).SendHeartbeatAsync(s.UnifiedId!, true, _inSession());
+        }
+    }
+}
