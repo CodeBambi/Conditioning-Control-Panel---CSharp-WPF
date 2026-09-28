@@ -135,6 +135,18 @@ public class CompositorEngine : IDisposable
         return handles;
     }
 
+    /// <summary>Native handles of the visible capture-EXCLUDED hosts only, i.e. the Brain Drain
+    /// surface. OverlayService tucks these under CCP's own windows for "keep pictures clear".
+    /// UI thread only, like <see cref="GetVisibleHostHandles"/>.</summary>
+    public List<nint> GetVisibleExcludedHostHandles()
+    {
+        var handles = new List<nint>(_excludedWindows.Count);
+        foreach (var host in _excludedWindows.Values)
+            if (host.IsVisible && host.WindowHandle != 0)
+                handles.Add(host.WindowHandle);
+        return handles;
+    }
+
     /// <summary>One visible main-surface host: its native handle and the monitor rect it covers.</summary>
     public readonly record struct HostAnchor(nint Hwnd, System.Drawing.Rectangle BoundsPx);
 

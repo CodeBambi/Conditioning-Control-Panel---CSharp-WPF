@@ -215,7 +215,13 @@ namespace ConditioningControlPanel.Services
             {
                 ShowCornerGif(session.Settings);
             }
-            
+
+            // The session owns Mind Wipe, like every other feature it prescribes (#1304). The
+            // engine starts ahead of the session with the user's GLOBAL Mind Wipe, and
+            // StartSession below returns early on a running service, so a session without Mind
+            // Wipe played the global one anyway and a session with it never escalated.
+            App.MindWipe?.Stop();
+
             // Start Mind Wipe if enabled (escalating frequency)
             if (session.Settings.MindWipeEnabled)
             {

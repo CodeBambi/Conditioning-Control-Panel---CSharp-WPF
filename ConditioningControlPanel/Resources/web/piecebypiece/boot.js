@@ -265,9 +265,43 @@ function main() {
     view.dispose = () => { board.turnSpiral.dispose(); dispose(); };
   }).catch(e => console.warn('[pbp] turn spiral missing', e));
   // --- end T ---
-  // Esc closes the board - but never mid-drag, where it is "put the piece back".
+  // Esc on the menu closes the board; Esc in a game pauses it (owner, 2026-09-27). Never mid-drag, where it
+  // is "put the piece back". A local game holds its clock and the computer's reply; an online clock belongs to
+  // the server, so the card says it keeps running.
+  const pauseCard = document.createElement('div');
+  pauseCard.className = 'pbp-pause';
+  pauseCard.hidden = true;
+  pauseCard.setAttribute('role', 'dialog');
+  pauseCard.setAttribute('aria-modal', 'true');
+  pauseCard.innerHTML = '<div class="pbp-pause-card"><h2>PAUSED</h2><p class="pbp-pause-note" hidden>Online game: the clock keeps running.</p>'
+    + '<button type="button" data-pause="resume">Resume</button><button type="button" data-pause="leave">Leave the board</button></div>';
+  document.body.appendChild(pauseCard);
+  let pausedGame = false;
+  const onlineSeat = () => !!(window.PBP.game?.current && typeof window.PBP.game.current.offerDraw === 'function');
+  function setGamePaused(p) {
+    if (p === pausedGame) return;
+    pausedGame = p;
+    pauseCard.hidden = !p;
+    const online = onlineSeat();
+    pauseCard.querySelector('.pbp-pause-note').hidden = !online;
+    if (!online) { const clock = window.PBP.game?.clock; if (p) clock?.pause?.(); else clock?.resume?.(); }
+    if (p) pauseCard.querySelector('[data-pause="resume"]').focus();
+  }
+  window.PBP.pause = setGamePaused;
+  bus.on('gameover', () => setGamePaused(false));   // the result card owns the screen now
+  window.PBP.isPaused = () => pausedGame;
+  pauseCard.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pause]');
+    if (!b) return;
+    if (b.dataset.pause === 'resume') setGamePaused(false);
+    else { setGamePaused(false); postToHost({ type: 'pbp:exit' }); }
+  });
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !drag.isDragging()) postToHost({ type: 'pbp:exit' });
+    if (e.key !== 'Escape' || drag.isDragging()) return;
+    if (pausedGame) { setGamePaused(false); return; }
+    const inGame = !window.PBP.door?.isUp() && window.PBP.game && !window.PBP.game.isOver();
+    if (inGame) setGamePaused(true);
+    else postToHost({ type: 'pbp:exit' });
   });
   // --- Q: a capture animation is never a hostage ---
   // A tap on the board or a Space/Enter while the bishop is mid-whip lands
@@ -289,7 +323,8 @@ function main() {
     board.turnHandoff.update(dt);
     drag.update(dt);
     jiggle.update(dt);   // last: it reads what everything else just decided
-    if (window.PBP.game && window.PBP.game.update) window.PBP.game.update(dt);
+    // A paused local game holds the computer's reply too; an online seat keeps talking to the server.
+    if (window.PBP.game && window.PBP.game.update && (!pausedGame || onlineSeat())) window.PBP.game.update(dt);
     view.render();
     requestAnimationFrame(frame);
   }

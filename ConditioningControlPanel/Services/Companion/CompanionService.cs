@@ -98,6 +98,7 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _drainTimer;
         private const double DRAIN_XP_PER_TICK = 3.0;
         private const double DRAIN_INTERVAL_SECONDS = 2.0;
+        private DateTime? _lastDrainSaveUtc; // see DrainSaveThrottle (#1311)
 
         // Active time tracking
         private DateTime _lastActiveTimeUpdate = DateTime.Now;
@@ -403,7 +404,15 @@ namespace ConditioningControlPanel.Services
                 return;
 
             settings.PlayerXP = Math.Max(0, settings.PlayerXP - DRAIN_XP_PER_TICK);
-            App.Settings?.Save();
+
+            // #1311: the write is throttled, not the drain. Saving on every 2 s tick fsynced the
+            // whole settings file every 2 s all session long.
+            var now = DateTime.UtcNow;
+            if (DrainSaveThrottle.ShouldSave(_lastDrainSaveUtc, now, reachedZero: settings.PlayerXP <= 0))
+            {
+                _lastDrainSaveUtc = now;
+                App.Settings?.Save();
+            }
 
             XPDrained?.Invoke(this, DRAIN_XP_PER_TICK);
 

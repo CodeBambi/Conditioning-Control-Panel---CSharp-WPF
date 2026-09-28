@@ -270,6 +270,7 @@ namespace ConditioningControlPanel
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
                 _avatarTubeWindow?.CloseSafe();
+                CloseLuckyToast();   // reused and hidden between procs (#1312), so close it for real
 
                 // Close any quiz windows (topmost/fullscreen, would keep app alive)
                 try

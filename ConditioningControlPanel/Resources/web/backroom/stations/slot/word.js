@@ -13,8 +13,8 @@
  * keys plus every enabled Awareness keyword trigger, and only falls back to the four preset words when
  * the player has none active (BackRoomMedia.ActiveWords). Each word is then SPOKEN BY THE HOST
  * (callout.js -> shared/hypno/voice.js -> word.speak, CONTRACT 10.21): the player's own clip for that
- * phrase, a bundled Back Room clip, or Windows speech, on the app's chosen audio device. The browser's
- * speechSynthesis is only the last fallback, for the phone playtest where there is no host. The
+ * phrase or a bundled Back Room recording, on the app's chosen audio device. With no recording (or no
+ * host, the phone playtest) the word is silent: no synthetic speech. The
  * subliminal gate off (ctx.gates.subliminal === false) leaves every fx to the host as before, so the host's
  * own toggle stays the only judge. The reversal easter egg is seeded from the outcome (index + stops), so a
  * replayed outcome shows the same thing; it never touches the payout.

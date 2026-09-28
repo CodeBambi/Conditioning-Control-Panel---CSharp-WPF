@@ -1525,6 +1525,20 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     setWords(list) { if (Array.isArray(list) && list.length) { g.words = list.map(x => String(x)); g.wordIx = 0; } },
     /* dev and test hooks */
     replayEntrance() { g.wallAge = 0; g.landRow = 0; },
+    /**
+     * Endless only, from Options: leave this board for the next one. Nothing is paid for the skip (no colour,
+     * no Sparkle), the rally keeps its pace like any board change, and the new board lands with its entrance.
+     */
+    skipBoard() {
+      if (!g.endless || g.demoComplete) return false;
+      wordSim.endAll(); g.colliders = []; g.pops = []; g.well = null;
+      g.hitStopMs = 0; g.freeze = 0; g.pendingBreakout = false; g.transition = null; g.clearing = null; g.lastBrickDone = false;
+      g.stats.walls++;
+      buildWall(); g.wallAge = 0; g.landRow = 0; g.tail = 0; g.tailDrop = 0;
+      respawn(g.state === 'grey'); g.launchTimer = 0;
+      emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra, skipped: true });
+      return true;
+    },
     jumpToWall(n) {
       g.demoComplete = false; g.rally = 0;
       g.stats.walls = Math.min(!g.endless && g.storyLimit < 8 ? g.storyLimit - 1 : Infinity, Math.max(0, Math.floor(Number(n) || 1) - 1));

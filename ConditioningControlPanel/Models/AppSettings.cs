@@ -145,6 +145,22 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// How a flash leaves when it is clicked or popped (owner, 2026-09-28; Mix is the default).
+    /// Compositor flashes only; a timed-out flash keeps its soft fade and an owned Shatter still
+    /// wins. None is the old plain cut. See Services/Flash/FlashExit.cs.
+    /// </summary>
+    public enum FlashExitStyle
+    {
+        Mix,
+        Pop,
+        TvOff,
+        Spiral,
+        Melt,
+        Glitch,
+        None
+    }
+
+    /// <summary>
     /// How the ambient dashboard bubbles travel (Back Room prize styles). FloatUp is the free
     /// base; Rain and SpiralIn are owned styles; Mix rolls per bubble among FloatUp plus the
     /// owned styles. Ownership is never read from here: an unowned pick behaves as FloatUp
@@ -1112,6 +1128,26 @@ namespace ConditioningControlPanel.Models
         {
             get => _flashGazeDisabledByDecoupling;
             set { _flashGazeDisabledByDecoupling = value; OnPropertyChanged(); }
+        }
+
+        private FlashExitStyle _flashExitStyle = FlashExitStyle.Mix;
+        /// <summary>How a clicked or popped flash leaves (compositor path). Mix by default. See FlashExit.</summary>
+        [JsonProperty("FlashExitStyle")]
+        public FlashExitStyle FlashExitStyle
+        {
+            get => _flashExitStyle;
+            set { _flashExitStyle = value; OnPropertyChanged(); }
+        }
+
+        private bool _flashStayUntilPopped = false;
+        /// <summary>
+        /// Ambient flashes stay on screen until clicked (or popped by a stare), up to a 10-minute
+        /// safety lifetime and 40 on screen. Needs <see cref="FlashClickable"/>. See FlashStayRule.
+        /// </summary>
+        public bool FlashStayUntilPopped
+        {
+            get => _flashStayUntilPopped;
+            set { _flashStayUntilPopped = value; OnPropertyChanged(); }
         }
 
         private bool _corruptionMode = false; // Hydra effect
@@ -2313,6 +2349,19 @@ namespace ConditioningControlPanel.Models
         {
             get => _modAvatarSet;
             set { _modAvatarSet = new Dictionary<string, int>(value ?? new Dictionary<string, int>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modPersonalityPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Per mod id, the companion personality (PersonalityPreset.Id) last picked in that mod,
+        /// put back when the mod is switched to again. A missing key = never picked there; the
+        /// mod's own default applies. Local only. See Services/Companion/ModPersonalityPicks.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModPersonalityPreset
+        {
+            get => _modPersonalityPreset;
+            set { _modPersonalityPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
         }
 
         private string? _currentAssetPresetId = null;
@@ -5022,6 +5071,20 @@ namespace ConditioningControlPanel.Models
         {
             get => _brainDrainMeltEnabled;
             set { _brainDrainMeltEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _brainDrainKeepPicturesClear = false;
+        /// <summary>
+        /// Brain Drain blurs everything EXCEPT the app's own pictures: flashes, videos, lock cards,
+        /// subliminals and bubbles stay sharp over the blurred desktop. The blur window is tucked
+        /// under the lowest CCP window in the topmost band (OverlayService, BrainDrainKeepClear).
+        /// Off by default so the classic look does not change under anyone.
+        /// </summary>
+        [JsonProperty]
+        public bool BrainDrainKeepPicturesClear
+        {
+            get => _brainDrainKeepPicturesClear;
+            set { _brainDrainKeepPicturesClear = value; OnPropertyChanged(); }
         }
 
         private bool _allowOverlayCapture = false;
