@@ -56,6 +56,7 @@ public class ChasterLadderScrapRenderTests
 
     private static TextBlock[] Texts(FrameworkElement row) =>
         ((Grid)((Border)row).Child).Children.OfType<TextBlock>().ToArray();
+#if DEBUG // DemoRaffle is a DEBUG-only demo; CI builds Release
 
     [Theory]
     [InlineData(false)]
@@ -114,6 +115,7 @@ public class ChasterLadderScrapRenderTests
             }
         });
     }
+#endif
 
     [Fact]
     public void No_board_is_one_quiet_line_and_never_an_error()
