@@ -526,3 +526,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   grid shows the effective value), CCP Default neutral session words in PhrasePoolCustody. WPF tests read the moved Assets
   and language files through SourceRoots (a Linux test asserts each path exists). 12 parity rows added as missing, plus a
   blocked row for the content-pack script (phase 5). Review: FIX -> r1 applied.
+
+## avalonia-port/nav-rail-hover-parity: +294 (user-reported: side menu looks off, does not open)
+- Root cause: the rail's setup hung off OnAttachedToVisualTree, which never fires on a Window, so no hover hook or label
+  fade ran live (the clipped "Da"). Setup moves to the constructor; hover reads IsPointerOver (hit-test aware like WPF).
+  WPF's 56->236 px 190/150 ms open/close, linear label/pill fade, 44->50 tiles, 40->46 icons, staggered door names.
+- Evidence: NavRailHoverTests (fail-proofed 4 ways); live sandbox open/closed screenshots; nav-check and click-through
+  pass. Still missing: door glow/shimmer, hue glow, mod door art, watchdog, reduced motion. Review: ACCEPT.
