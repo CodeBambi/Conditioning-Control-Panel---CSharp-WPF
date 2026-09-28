@@ -170,3 +170,14 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Ledger: shell-clickthrough-overlays notes updated; stays stub until a feature uses the mechanism.
 - Follow-up: X11Overlay's process-wide XSetErrorHandler replaces Avalonia's own handler (pre-existing).
 - Not run: in CI (needs a display); Windows (no Win32 shim yet).
+
+## avalonia-port/layered-audio: +395
+- LayeredAudio (head-side port of WPF LayeredAudioService on LibVLC): start/restart/stop rules, ignore-master
+  path for audio-only sessions, live track/master volume, ducked by other CCP sounds, true infinite loop
+  (restart on end-of-file), synchronous bounded shutdown on exit.
+- Audio Layers window opens from Settings > Audio and Home, single instance, open failure shown like WPF.
+- Volume sticks per stream even when PipeWire restores by app name (bounded re-apply after Playing).
+- Evidence: LayeredAudioTests (fail-proofed); --layers-probe with exact per-stream values (15/15 PASS in a
+  supervisor re-run); live Keincheck run with a temp profile; 0 binding errors. Two review rounds.
+- Ledger: win-layered-audio verified; shell-home-audio, shell-audio-playback-devices, views-settings-audio updated.
+- Gaps: output-device selection (this head has no device picker yet); audio-only session start (no session engine).
