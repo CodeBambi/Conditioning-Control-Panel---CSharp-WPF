@@ -519,15 +519,13 @@
                     <Button x:Name="BtnSessionHistory"
                             ToolTip.Tip="{loc:Str tooltip_recent_sessions}"
                             Theme="{StaticResource OutlineButton}"
-                            Padding="12,7" Margin="0,0,7,0" FontSize="11.5" Cursor="Hand"
-                            IsEnabled="False" Opacity="0.5">
+                            Padding="12,7" Margin="0,0,7,0" FontSize="11.5" Cursor="Hand">
                         <TextBlock Text="{loc:Str btn_recent_sessions}" FontWeight="SemiBold"/>
                     </Button>
                     <!-- Was the right-hand "Session Editor" placeholder box. -->
                     <Button x:Name="BtnCreateSession"
                             Theme="{StaticResource PinkButton}"
-                            Padding="14,7" FontSize="11.5" FontWeight="SemiBold" Cursor="Hand"
-                            IsEnabled="False" Opacity="0.5">
+                            Padding="14,7" FontSize="11.5" FontWeight="SemiBold" Cursor="Hand">
                         <TextBlock Text="{loc:Str btn_create_new}"/>
                     </Button>
                 </StackPanel>

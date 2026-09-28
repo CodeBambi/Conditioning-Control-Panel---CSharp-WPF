@@ -129,3 +129,15 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   JSON round-trip against Fixtures/session_log_premove.json generated from the pre-move model,
   RecordMedia append rules); each failed once when its behaviour was broken.
 - Not run: WPF tests (Windows-only); no Avalonia wiring, so no Keincheck run.
+
+## avalonia-port/wire-session-surfaces: +396
+- Session editor opens from Presets Create New and row ✎ and saves through Core SessionManager
+  (built-in -> new custom, custom -> overwrite; save failures logged and shown in an error dialog).
+- Recent Sessions lists Core SessionLogService.LoadRecentLogs() instead of fabricated rows and reopens
+  SessionCompleteWindow, which now takes Core SessionLog (Recap/MediaKind stand-ins deleted).
+- Gap: no Avalonia session engine, so the end-of-session recap open (WPF Presets.cs:1788) stays unwired.
+- Evidence: SessionSurfacesTests (4, each fail-proofed); CCP.Avalonia.Tests now runs in a temp
+  CCP_USERDATA_DIR; Keincheck text dumps under evidence/avalonia-port/wire-session-surfaces/.
+- Ledger: win-session-editor, win-session-log-history, win-session-complete stub -> wired;
+  shell-session-io stays stub with an updated note.
+- Not run: file-picker save live; WPF tests.

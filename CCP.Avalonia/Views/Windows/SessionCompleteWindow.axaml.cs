@@ -11,6 +11,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -20,11 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// media the session played.
     ///
     /// PORTED from ConditioningControlPanel/Windows/SessionCompleteWindow.xaml.cs. Deviations:
-    ///  - <c>SessionLog</c>, <c>MediaLogEntry</c>, <c>Session</c> and their enums are still in the
-    ///    WPF head, and this project may not reference it, so <see cref="Recap"/> /
-    ///    <see cref="MediaRow"/> are local stand-ins with the same fields <c>ApplyLog</c> reads.
-    ///    The two legacy constructors collapse into one: the legacy overload only built a
-    ///    <c>SessionLog</c> from raw fields, which is what <see cref="Recap"/> already is.
+    ///  - Takes Core's <see cref="SessionLog"/>; the WPF legacy raw-field overload is dropped.
     ///  - <c>DialogResult = true</c> becomes <c>Close(true)</c>, as in TextEditorDialog; the
     ///    "shown non-modally" guard the WPF comment describes is not needed - Avalonia's Close
     ///    works either way.
@@ -44,9 +41,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         };
 
         /// <summary>Render constructor: sample data, so --render-all can discover the window.</summary>
-        internal SessionCompleteWindow() : this(Recap.Sample()) { }
+        internal SessionCompleteWindow() : this(SampleLog()) { }
 
-        public SessionCompleteWindow(Recap log, bool playSound = true)
+        public SessionCompleteWindow(SessionLog log, bool playSound = true)
         {
             AvaloniaXamlLoader.Load(this);
 
@@ -74,7 +71,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
         }
 
-        private void ApplyLog(Recap log)
+        private void ApplyLog(SessionLog log)
         {
             var txtMainMessage = this.FindControl<TextBlock>("TxtMainMessage")!;
             var txtSubMessage = this.FindControl<TextBlock>("TxtSubMessage")!;
@@ -105,15 +102,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             txtXP.Text = $"+{log.XPEarned}";
             txtXP.Foreground = log.SessionDifficulty switch
             {
-                Difficulty.Easy => new SolidColorBrush(Color.FromRgb(144, 238, 144)),
-                Difficulty.Medium => new SolidColorBrush(Color.FromRgb(255, 215, 0)),
-                Difficulty.Hard => new SolidColorBrush(Color.FromRgb(255, 165, 0)),
-                Difficulty.Extreme => new SolidColorBrush(Color.FromRgb(255, 99, 71)),
+                SessionDifficulty.Easy => new SolidColorBrush(Color.FromRgb(144, 238, 144)),
+                SessionDifficulty.Medium => new SolidColorBrush(Color.FromRgb(255, 215, 0)),
+                SessionDifficulty.Hard => new SolidColorBrush(Color.FromRgb(255, 165, 0)),
+                SessionDifficulty.Extreme => new SolidColorBrush(Color.FromRgb(255, 99, 71)),
                 _ => new SolidColorBrush(Color.FromRgb(144, 238, 144))
             };
 
             // Media list - newest entries last (chronological order matches the session timeline).
-            var rows = log.Media ?? new List<MediaRow>();
+            var rows = (log.Media ?? new List<MediaLogEntry>()).Select(m => new MediaRow(m)).ToList();
 
             var noMedia = this.FindControl<TextBlock>("TxtNoMedia")!;
             var mediaList = this.FindControl<ItemsControl>("MediaList")!;
@@ -130,7 +127,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 noMedia.IsVisible = false;
                 mediaList.IsVisible = true;
                 mediaList.ItemsSource = rows;
-                int videoCount = rows.Count(r => r.Type == MediaKind.Video);
+                int videoCount = rows.Count(r => r.Type == MediaType.Video);
                 int imageCount = rows.Count - videoCount;
                 mediaCount.Text = Loc.GetF("label_media_count_videos_images", videoCount, imageCount);
             }
@@ -217,46 +214,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>The one close path, kept from the WPF original.</summary>
         private void CloseRecap() => Close(true);
 
-        /// <summary>
-        /// Stand-in for the head's SessionLog. Same fields ApplyLog reads, nothing more - this is
-        /// deliberately not a second model, it is the argument shape until SessionLog is in Core.
-        /// </summary>
-        public sealed class Recap
+        /// <summary>Render seat sample.</summary>
+        private static SessionLog SampleLog() => new()
         {
-            public string SessionId { get; set; } = "";
-            public string SessionName { get; set; } = "";
-            public string SessionIcon { get; set; } = "";
-            public Difficulty SessionDifficulty { get; set; } = Difficulty.Easy;
-            public TimeSpan Duration { get; set; }
-            public int XPEarned { get; set; }
-            public bool Completed { get; set; }
-            public List<MediaRow>? Media { get; set; }
-
-            internal static Recap Sample() => new()
+            SessionId = "sample",
+            SessionName = "Deep Focus",
+            SessionIcon = "🌀",
+            SessionDifficulty = SessionDifficulty.Medium,
+            Duration = TimeSpan.FromSeconds(23 * 60 + 41),
+            XPEarned = 180,
+            Completed = true,
+            Media = new List<MediaLogEntry>
             {
-                SessionId = "sample",
-                SessionName = "Deep Focus",
-                SessionIcon = "🌀",
-                SessionDifficulty = Difficulty.Medium,
-                Duration = TimeSpan.FromSeconds(23 * 60 + 41),
-                XPEarned = 180,
-                Completed = true,
-                Media = new List<MediaRow>
-                {
-                    new(MediaKind.Video, "/media/loops/spiral-intro.mp4", "spiral-intro.mp4", TimeSpan.FromSeconds(12)),
-                    new(MediaKind.Image, "/media/stills/mantra-01.png", "mantra-01.png", TimeSpan.FromSeconds(4 * 60 + 8)),
-                    new(MediaKind.Video, "/media/loops/deep-drop.mp4", "deep-drop.mp4", TimeSpan.FromSeconds(11 * 60 + 37)),
-                    new(MediaKind.Image, "/media/stills/mantra-07.png", "mantra-07.png", TimeSpan.FromSeconds(19 * 60 + 2)),
-                }
-            };
-        }
-
-        public enum Difficulty { Easy, Medium, Hard, Extreme }
-
-        public enum MediaKind { Image, Video }
+                new() { Type = MediaType.Video, FilePath = "/media/loops/spiral-intro.mp4", SessionTimeSeconds = 12 },
+                new() { Type = MediaType.Image, FilePath = "/media/stills/mantra-01.png", SessionTimeSeconds = 248 },
+                new() { Type = MediaType.Video, FilePath = "/media/loops/deep-drop.mp4", SessionTimeSeconds = 697 },
+                new() { Type = MediaType.Image, FilePath = "/media/stills/mantra-07.png", SessionTimeSeconds = 1142 },
+            }
+        };
 
         /// <summary>View model for a single row in the media list. Formatting copied verbatim from
-        /// the WPF nested MediaRow; it took a MediaLogEntry, which is not available here.</summary>
+        /// the WPF nested MediaRow.</summary>
         public sealed class MediaRow
         {
             public string DisplayName { get; }
@@ -264,22 +242,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             public string TimeOffsetText { get; }
             public string TypeLabel { get; }
             public IBrush TypeBrush { get; }
-            public MediaKind Type { get; }
+            public MediaType Type { get; }
 
-            public MediaRow(MediaKind type, string? filePath, string? displayName, TimeSpan sessionTime)
+            public MediaRow(MediaLogEntry entry)
             {
+                var type = entry.Type;
+                var displayName = entry.DisplayName;
                 Type = type;
-                FilePath = filePath ?? "";
+                FilePath = entry.FilePath ?? "";
                 DisplayName = !string.IsNullOrEmpty(displayName)
                     ? displayName!
                     : (string.IsNullOrEmpty(FilePath) ? "" : Path.GetFileName(FilePath));
 
-                var t = sessionTime;
+                var t = entry.SessionTime;
                 TimeOffsetText = t.TotalHours >= 1
                     ? $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}"
                     : $"{t.Minutes:D2}:{t.Seconds:D2}";
 
-                if (type == MediaKind.Video)
+                if (type == MediaType.Video)
                 {
                     TypeLabel = Loc.Get("label_video");
                     TypeBrush = new SolidColorBrush(Color.FromRgb(255, 105, 180)); // pink

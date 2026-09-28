@@ -24,10 +24,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// those head-owned dependencies out of the view; the built-in Core session rack is the one
     /// honest read-only slice restored here, including pointer and keyboard selection.
     ///
-    /// ponytail: needs MainWindow (preset CRUD, SessionManager, JustDropOrdersService, and the
+    /// ponytail: needs MainWindow (preset CRUD, JustDropOrdersService, and the
     /// tab FX clock), wired when those services move to Core. The remaining wiring points, all
     /// named in the XAML, are:
-    ///   BtnCreateSession / BtnSessionHistory / BtnStartSession / BtnRevealSpoilers /
+    ///   BtnStartSession / BtnRevealSpoilers /
     ///   BtnLoadPreset / BtnSaveOverPreset / BtnDeletePreset / BtnSharePreset /
     ///   BtnExportSession / BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
@@ -53,6 +53,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CmbRackSort.SelectionChanged += CmbRackSort_SelectionChanged;
             TxtRackSearch.TextChanged += TxtRackSearch_TextChanged;
             BtnExportPreset.Click += BtnExportPreset_Click;
+            BtnSessionHistory.Click += BtnSessionHistory_Click;
+            BtnCreateSession.Click += BtnCreateSession_Click;
             TxtDetailTitle.Text = Loc.Get("label_select_a_preset");
             TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_preset_or_session_to_see_details");
             TxtSessionDuration.Text = Loc.Get("label_30_minutes");
@@ -241,6 +243,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         };
         private bool _rackToolbarSyncing;
 
+        private SessionManager? _sessionManager;
+
         private IReadOnlyList<Session> _availableSessions =
             Session.GetAllSessions().Where(session => session.IsAvailable).ToArray();
         private Session? _selectedSession;
@@ -257,6 +261,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal void UseSessionManager(SessionManager manager)
         {
             ArgumentNullException.ThrowIfNull(manager);
+            _sessionManager = manager;
             _availableSessions = manager.AllSessions.Where(session => session.IsAvailable).ToArray();
             _selectedSession = null;
             RackSourceChips.Children.Clear();
@@ -699,10 +704,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Grid.SetColumn(badges, 7);
             grid.Children.Add(badges);
 
-            // Session CRUD/import is not on this head yet. Keep the existing action geometry, but
-            // do not offer controls that would silently do nothing in this read-only slice.
+            // Edit is live (WPF SessionBtn_Edit); export/share/delete are not on this head yet.
             var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            actions.Children.Add(RowAction("✎", Loc.Get("tooltip_edit_session"), danger: false));
+            var edit = RowAction("✎", Loc.Get("tooltip_edit_session"), danger: false);
+            edit.IsEnabled = true;
+            edit.Click += (_, e) => { e.Handled = true; EditSession(session); };
+            actions.Children.Add(edit);
             actions.Children.Add(RowAction("↗", Loc.Get("tooltip_export_session"), danger: false));
             // Pad out to four buttons' worth (28px wide, 3px margin) so the existing row columns
             // keep their layout if custom rows are restored later.
@@ -813,6 +820,113 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 var selected = row.Tag is Session session && session.Id == _selectedSession?.Id;
                 row.Theme = selected ? selectedStyle : normalStyle;
             }
+        }
+
+        /// <summary>WPF MainWindow.Presets.cs BtnSessionHistory_Click.</summary>
+        private void BtnSessionHistory_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            try { _ = new Windows.SessionLogHistoryWindow().ShowDialog(owner); }
+            catch (Exception ex) { Serilog.Log.Error(ex, "Failed to open session history dialog"); }
+        }
+
+        /// <summary>WPF MainWindow.SessionIO.cs BtnCreateSession_Click: editor, then save-as into
+        /// CustomSessions and register with SessionManager.</summary>
+        private async void BtnCreateSession_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            var editor = new Windows.SessionEditorWindow((TimelineSession?)null);
+            if (await editor.ShowDialog<bool?>(owner) != true || editor.ResultSession is not { } session) return;
+            if (await PickSessionSavePath(owner, "title_save_new_session", session) is not { } path) return;
+
+            try
+            {
+                var lib = SessionLibrary();
+                lib.AddNewSession(session, path);
+                UseSessionManager(lib);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Error(ex, "Failed to save session {Path}", path);
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_error"), ex.Message);
+                return;
+            }
+            await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_success"), Loc.Get("msg_new_session_saved"));
+            Serilog.Log.Information("Session created: {Name} at {Path}", session.Name, path);
+        }
+
+        /// <summary>WPF MainWindow.SessionIO.cs SessionBtn_Edit: a built-in becomes a new custom
+        /// session saved where the user picks; a custom session is saved over its own file.</summary>
+        private async void EditSession(Session session)
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            var editor = new Windows.SessionEditorWindow(TimelineSession.FromSession(session));
+            if (await editor.ShowDialog<bool?>(owner) != true || editor.ResultSession is not { } edited) return;
+
+            if (session.Source == SessionSource.BuiltIn)
+            {
+                edited.Id = Guid.NewGuid().ToString();
+                if (await PickSessionSavePath(owner, "title_save_as_new_custom_session", edited) is not { } path) return;
+                try
+                {
+                    var lib = SessionLibrary();
+                    lib.AddNewSession(edited, path);
+                    UseSessionManager(lib);
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Error(ex, "Failed to save session {Path}", path);
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_error"), ex.Message);
+                    return;
+                }
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_success"),
+                    Loc.Get("msg_built_in_session_saved_as_a_new_custom_sessio"));
+            }
+            else
+            {
+                edited.Id = session.Id;
+                edited.Source = session.Source;
+                edited.SourceFilePath = session.SourceFilePath;
+                try
+                {
+                    var lib = SessionLibrary();
+                    lib.UpdateCustomSession(edited);
+                    UseSessionManager(lib);
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Error(ex, "Failed to save session {Path}", edited.SourceFilePath);
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_error"), ex.Message);
+                    return;
+                }
+                SelectSession(edited);
+                ShowDropZoneStatus($"Session updated: {edited.Name}", isError: false);
+            }
+        }
+
+        /// <summary>WPF's InitializeSessionManager on first use, for a view mounted without one.</summary>
+        private SessionManager SessionLibrary()
+        {
+            if (_sessionManager is null)
+            {
+                _sessionManager = new SessionManager();
+                _sessionManager.LoadAllSessions();
+            }
+            return _sessionManager;
+        }
+
+        private static async System.Threading.Tasks.Task<string?> PickSessionSavePath(Window owner, string titleKey, Session session)
+        {
+            var folder = await owner.StorageProvider.TryGetFolderFromPathAsync(SessionFileService.CustomSessionsFolder);
+            var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = Loc.Get(titleKey),
+                SuggestedStartLocation = folder,
+                SuggestedFileName = SessionFileService.GetExportFileName(session),
+                DefaultExtension = ".session.json",
+                FileTypeChoices = new[] { new FilePickerFileType("Session Files") { Patterns = new[] { "*.session.json" } } },
+            });
+            return file?.TryGetLocalPath();
         }
 
         /// <summary>Three pinned receipts, the "+n more" toggle, the shop door, and three tray

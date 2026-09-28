@@ -6,6 +6,9 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -17,29 +20,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - The row Click handler moves out of the DataTemplate onto the ItemsControl: template
     ///    content has no name scope to bind a markup handler through. The Tag still carries the
     ///    row, exactly as the WPF original read it.
-    ///  - <see cref="HistoryRow"/> takes the fields it formats rather than a
-    ///    <c>Models.SessionLog</c>: that model lives in the WPF head, not CCP.Core, and this port
-    ///    may reference neither. The formatting it does — duration, media counts, status — is
-    ///    ported verbatim, so restoring the <c>HistoryRow(SessionLog)</c> constructor when the model
-    ///    reaches Core is a one-liner.
-    ///
-    /// <para><b>DELIBERATELY STILL UNREACHABLE.</b> Its WPF call site is
-    /// <c>MainWindow.Presets.BtnSessionHistory_Click</c>, and the button that raises it —
-    /// <c>BtnSessionHistory</c> — is already in this head's Views/Tabs/PresetsTabView.axaml with no
-    /// Click handler. Wiring those two together is a one-liner and is REFUSED, because
-    /// <see cref="LoadRecentRows"/> below has no data source on this head: WPF reads
-    /// <c>App.SessionLog.LoadRecentLogs()</c> from
-    /// ConditioningControlPanel/Services/Session/SessionLogService.cs, which is not in CCP.Core,
-    /// so the list is three fabricated sessions seeded for the render proof. A "Recent Sessions"
-    /// button that opens invented dates, durations and media counts is a window that LIES about
-    /// the user's own history — worse than a button that does nothing, and not something a
-    /// reviewer or a render can catch, since the fake rows look exactly like real ones.</para>
-    ///
-    /// <para>What unblocks it: <c>SessionLogService</c> and <c>Models.SessionLog</c> reaching Core.
-    /// At that point <see cref="LoadRecentRows"/> becomes a real read, the
-    /// <c>HistoryRow(SessionLog)</c> constructor comes back, and the wiring is
-    /// <c>BtnSessionHistory.Click += … new SessionLogHistoryWindow().ShowDialog(owner)</c> in
-    /// PresetsTabView's constructor, guarded on a VISIBLE owner.</para>
+    ///  - Reads Core's <see cref="SessionLogService"/> directly instead of <c>App.SessionLog</c>;
+    ///    the service holds no state for a read.
     /// </summary>
     public partial class SessionLogHistoryWindow : Window
     {
@@ -47,8 +29,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly TextBlock _txtCount;
         private readonly ItemsControl _logList;
 
-        public SessionLogHistoryWindow()
+        private readonly IReadOnlyList<SessionLog> _logs;
+
+        /// <summary>WPF's constructor: the user's persisted logs, newest first.</summary>
+        public SessionLogHistoryWindow() : this(new SessionLogService().LoadRecentLogs()) { }
+
+        internal SessionLogHistoryWindow(IReadOnlyList<SessionLog> logs)
         {
+            _logs = logs;
             AvaloniaXamlLoader.Load(this);
 
             _txtEmpty = this.FindControl<TextBlock>("TxtEmpty")!;
@@ -65,7 +53,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void LoadLogs()
         {
-            var rows = LoadRecentRows();
+            var rows = _logs.Select(l => new HistoryRow(l)).ToList();
 
             if (rows.Count == 0)
             {
@@ -82,36 +70,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        /// <summary>
-        /// WPF read <c>App.SessionLog.LoadRecentLogs()</c>.
-        /// ponytail: needs ConditioningControlPanel/Services/Session/SessionLogService.cs. Until then this returns
-        /// placeholder rows so the window renders the populated state rather than the empty one.
-        /// </summary>
-        private static List<HistoryRow> LoadRecentRows() => new()
-        {
-            new HistoryRow("🌀", "Deep Spiral", new DateTime(2026, 8, 30, 21, 14, 0),
-                TimeSpan.FromMinutes(42) + TimeSpan.FromSeconds(18), videos: 12, images: 48, completed: true),
-            new HistoryRow("💗", "Soft Start", new DateTime(2026, 8, 29, 19, 2, 0),
-                TimeSpan.FromMinutes(11) + TimeSpan.FromSeconds(5), videos: 3, images: 20, completed: true),
-            new HistoryRow("🔒", "Lockdown Hour", new DateTime(2026, 8, 27, 23, 40, 0),
-                TimeSpan.FromHours(1) + TimeSpan.FromMinutes(6) + TimeSpan.FromSeconds(31), videos: 21, images: 0, completed: false),
-        };
-
         private void LogRow_Click(object? sender, RoutedEventArgs e)
         {
             if (e.Source is not Control c) return;
-            if (c.Tag is not HistoryRow) return;
+            if (c.Tag is not HistoryRow row) return;
 
-            // WPF opened SessionCompleteWindow(row.Log, playSound: false) as a modal child.
-            //
-            // ponytail: SessionCompleteWindow IS ported (it sits beside this file) and takes a
-            // Recap, so the window is no longer the blocker - the DATA is. SessionLogService is
-            // still in the WPF head, so LoadRecentRows below fabricates its rows, and a HistoryRow
-            // carries none of the XP, difficulty or media list a Recap needs. Building one from a
-            // row would open a recap reading "0 XP, no media" over a session that had both, which
-            // is a window that lies. Wire this when
-            // ConditioningControlPanel/Services/Session/SessionLogService.cs reaches Core and a row
-            // can carry its real log.
+            try
+            {
+                _ = new SessionCompleteWindow(row.Log, playSound: false).ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to open historical session log");
+            }
         }
     }
 
@@ -121,6 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// </summary>
     public sealed class HistoryRow
     {
+        public SessionLog Log { get; }
         public string Icon { get; }
         public string Name { get; }
         public string StartedText { get; }
@@ -135,21 +107,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>The WPF footer line's five Runs, joined with the same separator.</summary>
         public string Meta => $"{StartedText}  ·  {DurationText}  ·  {MediaText}";
 
-        public HistoryRow(string? icon, string? name, DateTime startedAt, TimeSpan duration,
-                          int videos, int images, bool completed)
+        public HistoryRow(SessionLog log)
         {
-            Icon = icon ?? "";
-            Name = name ?? "";
-            StartedText = startedAt.ToString("g");
+            Log = log;
+            Icon = log.SessionIcon ?? "";
+            Name = log.SessionName ?? "";
+            StartedText = log.StartedAt.ToString("g");
 
-            var d = duration;
+            var d = log.Duration;
             DurationText = d.TotalHours >= 1
                 ? $"{(int)d.TotalHours}:{d.Minutes:D2}:{d.Seconds:D2}"
                 : $"{d.Minutes:D2}:{d.Seconds:D2}";
 
+            int videos = log.Media?.Count(m => m.Type == MediaType.Video) ?? 0;
+            int images = (log.Media?.Count ?? 0) - videos;
             MediaText = Loc.GetF("label_media_count_videos_images", videos, images);
 
-            if (completed)
+            if (log.Completed)
             {
                 StatusText = Loc.Get("label_completed");
                 StatusBrush = new SolidColorBrush(Color.FromRgb(144, 238, 144));

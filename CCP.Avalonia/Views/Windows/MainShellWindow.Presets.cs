@@ -81,13 +81,14 @@
 //   internal void VelvetBtnAppInfo_Click(…)
 //   internal void VelvetBtnSchedulerRamp_Click(…)
 //   internal void BtnCatalogue_Click(…)                RESTORED
-//   internal void BtnSessionHistory_Click(…)
+//   internal void BtnSessionHistory_Click(…)         RESTORED in PresetsTabView
 //   internal void BtnStartSession_Click(…)
 //   private async void StartSession(…)
 //   private void OnSessionCompleted(…)
 //   private DateTime _suppressSessionSummaryUntil
 //   internal void SuppressNextSessionSummary(…)
-//   private void OnSessionLogReady(…)
+//   private void OnSessionLogReady(…)                SessionCompleteWindow takes Core SessionLog; no
+//                                                    Avalonia session engine publishes LogReady yet
 //   private SessionCompleteWindow? _liveSessionRecap
 //   private bool _liveSessionRecapTeardownHooked
 //   private void CloseLiveSessionRecap(…)
