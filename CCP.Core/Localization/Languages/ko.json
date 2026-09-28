@@ -5389,6 +5389,7 @@
   "tray_wake_bambi": "Bambi 깨우기",
   "tray_wake": "깨우기",
   "tray_show": "창 보이기",
+  "tray_stop_everything": "모두 중지",
   "btn_stop_session_no": "계속하기",
   "btn_stop_session_yes": "세션 멈추기",
   "dialog_stop_session_penalty": "\n(일시정지 페널티: -{0} XP, 그래서 {1} XP를 받을 참이었습니다.)",

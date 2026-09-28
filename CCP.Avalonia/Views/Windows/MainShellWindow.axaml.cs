@@ -131,9 +131,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnManageMods_Click(object? sender, RoutedEventArgs e) { }
         private void ModSelectorCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
 
-        // ponytail: MainWindow.Settings.cs's BtnExit_Click saves the session and shuts the
-        // application down through App. Closing the shell is the part that is ours.
-        private void BtnExit_Click(object? sender, RoutedEventArgs e) => Close();
+        // MainWindow.Settings.cs's BtnExit_Click: the real exit, not the X-to-tray close.
+        private void BtnExit_Click(object? sender, RoutedEventArgs e) => RequestExit();
     }
 }
 
@@ -178,7 +177,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 //   private bool _isCapturingPanicKey
 //   internal bool IsCapturingPanicKey
 //   private bool _isCapturingPauseKey
-//   private bool _exitRequested
 //   private int _panicPressCount
 //   private string _leaderboardMode
 //   private int _lockdownTimerClickCount

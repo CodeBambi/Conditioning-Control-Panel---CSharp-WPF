@@ -5389,6 +5389,7 @@
   "tray_wake_bambi": "Bambi を起こす",
   "tray_wake": "起こす",
   "tray_show": "ウィンドウを表示",
+  "tray_stop_everything": "すべて停止",
   "btn_stop_session_no": "続ける",
   "btn_stop_session_yes": "セッションを止める",
   "dialog_stop_session_penalty": "\n（一時停止のペナルティ: -{0} XP。つまり {1} XP になるところでした。）",

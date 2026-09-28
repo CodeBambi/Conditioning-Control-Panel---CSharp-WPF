@@ -6005,6 +6005,7 @@
   "tray_wake_bambi": "Wake Bambi up",
   "tray_wake": "Wake them up",
   "tray_show": "Show the window",
+  "tray_stop_everything": "Stop everything",
   "btn_stop_session_no": "Keep going",
   "btn_stop_session_yes": "Stop the session",
   "dialog_stop_session_penalty": "\n(Pause penalty: -{0} XP, so you would have earned {1} XP.)",
