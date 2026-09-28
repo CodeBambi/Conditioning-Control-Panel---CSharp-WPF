@@ -446,3 +446,12 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   until unit 6, MergedRecovery hook). No server contract change. Decision: the V2 client and OAuth live in Core.
 - Evidence: XpCurveGoldenTests (113 values from the pre-move code), V2AuthServiceWireTests (fake handler: method, URL,
   headers, body transcribed from the WPF source; error paths; tokens never logged), each fail-proofed. Review: ACCEPT.
+
+## avalonia-port/overlay-first-frame-perf: +55
+- Root cause of subliminal cards lingering 1-3 s: overlays sat at _NET_WM_WINDOW_OPACITY 0; KWin sends a fully transparent
+  XWayland window no frame callbacks, so the vsync'd swap waited on XWayland's 1 s fallback and stalled every overlay and
+  the UI thread. X11Overlay.OpacityCardinal floors opacity at 1/(2^32-1) (invisible); a backstop closes each card by
+  hold + 200 ms after Show().
+- Live 150 s flash + subliminal + bouncing text: card p95 3.06 -> 0.23 s; bouncing-text worst frame gap 2097 -> 62 ms,
+  69-152 fps; flash 6.37-6.45 s (WPF 6.45 s). 2 fail-proofed tests. Review: ACCEPT. One unexplained all-overlays vanish at
+  131.7 s in one run (log overwritten; suspected stray panic key; not reproduced).
