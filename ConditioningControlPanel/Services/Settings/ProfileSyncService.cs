@@ -568,7 +568,7 @@ namespace ConditioningControlPanel.Services
 
         public ProfileSyncService()
         {
-            _httpClient = new HttpClient
+            _httpClient = new HttpClient(new ServerClockHandler())
             {
                 Timeout = TimeSpan.FromSeconds(30)
             };
@@ -1558,6 +1558,27 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static readonly TimeSpan SyncCooldown = TimeSpan.FromSeconds(30);
 
+        // Failure backoff state (see SyncFailureBackoff). Touched only inside _syncGate.
+        private int _syncBackoffFailures;
+        private DateTime? _syncBlockedUntilUtc;
+        private string? _syncBackoffToken;
+        private TimeSpan _syncBackoffOffset;
+
+        /// <summary>
+        /// Arm the failure backoff. Keyed to the auth token and clock offset this attempt used, so a
+        /// sign-in, a 401 heal or a learned server clock opens the gate again at once.
+        /// </summary>
+        private void NoteSyncFailureForBackoff(int? status)
+        {
+            _syncBackoffFailures++;
+            var wait = SyncFailureBackoff.Delay(_syncBackoffFailures);
+            _syncBlockedUntilUtc = DateTime.UtcNow + wait;
+            _syncBackoffToken = App.Settings?.Current?.AuthToken;
+            _syncBackoffOffset = ServerClock.Offset;
+            App.Logger?.Warning("Profile sync backing off {Seconds:F0}s after failure #{Count} (status {Status})",
+                wait.TotalSeconds, _syncBackoffFailures, status?.ToString() ?? "none");
+        }
+
         public async Task<bool> SyncProfileAsync()
         {
             // Skip if offline mode is enabled
@@ -1597,6 +1618,15 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("Profile sync skipped - cooldown active ({Remaining}s remaining)",
                     Math.Ceiling((SyncCooldown - (DateTime.Now - LastSyncTime.Value)).TotalSeconds));
+                return false;
+            }
+
+            // Failure backoff: a refused sync used to leave the door open for every caller at once.
+            if (SyncFailureBackoff.ShouldSkip(DateTime.UtcNow, _syncBlockedUntilUtc, _syncBackoffToken,
+                    App.Settings?.Current?.AuthToken, _syncBackoffOffset, ServerClock.Offset))
+            {
+                App.Logger?.Debug("Profile sync skipped - backing off after {Failures} failure(s), {Remaining}s left",
+                    _syncBackoffFailures, Math.Ceiling((_syncBlockedUntilUtc!.Value - DateTime.UtcNow).TotalSeconds));
                 return false;
             }
 
@@ -1862,6 +1892,28 @@ namespace ConditioningControlPanel.Services
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
 
+                    // A 403 for clock skew: the signature was right, our timestamp was not. The
+                    // handler has already read the Date header; the body's server_time (#233) is
+                    // the second source. Re-sign with the corrected clock and try ONCE; anything
+                    // still refused falls through to the backoff below.
+                    if (v2Response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                    {
+                        string? refusal = null;
+                        try { refusal = await v2Response.Content.ReadAsStringAsync(); } catch { /* status alone */ }
+                        var reason = ServerClock.ParseRefusal(refusal, out var serverTime);
+                        if (serverTime != null) ServerClock.Observe(serverTime, DateTimeOffset.UtcNow);
+                        if (string.Equals(reason, "clock_skew", StringComparison.OrdinalIgnoreCase))
+                        {
+                            App.Logger?.Warning("V2 Profile sync refused for clock skew; re-signing with server offset {Seconds:F0}s and retrying once",
+                                ServerClock.Offset.TotalSeconds);
+                            var retry = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/sync");
+                            AddAuthHeader(retry);
+                            retry.Content = new StringContent(v2Body, Encoding.UTF8, "application/json");
+                            if (SignRequest(retry, v2Body))
+                                v2Response = await _httpClient.SendAsync(retry);
+                        }
+                    }
+
                     if (!v2Response.IsSuccessStatusCode)
                     {
                         // Contract D: merged tombstone. Not a rejection of the DATA, so the
@@ -1893,6 +1945,7 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)",
                             (int)v2Response.StatusCode, error?.Length ?? 0);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
+                        NoteSyncFailureForBackoff((int)v2Response.StatusCode);
                         // Settle a deferred streak break only on a DEFINITIVE rejection (4xx) —
                         // retrying cannot change those answers. A 5xx is transient like the 429
                         // above: leave it to the retry/timeout window rather than deciding the
@@ -2699,6 +2752,7 @@ namespace ConditioningControlPanel.Services
                 else
                     App.Logger?.Error(ex, "Failed to sync profile to cloud");
                 LastSyncError = ex.Message;
+                if (!IsExpectedCancellation(ex)) NoteSyncFailureForBackoff(null);
                 // Mobile streak parity: the cloud is unreachable, so a deferred streak break
                 // gets the pre-parity behavior now instead of waiting out the full timeout.
                 App.Achievements?.Progress?.ResolveDeferredStreakBreak("sync failed");
@@ -2710,6 +2764,8 @@ namespace ConditioningControlPanel.Services
                 // Track sync health — only count actual failures, not skips (cooldown, gate, offline)
                 if (syncSucceeded)
                 {
+                    _syncBackoffFailures = 0;
+                    _syncBlockedUntilUtc = null;
                     if (ConsecutiveSyncFailures > 0)
                     {
                         ConsecutiveSyncFailures = 0;
@@ -4548,7 +4604,7 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+            var timestamp = ServerClock.UtcNow.ToUnixTimeSeconds().ToString(); // server-corrected: a skewed PC clock 403s every sync
             var payload = $"{timestamp}:{body}";
 
             // Key derived from unified_id + embedded app key
@@ -4569,6 +4625,9 @@ namespace ConditioningControlPanel.Services
 
         private long _lastSettingsBackupTicks = 0;
         private static readonly long SettingsBackupDebounceTicks = TimeSpan.FromMinutes(5).Ticks;
+        private int _backupRefusedTooLarge;   // 1 after a 413: automatic backups stop for the session
+        private int _loggedBackupOversize;    // log the largest settings once, not every five minutes
+        private int _loggedBackupTrim;
 
         /// <summary>
         /// Properties to exclude from settings backup (server-authoritative or identity fields).
@@ -4629,6 +4688,14 @@ namespace ConditioningControlPanel.Services
             restored.CustomAssetsPath = current.CustomAssetsPath;
             restored.DiscordWebhookUrl = current.DiscordWebhookUrl;
             restored.LastSeenUtc = current.LastSeenUtc;
+            // A backup over budget leaves out the per-file asset lists (SettingsBackupBudget), so
+            // an empty list in the restore may just mean "not carried": keep this PC's own.
+            if (restored.DisabledAssetPaths.Count == 0 && current.DisabledAssetPaths.Count > 0)
+                restored.DisabledAssetPaths = new HashSet<string>(current.DisabledAssetPaths);
+            if (restored.ActiveAssetPaths.Count == 0 && current.ActiveAssetPaths.Count > 0)
+                restored.ActiveAssetPaths = new HashSet<string>(current.ActiveAssetPaths);
+            if (restored.AssetPresets.Count == 0 && current.AssetPresets.Count > 0)
+                restored.AssetPresets = new List<AssetPreset>(current.AssetPresets);
             foreach (var p in ChasterLocalProperties)
             {
                 var v = p.GetValue(current);
@@ -4654,6 +4721,12 @@ namespace ConditioningControlPanel.Services
             if (!force && App.Settings?.RestoredFromBackup == true)
             {
                 App.Logger?.Debug("Settings cloud backup skipped — local settings came from a daily backup and have not been reconciled yet");
+                return false;
+            }
+
+            if (!force && Interlocked.CompareExchange(ref _backupRefusedTooLarge, 0, 0) == 1)
+            {
+                App.Logger?.Debug("Settings backup skipped (server refused the last one as too large)");
                 return false;
             }
 
@@ -4707,21 +4780,30 @@ namespace ConditioningControlPanel.Services
                     if (IsExcludedFromBackup(key)) obj.Remove(key);
                 }
 
-                var strippedJson = obj.ToString(Formatting.None);
-
-                // Gzip compress
-                byte[] compressedBytes;
-                using (var output = new MemoryStream())
+                // Gzip + base64 under the server's 1 MB body limit. The unbounded per-file asset
+                // lists are trimmed first; still too big and the backup is skipped rather than sent
+                // to earn a 413 every five minutes (see SettingsBackupBudget).
+                var encoded = SettingsBackupBudget.Encode(obj);
+                if (!encoded.Fits)
                 {
-                    using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
+                    if (Interlocked.Exchange(ref _loggedBackupOversize, 1) == 0)
                     {
-                        var jsonBytes = Encoding.UTF8.GetBytes(strippedJson);
-                        await gzip.WriteAsync(jsonBytes, 0, jsonBytes.Length);
+                        var largest = string.Join(", ", SettingsBackupBudget.LargestProperties(obj)
+                            .Select(x => $"{x.Name}={x.Bytes}"));
+                        App.Logger?.Warning("Settings backup skipped: {Size} bytes encoded is over the {Max} budget even after trimming [{Trimmed}]. Largest: {Largest}",
+                            encoded.Base64.Length, SettingsBackupBudget.MaxEncodedBytes,
+                            string.Join(",", encoded.Trimmed), largest);
                     }
-                    compressedBytes = output.ToArray();
+                    return false;
+                }
+                if (encoded.Trimmed.Count > 0 && Interlocked.Exchange(ref _loggedBackupTrim, 1) == 0)
+                {
+                    App.Logger?.Information("Settings backup trimmed to fit: left out {Trimmed}",
+                        string.Join(",", encoded.Trimmed));
                 }
 
-                var base64Data = Convert.ToBase64String(compressedBytes);
+                var compressedBytes = encoded.Compressed;
+                var base64Data = encoded.Base64;
 
                 var requestData = new
                 {
@@ -4743,6 +4825,14 @@ namespace ConditioningControlPanel.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
+                    if ((int)response.StatusCode == 413)
+                    {
+                        // The same body will be refused again: stop for this session.
+                        Interlocked.Exchange(ref _backupRefusedTooLarge, 1);
+                        App.Logger?.Warning("Settings backup refused as too large (413, {Size} bytes encoded); no more automatic backups this session",
+                            base64Data.Length);
+                        return false;
+                    }
                     await HandleUnauthorizedAsync(response);
                     var error = await response.Content.ReadAsStringAsync();
                     App.Logger?.Warning("Settings backup failed: {Status} - {Error}", response.StatusCode, error);
