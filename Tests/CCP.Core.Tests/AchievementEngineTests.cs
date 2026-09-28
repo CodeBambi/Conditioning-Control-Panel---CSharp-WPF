@@ -177,4 +177,44 @@ public sealed class AchievementEngineTests : IDisposable
         Assert.False(engine.IsDirty);
         Assert.True(OnDisk(path, FreeId));
     }
+
+    [Fact]
+    public void BubbleCountStreakUnlocksAtTheRuleAndAWrongAnswerResetsIt()
+    {
+        var engine = new AchievementEngine(new AchievementStore(MainPath));
+        for (var i = 1; i < AchievementRules.MathematiciansNightmareStreak; i++) engine.TrackBubbleCountResult(true);
+        engine.TrackBubbleCountResult(false);
+        Assert.Equal(0, engine.Progress.BubbleCountCorrectStreak);
+        for (var i = 1; i < AchievementRules.MathematiciansNightmareStreak; i++) engine.TrackBubbleCountResult(true);
+        Assert.False(engine.Progress.IsUnlocked("mathematicians_nightmare"));
+
+        engine.TrackBubbleCountResult(true);
+
+        Assert.True(OnDisk(MainPath, "mathematicians_nightmare"));
+        Assert.Equal(2 * AchievementRules.MathematiciansNightmareStreak - 1, engine.Progress.TotalBubbleCountCorrect);
+        Assert.Equal(1, engine.Progress.TotalBubbleCountFailed);
+    }
+
+    // Literal catalogue numbers (Achievement.All): 69 ids = 56 free (2 parked, 4 premium-program) + 13 exclusive.
+    // A catalogue change must update these on purpose.
+    [Theory]
+    [InlineData(false, 50, 13, 50)]
+    [InlineData(true, 54, 13, 67)]
+    public void FreeAndPatronCountsAreSeparateAndFollowPremium(bool premium, int freeTotal, int patronTotal, int reachableTotal)
+    {
+        var previous = CoreEntitlement.HasPremiumProvider;
+        try
+        {
+            CoreEntitlement.HasPremiumProvider = () => premium;
+            var engine = new AchievementEngine(new AchievementStore(MainPath));
+            engine.TryUnlock(FreeId);
+
+            Assert.Equal(1, engine.GetUnlockedCount(exclusive: false));
+            Assert.Equal(0, engine.GetUnlockedCount(exclusive: true));
+            Assert.Equal(freeTotal, engine.GetTotalCount(exclusive: false));
+            Assert.Equal(patronTotal, engine.GetTotalCount(exclusive: true));
+            Assert.Equal((1, reachableTotal), engine.GetReachableCounts());
+        }
+        finally { CoreEntitlement.HasPremiumProvider = previous; }
+    }
 }

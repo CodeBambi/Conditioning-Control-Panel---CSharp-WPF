@@ -50,6 +50,9 @@ public sealed class RealCatalogueFailureFallbackTests
 
         internal SessionManager? Candidate { get; private set; }
 
+        protected override string AchievementsPath =>
+            System.IO.Path.Combine(CatalogueStartupTestProfile.DirectoryPath, "achievements.json");
+
         protected override SessionManager CreateSessionManager()
         {
             var candidate = new SessionManager(new SessionFileService(_customFolder, _builtInFolder));
@@ -150,6 +153,10 @@ public sealed class RealCatalogueFailureFallbackTests
                     Assert.DoesNotContain(rows,
                         row => (row.Tag as Session)?.Id == "real_failure_builtin");
                     Assert.All(rows, row => Assert.IsType<Session>(row.Tag));
+
+                    // A tracked counter dirties the engine; the exit handler must flush it, and into
+                    // this test's profile, never the real ~/.config achievements.json.
+                    CoreProgression.TrackBubbleCountResult(false);
                 }
                 finally
                 {
@@ -163,6 +170,8 @@ public sealed class RealCatalogueFailureFallbackTests
                     }
                 }
 
+                Assert.Contains("\"TotalBubbleCountFailed\": 1",
+                    File.ReadAllText(Path.Combine(profile, "achievements.json")));
                 return Task.CompletedTask;
             });
         }

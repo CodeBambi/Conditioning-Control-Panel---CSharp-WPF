@@ -122,6 +122,77 @@ internal sealed class AchievementEngine
     /// </summary>
     public static bool CanUnlockExclusive => CoreEntitlement.HasPremium;
 
+    /// <summary>A bubble-count answer: the correct-answer streak (mathematicians_nightmare) and the totals.</summary>
+    public void TrackBubbleCountResult(bool correct)
+    {
+        if (correct)
+        {
+            Progress.BubbleCountCorrectStreak++;
+            if (Progress.BubbleCountCorrectStreak > Progress.BubbleCountBestStreak)
+                Progress.BubbleCountBestStreak = Progress.BubbleCountCorrectStreak;
+            if (Progress.BubbleCountCorrectStreak >= AchievementRules.MathematiciansNightmareStreak)
+                TryUnlock("mathematicians_nightmare");
+        }
+        else
+        {
+            Progress.BubbleCountCorrectStreak = 0;
+        }
+        TrackBubbleCountGameResult(correct);
+    }
+
+    public void TrackBubbleCountGameResult(bool success)
+    {
+        if (success) Progress.TotalBubbleCountCorrect++;
+        else Progress.TotalBubbleCountFailed++;
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Unlock count filtered by exclusivity. The free (false) and patron (true) counts are
+    /// deliberately separate and must never be summed. An earned IsPremiumFeature badge counts
+    /// unconditionally - it is a receipt, and a lapse never takes it back.
+    /// </summary>
+    public int GetUnlockedCount(bool exclusive)
+    {
+        var count = 0;
+        foreach (var id in Progress.UnlockedAchievements)
+            if (Achievement.All.TryGetValue(id, out var a) && a.IsExclusive == exclusive) count++;
+        return count;
+    }
+
+    /// <summary>
+    /// Total filtered by exclusivity. THE PREMIUM-PROGRAM RULE lives here: a locked
+    /// IsPremiumFeature badge is in the total only for a user who could earn it; an unlocked one
+    /// always. Parked (IsHidden) achievements are never counted.
+    /// </summary>
+    public int GetTotalCount(bool exclusive)
+    {
+        var hasPremium = CoreEntitlement.HasPremium;
+        var count = 0;
+        foreach (var a in Achievement.All.Values)
+        {
+            if (a.IsHidden || a.IsExclusive != exclusive) continue;
+            if (a.IsPremiumFeature && !hasPremium && !Progress.IsUnlocked(a.Id)) continue;
+            count++;
+        }
+        return count;
+    }
+
+    /// <summary>Blended pair for one-line surfaces (profile bubble); never for the tab's counters.</summary>
+    public (int Unlocked, int Total) GetReachableCounts()
+    {
+        var hasPremium = CoreEntitlement.HasPremium;
+        int unlocked = 0, total = 0;
+        foreach (var a in Achievement.All.Values)
+        {
+            if (Progress.IsUnlocked(a.Id)) { unlocked++; total++; continue; }
+            if (a.IsHidden) continue;
+            if ((a.IsExclusive || a.IsPremiumFeature) && !hasPremium) continue;
+            total++;
+        }
+        return (unlocked, total);
+    }
+
     /// <summary>No-op (false) for non-entitled users; otherwise exactly <see cref="TryUnlock"/>.</summary>
     public bool TryUnlockExclusive(string achievementId)
     {

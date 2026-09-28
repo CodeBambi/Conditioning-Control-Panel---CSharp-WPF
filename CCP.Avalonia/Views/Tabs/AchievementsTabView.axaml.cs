@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -9,8 +10,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public AchievementsTabView()
         {
             AvaloniaXamlLoader.Load(this);
-            DataContext = new AchievementsTabViewModel();
+            DataContext = new AchievementsTabViewModel(Engine);
+            // WPF MainWindow.xaml.cs:420: the counters refresh on every unlock.
+            if (App.Achievements is { } live)
+            {
+                void Refresh(object? _, Models.Achievement __) => global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => DataContext = new AchievementsTabViewModel(live));
+                AttachedToVisualTree += (_, _) => { live.Unlocked -= Refresh; live.Unlocked += Refresh; };
+                DetachedFromVisualTree += (_, _) => live.Unlocked -= Refresh;
+            }
         }
+
+        /// <summary>The live engine; on the headless render path a read-only load of the same file
+        /// (nothing on that path ever saves it).</summary>
+        private static AchievementEngine Engine =>
+            App.Achievements ?? new AchievementEngine(new AchievementStore(AchievementStore.DefaultPath));
     }
 
     /// <summary>
@@ -28,17 +42,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public string LocRewardCount => Loc.GetF("achv_reward_count", RewardsEarned, RewardsTotal);
         public string LocPatronCount => Loc.GetF("label_0_1_achievements_unlocked", PatronUnlocked, PatronTotal);
 
-        // Placeholder counts. The real values come from AchievementService, which is still in
-        // the WPF head; wiring them is a separate change from proving the view renders.
-        public int Unlocked => 0;
-        public int Total => 25;
+        private readonly AchievementEngine _engine;
+        internal AchievementsTabViewModel(AchievementEngine engine) => _engine = engine;
+
+        // Keys and arg order: WPF MainWindow.AchievementsTab.cs:155-172. Free and patron are never summed.
+        public int Unlocked => _engine.GetUnlockedCount(exclusive: false);
+        public int Total => _engine.GetTotalCount(exclusive: false);
+        public int PatronUnlocked => _engine.GetUnlockedCount(exclusive: true);
+        public int PatronTotal => _engine.GetTotalCount(exclusive: true);
+
+        // ponytail: reward count needs WardrobeCatalog.AchievementGates (WPF head only); WPF collapses
+        // the line when it has no gates, so it is hidden here until the catalog reaches Core.
+        public bool RewardCountVisible => false;
         public int RewardsEarned => 0;
-        public int RewardsTotal => 12;
-        public int PatronUnlocked => 0;
-        public int PatronTotal => 8;
+        public int RewardsTotal => 0;
 
         /// <summary>Free users see the locked collection behind an overlay; content stays in
         /// the tree, just covered - same contract as the WPF view.</summary>
-        public bool PatronLocked => true;
+        public bool PatronLocked => !CoreEntitlement.HasPremium;
     }
 }

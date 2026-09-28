@@ -544,31 +544,7 @@ public class AchievementService : IDisposable
     /// <summary>
     /// Track bubble count game result
     /// </summary>
-    public void TrackBubbleCountResult(bool correct)
-    {
-        if (correct)
-        {
-            _progress.BubbleCountCorrectStreak++;
-            if (_progress.BubbleCountCorrectStreak > _progress.BubbleCountBestStreak)
-            {
-                _progress.BubbleCountBestStreak = _progress.BubbleCountCorrectStreak;
-            }
-
-            if (_progress.BubbleCountCorrectStreak >= MathematiciansNightmareStreak)
-            {
-                TryUnlock("mathematicians_nightmare");
-            }
-        }
-        else
-        {
-            _progress.BubbleCountCorrectStreak = 0;
-        }
-
-        // Track total correct/failed games
-        TrackBubbleCountGameResult(correct);
-
-        _isDirty = true;
-    }
+    public void TrackBubbleCountResult(bool correct) => _engine.TrackBubbleCountResult(correct);
     
     /// <summary>
     /// Track Lock Card completion
@@ -875,18 +851,7 @@ public class AchievementService : IDisposable
     /// <summary>
     /// Track bubble count game result (success/failure)
     /// </summary>
-    public void TrackBubbleCountGameResult(bool success)
-    {
-        if (success)
-        {
-            _progress.TotalBubbleCountCorrect++;
-        }
-        else
-        {
-            _progress.TotalBubbleCountFailed++;
-        }
-        _isDirty = true;
-    }
+    public void TrackBubbleCountGameResult(bool success) => _engine.TrackBubbleCountGameResult(success);
 
     /// <summary>
     /// Track session started
@@ -999,16 +964,7 @@ public class AchievementService : IDisposable
     /// An earned <see cref="Achievement.IsPremiumFeature"/> badge is counted here
     /// unconditionally - it is a receipt, and a lapse never takes it back.
     /// </summary>
-    public int GetUnlockedCount(bool exclusive)
-    {
-        var count = 0;
-        foreach (var id in _progress.UnlockedAchievements)
-        {
-            if (Achievement.All.TryGetValue(id, out var a) && a.IsExclusive == exclusive)
-                count++;
-        }
-        return count;
-    }
+    public int GetUnlockedCount(bool exclusive) => _engine.GetUnlockedCount(exclusive);
 
     /// <summary>
     /// Get total achievement count filtered by exclusivity.
@@ -1024,20 +980,7 @@ public class AchievementService : IDisposable
     /// It is deliberately NOT IsExclusive: an exclusive badge disappears from the
     /// gallery on a downgrade, and a graduation receipt must never do that.
     /// </summary>
-    public int GetTotalCount(bool exclusive)
-    {
-        var hasPremium = App.Patreon?.HasPremiumAccess == true;
-        var count = 0;
-        foreach (var a in Achievement.All.Values)
-        {
-            if (a.IsHidden) continue; // parked — not earnable in this build
-            if (a.IsExclusive != exclusive) continue;
-            // Locked, premium-only, and the user has no premium: out of the denominator.
-            if (a.IsPremiumFeature && !hasPremium && !_progress.IsUnlocked(a.Id)) continue;
-            count++;
-        }
-        return count;
-    }
+    public int GetTotalCount(bool exclusive) => _engine.GetTotalCount(exclusive);
 
     /// <summary>
     /// The pair for one-line blended surfaces (the profile bubble): everything this user
@@ -1047,20 +990,7 @@ public class AchievementService : IDisposable
     /// Never feed these to the achievements tab: its free/patron counters are
     /// deliberately separate numbers.
     /// </summary>
-    public (int Unlocked, int Total) GetReachableCounts()
-    {
-        var hasPremium = App.Patreon?.HasPremiumAccess == true;
-        int unlocked = 0, total = 0;
-        foreach (var a in Achievement.All.Values)
-        {
-            if (_progress.IsUnlocked(a.Id)) { unlocked++; total++; continue; }
-            if (a.IsHidden) continue; // parked — not earnable in this build
-            if (a.IsExclusive && !hasPremium) continue;
-            if (a.IsPremiumFeature && !hasPremium) continue;
-            total++;
-        }
-        return (unlocked, total);
-    }
+    public (int Unlocked, int Total) GetReachableCounts() => _engine.GetReachableCounts();
 
     /// <summary>
     /// Whether the current user is entitled to EARN patron-exclusive achievements (CoreEntitlement,

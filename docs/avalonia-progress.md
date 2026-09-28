@@ -276,3 +276,15 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   account's progress after Reset).
 - Evidence: AchievementEngineTests (9, each fail-proofed, incl. the Reset race). Review: ACCEPT + P2 race fixed.
 - Not run: WPF tests (Windows CI). No Avalonia surface yet (unit 5).
+
+## avalonia-port/achievements-wire: +238
+- The Avalonia head creates the Core AchievementEngine (~/.config achievements.json), seeds
+  CoreProgram.UnlockAchievementProvider and CoreProgression.TrackBubbleCountResultProvider like WPF, shows
+  AchievementPopup per unlock on the UI thread, and saves on exit only when dirty. Free/patron counts and the
+  bubble-count streak moved into the engine (WPF delegates). The Achievements tab reads live counts.
+- Local-only (decisions log): no sync, no streak writes, no ResetProgress. Test apps use a sandbox path, so no
+  test can touch a real achievements.json (proven: the real file is still absent after both desktop suites).
+- Fixed on the way: a closed shell kept answering language changes (flaky SpiralHelpPopoverTests).
+- Evidence: tab renders 3/50 from a sandbox fixture; sha256 unchanged after a 60 s idle session; tests
+  fail-proofed (idle exit writes nothing, dirty exit persists, premium/free counts with literal numbers).
+- Gaps: card grid, ItemUnlockedPopup (WardrobeCatalog is WPF-only), no user path reaches an unlock yet.
