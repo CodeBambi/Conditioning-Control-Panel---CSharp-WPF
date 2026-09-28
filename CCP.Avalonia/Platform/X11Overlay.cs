@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
 using Serilog;
@@ -129,9 +130,32 @@ internal static class X11Overlay
     ///
     /// <para><b>XSync, not XFlush.</b> This display is a different connection from Avalonia's, and
     /// the server orders requests per connection only. A flushed-but-unprocessed request could
-    /// land after Avalonia's XMapWindow; XSync returns once the server has applied it.</para></summary>
+    /// land after Avalonia's XMapWindow; XSync returns once the server has applied it.</para>
+    ///
+    /// <para><b>Why this also places the window.</b> Until override-redirect is set, every
+    /// ConfigureWindow on the window is redirected to the WM as a ConfigureRequest, and the WM
+    /// replays it whenever it gets round to it. Avalonia's X11 <c>Position</c> setter issues one
+    /// (x/y), and its DPI rescale on that move issues another carrying the 300x200-logical default
+    /// size. Set <c>Position</c> first and KWin can replay that stale size AFTER Show() has
+    /// configured the real one - measured on XWayland: 537x358 overlays on the non-primary
+    /// screens in 14 of 25 runs, 0 of 25 with this order. So override-redirect goes on before
+    /// any geometry, and geometry is set here so no caller can get the order wrong. Width/Height
+    /// use the window's own scaling after the move, i.e. the exact factor Avalonia multiplies back
+    /// by in Show().</para></summary>
+    /// <param name="bounds">Where the overlay goes, in screen pixels (e.g. <c>Screen.Bounds</c>).
+    /// Applied on every platform; only the override-redirect part is X11-only.</param>
     /// <returns>False when the platform cannot do this (no XID, no display, not 64-bit) or the server refused it.</returns>
-    internal static bool SetOverrideRedirect(TopLevel window)
+    internal static bool SetOverrideRedirect(Window window, PixelRect bounds)
+    {
+        var ok = SetOverrideRedirect(window);
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.Position = bounds.Position;
+        window.Width = bounds.Width / window.DesktopScaling;
+        window.Height = bounds.Height / window.DesktopScaling;
+        return ok;
+    }
+
+    private static bool SetOverrideRedirect(TopLevel window)
     {
         // The struct offsets below are the LP64 layout (x86_64, arm64).
         if (IntPtr.Size != 8 || !TryGetXid(window, out var xid)) return false;

@@ -70,10 +70,6 @@ namespace ConditioningControlPanel.Avalonia
                     ShowInTaskbar = false,
                     ShowActivated = false,
                     CanResize = false,
-                    WindowStartupLocation = WindowStartupLocation.Manual,
-                    Position = b.Position,
-                    Width = b.Width / screen.Scaling,
-                    Height = b.Height / screen.Scaling,
                 };
 
                 var handle = w.TryGetPlatformHandle();
@@ -84,7 +80,7 @@ namespace ConditioningControlPanel.Avalonia
 
                 var pre = Read(display, xid);
                 Check(pre is { } p0 && p0.MapState != IsViewable, $"not yet mapped before Show() (map_state={pre?.MapState.ToString() ?? "unreadable"})");
-                Check(X11Overlay.SetOverrideRedirect(w), "SetOverrideRedirect returned true");
+                Check(X11Overlay.SetOverrideRedirect(w, b), "SetOverrideRedirect returned true");
                 Check(X11Overlay.SetClickThrough(w, true), "SetClickThrough(true) returned true");
                 w.Show();
                 overlays.Add((w, screen, xid));
