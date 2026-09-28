@@ -24,10 +24,12 @@
 //   protected override void OnStateChanged(…)     // avatar re-attach, Bark, taskbar thumbnail
 //   private void HideAvatarTube(…)                // called by BtnMinimize_Click below
 
+using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -77,8 +79,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private WindowEdge? ResizeEdgeFor(PointerEventArgs e)
             => WindowState == WindowState.Normal && CanResize ? EdgeAt(e.GetPosition(this), Bounds.Size) : null;
 
+        // The shell's stretch policy (docs/avalonia-decisions.md, oracle-deep): WPF's Fill while
+        // the window is within 15% of the design canvas aspect, Uniform outside it.
+        private const double CanvasAspect = 1585.0 / 901.0;
+        internal const double FillTolerance = 0.15;
+
+        internal static Stretch StretchFor(Size s)
+        {
+            if (s.Width <= 0 || s.Height <= 0) return Stretch.Fill;
+            double r = s.Width / s.Height / CanvasAspect;
+            return Math.Abs(r - 1) <= FillTolerance ? Stretch.Fill : Stretch.Uniform;
+        }
+
+        private void UpdateShellStretch()
+        {
+            var root = Named<Grid>("RootGrid");
+            var box = Named<Viewbox>("ShellViewbox");
+            if (root is null || box is null) return;
+            var want = StretchFor(root.Bounds.Size);
+            if (box.Stretch != want) box.Stretch = want;
+        }
+
         private void HookResizeEdges()
         {
+            if (Named<Grid>("RootGrid") is { } root) root.SizeChanged += (_, _) => UpdateShellStretch();
+
             // Tunnel, so the edge wins over whatever card sits under the 5px band.
             AddHandler(PointerMovedEvent, (_, e) =>
             {

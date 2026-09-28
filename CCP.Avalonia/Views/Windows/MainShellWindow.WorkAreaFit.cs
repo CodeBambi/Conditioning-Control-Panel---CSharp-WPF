@@ -39,6 +39,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class MainShellWindow
     {
         // The XAML floors, captured before we ever lower them so they can be restored.
+        private global::Avalonia.Platform.Screen? _fitScreen;
         private double _designMinWidth = double.NaN;
         private double _designMinHeight = double.NaN;
 
@@ -46,7 +47,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // size/position changes that could route back here.
         private bool _workAreaFitInProgress;
 
-        private void EnsureDesignFloorsCaptured()
+        internal void EnsureDesignFloorsCaptured()
         {
             if (double.IsNaN(_designMinWidth))
             {
@@ -60,7 +61,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// floors, and raises them back toward the XAML values when the screen can take it.
         /// Sizes are DIPs, the space MinWidth/MinHeight themselves live in.
         /// </summary>
-        private void RelaxSizeFloorsTo(double maxWidthDip, double maxHeightDip)
+        internal void RelaxSizeFloorsTo(double maxWidthDip, double maxHeightDip)
         {
             EnsureDesignFloorsCaptured();
             if (maxWidthDip > 0)
@@ -158,6 +159,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 EnsureDesignFloorsCaptured();
                 FitToCurrentMonitorWorkArea("opened");
                 ScalingChanged += (_, __) => FitToCurrentMonitorWorkArea("scaling-changed");
+                // Screen change: dragged onto another monitor, or the topology itself changed.
+                // Either way the floors must fit THAT work area or they veto the resize.
+                _fitScreen = Screens?.ScreenFromWindow(this);
+                PositionChanged += (_, __) =>
+                {
+                    var now = Screens?.ScreenFromWindow(this);
+                    if (now is null || now.Bounds == _fitScreen?.Bounds) return;
+                    _fitScreen = now;
+                    FitToCurrentMonitorWorkArea("screen-changed");
+                };
+                if (Screens is { } screens) screens.Changed += (_, __) => FitToCurrentMonitorWorkArea("screens-changed");
             }
             catch (Exception ex)
             {
