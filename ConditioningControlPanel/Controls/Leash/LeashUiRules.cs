@@ -221,4 +221,28 @@ public static class LeashUiRules
 
     /// <summary>After a panic press the gate stands back this long, then returns at the next idle moment.</summary>
     public static readonly TimeSpan PanicSnooze = TimeSpan.FromMinutes(10);
+
+    /// <summary>The line the panel says when the runner stopped by itself, as a loc key taking
+    /// the holder's name. <paramref name="skip"/> is what became of a video that will not play.</summary>
+    public static string StopKey(LeashTaskStopped s, PunishKind? kind, LeashSkipResult? skip = null)
+    {
+        if (s.Assignment)
+            return s.Reason == LeashTaskStop.Unplayable ? "leash_assign_stop_unplayable" : "leash_assign_stop_closed";
+        return s.Reason switch
+        {
+            LeashTaskStop.Unplayable => skip switch
+            {
+                LeashSkipResult.Skipped => "leash_stop_unplayable_skipped",
+                LeashSkipResult.Marked => "leash_stop_unplayable_marked",
+                _ => "leash_stop_video",
+            },
+            LeashTaskStop.CouldNotContinue => "leash_stop_no_phrases",
+            _ => kind switch
+            {
+                PunishKind.Bubbles => "leash_stop_bubbles",
+                PunishKind.Video => "leash_stop_video",
+                _ => "leash_stop_session",
+            },
+        };
+    }
 }

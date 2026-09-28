@@ -29,6 +29,8 @@ namespace ConditioningControlPanel.Controls.Leash;
 /// ends when the video ends or its time cap is reached (the runner decides), when the leash is
 /// cut, or on a panic press, which always works. A TASK window (a video assignment) closes
 /// normally. The way out is told up front in the explainer, so there is no cut button here.
+/// A page that fails to load, or a local file that will not decode, raises
+/// <see cref="PlaybackFailed"/> so the runner gives up instead of leaving an empty cage (2026-09-28).
 /// </summary>
 internal sealed class LeashPunishWindow : Window
 {
@@ -37,8 +39,12 @@ internal sealed class LeashPunishWindow : Window
     /// <summary>The page's video reached its end.</summary>
     public static event Action? VideoEnded;
 
+    /// <summary>The page could not load (an HTTP error, no network) or the local video would not decode.</summary>
+    public static event Action? PlaybackFailed;
+
     private const string LocalHost = "leash-video.ccp";
 
+    private bool _failed;
     private readonly bool _locked;
     private readonly string _holder;
     private readonly TextBlock _title;
@@ -156,7 +162,8 @@ internal sealed class LeashPunishWindow : Window
     private static string LocalPage(string src) =>
         "<!doctype html><html><head><meta charset=\"utf-8\"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}"
         + "video{width:100vw;height:100vh;object-fit:contain;background:#000}</style></head><body>"
-        + "<video autoplay playsinline src=\"" + WebUtility.HtmlEncode(src) + "\"></video></body></html>";
+        + "<video autoplay playsinline onerror=\"try{chrome.webview.postMessage('leash-error')}catch(e){}\" src=\""
+        + WebUtility.HtmlEncode(src) + "\"></video></body></html>";
 
     // ---- the browser -------------------------------------------------------------------------
 
@@ -190,6 +197,13 @@ internal sealed class LeashPunishWindow : Window
                 string? msg = null;
                 try { msg = e.TryGetWebMessageAsString(); } catch { }
                 if (msg == "leash-ended") VideoEnded?.Invoke();
+                else if (msg == "leash-error") Fail("media error");
+            };
+            core.NavigationCompleted += (_, e) =>
+            {
+                // A navigation this window refused (off the page) reports as cancelled: not a failure.
+                if (e.IsSuccess || e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled) return;
+                Fail($"navigation {e.WebErrorStatus} http {e.HttpStatusCode}");
             };
             await core.AddScriptToExecuteOnDocumentCreatedAsync(CageScript);
             go(core);
@@ -198,6 +212,21 @@ internal sealed class LeashPunishWindow : Window
         {
             App.Logger?.Warning("Leash video window failed: {E}", ex.Message);
         }
+    }
+
+    /// <summary>Once per window: the video cannot play here.</summary>
+    private void Fail(string why)
+    {
+        if (_failed || _allowClose) return;
+        _failed = true;
+        App.Logger?.Information("Leash video window: will not play ({Why})", why);
+        // Posted: the handler closes this window, which must not happen inside a WebView2 callback.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!ReferenceEquals(Current, this)) return;
+            try { PlaybackFailed?.Invoke(); }
+            catch (Exception ex) { App.Logger?.Debug("Leash playback-failed handler failed: {E}", ex.Message); }
+        }));
     }
 
     /// <summary>The panel browser's own profile (its cookies carry the Hypnotube age check) with

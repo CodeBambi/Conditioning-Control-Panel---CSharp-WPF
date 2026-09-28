@@ -98,3 +98,9 @@ public enum LeashSendStatus
 }
 
 public sealed record LeashSendResult(LeashSendStatus Status, DateTimeOffset? DndUntil = null);
+
+/// <summary>What became of a punishment video that will not play. <see cref="Skipped"/> = the
+/// server dropped it and told the holder (<c>punish_skip</c>); <see cref="Marked"/> = the server
+/// could not (refused, unknown op, offline), so it stays pending and this client leaves it off
+/// the gate for a day.</summary>
+public enum LeashSkipResult { Skipped, Marked }
