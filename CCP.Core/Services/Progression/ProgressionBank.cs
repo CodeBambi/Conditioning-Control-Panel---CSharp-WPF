@@ -9,7 +9,7 @@ namespace ConditioningControlPanel
     /// <see cref="CoreProgression.AddXPProvider"/> with <see cref="Add"/>: the login gate, the XP add and the
     /// level loop with <c>HighestLevelEver</c>.
     /// ponytail: no skill/Cycle multipliers (skill-tree owners are under-awarded, which errs safe), no skill
-    /// points, companion XP, quests, idle suppression or achievements - each lands with its ported feature.
+    /// points, companion XP, quests or achievements - each lands with its ported feature.
     /// </summary>
     public static class ProgressionBank
     {
@@ -26,6 +26,13 @@ namespace ConditioningControlPanel
             if (!CoreAccount.IsLoggedIn && !offline)
             {
                 Log.Debug("XP not awarded - user not logged in and not in offline mode");
+                return;
+            }
+            // ponytail: no idle tracker on this head, so the passive sources WPF suppresses while idle
+            // (ProgressionService.cs:70-78) are never banked; bank them again once an idle tracker exists.
+            if (source is "Flash" or "Subliminal" or "BouncingText")
+            {
+                Log.Debug("XP not banked: +{Amount} from passive {Source} (no idle tracker)", amount, source);
                 return;
             }
             s.PlayerXP += amount;

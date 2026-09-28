@@ -308,7 +308,10 @@ namespace ConditioningControlPanel.Services
             if (completed)
             {
                 var award = SessionXp.Compute(session.BonusXP, PauseCount, s.PlayerLevel, elapsed);
-                if (CoreProgression.AddXPProvider != null) { CoreProgression.AddXP(award, "Session"); xp = award; }
+                // Banked = what the ledger actually gained (a head's gate may refuse it, e.g. signed out).
+                var before = ProfileAdopt.TotalXp(s);
+                CoreProgression.AddXP(award, "Session");
+                xp = (int)Math.Round(ProfileAdopt.TotalXp(s) - before);
                 Log.Information("Session completed: {Name}, XP: {XP} (banked {Banked}, paused {PauseCount}x, penalty: -{Penalty})",
                     session.Name, award, xp, PauseCount, XPPenalty);
             }

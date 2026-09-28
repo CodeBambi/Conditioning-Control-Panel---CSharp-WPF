@@ -34,7 +34,7 @@ namespace ConditioningControlPanel.Services
         private readonly Func<IEnumerable<string>?> _localAchievements;
         private readonly Func<bool> _inSession;
         private readonly SemaphoreSlim _gate = new(1, 1);
-        private string[] _serverAchievements = Array.Empty<string>();
+        private string[]? _serverAchievements;   // null: the profile carried none, so achievements are not known
         private Timer? _heartbeat;
         private int _nudgePending;
 
@@ -56,7 +56,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>The profile load succeeded: the baseline pushes are allowed against.</summary>
         public void MarkLoaded(IEnumerable<string>? serverAchievements)
         {
-            _serverAchievements = serverAchievements?.ToArray() ?? Array.Empty<string>();
+            _serverAchievements = serverAchievements?.ToArray();
             Loaded = true;
         }
 
@@ -65,28 +65,30 @@ namespace ConditioningControlPanel.Services
         {
             StopHeartbeat();
             Loaded = false;
-            _serverAchievements = Array.Empty<string>();
+            _serverAchievements = null;
             LastSyncTime = null;
         }
 
         private static bool SignedIn(AppSettings s) => !s.OfflineMode && !string.IsNullOrEmpty(s.UnifiedId) && CoreAccount.IsLoggedIn;
 
-        /// <summary>The body: known fields only. Xp is the TOTAL, as WPF sends it.</summary>
-        public static SyncBody Body(AppSettings s, IEnumerable<string> achievements) => new()
+        /// <summary>The body: known fields only (achievements only when <paramref name="achievements"/> is known, never
+        /// shrunk to local-only). Xp is the TOTAL, as WPF sends it.</summary>
+        public static SyncBody Body(AppSettings s, IEnumerable<string>? achievements) => new()
         {
-            Known = Sent,
+            Known = achievements == null ? Sent & ~SyncBody.Field.Achievements : Sent,
             UnifiedId = s.UnifiedId,
             Xp = (int)ProfileAdopt.TotalXp(s),
             Level = s.PlayerLevel,
             DescentEpoch = Descent.DescentEpochs.ClientEpoch,
-            Achievements = achievements.Distinct().OrderBy(a => a, StringComparer.Ordinal).ToList(),
+            Achievements = achievements?.Distinct().OrderBy(a => a, StringComparer.Ordinal).ToList(),
         };
 
-        public async Task<bool> PushAsync(string reason)
+        /// <param name="waitForGate">Logout: wait (bounded) for an in-flight push instead of skipping.</param>
+        public async Task<bool> PushAsync(string reason, bool waitForGate = false)
         {
             var s = CoreSettings.Current;
             if (!Loaded || !SignedIn(s)) { Log.Debug("Profile sync skipped ({Reason}) - not loaded this session or not signed in", reason); return false; }
-            if (!await _gate.WaitAsync(0)) return false;
+            if (!await _gate.WaitAsync(waitForGate ? TimeSpan.FromSeconds(5) : TimeSpan.Zero)) return false;
             try
             {
                 if (LastSyncTime is { } last && UtcNow() - last < Cooldown) { Log.Debug("Profile sync skipped - cooldown active"); return false; }
@@ -98,7 +100,9 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
                 var id = s.UnifiedId!;
-                var body = JsonConvert.SerializeObject(Body(s, _serverAchievements.Concat(_localAchievements() ?? Array.Empty<string>())));
+                if (!Loaded || !SignedIn(s)) return false;   // a logout between the check above and the gate
+                var server = _serverAchievements;
+                var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>())));
                 using var request = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/sync");
                 if (!string.IsNullOrEmpty(s.AuthToken)) request.Headers.Add("X-Auth-Token", s.AuthToken);
                 request.Content = new StringContent(body, Encoding.UTF8, "application/json");
@@ -106,14 +110,21 @@ namespace ConditioningControlPanel.Services
                 Log.Information("Syncing profile ({Reason}) - Level: {Level}, TotalXP: {Xp}", reason, s.PlayerLevel, (int)totalXp);
                 using var response = await _http.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
+                // Signed out (or into another account) while this was in flight: the answer is not ours to apply.
+                if (!Loaded || !string.Equals(s.UnifiedId, id, StringComparison.Ordinal))
+                {
+                    Log.Information("Profile sync response dropped - the account changed while it was in flight");
+                    return false;
+                }
                 if (!response.IsSuccessStatusCode)
                 {
                     // Contract D: merged tombstone; the head's recovery re-signs in and reloads.
                     if (V2AuthService.MergedRecovery is { } merged && await merged(response, json)) return false;
-                    if (response.StatusCode == (HttpStatusCode)429)
+                    // 429, and a 409 no recovery handled: cool down rather than retry on every trigger.
+                    if (response.StatusCode is (HttpStatusCode)429 or HttpStatusCode.Conflict)
                     {
                         LastSyncTime = UtcNow();
-                        Log.Warning("V2 Profile sync rate-limited by server (429), will retry later");
+                        Log.Warning("V2 Profile sync refused by server ({Status}), will retry after the cooldown", (int)response.StatusCode);
                         return false;
                     }
                     Log.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)", (int)response.StatusCode, json.Length);

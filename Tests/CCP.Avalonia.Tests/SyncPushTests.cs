@@ -10,6 +10,9 @@ using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Newtonsoft.Json.Linq;
+using Avalonia;
+using Avalonia.Headless;
+using CCP.Avalonia.Testing;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -29,6 +32,7 @@ public sealed partial class AccountSeedTests
         public string? Profile;
         public HttpStatusCode SyncStatus = HttpStatusCode.OK;
         public string SyncReply = "{\"success\":true}";
+        public TaskCompletionSource? Hold;   // a sync answer that waits until released
         public IEnumerable<JObject> Syncs => Seen.Where(r => r.Path == "POST /v2/user/sync").Select(r => r.Body!);
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
@@ -39,7 +43,12 @@ public sealed partial class AccountSeedTests
             if (path == "GET /v2/user/profile")
                 return Profile == null ? new(HttpStatusCode.InternalServerError) { Content = new StringContent("{}") }
                     : new(HttpStatusCode.OK) { Content = new StringContent(Profile) };
-            if (path == "POST /v2/user/sync") return new(SyncStatus) { Content = new StringContent(SyncReply) };
+            if (path == "POST /v2/user/sync")
+            {
+                var (status, reply) = (SyncStatus, SyncReply);
+                if (Hold is { } hold) await hold.Task;
+                return new(status) { Content = new StringContent(reply) };
+            }
             return new(HttpStatusCode.OK) { Content = new StringContent("{}") };
         }
     }
@@ -200,6 +209,97 @@ public sealed partial class AccountSeedTests
         Assert.Equal("u2", (string?)body["unified_id"]);
         Assert.Equal(900, (int)body["xp"]!);
         Assert.Equal(2, (int)body["level"]!);
+    });
+
+    [Fact]
+    public void SigningInAsADifferentAccount_ClearsTheLastOnesProgression_BeforeTheFirstPush() => WithFreshInstall(async () =>
+    {
+        var s = CoreSettings.Current;
+        var (wire, _, _) = SignIn("uA", profile: null);
+        (s.PlayerLevel, s.PlayerXP, s.HighestLevelEver) = (40, 500, 40);   // account A's progression, still in settings
+        wire.Profile = """{"user":{"unified_id":"uB","level":2,"xp":900,"current_season":"2026-08","achievements":["b_only"]}}""";
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            if (global::Avalonia.Application.Current is null)
+                global::Avalonia.AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var dialog = new global::ConditioningControlPanel.Avalonia.Views.Dialogs.LoginDialog();
+            dialog.Succeed(new V2AuthService.V2User { UnifiedId = "uB", Level = 2, Xp = 900 }, "tok", null, false);
+            await dialog.ProfileLoad;
+        });
+        var body = Assert.Single(wire.Syncs);
+        Assert.Equal("uB", (string?)body["unified_id"]);
+        Assert.Equal(900, (int)body["xp"]!);
+        Assert.Equal(2, (int)body["level"]!);
+        Assert.Equal(new[] { "b_only" }, body["achievements"]!.Values<string>());
+    });
+
+    [Fact]
+    public void Logout_WaitsForAnInFlightPush_ThenClears() => WithFreshInstall(async () =>
+    {
+        var (wire, sync, _) = SignIn("u1", L40Profile("u1"));
+        Assert.True(await AccountSeed.LoadProfileAsync());
+        wire.Hold = new TaskCompletionSource();
+        sync.UtcNow = () => T0.AddSeconds(31);
+        var push = sync.PushAsync("level-up");
+        var logout = AccountSeed.Logout();
+        await Task.Delay(300);
+        Assert.False(logout.IsCompleted);                        // waiting on the push, not skipping it
+        wire.Hold.SetResult();
+        Assert.True(await push);
+        await logout;
+        Assert.Equal((1, 0.0), (CoreSettings.Current.PlayerLevel, CoreSettings.Current.PlayerXP));
+    });
+
+    [Fact]
+    public void AResponseArrivingAfterTheAccountChanged_IsNotApplied() => WithFreshInstall(async () =>
+    {
+        var (wire, sync, _) = SignIn("u1", L40Profile("u1"));
+        Assert.True(await AccountSeed.LoadProfileAsync());
+        var s = CoreSettings.Current;
+        wire.Hold = new TaskCompletionSource();
+        wire.SyncReply = """{"success":true,"user":{"level":90,"xp":9000000,"current_season":"2026-08"}}""";
+        sync.UtcNow = () => T0.AddSeconds(31);
+        var push = sync.PushAsync("level-up");
+        sync.Reset();                                             // a logout that did not wait (the 5 s bound ran out)
+        ProgressionClear.Apply(s);
+        (s.UnifiedId, s.CurrentSeason) = ("u2", "2026-08");
+        wire.Hold.SetResult();
+        Assert.False(await push);
+        Assert.Equal(1, s.PlayerLevel);
+    });
+
+    [Fact]
+    public void AProfileWithoutAchievements_SendsNoAchievementsKey() => WithFreshInstall(async () =>
+    {
+        var (wire, _, local) = SignIn("u1", """{"user":{"unified_id":"u1","level":2,"xp":900,"current_season":"2026-08"}}""");
+        local.Add("linux_only");
+        Assert.True(await AccountSeed.LoadProfileAsync());
+        Assert.Null(Assert.Single(wire.Syncs)["achievements"]);
+    });
+
+    [Fact]
+    public void AnUnhandled409_CoolsDown() => WithFreshInstall(async () =>
+    {
+        var (wire, sync, _) = SignIn("u1", L40Profile("u1"));
+        wire.SyncStatus = HttpStatusCode.Conflict;
+        Assert.True(await AccountSeed.LoadProfileAsync());
+        sync.UtcNow = () => T0.AddSeconds(10);
+        Assert.False(await sync.PushAsync("level-up"));
+        Assert.Single(wire.Syncs);
+    });
+
+    [Fact]
+    public void ProgressionBank_IgnoresPassiveSources_WithNoIdleTracker() => WithFreshInstall(() =>
+    {
+        var s = CoreSettings.Current;
+        CoreAccount.UnifiedUserId = "u1";
+        foreach (var src in new[] { "Flash", "Subliminal", "BouncingText" }) ProgressionBank.Add(50, src);
+        Assert.Equal(0, s.PlayerXP);
+        ProgressionBank.Add(50, "Session");
+        Assert.Equal(50, s.PlayerXP);
+        return Task.CompletedTask;
     });
 
     [Fact]

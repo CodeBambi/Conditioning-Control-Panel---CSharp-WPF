@@ -153,7 +153,7 @@ internal static class AccountSeed
     /// </summary>
     internal static async Task Logout()
     {
-        if (Sync is { Loaded: true } sync) await sync.PushAsync("pre-logout");
+        if (Sync is { Loaded: true } sync) await sync.PushAsync("pre-logout", waitForGate: true);
         Sync?.StopHeartbeat();
         SecretStore.ClearFailed = false;
         Patreon?.Logout();
