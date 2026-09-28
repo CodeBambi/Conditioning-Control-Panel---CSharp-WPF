@@ -5,8 +5,9 @@
 .DESCRIPTION
     Phase E of docs/CONTENT_PACKS_PLAN.md. ~1.36 GB of version-stable audio (plus the two
     bundled .ccpmod archives) no longer ships in the installer -- see the
-    $(ContentPackSoundsExclude) / $(ContentPackWebExclude) properties in
-    ConditioningControlPanel.csproj, which strip exactly the same file set from the build.
+    $(ContentPackSoundsExclude) (ContentPackSounds.props at the repo root, imported by both heads) /
+    $(ContentPackWebExclude) (ConditioningControlPanel.csproj) properties, which strip exactly the
+    same file set from the build.
     This script zips that payload straight out of the SOURCE TREE (not the publish output,
     which by definition no longer contains it) and emits the manifest the client reads.
 
@@ -326,9 +327,10 @@ function New-PackZip($spec, [string]$ZipPath, $Files) {
 # ---------------------------------------------------------------------------------------------
 # Strip/pack drift self-check
 # ---------------------------------------------------------------------------------------------
-# !!! HAND-MAINTAINED MIRROR OF ConditioningControlPanel.csproj !!!
+# !!! HAND-MAINTAINED MIRROR OF ContentPackSounds.props + ConditioningControlPanel.csproj !!!
 # These globs must be character-for-character the same file set as the
-# $(ContentPackSoundsExclude) + $(ContentPackWebExclude) properties in the csproj -- the set the
+# $(ContentPackSoundsExclude) (repo-root ContentPackSounds.props, imported by the WPF and Avalonia
+# heads) + $(ContentPackWebExclude) (csproj) properties -- the set the
 # BUILD STRIPS. $PackSpecs above is the set the PACKS SHIP. The two are edited independently and
 # nothing in MSBuild or Inno cross-checks them, so this list plus Assert-NoStripPackDrift is the
 # only thing standing between a one-line csproj edit and a file that ships NOWHERE (stripped but

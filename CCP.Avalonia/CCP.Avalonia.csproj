@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="..\ContentPackSounds.props" />
+
   <!--
     The cross-platform head. This replaces WPF, it does not sit beside it: the owner's decision is
     one UI codebase for Windows and Linux, so a feature is written once and both platforms get it.
@@ -47,13 +49,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The shared sounds at the same logical path as the WPF head (Resources\sounds), with the
-         SAME exclude set as its $(ContentPackSoundsExclude): that audio ships as a downloadable
-         content pack, not in-box. Keep this list mirrored with ConditioningControlPanel.csproj. -->
+    <!-- The shared sounds at the same logical path as the WPF head (Resources\sounds), minus the
+         content-pack audio in ..\ContentPackSounds.props, which both heads import. WPF's temporary
+         $(CirceNeutralInBoxOverride) (builtin-locked clips re-added in-box until the rebuilt
+         packs ship) is deliberately NOT mirrored: this head has no pack downloader and no bark path
+         that plays them. -->
     <Content Include="..\Assets\sounds\**\*" Link="Resources\sounds\%(RecursiveDir)%(Filename)%(Extension)"
-             Exclude="..\Assets\sounds\flashes_audio\**\*.mp3;..\Assets\sounds\flashes_audio\**\*.wav;..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.mp3;..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.wav;..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.ogg;..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.m4a;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png">
+             Exclude="$(ContentPackSoundsExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
 

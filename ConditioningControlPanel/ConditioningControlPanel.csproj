@@ -465,7 +465,9 @@
        hosted on the vX.Y.0 GitHub release, and downloaded at runtime into
        %LOCALAPPDATA%\ConditioningControlPanel\content\.
 
-       These four properties are the single source of truth and are consumed in BOTH places the
+       $(ContentPackSoundsExclude) lives in ..\ContentPackSounds.props (imported just below) so the
+       Avalonia head ships exactly the same sounds; the other three are here. These four properties
+       are the single source of truth and are consumed in BOTH places the
        content is declared: the <Content> itemgroups below AND the CopyContentAfterPublish target
        at the bottom of this file. The *Abs variants are the same patterns made absolute, because
        that target's Include is absolute too — keep each pair mirrored. If you change anything
@@ -494,28 +496,12 @@
        first). installer.iss [InstallDelete] carries the same extension list.
 
        DRIFT IS ENFORCED, NOT TRUSTED: build-content-packs.ps1 hardcodes a mirror of the two
-       Exclude properties below and hard-fails the pack build if the stripped set and the packed
+       Exclude properties (ContentPackSounds.props + ContentPackWebExclude below) and hard-fails the pack build if the stripped set and the packed
        set disagree in either direction. Edit these properties → edit $CsprojStripPatterns in
        that script in the same commit, or the next pack build stops with a diff.
        ========================================================================================== -->
+  <Import Project="..\ContentPackSounds.props" />
   <PropertyGroup>
-    <ContentPackSoundsExclude>
-      ..\Assets\sounds\flashes_audio\**\*.mp3;
-      ..\Assets\sounds\flashes_audio\**\*.wav;
-      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;
-      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;
-      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;
-      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;
-      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.mp3;
-      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.wav;
-      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.ogg;
-      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.m4a;
-      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;
-      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;
-      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;
-      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;
-      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
-    </ContentPackSoundsExclude>
     <!-- PATH CONVENTION. The bytes live in the shared repo-root \Assets tree and every include
          below is "..\Assets\X" with Link="Resources\X", so an Exclude has to be spelled the way
          the Include is or it matches nothing and the file ships anyway. These relative properties

@@ -27,11 +27,27 @@ public sealed class SharedSoundsPackagingTests
         Assert.True(File.Exists(path), $"missing {path}");
     }
 
+    /// <summary>ContentPackSounds.props: the pack audio (and sissyhypno's portraits) stays out,
+    /// while the mod manifests stay in-box - a missing manifest is a hang, not a degrade.</summary>
     [Fact]
     public void ContentPackAudioIsNotShippedInBox()
     {
-        var flashes = Path.Combine(AppContext.BaseDirectory, "Resources", "sounds", "flashes_audio");
-        Assert.False(Directory.Exists(flashes) && Directory.EnumerateFiles(flashes, "*", SearchOption.AllDirectories).Any(),
-            "flashes_audio ships as a content pack, not in-box (WPF $(ContentPackSoundsExclude))");
+        var sounds = Path.Combine(AppContext.BaseDirectory, "Resources", "sounds");
+        string[] packed = { "flashes_audio", "companion_audio/mods/builtin-bambisleep",
+                            "companion_audio/mods/builtin-locked", "companion_audio/mods/builtin-sissyhypno" };
+        string[] packExt = { ".mp3", ".wav", ".ogg", ".m4a" };
+        var shipped = packed
+            .Select(d => Path.Combine(new[] { sounds }.Concat(d.Split('/')).ToArray()))
+            .Where(Directory.Exists)
+            .SelectMany(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories))
+            .Where(f => packExt.Contains(Path.GetExtension(f).ToLowerInvariant())
+                        || (f.Contains("builtin-sissyhypno") && Path.GetExtension(f).ToLowerInvariant() == ".png"))
+            .ToArray();
+        Assert.True(shipped.Length == 0, "content-pack files shipped in-box: " + string.Join(", ", shipped));
+
+        foreach (var manifest in new[] { "builtin-bambisleep/bark_rules.json", "builtin-locked/bark_rules.json",
+                                         "builtin-sissyhypno/avatar_manifest.json" })
+            Assert.True(File.Exists(Path.Combine(new[] { sounds, "companion_audio", "mods" }
+                .Concat(manifest.Split('/')).ToArray())), $"mod manifest missing: {manifest}");
     }
 }
