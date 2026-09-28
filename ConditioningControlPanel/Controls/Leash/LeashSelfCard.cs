@@ -136,10 +136,42 @@ public sealed class LeashSelfCard : Border
                 _ => ("leash_self_task_open", FriendsLook.GoldBrush),
             };
             sp.Children.Add(Line("task", brush, Loc.GetF(key, what, _me.Holder.Name)));
+            if (LeashAssignRule.OfferWatch(a)) sp.Children.Add(WatchButton(a));
         }
         if (_me.Pardons > 0) sp.Children.Add(Line("scissors", FriendsLook.LilacBrush, Loc.GetF("leash_self_pardons", _me.Pardons)));
         if (sp.Children.Count == 0) sp.Children.Add(Line("heart", FriendsLook.MutedBrush, Loc.Get("leash_self_clear")));
         return sp;
+    }
+
+    /// <summary>"Watch it" on today's video task: opens the video and counts the real watch
+    /// (the runner's StartAssignmentWatch, which had no caller before 2026-09-28).</summary>
+    private FrameworkElement WatchButton(Assignment a)
+    {
+        var running = LeashLocator.Runner()?.RunningAid == a.Aid;
+        var b = LeashLook.Chunky(Loc.Get(running ? "leash_self_watching" : "leash_self_watch"), LeashLook.Tone.Gold, "play", size: 12.5);
+        b.Margin = new Thickness(20, 4, 0, 4);
+        b.HorizontalAlignment = HorizontalAlignment.Left;
+        b.Tag = "leash-self-watch";
+        b.IsEnabled = !running;
+        b.Click += (_, _) => StartWatch(a);
+        return b;
+    }
+
+    /// <summary>Opens the assignment's video. False (with a line) when it cannot now.</summary>
+    internal bool StartWatch(Assignment a)
+    {
+        var runner = LeashLocator.Runner();
+        bool ok = false;
+        try { ok = runner?.StartAssignmentWatch(a) == true; }
+        catch (Exception ex) { App.Logger?.Debug("[Leash] assignment watch failed: {E}", ex.Message); }
+        if (!ok)
+        {
+            var key = runner?.IsRunning == true ? "leash_self_watch_busy" : "leash_self_watch_cannot";
+            try { App.Notifications?.Show(Loc.Get(key), Services.NotificationType.Warning); } catch { }
+        }
+        else App.Logger?.Information("[Leash] watching today's video task {Aid}", a.Aid);
+        Render();
+        return ok;
     }
 
     private static FrameworkElement Line(string icon, Brush brush, string text)

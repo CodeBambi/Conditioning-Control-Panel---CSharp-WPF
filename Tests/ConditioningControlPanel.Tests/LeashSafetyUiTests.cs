@@ -10,8 +10,10 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// The leash safety pass (2026-09-28): the gate can say a video will not play, a stopped
-/// task frees the gate button, the runner's stop lines and the orphan guard.
+/// The leash safety pass (2026-09-28): the ask card keeps itself open on a failed answer, the
+/// gate can say a video will not play, the holder's let-go only sounds when it landed, the self
+/// card offers "Watch it" on a video task, the runner's stop lines, the orphan guard, the hold
+/// countdown and "the leash came off" naming who.
 /// </summary>
 [Collection(CompanionWpfRenderCollection.Name)]
 public class LeashSafetyUiTests
@@ -35,6 +37,56 @@ public class LeashSafetyUiTests
     private static Punishment Pun(string pid, PunishKind kind = PunishKind.Lines) =>
         new(pid, kind, 3, kind == PunishKind.Video ? new LeashWatch("ht", "1", null) : null,
             FakeLeashService.Vex, T0, T0.AddHours(72));
+
+    // ---- the ask card ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(LeashAnswerResult.Failed)]
+    [InlineData(LeashAnswerResult.Off)]
+    [InlineData(LeashAnswerResult.Gone)]
+    public void A_failed_answer_keeps_the_ask_card_open_and_says_why(LeashAnswerResult result)
+    {
+        Run(() =>
+        {
+            var svc = FakeLeashService.Sample();
+            var offer = svc.Snapshot.Offers[0];
+            var card = new LeashAskCard(offer, () => svc);
+            var answered = new List<bool>();
+            var dismissed = 0;
+            card.Answered += (_, a, _) => answered.Add(a);
+            card.Dismissed += () => dismissed++;
+
+            svc.NextAnswer = result;
+            card.AnswerAsync(true).GetAwaiter().GetResult();
+            Assert.Empty(answered);
+            Assert.Equal(0, dismissed);
+            Assert.False(string.IsNullOrEmpty(card.ErrorShown));
+            Assert.Null(svc.Snapshot.Me?.Holder.Id == offer.From.Id ? "leashed" : null);
+
+            if (result == LeashAnswerResult.Gone)
+            {
+                // The offer is gone: "Put it on" is off and "Not now" is a plain close.
+                Assert.False(card.PutItOnButton!.IsEnabled);
+                card.AnswerAsync(false).GetAwaiter().GetResult();
+                Assert.Equal(1, dismissed);
+                Assert.Empty(answered);
+            }
+            else
+            {
+                // Try again: it goes through this time and the card closes as usual.
+                card.AnswerAsync(true).GetAwaiter().GetResult();
+                Assert.Equal(new[] { true }, answered);
+            }
+        });
+    }
+
+    [Fact]
+    public void Ask_error_keys_exist_for_every_failure()
+    {
+        Assert.Null(LeashAskCard.ErrorKey(LeashAnswerResult.Done));
+        foreach (var r in new[] { LeashAnswerResult.Gone, LeashAnswerResult.Off, LeashAnswerResult.Failed })
+            Assert.StartsWith("leash_ask_err_", LeashAskCard.ErrorKey(r));
+    }
 
     // ---- the gate ----------------------------------------------------------------------
 
@@ -78,6 +130,45 @@ public class LeashSafetyUiTests
         });
     }
 
+    // ---- the holder's let go -----------------------------------------------------------
+
+    [Fact]
+    public void Letting_go_reports_whether_it_landed()
+    {
+        Run(() =>
+        {
+            var svc = FakeLeashService.Sample();
+            var card = new LeashHolderCard(svc.Snapshot.Holding[0], () => svc);
+            svc.ReleaseRefused = true;
+            Assert.False(card.ReleaseAsync().GetAwaiter().GetResult());
+            Assert.Single(svc.Snapshot.Holding);
+            svc.ReleaseRefused = false;
+            Assert.True(card.ReleaseAsync().GetAwaiter().GetResult());
+            Assert.Empty(svc.Snapshot.Holding);
+        });
+    }
+
+    // ---- the self card -----------------------------------------------------------------
+
+    [Fact]
+    public void Self_card_offers_watch_it_only_on_an_open_video_task()
+    {
+        Run(() =>
+        {
+            var svc = FakeLeashService.Sample();
+            var video = new Assignment("a9", AssignKind.Video, 1, new LeashWatch("ht", "42", "Pink"), "20260928", AssignStatus.Open, T0);
+            var card = new LeashSelfCard(svc.Snapshot.Me! with { Assignment = video }, () => svc);
+            Assert.NotNull(Find(card, t => t == "leash-self-watch"));
+            // No runner able to watch (the fake): it says so and nothing throws.
+            Assert.False(card.StartWatch(video));
+
+            var minutes = new LeashSelfCard(svc.Snapshot.Me!, () => svc);
+            Assert.Null(Find(minutes, t => t == "leash-self-watch"));
+            var done = new LeashSelfCard(svc.Snapshot.Me! with { Assignment = video with { Status = AssignStatus.Done } }, () => svc);
+            Assert.Null(Find(done, t => t == "leash-self-watch"));
+        });
+    }
+
     // ---- pure rules --------------------------------------------------------------------
 
     [Fact]
@@ -109,14 +200,47 @@ public class LeashSafetyUiTests
         Assert.Equal("leash_assign_stop_unplayable", LeashUiRules.StopKey(new("a", true, LeashTaskStop.Unplayable), null));
     }
 
+    [Theory]
+    [InlineData(0.0, 5)]
+    [InlineData(0.6, 5)]
+    [InlineData(1.0, 4)]
+    [InlineData(3.2, 2)]
+    [InlineData(4.9, 1)]
+    [InlineData(7.0, 1)]
+    public void Hold_ring_counts_five_to_one(double held, int shown)
+        => Assert.Equal(shown, LeashHoldTick.SecondsLeft(TimeSpan.FromSeconds(held)));
+
+    [Fact]
+    public void Hold_ring_fraction_fills_over_the_hold()
+    {
+        Assert.Equal(0, LeashHoldTick.Fraction(TimeSpan.Zero));
+        Assert.Equal(0.5, LeashHoldTick.Fraction(TimeSpan.FromSeconds(2.5)), 3);
+        Assert.Equal(1, LeashHoldTick.Fraction(TimeSpan.FromSeconds(9)));
+    }
+
+    [Fact]
+    public void The_leash_came_off_names_who()
+    {
+        var e = new LeashEvent("e1", LeashEventKind.Ended, FakeLeashService.Vex, T0);
+        Assert.Equal("leash_evt_ended", LeashUiRules.EventKey(e));
+        foreach (var file in System.IO.Directory.GetFiles(LangDir(), "*.json"))
+        {
+            var line = System.IO.File.ReadLines(file).Single(l => l.Contains("\"leash_evt_ended\""));
+            Assert.Contains("{0}", line);
+        }
+    }
+
     [Fact]
     public void Every_new_leash_key_is_in_all_nine_languages()
     {
         var keys = new[]
         {
-            "leash_gate_unplayable", "leash_gate_later", "leash_stop_session", "leash_stop_bubbles", "leash_stop_video",
-            "leash_stop_no_phrases", "leash_stop_unplayable_skipped", "leash_stop_unplayable_marked",
-            "leash_assign_stop_closed", "leash_assign_stop_unplayable",
+            "leash_punish_fullscreen_key", "leash_task_close_hint", "leash_hold_ring", "leash_ask_err_gone", "leash_ask_err_off",
+            "leash_ask_err_failed", "leash_release_confirm_title", "leash_release_confirm_body", "leash_release_confirm_yes",
+            "leash_release_done", "leash_release_failed", "leash_gate_unplayable", "leash_gate_later", "leash_stop_session",
+            "leash_stop_bubbles", "leash_stop_video", "leash_stop_no_phrases", "leash_stop_unplayable_skipped",
+            "leash_stop_unplayable_marked", "leash_assign_stop_closed", "leash_assign_stop_unplayable", "leash_self_watch",
+            "leash_self_watching", "leash_self_watch_busy", "leash_self_watch_cannot",
         };
         var files = System.IO.Directory.GetFiles(LangDir(), "*.json");
         Assert.Equal(9, files.Length);

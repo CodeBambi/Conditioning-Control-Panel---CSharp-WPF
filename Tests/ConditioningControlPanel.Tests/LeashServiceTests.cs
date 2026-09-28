@@ -305,7 +305,7 @@ public class LeashServiceTests
     {
         var r = new Rig().Build();
         r.Api.Answer("answer", new JObject { ["ok"] = true, ["status"] = "on" });
-        Assert.True(await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
+        Assert.Equal(LeashAnswerResult.Done, await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
         Assert.Equal("standard", (string?)r.Api.Calls.Last().Body["intensity"]);
         await r.Svc.AnswerAsync("u_vex", false, LeashIntensity.Strict);
         Assert.Null(r.Api.Calls.Last().Body["intensity"]);
@@ -343,6 +343,45 @@ public class LeashServiceTests
     }
 
     // ---- 2026-09-28 safety pass --------------------------------------------------------
+
+    [Theory]
+    [InlineData(true, "on", LeashAnswerResult.Done)]
+    [InlineData(false, "declined", LeashAnswerResult.Done)]
+    [InlineData(true, "gone", LeashAnswerResult.Gone)]
+    [InlineData(false, "gone", LeashAnswerResult.Gone)]
+    [InlineData(true, "declined", LeashAnswerResult.Failed)]
+    [InlineData(true, "mystery", LeashAnswerResult.Failed)]
+    public async Task An_answer_is_a_success_only_when_the_status_says_so(bool accept, string status, LeashAnswerResult expected)
+    {
+        var r = new Rig().Build();
+        r.Api.Answer("answer", new JObject { ["ok"] = true, ["status"] = status });
+        Assert.Equal(expected, await r.Svc.AnswerAsync("u_vex", accept, LeashIntensity.Standard));
+    }
+
+    [Fact]
+    public async Task A_failed_or_refused_answer_is_not_a_success()
+    {
+        var r = new Rig().Build();
+        r.Api.Answer("answer", null);
+        Assert.Equal(LeashAnswerResult.Failed, await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
+        r.Api.Answer("answer", new JObject { ["ok"] = false, ["reason"] = "off" });
+        Assert.Equal(LeashAnswerResult.Off, await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
+        r.Api.Answer("answer", new JObject { ["ok"] = false, ["reason"] = "gone" });
+        Assert.Equal(LeashAnswerResult.Gone, await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
+    }
+
+    [Fact]
+    public async Task Release_says_whether_the_server_took_it()
+    {
+        var r = new Rig().Build();
+        r.Api.Answer("release", null);
+        Assert.False(await r.Svc.ReleaseAsync("u_sub"));
+        r.Api.Answer("release", new JObject { ["ok"] = false, ["reason"] = "refused" });
+        Assert.False(await r.Svc.ReleaseAsync("u_sub"));
+        Assert.Equal(0, r.Kicks);
+        Assert.True(await r.Svc.ReleaseAsync("u_sub"));
+        Assert.Equal(1, r.Kicks);
+    }
 
     [Fact]
     public void A_leash_ended_from_the_other_side_runs_the_cut_safety_once()

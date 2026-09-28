@@ -99,6 +99,12 @@ public enum LeashSendStatus
 
 public sealed record LeashSendResult(LeashSendStatus Status, DateTimeOffset? DndUntil = null);
 
+/// <summary>How an answer to an offer went. Only <see cref="Done"/> means the server took it
+/// (<c>on</c> for a yes, <c>declined</c> for a no). <see cref="Gone"/> = the offer expired or was
+/// withdrawn; <see cref="Off"/> = the feature is switched off; <see cref="Failed"/> = network,
+/// 5xx, or a reply the client does not know.</summary>
+public enum LeashAnswerResult { Done, Gone, Off, Failed }
+
 /// <summary>What became of a punishment video that will not play. <see cref="Skipped"/> = the
 /// server dropped it and told the holder (<c>punish_skip</c>); <see cref="Marked"/> = the server
 /// could not (refused, unknown op, offline), so it stays pending and this client leaves it alone
