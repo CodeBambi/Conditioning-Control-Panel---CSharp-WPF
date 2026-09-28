@@ -424,3 +424,9 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   before SettingsService. Nothing reads secrets yet (login is a later unit).
 - Evidence: scripts/secrets-roundtrip.sh runs a throwaway gnome-keyring in Docker: round trip + no-bus/no-file, both
   fail-proofed (and an empty test filter fails). DPAPI WPF-bytes test runs on Windows CI. The real KWallet was never touched.
+
+## avalonia-port/session-runner-wire: OPEN perf finding
+- Subliminal cards stay up 1.1-3.1 s instead of 0.23 s when flash and bouncing text run together. It is intermittent. It is not
+  dispatcher priority: Render priority on the overlay RunOnce calls was measured and reverted. The suspect is the card's first
+  frame arriving late (SubliminalOverlayWindow.Run starts its clock in RequestAnimationFrame). This fails "at least as fast";
+  a perf branch follows. Evidence ~/ccp-port/evidence/avalonia-port/session-runner-wire/p2-*.txt.
