@@ -39,6 +39,15 @@ public sealed class ModServiceCoreTests
     private static string Root => CorePaths.UserData;
 
     /// <summary>Capture deletes under the profile: only ever this assembly's own temp sandbox.</summary>
+    /// <summary>ActivateMod queues a debounced save on a pool thread; flush (waits for an in-flight
+    /// write) and seal it so no temp file is open when ResetProfile deletes the profile.</summary>
+    private static void Quiesce(SettingsService? svc)
+    {
+        if (svc == null) return;
+        svc.SaveImmediate();
+        svc.SealForReset();
+    }
+
     private static void ResetProfile()
     {
         Assert.Equal(RoadmapTestProfile.DirectoryPath, Root);
@@ -56,9 +65,10 @@ public sealed class ModServiceCoreTests
         var oldProvider = CoreSettings.ServiceProvider;
         var runStart = DateTime.UtcNow;
         string actual;
+        SettingsService? svc = null;
         try
         {
-            var svc = new SettingsService();
+            svc = new SettingsService();
             CoreSettings.ServiceProvider = () => svc;
 
             var mods = new ModService();
@@ -79,6 +89,7 @@ public sealed class ModServiceCoreTests
         }
         finally
         {
+            Quiesce(svc);
             CoreSettings.ServiceProvider = oldProvider;
             ResetProfile();
         }
@@ -128,16 +139,18 @@ public sealed class ModServiceCoreTests
         var scratch = Directory.CreateTempSubdirectory("ccp-ccpmod-").FullName;
         var oldVersion = CoreReleaseContent.AppVersionProvider;
         var oldProvider = CoreSettings.ServiceProvider;
+        SettingsService? svc = null;
         try
         {
             // Activation writes pools into settings: a throwaway service, not the shared fallback.
-            var svc = new SettingsService();
+            svc = new SettingsService();
             CoreSettings.ServiceProvider = () => svc;
             CoreReleaseContent.AppVersionProvider = () => "6.10.3";
             body(new ModService(), scratch);
         }
         finally
         {
+            Quiesce(svc);
             CoreReleaseContent.AppVersionProvider = oldVersion;
             CoreSettings.ServiceProvider = oldProvider;
             Directory.Delete(scratch, recursive: true);
