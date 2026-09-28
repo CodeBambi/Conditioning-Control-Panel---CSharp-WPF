@@ -132,7 +132,12 @@ namespace ConditioningControlPanel.Avalonia
             // PulseMicSource on the given source (scripts/speech-capture-check.sh feeds a null sink's
             // monitor; never a real mic). Exit 0 = matched, 1 = not matched.
             var sc = Array.IndexOf(args, "--speech-check");
-            if (sc >= 0 && sc + 3 < args.Length)
+            if (sc >= 0 && sc + 3 >= args.Length)
+            {
+                Console.Error.WriteLine("usage: --speech-check <modelRoot> <pulseSource> <phrase>");
+                return 2;
+            }
+            if (sc >= 0)
             {
                 using var engine = new ConditioningControlPanel.Services.Speech.SpeechEngine(
                     new Platform.PulseMicSource(args[sc + 2]), new[] { args[sc + 1] });
