@@ -125,7 +125,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void PaintTree()
         {
-            var owned = CoreSettings.Current.UnlockedSkills;
+            var settings = CoreSettings.Current;
             var positions = NodePositions();
             var tree = SkillDefinition.All.Where(s => !s.IsSecret && positions.ContainsKey(s.Id)).ToList();
 
@@ -136,12 +136,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 var (px, py) = positions[skill.PrerequisiteId!];
                 var (cx, cy) = positions[skill.Id];
                 SkillTreeCanvas.Children.Add(Connector(px + NodeWidth, py + NodeHeight / 2, cx, cy + NodeHeight / 2,
-                    owned.Contains(skill.Id), owned.Contains(skill.PrerequisiteId!)));
+                    SkillTreeRules.HasSkill(settings, skill.Id), SkillTreeRules.HasSkill(settings, skill.PrerequisiteId!)));
             }
 
             SkillTreeCanvas.Children.Add(Place(Header(), 5, 0));
             foreach (var skill in tree)
-                SkillTreeCanvas.Children.Add(Place(Node(skill, owned.Contains(skill.Id)), positions[skill.Id].X, positions[skill.Id].Y));
+                SkillTreeCanvas.Children.Add(Place(Node(skill, SkillTreeRules.HasSkill(settings, skill.Id)), positions[skill.Id].X, positions[skill.Id].Y));
         }
 
         private static Control Place(Control c, double left, double top)
@@ -274,10 +274,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// requirement is met is SkillTreeService.IsSecretSkillAvailable, head-side.</summary>
         private void PaintSecretRail()
         {
-            var owned = CoreSettings.Current.UnlockedSkills;
+            var settings = CoreSettings.Current;
             foreach (var skill in SkillDefinition.All.Where(s => s.IsSecret))
-                SecretSkills.Children.Add(HiddenSecretCard(owned.Contains(skill.Id)
-                    ? skill.LocalizedName : skill.LocalizedSecretRequirementDesc, owned.Contains(skill.Id)));
+                SecretSkills.Children.Add(HiddenSecretCard(SkillTreeRules.HasSkill(settings, skill.Id)
+                    ? skill.LocalizedName : skill.LocalizedSecretRequirementDesc, SkillTreeRules.HasSkill(settings, skill.Id)));
         }
 
         private static Control HiddenSecretCard(string requirement, bool owned = false)
