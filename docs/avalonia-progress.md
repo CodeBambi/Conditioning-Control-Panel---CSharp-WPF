@@ -501,3 +501,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   wired (providers, register/invite, password, same-email confirm, name check), restore-session check (Core), logout
   (tokens + identity; a failed clear is reported), one-time "sign-in not remembered" notice. Review FIX -> r1 -> ACCEPT.
 - Live sandbox: LoginDialog opens with all options, 0 binding errors. Real consent not provable here.
+
+## avalonia-port/popquiz-scheduler-core: +594 (quiz unit 2)
+- Core PopQuizScheduler (WPF's 60/rate ±30% tick, disabled -> nothing, no stacking, lock-card defer once then drop,
+  busy-queue defer) + question bank/mod resolver behind a 7-member IPopQuizHost; WPF PopQuizService is the host
+  (behaviour unchanged). 5 fake-clock tests, each fail-proofed. Review: ACCEPT. No Avalonia host yet (unit 3).

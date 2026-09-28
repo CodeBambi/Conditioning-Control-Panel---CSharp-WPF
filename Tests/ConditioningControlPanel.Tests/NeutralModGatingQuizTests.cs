@@ -26,15 +26,15 @@ public class NeutralModGatingQuizTests
     [Fact]
     public void The_three_themed_slots_still_point_at_the_right_questions()
     {
-        Assert.Equal("What do good subjects do?", PopQuizService.QuestionPool[PopQuizSlots.Obedience].QuestionText);
-        Assert.Equal("When I hear praise, I feel...", PopQuizService.QuestionPool[PopQuizSlots.PraiseHeard].QuestionText);
-        Assert.Equal("Your favorite word is...", PopQuizService.QuestionPool[PopQuizSlots.FavouriteWord].QuestionText);
+        Assert.Equal("What do good subjects do?", PopQuizScheduler.QuestionPool[PopQuizSlots.Obedience].QuestionText);
+        Assert.Equal("When I hear praise, I feel...", PopQuizScheduler.QuestionPool[PopQuizSlots.PraiseHeard].QuestionText);
+        Assert.Equal("Your favorite word is...", PopQuizScheduler.QuestionPool[PopQuizSlots.FavouriteWord].QuestionText);
     }
 
     /// <summary>An unmodded install gets the neutral bank back, by reference.</summary>
     [Fact]
     public void No_mod_gets_the_neutral_bank_untouched()
-        => Assert.Same(PopQuizService.QuestionPool, PopQuizService.ResolveQuestionPool(null, null, null));
+        => Assert.Same(PopQuizScheduler.QuestionPool, PopQuizScheduler.ResolveQuestionPool(null, null, null));
 
     /// <summary>The 6.9.3 wording, restored for a mod that carries it.</summary>
     [Fact]
@@ -42,7 +42,7 @@ public class NeutralModGatingQuizTests
     {
         var messages = BuiltInMods.BambiSleep.Messages!;
 
-        var pool = PopQuizService.ResolveQuestionPool(
+        var pool = PopQuizScheduler.ResolveQuestionPool(
             messages.QuizPraise, messages.QuizObedienceQuestion, messages.QuizPraiseHeardQuestion);
 
         Assert.Equal("What do good girls do?", pool[PopQuizSlots.Obedience].QuestionText);
@@ -59,14 +59,14 @@ public class NeutralModGatingQuizTests
     {
         var messages = BuiltInMods.BambiSleep.Messages!;
 
-        var pool = PopQuizService.ResolveQuestionPool(
+        var pool = PopQuizScheduler.ResolveQuestionPool(
             messages.QuizPraise, messages.QuizObedienceQuestion, messages.QuizPraiseHeardQuestion);
 
-        Assert.Equal(PopQuizService.QuestionPool.Length, pool.Length);
+        Assert.Equal(PopQuizScheduler.QuestionPool.Length, pool.Length);
         for (int i = 0; i < pool.Length; i++)
         {
             if (i is PopQuizSlots.Obedience or PopQuizSlots.PraiseHeard or PopQuizSlots.FavouriteWord) continue;
-            Assert.Same(PopQuizService.QuestionPool[i], pool[i]);
+            Assert.Same(PopQuizScheduler.QuestionPool[i], pool[i]);
         }
     }
 
@@ -81,7 +81,7 @@ public class NeutralModGatingQuizTests
     [InlineData(".")]
     public void A_mod_with_no_praise_line_is_ignored_entirely(string? praise)
     {
-        var pool = PopQuizService.ResolveQuestionPool(praise, "What do good girls do?", "When I hear 'good girl,' I feel...");
+        var pool = PopQuizScheduler.ResolveQuestionPool(praise, "What do good girls do?", "When I hear 'good girl,' I feel...");
 
         Assert.Equal("What do good subjects do?", pool[PopQuizSlots.Obedience].QuestionText);
     }
@@ -93,7 +93,7 @@ public class NeutralModGatingQuizTests
     [Fact]
     public void A_praise_line_alone_still_reaches_the_answer_chip()
     {
-        var pool = PopQuizService.ResolveQuestionPool("Good pet.", null, null);
+        var pool = PopQuizScheduler.ResolveQuestionPool("Good pet.", null, null);
 
         Assert.Equal("What do good subjects do?", pool[PopQuizSlots.Obedience].QuestionText);
         Assert.Equal("Good pet", pool[PopQuizSlots.FavouriteWord].Answers[PopQuizSlots.FavouriteWordAnswer]);
@@ -107,11 +107,11 @@ public class NeutralModGatingQuizTests
     [Fact]
     public void Resolving_for_a_mod_does_not_mutate_the_shared_neutral_bank()
     {
-        PopQuizService.ResolveQuestionPool("Good girl.", "What do good girls do?", "When I hear 'good girl,' I feel...");
+        PopQuizScheduler.ResolveQuestionPool("Good girl.", "What do good girls do?", "When I hear 'good girl,' I feel...");
 
-        Assert.Equal("What do good subjects do?", PopQuizService.QuestionPool[PopQuizSlots.Obedience].QuestionText);
-        Assert.Equal("Good.", PopQuizService.QuestionPool[PopQuizSlots.Obedience].Affirmations[0]);
-        Assert.Equal("Deeper", PopQuizService.QuestionPool[PopQuizSlots.FavouriteWord].Answers[PopQuizSlots.FavouriteWordAnswer]);
+        Assert.Equal("What do good subjects do?", PopQuizScheduler.QuestionPool[PopQuizSlots.Obedience].QuestionText);
+        Assert.Equal("Good.", PopQuizScheduler.QuestionPool[PopQuizSlots.Obedience].Affirmations[0]);
+        Assert.Equal("Deeper", PopQuizScheduler.QuestionPool[PopQuizSlots.FavouriteWord].Answers[PopQuizSlots.FavouriteWordAnswer]);
     }
 
     /// <summary>Every themed built-in answers both halves, or neither - never a lone question.</summary>

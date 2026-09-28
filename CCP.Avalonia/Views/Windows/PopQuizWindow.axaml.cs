@@ -9,6 +9,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Serilog;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -29,9 +30,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    DROPPED on purpose: a 200ms static timer is the only thing in this file that can outlive
     ///    the window, and under --render-all (no lifetime, no shell) it would tick forever against
     ///    a null MainWindow and close every rendered quiz. Restore it with the shell, not before.
-    ///  - <c>PopQuizQuestion</c> is copied to the bottom of this file: it lives in the WPF head's
-    ///    PopQuizService and this project may not reference that, same as TextEditorDialog's
-    ///    TextItem.
+    ///  - <c>PopQuizQuestion</c> and the question bank come from Core's <c>PopQuizScheduler</c>.
     ///  - <c>MouseLeftButtonDown</c>/<c>MouseEnter</c>/<c>MouseLeave</c>/<c>KeyDown</c> are wired
     ///    in the constructor as PointerPressed / PointerEntered / PointerExited / KeyDown.
     ///  - <c>Application.Current.Windows</c> becomes the desktop lifetime's window list; that
@@ -53,9 +52,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Render/design constructor: the first question of the WPF pool, whose strings are
         /// hardcoded English there too, so the sample is faithful rather than invented.</summary>
         internal PopQuizWindow() : this(
-            new PopQuizQuestion("How does obedience feel?",
-                new[] { "Natural", "Peaceful", "Exciting", "Like coming home" },
-                new[] { "That's right — it's always been natural.", "Peace comes from letting go.", "The thrill never fades.", "Welcome home." }),
+            PopQuizScheduler.QuestionPool[0],
             isTest: true)
         {
         }
@@ -274,25 +271,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // unanswered quiz still owes a Complete.
 
             base.OnClosed(e);
-        }
-    }
-
-    /// <summary>
-    /// One quiz question and its four answer/affirmation pairs.
-    /// Copied from ConditioningControlPanel/Services/Quiz/PopQuizService.cs: the type lives in the
-    /// WPF head, not in CCP.Core, and neither may be touched by this port.
-    /// </summary>
-    public class PopQuizQuestion
-    {
-        public string QuestionText { get; }
-        public string[] Answers { get; }
-        public string[] Affirmations { get; }
-
-        public PopQuizQuestion(string questionText, string[] answers, string[] affirmations)
-        {
-            QuestionText = questionText;
-            Answers = answers;
-            Affirmations = affirmations;
         }
     }
 }

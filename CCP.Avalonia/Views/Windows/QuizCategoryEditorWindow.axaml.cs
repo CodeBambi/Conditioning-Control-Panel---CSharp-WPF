@@ -22,13 +22,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// PORTED from ConditioningControlPanel/Windows/QuizCategoryEditorWindow.xaml.cs. Deviations:
     ///  - <c>QuizCategoryDefinition</c> / <c>QuizArchetypeDefinition</c> come from Core
     ///    (CCP.Core/Services/Quiz/QuizStore.cs).
-    ///  - <c>QuizService</c> is not in Core either, so the template dropdown, the AI preview, the
-    ///    built-in name-collision check and Delete are stubs. Each carries a ponytail comment.
+    ///  - The template dropdown, the built-in name-collision check and Delete need QuizStore.X
+    ///    (Core) wired - quiz unit 5/6; the AI preview is head-side. Each carries a ponytail comment.
     ///  - <c>PromptValidator</c> IS in Core, so <see cref="RunPromptValidation"/> runs for real, and
     ///    its flags go to the app's moderation log through <see cref="CoreModerationLog"/>.
     ///  - The <c>MessageBox.Show</c> calls are this head's <see cref="MessageDialog"/>, which is
     ///    async, so Save and Delete are <c>async void</c> handlers. Only the name-collision warning
-    ///    is missing, because the check behind it needs QuizService.
+    ///    is missing, because the check behind it needs QuizStore (Core) wired.
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>.
     ///  - The public ctor loses its <c>= null</c> default: with a parameterless render ctor beside
     ///    it, <c>new QuizCategoryEditorWindow()</c> would be ambiguous (CS0121).
@@ -272,9 +272,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var templateId = item.Tag?.ToString();
             if (string.IsNullOrEmpty(templateId)) return;
 
-            // ponytail: needs QuizService.GetBuiltInCategories() / FindCategory() from
-            // ConditioningControlPanel/Services/Quiz/QuizService.cs for the real category name and
-            // its archetype table - still head-side.
+            // ponytail: needs QuizStore.GetBuiltInCategories() / FindCategory() (Core) wired -
+            // quiz unit 5/6 - for the real category name and its archetype table.
             // The skeleton below is the WPF original's, minus the RESULT ARCHETYPES block it filled
             // from the built-in definition.
             _txtPrompt.Text = GetBuiltInPromptText(templateId);
@@ -373,8 +372,7 @@ Do NOT include any other text before or after the question format. Just the ques
 
             // ponytail: the built-in name-collision guard (and its
             // msg_this_name_conflicts_with_a_built_in_category warning) needs
-            // QuizService.GetBuiltInCategories() from
-            // ConditioningControlPanel/Services/Quiz/QuizService.cs — still head-side.
+            // QuizStore.GetBuiltInCategories() (Core) wired - quiz unit 5/6.
 
             // P1.3 PromptValidator: soft validation, warns but does not block save.
             RunPromptValidation(prompt);
@@ -437,9 +435,8 @@ Do NOT include any other text before or after the question format. Just the ques
                 $"Delete the \"{_existing.Name}\" category? This cannot be undone.");
             if (!confirmed) return;
 
-            // ponytail: needs QuizService.DeleteCustomCategory(_existing.Id) from
-            // ConditioningControlPanel/Services/Quiz/QuizService.cs to remove it from the stored
-            // custom-category file - still head-side. The null Result below is already the
+            // ponytail: needs QuizStore.DeleteCustomCategory(_existing.Id) (Core) wired - quiz
+            // unit 5/6 - to remove it from the stored custom-category file. The null Result below is already the
             // "deleted" signal the caller reads, so the dialog contract itself is complete.
             Result = null;
             Close(true);

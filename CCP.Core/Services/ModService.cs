@@ -1231,7 +1231,7 @@ namespace ConditioningControlPanel.Services
         public string? GetQuizTrickAnswerOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizTrickAnswer);
 
         // The Pop Quiz overrides follow the same contract as the trick pair above: active mod only,
-        // null for "no opinion". The neutral wording is the 25-question array in PopQuizService, so
+        // null for "no opinion". The neutral wording is the 25-question array in PopQuizScheduler, so
         // walking to CCP Default would replace a pool with a single line.
 
         /// <summary>Active mod's Pop Quiz praise sentence, or null when it ships none.</summary>

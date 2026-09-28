@@ -411,9 +411,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(null);
             if (await editor.ShowDialog<bool>(this) && editor.Result != null)
             {
-                // ponytail: needs QuizService.SaveCustomCategory from
-                // ConditioningControlPanel/Services/Quiz/QuizService.cs to write the new category
-                // into custom_quiz_categories.json. The rebuild below still runs, so the list
+                // ponytail: needs QuizStore.SaveCustomCategory (Core) wired - quiz unit 5/6 - to
+                // write the new category into custom_quiz_categories.json. The rebuild below still runs, so the list
                 // refreshes (from the stub).
                 BuildCategoryButtons();
             }
@@ -427,9 +426,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(catDef);
             if (await editor.ShowDialog<bool>(this))
             {
-                // ponytail: needs QuizService.SaveCustomCategory from
-                // ConditioningControlPanel/Services/Quiz/QuizService.cs when editor.Result is
-                // non-null. If Result is null, it was deleted (handled inside editor)
+                // ponytail: needs QuizStore.SaveCustomCategory (Core) wired - quiz unit 5/6 - when
+                // editor.Result is non-null. If Result is null, it was deleted (handled inside editor)
                 BuildCategoryButtons();
             }
         }
@@ -550,9 +548,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             var catDef = _currentCategoryDefinition;
 
-            // ponytail: needs QuizHistoryEntry + QuizService.SaveEntry from
-            // ConditioningControlPanel/Services/Quiz/QuizService.cs to append this run to
-            // quiz_history.json. Head-side, so nothing is recorded and savedEntry stays null -
+            // ponytail: needs QuizStore.SaveEntry (Core) wired - quiz unit 5/6 - to append this
+            // run to quiz_history.json. Until then nothing is recorded and savedEntry stays null -
             // which is also what gates BuildTrendDisplay and the session generation below, exactly
             // as it does in WPF on a save failure.
 
@@ -672,10 +669,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// The "your journey" line under the result. ponytail: needs QuizService.LoadHistory /
-        /// GetScoreTrend / TrendKey / DisplayName from
-        /// ConditioningControlPanel/Services/Quiz/QuizService.cs, plus the QuizHistoryEntry this
-        /// run would have been saved as. All head-side. The header and panel stay hidden until
+        /// The "your journey" line under the result. ponytail: needs QuizStore.LoadHistory /
+        /// GetScoreTrend / TrendKey / DisplayName (Core) wired - quiz unit 5/6 - plus the
+        /// QuizHistoryEntry this run would have been saved as. The header and panel stay hidden until
         /// then, exactly as they do on a first quiz, so nothing draws half-built - a trend line
         /// over one invented number would be a control that lies about the user's history.
         /// </summary>
@@ -1079,10 +1075,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // ============ QUIZ SERVICE STUBS ============
 
         /// <summary>
-        /// ponytail: needs QuizService.GetAllCategories() from
-        /// ConditioningControlPanel/Services/Quiz/QuizService.cs - GetBuiltInCategories() (five
-        /// definitions carrying ~600 lines of system prompt) plus LoadCustomCategories() over
-        /// custom_quiz_categories.json. Both head-side. The placeholder below keeps the same shape;
+        /// ponytail: needs QuizStore.GetAllCategories() (Core) wired - quiz unit 5/6 -
+        /// GetBuiltInCategories() (five definitions carrying ~600 lines of system prompt) plus
+        /// LoadCustomCategories() over custom_quiz_categories.json. The placeholder below keeps the same shape;
         /// the last entry is deliberately NOT built-in so the "Edit" affordance is exercised too.
         /// </summary>
         private static List<QuizCategoryDefinition> GetAllCategories() => new()
