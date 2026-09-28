@@ -323,3 +323,11 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   or skill writes on this head.
 - Evidence: SkillTreeRulesTests (thresholds at the boundary), EnhancementsTabDrawsOwnedSkillAsOwned, fail-proofed;
   Keincheck with a sandbox profile owning 2 skills; 0 binding errors. Review: ACCEPT.
+
+## avalonia-port/mods-core-prereqs: +247
+- One app version: root Version.props (6.10.3) imported by WPF, Core and Avalonia; WPF stamp unchanged; Avalonia
+  no longer reports 1.0.0 (blocked mod MinAppVersion checks), Core no longer 6.9.0. Decision logged.
+- ModService unit 1 (oracle-deep plan): PersonaSwitchRules, CompanionContentResolver, ModCompanionContent,
+  CountMediaFiles and the Hypnotube default links moved to Core with identical behaviour; seven CoreModsHooks and
+  the CoreSession phrase-pool delegates added and seeded lazily in WPF (callers switch over in unit 3).
+- Evidence: companion-content tests now run on Linux; new seam test fail-proofed; version before/after. Review: ACCEPT.
