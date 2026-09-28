@@ -83,7 +83,7 @@ namespace ConditioningControlPanel.Avalonia
                 if (xid == IntPtr.Zero) continue;
 
                 var pre = Read(display, xid);
-                Check(pre.MapState != IsViewable, $"not yet mapped before Show() (map_state={pre.MapState})");
+                Check(pre is { } p0 && p0.MapState != IsViewable, $"not yet mapped before Show() (map_state={pre?.MapState.ToString() ?? "unreadable"})");
                 Check(X11Overlay.SetOverrideRedirect(w), "SetOverrideRedirect returned true");
                 Check(X11Overlay.SetClickThrough(w, true), "SetClickThrough(true) returned true");
                 w.Show();
@@ -99,7 +99,7 @@ namespace ConditioningControlPanel.Avalonia
                     foreach (var (_, screen, xid) in overlays)
                     {
                         var b = screen.Bounds;
-                        var a = Read(display, xid);
+                        var a = Read(display, xid) ?? default; Check(Read(display, xid) is not null, "window attributes readable");
                         XTranslateCoordinates(display, xid, root, 0, 0, out var x, out var y, out _);
                         var input = XShapeGetRectangles(display, xid, ShapeInput, out var rects, out _);
                         if (input != IntPtr.Zero) XFree(input);
@@ -124,12 +124,12 @@ namespace ConditioningControlPanel.Avalonia
             return fails == 0 ? 0 : 1;
         }
 
-        private static Attrs Read(IntPtr display, IntPtr xid)
+        private static Attrs? Read(IntPtr display, IntPtr xid)
         {
             var p = Marshal.AllocHGlobal(XWindowAttributesSize);
             try
             {
-                if (XGetWindowAttributes(display, xid, p) == 0) return default;
+                if (XGetWindowAttributes(display, xid, p) == 0) return null;
                 return new Attrs(Marshal.ReadInt32(p, OffWidth), Marshal.ReadInt32(p, OffHeight), Marshal.ReadInt32(p, OffDepth),
                     Marshal.ReadInt32(p, OffMapState), Marshal.ReadInt32(p, OffOverrideRedirect) != 0);
             }

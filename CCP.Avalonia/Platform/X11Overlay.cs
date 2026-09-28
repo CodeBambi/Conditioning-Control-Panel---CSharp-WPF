@@ -130,10 +130,11 @@ internal static class X11Overlay
     /// <para><b>XSync, not XFlush.</b> This display is a different connection from Avalonia's, and
     /// the server orders requests per connection only. A flushed-but-unprocessed request could
     /// land after Avalonia's XMapWindow; XSync returns once the server has applied it.</para></summary>
-    /// <returns>False when the platform cannot do this (no XID, no display).</returns>
+    /// <returns>False when the platform cannot do this (no XID, no display, not 64-bit) or the server refused it.</returns>
     internal static bool SetOverrideRedirect(TopLevel window)
     {
-        if (!TryGetXid(window, out var xid)) return false;
+        // The struct offsets below are the LP64 layout (x86_64, arm64).
+        if (IntPtr.Size != 8 || !TryGetXid(window, out var xid)) return false;
 
         lock (Gate)
         {
@@ -146,9 +147,10 @@ internal static class X11Overlay
             {
                 for (var i = 0; i < XSetWindowAttributesSize; i += IntPtr.Size) Marshal.WriteIntPtr(attrs, i, IntPtr.Zero);
                 Marshal.WriteInt32(attrs, 88, 1);
+                _xErrored = false;
                 XChangeWindowAttributes(_display, xid, CWOverrideRedirect, attrs);
                 XSync(_display, false);
-                return true;
+                return !_xErrored; // e.g. BadWindow: the server refused the request
             }
             finally { Marshal.FreeHGlobal(attrs); }
         }
@@ -268,8 +270,12 @@ internal static class X11Overlay
         }
     }
 
+    // Set by OnXError; SetOverrideRedirect clears it before its request and reads it after XSync.
+    private static volatile bool _xErrored;
+
     private static int OnXError(IntPtr display, IntPtr errorEvent)
     {
+        _xErrored = true;
         // Xlib's default handler exits the process. An overlay destroyed between reading its
         // handle and the call above is normal churn, not a reason to take the app down.
         Log.Debug("X11Overlay: X error on the overlay display, ignored");
