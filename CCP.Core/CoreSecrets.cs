@@ -11,9 +11,9 @@ namespace ConditioningControlPanel
     ///
     /// <para><b>Unseeded means "no store", never "store in the clear".</b> A head that has not
     /// attached a provider gets null from <see cref="Retrieve"/> and a silent no-op from
-    /// <see cref="Store"/>. The Linux head is in that state today: it has no secure store yet,
-    /// so on Linux these two values are not persisted at all. That is the honest behaviour until
-    /// a keyring-backed provider exists; writing them to disk unencrypted is not a fallback.</para>
+    /// <see cref="Store"/>. The Avalonia head seeds CCP.Avalonia/Platform/SecretStore.cs
+    /// (libsecret on Linux, WPF's DPAPI files on Windows, memory-only when neither is usable);
+    /// writing them to disk unencrypted is never a fallback.</para>
     ///
     /// <para>Two delegates, no interface, matching <see cref="CoreMods"/>. Volatile for the same
     /// reason as there.</para>
