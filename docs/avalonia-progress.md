@@ -586,3 +586,13 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   on first use; both pickers open there. A profile with files already in UserData/assets keeps it (logged, nothing moved);
   sandboxed runs (CCP_USERDATA_DIR) and Windows keep UserData/assets. Decision logged (advisor: user).
 - Evidence: LinuxMediaDefaultTests (7, fail-proofed); live run with a temp HOME created <tmp>/ccp media. Review: FIX -> r1.
+
+## avalonia-port/firstrun-gate-dead-clicks: +364 (first-5-minutes fixes)
+- 18+ gate ported from WPF: the wizard's consent checkbox (Enter disabled until ticked; closing unaccepted aborts the launch
+  like WPF AbortUngatedLaunch) and WPF's app-level "Age Verification" dialog for installs already welcomed but never accepted
+  (a crash mid-wizard or a copied WPF settings file). Decision logged for its OK wording.
+- Dead clicks fixed: Library rows (Web App via the launcher with WPF's copy-link fallback, Exclusives, Media Log window,
+  Phrases editor), dashboard mosaic/split tiles (left-click opens the module, right-click toggles), Vault, companion strip,
+  Scheduler/Ramp and Catalogue pills; ramp link labels use WPF's keys.
+- Evidence: FirstRunGateDeadClickTests (fail-proofed); live sandbox: gate shown, accept writes the setting, decline exits,
+  dashboard and Library routes work, 0 binding errors. Review: FIX -> r1 applied.
