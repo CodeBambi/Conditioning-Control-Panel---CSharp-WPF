@@ -22,6 +22,26 @@ namespace ConditioningControlPanel.Avalonia
         /// Local-only: no sync, no streak writes, no ResetProgress on this head (oracle-achievements.md).</summary>
         internal static AchievementEngine? Achievements { get; private set; }
 
+        /// <summary>The mod service (WPF App.Mods), or null on the headless render path.</summary>
+        internal static ModService? Mods { get; private set; }
+
+        /// <summary>
+        /// WPF App.OnStartup's mod block (App.xaml.cs, "Initialize mod system"): one service, seeded
+        /// into CoreMods, initialised from the saved ActiveModId. Desktop lifetime only, so a headless
+        /// render never reads or writes a profile. Initialize restores the per-mod pools and runs
+        /// the Hypnotube migration on CoreSettings.Current, exactly the write WPF does at launch.
+        /// CoreModsHooks stay unseeded: every hook targets a WPF service this head does not have
+        /// yet (Brain, Bark, Companion, DTRH/Arcademy hosts, ModResourceResolver's cache, the
+        /// portrait loader, the voice-line index, BambiSprite, AvatarTubeWindow's link list), and
+        /// unseeded means "nothing to invalidate". Seed each when its counterpart lands here.
+        /// </summary>
+        internal static void StartMods()
+        {
+            Mods = new ModService();
+            CoreMods.Attach(Mods);
+            Mods.Initialize(CoreSettings.Current.ActiveModId);
+        }
+
         private AvaloniaCoreDispatch? _desktopDispatch;
         private int _exitHandled;
         private int _warnedMissingCustomAssetsPath;
@@ -82,8 +102,8 @@ namespace ConditioningControlPanel.Avalonia
                 CorePaths.EffectiveAssetsProvider = ResolveEffectiveAssetsPath;
                 LocalizationManager.Instance.SetLanguage(Settings.Current.Language);
 
-                // Mod art: the same Core chain WPF's ModResourceResolver walks. Inert until a mod
-                // service seeds CoreMods (ActiveModPackage is null, so every answer is "no override").
+                // Mod art: the same Core chain WPF's ModResourceResolver walks. Answers from the
+                // active mod once StartMods (below) seeds CoreMods; before that every answer is "no override".
                 // No event skin on this head yet (nothing arms LiveEventService on either head).
                 CoreModArt.OverridePathProvider = p => CoreModArt.ResolveOverride(p, null, CoreMods.ActiveModPackage?.InstalledPath);
                 CoreModArt.AudioOverridePathProvider = p => CoreModArt.ModAudioFile(p, CoreMods.ActiveModPackage?.InstalledPath);
@@ -133,17 +153,14 @@ namespace ConditioningControlPanel.Avalonia
                 CoreBouncingText.RefreshAction = Views.Overlays.BouncingTextOverlay.Refresh;
                 CoreBouncingText.RestartAction = Views.Overlays.BouncingTextOverlay.Restart;
 
-                // No CoreMods seeding here, deliberately. ModService is still in the WPF head, so
-                // this head has nothing to seed the mod seam with and leaves every provider null.
-                // Unseeded is the supported state: CoreMods answers from the built-in manifests,
-                // which is what the WPF call sites saw with no mod active.
-
                 // Core cannot read the running build's version - the entry assembly is whichever
                 // head started the process, and Core is not it. Reading the version is a head job,
                 // so this head reports its own; unseeded, CoreReleaseContent answers "0.0.0".
                 var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 CoreReleaseContent.AppVersionProvider = () =>
                     version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
+                // After the version seed: installing / loading a mod checks its MinAppVersion.
+                StartMods();
                 // Real audio through LibVLC, seeded only if libvlc loads. If it is missing,
                 // CoreAudio stays unseeded: every clip "finishes" at once and nothing plays.
                 // Console as well as Serilog: this head configures no Serilog sink yet.
