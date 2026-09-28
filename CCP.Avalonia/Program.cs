@@ -78,6 +78,12 @@ namespace ConditioningControlPanel.Avalonia
             if (Array.IndexOf(args, "--x11-probe") >= 0)
                 return X11OverlayProbe.Run();
 
+            // --overlay-check opens one click-through override-redirect overlay per screen and
+            // reads map state, override_redirect, depth, input shape and geometry back from the
+            // X server. Non-zero on any mismatch. Safe on a live session (transparent, no input).
+            if (Array.IndexOf(args, "--overlay-check") >= 0)
+                return OverlayCheck.Run();
+
             // --audio-probe plays a clip through the REAL LibVLC output and ducks/unducks other
             // apps via CoreAudio, printing pactl's view of each step. Run with another stream
             // playing (e.g. a looping pw-play) to see its volume drop and come back.
@@ -94,10 +100,17 @@ namespace ConditioningControlPanel.Avalonia
             return 0;
         }
 
-        public static AppBuilder BuildAvaloniaApp() =>
-            AppBuilder.Configure<App>()
-                .UsePlatformDetect()      // X11 or Wayland on Linux, Win32 on Windows - one binary
+        public static AppBuilder BuildAvaloniaApp()
+        {
+            var builder = AppBuilder.Configure<App>()
+                .UsePlatformDetect()      // Win32 on Windows, X11 on Linux (12.1.2 has no Wayland backend)
                 .WithInterFont()
                 .LogToTrace();
+            // Pinned, not detected: every desktop overlay is an X11 override-redirect window
+            // (Platform/X11Overlay.cs), and under a future native Wayland backend those calls would
+            // silently no-op. On a Wayland session this runs through XWayland.
+            // See docs/avalonia-decisions.md (desktop overlays).
+            return OperatingSystem.IsLinux() ? builder.UseX11() : builder;
+        }
     }
 }

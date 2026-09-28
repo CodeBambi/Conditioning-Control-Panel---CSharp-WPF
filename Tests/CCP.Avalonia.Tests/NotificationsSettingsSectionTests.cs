@@ -22,10 +22,12 @@ public sealed class NotificationsSettingsSectionTests
     {
         AvaloniaTestDispatcher.Run(() =>
         {
-            var profile = Path.Combine(Path.GetTempPath(), "ccp-notifications-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(profile);
-        var previousProfile = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR");
-        Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", profile);
+            // CorePaths.UserData is captured once per process, so a per-test CCP_USERDATA_DIR only
+            // took effect when this test happened to be the first to touch it; in any other xUnit
+            // order SettingsService wrote to TestUserDataProfile.Root and this read a file that
+            // never existed. Use the process profile SettingsService actually writes to.
+            var settingsPath = Path.Combine(CorePaths.UserData, "settings.json");
+            File.Delete(settingsPath);
         Window? host = null;
 
         try
@@ -35,7 +37,6 @@ public sealed class NotificationsSettingsSectionTests
             CoreSettings.ServiceProvider = () => service;
             service.SaveImmediate();
 
-            var settingsPath = Path.Combine(profile, "settings.json");
             var before = File.ReadAllBytes(settingsPath);
             var writtenAt = File.GetLastWriteTimeUtc(settingsPath);
             NotificationsSettingsSection? section = null;
@@ -118,8 +119,7 @@ public sealed class NotificationsSettingsSectionTests
             }
             catch { }
             CoreSettings.ServiceProvider = null;
-            Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", previousProfile);
-            try { Directory.Delete(profile, recursive: true); } catch { }
+            File.Delete(settingsPath);
             }
         });
     }
