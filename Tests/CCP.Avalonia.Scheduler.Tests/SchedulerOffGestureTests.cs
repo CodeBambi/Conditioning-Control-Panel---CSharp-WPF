@@ -108,7 +108,7 @@ public sealed class SchedulerOffGestureTests
 
                     // Enabling remains the panel checkbox's real pointer/event path, including its save.
                     LeftClick(host, enabled);
-                    await WaitForSave();
+                    await WaitForSettingsFile(settingsPath, "\"SchedulerEnabled\": true");
                     Assert.True(activeService.Current.SchedulerEnabled);
                     Assert.Contains("\"SchedulerEnabled\": true",
                         File.ReadAllText(settingsPath), StringComparison.Ordinal);
@@ -128,7 +128,7 @@ public sealed class SchedulerOffGestureTests
 
                     // Positive proof: once on, the same mounted right-click turns Scheduler off.
                     RightClick(host, schedulerRow);
-                    await WaitForSave();
+                    await WaitForSettingsFile(settingsPath, "\"SchedulerEnabled\": false");
                     Assert.False(activeService.Current.SchedulerEnabled);
                     Assert.False(enabled.IsChecked == true);
                     Assert.True(schedulerRow.IsChecked == true, "Scheduler row lost selection after turning it off");
@@ -177,6 +177,24 @@ public sealed class SchedulerOffGestureTests
     {
         await Task.Delay(650);
         Dispatcher.UIThread.RunJobs();
+    }
+
+    // Save() is a 500 ms thread-pool debounce followed by an atomic publish that retries on
+    // Windows sharing violations, so a fixed sleep raced it on a loaded CI runner. Poll the file
+    // for the expected write instead, bounded; the Assert.Contains after it reports a miss.
+    private static async Task WaitForSettingsFile(string settingsPath, string expected)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        do
+        {
+            await Task.Delay(50);
+            Dispatcher.UIThread.RunJobs();
+            try
+            {
+                if (File.ReadAllText(settingsPath).Contains(expected, StringComparison.Ordinal)) return;
+            }
+            catch (IOException) { }
+        } while (DateTime.UtcNow < deadline);
     }
 
     private static void LeftClick(Window host, Control target)
