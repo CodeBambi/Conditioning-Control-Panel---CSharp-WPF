@@ -465,3 +465,14 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   SHA-256 pinned to the WPF originals), each fail-proofed. No real provider sign-in (not provable here). Review: ACCEPT.
 ## avalonia-port/providers-patreon-substar: +1000 (auth 4a; Patreon/SubscribeStar lifecycle in Core, WPF delegates, Avalonia seeds CoreAccount fail-closed; SecretStore memory-only under CCP_USERDATA_DIR;
 review FIX->r1 applied; one earlier live run was unsandboxed: real settings.json not written (mtime before run), no keyring items, two empty mods dirs created and left)
+
+## avalonia-port/session-pause-panic-ramps: +389
+- Session runner U4: Core SessionRunner Pause/Resume (clock frozen, 100 XP per pause in the award, Resume restarts only
+  features past their start minute), the flash ramp (never reaches settings.json), pink tint (±3 min random start, ramp,
+  hidden while paused). Head: pause button with WPF's confirm, panic and tray pause a running session then stop the
+  engine (replaces the U3b interim), stop confirm shows the pause penalty.
+- The head had no log sink: now stderr + a rolling file under UserData/logs (WPF's package/version), and every engine-stop
+  path logs its trigger.
+- Evidence: 4 Core tests + SessionRunWireTests (fail-proofed); panic-check.sh session phase PASS, FAIL when broken; live
+  sandbox: tray Stop froze the clock, Resume brought back only started features, recap XP +0 (banking not ported; log
+  line shows "paused 2x, penalty -200"). Review: ACCEPT, file sink added.

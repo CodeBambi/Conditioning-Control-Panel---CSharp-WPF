@@ -1,5 +1,6 @@
 using System;
 using Avalonia;
+using Serilog;
 #if DEBUG
 using Keincheck;
 #endif
@@ -11,6 +12,15 @@ namespace ConditioningControlPanel.Avalonia
         [STAThread]
         public static int Main(string[] args)
         {
+            // WPF logs to a file under UserData/logs (App.xaml.cs:1967, LogPipeline.cs); stderr stays for CI and kc.
+            // ponytail: WPF's path redaction, flight recorder and per-run naming come with the bug-report port.
+            Serilog.Log.Logger = new Serilog.LoggerConfiguration().MinimumLevel.Information()
+                .WriteTo.Sink(new StderrSink())
+                .WriteTo.File(System.IO.Path.Combine(ConditioningControlPanel.CorePaths.UserData, "logs", "ccp-avalonia-.log"),
+                    rollingInterval: Serilog.RollingInterval.Day, retainedFileCountLimit: 14,
+                    fileSizeLimitBytes: 10_000_000, rollOnFileSizeLimit: true,
+                    flushToDiskInterval: TimeSpan.FromSeconds(1))
+                .CreateLogger();
             // The session's hold on the phrase pools (#906); WPF seeds the same three in App.xaml.cs:324.
             ConditioningControlPanel.Services.PhrasePoolCustody.Seed();
 
@@ -152,5 +162,12 @@ namespace ConditioningControlPanel.Avalonia
             // See docs/avalonia-decisions.md (desktop overlays).
             return OperatingSystem.IsLinux() ? builder.UseX11() : builder;
         }
+    }
+
+    /// <summary>One line per event on stderr: time, level, rendered message, exception.</summary>
+    internal sealed class StderrSink : Serilog.Core.ILogEventSink
+    {
+        public void Emit(Serilog.Events.LogEvent e) =>
+            Console.Error.WriteLine($"{e.Timestamp:HH:mm:ss.fff} [{e.Level}] {e.RenderMessage()}{(e.Exception is null ? "" : " " + e.Exception)}");
     }
 }

@@ -2,8 +2,8 @@
 // branch (:955), HandlePanicKeyPress (:1458) and RunPanicStopTail (:1694), engine-not-running path.
 // The decision is the same Core PanicPolicy; the listener is Platform/X11PanicKey (XInput2 raw keys,
 // non-consuming like the WH_KEYBOARD_LL hook - docs/avalonia-decisions.md, panic key row).
-// ponytail: no game surfaces, video grace pause, bark or session engine on this head yet, so the
-// stop pass is StopEngine plus the lock card; wire each as its surface arrives. The #919b off-thread watchdog is omitted: the listener is its own thread,
+// ponytail: no game surfaces, video grace pause or bark on this head yet, so the
+// stop pass is StopEngine (which pauses a running session first) plus the lock card; wire each as its surface arrives. The #919b off-thread watchdog is omitted: the listener is its own thread,
 // so a wedged UI thread cannot drop the hook, but the queued stop still waits for the UI thread.
 // ponytail: Windows has no panic listener on this head yet (WPF's WH_KEYBOARD_LL hook is not ported);
 // X11PanicKey.Start returns false there and the tray's Stop everything is the only panic control.
@@ -38,7 +38,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             _portalAllowed = true;
             return X11PanicKey.Start(() => CoreSettings.Current.PanicKey,
-                () => Dispatcher.UIThread.Post(() => HandlePanicKeyPress(DateTime.Now)));
+                () =>
+                {
+                    Serilog.Log.Information("Panic trigger: XInput2 key press");
+                    Dispatcher.UIThread.Post(() => HandlePanicKeyPress(DateTime.Now));
+                });
         }
 
         /// <summary>One press of the configured key (UI thread). Each press stops everything; a second
@@ -102,9 +106,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static async Task BindPortalAsync()
         {
             var trigger = await PortalPanicShortcut.BindAsync(CoreSettings.Current.PanicKey, Loc.Get("panic_portal_description"),
-                () => Dispatcher.UIThread.Post(() =>
+                () =>
+                {
+                    Serilog.Log.Information("Panic trigger: GlobalShortcuts portal Activated");
+                    Dispatcher.UIThread.Post(() =>
                     ((Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as MainShellWindow)
-                        ?.HandlePanicKeyPress(DateTime.Now)));
+                        ?.HandlePanicKeyPress(DateTime.Now));
+                });
             Dispatcher.UIThread.Post(() =>
             {
                 if (trigger == null)
