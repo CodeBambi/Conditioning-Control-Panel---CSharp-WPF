@@ -42,6 +42,39 @@ namespace ConditioningControlPanel.Services
             _cachePath = Path.Combine(storageDir, $"{prefix}_cache.dat");
         }
 
+        private static readonly Lazy<SecureTokenStorage> Patreon = new(() => new SecureTokenStorage());
+        private static readonly Lazy<SecureTokenStorage> SubStar = new(() => new SecureTokenStorage("substar"));
+
+        /// <summary>
+        /// Core ProviderSubscription's CoreSecrets names (<c>{prefix}_auth</c> / <c>{prefix}_cache</c>,
+        /// JSON of the same models) mapped onto these stores, so files, entropy and bytes on disk are
+        /// exactly what they always were. False for any other name. Null clears.
+        /// </summary>
+        public static bool TryReadSecret(string name, out string? json)
+        {
+            var store = For(name, out var cache);
+            object? value = store == null ? null : cache ? store.RetrieveCachedState() : store.RetrieveTokens();
+            json = value == null ? null : JsonConvert.SerializeObject(value);
+            return store != null;
+        }
+
+        public static bool TryWriteSecret(string name, string? json)
+        {
+            if (For(name, out var cache) is not { } store) return false;
+            if (cache && json == null) store.ClearCachedState();
+            else if (cache) store.StoreCachedState(JsonConvert.DeserializeObject<PatreonCachedState>(json!)!);
+            else if (json == null) store.ClearTokens();
+            else if (JsonConvert.DeserializeObject<PatreonTokenData>(json) is { } t) store.StoreTokens(t.AccessToken, t.RefreshToken, t.ExpiresAt);
+            return true;
+        }
+
+        private static SecureTokenStorage? For(string name, out bool cache)
+        {
+            cache = name.EndsWith("_cache", StringComparison.Ordinal);
+            return name is "patreon_auth" or "patreon_cache" ? Patreon.Value
+                : name is "substar_auth" or "substar_cache" ? SubStar.Value : null;
+        }
+
         /// <summary>
         /// Store tokens securely using DPAPI
         /// </summary>

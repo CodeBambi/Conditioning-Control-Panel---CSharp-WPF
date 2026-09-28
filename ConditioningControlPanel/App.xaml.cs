@@ -351,6 +351,8 @@ namespace ConditioningControlPanel
             CoreReleaseContent.PatchNotesProvider = () => Services.UpdateService.CurrentPatchNotes;
             // The V2 client lives in Core; its 409-merged recovery re-runs head sign-in.
             Services.V2AuthService.MergedRecovery = Services.MergedAccountRecovery.TryHandleAsync;
+            // The Patreon/SubscribeStar lifecycle lives in Core too; validate prizes land here.
+            Services.ProviderSubscription.PrizesSink = Services.ProfileSyncService.ApplyValidatePrizes;
             // BugReportService stays head-side in this layer, but its report assembly is portable.
             // The diagnostic writer/heartbeat remains WPF; only its bounded tail crosses the seam.
             BugReportService.DiagnosticTailProvider = VideoDiag.Tail;
@@ -536,7 +538,7 @@ namespace ConditioningControlPanel
             {
                 CoreSecrets.ApiKey    => Services.SecureApiKeyStore.Retrieve(),
                 CoreSecrets.AuthToken => Services.SecureAuthTokenStore.Retrieve(),
-                _ => null,
+                _ => Services.SecureTokenStorage.TryReadSecret(name, out var json) ? json : null,
             };
             CoreSecrets.StoreProvider = (name, value) =>
             {
@@ -544,6 +546,7 @@ namespace ConditioningControlPanel
                 {
                     case CoreSecrets.ApiKey:    Services.SecureApiKeyStore.Store(value); break;
                     case CoreSecrets.AuthToken: Services.SecureAuthTokenStore.Store(value); break;
+                    default: Services.SecureTokenStorage.TryWriteSecret(name, value); break;
                 }
             };
             SeedTutorialSeam();
@@ -1120,7 +1123,7 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Unified user ID that links Patreon and Discord accounts together
         /// </summary>
-        public static string? UnifiedUserId { get; set; }
+        public static string? UnifiedUserId { get => CoreAccount.UnifiedUserId; set => CoreAccount.UnifiedUserId = value; }
 
         /// <summary>
         /// Snapshot of the UnifiedUserId as restored from settings at startup, captured

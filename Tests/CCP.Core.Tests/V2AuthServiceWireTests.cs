@@ -21,6 +21,7 @@ namespace CCP.Core.Tests;
 /// static-ctor headers (X-Client-Version, User-Agent) and X-Auth-Token only where WPF's
 /// AddAuthHeader ran. Nothing was run on Windows to record them.
 /// </summary>
+[Collection(CoreSecretsStatics.Name)]
 public sealed class V2AuthServiceWireTests : IDisposable
 {
     private const string Url = "https://codebambi-proxy.vercel.app";
