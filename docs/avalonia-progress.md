@@ -154,3 +154,16 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: ProgramsRoadmapAwarenessOpenersTests (4) + LanguageSelectorTests roadmap assertion, each
   fail-proofed; evidence/avalonia-port/wire-programs-roadmap-awareness/. Two review rounds.
 - Not run: WPF tests; Chaster confirm on activate (not ported; lock time is declined, the safe direction).
+
+## avalonia-port/x11-override-redirect: +203
+- X11Overlay.SetOverrideRedirect: XChangeWindowAttributes(CWOverrideRedirect) + XSync on the overlay's own
+  connection, applied before Show() (Avalonia 12.1.2 creates the XID in the Window ctor and maps in Show;
+  measured). Returns false on non-XID windows, 32-bit processes, or an X error from the server.
+- X11 backend pinned on Linux (UseX11 after UsePlatformDetect); "X11 or Wayland" comment corrected.
+- --overlay-check: per screen, a transparent click-through override-redirect overlay read back from the X
+  server (map_state, override_redirect, depth 32, empty input shape, geometry == Screens).
+- Evidence: PASS live on this box (XDG_SESSION_TYPE=wayland via XWayland, 3 screens at 1.79 scaling) and in a
+  nested kwin; exit 1 with override-redirect skipped. Existing x11-overlay-probe.sh still passes.
+- Ledger: shell-clickthrough-overlays notes updated; stays stub until a feature uses the mechanism.
+- Follow-up: X11Overlay's process-wide XSetErrorHandler replaces Avalonia's own handler (pre-existing).
+- Not run: in CI (needs a display); Windows (no Win32 shim yet).
