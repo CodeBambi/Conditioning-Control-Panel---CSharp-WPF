@@ -596,3 +596,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   Scheduler/Ramp and Catalogue pills; ramp link labels use WPF's keys.
 - Evidence: FirstRunGateDeadClickTests (fail-proofed); live sandbox: gate shown, accept writes the setting, decline exits,
   dashboard and Library routes work, 0 binding errors. Review: FIX -> r1 applied.
+
+## avalonia-port/cloud-read-only-2: +921 (auth unit 6 part 2, read-only)
+- Core LeaderboardClient (GET /v3/leaderboard, GET /user/lookup, WPF's ranking) with the models and avatar hue moved into
+  Core; WPF LeaderboardService goes through it. The Avalonia leaderboard's sample roster is gone: a real fetch on every
+  visit/refresh/mode switch (one at a time, like WPF), your-rank badge, you-bar, honest "Failed to load" offline state.
+- The heartbeat is a presence POST, so it waits for unit 7 (ledger row). The profile-card read is in Core; its Trainer Card
+  UI is the next layer.
+- Evidence: CloudLeaderboardTests (no-write, board, card fields, in-flight guard; fail-proofed); live sandbox: the real public
+  board and the offline state. Review: ACCEPT, follow-ups applied.
