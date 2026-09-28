@@ -1629,6 +1629,32 @@ export const RAW = {
     saveFailed: 'could not save that one',
     alt: tpl('match card: {word}', (word) => ({ word })),
   },
+
+  /* PvP stakes (ui/stake.js). Each side stakes against the house, never the
+   * other player. Leaving mid-match never costs anything, so the copy never
+   * threatens; it just says what is on the table. */
+  stake: {
+    label: 'stake',
+    off: 'off',
+    min: tpl('{n} min', (n) => ({ n })),
+    sp: tpl('{n} ✦', (n) => ({ n })),
+    them: tpl('them: {what}', (what) => ({ what })),
+    themNone: 'them: no stake',
+    locked: 'locked in',
+    timeNote: 'lose and it goes on your lock',
+    dailyCap: 'three a day. back tomorrow.',
+    pairCap: 'one staked match with them a day.',
+    noSp: 'not enough ✦',
+    started: 'too late, the match started',
+    badAmount: 'not on the table',
+    down: 'stakes are down for now',
+    settling: 'settling the stake…',
+    wonSp: tpl('+{n} ✦', (n) => ({ n })),
+    lostTime: tpl('+{n} min on your lock', (n) => ({ n })),
+    lostSp: tpl('-{n} ✦', (n) => ({ n })),
+    lost: 'stake lost',
+    returned: 'stake returned',
+  },
 };
 
 /** The copy deck, every word read in the page's current language on access. */
