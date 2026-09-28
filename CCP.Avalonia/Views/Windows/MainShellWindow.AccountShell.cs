@@ -16,8 +16,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // WPF MainWindow.AccountShell.cs:96.
         private void BtnAwareness_Click(object? sender, RoutedEventArgs e) => ShowTab("awareness");
 
-        // ponytail: needs the services in MainWindow.AccountShell.cs; wired when they move to Core.
-        private void BtnPatreonExclusives_Click(object? sender, RoutedEventArgs e) { }
+        // WPF MainWindow.AccountShell.cs:37: a plain tab button.
+        internal void BtnPatreonExclusives_Click(object? sender, RoutedEventArgs e) => ShowTab("exclusives");
 
         // ponytail: needs the services in MainWindow.AccountShell.cs; wired when they move to Core.
         private void BtnUpdateAvailable_Click(object? sender, RoutedEventArgs e) { }

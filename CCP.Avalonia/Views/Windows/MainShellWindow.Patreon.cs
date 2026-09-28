@@ -92,8 +92,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // ponytail: needs the services in MainWindow.Patreon.cs; wired when they move to Core.
-        private void BtnManagePhrases_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        // WPF MainWindow.Patreon.cs:1312. ponytail: UpdatePhraseCountDisplay skipped - the
+        // Companion tab's TxtPhraseCount needs CompanionPhraseService, still head-side.
+        internal void BtnManagePhrases_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+            => _ = new Dialogs.CompanionPhraseEditorDialog().ShowDialog(this);
 
     }
 }

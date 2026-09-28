@@ -161,7 +161,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// head's equivalent and works on Linux, so this is a port rather than a seam - the same
         /// swap Views/Dialogs/UpdateFailedDialog and LoginDialog already make.
         /// </summary>
-        private async void BtnCatalogue_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        internal async void BtnCatalogue_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
             try { await Launcher.LaunchUriAsync(new Uri("https://app.cclabs.app/catalogue")); }
             catch (Exception ex) { Log.Warning(ex, "Failed to open CCP Catalogue URL"); }

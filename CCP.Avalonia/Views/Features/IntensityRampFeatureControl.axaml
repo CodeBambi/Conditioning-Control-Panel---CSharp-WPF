@@ -219,12 +219,12 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
                             <CheckBox x:Name="ChkLinkMaster" Theme="{StaticResource ToggleStyle}"/>
-                            <TextBlock Text="{loc:Str setting_master}" Foreground="{StaticResource TextLightBrush}"
+                            <TextBlock Text="{loc:Str label_ramp_link_master}" Foreground="{StaticResource TextLightBrush}"
                                        FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
                             <CheckBox x:Name="ChkLinkSub" Theme="{StaticResource ToggleStyle}"/>
-                            <TextBlock Text="{loc:Str label_sub}" Foreground="{StaticResource TextLightBrush}"
+                            <TextBlock Text="{loc:Str label_ramp_link_sub}" Foreground="{StaticResource TextLightBrush}"
                                        FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                         <!-- Brain Drain rides the ramp like the spiral does: the BLUR strength. -->

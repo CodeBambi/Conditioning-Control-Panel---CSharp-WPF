@@ -275,6 +275,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly Button _btnPickFolder;
         private readonly ItemsControl _modCardsList;
         private readonly StackPanel _doorsHost;
+        private readonly CheckBox _chkAgeConfirm;
+        private readonly TextBlock _txtAgeConfirm;
+        private readonly TextBlock _txtContentPolicy;
+        private readonly TextBlock _txtCloseHint;
+        private readonly Button _btnSkip;
+        private readonly Button _btnNext;
+
+        /// <summary>True once Enter was pressed on the Welcome step with the 18+ box ticked.</summary>
+        public bool AgeAccepted { get; private set; }
 
         /// <summary>Set by "Take the tour"; read by the caller after the modal returns.</summary>
         public bool StartTourRequested { get; private set; }
@@ -320,6 +329,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _btnPickFolder = this.FindControl<Button>("BtnPickFolder")!;
             _modCardsList = this.FindControl<ItemsControl>("ModCardsList")!;
             _doorsHost = this.FindControl<StackPanel>("DoorsHost")!;
+            _chkAgeConfirm = this.FindControl<CheckBox>("ChkAgeConfirm")!;
+            _txtAgeConfirm = this.FindControl<TextBlock>("TxtAgeConfirm")!;
+            _txtContentPolicy = this.FindControl<TextBlock>("TxtContentPolicy")!;
+            _txtCloseHint = this.FindControl<TextBlock>("TxtCloseHint")!;
+            _btnSkip = this.FindControl<Button>("BtnSkip")!;
+            _btnNext = this.FindControl<Button>("BtnNext")!;
 
             ApplyStaticText();
             BuildModCards();
@@ -340,8 +355,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             this.FindControl<Button>("BtnCloseX")!.Click += (_, _) => CloseSafely();
             _btnPickFolder.Click += BtnPickFolder_Click;
             _btnBack.Click += (_, _) => ShowStep(_step - 1);
-            this.FindControl<Button>("BtnSkip")!.Click += (_, _) => CloseSafely();
-            this.FindControl<Button>("BtnNext")!.Click += BtnNext_Click;
+            _btnSkip.Click += (_, _) => CloseSafely();
+            _btnNext.Click += BtnNext_Click;
+            _chkAgeConfirm.IsCheckedChanged += (_, _) => ApplyStepChrome();
+            // WPF AgeConfirmLabel_Click: the sentence is the target too.
+            _txtAgeConfirm.PointerReleased += (_, _) => _chkAgeConfirm.IsChecked = _chkAgeConfirm.IsChecked != true;
 
             // One handler on the list instead of one inside the DataTemplate: template content has
             // no name scope to FindControl through, and PointerReleased bubbles the same way WPF's
@@ -471,7 +489,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 MainShellWindow.IsStartupDialogShowing = false;
             }
 
-            if (wizard == null) return;
+            // WPF Run's safety net (FirstRunWizard.xaml.cs:482-486): every exit that is not
+            // "Enter, with the box ticked" stops the launch rather than running ungated.
+            if (wizard == null || !wizard.AgeAccepted)
+            {
+                AbortUngatedLaunch(owner, "age gate not accepted");
+                return;
+            }
 
             if (wizard.StartTourRequested)
             {
@@ -483,6 +507,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try { CoreTutorial.Start("ShortWalk"); }
                 catch (Exception ex) { Log.Warning(ex, "[FirstRun] Could not start the short walk"); }
             }
+        }
+
+        /// <summary>
+        /// WPF AbortUngatedLaunch (FirstRunWizard.xaml.cs:428): an acceptance already on file
+        /// (FirstRunGate.MustShutDown) lets the launch continue; otherwise hand the first run back
+        /// and shut down, which is what WPF's decline does.
+        /// </summary>
+        internal static void AbortUngatedLaunch(MainShellWindow owner, string reason)
+        {
+            try
+            {
+                if (CoreSettings.Current.HasAcceptedAgeVerification) return;
+                HandBackFirstRun(reason);
+                Log.Information("[FirstRun] The 18+ gate was never accepted ({Reason}) - shutting down rather than running ungated", reason);
+                owner.RequestExit();
+            }
+            catch (Exception ex) { Log.Warning(ex, "[FirstRun] Could not stop an ungated launch"); }
+        }
+
+        /// <summary>WPF RecordAgeAcceptance: written the moment Enter is pressed.</summary>
+        private void RecordAgeAcceptance()
+        {
+            AgeAccepted = true;
+            try
+            {
+                CoreSettings.Current.HasAcceptedAgeVerification = true;
+                CoreSettings.Save();
+                Log.Information("[FirstRun] Age verification accepted on the Welcome step");
+            }
+            catch (Exception ex) { Log.Warning(ex, "[FirstRun] Could not record the age acceptance"); }
         }
 
         // ------------------------------------------------------------------ copy
@@ -570,6 +624,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 "Turn some off or lower their rates in Settings if things get sluggish.");
 
             _txtPickFolder.Text = _pickedFolder ?? Str("fr8_welcome_pick_folder", "Choose a content folder");
+            _txtAgeConfirm.Text = Str("fr8_age_confirm", "I am 18 or older and I have read the content policy.");
+            _txtContentPolicy.Text = Str("fr8_age_policy_link", "Read the content policy");
 
             // --- step 2 ---
             _txtModHeading.Text = Str("fr8_modpick_heading", "Pick your flavour");
@@ -603,8 +659,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             _txtStepCounter.Text = StrF("fr8_wizard_step_of", "Step {0} of {1}", _step, StepCount);
             _btnBack.IsVisible = _step != 1;
+            ApplyStepChrome();
 
-            if (_step == 3)
+            // WPF re-called RefreshWelcomeLogo from ShowStep(1), so Back-navigation after a mod
+            // pick repaints instead of showing the previous mod's mark.
+            if (_step == 1) RefreshWelcomeLogo();
+            if (_step == 2) PrepareModStep();
+
+            FadeInCurrentStep();
+        }
+
+        /// <summary>WPF ApplyStepChrome (FirstRunWizard.xaml.cs:637-661): step 1 has no skip, its
+        /// primary is Enter and stays disabled until the 18+ box is ticked.</summary>
+        private void ApplyStepChrome()
+        {
+            _btnSkip.IsVisible = _step != 1;
+            _btnNext.IsEnabled = _step != 1 || _chkAgeConfirm.IsChecked == true;
+            _txtCloseHint.Text = _step == 1 ? Str("fr8_welcome_close_hint", "Not for you? Close this window.") : "";
+            _txtCloseHint.IsVisible = _step == 1;
+
+            if (_step == 1) _txtNext.Text = Str("fr8_welcome_enter", "Enter");
+            else if (_step == 3)
             {
                 _txtSkip.Text = Str("fr8_tour_explore", "Explore on my own");
                 _txtNext.Text = Str("fr8_tour_take", "Take the tour");
@@ -614,13 +689,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _txtSkip.Text = Str("fr8_wizard_skip", "Skip setup");
                 _txtNext.Text = Str("fr8_wizard_next", "Next");
             }
-
-            // WPF re-called RefreshWelcomeLogo from ShowStep(1), so Back-navigation after a mod
-            // pick repaints instead of showing the previous mod's mark.
-            if (_step == 1) RefreshWelcomeLogo();
-            if (_step == 2) PrepareModStep();
-
-            FadeInCurrentStep();
         }
 
         /// <summary>
@@ -857,6 +925,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnNext_Click(object? sender, RoutedEventArgs e)
         {
             if (!_btnPickFolder.IsEnabled) return;   // folder picker still open: finish after it answers
+            if (_step == 1)
+            {
+                // Belt and braces, as WPF: the button is disabled until the box is ticked.
+                if (_chkAgeConfirm.IsChecked != true) return;
+                RecordAgeAcceptance();
+            }
             if (_step == 2) CommitModChoice();
 
             if (_step >= StepCount)
@@ -907,6 +981,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (_closed) return;
             _closed = true;
+            if (!AgeAccepted) return;   // declined: Run hands the first run back and shuts down
 
             // A choice made but never "Next"-ed (Esc, the X, Explore on my own) still counts - the
             // user ticked a mod, and honouring it is what the picker's own contract promises.

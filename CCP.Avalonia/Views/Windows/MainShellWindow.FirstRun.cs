@@ -56,6 +56,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // WPF's else branch (MainWindow.xaml.cs:618-624): the upgrader gets the picker,
                 // pre-ticked with the mod they were running. Its own guards decide; on this head
                 // there is no pack service, so it declines exactly as WPF does without one.
+                else if (CoreSettings.Service != null && CoreSettings.Current.Welcomed
+                         && !CoreSettings.Current.HasAcceptedAgeVerification)
+                    Opened += OnAgeGateShellOpened;
                 else Opened += OnUpgradeShellOpened;
             }
             catch (Exception ex)
@@ -63,6 +66,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // A first-run screen must never be the reason a fresh install fails to start.
                 Log.Warning(ex, "[FirstRun] Could not arm the first-run wizard");
             }
+        }
+
+        /// <summary>
+        /// WPF App.xaml.cs:3622-3664: an install already Welcomed but never accepted (a kill
+        /// mid-wizard, or a WPF settings file in that state) is asked before anything else.
+        /// "Yes" reads "OK" to match this head's buttons (docs/avalonia-decisions.md).
+        /// </summary>
+        internal const string AgeGateBody =
+            "This application contains adult content intended for users aged 18 and older.\n\n" +
+            "By clicking \"OK\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
+            "Do you wish to continue?";
+
+        private void OnAgeGateShellOpened(object? sender, EventArgs e)
+        {
+            Opened -= OnAgeGateShellOpened;
+            Dispatcher.UIThread.Post(async () =>
+            {
+                var ok = IsVisible && await Dialogs.MessageDialog.ConfirmAsync(this, "Age Verification", AgeGateBody, defaultToCancel: true);
+                if (!ok) { RequestExit(); return; }
+                CoreSettings.Current.HasAcceptedAgeVerification = true;
+                CoreSettings.Save();
+                OnUpgradeShellOpened(this, EventArgs.Empty);
+            }, DispatcherPriority.Normal);
         }
 
         private void OnUpgradeShellOpened(object? sender, EventArgs e)
@@ -87,7 +113,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // flags back rather than spending a first run nobody was shown.
                     if (!IsVisible)
                     {
-                        FirstRunWizard.HandBackFirstRun("shell window never became visible");
+                        FirstRunWizard.AbortUngatedLaunch(this, "shell window never became visible");
                         return;
                     }
 

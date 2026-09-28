@@ -29,9 +29,8 @@
 //     in the same place WPF fires it - see ShowTab.
 //   - The three keys that are WINDOWS, not tabs, and the one launcher door: "patreon" (opens
 //     Settings · Account via ShowAppInfoPopup), "fyp" (OpenFypFeed), "justdrop" (the shop host)
-//     and the "webapp" door. Each is a documented no-op below until its service exists here.
-//   - BtnNavMediaLog: WPF raises AssetsTab.BtnMediaLog's Click. That button is inside the
-//     ported AssetsTabView and its handler is a stub, so this lands on the Assets tab instead.
+//     Each is a documented no-op below until its service exists here. The "webapp" door is
+//     wired (DoorWebApp_Click opens it through the Launcher).
 //   - An "active" state on the rail. NavDoorButton has no :checked/.active selector on this
 //     head, so nothing is highlighted yet.
 //
@@ -61,6 +60,8 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Threading;
+using Avalonia.Input.Platform;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -320,8 +321,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnNavBlinkTrainer_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("blinktrainer");
         private void BtnNavRemoteControl_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("remotecontrol");
 
-        // Still a stub: the web-app door launches a browser, which is a service on this head.
-        private void DoorWebApp_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
-        private void BtnNavMediaLog_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("assets");
+        // WPF MainWindow.TabNavigation.cs:986-994: open the web app, retire the banner beat.
+        // No browser -> show the URL, as WPF's BrowserLauncher.OpenUrlOrPrompt does.
+        private async void DoorWebApp_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            const string url = "https://app.cclabs.app";
+            try
+            {
+                if (!await Launcher.LaunchUriAsync(new Uri(url)))
+                {
+                    try { if (Clipboard is { } cb) await cb.SetTextAsync(url); } catch { /* clipboard may be unavailable */ }
+                    await Dialogs.MessageDialog.ShowAsync(this, Loc.Get("title_open_link_in_browser"),
+                        Loc.GetF("msg_browser_no_default_for", "open the CC Labs web app") + Loc.GetF("msg_browser_link_copied", url));
+                }
+                RetireWebBannerBeat();
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "DoorWebApp_Click failed"); }
+        }
+
+        // WPF MainWindow.TabNavigation.cs:1066: the Media Log is a window, deliberately no ShowTab.
+        private void BtnNavMediaLog_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            try { new MediaHistoryWindow().Show(this); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "BtnNavMediaLog_Click failed"); }
+        }
     }
 }

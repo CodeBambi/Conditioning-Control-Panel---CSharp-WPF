@@ -1266,9 +1266,8 @@
                                        Phrases   -> BtnManagePhrases_Click(MainWindow.Patreon.cs:898,
                                                     which also refreshes the Companion tab's count)
                                        Media Log -> BtnNavMediaLog_Click  (TabNavigation.cs), which
-                                                    re-fires the Assets tab's own BtnMediaLog rather
-                                                    than newing a second MediaHistoryWindow - see the
-                                                    comment there for why that matters.
+                                                    opens MediaHistoryWindow directly, never the
+                                                    Assets tab.
 
                                      Deliberately NOT duplicated here: the Mod Catalogue browser
                                      (a button inside ModManagerDialog) and Session History (a
