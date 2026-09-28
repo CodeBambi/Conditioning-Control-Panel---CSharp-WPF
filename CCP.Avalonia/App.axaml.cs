@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -349,7 +350,30 @@ namespace ConditioningControlPanel.Avalonia
                 if (Interlocked.Exchange(ref _warnedMissingCustomAssetsPath, 1) == 0)
                     Serilog.Log.Warning("CustomAssetsPath '{Path}' does not exist — falling back to default assets folder. Imports/extractions will go to the default location.", customPath);
             }
-            return Path.Combine(CorePaths.UserData, "assets");
+            return _defaultAssetsPath ??= DefaultAssetsPath(OperatingSystem.IsLinux(),
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), CorePaths.UserData);
+        }
+
+        private string? _defaultAssetsPath;
+
+        /// <summary>
+        /// The media folder used while CustomAssetsPath is empty. Windows keeps WPF's
+        /// UserData/assets; Linux uses ~/ccp media (user request), created with its subfolders on
+        /// first use. A Linux profile that already has files in UserData/assets keeps using it -
+        /// nothing is moved and nothing switches silently. Decided once per process.
+        /// </summary>
+        internal static string DefaultAssetsPath(bool isLinux, string home, string userData)
+        {
+            var legacy = Path.Combine(userData, "assets");
+            if (!isLinux) return legacy;
+            if (Directory.Exists(legacy) && Directory.EnumerateFiles(legacy, "*", SearchOption.AllDirectories).Any())
+            {
+                Serilog.Log.Information("Media folder: keeping {Legacy} (it already holds files) instead of ~/ccp media", legacy);
+                return legacy;
+            }
+            var media = Path.Combine(home, "ccp media");
+            CorePaths.EnsureCustomAssetsDirectories(media);
+            return media;
         }
 
         private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
