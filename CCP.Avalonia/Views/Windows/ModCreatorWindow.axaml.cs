@@ -18,6 +18,7 @@ using Avalonia.Styling;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Newtonsoft.Json;
 using Serilog;
 
@@ -2561,7 +2562,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 CleanupTempDir();
                 _loadedTempDir = Path.Combine(Path.GetTempPath(), $"ccpmod_load_{Guid.NewGuid():N}");
-                ZipFile.ExtractToDirectory(picked[0], _loadedTempDir);
+                CcpmodArchive.Extract(picked[0], _loadedTempDir);
 
                 var manifestPath = Path.Combine(_loadedTempDir, "mod.json");
                 if (!File.Exists(manifestPath))
