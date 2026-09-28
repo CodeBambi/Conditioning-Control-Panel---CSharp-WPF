@@ -13,7 +13,7 @@
 // 83 MainShellWindow.<Suffix>.cs partials for the rest.
 //
 // Win32 in this file (10 P/Invokes), mapped rather than copied — user32/dwmapi do not exist on
-// a net8.0 head:
+// a net10.0 head:
 //   DwmSetWindowAttribute(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND)
 //        -> dropped. The rounded corner is the compositor's business on Linux; the accent frame
 //           the app draws over it (GlassWindowEdge, CornerRadius 8) is in the XAML and unchanged.

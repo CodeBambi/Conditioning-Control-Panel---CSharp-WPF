@@ -8,7 +8,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 {
     // PORTED (the used slice) from ConditioningControlPanel/Views/Controls/Companion/CompanionVmPrimitives.cs.
     // The WPF version leans on CommandManager.RequerySuggested; Avalonia has none, so
-    // RaiseCanExecuteChanged is explicit. Plain net8.0 - folding into CCP.Core deletes this copy.
+    // RaiseCanExecuteChanged is explicit. Plain net10.0 - folding into CCP.Core deletes this copy.
 
     /// <summary>Minimal ICommand. Port of CompanionRelayCommand's used surface.</summary>
     public sealed class CompanionRelayCommand : ICommand

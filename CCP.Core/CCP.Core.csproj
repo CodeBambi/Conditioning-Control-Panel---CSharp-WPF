@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Platform-agnostic engine library. Targets plain net8.0 ON PURPOSE: the target framework
-    itself is the architecture test. A net8.0 assembly physically cannot reference
+    Platform-agnostic engine library. Targets plain net10.0 ON PURPOSE: the target framework
+    itself is the architecture test. A net10.0 assembly physically cannot reference
     System.Windows.*, so any WPF/WinForms/Win32 leak into Core becomes a compile error rather
     than a code-review question. Do not add -windows, UseWPF, UseWindowsForms, or a
     RuntimeIdentifier here.
@@ -11,7 +11,7 @@
     below. Core is precisely where a Windows-only API call must not compile.
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <!-- Match the app: it does not use implicit usings. -->
     <ImplicitUsings>disable</ImplicitUsings>

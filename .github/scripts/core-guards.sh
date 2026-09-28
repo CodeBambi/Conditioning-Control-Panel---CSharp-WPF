@@ -4,7 +4,7 @@
 #     bash .github/scripts/core-guards.sh
 #
 # GUARD 1 - forbidden APIs in CCP.Core.
-#   Every pattern below compiles cleanly in a net8.0 library and then throws, no-ops, or
+#   Every pattern below compiles cleanly in a net10.0 library and then throws, no-ops, or
 #   silently returns null at runtime on a non-Windows head. The target framework cannot
 #   catch them, so they are caught here instead.
 #

@@ -559,7 +559,7 @@ public class StudioRackRenderTests
 
     private static string RepoRoot()
     {
-        // bin/Debug/net8.0 -> Tests/<proj> -> Tests -> repo root
+        // bin/Debug/net10.0 -> Tests/<proj> -> Tests -> repo root
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
             dir = dir.Parent;

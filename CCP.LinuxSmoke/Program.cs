@@ -15,7 +15,7 @@ namespace ConditioningControlPanel.LinuxSmoke
     /// Executes CCP.Core on a non-Windows runtime and asserts on the answers.
     ///
     /// This is not a test project and not a UI. It is the smallest thing that proves the engine
-    /// RUNS off Windows, as opposed to merely compiling for net8.0. The distinction is not
+    /// RUNS off Windows, as opposed to merely compiling for net10.0. The distinction is not
     /// academic: EnhancementValidator.IsUnsafeAssetPath was found leaning on Path.IsPathRooted,
     /// whose result is platform-dependent, so a security check silently changed meaning on Linux
     /// while the TFM guard, the grep gate and a 100%-similarity rename check all stayed green.

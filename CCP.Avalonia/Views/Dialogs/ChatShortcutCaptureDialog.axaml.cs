@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         /// <summary>
         /// Avalonia's <see cref="KeyModifiers"/>, not WPF's <c>ModifierKeys</c> — the latter lives
-        /// in System.Windows.Input, which the net8.0 head cannot reference.
+        /// in System.Windows.Input, which the net10.0 head cannot reference.
         /// </summary>
         public KeyModifiers CapturedModifiers { get; private set; }
 

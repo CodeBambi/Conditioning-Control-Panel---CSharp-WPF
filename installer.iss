@@ -25,7 +25,7 @@
 ; ~131 chars deep, and a handful of builtin-sissyhypno audio files push past MAX_PATH (260)
 ; from there, aborting the ISCC compile. Staging to e.g. C:\ccpb\pub keeps every path short.
 #ifndef PublishDir
-  #define PublishDir "ConditioningControlPanel\bin\Release\net8.0-windows10.0.19041.0\win-x64\publish"
+  #define PublishDir "ConditioningControlPanel\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish"
 #endif
 
 [Setup]

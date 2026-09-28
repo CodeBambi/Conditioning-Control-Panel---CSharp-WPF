@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// PORTED from ConditioningControlPanel/Chaos/ChaosOverlayWindow.xaml.cs. Deviations:
     ///
     /// <para><b>Win32.</b> Every P/Invoke in the original is gone; `user32`/`kernel32` do not
-    /// exist off Windows and this head is net8.0. The mapping actually used:</para>
+    /// exist off Windows and this head is net10.0. The mapping actually used:</para>
     /// <list type="bullet">
     ///   <item><c>SetWindowLong(GWL_EXSTYLE, WS_EX_TRANSPARENT)</c> ->
     ///         <see cref="X11Overlay.SetClickThrough"/>, which is the X11 twin (an empty XFixes

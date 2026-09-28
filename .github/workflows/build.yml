@@ -17,10 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          # 8.0 is what everything targets; 10.0 matches the SDK the solution is built with
-          # locally. The 8.0 runtime must be present or the net8.0 test host cannot launch.
+          # 10.0 is what everything targets (LTS, supported to Nov 2028).
           dotnet-version: |
-            8.0.x
             10.0.x
       - run: dotnet build CCP.Core/CCP.Core.csproj -c Release
       # Core.Tests is the Linux-only behavior gate for the engine. Keep it separate from the
@@ -29,7 +27,7 @@ jobs:
       - name: Test Core settings publication (isolated profile)
         run: dotnet test Tests/CCP.Core.Settings.Tests/CCP.Core.Settings.Tests.csproj -c Release
 
-      # Compiling for net8.0 proves the type system is satisfied. It does not prove the engine
+      # Compiling for net10.0 proves the type system is satisfied. It does not prove the engine
       # BEHAVES off Windows. This step actually executes Core on Linux and asserts on the answers.
       #
       # It is not redundant with the build above, and it earned its place immediately: on its
@@ -92,7 +90,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            8.0.x
             10.0.x
       # The -p: flag is required, not cosmetic. ConditioningControlPanel.csproj is SelfContained
       # + win-x64; ConditioningControlPanel.Tests sets a RID but NOT SelfContained and
@@ -136,7 +133,7 @@ jobs:
       - name: Test Avalonia General settings picker (isolated profile)
         run: dotnet test Tests/CCP.Avalonia.GeneralSettings.Tests/CCP.Avalonia.GeneralSettings.Tests.csproj -c Release
 
-  # Greps the compiler cannot do: APIs that compile fine in a net8.0 library and only fail at
+  # Greps the compiler cannot do: APIs that compile fine in a net10.0 library and only fail at
   # runtime, plus the XAML clr-namespace tripwire. See the script for what and why.
   core-guards:
     runs-on: ubuntu-latest

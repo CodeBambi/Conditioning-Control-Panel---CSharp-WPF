@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Tests for CCP.Core. Plain net8.0 with no RuntimeIdentifier and no UseWPF, deliberately:
+    Tests for CCP.Core. Plain net10.0 with no RuntimeIdentifier and no UseWPF, deliberately:
     this project must be runnable by the core-linux CI job, which is the anti-drift check.
     Adding -windows / win-x64 / UseWPF here would make it unrunnable on Linux and quietly
     delete that signal. Package versions match Tests/ConditioningControlPanel.Tests.
@@ -10,7 +10,7 @@
     without a Windows runtime. See .github/workflows/build.yml.
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <IsPackable>false</IsPackable>

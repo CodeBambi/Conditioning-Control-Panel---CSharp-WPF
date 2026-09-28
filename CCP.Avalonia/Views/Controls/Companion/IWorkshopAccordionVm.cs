@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     //  PORTED from ConditioningControlPanel/Views/Controls/Companion/IWorkshopAccordionVm.cs,
     //  plus the Workshop slice of that folder's CompanionItemVms.cs (IWorkshopCellVm,
     //  IWorkshopRowVm, CompanionWorkshopCell, CompanionWorkshopRow). Contracts and doc comments
-    //  are unchanged - the whole file is plain net8.0 already, System.Windows.Input.ICommand
+    //  are unchanged - the whole file is plain net10.0 already, System.Windows.Input.ICommand
     //  included, so nothing here needed rewriting. It is COPIED rather than referenced only
     //  because a partial WPF-head class cannot be shared with this assembly; folding it into
     //  CCP.Core would delete the copy, and is the obvious follow-up.

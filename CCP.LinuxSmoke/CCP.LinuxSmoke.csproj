@@ -3,7 +3,7 @@
   <!--
     A head that actually RUNS CCP.Core on Linux.
 
-    Until this existed, Core was only ever *compiled* for net8.0 and then executed exclusively
+    Until this existed, Core was only ever *compiled* for net10.0 and then executed exclusively
     inside the Windows WPF process. Compiling proves the type system is satisfied; it does not
     prove the code behaves. That gap is not theoretical - a code review found
     EnhancementValidator.IsUnsafeAssetPath leaning on Path.IsPathRooted, whose result differs by
@@ -18,7 +18,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>ConditioningControlPanel.LinuxSmoke</RootNamespace>
