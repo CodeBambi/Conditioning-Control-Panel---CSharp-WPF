@@ -11,10 +11,15 @@ namespace ConditioningControlPanel.Avalonia
         [STAThread]
         public static int Main(string[] args)
         {
-            // WPF logs to a file (App.xaml.cs); this head had no sink at all, so every Log.* line was lost.
-            // ponytail: stderr only, Information+; a rolling file when Serilog.Sinks.File is worth a package.
+            // WPF logs to a file under UserData/logs (App.xaml.cs:1967, LogPipeline.cs); stderr stays for CI and kc.
+            // ponytail: WPF's path redaction, flight recorder and per-run naming come with the bug-report port.
             Serilog.Log.Logger = new Serilog.LoggerConfiguration().MinimumLevel.Information()
-                .WriteTo.Sink(new StderrSink()).CreateLogger();
+                .WriteTo.Sink(new StderrSink())
+                .WriteTo.File(System.IO.Path.Combine(ConditioningControlPanel.CorePaths.UserData, "logs", "ccp-avalonia-.log"),
+                    rollingInterval: Serilog.RollingInterval.Day, retainedFileCountLimit: 14,
+                    fileSizeLimitBytes: 10_000_000, rollOnFileSizeLimit: true,
+                    flushToDiskInterval: TimeSpan.FromSeconds(1))
+                .CreateLogger();
             // The session's hold on the phrase pools (#906); WPF seeds the same three in App.xaml.cs:324.
             ConditioningControlPanel.Services.PhrasePoolCustody.Seed();
 

@@ -45,6 +45,8 @@
     <PackageReference Include="LibVLCSharp" Version="3.10.1" />
     <!-- DPAPI for the Windows secret store (Platform/SecretStore.cs), same package WPF uses. -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <!-- Same file sink and version WPF ships (ConditioningControlPanel.csproj:130). -->
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('win')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Windows')))">
