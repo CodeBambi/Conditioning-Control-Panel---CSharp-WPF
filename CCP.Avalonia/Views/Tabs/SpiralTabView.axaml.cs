@@ -51,8 +51,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///   <item><c>MotionFx</c>, <c>DescentRoomSfx</c> and <c>DescentBarkWatcher</c> are
     ///     WPF-head services; each is a stub at its call site. <c>HelpPopover</c> is real on
     ///     this head and carries the shared Core topic.</item>
-    ///   <item><c>DescentFuseCopy</c> is likewise still in the WPF head; its six lines for this
-    ///     room are inlined verbatim below.</item>
     /// </list>
     ///
     /// <para><b>Escape is never handled here.</b> The global panic key must reach its hook
@@ -104,8 +102,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>
         /// The pulse's HALF cycle. ponytail: needs <c>SpiralRoom.FogPulseSecondsFor(phase)</c>, whose
-        /// tempo ladder runs 2.8s → 0.52s as the phase closes in. <c>DescentFusePhase</c> is a WPF
-        /// head type, so this head cannot know the phase and takes that function's own default rung
+        /// tempo ladder runs 2.8s → 0.52s as the phase closes in. <c>SpiralRoom</c> and
+        /// <c>App.DescentCountdown</c> are still WPF-head, so this head cannot know the phase and takes that function's own default rung
         /// (the <c>_ =&gt; 3.0</c> arm, which is where a dark fuse lands anyway).
         /// </summary>
         private const double FogPulseSeconds = 3.0;

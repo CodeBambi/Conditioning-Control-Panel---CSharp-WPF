@@ -35,6 +35,21 @@ public sealed class CoreStandInTests
 
         var fuse = new DescentFuseWindow();
         Assert.Equal(DescentFuseCopy.ShowAwaits, Text(fuse, "ShowLine"));
+        fuse.Close();
+
+        // A private copy of any Core line (ShowAwaits, IgnitionLine, the fog lines...) is a stand-in.
+        var core = typeof(DescentFuseCopy).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
+        Assert.Contains(DescentFuseCopy.IgnitionLine, core);
+        foreach (var type in new[] { typeof(DescentFuseWindow), typeof(SpiralTabView) })
+        {
+            var copies = type.GetFields(BindingFlags.NonPublic | BindingFlags.Static)
+                .Where(f => f.IsLiteral && f.FieldType == typeof(string)
+                            && core.Contains((string)f.GetRawConstantValue()!))
+                .Select(f => f.Name).ToArray();
+            Assert.True(copies.Length == 0, $"{type.Name} re-declares DescentFuseCopy: {string.Join(", ", copies)}");
+        }
     });
 
     [Fact]

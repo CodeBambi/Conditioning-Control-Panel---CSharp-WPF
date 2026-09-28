@@ -215,7 +215,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// The rail's search pill, one line as in WPF (MainWindow.NavRail.cs:406). WPF's Toggle
+        /// The rail's search pill, one line as in WPF (MainWindow.NavRail.cs:480-484). WPF's Toggle
         /// also refuses during Lockdown; LockdownService is not on this head, so Lockdown cannot be
         /// active here and there is nothing to refuse.
         /// </summary>

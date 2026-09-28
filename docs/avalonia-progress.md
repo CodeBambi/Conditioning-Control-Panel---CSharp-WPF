@@ -51,7 +51,7 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   (SettingsPaletteWindow, DescentFuse/CeremonyWindow, SpiralTabView, EnhancementPlayerWindow).
 - Not run: WPF tests (Windows-only).
 
-## avalonia-port/wire-core-standins-1
+## avalonia-port/wire-core-standins-1: +332
 - Deletes the Avalonia stand-ins for types #1768/#1769 moved to Core: DescentFuseWindow and
   SpiralTabView read DescentFuseCopy; DescentCeremonyWindow reads DescentCeremonyCopy and
   DescentMigrationChoices (only the Offer stand-in stays: DescentMigrationOffer is head-only);

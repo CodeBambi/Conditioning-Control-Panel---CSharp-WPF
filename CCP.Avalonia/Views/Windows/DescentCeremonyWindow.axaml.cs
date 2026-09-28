@@ -119,7 +119,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // submit will use — so the number on the card is the number they get, not an estimate.
             // ponytail: needs DescentMigration.Resolve(string, DescentMigrationOffer).Level in
             // ConditioningControlPanel/Services/Descent/DescentMigration.cs, which also holds
-            // DescentMigrationOffer and DescentMigrationChoices. Core carries only the persisted
+            // DescentMigrationOffer. Core carries only the persisted
             // flags (AppSettings.DescentMigrationCompleted / .DescentMigrationChoice), not the
             // relevel maths. The sample offer carries the level the resolve would have produced.
             _restoreLevel = _offer.ResolvedRestoreLevel;
