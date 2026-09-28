@@ -6860,5 +6860,7 @@
   "friends_settings": "Settings",
   "friends_my_code": "YOUR CODE",
   "friends_copy": "Copy your code",
-  "friends_copied": "copied"
+  "friends_copied": "copied",
+  "login_not_remembered_title": "Sign-in not remembered",
+  "login_not_remembered_body": "This device has no secret store (Secret Service), so your sign-in is kept only until the app closes. You will need to sign in again next time."
 }

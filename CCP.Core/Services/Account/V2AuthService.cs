@@ -447,6 +447,22 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>The identity half of a sign-in (WPF V2AuthServiceHead.ApplyUserDataToSettings, which calls
+        /// this first). Linked-tier grace and the XP take-higher adopt stay in the WPF head until unit 6.</summary>
+        public static void ApplyIdentity(AppSettings settings, V2User user, string? authToken)
+        {
+            settings.UnifiedId = user.UnifiedId;
+            settings.UserDisplayName = user.DisplayName;
+            settings.IsSeason0Og = user.IsSeason0Og;
+            settings.CurrentSeason = user.CurrentSeason;
+            settings.HighestLevelEver = user.HighestLevelEver;
+            settings.HasLinkedDiscord = !string.IsNullOrEmpty(user.DiscordId);
+            settings.HasLinkedPatreon = !string.IsNullOrEmpty(user.PatreonId);
+            settings.PatreonTier = user.PatreonTier;
+            // Store auth token if provided
+            if (!string.IsNullOrEmpty(authToken)) settings.AuthToken = authToken;
+        }
+
         /// <summary>
         /// Login with display name and password
         /// </summary>

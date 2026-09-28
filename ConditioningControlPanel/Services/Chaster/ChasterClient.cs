@@ -107,14 +107,10 @@ public sealed class ChasterClient : IDisposable
 
     /// <summary>PKCE (RFC 7636): 32 random bytes, base64url. Never leaves this machine until the
     /// exchange, so a code read out of browser history or caught by another program is useless.</summary>
-    public static string NewVerifier() => Base64Url(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+    public static string NewVerifier() => LoopbackOAuth.NewVerifier();
 
     /// <summary>The S256 challenge the consent page is opened with.</summary>
-    public static string Challenge(string verifier) =>
-        Base64Url(System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-
-    private static string Base64Url(byte[] bytes) =>
-        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    public static string Challenge(string verifier) => LoopbackOAuth.Challenge(verifier);
 
     /// <summary>Turn the one-time code the loopback caught into tokens. The proxy adds the
     /// secret; Chaster checks the verifier against the challenge the flow started with.</summary>

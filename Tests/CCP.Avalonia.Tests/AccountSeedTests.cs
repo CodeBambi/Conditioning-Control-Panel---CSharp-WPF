@@ -95,4 +95,36 @@ public sealed class AccountSeedTests : IDisposable
         CoreSecrets.RetrieveProvider = _ => throw new InvalidOperationException("keyring gone");
         AssertNothing();
     }
+
+    [Fact]
+    public void Logout_ClearsTokensAndIdentity_ButNotProgression_AndRestoreBringsTheIdBack()
+    {
+        var s = CoreSettings.Current;
+        var (oldId, oldName, oldLevel, oldXp) = (s.UnifiedId, s.UserDisplayName, s.PlayerLevel, s.PlayerXP);
+        try
+        {
+            s.UnifiedId = "u-1"; s.UserDisplayName = "Bambi"; s.HasLinkedDiscord = s.HasLinkedPatreon = true;
+            s.AuthToken = "tok"; s.PlayerLevel = 12; s.PlayerXP = 345;
+            foreach (var n in new[] { "patreon_auth", "discord_auth", "substar_auth" })
+                _secrets[n] = JsonConvert.SerializeObject(new PatreonTokenData { AccessToken = "a", RefreshToken = "r", ExpiresAt = DateTime.UtcNow.AddDays(1) });
+            Assert.True(AccountSeed.Seed(Make, p => new DiscordAccount(() => p, () => new AppSettings())));
+
+            AccountSeed.RestoreSession(); // WPF App.xaml.cs:2267
+            Assert.Equal("u-1", CoreAccount.UnifiedUserId);
+
+            AccountSeed.Logout();
+
+            Assert.False(CoreAccount.IsLoggedIn);
+            Assert.Null(CoreAccount.UnifiedUserId);
+            Assert.Null(s.UnifiedId);
+            Assert.Null(s.UserDisplayName);
+            Assert.Null(s.AuthToken);
+            Assert.False(s.HasLinkedDiscord || s.HasLinkedPatreon);
+            Assert.All(new[] { "patreon_auth", "discord_auth", "substar_auth" }, n => Assert.Null(_secrets.GetValueOrDefault(n)));
+            // Progression stays until unit 7 ships the clear with the push.
+            Assert.Equal(12, s.PlayerLevel);
+            Assert.Equal(345, s.PlayerXP);
+        }
+        finally { (s.UnifiedId, s.UserDisplayName, s.PlayerLevel, s.PlayerXP) = (oldId, oldName, oldLevel, oldXp); }
+    }
 }

@@ -172,7 +172,10 @@ namespace ConditioningControlPanel.Avalonia
                 // After the version seed (the proxy client's headers carry it). Fail closed; the
                 // startup validate runs on the UI thread as WPF's does (App.xaml.cs OnStartup).
                 if (Platform.AccountSeed.Seed())
+                {
+                    Platform.AccountSeed.RestoreSession();
                     Dispatcher.UIThread.Post(async () => await Platform.AccountSeed.InitializeAsync());
+                }
                 // After the version seed: installing / loading a mod checks its MinAppVersion.
                 StartMods();
                 // Real audio through LibVLC, seeded only if libvlc loads. If it is missing,
