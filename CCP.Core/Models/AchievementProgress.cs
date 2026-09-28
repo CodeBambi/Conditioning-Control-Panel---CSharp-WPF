@@ -182,7 +182,7 @@ public class AchievementProgress
     /// One-shot latch for the #877 retroactive chat backfill. The companion-chat counter was
     /// only ever fed by the tube's legacy send handler, so every message routed through the
     /// modern brain funnel (and everything sent from Her Room) counted for nothing. On the
-    /// first launch after the fix, <see cref="Services.GamificationBridge"/> reconstructs the
+    /// first launch after the fix, GamificationBridge (WPF head) reconstructs the
     /// counter from what the companion actually persisted and sets this. Persisted precisely
     /// so it runs ONCE — the evidence it reads (the restored turn log) is a rolling window,
     /// so re-running it every launch would flip the counter up and down forever.
@@ -333,7 +333,7 @@ public class AchievementProgress
     ///
     /// Returns false when:
     ///  - <paramref name="lastBankedDate"/> is default/MinValue. That is the "no local launch
-    ///    history" case which <see cref="UpdateDailyStreak"/>'s startup path owns exclusively
+    ///    history" case which UpdateDailyStreak's startup path owns exclusively
     ///    (it defers to the cloud restore). The rollover path must never claim a first run.
     ///  - the day has not advanced (<c>today == lastBanked</c>) — today is already banked, so
     ///    running again would be the double-count we must never produce.

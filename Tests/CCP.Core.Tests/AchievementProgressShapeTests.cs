@@ -85,5 +85,15 @@ public sealed class AchievementProgressShapeTests
         var actual = info.Properties.Where(p => p.Get != null).Select(p => (p.Name, p.PropertyType)).ToArray();
 
         Assert.Equal(Persisted, actual);
+
+        // Written is not enough: every persisted property must also load back, with no custom
+        // converter or number handling changing what the bytes mean.
+        Assert.All(info.Properties.Where(p => p.Get != null), p =>
+        {
+            Assert.NotNull(p.Set);
+            Assert.Null(p.CustomConverter);
+            Assert.Null(p.NumberHandling);
+        });
+        Assert.Equal(double.MaxValue, new AchievementProgress().FastestLockCardSeconds);
     }
 }
