@@ -363,6 +363,29 @@ public class StakeTests
     }
 
     [Fact]
+    public async Task A_goon_lock_rides_the_state_call_and_chess_never_sends_one()
+    {
+        var b = new BridgeRig();
+        b.Api.Default = Unsettled(40);
+        await b.Bridge.Handle(new JObject { ["type"] = "stake-state", ["match"] = "ABCD", ["lock"] = true });
+        await b.Bridge.Handle(new JObject { ["type"] = "stake-state", ["match"] = "m1" });
+        Assert.True((bool)b.Api.Calls[0].Body["lock"]!);
+        Assert.Null(b.Api.Calls[1].Body["lock"]);
+    }
+
+    [Fact]
+    public async Task The_watch_keeps_asking_through_busy()
+    {
+        var rig = new Rig();
+        var api = new FakeApi();
+        api.Replies.Enqueue(new JObject { ["ok"] = false, ["reason"] = "busy" });
+        api.Replies.Enqueue(Settled("won", 10, 0, 60));
+        var (_, outcome) = await rig.Settlement.WatchAsync(api, "pbp", "m9", NoWait);
+        Assert.True(outcome.Result!.Won);
+        Assert.Equal(2, api.Calls.Count);
+    }
+
+    [Fact]
     public async Task No_reply_reads_as_offline_or_signin()
     {
         var b = new BridgeRig();

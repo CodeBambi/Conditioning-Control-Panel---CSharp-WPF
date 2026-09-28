@@ -15,7 +15,7 @@ namespace ConditioningControlPanel.Services.Stakes;
 /// <para>page -&gt; host:
 /// <c>{type:'stake-limits'}</c>,
 /// <c>{type:'stake-offer', match, kind, amount, idem?}</c>,
-/// <c>{type:'stake-state', match}</c>,
+/// <c>{type:'stake-state', match, lock?}</c> (Goon sends <c>lock:true</c> at Countdown),
 /// <c>{type:'stake-settle', match}</c> (the match is over: poll until settled, then book).</para>
 ///
 /// <para>host -&gt; page: <c>{type:'stake', op, ...the route reply verbatim}</c>. The host adds
@@ -121,7 +121,11 @@ public sealed class StakeBridge
         var match = Match(msg);
         if (match == null) { Post("state", Refusal("no_match")); return; }
         var sentFor = _api.Account();
-        var reply = await _api.CallAsync("state", new JObject { ["game"] = _game, ["match"] = match }).ConfigureAwait(false);
+        var body = new JObject { ["game"] = _game, ["match"] = match };
+        // The Goon page locks its stake at Countdown (server CONTRACT); chess never sends it,
+        // the first move locks there.
+        if (msg.Value<bool?>("lock") == true) body["lock"] = true;
+        var reply = await _api.CallAsync("state", body).ConfigureAwait(false);
         if (reply == null) { Post("state", Refusal(sentFor == null ? "signin" : "offline")); return; }
         var o = (JObject)reply.DeepClone();
         // Whichever sees the settled reply first books it; the settlement books a match once.

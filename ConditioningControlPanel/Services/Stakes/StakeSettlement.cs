@@ -157,8 +157,10 @@ public sealed class StakeSettlement
             if (ct.IsCancellationRequested) break;
             var reply = await api.CallAsync("state", body, ct).ConfigureAwait(false);
             if (reply != null) last = reply;
-            // A worded refusal will not change its mind by being asked again.
-            if (reply != null && reply.Value<bool?>("ok") == false) break;
+            // A worded refusal will not change its mind by being asked again; 'busy' (a lock was
+            // held on the server) and 'too_fast' will.
+            if (reply != null && reply.Value<bool?>("ok") == false
+                && reply.Value<string?>("reason") is not ("busy" or "too_fast")) break;
             var outcome = Settle(game, match, sentFor, reply);
             if (outcome.Result != null) return (reply, outcome);
         }
