@@ -24,14 +24,103 @@
 //   protected override void OnStateChanged(…)     // avatar re-attach, Bark, taskbar thumbnail
 //   private void HideAvatarTube(…)                // called by BtnMinimize_Click below
 
+using System;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
+        // WPF: WindowChrome ResizeBorderThickness="5" + ResizeMode=CanResizeWithGrip gave the
+        // undecorated window OS resize edges. SystemDecorations="None" on X11 gives none, so the
+        // edges are hit-tested here and handed to the window manager via BeginResizeDrag.
+        internal const double ResizeBorder = 5;
+        private const double ResizeCorner = 12;   // the lost grip, folded into a wider corner
+
+        /// <summary>The edge under <paramref name="p"/> in a window of size <paramref name="s"/>, or null.</summary>
+        internal static WindowEdge? EdgeAt(Point p, Size s)
+        {
+            bool l = p.X < ResizeBorder, r = p.X >= s.Width - ResizeBorder;
+            bool t = p.Y < ResizeBorder, b = p.Y >= s.Height - ResizeBorder;
+            bool lc = p.X < ResizeCorner, rc = p.X >= s.Width - ResizeCorner;
+            bool tc = p.Y < ResizeCorner, bc = p.Y >= s.Height - ResizeCorner;
+            if ((t && lc) || (l && tc)) return WindowEdge.NorthWest;
+            if ((t && rc) || (r && tc)) return WindowEdge.NorthEast;
+            if ((b && lc) || (l && bc)) return WindowEdge.SouthWest;
+            if ((b && rc) || (r && bc)) return WindowEdge.SouthEast;
+            if (l) return WindowEdge.West;
+            if (r) return WindowEdge.East;
+            if (t) return WindowEdge.North;
+            if (b) return WindowEdge.South;
+            return null;
+        }
+
+        internal static StandardCursorType CursorFor(WindowEdge e) => e switch
+        {
+            WindowEdge.West => StandardCursorType.LeftSide,
+            WindowEdge.East => StandardCursorType.RightSide,
+            WindowEdge.North => StandardCursorType.TopSide,
+            WindowEdge.South => StandardCursorType.BottomSide,
+            WindowEdge.NorthWest => StandardCursorType.TopLeftCorner,
+            WindowEdge.NorthEast => StandardCursorType.TopRightCorner,
+            WindowEdge.SouthWest => StandardCursorType.BottomLeftCorner,
+            _ => StandardCursorType.BottomRightCorner,
+        };
+
+        /// <summary>The last edge handed to BeginResizeDrag. Test seam.</summary>
+        internal WindowEdge? LastResizeEdge { get; private set; }
+
+        private WindowEdge? _cursorEdge;
+
+        private WindowEdge? ResizeEdgeFor(PointerEventArgs e)
+            => WindowState == WindowState.Normal && CanResize ? EdgeAt(e.GetPosition(this), Bounds.Size) : null;
+
+        // The shell's stretch policy (docs/avalonia-decisions.md, oracle-deep): WPF's Fill while
+        // the window is within 15% of the design canvas aspect, Uniform outside it.
+        private const double CanvasAspect = 1585.0 / 901.0;
+        internal const double FillTolerance = 0.15;
+
+        internal static Stretch StretchFor(Size s)
+        {
+            if (s.Width <= 0 || s.Height <= 0) return Stretch.Fill;
+            double r = s.Width / s.Height / CanvasAspect;
+            return Math.Abs(r - 1) <= FillTolerance ? Stretch.Fill : Stretch.Uniform;
+        }
+
+        private void UpdateShellStretch()
+        {
+            var root = Named<Grid>("RootGrid");
+            var box = Named<Viewbox>("ShellViewbox");
+            if (root is null || box is null) return;
+            var want = StretchFor(root.Bounds.Size);
+            if (box.Stretch != want) box.Stretch = want;
+        }
+
+        private void HookResizeEdges()
+        {
+            if (Named<Grid>("RootGrid") is { } root) root.SizeChanged += (_, _) => UpdateShellStretch();
+
+            // Tunnel, so the edge wins over whatever card sits under the 5px band.
+            AddHandler(PointerMovedEvent, (_, e) =>
+            {
+                var edge = ResizeEdgeFor(e);
+                if (edge == _cursorEdge) return;
+                _cursorEdge = edge;
+                Cursor = edge is { } x ? new Cursor(CursorFor(x)) : null;
+            }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
+            AddHandler(PointerPressedEvent, (_, e) =>
+            {
+                if (ResizeEdgeFor(e) is not { } edge || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+                LastResizeEdge = edge;
+                e.Handled = true;
+                BeginResizeDrag(edge, e);
+            }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        }
+
         private void TitleBar_MouseLeftButtonDown(object? sender, PointerPressedEventArgs e)
         {
             if (e.ClickCount == 2)
