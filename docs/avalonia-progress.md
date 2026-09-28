@@ -250,3 +250,10 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: NotificationServiceTests (fail-proofed three ways); live: Play > Gaze Minigame Open shows the
   refusal toast, "See tiers" opens Account, x and expiry dismiss; 0 binding errors. Review: FIX -> fixed.
 - Gaps: tray balloons (OS notifications, later unit), sticky toasts, Patreon reconnect branch.
+
+## avalonia-port/achievement-store: +392
+- Core AchievementStore: WPF's achievements.json load/save lifted verbatim (System.Text.Json indented, UTF-8
+  BOM, .tmp -> File.Replace with .bak, .bak fallback, one save lock); WPF AchievementService delegates to it.
+- Golden fixture written by the pre-change serializer; tests: byte-identical round trip, fixture covers exactly
+  the persisted properties, truncated file recovers from .bak, parsed equality, time-zone behaviour pinned.
+  Each fail-proofed. Tests (a)/(e) need TZ pinning and run on the Linux CI job. Review: ACCEPT.
