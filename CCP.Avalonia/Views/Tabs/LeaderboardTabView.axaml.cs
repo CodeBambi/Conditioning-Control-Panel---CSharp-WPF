@@ -347,6 +347,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private LeaderboardPage<LeaderboardRow>? _page;
 
+        /// <summary>The last fetched board in rank order (the Trainer Card's offline search, as WPF's shared cache).</summary>
+        internal LeaderboardPage<LeaderboardRow>? RankedPage => _page == null ? null
+            : new() { Entries = _ranked.ToList(), YourRank = _page.YourRank, YourTotal = _page.YourTotal };
+
         /// <summary>
         /// MainWindow.Leaderboard.cs:953 RefreshLeaderboardAsync + RankLeaderboardEntries. Offline or a failed fetch leaves
         /// the board empty and says so in the status line, as WPF does. Never throws.

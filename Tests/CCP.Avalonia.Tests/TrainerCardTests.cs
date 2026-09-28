@@ -35,12 +35,15 @@ public sealed partial class AccountSeedTests
     private sealed class CardWire : HttpMessageHandler
     {
         public readonly List<string> Seen = new();
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        /// <summary>When set, every answer waits for it (a fetch in flight).</summary>
+        public TaskCompletionSource? Gate;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
             Seen.Add($"{r.Method} {r.RequestUri!.PathAndQuery}");
+            if (Gate != null) await Gate.Task;
             var body = r.RequestUri.AbsolutePath switch { "/v3/leaderboard" => Board, "/user/lookup" => CardLookup, _ => null };
-            return Task.FromResult(new HttpResponseMessage(body == null ? HttpStatusCode.InternalServerError : HttpStatusCode.OK)
-                { Content = new StringContent(body ?? "{}") });
+            return new HttpResponseMessage(body == null ? HttpStatusCode.InternalServerError : HttpStatusCode.OK)
+                { Content = new StringContent(body ?? "{}") };
         }
     }
 
@@ -100,6 +103,8 @@ public sealed partial class AccountSeedTests
                 await tab.OpenProfileAsync("nobody_by_that_name");
                 Assert.False(F<Grid>("ProfileCardWrapper").IsVisible);
                 Assert.True(F<Border>("NoProfileSelected").IsVisible);
+                // One board GET for the own card and all three searches: the board is cached for 60 s.
+                Assert.Single(wire.Seen, r => r.Contains("/v3/leaderboard"));
 
                 // Offline: nothing on the wire, a fresh tab finds nobody and your card is local with no rank.
                 s.OfflineMode = true;
@@ -110,6 +115,18 @@ public sealed partial class AccountSeedTests
                 await offline.ViewMyProfileAsync();
                 Assert.Equal("#-", offline.FindControl<TextBlock>("TxtProfileViewerRank")!.Text);
                 Assert.Equal(seen, wire.Seen.Count);
+
+                // Me-first and a double-click search in flight together share ONE board GET.
+                s.OfflineMode = false;
+                wire.Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var boardBefore = wire.Seen.Count(r => r.Contains("/v3/leaderboard"));
+                var both = new DiscordTabView();
+                var me = both.ViewMyProfileAsync();
+                var them = both.OpenProfileAsync("Nyx");
+                wire.Gate.SetResult();
+                await Task.WhenAll(me, them);
+                Assert.Equal(boardBefore + 1, wire.Seen.Count(r => r.Contains("/v3/leaderboard")));
+                Assert.Equal("Nyx", both.FindControl<TextBlock>("TxtProfileViewerName")!.Text);  // the newest request wins
             });
             Assert.All(wire.Seen, r => Assert.True(r.StartsWith("GET "), $"write endpoint called: {r}"));
         }
@@ -142,6 +159,8 @@ public sealed partial class AccountSeedTests
                 var board = w.Named<LeaderboardTabView>("LeaderboardTab")!;
                 await board.RefreshLeaderboardAsync();
                 Dispatcher.UIThread.RunJobs();
+                int BoardGets() => wire.Seen.Count(r => r.Contains("/v3/leaderboard"));
+                var boardTabGets = BoardGets();
                 var list = board.FindControl<ListBox>("LstLeaderboard")!;
                 var row = list.GetRealizedContainers().First(c => c.DataContext is LeaderboardRow);
                 var at = row.TranslatePoint(new Point(40, row.Bounds.Height / 2), w)!.Value;
@@ -157,7 +176,21 @@ public sealed partial class AccountSeedTests
                 Assert.True(card.IsEffectivelyVisible);                          // the Profile tab is up
                 Assert.Equal(name, card.FindControl<TextBox>("TxtProfileSearch")!.Text);
                 Assert.Equal(name, card.FindControl<TextBlock>("TxtProfileViewerName")!.Text);
+                // The double-click search costs one card board GET.
+                Assert.Equal(boardTabGets + 1, BoardGets());
                 w.Close();
+
+                // Offline, a card with no board of its own searches the Leaderboard tab's last ranked page (WPF's cache).
+                var w2 = new global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
+                w2.Show();
+                await w2.Named<LeaderboardTabView>("LeaderboardTab")!.RefreshLeaderboardAsync();
+                s.OfflineMode = true;
+                var seen = wire.Seen.Count;
+                await w2.ProfilePage!.OpenProfileAsync("Nyx");
+                Assert.Equal("Nyx", w2.ProfilePage.FindControl<TextBlock>("TxtProfileViewerName")!.Text);
+                Assert.Equal("#3", w2.ProfilePage.FindControl<TextBlock>("TxtProfileViewerRank")!.Text);
+                Assert.Equal(seen, wire.Seen.Count);
+                w2.Close();
             });
             Assert.All(wire.Seen, r => Assert.True(r.StartsWith("GET "), $"write endpoint called: {r}"));
         }

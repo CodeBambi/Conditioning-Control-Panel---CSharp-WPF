@@ -80,6 +80,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ------------------------------------------------------------------
 
         private LeaderboardPage<LeaderboardRow>? _board;
+        private Task<LeaderboardPage<LeaderboardRow>?>? _boardFetch;
+        private DateTime _boardAt;
         private int _cardRequest;   // newest request wins; an older one finishing late draws nothing
         private bool _meFirstDone;
 
@@ -120,21 +122,39 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ProfileCardWrapper.IsVisible = false;
         }
 
-        /// <summary>WPF searches LeaderboardService's cached board and fetches only when it is empty; this tab has no
-        /// shared cache, so each search fetches the monthly board (a GET). Offline fetches nothing and searches the last
-        /// board this tab saw, as WPF searches its cache.</summary>
+        /// <summary>WPF searches LeaderboardService's cached board. This tab keeps its own monthly board for 60 s (one
+        /// GET shared by every search in that window, including an in-flight one); offline fetches nothing and searches the
+        /// last board it saw, else the Leaderboard tab's last ranked page, as WPF searches its shared cache.</summary>
         private async Task<LeaderboardRow?> FindOnBoardAsync(string name)
         {
             if (!CoreSettings.Current.OfflineMode)
             {
-                try
+                if (_boardFetch == null || DateTime.UtcNow - _boardAt > TimeSpan.FromSeconds(60))
                 {
-                    var (page, _) = await LeaderboardTabView.NewClient().FetchAsync<LeaderboardRow>("monthly", CoreAccount.UnifiedUserId, DateTime.UtcNow);
-                    if (page?.Entries != null) { page.Entries = LeaderboardClient.Rank(page.Entries, false); _board = page; }
+                    _boardAt = DateTime.UtcNow;
+                    _boardFetch = FetchBoardAsync();
                 }
-                catch (Exception ex) { Log.Warning(ex, "Trainer Card board fetch failed"); }
+                var fetch = _boardFetch;
+                var page = await fetch;
+                if (page != null) _board = page;
+                else if (_boardFetch == fetch) _boardFetch = null; // a failed fetch is not cached
             }
-            return TrainerCardText.Find(_board?.Entries, name);
+            return TrainerCardText.Find(Board?.Entries, name);
+        }
+
+        private LeaderboardPage<LeaderboardRow>? Board =>
+            _board ?? Host?.Named<LeaderboardTabView>("LeaderboardTab")?.RankedPage;
+
+        private static async Task<LeaderboardPage<LeaderboardRow>?> FetchBoardAsync()
+        {
+            try
+            {
+                var (page, _) = await LeaderboardTabView.NewClient().FetchAsync<LeaderboardRow>("monthly", CoreAccount.UnifiedUserId, DateTime.UtcNow);
+                if (page?.Entries == null) return null;
+                page.Entries = LeaderboardClient.Rank(page.Entries, false);
+                return page;
+            }
+            catch (Exception ex) { Log.Warning(ex, "Trainer Card board fetch failed"); return null; }
         }
 
         /// <summary>WPF DisplayOwnProfile: local settings and achievement progress, rank from the last board.</summary>
@@ -147,8 +167,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtProfileViewerName.Text = s.UserDisplayName ?? "You";
             SetOnline(true, Loc.Get("label_online"));
             TxtProfileViewerLevel.Text = s.PlayerLevel.ToString();
-            TxtProfileViewerRank.Text = TrainerCardText.Rank(_board?.YourRank is > 0
-                ? _board.YourRank : _board?.Entries?.FirstOrDefault(e => e.IsCurrentUser)?.Rank);
+            // WPF Browser.cs:1963-1981: the server rank, else your row by unified id, else by display name.
+            var board = Board;
+            var rows = board?.Entries;
+            TxtProfileViewerRank.Text = TrainerCardText.Rank(board?.YourRank is > 0 ? board.YourRank
+                : (rows?.FirstOrDefault(e => e.IsCurrentUser)
+                   ?? (string.IsNullOrEmpty(s.UserDisplayName) ? null
+                       : rows?.FirstOrDefault(e => string.Equals(e.DisplayName, s.UserDisplayName, StringComparison.OrdinalIgnoreCase))))?.Rank);
             TxtProfileViewerXp.Text = TrainerCardText.Number(XpCurve.GetTotalXP(s.PlayerLevel, s.PlayerXP, s.DescentEpoch));
             TxtProfileViewerBubbles.Text = TrainerCardText.Number(progress?.TotalBubblesPopped ?? 0);
             TxtProfileViewerVideos.Text = TrainerCardText.Video(progress?.TotalVideoMinutes ?? 0);
