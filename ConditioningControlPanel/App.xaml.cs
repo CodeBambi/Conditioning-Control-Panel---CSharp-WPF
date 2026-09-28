@@ -349,6 +349,8 @@ namespace ConditioningControlPanel
             // stamps) that need a version string or the installed build's notes and nothing else.
             CoreReleaseContent.AppVersionProvider = () => Services.UpdateService.AppVersion;
             CoreReleaseContent.PatchNotesProvider = () => Services.UpdateService.CurrentPatchNotes;
+            // The V2 client lives in Core; its 409-merged recovery re-runs head sign-in.
+            Services.V2AuthService.MergedRecovery = Services.MergedAccountRecovery.TryHandleAsync;
             // BugReportService stays head-side in this layer, but its report assembly is portable.
             // The diagnostic writer/heartbeat remains WPF; only its bounded tail crosses the seam.
             BugReportService.DiagnosticTailProvider = VideoDiag.Tail;

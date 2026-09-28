@@ -340,14 +340,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// <summary>
         /// ponytail: needs the proxy's /v2/auth/check-name and /user/check-display-name endpoints
         /// (the WPF original picks one of three by provider and signs it with the OAuth token),
-        /// wired when V2AuthService moves to Core. Answering "available" keeps the picker usable.
+        /// wired in the login unit (the V2 client is in Core now). Answering "available" keeps the picker usable.
         /// </summary>
         private static Task<bool> CheckNameAvailabilityAsync(string name) => Task.FromResult(true);
 
         /// <summary>
-        /// ponytail: needs <c>ConditioningControlPanel/Services/Account/V2AuthService.cs</c>
-        /// (RegisterAsync / AuthenticateWith*Async) and <c>App.UnifiedUserId</c>; both are still
-        /// WPF head-side and neither has a seam. <c>CoreSettings.Current</c> covers the settings
+        /// ponytail: the client is Core <c>CCP.Core/Services/Account/V2AuthService.cs</c>
+        /// (RegisterAsync / AuthenticateWith*Async); what still blocks it is <c>App.UnifiedUserId</c>
+        /// (WPF head-side, no seam) and the provider services (login unit). <c>CoreSettings.Current</c> covers the settings
         /// half already, so settings are NOT what blocks this. Do not half-port it: the flow
         /// carries an OAuth token and a password, and a partial that writes an identity without
         /// the server's answer is worse than the stub. The guards and the loading state are the
@@ -490,8 +490,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         }
 
         /// <summary>
-        /// ponytail: needs <c>ConditioningControlPanel/Services/Account/V2AuthService.cs</c>
-        /// (LoginAsync) and <c>App.UnifiedUserId</c>, both still WPF head-side with no seam.
+        /// ponytail: the client (LoginAsync) is Core <c>CCP.Core/Services/Account/V2AuthService.cs</c>;
+        /// <c>App.UnifiedUserId</c> (WPF head-side, no seam) is what still blocks it (login unit).
         /// <c>CoreSettings.Current</c> is not the blocker. The password is still wiped immediately
         /// after the (absent) call, as audit C1 requires, and the failure path back to the form is
         /// the original's.

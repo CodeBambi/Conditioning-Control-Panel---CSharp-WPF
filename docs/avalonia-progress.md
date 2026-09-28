@@ -439,3 +439,10 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: SessionRunWireTests (fail-proofed); live sandbox 2-minute session: overlays on time, bouncing text at 1:00,
   recap "Completed, 02:00, 5 images" == 5 flash windows and the log on disk, settings.json unchanged except TotalSessions
   and the ledger; early Stop -> Ended Early. Review: ACCEPT.
+
+## avalonia-port/v2-client-core: +731
+- Auth unit 2: the V2 HTTP client and its data types moved to Core (CCP.Core/Services/Account/V2AuthService.cs) and the
+  XP-curve maths to Core (XpCurve); WPF calls into both (ProgressionService wrappers, ApplyUserDataToSettings stays in WPF
+  until unit 6, MergedRecovery hook). No server contract change. Decision: the V2 client and OAuth live in Core.
+- Evidence: XpCurveGoldenTests (113 values from the pre-move code), V2AuthServiceWireTests (fake handler: method, URL,
+  headers, body transcribed from the WPF source; error paths; tokens never logged), each fail-proofed. Review: ACCEPT.
