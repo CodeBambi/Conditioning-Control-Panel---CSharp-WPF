@@ -10,9 +10,11 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -21,17 +23,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// Session editor window with timeline and drag-drop features.
     ///
     /// PORTED from ConditioningControlPanel/Windows/SessionEditorWindow.xaml.cs. Deviations:
-    ///  - <c>TimelineSession</c> / <c>Session</c> / <c>SessionFileService</c> are all WPF-head
-    ///    types (804, 200-odd and 300-odd lines), so the editor drives <see cref="EditorSession"/>,
-    ///    a nested stand-in carrying only the members this view calls, logic copied verbatim.
-    ///    Delete it and switch the field's type when TimelineSession moves to Core.
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>, as Avalonia carries the result
     ///    through <c>ShowDialog&lt;bool?&gt;</c>.
     ///  - <c>MessageBox.Show</c> is this head's <see cref="MessageDialog"/>. Both warning sites are
     ///    notices the code returns straight after - nothing is gated on the answer - so the helper
     ///    fires the dialog without awaiting it and its two callers stay synchronous.
-    ///  - Import/Export need <c>OpenFileDialog</c>/<c>SaveFileDialog</c> plus SessionFileService;
-    ///    both are stubs. Save/Cancel are fully ported.
+    ///  - Import/Export use Core's <c>SessionFileService</c> with <c>StorageProvider</c> pickers in
+    ///    place of <c>OpenFileDialog</c>/<c>SaveFileDialog</c>.
     ///  - <c>BtnHelp</c> keeps the coach-mark overlay instead of the clip on purpose; see the
     ///    handler. The old note said the lookup and the hand-off were
     ///    a stub; the button opens the coach-mark overlay, which was WPF's own fallback.
@@ -48,7 +46,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// </summary>
     public partial class SessionEditorWindow : Window
     {
-        private readonly EditorSession _session;
+        private readonly TimelineSession _session;
+        private readonly SessionFileService _fileService = new();
 
         // Timeline icon drag state
         private bool _isTimelineDragging;
@@ -73,7 +72,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// Result session after save (null if cancelled)
         /// </summary>
-        internal EditorSession? ResultSession { get; private set; }
+        internal Session? ResultSession { get; private set; }
 
         /// <summary>Render/design constructor: a two-segment sample session so --render-view draws
         /// real timeline bars, icons and stats rather than an empty track.</summary>
@@ -88,11 +87,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <param name="existingSession">Session to edit, or null for a blank one. WPF's public
         /// parameterless overload meant "blank"; here that signature is the render seat, so
         /// production callers pass null explicitly.</param>
-        internal SessionEditorWindow(EditorSession? existingSession)
+        internal SessionEditorWindow(TimelineSession? existingSession)
         {
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
 
-            _session = existingSession ?? new EditorSession();
+            _session = existingSession ?? new TimelineSession();
 
             // Handlers live here rather than in markup, per the porting convention.
             PointerPressed += Window_PointerPressed;
@@ -152,9 +151,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>Sample data for the render seat: a 60 minute session with two segments on
         /// different feature rows, so bars, start icons and stop icons are all exercised.</summary>
-        private static EditorSession SampleSession()
+        private static TimelineSession SampleSession()
         {
-            var s = new EditorSession { Name = "Sample Session", DurationMinutes = 60 };
+            var s = new TimelineSession { Name = "Sample Session", DurationMinutes = 60 };
             s.AddStopEvent(s.AddStartEvent("spiral", 5), 25);
             s.AddStopEvent(s.AddStartEvent("flash", 30), 50);
             return s;
@@ -978,11 +977,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void RefreshStats()
         {
             var xp = _session.CalculateXP();
-            var (difficultyText, difficultyColor) = _session.GetDifficulty();
 
             TxtXP.Text = Loc.GetF("session_xp_amount", xp);
-            TxtDifficulty.Text = difficultyText;
-            TxtDifficulty.Foreground = new SolidColorBrush(Color.Parse(difficultyColor));
+            TxtDifficulty.Text = _session.GetDifficultyText();
+            TxtDifficulty.Foreground = new SolidColorBrush(Color.Parse(_session.GetDifficultyColor()));
             TxtDuration.Text = Loc.GetF("session_duration_min", _session.DurationMinutes);
 
             // WPF let the markup placeholder stand until the slider first moved; that placeholder
@@ -1027,33 +1025,71 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         #region Buttons
 
-        private void BtnImport_Click()
+        private async void BtnImport_Click()
         {
-            // ponytail: the picker is NOT the blocker - StorageProvider.OpenFilePickerAsync is on
-            // this head (ModCreatorWindow uses it). The blocker is the file FORMAT. A .session.json
-            // is Session/SessionSettings shaped, written by
-            // CCP.Core/Services/Session/SessionFileService.cs and mapped in through
-            // CCP.Core/Models/TimelineSession.cs; both are in Core now, but the
-            // _session field below is EditorSession, a local stand-in whose JSON is a DIFFERENT
-            // shape. Reading a real .session.json into it would silently drop every per-feature
-            // setting the editor does not model, and the author would then save that loss back.
-            // Blocked on mapping EditorSession onto TimelineSession, not on a picker.
-            // WPF reported with msg_invalid_session_file / msg_failed_to_import_session /
-            // msg_imported_session.
-            Log.Information("session editor: import is not wired on this head yet");
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = Loc.Get("title_import_session"),
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("Session Files") { Patterns = new[] { "*.session.json" } },
+                    new FilePickerFileType("All Files") { Patterns = new[] { "*" } },
+                },
+            });
+            if (files.Count != 1 || files[0].TryGetLocalPath() is not { } path) return;
+
+            if (!_fileService.ValidateSessionFile(path, out var error))
+            {
+                Warn("title_import_error", Loc.GetF("msg_invalid_session_file", error));
+                return;
+            }
+
+            var definition = _fileService.ImportSession(path);
+            if (definition == null)
+            {
+                Warn("title_import_error", Loc.Get("msg_failed_to_import_session"));
+                return;
+            }
+
+            var timelineSession = TimelineSession.FromSession(definition.ToSession());
+            _session.Id = timelineSession.Id;
+            _session.Name = timelineSession.Name;
+            _session.Icon = timelineSession.Icon;
+            _session.Description = timelineSession.Description;
+            _session.DurationMinutes = timelineSession.DurationMinutes;
+            _session.Events.Clear();
+            _session.Events.AddRange(timelineSession.Events);
+            _session.SubliminalPhrases = new List<string>(timelineSession.SubliminalPhrases);
+            _session.BouncingTextPhrases = new List<string>(timelineSession.BouncingTextPhrases);
+
+            TxtSessionName.Text = _session.Name;
+            TxtDescription.Text = _session.Description;
+            SliderDuration.Value = _session.DurationMinutes;
+
+            RefreshTimeline();
+            RefreshStats();
+
+            _ = MessageDialog.ShowAsync(this, Loc.Get("title_import_successful"), Loc.GetF("msg_imported_session", _session.Name));
         }
 
-        private void BtnExport_Click()
+        private async void BtnExport_Click()
         {
-            // ponytail: same format blocker as BtnImport_Click, and worse in this direction -
-            // serialising EditorSession would put a file named *.session.json on disk that the
-            // Windows head cannot read back, so the author would ship a broken export believing it
-            // worked. Needs SessionFileService.ExportSession + GetExportFileName
-            // (ConditioningControlPanel/Services/Session/SessionFileService.cs) in Core; the save
-            // picker itself is already available here. (msg_session_exported_to on success.)
             _session.Name = TxtSessionName.Text ?? string.Empty;
             _session.Description = TxtDescription.Text ?? string.Empty;
-            Log.Information("session editor: export is not wired on this head yet");
+
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = Loc.Get("title_export_session"),
+                SuggestedFileName = SessionFileService.GetExportFileName(_session.ToSession()),
+                FileTypeChoices = new[]
+                {
+                    new FilePickerFileType("Session Files") { Patterns = new[] { "*.session.json" } },
+                },
+            });
+            if (file?.TryGetLocalPath() is not { } path) return;
+
+            _fileService.ExportSession(_session.ToSession(), path);
+            _ = MessageDialog.ShowAsync(this, Loc.Get("title_export_successful"), Loc.GetF("msg_session_exported_to", path));
         }
 
         private void BtnCancel_Click()
@@ -1074,7 +1110,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 return;
             }
 
-            ResultSession = _session;
+            ResultSession = _session.ToSession();
             Close(true);
         }
 
@@ -1093,232 +1129,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         private IBrush? Res(string key) => this.TryFindResource(key, out var v) ? v as IBrush : null;
-
-        /// <summary>
-        /// The slice of <c>ConditioningControlPanel.Models.TimelineSession</c> this editor calls,
-        /// logic copied verbatim from the WPF head. That type is 804 lines and pulls in Session,
-        /// SessionSettings and thirteen per-feature mappers, none of which are in Core yet - and
-        /// none of which the editor itself touches.
-        ///
-        /// ponytail: local stand-in for TimelineSession; delete it and retype the _session field
-        /// when TimelineSession moves to Core.
-        /// </summary>
-        internal sealed class EditorSession
-        {
-            public string Id { get; set; } = Guid.NewGuid().ToString();
-            public string Name { get; set; } = "New Session";
-            public string Icon { get; set; } = "✨";
-            public string Description { get; set; } = "";
-            public int DurationMinutes { get; set; } = 30;
-            public List<TimelineEvent> Events { get; set; } = new();
-            public List<string> SubliminalPhrases { get; set; } = new();
-            public List<string> BouncingTextPhrases { get; set; } = new();
-
-            public bool HasFeature(string featureId)
-                => Events.Any(e => e.FeatureId == featureId && e.EventType == TimelineEventType.Start);
-
-            public List<TimelineEvent> GetStartEvents(string featureId)
-                => Events.Where(e => e.FeatureId == featureId && e.EventType == TimelineEventType.Start).ToList();
-
-            public TimelineEvent? GetPairedStopEvent(TimelineEvent startEvent)
-            {
-                if (startEvent.EventType != TimelineEventType.Start || string.IsNullOrEmpty(startEvent.PairedEventId))
-                    return null;
-                return Events.FirstOrDefault(e => e.Id == startEvent.PairedEventId);
-            }
-
-            /// <summary>End minute of the last segment for a feature, or -1 when it has none.</summary>
-            public int GetLastSegmentEndMinute(string featureId)
-            {
-                var lastEndMinute = -1;
-
-                foreach (var startEvt in Events.Where(e => e.FeatureId == featureId && e.EventType == TimelineEventType.Start))
-                {
-                    var stopEvt = GetPairedStopEvent(startEvt);
-                    if (stopEvt != null && stopEvt.Minute > lastEndMinute)
-                    {
-                        lastEndMinute = stopEvt.Minute;
-                    }
-                }
-
-                return lastEndMinute;
-            }
-
-            /// <summary>Maximum opacity/intensity setting for a feature.</summary>
-            public int GetMaxValue(string featureId, string settingKey)
-            {
-                var startEvents = GetStartEvents(featureId);
-                if (startEvents.Count == 0) return 0;
-
-                int maxValue = 0;
-                foreach (var evt in startEvents)
-                {
-                    var value = evt.GetSetting<int>(settingKey, 0);
-                    if (value > maxValue) maxValue = value;
-
-                    // Also check end value for ramping
-                    if (evt.EndValue.HasValue && evt.EndValue.Value > maxValue)
-                        maxValue = evt.EndValue.Value;
-                }
-                return maxValue;
-            }
-
-            /// <summary>XP reward for this session, rounded to the nearest 50.</summary>
-            public int CalculateXP()
-            {
-                // Base XP: 10 per minute
-                int baseXP = DurationMinutes * 10;
-
-                // Feature bonus based on distinct features (each feature counts once)
-                int featureBonus = 0;
-                var countedFeatures = new HashSet<string>();
-                foreach (var evt in Events.Where(e => e.EventType == TimelineEventType.Start))
-                {
-                    if (!countedFeatures.Add(evt.FeatureId)) continue;
-                    var definition = FeatureDefinition.GetById(evt.FeatureId);
-                    if (definition != null)
-                    {
-                        featureBonus += definition.XPBonus;
-                    }
-                }
-
-                // Round to nearest 50
-                return (int)(Math.Round((baseXP + featureBonus) / 50.0) * 50);
-            }
-
-            /// <summary>Difficulty label and colour. WPF split this across CalculateDifficulty,
-            /// GetDifficultyText and GetDifficultyColor - three passes over the same score, and a
-            /// SessionDifficulty enum that only ever fed those two switches.</summary>
-            public (string Text, string Color) GetDifficulty()
-            {
-                int score = 0;
-
-                // Duration factor: +1 per 15 minutes
-                score += DurationMinutes / 15;
-
-                // Count distinct active features
-                score += Events
-                    .Where(e => e.EventType == TimelineEventType.Start)
-                    .Select(e => e.FeatureId)
-                    .Distinct()
-                    .Count();
-
-                // Heavy features add more weight (each feature counted once)
-                var countedFeatures = new HashSet<string>();
-                foreach (var evt in Events.Where(e => e.EventType == TimelineEventType.Start))
-                {
-                    if (!countedFeatures.Add(evt.FeatureId)) continue;
-                    var definition = FeatureDefinition.GetById(evt.FeatureId);
-                    if (definition != null)
-                    {
-                        score += definition.DifficultyWeight;
-                    }
-                }
-
-                // High intensity settings add more difficulty
-                if (HasFeature("spiral") && GetMaxValue("spiral", "opacity") > 20) score += 1;
-                if (HasFeature("flash") && GetMaxValue("flash", "opacity") > 60) score += 1;
-                if (HasFeature("brain_drain") && GetMaxValue("brain_drain", "intensity") > 10) score += 1;
-
-                return score switch
-                {
-                    <= 4 => ("⭐ Easy", "#90EE90"),         // Light green
-                    <= 8 => ("⭐⭐ Medium", "#FFD700"),      // Gold
-                    <= 12 => ("⭐⭐⭐ Hard", "#FFA500"),      // Orange
-                    _ => ("💀 Extreme", "#FF6347")          // Tomato red
-                };
-            }
-
-            /// <summary>Add a start event to the timeline.</summary>
-            public TimelineEvent AddStartEvent(string featureId, int minute, Dictionary<string, object>? settings = null)
-            {
-                var evt = new TimelineEvent
-                {
-                    FeatureId = featureId,
-                    Minute = minute,
-                    EventType = TimelineEventType.Start,
-                    Settings = settings ?? new Dictionary<string, object>()
-                };
-
-                // Apply default settings from feature definition
-                var definition = FeatureDefinition.GetById(featureId);
-                if (definition != null)
-                {
-                    foreach (var settingDef in definition.Settings)
-                    {
-                        if (!evt.Settings.ContainsKey(settingDef.Key) && settingDef.Default != null)
-                        {
-                            evt.Settings[settingDef.Key] = settingDef.Default;
-                        }
-                    }
-                }
-
-                Events.Add(evt);
-                return evt;
-            }
-
-            /// <summary>Add a stop event paired to a start event.</summary>
-            public TimelineEvent AddStopEvent(TimelineEvent startEvent, int minute)
-            {
-                var evt = new TimelineEvent
-                {
-                    FeatureId = startEvent.FeatureId,
-                    Minute = minute,
-                    EventType = TimelineEventType.Stop,
-                    PairedEventId = startEvent.Id
-                };
-
-                startEvent.PairedEventId = evt.Id;
-                Events.Add(evt);
-                return evt;
-            }
-
-            /// <summary>Remove an event and its paired event.</summary>
-            public void RemoveEvent(TimelineEvent evt)
-            {
-                if (!string.IsNullOrEmpty(evt.PairedEventId))
-                {
-                    var paired = Events.FirstOrDefault(e => e.Id == evt.PairedEventId);
-                    if (paired != null)
-                    {
-                        Events.Remove(paired);
-                    }
-                }
-
-                // Also remove any events that reference this one
-                foreach (var r in Events.Where(e => e.PairedEventId == evt.Id).ToList())
-                {
-                    r.PairedEventId = null;
-                }
-
-                Events.Remove(evt);
-            }
-
-            /// <summary>True when [startMinute, endMinute) overlaps another segment of the same
-            /// feature.</summary>
-            public bool IsOverlapping(string featureId, int startMinute, int endMinute, string? excludeEventId = null)
-            {
-                var featureStartEvents = Events.Where(e =>
-                    e.FeatureId == featureId &&
-                    e.EventType == TimelineEventType.Start &&
-                    e.Id != excludeEventId &&
-                    (e.PairedEventId != excludeEventId || excludeEventId == null));
-
-                foreach (var startEvt in featureStartEvents)
-                {
-                    var stopEvt = GetPairedStopEvent(startEvt);
-                    if (stopEvt != null)
-                    {
-                        // Check for overlap: (StartA < EndB) and (EndA > StartB)
-                        if (startMinute < stopEvt.Minute && endMinute > startEvt.Minute)
-                        {
-                            return true;
-                        }
-                    }
-                }
-
-                return false;
-            }
-        }
     }
 }

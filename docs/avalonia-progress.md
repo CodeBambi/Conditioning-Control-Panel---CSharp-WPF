@@ -64,3 +64,18 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   ~/ccp-port/evidence/wire-core-standins-1/.
 - Not run: WPF tests (Windows-only); Descent windows and enhancement auto-load have no user path
   Keincheck can drive.
+
+## avalonia-port/wire-core-standins-2: +500
+- Wires the second batch of #1768 Core types: PresetsTabView lists Core presets and exports /
+  drop-imports through PresetFileService; EnhancementsTabView draws SkillDefinition.All (read-only,
+  SkillTreeService is head-only); SessionEditorWindow drops its EditorSession stand-in for
+  TimelineSession and imports/exports via SessionFileService; QuizWindow builds its session with
+  QuizSessionGenerator (fallback content; QuizService AI is head-only).
+- Ledger: shell-preset-io, views-tab-presets, views-tab-enhancements, win-session-editor, win-quiz
+  stay stub (notes updated: share/CRUD, purchasing, and no opener for the two windows).
+- Evidence: Tests/CCP.Avalonia.Tests/CoreStandInTests.cs (+4 cases, each checked to fail when its
+  surface is broken); Keincheck Presets rail and Enhancements tree under
+  ~/ccp-port/evidence/wire-core-standins-2/.
+- Not run: WPF tests (Windows-only); preset export/drop and chip clicks live (Keincheck click_at
+  hit-tests fall through to the window backdrop Panel); SessionEditorWindow and QuizWindow have no
+  user path.

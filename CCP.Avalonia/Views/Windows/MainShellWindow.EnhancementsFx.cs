@@ -16,10 +16,9 @@
 //
 //   * the owned-node breath (a single AnimationClock shared by every owned node's
 //     DropShadowEffect, 0.38<->0.72 over 3.8s). Its enrolment point is RegisterOwnedNodeGlow,
-//     called from MainWindow.Enhancements.cs's DrawSkillTree - and the tree on this head is a
-//     SAMPLE drawn by EnhancementsTabView itself (it needs Services/SkillTreeService.cs, still in
-//     the WPF head; Models/SkillTree.cs is in Core). There is no owned node to enrol. When the
-//     tree becomes real, the Avalonia twin is one Animation with IterationCount.Infinite and
+//     called from MainWindow.Enhancements.cs's DrawSkillTree. EnhancementsTabView now draws the
+//     real Core tree (owned nodes included) but as static nodes with no DropShadowEffect, so
+//     there is still no glow to enrol. The Avalonia twin is one Animation with IterationCount.Infinite and
 //     PlaybackDirection.Alternate over DropShadowEffect.OpacityProperty, plus the window
 //     Activated/Deactivated/PropertyChanged(WindowState) hooks WPF used to park it.
 //   * the node hover pop (1.25 over 250ms in, 200ms out). Lives on the node visual and belongs to

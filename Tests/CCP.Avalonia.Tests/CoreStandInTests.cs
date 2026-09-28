@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Views.Deeper;
@@ -106,6 +107,74 @@ public sealed class CoreStandInTests
             EnhancementResolver.LibraryMatchProvider = null;
             dir.Delete(recursive: true);
         }
+    });
+
+    [Fact]
+    public Task PresetsTabRailListsCorePresetsAndSelectionEnablesExport() => Run(() =>
+    {
+        var tab = new PresetsTabView();
+        var panel = tab.FindControl<WrapPanel>("PresetCardsPanel")!;
+        var shown = panel.Children.OfType<Border>().Where(b => b.Tag is string).Select(b => (string)b.Tag!).ToArray();
+        var expected = ConditioningControlPanel.Models.Preset.GetDefaultPresets()
+            .Concat(ConditioningControlPanel.CoreSettings.Current.UserPresets).Select(p => p.Id).ToArray();
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, shown);
+
+        var export = tab.FindControl<Button>("BtnExportPreset")!;
+        Assert.False(export.IsEnabled);
+        var first = ConditioningControlPanel.Models.Preset.GetDefaultPresets()[0];
+        typeof(PresetsTabView).GetMethod("SelectPreset", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(tab, new object[] { first });
+        Assert.True(export.IsEnabled);
+        Assert.Equal(ConditioningControlPanel.CoreMods.MakeModAware(first.Name), Text(tab, "TxtDetailTitle"));
+    });
+
+    [Fact]
+    public Task EnhancementsTabDrawsCoreSkillDefinitionCatalogue() => Run(() =>
+    {
+        var tab = new EnhancementsTabView();
+        var nodes = tab.FindControl<Canvas>("SkillTreeCanvas")!.Children.OfType<Border>()
+            .Where(b => b.Tag is string).ToArray();
+        var expected = ConditioningControlPanel.Models.SkillDefinition.All.Where(s => !s.IsSecret).ToArray();
+        Assert.Equal(expected.Select(s => s.Id), nodes.Select(b => (string)b.Tag!));
+
+        var texts = nodes[0].GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+        Assert.Contains(expected[0].LocalizedName, texts);
+        Assert.Contains(texts, t => t!.EndsWith(" " + expected[0].Cost));
+
+        Assert.Equal(ConditioningControlPanel.Models.SkillDefinition.All.Count(s => s.IsSecret),
+            tab.FindControl<Panel>("SecretSkills")!.Children.Count);
+    });
+
+    [Fact]
+    public Task SessionEditorDrivesCoreTimelineSession() => Run(() =>
+    {
+        Assert.Null(typeof(SessionEditorWindow).GetNestedType("EditorSession", BindingFlags.NonPublic));
+        var session = new ConditioningControlPanel.Models.TimelineSession { Name = "T", DurationMinutes = 60 };
+        session.AddStopEvent(session.AddStartEvent("spiral", 5), 25);
+        session.AddStopEvent(session.AddStartEvent("flash", 30), 50);
+
+        var window = new SessionEditorWindow(session);
+        Assert.Equal(session.GetDifficultyText(), Text(window, "TxtDifficulty"));
+        Assert.Equal(Loc.GetF("session_xp_amount", session.CalculateXP()), Text(window, "TxtXP"));
+        window.Close();
+    });
+
+    [Fact]
+    public Task QuizResultOffersQuizSessionGeneratorSession() => Run(() =>
+    {
+        var window = new QuizWindow();
+        var result = new QuizResult { Category = QuizCategory.Bambi, TotalScore = 30, MaxScore = 40, ProfileText = "p" };
+        typeof(QuizWindow).GetMethod("ShowResult", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(window, new object[] { result });
+
+        var id = result.Category.ToString();
+        var expected = QuizSessionGenerator.GenerateSession(30, 40, id, id,
+            QuizSessionGenerator.GetFallbackContent(id, 75));
+        var name = expected.Name.Length > 30 ? expected.Name.Substring(0, 30) + "..." : expected.Name;
+        Assert.Equal(Loc.GetF("quiz_save_session", name), Text(window, "TxtTrySessionLabel"));
+        Assert.True(window.FindControl<Border>("BtnTrySession")!.IsHitTestVisible);
+        window.Close();
     });
 
     private static string? Text(Control root, string name) => root.FindControl<TextBlock>(name)!.Text;

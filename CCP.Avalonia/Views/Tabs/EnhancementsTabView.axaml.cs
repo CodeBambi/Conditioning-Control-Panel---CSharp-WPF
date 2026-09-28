@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -8,6 +10,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -17,13 +20,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <para>The WPF original is one handler wide: the skill tree's wheel redirect. It ports for
     /// real - it touches nothing but the ScrollViewer it is attached to.</para>
     ///
-    /// <para>What is NOT here is the tab's content. Both the tree canvas and the secret rail are
-    /// filled by MainWindow.Enhancements.cs (DrawSkillTree / PopulateSecretSkills) off
-    /// <c>App.SkillTree</c> and <c>Models.SkillDefinition.All</c>, neither of which is on this head.
-    /// This file paints a SAMPLE of each instead, with the real loc keys, so the 460dip board and
-    /// the 90dip rail do not render as two unexplained blanks in the render proof.
-    /// ponytail: needs ConditioningControlPanel/Services/SkillTreeService.cs, still in the WPF
-    /// head (CCP.Core/Models/SkillTree.cs, SkillDefinition.All, is in Core). The one number that IS live is the sparkle-point count, which is a plain setting.</para>
+    /// <para>The tree canvas and the secret rail are MainWindow.Enhancements.cs's DrawSkillTree /
+    /// PopulateSecretSkills over Core's <c>Models.SkillDefinition.All</c>, with ownership read
+    /// from <c>AppSettings.UnlockedSkills</c>. Purchasing is unavailable: CanPurchaseSkill /
+    /// PurchaseSkillAsync / IsSecretSkillAvailable live in the head-only SkillTreeService, so
+    /// every unowned node draws in its locked state and nothing is clickable.</para>
     /// </summary>
     public partial class EnhancementsTabView : UserControl
     {
@@ -41,8 +42,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // own handler consumes the wheel.
             SkillTreeScroller.AddHandler(PointerWheelChangedEvent, OnSkillTreeWheel, RoutingStrategies.Tunnel);
 
-            PaintSampleTree();
-            PaintSampleSecretRail();
+            PaintTree();
+            PaintSecretRail();
         }
 
         /// <summary>
@@ -70,36 +71,45 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         // =====================================================================================
-        //  sample content — see the class summary
+        //  DrawSkillTree / PopulateSecretSkills, read-only
         // =====================================================================================
 
-        /// <summary>
-        /// The header block plus the root node and the first node of each of the three paths, at
-        /// the coordinates DrawSkillTree uses (header at x=5, root at 570, columns 270 apart, rows
-        /// 160 apart), with the connection lines drawn behind them.
-        /// </summary>
-        private void PaintSampleTree()
+        /// <summary>DrawSkillTree's layout, verbatim: header at x=5, root at 570, columns 270
+        /// apart, the three paths 160 apart, the analytics chain on the middle row.</summary>
+        internal static Dictionary<string, (double X, double Y)> NodePositions()
         {
             const double startX = 570, colSpacing = 270, rowSpacing = 160;
-            double rootY = rowSpacing;
-
-            var branches = new (string Key, double X, double Y)[]
+            var pos = new Dictionary<string, (double X, double Y)> { ["pink_hours"] = (startX, rowSpacing) };
+            void Row(double y, int firstCol, params string[] ids)
             {
-                ("skill_ditzy_data_name",       startX + colSpacing, 0),
-                ("skill_sparkle_boost_1_name",  startX + colSpacing, rowSpacing),
-                ("skill_good_girl_streak_name", startX + colSpacing, rowSpacing * 2),
-            };
+                for (int i = 0; i < ids.Length; i++) pos[ids[i]] = (startX + colSpacing * (firstCol + i), y);
+            }
+            Row(0, 1, "ditzy_data", "hive_mind", "trophy_case", "popular_girl", "quest_refresh", "better_quests");
+            Row(rowSpacing, 1, "sparkle_boost_1", "sparkle_boost_2", "lucky_bimbo", "sparkle_boost_3", "lucky_bubbles", "pink_rush");
+            Row(rowSpacing * 2, 1, "good_girl_streak", "milestone_rewards", "oopsie_insurance", "streak_power", "reroll_addict", "perfect_bimbo_week");
+            Row(rowSpacing, 7, "ditzy_data_pro", "season_rewind", "bestie_records", "brain_drain_report", "certified_data_bimbo");
+            return pos;
+        }
 
-            // Lines first, so they sit behind the nodes.
-            foreach (var b in branches)
-                SkillTreeCanvas.Children.Add(Connector(
-                    startX + NodeWidth, rootY + NodeHeight / 2,
-                    b.X, b.Y + NodeHeight / 2));
+        private void PaintTree()
+        {
+            var owned = CoreSettings.Current.UnlockedSkills;
+            var positions = NodePositions();
+            var tree = SkillDefinition.All.Where(s => !s.IsSecret && positions.ContainsKey(s.Id)).ToList();
 
-            SkillTreeCanvas.Children.Add(Place(SampleHeader(), 5, 0));
-            SkillTreeCanvas.Children.Add(Place(SampleNode("skill_pink_hours_name", owned: true), startX, rootY));
-            foreach (var b in branches)
-                SkillTreeCanvas.Children.Add(Place(SampleNode(b.Key, owned: false), b.X, b.Y));
+            // DrawConnectionLines' pairs are exactly each node's prerequisite edge. Lines first,
+            // so they sit behind the nodes.
+            foreach (var skill in tree.Where(s => s.PrerequisiteId != null && positions.ContainsKey(s.PrerequisiteId)))
+            {
+                var (px, py) = positions[skill.PrerequisiteId!];
+                var (cx, cy) = positions[skill.Id];
+                SkillTreeCanvas.Children.Add(Connector(px + NodeWidth, py + NodeHeight / 2, cx, cy + NodeHeight / 2,
+                    owned.Contains(skill.Id), owned.Contains(skill.PrerequisiteId!)));
+            }
+
+            SkillTreeCanvas.Children.Add(Place(Header(), 5, 0));
+            foreach (var skill in tree)
+                SkillTreeCanvas.Children.Add(Place(Node(skill, owned.Contains(skill.Id)), positions[skill.Id].X, positions[skill.Id].Y));
         }
 
         private static Control Place(Control c, double left, double top)
@@ -109,16 +119,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             return c;
         }
 
-        private static Control Connector(double x1, double y1, double x2, double y2) => new Line
+        /// <summary>DrawConnectionLines' colours, minus the purchasable accent (needs SkillTreeService).</summary>
+        private static Control Connector(double x1, double y1, double x2, double y2, bool childOwned, bool parentOwned) => new Line
         {
             StartPoint = new Point(x1, y1),
             EndPoint = new Point(x2, y2),
-            Stroke = new SolidColorBrush(Color.FromRgb(0x4A, 0x3A, 0x5C)),
-            StrokeThickness = 2,
+            Stroke = new SolidColorBrush(childOwned ? Color.FromRgb(100, 255, 150)
+                : parentOwned ? Color.Parse(CoreMods.AccentColorHex) : Color.FromRgb(60, 60, 80)),
+            StrokeThickness = childOwned ? 3 : 2,
+            Opacity = childOwned || parentOwned ? 1.0 : 0.3,
         };
 
         /// <summary>The 500dip stats header CreateSkillTreeHeader draws at the start of the canvas.</summary>
-        private static Control SampleHeader()
+        private static Control Header()
         {
             var stack = new StackPanel();
 
@@ -163,51 +176,84 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             };
         }
 
-        private static Control SampleNode(string nameKey, bool owned)
+        /// <summary>CreateSkillNode: art row (tier gradient; ModResourceResolver art is head-side),
+        /// name, and the cost badge - gold FOREVER when owned, locked otherwise.</summary>
+        internal static Control Node(SkillDefinition skill, bool owned)
         {
-            var body = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10) };
-            body.Children.Add(new TextBlock
+            var grid = new Grid { RowDefinitions = new RowDefinitions("86,20,3,28") };
+            grid.Children.Add(new Border
             {
-                Text = owned ? "⭐" : "💠",
-                FontSize = 28,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 8),
+                CornerRadius = new CornerRadius(8, 8, 0, 0),
+                Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x22, 0x44)),
+                Child = new TextBlock { Text = skill.Icon, FontSize = 32, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+                Opacity = owned ? 1 : 0.5,
             });
-            var name = Text(Loc.Get(nameKey), owned ? Color.FromRgb(0x64, 0xFF, 0x96) : Color.FromRgb(0xE6, 0xE6, 0xF0), 12, bold: true);
-            name.HorizontalAlignment = HorizontalAlignment.Center;
-            name.TextAlignment = TextAlignment.Center;
-            name.TextWrapping = TextWrapping.Wrap;
-            body.Children.Add(name);
 
-            return new Border
+            var name = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(30, 28, 45)),
+                Child = new TextBlock
+                {
+                    Text = CoreMods.MakeModAware(skill.LocalizedName),
+                    Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 210)),
+                    FontSize = 9.5,
+                    FontWeight = FontWeight.SemiBold,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                },
+            };
+            Grid.SetRow(name, 1);
+            grid.Children.Add(name);
+
+            var cost = new Border
+            {
+                Background = new SolidColorBrush(owned ? Color.FromRgb(255, 200, 80) : Color.FromRgb(40, 35, 50)),
+                CornerRadius = new CornerRadius(0, 0, 8, 8),
+                Child = new TextBlock
+                {
+                    Text = owned ? $"💎{skill.Cost} {Loc.Get("label_skill_permanent")}" : $"🔒 {skill.Cost}",
+                    Foreground = new SolidColorBrush(owned ? Color.FromRgb(20, 20, 30) : Color.FromRgb(120, 120, 130)),
+                    FontSize = 10,
+                    FontWeight = FontWeight.Bold,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
+            Grid.SetRow(cost, 3);
+            grid.Children.Add(cost);
+
+            var node = new Border
             {
                 Width = NodeWidth,
                 Height = NodeHeight,
                 CornerRadius = new CornerRadius(10),
                 ClipToBounds = true,
-                Background = new SolidColorBrush(Color.FromRgb(0x22, 0x1E, 0x36)),
+                Tag = skill.Id,
                 BorderThickness = new Thickness(owned ? 2 : 1),
-                BorderBrush = new SolidColorBrush(owned ? Color.FromRgb(0x64, 0xFF, 0x96) : Color.FromRgb(0x3C, 0x32, 0x46)),
-                Child = body,
+                BorderBrush = new SolidColorBrush(owned ? Color.FromRgb(100, 255, 150) : Color.FromRgb(60, 50, 70)),
+                Child = grid,
             };
+            ToolTip.SetTip(node, CoreMods.MakeModAware(skill.LocalizedDescription));
+            return node;
         }
 
-        /// <summary>
-        /// Three hidden secret cards, exactly what PopulateSecretSkills draws while none of the
-        /// three requirements is met: the padlock, the withheld-name label, and the hint.
-        /// </summary>
-        private void PaintSampleSecretRail()
+        /// <summary>PopulateSecretSkills. Every unowned secret draws hidden: whether its
+        /// requirement is met is SkillTreeService.IsSecretSkillAvailable, head-side.</summary>
+        private void PaintSecretRail()
         {
-            foreach (var id in new[] { "night_shift", "early_bird_bimbo", "eternal_doll" })
-                SecretSkills.Children.Add(HiddenSecretCard(Loc.Get($"rf_skill_{id}_req")));
+            var owned = CoreSettings.Current.UnlockedSkills;
+            foreach (var skill in SkillDefinition.All.Where(s => s.IsSecret))
+                SecretSkills.Children.Add(HiddenSecretCard(owned.Contains(skill.Id)
+                    ? skill.LocalizedName : skill.LocalizedSecretRequirementDesc, owned.Contains(skill.Id)));
         }
 
-        private static Control HiddenSecretCard(string requirement)
+        private static Control HiddenSecretCard(string requirement, bool owned = false)
         {
             var body = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
             body.Children.Add(new TextBlock
             {
-                Text = "🔒",
+                Text = owned ? "✨" : "🔒",
                 FontSize = 18,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 8, 0),
@@ -215,7 +261,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(text, 1);
-            text.Children.Add(Text(Loc.Get("label_secret_skill_hidden"), Color.FromRgb(0x99, 0x32, 0xCC), 11, bold: true));
+            text.Children.Add(Text(Loc.Get(owned ? "label_skill_permanent" : "label_secret_skill_hidden"), Color.FromRgb(0x99, 0x32, 0xCC), 11, bold: true));
             var hint = Text(requirement, Color.FromRgb(0x80, 0x80, 0x80), 8, top: 1);
             hint.TextWrapping = TextWrapping.Wrap;
             text.Children.Add(hint);
@@ -231,7 +277,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Height = SecretCardHeight,
                 Margin = new Thickness(0, 3, 10, 3),
                 Padding = new Thickness(8, 6, 8, 6),
-                Opacity = 0.6,
+                Opacity = owned ? 1.0 : 0.6,
                 Child = body,
             };
         }
