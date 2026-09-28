@@ -133,6 +133,20 @@
                                           Checked="ChkClickable_Changed" Unchecked="ChkClickable_Changed"/>
                             </Grid>
 
+                            <!-- Stay until popped (FlashStayUntilPopped). Needs clicking on, so it greys out with it. -->
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_flash_stay_until_popped}"
+                                  IsEnabled="{Binding IsChecked, ElementName=ChkClickable}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_stay_until_popped}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkStayUntilPopped"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkStayUntilPopped_Changed" Unchecked="ChkStayUntilPopped_Changed"/>
+                            </Grid>
+
                             <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_hydra_mode_clicking_an_image_spawns_two_more}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
