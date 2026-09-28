@@ -664,3 +664,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Core ProgressionClear.Apply = the settings half of WPF ClearProgressionData (same 28 fields, same order, XP watermark
   cleared, UnifiedId kept); WPF calls it, then saves and resets quests/achievements/skills as before.
 - Evidence: ProgressionClearTests (every field), fail-proofed. Avalonia uses it with the push in 7c. Review: ACCEPT.
+
+## avalonia-port/quiz-category-editor: +146 (quiz unit 6)
+- The quiz category editor is ported: WPF's validation order and messages (incl. the built-in name clash), template copy,
+  save (Id kept on edit) and delete through Core QuizStore; QuizWindow's Create/Edit save through it. Reachable only behind
+  WPF's hidden quiz button, as in WPF.
+- Evidence: QuizCategoryEditorTests (validation, template, create/edit/delete round trip vs the golden JSON keys),
+  fail-proofed 4 ways. Review: ACCEPT.
