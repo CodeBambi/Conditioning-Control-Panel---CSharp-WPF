@@ -6,10 +6,10 @@ for a voice in this order (CONTRACT.md 10.21):
 1. **`clip`** - the player's OWN audio for that phrase (an enabled Awareness trigger's PlayAudio action,
    the active mod's `resources/sounds/flashes_audio`, then `Resources/sub_audio`).
 2. **`preset`** - a clip in THIS folder, named by `words.json`.
-3. **`tts`** - Windows speech, rendered on the fly.
-4. **`none`** - the page falls back to the browser's `speechSynthesis`.
+3. **`none`** - no recording: the word is drawn and stays SILENT. No synthetic speech anywhere (owner,
+   2026-09-25): never Windows speech, never a browser voice.
 
-This folder includes nine Circe recordings for the English playtest vocabulary: Drop, Relax, Let go, Sink, Deeper, Empty, Obey, Softer and Blank. Player-provided clips keep priority. Other phrases retain the existing fallback chain.
+This folder includes nine Circe recordings for the English playtest vocabulary: Drop, Relax, Let go, Sink, Deeper, Empty, Obey, Softer and Blank. Player-provided clips keep priority. Other phrases are silent unless the player has a clip for them.
 
 ## Naming
 

@@ -138,7 +138,7 @@ the game" writes `br.sfx.variant` for that origin; the slot's own harness takes 
 <http://127.0.0.1:8940/backroom/stations/slot/dev.html?lever=A&reel=D>.
 
 `settle` and `clicker` are deduped (`DEDUPE_MS`): two lanes saying `settle` on the same frame make one settle. The
-spoken word itself is another lane's speechSynthesis call; the kit never synthesises speech.
+spoken word itself is the host's recorded clip; the kit never synthesises speech.
 
 Calm turns the whole floor down (`kit.setTrim(0.6)`, the room does it from the settings frame). Reduced motion keeps
 every cue: sound is where the beat lives when the travel is gone.

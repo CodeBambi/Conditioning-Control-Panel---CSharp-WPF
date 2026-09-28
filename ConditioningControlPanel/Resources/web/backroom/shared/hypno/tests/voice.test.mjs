@@ -57,7 +57,7 @@ function harness(voice) {
 const wordsOf = (c) => c.debug().voice;
 
 /* ------------------------------------------------------------------ the adapter */
-test('no host: createVoice is null, so the caller stays on speechSynthesis', () => {
+test('no host: createVoice is null, so every word stays silent', () => {
   assert.equal(createVoice({ hosted: false }), null);
   assert.equal(createVoice({ hosted: true, bridge: {} }), null, 'a bridge with no request() is no host either');
 });
@@ -87,7 +87,7 @@ test('readAck: only the four sources survive, none forces a zero duration, a wil
 });
 
 /* ------------------------------------------------------------------ callout.word with a host */
-test('a host that speaks keeps the page quiet; an ack of none sends the word back to speechSynthesis', async () => {
+test('a host that speaks keeps the page quiet; an ack of none stays silent', async () => {
   const sp = fakeSpeech();
   try {
     const said = [];
@@ -105,7 +105,7 @@ test('a host that speaks keeps the page quiet; an ack of none sends the word bac
   } finally { sp.restore(); }
 });
 
-test('a host that throws or rejects falls back to speechSynthesis rather than going silent', async () => {
+test('a host that throws or rejects stays silent, never a browser voice', async () => {
   const sp = fakeSpeech();
   try {
     const a = harness({ available: true, speak() { throw new Error('gone'); }, stop() {} });
