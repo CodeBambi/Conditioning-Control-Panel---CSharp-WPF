@@ -103,6 +103,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // The rail's setup pass. Here, not in OnAttachedToVisualTree: a Window IS the visual
             // root, so that override never fires on it and the rail never opened.
             InitializeNavRail();
+            // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
+            Opened += (_, _) => { if (CoreSettings.Current.AvatarEnabled) InitializeAvatarTube(); };
+            Closed += (_, _) => _avatarTubeWindow?.Close();
         }
 
         /// <summary>Uses an already-loaded catalogue without making the parameterless shell open

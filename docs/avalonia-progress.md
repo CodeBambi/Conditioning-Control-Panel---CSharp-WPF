@@ -605,3 +605,13 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   UI is the next layer.
 - Evidence: CloudLeaderboardTests (no-write, board, card fields, in-flight guard; fail-proofed); live sandbox: the real public
   board and the offline state. Review: ACCEPT, follow-ups applied.
+
+## avalonia-port/avatar-tube-windowing: +518 (user-reported: tube didn't move on Detach, wasn't on the left when attached)
+- WPF's windowing ported: one ToggleDetached for the tube menu and the hero Detach button (detached = topmost + drag from her
+  visible parts; attached = docks on the shell's left edge with WPF's formula, TubeDockPlacement moved to Core); follows the
+  shell's move/size/state (minimise hides, maximise detaches, restore re-attaches); Attach brings the shell back; mode and
+  position saved in WPF DIPs, restored on the right screen after the real scaling arrives (1 s fallback). While attached,
+  the tube's input region stops at the seam so it never steals the nav rail's clicks.
+- Evidence: TubeDockMathTests, AvatarTubeWindowingTests (fail-proofed); live KWin/XWayland: docks at 767,746 / follows to
+  967,946, detach topmost, restore after restart, input region ends at the shell edge. A real WM drag and a real click
+  through the margin weren't possible (Keincheck can't drag; the screen was locked). Review: FIX -> r1 applied.
