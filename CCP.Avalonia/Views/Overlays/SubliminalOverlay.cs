@@ -152,8 +152,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var closed = false;
             Closed += (_, _) => closed = true;   // a newer card may have closed this one already
             // The envelope starts at the card's first frame, not at Show(): mapping and the first
-            // full-screen paint take time a 100 ms hold cannot spare.
-            RequestAnimationFrame(_ =>
+            // full-screen paint take time a 100 ms hold cannot spare. A backstop from Show() caps the
+            // lifetime anyway, so a late first frame shortens the card instead of stranding it.
+            DispatcherTimer.RunOnce(() => { if (!closed) Close(); }, MaxLifetime(hold));
+            RequestFrame(this, _ =>
             {
                 if (closed) return;
                 Ramp(0, alpha, TimeSpan.Zero, fade);
@@ -161,6 +163,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 DispatcherTimer.RunOnce(() => { if (!closed) Close(); }, fade + hold + fade + TimeSpan.FromMilliseconds(1));
             });
         }
+
+        /// <summary>Test seam: a test swaps in a first frame that never comes.</summary>
+        internal static Action<TopLevel, Action<TimeSpan>> RequestFrame = (t, a) => t.RequestAnimationFrame(a);
+
+        /// <summary>Show() to forced close: the whole envelope plus 100 ms of first-frame slack.</summary>
+        internal static TimeSpan MaxLifetime(TimeSpan hold) => hold + TimeSpan.FromMilliseconds(4 * SubliminalOverlay.FadeMs);
 
         private void Ramp(double from, double to, TimeSpan start, TimeSpan span)
         {

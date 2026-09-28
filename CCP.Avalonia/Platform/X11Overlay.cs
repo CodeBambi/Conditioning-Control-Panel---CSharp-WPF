@@ -202,13 +202,19 @@ internal static class X11Overlay
         {
             if (!EnsureDisplay()) return false;
             // Format-32 property data is an array of C longs, i.e. pointer-sized on LP64.
-            var value = (IntPtr)(long)(Math.Clamp(alpha, 0, 1) * uint.MaxValue);
+            var value = (IntPtr)(long)OpacityCardinal(alpha);
             XChangeProperty(_display, xid, XInternAtom(_display, "_NET_WM_WINDOW_OPACITY", false),
                 (IntPtr)6 /* XA_CARDINAL */, 32, 0 /* PropModeReplace */, new[] { value }, 1);
             XFlush(_display);
             return true;
         }
     }
+
+    /// <summary>The _NET_WM_WINDOW_OPACITY value for <paramref name="alpha"/>, floored at 1 of 2^32-1:
+    /// still invisible, but never exactly 0. KWin sends no frame callbacks to an opacity-0 XWayland
+    /// window, so the render thread's vsync'd swap on it waits for XWayland's 1 s fallback timer and
+    /// stalls every window's frames and the UI thread 1-2 s (measured, overlay-first-frame-perf).</summary>
+    internal static uint OpacityCardinal(double alpha) => Math.Max(1u, (uint)(Math.Clamp(alpha, 0, 1) * uint.MaxValue));
 
     /// <summary>Stacks <paramref name="window"/> immediately above <paramref name="sibling"/> -
     /// the analogue of <c>SetWindowPos(hwnd, hwndInsertAfter, SWP_NOACTIVATE)</c>, and what holds
