@@ -368,3 +368,11 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   ReleaseContentService, both ModCreatorWindow Load paths). Windows: passthrough to ZipFile.ExtractToDirectory with the
   same arguments (identical at every caller, reviewed). Elsewhere: Windows-zipped backslash entries land in folders;
   traversal still rejected; the target folder is created like the framework does. Test fail-proofed. Review: ACCEPT.
+
+## avalonia-port/avalonia-seed-mods: +274
+- ModService unit 5: the Avalonia head runs one ModService (desktop lifetime only, after the version seed),
+  Initialize(settings.ActiveModId) like WPF, and seeds CoreMods through a new CoreMods.Attach that WPF now also uses
+  (same 16 providers, reviewed). Mod-dependent text follows the active mod (live: "Welcome, Good Girl.").
+- The Hypnotube known-title table moved to Core, so a legacy-link migration saves canonical titles on either head.
+- Evidence: StartModsTests (golden round trip through the head path, fail-proofed); legacy-link migration test with and
+  without the WPF provider; live sandbox launch. Review: ACCEPT + P2 fixed. No real profile touched.
