@@ -84,8 +84,11 @@ public sealed class SessionRunnerTests : IDisposable
         Assert.True(s.SubliminalPool["zzsession"]);
 
         _logs.RecordImages(new[] { "/pics/a.png" });
+        var ticks = 0;
+        _runner.Ticked += () => ticks++;   // the head's clock labels (WPF ProgressUpdated)
         _runner.Tick(TimeSpan.FromSeconds(59));
         Assert.True(_runner.IsRunning);
+        Assert.Equal(1, ticks);
         _runner.Tick(TimeSpan.FromSeconds(60));
 
         Assert.False(_runner.IsRunning || CoreSession.IsSessionRunning || CoreEngine.IsRunning);

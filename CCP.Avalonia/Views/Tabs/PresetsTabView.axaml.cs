@@ -27,7 +27,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// ponytail: needs MainWindow (preset CRUD, JustDropOrdersService, and the
     /// tab FX clock), wired when those services move to Core. The remaining wiring points, all
     /// named in the XAML, are:
-    ///   BtnStartSession / BtnRevealSpoilers /
+    ///   BtnRevealSpoilers /
     ///   BtnLoadPreset / BtnSaveOverPreset / BtnDeletePreset / BtnSharePreset /
     ///   BtnExportSession / BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
@@ -55,6 +55,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnExportPreset.Click += BtnExportPreset_Click;
             BtnSessionHistory.Click += BtnSessionHistory_Click;
             BtnCreateSession.Click += BtnCreateSession_Click;
+            _startSessionLabel = BtnStartSession.Content;
+            BtnStartSession.Click += (_, _) =>
+                (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnStartSession_Click(_selectedSession);
             TxtDetailTitle.Text = Loc.Get("label_select_a_preset");
             TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_preset_or_session_to_see_details");
             TxtSessionDuration.Text = Loc.Get("label_30_minutes");
@@ -793,8 +796,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             PresetDetailScroller.IsVisible = false;
             PresetButtonsPanel.IsVisible = false;
             SessionDetailScroller.IsVisible = true;
-            SessionButtonsPanel.IsVisible = false;
-            BtnStartSession.IsEnabled = false;
+            SessionButtonsPanel.IsVisible = true;   // WPF SessionIO.cs:923/:971
+            BtnStartSession.IsEnabled = true;
             BtnExportSession.IsEnabled = false;
             SessionSpoilerPanel.IsVisible = false;
             CornerGifOptionPanel.IsVisible = false;
@@ -808,6 +811,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             RefreshSessionRackSelection();
         }
+
+        private readonly object? _startSessionLabel;
+
+        /// <summary>The session button's text while a session runs (WPF sets its Content per tick);
+        /// null puts the localised Start label back. A TextBlock, so no '_' becomes an access key.</summary>
+        internal void SetSessionButtonLabel(string? text) =>
+            BtnStartSession.Content = text is null ? _startSessionLabel : new TextBlock { Text = text };
 
         private void RefreshSessionRackSelection()
         {

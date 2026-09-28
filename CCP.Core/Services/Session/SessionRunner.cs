@@ -13,7 +13,7 @@ namespace ConditioningControlPanel.Services
     /// <see cref="SessionLogService"/>. Drives flash, subliminal (+ whispers flag), bouncing text and lock cards.
     ///
     /// ponytail: not driven here - video, bubbles, bubble count, pop quiz, mind wipe, brain drain, spiral,
-    /// pink tint, corner GIF, ducking, the flash ramp, pause/resume + penalty (U4), progress/phase events,
+    /// pink tint, corner GIF, ducking, the flash ramp, pause/resume + penalty (U4), phase events,
     /// EMI Desk, Discord, friends, season recap and achievement tracking. No settings are written for them,
     /// so the snapshot restore writes their own values back; each arrives with its Core service.
     /// </summary>
@@ -32,6 +32,9 @@ namespace ConditioningControlPanel.Services
         public bool IsRunning { get; private set; }
         public int CurrentPhaseIndex { get; private set; }
 
+        /// <summary>After every live tick: WPF's ProgressUpdated, for the head's clock labels.</summary>
+        public event Action? Ticked;
+
         /// <summary>Seeds IsSessionRunning: one runner per head. The pool delegates are the head's
         /// (PhrasePoolCustody.Seed at startup, CCP.Avalonia/Program.cs).</summary>
         public SessionRunner(SessionLogService sessionLog)
@@ -39,6 +42,10 @@ namespace ConditioningControlPanel.Services
             SessionLog = sessionLog;
             CoreSession.IsSessionRunningProvider = () => IsRunning && CurrentSession != null;
         }
+
+        /// <summary>SessionEngine.RemainingTime.</summary>
+        public TimeSpan Remaining => CurrentSession is { } cs && IsRunning
+            ? TimeSpan.FromMinutes(cs.DurationMinutes) - Elapsed : TimeSpan.Zero;
 
         /// <summary>SessionEngine.ElapsedTime (no pause offset until U4).</summary>
         public TimeSpan Elapsed => IsRunning
@@ -161,6 +168,7 @@ namespace ConditioningControlPanel.Services
                 Log.Information("Phase changed: {Phase}", session.Phases[phase].Name);
             }
             _deferred.FireDue(minutes);
+            Ticked?.Invoke();
         }
 
         public void Stop(bool completed = false) => Stop(completed, Elapsed);
