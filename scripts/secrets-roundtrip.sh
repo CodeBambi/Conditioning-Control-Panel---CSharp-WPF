@@ -13,8 +13,8 @@ docker run --rm -v "$PWD/Tests/CCP.Avalonia.Tests/bin/Release/net10.0:/t:ro" -w 
   -e DOTNET_ROLL_FORWARD=Major ccp-secrets-roundtrip:local sh -euc "
     CCP_SECRETS_ROUNDTRIP=1 dbus-run-session -- sh -euc '
       echo -n pw | gnome-keyring-daemon --unlock --components=secrets >/dev/null
-      ${run}LibsecretRoundTrip | tee /tmp/rt.txt; grep -q \"Errors: 0, Failed: 0, Skipped: 0\" /tmp/rt.txt'
+      ${run}LibsecretRoundTrip | tee /tmp/rt.txt; grep -q \"Total: 1, Errors: 0, Failed: 0, Skipped: 0\" /tmp/rt.txt'
     home=\$(mktemp -d)
     HOME=\$home CCP_SECRETS_NOBUS=1 DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/bus \
-      ${run}NoBusReadsNullAndWritesNoFile | tee /tmp/nb.txt; grep -q 'Errors: 0, Failed: 0, Skipped: 0' /tmp/nb.txt
+      ${run}NoBusReadsNullAndWritesNoFile | tee /tmp/nb.txt; grep -q 'Total: 1, Errors: 0, Failed: 0, Skipped: 0' /tmp/nb.txt
     test -z \"\$(find \$home -type f)\" && echo 'no file under HOME'"

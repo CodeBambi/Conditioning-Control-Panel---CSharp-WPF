@@ -27,26 +27,42 @@ internal static class SecretStore
     /// ("sign-in not remembered"). The login unit hangs its notice here.</summary>
     internal static Action? NotRememberedHook;
 
+    /// <summary>True once a value was kept in memory only. Read it when attaching the hook late.</summary>
+    internal static volatile bool NotRemembered;
+
     internal static void Seed()
     {
         CoreSecrets.RetrieveProvider = Retrieve;
         CoreSecrets.StoreProvider = Store;
     }
 
-    internal static string? Retrieve(string name) => _cache.GetOrAdd(name, OsRead);
+    internal static string? Retrieve(string name)
+    {
+        if (_cache.TryGetValue(name, out var cached)) return cached;
+        var (ok, value) = OsRead(name);
+        if (ok) _cache[name] = value;   // a failed lookup (locked, prompt dismissed) retries next time
+        return value;
+    }
 
     internal static void Store(string name, string? value)
     {
         if (string.IsNullOrEmpty(value)) value = null;
         _cache[name] = value;
-        if (OsWrite(name, value) || value is null) return;
+        if (OsWrite(name, value)) return;
+        if (value is null)
+        {
+            // ponytail: logged only; the logout unit owns a "could not sign out fully" notice.
+            Log.Warning("Could not clear {Name} from the secret store", name);
+            return;
+        }
         Log.Warning("No usable secret store: {Name} is kept in memory for this run only", name);
-        if (Interlocked.Exchange(ref _notified, 1) == 0) NotRememberedHook?.Invoke();
+        NotRemembered = true;
+        if (NotRememberedHook is { } hook && Interlocked.Exchange(ref _notified, 1) == 0) hook();
     }
 
-    private static string? OsRead(string name) =>
-        OperatingSystem.IsWindows() ? Dpapi.Read(CorePaths.UserData, name)
-        : OperatingSystem.IsLinux() ? Libsecret.Lookup(name) : null;
+    private static (bool Ok, string? Value) OsRead(string name) =>
+        OperatingSystem.IsWindows() ? (true, Dpapi.Read(CorePaths.UserData, name))
+        : OperatingSystem.IsLinux() ? Libsecret.Read(name) : (true, null);
 
     private static bool OsWrite(string name, string? value) =>
         OperatingSystem.IsWindows() ? Dpapi.Write(CorePaths.UserData, name, value)
@@ -72,12 +88,15 @@ internal static class Libsecret
     [DllImport(GLib)] private static extern void g_hash_table_unref(IntPtr table);
     [DllImport(GLib)] private static extern void g_error_free(IntPtr error);
 
-    internal static string? Lookup(string name) => Call(name, "lookup", attrs =>
+    internal static string? Lookup(string name) => Read(name).Value;
+
+    /// <summary>Ok is false when the lookup failed (as opposed to finding nothing).</summary>
+    internal static (bool Ok, string? Value) Read(string name) => Call(name, "lookup", attrs =>
     {
         var p = secret_password_lookupv_sync(IntPtr.Zero, attrs, IntPtr.Zero, out var err);
-        Check(err, "lookup", name);
-        if (p == IntPtr.Zero) return null;
-        try { return Marshal.PtrToStringUTF8(p); } finally { secret_password_free(p); }
+        if (!Check(err, "lookup", name)) return (false, null);
+        if (p == IntPtr.Zero) return (true, (string?)null);
+        try { return (true, Marshal.PtrToStringUTF8(p)); } finally { secret_password_free(p); }
     });
 
     internal static bool Write(string name, string? value) => Call(name, "store", attrs =>

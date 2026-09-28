@@ -105,6 +105,7 @@ public sealed class SecretStoreTests
         SecretStore.Store("discord_auth", Json);
         Assert.Equal("tok", SecretStore.Retrieve("authtoken"));  // this run only, from memory
         Assert.Equal(1, notices);
+        Assert.True(SecretStore.NotRemembered);
         Assert.Equal(before, Files());
     }
 }

@@ -504,9 +504,9 @@ namespace ConditioningControlPanel.Services
                 var token = obj["auth_token"]?.ToString();
                 if (!string.IsNullOrEmpty(token))
                 {
-                    // Only on a head that HAS a secret store. Without one there is nothing to
-                    // migrate into, and the re-save below would strip the plaintext and lose the
-                    // token. The Linux head is in that state today (see CoreSecrets).
+                    // Only on a head with a provider attached (which may be memory-only for this
+                    // run, see CoreSecrets.HasStore). Without one there is nothing to migrate into;
+                    // skipping the re-save only delays the strip, since any later save drops it too.
                     if (!CoreSecrets.HasStore) return;
 
                     // Only migrate if encrypted store is empty (don't overwrite a newer token)
