@@ -114,7 +114,7 @@ public class RemoteSubAddMessageTests
     [Fact]
     public void AllNineLanguagesCarryAllFiveRefusals()
     {
-        var dir = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");
         Assert.True(files.Length == 9, "expected 9 language files, found " + files.Length);
 
@@ -148,7 +148,7 @@ public class RemoteSubAddMessageTests
     [Fact]
     public void TheForYouPageSaysTheSameThing()
     {
-        var js = ReadSource("Resources", "web", "fyp", "main.js");
+        var js = File.ReadAllText(Path.Combine(RepoRoot(), "Assets", "web", "fyp", "main.js"));
         var at = js.IndexOf("function onSubProbe", StringComparison.Ordinal);
         Assert.True(at > 0, "onSubProbe is no longer in fyp/main.js");
         var body = js.Substring(at, Math.Min(2000, js.Length - at));

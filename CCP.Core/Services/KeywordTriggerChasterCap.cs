@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -115,7 +116,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("KeywordTriggerChasterCap: could not read {Path}: {Error}", path, ex.Message);
+                Log.Warning("KeywordTriggerChasterCap: could not read {Path}: {Error}", path, ex.Message);
             }
             return new KeywordTriggerChasterCap();
         }
@@ -132,7 +133,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("KeywordTriggerChasterCap: could not write {Path}: {Error}", path, ex.Message);
+                Log.Warning("KeywordTriggerChasterCap: could not write {Path}: {Error}", path, ex.Message);
             }
         }
     }

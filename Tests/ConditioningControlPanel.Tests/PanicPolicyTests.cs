@@ -523,8 +523,7 @@ public class PanicPolicyTests
     /// <summary>The registry's own source. Anchors are single-line substrings, so this reads the
     /// same on a CRLF checkout as on an LF one.</summary>
     private static string GameSurfacesSource()
-        => File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "Services", "Safety", "GameSurfaces.cs"));
+        => SourceRoots.ReadProductFile("Services", "Safety", "GameSurfaces.cs");
 
     /// <summary>
     /// The legacy rung must not be a press that only CLOSES. Four of the surfaces it answers are
@@ -557,8 +556,7 @@ public class PanicPolicyTests
     /// agnostic - every anchor is a substring of one line.</summary>
     private static string LegacyGameRungBody()
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml.cs");
         var start = source.IndexOf("var liveSurfaces = Services.Safety.GameSurfaces.ActiveIds();",
             StringComparison.Ordinal);
         Assert.True(start >= 0, "the legacy game-surface rung is gone - update this test with it");

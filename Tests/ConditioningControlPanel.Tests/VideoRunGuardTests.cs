@@ -51,7 +51,7 @@ public class VideoRunGuardTests
         string? html = null;
         for (var d = new DirectoryInfo(dir); d != null; d = d.Parent)
         {
-            var p = Path.Combine(d.FullName, "ConditioningControlPanel", "Resources", "web", "player", "index.html");
+            var p = Path.Combine(d.FullName, "Assets", "web", "player", "index.html");
             if (File.Exists(p)) { html = File.ReadAllText(p); break; }
         }
         Assert.NotNull(html);

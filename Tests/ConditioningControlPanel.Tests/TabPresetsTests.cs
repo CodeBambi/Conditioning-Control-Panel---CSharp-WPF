@@ -19,7 +19,7 @@ internal static class ChasterPageLoc
             dir = dir.Parent;
         var root = dir?.FullName ?? throw new DirectoryNotFoundException("repo root");
         return JObject.Parse(File.ReadAllText(
-            Path.Combine(root, "ConditioningControlPanel", "Localization", "Languages", "en.json")));
+            Path.Combine(SourceRoots.LanguagesDirectory, "en.json")));
     }
 }
 

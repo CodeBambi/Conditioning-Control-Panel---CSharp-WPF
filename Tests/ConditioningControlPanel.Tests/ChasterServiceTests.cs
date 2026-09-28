@@ -150,7 +150,7 @@ public class ChasterServiceTests : IDisposable
         Assert.Equal("+0:10 each", TabPageText.Price(TabPrices.Find("mantra")!, "{0} each"));
         Assert.Equal("-10:00", TabPageText.Price(TabPrices.Find("session")!, "{0} each"));
 
-        var en = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", "en.json")));
+        var en = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, "en.json")));
         foreach (var id in TabPrices.All.Select(p => p.Id).Append(CircesTab.JackpotEventId))
             Assert.NotNull(en[TabPageText.NameKey(id)]);
     }

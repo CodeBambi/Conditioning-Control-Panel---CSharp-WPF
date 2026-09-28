@@ -35,7 +35,7 @@ public class ChasterTabRenderTests
     [Fact]
     public void Every_row_maps_to_a_scene_the_trailers_page_defines_and_the_page_can_mount_one()
     {
-        var page = System.IO.Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "web", "chaster", "trailers.html");
+        var page = System.IO.Path.Combine(RepoRoot(), "Assets", "web", "chaster", "trailers.html");
         Assert.True(File.Exists(page), "trailers.html is missing");
         var html = File.ReadAllText(page);
         Assert.Contains("window.__mount", html);
@@ -142,7 +142,7 @@ public class ChasterTabRenderTests
     [Fact]
     public void Every_row_with_a_picture_points_at_a_png_that_ships()
     {
-        var resources = System.IO.Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources");
+        var resources = System.IO.Path.Combine(RepoRoot(), "Assets");
         foreach (var id in TabMenuCopy.ArtIds)
         {
             var art = TabMenuCopy.ArtFor(id)!;
