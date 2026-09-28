@@ -315,3 +315,11 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   No notification server -> in-app toast if the window is visible, else drop + log once; Windows falls back.
 - Evidence: OsNotificationsTests (fail-proofed); --notify-check live; dbus-monitor capture of the in-app Notify
   with the icon path. Review: ACCEPT + fixes. Other WPF balloon callers await their features on this head.
+
+## avalonia-port/skilltree-service: +137
+- Skill-tree ownership rules (HasSkill, CanPurchaseSkill, IsSecretSkillAvailable, sparkle tier, free rerolls,
+  reroll bonus) moved from WPF SkillTreeService to Core SkillTreeRules (logic identical, reviewed); WPF delegates.
+- Avalonia Enhancements reads owned state through it. Purchasing stays unavailable (auth not ported); no streak
+  or skill writes on this head.
+- Evidence: SkillTreeRulesTests (thresholds at the boundary), EnhancementsTabDrawsOwnedSkillAsOwned, fail-proofed;
+  Keincheck with a sandbox profile owning 2 skills; 0 binding errors. Review: ACCEPT.
