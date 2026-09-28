@@ -27,12 +27,19 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
 
     public event Action? BubblePopped;
     public event Action<LeashWatch>? WatchFinished;
+    public event Action<LeashWatch>? WatchFailed;
     private LeashWatch? _watching;
 
     public AppLeashTaskHost()
     {
         Hook();
         Controls.Leash.LeashPunishWindow.VideoEnded += OnWindowVideoEnded;
+        Controls.Leash.LeashPunishWindow.PlaybackFailed += OnWindowPlaybackFailed;
+    }
+
+    private void OnWindowPlaybackFailed()
+    {
+        if (_watching is { } w && WatchCaged) WatchFailed?.Invoke(w);
     }
 
     private void OnWindowVideoEnded()
@@ -74,6 +81,13 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
     {
         var svc = App.LockCard;
         if (svc == null) return false;
+        // The service drops a card quietly when no phrase is enabled; that is a card that
+        // never opens, so say so here or the task would wait on it forever.
+        if (!HasEnabledPhrase(App.Settings?.Current?.LockCardPhrases))
+        {
+            App.Logger?.Information("Leash lock card: no phrases enabled");
+            return false;
+        }
         try
         {
             // Never strict, never a test card (a test card does not count). The player's own phrases.
@@ -81,6 +95,14 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
             return true;
         }
         catch (Exception ex) { App.Logger?.Warning("Leash lock card failed: {E}", ex.Message); return false; }
+    }
+
+    /// <summary>True when at least one lock card phrase is switched on.</summary>
+    internal static bool HasEnabledPhrase(System.Collections.Generic.IDictionary<string, bool>? phrases)
+    {
+        if (phrases == null) return false;
+        foreach (var kv in phrases) if (kv.Value) return true;
+        return false;
     }
 
     // ---- sessions ----
@@ -147,6 +169,11 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
         if (b.IsRunning) return false;
         try { b.Start(bypassLevelCheck: true, frequency: BubblesPerMinute); return true; }
         catch (Exception ex) { App.Logger?.Warning("Leash bubbles failed: {E}", ex.Message); return false; }
+    }
+
+    public bool BubblesRunning
+    {
+        get { try { return App.Bubbles?.IsRunning == true; } catch { return false; } }
     }
 
     public void StopBubbles()
@@ -285,6 +312,12 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
             && string.Equals(page.AbsolutePath.TrimEnd('/'), target.AbsolutePath.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>A caged watch is open while its window is; the Deeper player cannot be told apart
+    /// from the player's own use of it, so that one always reads open.</summary>
+    public bool WatchOpen => _watching != null && (!WatchCaged || Controls.Leash.LeashPunishWindow.Current != null);
+
+    public bool WatchCaged => _watching is { } w && (w.Kind == "ht" || _windowed);
+
     public void EndWatch()
     {
         _watching = null;
@@ -300,6 +333,7 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
     {
         EndWatch();
         Controls.Leash.LeashPunishWindow.VideoEnded -= OnWindowVideoEnded;
+        Controls.Leash.LeashPunishWindow.PlaybackFailed -= OnWindowPlaybackFailed;
         try
         {
             if (_hooked && App.Bubbles != null) App.Bubbles.OnBubblePopped -= OnPopped;

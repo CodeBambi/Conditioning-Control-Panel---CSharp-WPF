@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -17,6 +18,11 @@ namespace ConditioningControlPanel
     /// from the gate runs the real panic ladder and stands the gate back for ten minutes. Also
     /// wires the app-wide reactions (<see cref="LeashSurfaces"/>): the ask card, the snap, the tug
     /// wobble. The launcher's game tiles open the gate first (LauncherHost).
+    ///
+    /// <para>Safety pass (2026-09-28): a panic press stops ANY running gate task (the runner parks
+    /// with its progress, the lock card / video goes, the gate stands back ten minutes, nothing
+    /// reopens by itself); a task whose activity stopped, or whose video will not play, sends the
+    /// gate back with the task still pending and says why.</para>
     /// </summary>
     public partial class MainWindow
     {
@@ -142,12 +148,14 @@ namespace ConditioningControlPanel
             {
                 _leashRunner.Progress -= OnLeashProgress;
                 _leashRunner.Completed -= OnLeashCompleted;
+                _leashRunner.Stopped -= OnLeashStopped;
             }
             _leashRunner = next;
             if (_leashRunner != null)
             {
                 _leashRunner.Progress += OnLeashProgress;
                 _leashRunner.Completed += OnLeashCompleted;
+                _leashRunner.Stopped += OnLeashStopped;
             }
         }
 
@@ -159,7 +167,8 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("Leash task start failed: {E}", ex.Message); }
             if (!started)
             {
-                App.Notifications?.Show(Loc.Get("leash_gate_cannot_start"), NotificationType.Warning);
+                var noPhrases = p.Kind == PunishKind.Lines && !AppLeashTaskHost.HasEnabledPhrase(App.Settings?.Current?.LockCardPhrases);
+                App.Notifications?.Show(Loc.Get(noPhrases ? "leash_stop_no_phrases" : "leash_gate_cannot_start"), NotificationType.Warning);
                 return;
             }
             App.Logger?.Information("Leash: task {Kind} x{Size} started", p.Kind, p.Size);
@@ -186,6 +195,28 @@ namespace ConditioningControlPanel
             finally { CheckLeashGate(); }
         }
 
+        /// <summary>The runner went idle by itself: say why, and let the gate come back with the
+        /// task still pending.</summary>
+        private void OnLeashStopped(LeashTaskStopped s)
+        {
+            try
+            {
+                App.Logger?.Information("Leash: task {Id} stopped ({Reason})", s.Id, s.Reason);
+                _leashGate?.StopRunning();
+                var svc = LeashLocator.Service();
+                string? holder = null;
+                try { holder = svc?.Snapshot.Me?.Holder.Name; } catch { }
+                PunishKind? kind = null;
+                try { kind = svc?.Snapshot.Me?.Pending.FirstOrDefault(p => p.Pid == s.Id)?.Kind; } catch { }
+
+                if (s.Reason == LeashTaskStop.Unplayable) LeashFx.Denied();
+                var key = LeashUiRules.StopKey(s, kind);
+                App.Notifications?.Show(Loc.GetF(key, holder ?? ""), NotificationType.Info);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Leash stop handling failed: {E}", ex.Message); }
+            finally { CheckLeashGate(); }
+        }
+
         private async System.Threading.Tasks.Task PardonLeashAsync(Punishment p)
         {
             bool ok = false;
@@ -201,7 +232,7 @@ namespace ConditioningControlPanel
         private void PanicFromLeashGate()
         {
             _leashSnoozeUntilUtc = DateTime.UtcNow + LeashUiRules.PanicSnooze;
-            try { _leashRunner?.Cancel(); } catch { }
+            try { _leashRunner?.Park(); } catch { }
             HideLeashGate();
             HandlePanicKeyPress();
         }
@@ -245,14 +276,24 @@ namespace ConditioningControlPanel
             });
         }
 
-        /// <summary>First thing a panic press does: a leash video window closes, the task stops,
-        /// the gate stands back. The punishment itself stays pending.</summary>
+        /// <summary>First thing a panic press (and the blink stop) does while a leash task runs:
+        /// the runner parks with its progress, so nothing it drives comes back by itself (lines
+        /// used to reopen a lock card every 3 s), the video window closes, bubbles the task
+        /// started stop, and the gate stands back ten minutes. The rest of the panic ladder then
+        /// takes down the lock card and the session. The punishment itself stays pending.</summary>
         private void LeashOnPanicPress()
         {
-            if (LeashPunishWindow.Current == null) return;
+            var running = _leashRunner?.IsRunning == true;
+            if (!running && LeashPunishWindow.Current == null) return;
+            // An Escape aimed at closing the Ctrl+K palette is not a panic (the ladder's rung 2).
+            if (SettingsPaletteWindow.IsOpen && !LockCardWindow.IsAnyOpen()
+                && string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)) return;
+            App.Logger?.Information("Leash: panic press stops the running task (kept pending, gate back in {M} min)", LeashUiRules.PanicSnooze.TotalMinutes);
             _leashSnoozeUntilUtc = DateTime.UtcNow + LeashUiRules.PanicSnooze;
-            try { _leashRunner?.Cancel(); } catch { }
+            try { _leashRunner?.Park(); } catch { }
             LeashPunishWindow.CloseNow();
+            _leashGate?.StopRunning();
+            HideLeashGate();
         }
 
         /// <summary>A tug from the holder: the window gives a small wobble (the chain jingle has

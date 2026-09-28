@@ -11,7 +11,11 @@ namespace ConditioningControlPanel.Services.Safety
     /// cuts through Strict Lock and through a disabled panic key ("no escape").</para>
     ///
     /// <para>The rule: the gesture is never more permissive than the panic key. Wherever the user
-    /// (or Lockdown, or a leash holder) has taken the way out away, a blink run is just blinking.</para>
+    /// (or Lockdown) has taken the way out away, a blink run is just blinking.</para>
+    ///
+    /// <para>A leash does NOT take the way out away (owner call, 2026-09-28): panic always works on
+    /// a leashed account, so the blink stop does too, and it stops a running leash task the same
+    /// way a panic press does (parked, still pending, gate back in ten minutes).</para>
     /// </summary>
     internal static class BlinkStopGate
     {
@@ -23,20 +27,17 @@ namespace ConditioningControlPanel.Services.Safety
             BlinkTrainer,
             /// <summary>Lockdown is running: a halt leaves a paused session Lockdown will not resume.</summary>
             Lockdown,
-            /// <summary>On someone's leash: the sub leaves by cutting the leash, not by blinking.</summary>
-            Leashed,
             /// <summary>The panic key is off ("no escape"); the blink stop is a panic press by another name.</summary>
             NoEscape,
             /// <summary>Strict Lock is on: the user promised not to skip, and the halt skipped for them.</summary>
             StrictLock
         }
 
-        internal static Block Check(bool blinkTrainerRunning, bool lockdownActive, bool leashed,
+        internal static Block Check(bool blinkTrainerRunning, bool lockdownActive,
                                     bool panicKeyEnabled, bool strictLockEnabled)
         {
             if (blinkTrainerRunning) return Block.BlinkTrainer;
             if (lockdownActive) return Block.Lockdown;
-            if (leashed) return Block.Leashed;
             if (!panicKeyEnabled) return Block.NoEscape;
             if (strictLockEnabled) return Block.StrictLock;
             return Block.None;

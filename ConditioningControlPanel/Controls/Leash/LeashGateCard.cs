@@ -106,6 +106,16 @@ public sealed class LeashGateCard : Grid
         }
     }
 
+    /// <summary>The runner went idle without finishing: the pips stay, the button is live again.</summary>
+    public void StopRunning()
+    {
+        if (!_running) return;
+        _running = false;
+        Render();
+    }
+
+    internal bool Running => _running;
+
     private StackPanel? _pipRow;
     private Border? _stamp;
 
