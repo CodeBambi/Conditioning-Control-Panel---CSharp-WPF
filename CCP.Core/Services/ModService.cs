@@ -2634,6 +2634,10 @@ namespace ConditioningControlPanel.Services
             var settings = CoreSettings.Current;
             if (settings == null) return;
 
+            // A running session's phrases are in the live pools, so a no-backup fallback (and the
+            // self-heal below) must keep the USER's pools, as SaveCurrentPoolsToSettings does. ONE read (#906).
+            var userPools = CoreSession.UserPhrasePoolsWhileOverriding?.Invoke();
+
             // Restore saved customizations, or fall back to mod defaults
             if (settings.SubliminalPoolByMod?.TryGetValue(modId, out var savedPool) == true)
             {
@@ -2665,8 +2669,9 @@ namespace ConditioningControlPanel.Services
                 // reverting to defaults — discarding loaded customizations here is the bug that
                 // silently reset the user's phrases on the first launch after the backup store
                 // was added. Only fall back to defaults when there is genuinely nothing loaded.
-                settings.SubliminalPool = settings.SubliminalPool is { Count: > 0 }
-                    ? new Dictionary<string, bool>(settings.SubliminalPool)
+                var userSub = userPools?.Subliminal ?? settings.SubliminalPool;
+                settings.SubliminalPool = userSub is { Count: > 0 }
+                    ? new Dictionary<string, bool>(userSub)
                     : new Dictionary<string, bool>(GetDefaultSubliminalPool());
             }
 
@@ -2689,8 +2694,8 @@ namespace ConditioningControlPanel.Services
             var hadLockBackup = settings.LockCardPhrasesByMod?.TryGetValue(modId, out savedLock) == true;
             settings.LockCardPhrases = hadLockBackup && savedLock != null
                 ? new Dictionary<string, bool>(savedLock)
-                : settings.LockCardPhrases is { Count: > 0 }
-                    ? new Dictionary<string, bool>(settings.LockCardPhrases)
+                : (userPools?.LockCard ?? settings.LockCardPhrases) is { Count: > 0 } userLock
+                    ? new Dictionary<string, bool>(userLock)
                     : new Dictionary<string, bool>(GetDefaultLockCardPhrases());
 
             // Make the lock-card pool actually match the active mod: strip phrases that are some
@@ -2724,8 +2729,8 @@ namespace ConditioningControlPanel.Services
             if (settings.BouncingTextPoolByMod?.TryGetValue(modId, out var savedBounce) == true)
                 settings.BouncingTextPool = new Dictionary<string, bool>(savedBounce);
             else
-                settings.BouncingTextPool = settings.BouncingTextPool is { Count: > 0 }
-                    ? new Dictionary<string, bool>(settings.BouncingTextPool)
+                settings.BouncingTextPool = (userPools?.BouncingText ?? settings.BouncingTextPool) is { Count: > 0 } userBounce
+                    ? new Dictionary<string, bool>(userBounce)
                     : new Dictionary<string, bool>(GetDefaultBouncingTextPool());
 
             // Self-heal: capture any pool that had no per-mod backup (upgrade / cloud restore)

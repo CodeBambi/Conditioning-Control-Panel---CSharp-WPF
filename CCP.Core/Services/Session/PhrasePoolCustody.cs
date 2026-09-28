@@ -173,7 +173,8 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// After a mod switch restored the incoming mod's pools: re-base each user snapshot onto them
-        /// (D1 fix; WPF kept the outgoing mod's snapshot), then re-assert only the prescribed pools.
+        /// (D1 fix; WPF kept the outgoing mod's snapshot), then re-assert only the prescribed pools. Always
+        /// safe: with no per-mod backup, ModService falls back to the user's pools, not the session's (D1a).
         /// Runs inside ModService.ActivateMod's mirror suppression, so these assignments are not user edits.
         /// </summary>
         public void Reapply()

@@ -134,12 +134,18 @@ public sealed class PhrasePoolCustodyTests : IDisposable
 
     private const string A = BuiltInMods.BambiSleepId, B = BuiltInMods.SissyHypnoId;
 
-    private ModService Launch(bool freshProfile = true)
+    private ModService Launch(bool freshProfile = true, bool backupB = true)
     {
         Directory.CreateDirectory(CorePaths.UserData);
         if (freshProfile)
         {
-            JObject Pools(string p) => new() { [A] = JObject.FromObject(D("A" + p)), [B] = JObject.FromObject(D("B" + p)) };
+            if (_svc != null) { _svc.SaveImmediate(); _svc.SealForReset(); }
+            JObject Pools(string p)
+            {
+                var o = new JObject { [A] = JObject.FromObject(D("A" + p)) };
+                if (backupB) o[B] = JObject.FromObject(D("B" + p));
+                return o;
+            }
             File.WriteAllText(Path.Combine(CorePaths.UserData, "settings.json"), new JObject
             {
                 ["ActiveModId"] = A,
@@ -214,6 +220,8 @@ public sealed class PhrasePoolCustodyTests : IDisposable
         AllMods(A, S);
     }
 
+    /// <summary>Guards the D1 pair: the Reapply re-base and the reconcile-after-all-pools in Restore. Either
+    /// alone makes it pass, so it fails only when both are reverted (WPF's behaviour); no isolated test needed.</summary>
     [Fact]
     public void ModSwitch_End_AllThreePoolsAreIncomingMods()
     {
@@ -258,5 +266,38 @@ public sealed class PhrasePoolCustodyTests : IDisposable
         IsMods(A, S.SubliminalPool, "sub");
         IsMods(A, S.BouncingTextPool, "bounce");
         IsMods(A, S.LockCardPhrases, "lock");
+    }
+
+    /// <summary>D1a: no ByMod[B], so RestorePoolsFromSettings falls back to (and self-heals ByMod[B] from)
+    /// the flat pools - which mid-session are the session's. It must take the user's instead: ByMod[B]
+    /// comes out exactly as the same switch with no session running.</summary>
+    [Fact]
+    public void ModSwitch_ToModWithoutBackup_BackupIsUserPools()
+    {
+        string BackupB() => JsonConvert.SerializeObject(new { a = S.SubliminalPoolByMod![B], b = S.BouncingTextPoolByMod![B], c = S.LockCardPhrasesByMod![B] });
+
+        string Flat() => JsonConvert.SerializeObject(new { S.SubliminalPool, S.BouncingTextPool, S.LockCardPhrases });
+
+        var reference = Launch(backupB: false);
+        reference.ActivateMod(B);
+        var noSession = BackupB();
+        reference.ReapplyActiveModPools();
+        var noSessionFlat = Flat();
+
+        var mods = Launch(backupB: false);
+        var c = Start();
+        var prescribed = (new Dictionary<string, bool>(S.SubliminalPool), new Dictionary<string, bool>(S.BouncingTextPool), new Dictionary<string, bool>(S.LockCardPhrases));
+        mods.ActivateMod(B);
+        Assert.Equal(noSession, BackupB());
+        Assert.Equal(prescribed.Item1, S.SubliminalPool);
+        Assert.Equal(prescribed.Item2, S.BouncingTextPool);
+        Assert.Equal(prescribed.Item3, S.LockCardPhrases);
+
+        End(c);
+        Assert.Equal(noSessionFlat, Flat()); // what the end reconcile gives with no session
+        Assert.True(S.SubliminalPool["Asub"]);
+        mods.ActivateMod(A);
+        foreach (var pool in new[] { S.SubliminalPoolByMod![B], S.BouncingTextPoolByMod![B], S.LockCardPhrasesByMod![B] })
+            Assert.DoesNotContain(pool.Keys, k => k.StartsWith("zz"));
     }
 }
