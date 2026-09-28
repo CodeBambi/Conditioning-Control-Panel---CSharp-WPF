@@ -296,7 +296,8 @@ public class PatreonReconnectRuleTests
     [Fact]
     public void ThePatreonService_KeepsTheFlag()
     {
-        var source = ReadSource("Services", "Account", "PatreonService.cs");
+        // The lifecycle moved to Core (ProviderSubscription); PatreonService delegates to it.
+        var source = SourceRoots.ReadProductFile("Services", "Account", "ProviderSubscription.cs");
 
         Assert.Contains("public bool GrantLooksDead { get; private set; }", source, StringComparison.Ordinal);
         Assert.Contains("PatreonGrantHealth.Classify", source, StringComparison.Ordinal);

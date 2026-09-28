@@ -65,11 +65,22 @@ public sealed class SecretStoreTests
         finally { Directory.Delete(dir, true); }
     }
 
+    /// <summary>TestUserDataProfile sets CCP_USERDATA_DIR before this loads, as kc and CI sandboxes do.</summary>
+    [Fact]
+    public void ASandboxedProfileIsMemoryOnly()
+    {
+        Assert.True(SecretStore.Sandboxed);   // first: a broken flag must fail before anything reaches a keyring
+        SecretStore.Store("sandbox_probe", "v");
+        Assert.Equal("v", SecretStore.Retrieve("sandbox_probe"));
+        Assert.True(SecretStore.NotRemembered);
+    }
+
     [Fact]
     public void LibsecretRoundTrip()
     {
         if (Environment.GetEnvironmentVariable("CCP_SECRETS_ROUNDTRIP") != "1")
             Assert.Skip("Container-only (scripts/secrets-roundtrip.sh): never the user's keyring.");
+        SecretStore.Sandboxed = false;   // the test profile sets CCP_USERDATA_DIR; this run owns its keyring
 
         SecretStore.Store("patreon_auth", Json);
         Assert.Equal(Json, Libsecret.Lookup("patreon_auth"));   // in the keyring, not just the cache
@@ -90,6 +101,7 @@ public sealed class SecretStoreTests
     {
         if (Environment.GetEnvironmentVariable("CCP_SECRETS_NOBUS") != "1")
             Assert.Skip("Run by scripts/secrets-roundtrip.sh with DBUS_SESSION_BUS_ADDRESS pointing at nothing.");
+        SecretStore.Sandboxed = false;
 
         var home = Environment.GetEnvironmentVariable("HOME")!;
         string[] Files() => new[] { home, CorePaths.UserData }.Where(Directory.Exists)

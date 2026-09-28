@@ -1,11 +1,6 @@
 using System;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
@@ -13,292 +8,82 @@ using ConditioningControlPanel.Models;
 namespace ConditioningControlPanel.Services
 {
     /// <summary>
-    /// Handles Patreon OAuth authentication and subscription validation
+    /// Patreon for the WPF head: the OAuth browser flow and the display-name calls. The token
+    /// lifecycle (exchange, refresh, validate, tier, whitelist, cache, grace, GrantLooksDead) is
+    /// Core's <see cref="ProviderSubscription"/>, shared with every head; tokens stay in WPF's own
+    /// SecureTokenStorage files, reached through CoreSecrets.
     /// </summary>
     public class PatreonService : IDisposable
     {
-        private readonly SecureTokenStorage _tokenStorage;
-        private readonly HttpClient _httpClient;
+        private readonly ProviderSubscription _core = new("patreon")
+        {
+            PeerDisplayName = () => App.Discord?.CustomDisplayName
+        };
         private LoopbackOAuth? _callbackListener;
         private CancellationTokenSource? _oauthCts;
         private bool _disposed;
 
-        // Configuration - update these with your actual proxy URL
-        private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
+        private const string ProxyBaseUrl = ProviderSubscription.ProxyBaseUrl;
         private const int LocalCallbackPort = 47832;
-        private const int CacheHours = 24;
         private const int OAuthTimeoutMinutes = 5;
-        // Offline grace window. ONE constant for both tiers on purpose: a Lab window that outlived
-        // the premium one would let a lapsed tier-2 keep the Lab after losing everything else.
-        private const int GraceDays = 14;
 
-        // Server-side whitelist status (fetched from proxy)
-        private bool _isWhitelisted;
+        public PatreonService() => _core.TierChanged += (_, tier) => TierChanged?.Invoke(this, tier);
 
-        /// <summary>
-        /// Fired when the Patreon tier changes
-        /// </summary>
+        /// <summary>The shared lifecycle behind this service (read by the SubscribeStar-folding gates).</summary>
+        public ProviderSubscription Core => _core;
+
         public event EventHandler<PatreonTier>? TierChanged;
-
-        /// <summary>
-        /// Fired when authentication fails
-        /// </summary>
         public event EventHandler<string>? AuthenticationFailed;
 
-        /// <summary>
-        /// Current subscription tier
-        /// </summary>
-        public PatreonTier CurrentTier { get; private set; } = PatreonTier.None;
+        public PatreonTier CurrentTier => _core.CurrentTier;
+        public bool IsAuthenticated => _core.IsAuthenticated;
+        /// <summary>See <see cref="ProviderSubscription.GrantLooksDead"/>. Read by PatreonReconnectRule only.</summary>
+        public bool GrantLooksDead => _core.GrantLooksDead;
+        public bool IsActivePatron => _core.IsActive;
+        public bool IsVerifying => _core.IsVerifying;
+        public string? DisplayName { get => _core.DisplayName; set => _core.DisplayName = value; }
+        public string? UnifiedUserId { get => _core.UnifiedUserId; set => _core.UnifiedUserId = value; }
+        public bool NeedsDisplayNameMigration { get => _core.NeedsDisplayNameMigration; private set => _core.NeedsDisplayNameMigration = value; }
+        public bool NeedsRegistration => _core.NeedsRegistration;
 
-        /// <summary>
-        /// Whether the user is authenticated with Patreon (has valid tokens)
-        /// </summary>
-        public bool IsAuthenticated => _tokenStorage.HasValidTokens();
-
-        /// <summary>
-        /// This launch has seen the proxy REFUSE to refresh the stored grant, so the tokens on
-        /// disk are paper: <see cref="IsAuthenticated"/> still says yes (the .dat holds a non-empty
-        /// access token and #585 deliberately keeps it through a failed refresh), but nothing in it
-        /// will ever reach Patreon again.
-        ///
-        /// <para>In memory only, by design. It is re-derived on every launch from a live answer,
-        /// so a grant repaired elsewhere, a revoked-then-re-pledged account, or a wrong guess all
-        /// cost at most one session. Set only on a 4xx refusal (see
-        /// <see cref="PatreonGrantHealth"/>) - never on a timeout or a 5xx - and cleared by any
-        /// successful refresh, validate or fresh OAuth exchange.</para>
-        ///
-        /// <para>Read by <see cref="PatreonReconnectRule"/> and by nothing that grants anything:
-        /// this decides whether the user is OFFERED a repair, never what they are entitled to.</para>
-        ///
-        /// <para>Every online launch gets a chance to set it: <see cref="InitializeAsync"/> clears
-        /// the cached state before validating, so the 24h-cache short-circuit at the top of
-        /// <see cref="ValidateSubscriptionAsync"/> cannot skip the refresh on that path. Offline
-        /// mode never validates at all, which is the point of offline mode.</para>
-        /// </summary>
-        public bool GrantLooksDead { get; private set; }
-
-        /// <summary>
-        /// Whether the user is an active paying patron
-        /// </summary>
-        public bool IsActivePatron { get; private set; }
-
-        /// <summary>
-        /// Whether verification is currently in progress
-        /// </summary>
-        public bool IsVerifying { get; private set; }
-
-        /// <summary>
-        /// Custom display name chosen by user on first login
-        /// </summary>
-        public string? DisplayName { get; set; }
-
-        /// <summary>
-        /// Unified user ID from the server (links Patreon and Discord accounts)
-        /// </summary>
-        public string? UnifiedUserId { get; set; }
-
-        /// <summary>
-        /// True if user has a local display name that needs to be synced to server
-        /// </summary>
-        public bool NeedsDisplayNameMigration { get; private set; }
-
-        /// <summary>
-        /// True if user needs to complete registration (choose display name).
-        /// Set by the server when display_name is null/empty.
-        /// </summary>
-        public bool NeedsRegistration { get; private set; }
-
-        /// <summary>
-        /// Whether this is the user's first login (no display name set yet on ANY provider).
-        /// If Discord already has a display name, this returns false to avoid re-prompting.
-        /// </summary>
+        /// <summary>No display name yet on ANY provider (Discord's counts, to avoid re-prompting).</summary>
         public bool IsFirstLogin => IsAuthenticated
             && string.IsNullOrEmpty(DisplayName)
             && string.IsNullOrEmpty(App.Discord?.CustomDisplayName);
 
-        /// <summary>
-        /// Whether the user is whitelisted (gets Tier 1 access regardless of subscription)
-        /// This is now determined by the server-side whitelist
-        /// </summary>
-        public bool IsWhitelisted => _isWhitelisted;
+        public bool IsWhitelisted => _core.IsWhitelisted;
 
-        /// <summary>
-        /// Set whitelist status from external source (e.g. V2 sync response)
-        /// </summary>
         public void SetWhitelistStatus(bool whitelisted, PatreonTier minTier = PatreonTier.Level2)
-        {
-            _isWhitelisted = whitelisted;
-            if (whitelisted && CurrentTier < minTier)
-            {
-                var oldTier = CurrentTier;
-                CurrentTier = minTier;
-                IsActivePatron = true;
-                if (CurrentTier != oldTier)
-                {
-                    TierChanged?.Invoke(this, minTier);
-                }
-            }
-        }
+            => _core.SetWhitelistStatus(whitelisted, minTier);
 
         /// <summary>
-        /// A server-confirmed tier rise that did not come through Patreon OAuth (a site purchase
-        /// read off the heartbeat or a focus refresh, see EntitlementTierSync). The grace stamps are
-        /// already written; this only tells every TierChanged subscriber to repaint. Call on the UI thread.
+        /// A server-confirmed tier rise that did not come through Patreon OAuth (see
+        /// EntitlementTierSync). Only tells every TierChanged subscriber to repaint. UI thread.
         /// </summary>
         public void NotifyEntitlementRaised(PatreonTier tier) => TierChanged?.Invoke(this, tier);
 
-        /// <summary>
-        /// Whether the user has AI access (Tier 1+ OR whitelisted).
-        /// All features are currently Tier 1. Also grants access during the 2-week grace period.
-        /// This is the app's canonical AI gate: SubscribeStar is OR'd in here so either
-        /// provider unlocks features without touching the ~50 call sites that read it.
-        /// </summary>
-        public bool HasAiAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true)
-            || (App.SubscribeStar?.HasAiAccess == true);
+        /// <summary>The canonical AI gate; SubscribeStar and the offline grace are folded in.</summary>
+        public bool HasAiAccess => HasPremiumAccess;
+
+        /// <summary>The canonical premium (tier 1) gate: see <see cref="ProviderSubscription.HasPremiumAccess"/>.</summary>
+        public bool HasPremiumAccess => ProviderSubscription.HasPremiumAccess(_core, App.SubscribeStar?.Core, App.Settings?.Current);
 
         /// <summary>
-        /// Whether the user has any premium feature access (Tier 1+ OR whitelisted OR within 2-week grace period).
-        /// Canonical premium gate; SubscribeStar is OR'd in (see <see cref="HasAiAccess"/>).
+        /// The goon-game HOST bar (tier 2+ or whitelisted, either provider, or the Lab's own 14-day
+        /// grace). Advisory: the server refuses on its own. See <see cref="ProviderSubscription.HasLabAccess"/>.
         /// </summary>
-        public bool HasPremiumAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true)
-            || (App.SubscribeStar?.HasPremiumAccess == true);
+        public bool HasLabAccess => ProviderSubscription.HasLabAccess(_core, App.SubscribeStar?.Core, App.Settings?.Current);
 
-        /// <summary>
-        /// The tier-2 half of the offline grace: its own 14-day stamp
-        /// (<see cref="Models.AppSettings.PatreonLabValidUntil"/>), written only by a validation
-        /// that actually returned Level2. A tier-1 patron therefore never falls through it.
-        ///
-        /// It used to be derived from the persisted PatreonTier AND'd with the premium window,
-        /// which sounded equivalent and was not: PatreonTier is written by the V2 sync, so a
-        /// Patreon-OAuth-only tier 2 (whose settings tier stays 0 until a sync that may never
-        /// happen) got no grace at all, while any path that wrote the tier once handed out Lab for
-        /// as long as premium held. One dedicated timestamp removes both halves of that.
-        /// </summary>
-        private static bool HasCachedLabAccess => App.Settings?.Current?.HasCachedLabAccess == true;
+        /// <summary>False until <see cref="InitializeAsync"/> settled this launch (#1048).</summary>
+        public bool EntitlementResolved => _core.EntitlementResolved;
 
-        /// <summary>
-        /// Whether the user has Lab access: Tier 2+ OR whitelisted.
-        ///
-        /// THIS IS THE GOON GAME **HOST** BAR, and it mirrors the server exactly:
-        /// <c>/v2/goon/invite</c> answers 403 <c>no_host_access</c> below
-        /// <c>computeEffectiveTier(user) &gt;= 2</c>. Joining a duel is free for everyone;
-        /// minting the room is the tier-2 perk. <see cref="HasPremiumAccess"/> is deliberately
-        /// NOT the right gate here — in this codebase "premium" means tier 1.
-        ///
-        /// Whitelist folds to permanent tier 2 on both sides (<see cref="SetWhitelistStatus"/>
-        /// raises CurrentTier to Level2, computeEffectiveTier does the same server-side), so the
-        /// OR is belt-and-braces rather than a second rule. SubscribeStar is OR'd in the same way
-        /// the server folds <c>substar_tier</c>. The plain premium grace cache is still NOT OR'd
-        /// in - it caches a tier-1 entitlement - but <see cref="HasCachedLabAccess"/> gives the
-        /// same 14-day offline window to accounts whose last validated tier was 2, so a supporter
-        /// who goes offline (or logs in with Discord) keeps the Lab for a fortnight the way they
-        /// keep every premium feature. Owner decision, 2026-08-10.
-        ///
-        /// Advisory only — the server refuses on its own, and this exists so the UI can say so
-        /// before the round-trip instead of after it. The grace can therefore say yes where the
-        /// server still says 403 <c>no_host_access</c>; that costs a round-trip, not a leak.
-        /// </summary>
-        public bool HasLabAccess => CurrentTier >= PatreonTier.Level2 || IsWhitelisted
-            || (App.SubscribeStar?.CurrentTier ?? PatreonTier.None) >= PatreonTier.Level2
-            || (App.SubscribeStar?.IsWhitelisted == true)
-            || HasCachedLabAccess;
+        public Task InitializeAsync() => _core.InitializeAsync();
 
-        /// <summary>
-        /// False until <see cref="InitializeAsync"/> has finished deciding this launch's entitlement
-        /// (validated online, or settled from cache/offline mode). Startup order puts MainWindow up
-        /// while validation is still in flight, so before this flips, a false
-        /// <see cref="HasLabAccess"/> means "not known yet", NOT "not entitled".
-        ///
-        /// #1048: the AI-effect-control repair in MainWindow.UpdateUnlockablesVisibility read that
-        /// unresolved false as a lapse and force-cleared + SAVED AllowAiToControlEffects on every
-        /// single launch, so the switch could never survive a restart. Any DESTRUCTIVE entitlement
-        /// repair must wait for this; advisory UI (lockbands, badges) may keep reading the raw
-        /// properties, because a lockband that appears for a second and then goes away costs
-        /// nothing.
-        /// </summary>
-        public bool EntitlementResolved { get; private set; }
+        public Task<PatreonTier> ValidateSubscriptionAsync(bool forceRefresh = false) => _core.ValidateSubscriptionAsync(forceRefresh);
 
-        public PatreonService()
-        {
-            _tokenStorage = new SecureTokenStorage();
-            _httpClient = new HttpClient
-            {
-                BaseAddress = new Uri(ProxyBaseUrl),
-                Timeout = TimeSpan.FromSeconds(30)
-            };
-            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
+        public string? GetAccessToken() => _core.GetAccessToken();
 
-            // Load cached state on startup
-            LoadCachedState();
-        }
-
-        /// <summary>
-        /// Initialize and validate subscription on startup
-        /// </summary>
-        public async Task InitializeAsync()
-        {
-            try
-            {
-                // Skip online validation if offline mode is enabled
-                if (App.Settings?.Current?.OfflineMode == true)
-                {
-                    App.Logger?.Information("Offline mode enabled, using cached Patreon state only");
-                    LoadCachedState();
-                    EntitlementResolved = true;   // cache IS the answer offline (#1048)
-                    return;
-                }
-
-                // Force clear cache for v4.1 to pick up whitelist changes
-                _tokenStorage.ClearCachedState();
-                App.Logger?.Debug("Cleared Patreon cache for fresh validation");
-
-                if (_tokenStorage.HasValidTokens())
-                {
-                    await ValidateSubscriptionAsync();
-                }
-                else
-                {
-                    // No valid tokens - ensure cached premium access is cleared.
-                    if (App.Settings?.Current != null)
-                    {
-                        App.Settings.Current.PatreonTier = 0;
-
-                        // ...but the offline grace stamps are NOT Patreon-OAuth-shaped. A
-                        // Discord-linked or SubscribeStar account has no local Patreon tokens by
-                        // construction, and V2AuthService/SubscribeStarService are the only writers
-                        // of its stamp - so nulling here would wipe the grace window on every
-                        // launch for exactly the population it exists for, synchronously, before
-                        // any of those paths can re-stamp. Leave the stamps to expire on their own
-                        // 14-day window, or to be overwritten by the server's answer; a real logout
-                        // still clears both explicitly.
-                        var hasUnifiedSession =
-                            !string.IsNullOrWhiteSpace(App.Settings.Current.UnifiedId) ||
-                            !string.IsNullOrWhiteSpace(App.Settings.Current.AuthToken);
-                        if (!hasUnifiedSession)
-                        {
-                            App.Settings.Current.PatreonPremiumValidUntil = null;
-                            App.Settings.Current.PatreonLabValidUntil = null;
-                        }
-
-                        App.Logger?.Debug(
-                            "No Patreon tokens found, cleared cached tier (grace stamps kept: {Kept})",
-                            hasUnifiedSession);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Failed to validate Patreon subscription on startup");
-            }
-            finally
-            {
-                // Resolved either way: a validation that THREW leaves the cached/grace state as this
-                // launch's answer, which is still an answer. What must never happen is a destructive
-                // repair firing against the pre-validation blank (#1048).
-                EntitlementResolved = true;
-            }
-        }
+        public void Logout() => _core.Logout();
 
         /// <summary>
         /// Start OAuth2 browser flow
@@ -309,7 +94,7 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                IsVerifying = true;
+                _core.IsVerifying = true;
                 _oauthCts = new CancellationTokenSource();
 
                 // Local callback listener + CSRF state (Core LoopbackOAuth, shared with every head)
@@ -345,7 +130,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Exchange code for tokens
-                await ExchangeCodeForTokensAsync(code, callbackUrl);
+                await _core.ExchangeCodeAsync(new { code, redirect_uri = callbackUrl });
 
                 // Validate subscription immediately
                 await ValidateSubscriptionAsync(forceRefresh: true);
@@ -365,7 +150,7 @@ namespace ConditioningControlPanel.Services
             }
             finally
             {
-                IsVerifying = false;
+                _core.IsVerifying = false;
                 StopCallbackListener();
             }
         }
@@ -387,397 +172,6 @@ namespace ConditioningControlPanel.Services
                 _callbackListener = null;
             }
             catch { }
-        }
-
-        private async Task ExchangeCodeForTokensAsync(string code, string redirectUri)
-        {
-            var tokenResponse = await LoopbackOAuth.ExchangeAsync(_httpClient, "/patreon/token", new
-            {
-                code,
-                redirect_uri = redirectUri
-            });
-
-            // Store tokens securely
-            _tokenStorage.StoreTokens(
-                tokenResponse.AccessToken,
-                tokenResponse.RefreshToken,
-                DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn));
-
-            // A brand new grant. Whatever the old one did, this is the repair.
-            GrantLooksDead = false;
-
-            App.Logger?.Information("Patreon tokens stored successfully");
-        }
-
-        /// <summary>
-        /// Validate subscription status with the server
-        /// </summary>
-        public async Task<PatreonTier> ValidateSubscriptionAsync(bool forceRefresh = false)
-        {
-            if (IsVerifying && !forceRefresh) return CurrentTier;
-
-            // Skip online validation if offline mode is enabled
-            if (App.Settings?.Current?.OfflineMode == true)
-            {
-                App.Logger?.Debug("Offline mode enabled, skipping Patreon validation");
-                return CurrentTier;
-            }
-
-            try
-            {
-                // Check cache first (unless forcing refresh)
-                if (!forceRefresh)
-                {
-                    var cachedState = _tokenStorage.RetrieveCachedState();
-                    if (cachedState != null && !cachedState.IsExpired)
-                    {
-                        // Use cached whitelist status from server
-                        _isWhitelisted = cachedState.IsWhitelisted;
-
-                        // If whitelisted, ensure they get Level1 access even if cached tier is None
-                        var cachedEffectiveTier = cachedState.IsWhitelisted && cachedState.Tier == PatreonTier.None
-                            ? PatreonTier.Level2
-                            : cachedState.Tier;
-                        var cachedEffectivelyActive = cachedState.IsActive || cachedState.IsWhitelisted;
-
-                        UpdateTier(cachedEffectiveTier, cachedEffectivelyActive, cachedState.DisplayName);
-                        return CurrentTier;
-                    }
-                }
-
-                // Get tokens
-                var tokens = _tokenStorage.RetrieveTokens();
-                if (tokens == null)
-                {
-                    UpdateTier(PatreonTier.None, false);
-                    return PatreonTier.None;
-                }
-
-                // Check if token expired and needs refresh
-                if (tokens.IsExpired)
-                {
-                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken, tokens.ExpiresAt);
-                    if (!refreshed)
-                    {
-                        // A refresh failure here is usually transient (proxy/network hiccup, not a
-                        // revoked grant), so DON'T hard-drop a paying subscriber to None (#585 - lost
-                        // premium while still subscribed). Fall back to the cached tier exactly like
-                        // the HTTP-failure path below; the 24h cache + 2-week premium grace still
-                        // time-box this, and a genuinely dead grant lapses once the grace expires.
-                        // Note the 401 path further down DOES clear tokens on a hard-invalid token.
-                        App.Logger?.Warning("Patreon token refresh failed (expired access token) - keeping cached tier {Tier}", CurrentTier);
-                        return CurrentTier;
-                    }
-                    tokens = _tokenStorage.RetrieveTokens();
-                    if (tokens == null)
-                    {
-                        // Stored and then gone: whatever IsAuthenticated is about to claim, there
-                        // is nothing here to talk to Patreon with, so offer the repair.
-                        GrantLooksDead = true;
-                        App.Logger?.Warning("Patreon tokens missing after successful refresh - keeping cached tier {Tier}", CurrentTier);
-                        return CurrentTier;
-                    }
-                }
-
-                IsVerifying = true;
-
-                // Validate via hosted proxy. Use a per-request message so the
-                // CCP auth token rides along without polluting DefaultRequestHeaders
-                // (a duplicate X-Auth-Token would otherwise accumulate across calls).
-                // The server uses this token to detect a divergent/mismatched token
-                // and heal it in the response (BUG-7DCJHDP3JZ).
-                using var validateRequest = new HttpRequestMessage(HttpMethod.Get, "/patreon/validate");
-                var prizesFor = App.Settings?.Current?.UnifiedId;
-                validateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
-                var currentAuthToken = App.Settings?.Current?.AuthToken;
-                if (!string.IsNullOrEmpty(currentAuthToken))
-                {
-                    validateRequest.Headers.Add("X-Auth-Token", currentAuthToken);
-                }
-
-                var response = await _httpClient.SendAsync(validateRequest);
-
-                // Contract D: the account this token belongs to is a merge tombstone. The swap
-                // re-signs in on the canonical (detached); keep the cached tier meanwhile.
-                if (await MergedAccountRecovery.TryHandleAsync(response)) return CurrentTier;
-
-                if (response.StatusCode == HttpStatusCode.Unauthorized)
-                {
-                    // Token may be invalid, try refresh
-                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken, tokens.ExpiresAt);
-                    if (refreshed)
-                    {
-                        return await ValidateSubscriptionAsync(forceRefresh: true);
-                    }
-                    else
-                    {
-                        _tokenStorage.ClearTokens();
-                        UpdateTier(PatreonTier.None, false);
-                        return PatreonTier.None;
-                    }
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    App.Logger?.Warning("Patreon validation failed with status {Status}", response.StatusCode);
-                    // Use cached tier if available, otherwise fail closed
-                    return CurrentTier;
-                }
-
-                var subscription = await response.Content.ReadFromJsonAsync<PatreonSubscriptionResponse>();
-
-                if (subscription == null || !string.IsNullOrEmpty(subscription.Error))
-                {
-                    App.Logger?.Warning("Patreon validation error: {Error}", subscription?.Error);
-                    return CurrentTier;
-                }
-
-                // The stored grant just reached Patreon and came back with an answer. Whatever a
-                // previous refusal made us think, it is alive.
-                GrantLooksDead = false;
-
-                ProfileSyncService.ApplyValidatePrizes(prizesFor, subscription.UnifiedId, subscription.Prizes, "Patreon validate");
-
-                // Server healed a divergent auth token — store it immediately so
-                // subsequent authed requests stop 401ing. Only present on mismatch;
-                // never cached, so a stale replay can't re-break auth (BUG-7DCJHDP3JZ).
-                //
-                // BUT only when the server resolved this Patreon account to the SAME unified
-                // record this client is operating as. On a duplicate-identity account (one
-                // record per provider, never merged) the heal is keyed to the patreon_index
-                // record — a DIFFERENT record than Settings.UnifiedId — and adopting its
-                // token breaks every request that sends our unified_id in the body until the
-                // OTHER provider's validate mints it back, flip-flopping forever. See the
-                // twin guard in DiscordService.ValidateAndRefreshUserAsync for the full
-                // mechanism; such an account pair needs a server-side merge.
-                if (!string.IsNullOrEmpty(subscription.AuthToken) && App.Settings?.Current != null)
-                {
-                    var localUnifiedId = App.Settings.Current.UnifiedId;
-                    if (!string.IsNullOrEmpty(localUnifiedId) &&
-                        !string.IsNullOrEmpty(subscription.UnifiedId) &&
-                        !string.Equals(subscription.UnifiedId, localUnifiedId, StringComparison.Ordinal))
-                    {
-                        App.Logger?.Warning(
-                            "[Auth] Patreon validate resolved to unified account {ServerId} but this session is {LocalId} — " +
-                            "REFUSING the re-issued auth token (it belongs to the other record). " +
-                            "This account pair likely needs a server-side merge.",
-                            subscription.UnifiedId, localUnifiedId);
-                    }
-                    else
-                    {
-                        App.Settings.Current.AuthToken = subscription.AuthToken;
-                        App.Settings.Save();
-                        App.Logger?.Information("[Auth] Stored re-issued auth token from Patreon validate (token recovery)");
-                    }
-                }
-
-                // Get whitelist status from server response
-                var userIsWhitelisted = subscription.IsWhitelisted;
-                _isWhitelisted = userIsWhitelisted;
-
-                // Check if user needs to complete registration (choose display name)
-                NeedsRegistration = subscription.NeedsRegistration;
-
-                App.Logger?.Debug("Server whitelist check: Whitelisted={Whitelisted}, NeedsRegistration={NeedsReg}",
-                    userIsWhitelisted, subscription.NeedsRegistration);
-
-                // Set unified user ID for cross-provider account linking
-                // Only set App.UnifiedUserId if not already set by another provider (to allow conflict detection)
-                if (!string.IsNullOrEmpty(subscription.UnifiedId))
-                {
-                    UnifiedUserId = subscription.UnifiedId;
-                    // Don't overwrite App.UnifiedUserId if another provider already set it
-                    // AccountService.HandlePostAuthAsync will handle conflict detection
-                    if (string.IsNullOrEmpty(App.UnifiedUserId))
-                    {
-                        App.UnifiedUserId = subscription.UnifiedId;
-                        App.Logger?.Information("Set UnifiedUserId from Patreon validate: {UnifiedId}", subscription.UnifiedId);
-                    }
-                    else
-                    {
-                        App.Logger?.Information("Patreon has UnifiedUserId {PatreonId} but App already has {AppId} - deferring to AccountService for conflict check",
-                            subscription.UnifiedId, App.UnifiedUserId);
-                    }
-                }
-
-                // Update state and cache
-                // If active but tier is 0, default to Level1 (proxy may not return tier correctly)
-                // Whitelisted users get Level2 access
-                var effectivelyActive = subscription.IsActive || userIsWhitelisted;
-                var newTier = effectivelyActive
-                    ? (subscription.Tier > PatreonTier.None ? subscription.Tier : (userIsWhitelisted ? PatreonTier.Level2 : PatreonTier.Level1))
-                    : PatreonTier.None;
-                UpdateTier(newTier, effectivelyActive);
-
-                // Use DisplayName from server if available, otherwise preserve existing local one
-                // Also check Discord as a fallback (for linked accounts)
-                var existingCache = _tokenStorage.RetrieveCachedState();
-                var serverDisplayName = subscription.DisplayName;
-                var localDisplayName = existingCache?.DisplayName ?? DisplayName;
-                var discordDisplayName = App.Discord?.CustomDisplayName;
-
-                // Priority: server > local > Discord
-                var effectiveDisplayName = !string.IsNullOrEmpty(serverDisplayName)
-                    ? serverDisplayName
-                    : !string.IsNullOrEmpty(localDisplayName)
-                        ? localDisplayName
-                        : discordDisplayName;
-
-                // Check if we need to migrate a local name to server
-                // This happens when user has a local name but server doesn't have it yet
-                NeedsDisplayNameMigration = !string.IsNullOrEmpty(localDisplayName)
-                    && string.IsNullOrEmpty(serverDisplayName);
-
-                // Update the DisplayName property
-                if (!string.IsNullOrEmpty(serverDisplayName))
-                {
-                    DisplayName = serverDisplayName;
-                    NeedsDisplayNameMigration = false; // Server already has it
-                }
-                else if (!string.IsNullOrEmpty(discordDisplayName) && string.IsNullOrEmpty(DisplayName))
-                {
-                    // Adopt Discord's display name if Patreon doesn't have one
-                    DisplayName = discordDisplayName;
-                    App.Logger?.Information("Adopted display name from Discord ({Chars} chars)", DisplayName.Length);
-                }
-
-                // Cache result for 24 hours (use effective values for whitelisted users)
-                _tokenStorage.StoreCachedState(new PatreonCachedState
-                {
-                    Tier = newTier,
-                    IsActive = effectivelyActive,
-                    LastVerified = DateTime.UtcNow,
-                    CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours),
-                    DisplayName = effectiveDisplayName,
-                    IsWhitelisted = userIsWhitelisted,
-                    UnifiedId = subscription.UnifiedId
-                });
-
-                // If user has premium access, extend the 2-week grace period
-                // This allows users to log in with Discord and still keep premium features
-                if (newTier >= PatreonTier.Level1 || userIsWhitelisted)
-                {
-                    if (App.Settings?.Current != null)
-                    {
-                        App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(GraceDays);
-                        App.Logger?.Information("Extended premium access grace period to {Date}", App.Settings.Current.PatreonPremiumValidUntil);
-
-                        // Tier-2 half of the same grace. Stamped from the tier this validation just
-                        // returned - never from the persisted PatreonTier, which is exactly the
-                        // never-expiring read HasCachedLabAccess was rewritten to stop trusting.
-                        // A tier-1 patron falls through to the else and any stale Lab window dies.
-                        if (newTier >= PatreonTier.Level2)
-                        {
-                            App.Settings.Current.PatreonLabValidUntil = DateTime.UtcNow.AddDays(GraceDays);
-                            App.Logger?.Information("Extended Lab (tier 2) grace period to {Date}", App.Settings.Current.PatreonLabValidUntil);
-                        }
-                        else
-                        {
-                            App.Settings.Current.PatreonLabValidUntil = null;
-                        }
-                    }
-                }
-
-                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Whitelisted={Whitelisted}",
-                    newTier, subscription.IsActive, effectivelyActive, userIsWhitelisted);
-
-                return newTier;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Failed to validate Patreon subscription");
-                // Fail closed - return current tier (which may be cached or None)
-                return CurrentTier;
-            }
-            finally
-            {
-                IsVerifying = false;
-            }
-        }
-
-        /// <param name="accessTokenExpiresAtUtc">
-        /// When the access token this refresh is replacing expired. The proxy answers 500 for a
-        /// revoked grant as well as for its own trouble (see <see cref="PatreonGrantHealth"/>), so
-        /// the age of that expiry is the only thing that tells the two apart.
-        /// </param>
-        private async Task<bool> RefreshTokensAsync(string refreshToken, DateTime? accessTokenExpiresAtUtc)
-        {
-            try
-            {
-                var response = await _httpClient.PostAsJsonAsync("/patreon/refresh", new
-                {
-                    refresh_token = refreshToken
-                });
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    App.Logger?.Warning("Token refresh failed with status {Status}", response.StatusCode);
-                    return NoteRefresh(PatreonGrantHealth.Classify(
-                        response.StatusCode, null, threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow));
-                }
-
-                var tokenResponse = await response.Content.ReadFromJsonAsync<PatreonTokenResponse>();
-
-                if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
-                {
-                    App.Logger?.Warning("Token refresh error: {Error}", tokenResponse?.ErrorDescription);
-                    // A missing body is a malformed answer, not a verdict; an OAuth error field is
-                    // the refusal wearing a 200.
-                    return NoteRefresh(tokenResponse == null
-                        ? PatreonRefreshOutcome.Unavailable
-                        : PatreonGrantHealth.Classify(response.StatusCode, tokenResponse.Error,
-                            threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow));
-                }
-
-                _tokenStorage.StoreTokens(
-                    tokenResponse.AccessToken,
-                    tokenResponse.RefreshToken,
-                    DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn));
-
-                App.Logger?.Information("Patreon tokens refreshed successfully");
-                return NoteRefresh(PatreonRefreshOutcome.Refreshed);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Failed to refresh Patreon tokens");
-                return NoteRefresh(PatreonGrantHealth.Classify(
-                    null, null, threw: true, accessTokenExpiresAtUtc, DateTime.UtcNow));
-            }
-        }
-
-        /// <summary>
-        /// Records what a refresh attempt said about the grant and reports whether it worked.
-        /// Only a refusal raises <see cref="GrantLooksDead"/>; a success lowers it; an outage
-        /// leaves it exactly as it was, so a flaky connection can neither raise nor clear it.
-        /// </summary>
-        private bool NoteRefresh(PatreonRefreshOutcome outcome)
-        {
-            if (outcome == PatreonRefreshOutcome.Refreshed) GrantLooksDead = false;
-            else if (PatreonGrantHealth.MarksGrantDead(outcome)) GrantLooksDead = true;
-            return outcome == PatreonRefreshOutcome.Refreshed;
-        }
-
-        private void UpdateTier(PatreonTier tier, bool isActive, string? displayName = null)
-        {
-            var tierChanged = CurrentTier != tier;
-            CurrentTier = tier;
-            IsActivePatron = isActive;
-            // Only update DisplayName if provided (preserve existing)
-            if (displayName != null)
-            {
-                DisplayName = displayName;
-            }
-
-            if (tierChanged)
-            {
-                TierChanged?.Invoke(this, tier);
-            }
-
-            // Log whitelist status
-            if (IsWhitelisted)
-            {
-                App.Logger?.Information("User is whitelisted - granting premium access");
-            }
         }
 
         /// <summary>
@@ -805,11 +199,11 @@ namespace ConditioningControlPanel.Services
             DisplayName = trimmedName;
 
             // Update the cached state with the new display name
-            var cachedState = _tokenStorage.RetrieveCachedState();
+            var cachedState = _core.RetrieveCachedState();
             if (cachedState != null)
             {
                 cachedState.DisplayName = DisplayName;
-                _tokenStorage.StoreCachedState(cachedState);
+                _core.StoreCachedState(cachedState);
             }
 
             // Save to server so it syncs across devices
@@ -840,11 +234,11 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Warning("Migration failed - display name is already taken ({Chars} chars)", DisplayName?.Length ?? 0);
                 // Clear the local name so user can pick a new one
                 DisplayName = null;
-                var cachedState = _tokenStorage.RetrieveCachedState();
+                var cachedState = _core.RetrieveCachedState();
                 if (cachedState != null)
                 {
                     cachedState.DisplayName = null;
-                    _tokenStorage.StoreCachedState(cachedState);
+                    _core.StoreCachedState(cachedState);
                 }
                 NeedsDisplayNameMigration = false;
                 return (false, checkResult.Error ?? "This name is already taken by another user. Please choose a different name.");
@@ -864,16 +258,16 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var tokens = _tokenStorage.RetrieveTokens();
+                var tokens = _core.RetrieveTokens();
                 if (tokens == null)
                 {
                     return (true, null); // Can't check, allow optimistically
                 }
 
-                _httpClient.DefaultRequestHeaders.Authorization =
+                _core.Http.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
 
-                var response = await _httpClient.GetAsync($"/user/check-display-name?name={Uri.EscapeDataString(displayName)}");
+                var response = await _core.Http.GetAsync($"/user/check-display-name?name={Uri.EscapeDataString(displayName)}");
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -904,17 +298,17 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var tokens = _tokenStorage.RetrieveTokens();
+                var tokens = _core.RetrieveTokens();
                 if (tokens == null)
                 {
                     App.Logger?.Warning("Cannot save display name: no tokens available");
                     return;
                 }
 
-                _httpClient.DefaultRequestHeaders.Authorization =
+                _core.Http.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
 
-                var response = await _httpClient.PostAsJsonAsync("/user/set-display-name", new
+                var response = await _core.Http.PostAsJsonAsync("/user/set-display-name", new
                 {
                     display_name = displayName
                 });
@@ -935,75 +329,6 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void LoadCachedState()
-        {
-            try
-            {
-                var cachedState = _tokenStorage.RetrieveCachedState();
-                if (cachedState != null && !cachedState.IsExpired && _tokenStorage.HasValidTokens())
-                {
-                    // Load whitelist status from cache
-                    _isWhitelisted = cachedState.IsWhitelisted;
-
-                    // If active or whitelisted but tier is 0, default to Level2 for whitelisted, Level1 for active
-                    var effectivelyActive = cachedState.IsActive || cachedState.IsWhitelisted;
-                    CurrentTier = effectivelyActive && cachedState.Tier == PatreonTier.None
-                        ? (cachedState.IsWhitelisted ? PatreonTier.Level2 : PatreonTier.Level1)
-                        : cachedState.Tier;
-                    IsActivePatron = effectivelyActive;
-                    DisplayName = cachedState.DisplayName;
-
-                    // Restore unified user ID (don't overwrite if another provider already set it)
-                    if (!string.IsNullOrEmpty(cachedState.UnifiedId))
-                    {
-                        UnifiedUserId = cachedState.UnifiedId;
-                        if (string.IsNullOrEmpty(App.UnifiedUserId))
-                        {
-                            App.UnifiedUserId = cachedState.UnifiedId;
-                            App.Logger?.Information("Restored UnifiedUserId from cache: {UnifiedId}", cachedState.UnifiedId);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Failed to load cached Patreon state");
-            }
-        }
-
-        /// <summary>
-        /// Get access token for API calls (used by AiService)
-        /// </summary>
-        public string? GetAccessToken()
-        {
-            var tokens = _tokenStorage.RetrieveTokens();
-            return tokens?.AccessToken;
-        }
-
-        /// <summary>
-        /// Logout and clear all stored data
-        /// </summary>
-        public void Logout()
-        {
-            _tokenStorage.ClearTokens();
-            _tokenStorage.ClearCachedState(); // Clear cached state including DisplayName
-            DisplayName = null; // Explicitly clear DisplayName
-            NeedsDisplayNameMigration = false;
-            _isWhitelisted = false; // Clear whitelist status
-            GrantLooksDead = false; // Nothing to be dead: the tokens are gone with it
-
-            // Clear all cached premium access - user explicitly logged out
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.PatreonPremiumValidUntil = null;
-                App.Settings.Current.PatreonLabValidUntil = null;
-                App.Settings.Current.PatreonTier = 0; // Clear cached tier
-                App.Settings.Save(); // Force save immediately
-            }
-
-            UpdateTier(PatreonTier.None, false);
-            App.Logger?.Information("Patreon logout completed, all premium access cleared");
-        }
 
         public void Dispose()
         {
@@ -1013,7 +338,7 @@ namespace ConditioningControlPanel.Services
             _oauthCts?.Cancel();
             _oauthCts?.Dispose();
             StopCallbackListener();
-            _httpClient.Dispose();
+            _core.Dispose();
         }
     }
 }

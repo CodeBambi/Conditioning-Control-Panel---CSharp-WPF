@@ -30,6 +30,9 @@ internal static class SecretStore
     /// <summary>True once a value was kept in memory only. Read it when attaching the hook late.</summary>
     internal static volatile bool NotRemembered;
 
+    /// <summary>A CCP_USERDATA_DIR sandbox (tests, kc) does not isolate the keyring, so it never touches it: memory only.</summary>
+    internal static bool Sandboxed = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR") != null;
+
     internal static void Seed()
     {
         CoreSecrets.RetrieveProvider = Retrieve;
@@ -61,12 +64,12 @@ internal static class SecretStore
     }
 
     private static (bool Ok, string? Value) OsRead(string name) =>
-        OperatingSystem.IsWindows() ? (true, Dpapi.Read(CorePaths.UserData, name))
+        Sandboxed ? (true, null) : OperatingSystem.IsWindows() ? (true, Dpapi.Read(CorePaths.UserData, name))
         : OperatingSystem.IsLinux() ? Libsecret.Read(name) : (true, null);
 
     private static bool OsWrite(string name, string? value) =>
-        OperatingSystem.IsWindows() ? Dpapi.Write(CorePaths.UserData, name, value)
-        : OperatingSystem.IsLinux() && Libsecret.Write(name, value);
+        !Sandboxed && (OperatingSystem.IsWindows() ? Dpapi.Write(CorePaths.UserData, name, value)
+        : OperatingSystem.IsLinux() && Libsecret.Write(name, value));
 }
 
 /// <summary>
