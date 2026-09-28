@@ -80,8 +80,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 var p = CoreSettings.Current.CompanionPrompt;
                 if (p == null) return;
 
-                ChkCapEffects.IsChecked = p.AllowAiToControlEffects;
-                EffectPermsPanel.IsVisible = p.AllowAiToControlEffects;
+                // The EFFECTIVE value (WPF MainWindow.Patreon.cs:1964, #1307): unticked while Lab
+                // access is not live, without touching the saved choice.
+                var effectsOn = global::ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow;
+                ChkCapEffects.IsChecked = effectsOn;
+                EffectPermsPanel.IsVisible = effectsOn;
 
                 ChkAllowFlash.IsChecked = p.AllowAiFlash;
                 ChkAllowVideo.IsChecked = p.AllowAiVideo;
@@ -199,7 +202,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             EffectPermsPanel.IsVisible = on;
 
             var p = CoreSettings.Current.CompanionPrompt;
-            if (p == null || p.AllowAiToControlEffects == on) return;
+            if (p == null) return;
             p.AllowAiToControlEffects = on;
             CoreSettings.Save();
         }

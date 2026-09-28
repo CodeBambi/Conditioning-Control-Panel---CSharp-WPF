@@ -400,7 +400,7 @@ public class CircesTabTests
         var none = new HashSet<string>();
         Assert.All(TabPrices.All, p => Assert.Equal(0, TabPrices.Resolve(p.Id, none)));
         Assert.All(TabPrices.All, p => Assert.Equal(0, TabPrices.Resolve(p.Id, null)));
-        Assert.Equal(15, TabPrices.Resolve("typo", new HashSet<string> { "typo" }));
+        Assert.Equal(30, TabPrices.Resolve("typo", new HashSet<string> { "typo" }));
     }
 
     [Fact]
@@ -417,8 +417,8 @@ public class CircesTabTests
     {
         var on = new HashSet<string> { "mantra", "session" };
 
-        Assert.Equal(70, TabPrices.Resolve("mantra", on, units: 7));
-        Assert.Equal(10000, TabPrices.Resolve("mantra", on, units: 100000));
+        Assert.Equal(210, TabPrices.Resolve("mantra", on, units: 7));
+        Assert.Equal(30000, TabPrices.Resolve("mantra", on, units: 100000));
         Assert.Equal(-600, TabPrices.Resolve("session", on, units: 7));
     }
 

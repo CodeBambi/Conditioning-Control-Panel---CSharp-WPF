@@ -490,7 +490,7 @@ const quiet = { info() {}, warn() {}, error() {}, log() {} };
     + '"payload_min_gap_ms":30000,"confirmed":false,"media_transfer":false,"voice_notes":false}',
     'a default consent frame serializes exactly as pinned', serialize(makeConsent()));
   ok(JSON.stringify(makeCaps()) === '{"platform":"web","payloads":[],"elements":[],"rounds":[],'
-    + '"min_v":1,"transfer":false,"voice":0}',
+    + '"min_v":1,"transfer":false,"voice":0,"night":0,"score":0}',
     'and a default caps object', JSON.stringify(makeCaps()));
   ok(serialize(makePayload({ id: 'x1' })) === '{"t":"payload","v":1,"id":"x1","kind":0,'
     + '"fire_at_match_ms":0,"duration_ms":0,"voice":false,"intensity":0}',

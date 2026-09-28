@@ -245,17 +245,11 @@ function createCues(log) {
 }
 
 /* ------------------------------------------------------------------ speech */
+// No synthetic speech (owner, 2026-09-25): the browser voice never speaks. A word with no
+// recorded clip from the host stays silent; the log still records that it was asked.
 function speak(text, rate, log) {
-  try {
-    const S = globalThis.speechSynthesis, U = globalThis.SpeechSynthesisUtterance;
-    if (!S || typeof U !== 'function') { log.push({ text, rate, spoken: false }); return false; }
-    S.cancel();
-    const u = new U(String(text));
-    u.rate = rate; u.pitch = SPEECH.pitch;
-    S.speak(u);
-    log.push({ text, rate, spoken: true });
-    return true;
-  } catch (e) { log.push({ text, rate, spoken: false }); return false; }
+  log.push({ text, rate, spoken: false });
+  return false;
 }
 function hush() { try { const S = globalThis.speechSynthesis; if (S && typeof S.cancel === 'function') S.cancel(); } catch (e) { /* noop */ } }
 

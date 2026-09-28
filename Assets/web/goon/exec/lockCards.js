@@ -1,3 +1,4 @@
+import { rollLockBounty, lockPrize } from '../core/lockBounty.js';
 /* ============================================================================
  * exec/lockCards.js — GoonElement.LockCards (4) + GoonPayloadKind.LockCard (4),
  * and the typed-phrase PRIMITIVE both this element and the QuickDraw sudden-
@@ -23,6 +24,11 @@
  * ==========================================================================*/
 
 import { sanitizeText, TEXT_MAX_CHARS } from './sanitize.js';
+/* exec/ stays clear of ui/: the chrome is read by key (ui/strings.js S.lockCard). */
+import { t } from '../core/i18n.js';
+// Juice pass (2026-09-23): an unsolved card LEAVES (shrink + fade, 220 ms)
+// instead of vanishing in one frame. A solved card has its own exit (fx.css).
+import { fadeOut } from './motion.js';
 
 /** Built-in phrases. Short, neutral, duel-flavoured; typable on any layout. */
 export const LOCK_PHRASES = Object.freeze([
@@ -78,10 +84,22 @@ export function createLockCardView(container, o = {}) {
   let composing = false;
   let disposed = false;
   let solved = false;
+  const timed = Number(o.durationMs) > 0;
+  const started = Date.now();
+  let pausedAt = null;
+  let unobservePause = null;
+  let deadline = started + (Number(o.durationMs) || 30000);
+  const initialPrize = Number(o.bounty) || 0;
+  let clockTimer = 0, lastTick = -1;
+  const cue = (id) => { try { o.audio?.sfx?.(id); } catch (_e) { /* optional audio */ } };
 
   /* ---- DOM ---------------------------------------------------------- */
   const card = document.createElement('div');
   card.className = 'gg-card gg-lock';
+  if (timed) {
+    card.classList.add('gg-lock--bounty');
+    document.documentElement.setAttribute('data-gg-lock-active', '1');
+  }
 
   const fill = document.createElement('div');
   fill.className = 'gg-lock-fill';
@@ -95,8 +113,24 @@ export function createLockCardView(container, o = {}) {
   eyebrow.className = 'gg-eyebrow gg-lock-eyebrow';
   const dot = document.createElement('i');
   eyebrow.appendChild(dot);
-  eyebrow.appendChild(document.createTextNode('lock card'));
+  eyebrow.appendChild(document.createTextNode(t('gg_lockCard_eyebrow')));
   inner.appendChild(eyebrow);
+  // The prize is a gold tag with two chains latched BEHIND it: nothing ever
+  // crosses the number, and the footer hint already says how to unlock it.
+  const prize = document.createElement('div');
+  prize.className = 'gg-lock-prize';
+  const tag = document.createElement('div');
+  tag.className = 'gg-lock-tag';
+  for (let i = 0; i < 2; i++) {
+    const chain = document.createElement('i');
+    chain.className = 'gg-lock-chain gg-lock-chain--' + i;
+    tag.appendChild(chain);
+  }
+  const amount = document.createElement('strong');
+  amount.textContent = String(initialPrize);
+  tag.appendChild(amount);
+  prize.appendChild(tag);
+  if (timed) inner.appendChild(prize);
 
   const phraseEl = document.createElement('p');
   phraseEl.className = 'gg-lock-phrase';
@@ -127,26 +161,44 @@ export function createLockCardView(container, o = {}) {
   input.autocomplete = 'off';
   input.autocapitalize = 'off';
   input.spellcheck = false;
-  input.setAttribute('aria-label', 'type the phrase');
+  input.setAttribute('aria-label', t('gg_lockCard_typePhrase'));
   inner.appendChild(input);
 
   const foot = document.createElement('div');
   foot.className = 'gg-lock-foot';
   const hint = document.createElement('span');
   hint.className = 'gg-lock-hint';
-  hint.textContent = strict ? 'type it exactly' : 'type it to unlock';
+  hint.textContent = strict ? t('gg_lockCard_exact') : t('gg_lockCard_unlock');
   const mistakeEl = document.createElement('span');
   mistakeEl.className = 'gg-lock-mistakes';
   const give = document.createElement('button');
   give.type = 'button';
   give.className = 'gg-btn gg-btn--ghost';
-  give.textContent = 'dismiss';
+  // A bounty card can be walked away from too: the prize is forfeit, the card
+  // closes, exactly as if the clock had run out (owner, 2026-09-25).
+  give.textContent = timed ? t('gg_lockCard_forfeit') : t('gg_lockCard_dismiss');
   foot.appendChild(hint);
   foot.appendChild(mistakeEl);
   foot.appendChild(give);
+  const clock = document.createElement('span');
+  clock.className = 'gg-lock-clock';
+  if (timed) foot.prepend(clock);
   inner.appendChild(foot);
 
   container.appendChild(card);
+  if (timed) cue('lock-in');
+  function tick() {
+    if (disposed || solved || pausedAt !== null) return;
+    const left = Math.max(0, deadline - Date.now());
+    clock.textContent = Math.ceil(left / 1000) + 's';
+    const urgent = left <= 8000;
+    card.classList.toggle('is-urgent', urgent);
+    card.style.setProperty('--gg-lock-beat', Math.max(240, left / 30) + 'ms');
+    const beat = Math.floor((Date.now() - started) / (urgent ? 300 : 1000));
+    if (beat !== lastTick) { lastTick = beat; cue('lock-tick'); }
+    if (!left) { if (onAbandoned) onAbandoned(); return; }
+    clockTimer = soon(tick, 100);
+  }
 
   /* ---- matching ----------------------------------------------------- */
   const same = (a, b) => {
@@ -180,14 +232,27 @@ export function createLockCardView(container, o = {}) {
     input.value = '';
     paint();
     if (doneRepeats < repeats) return;
+    if (timed && Date.now() >= deadline) { if (onAbandoned) onAbandoned(); return; }
     solved = true;
+    clearTimeout(clockTimer);
+    cue('lock-solved');
     input.disabled = true;
     card.classList.add('is-solved');
-    if (onSolved) { try { onSolved({ mistakes }); } catch (_e) { /* caller's problem, not ours */ } }
+    if (timed) {
+      for (let i = 0; i < 12; i++) {
+        const spark = document.createElement('i');
+        spark.className = 'gg-lock-win-spark';
+        spark.style.setProperty('--a', (i * 30) + 'deg');
+        prize.appendChild(spark);
+      }
+    }
+    if (onSolved) { try { onSolved({ mistakes, prize: lockPrize(initialPrize, mistakes) }); } catch (_e) { /* caller's problem, not ours */ } }
   }
 
   function evaluate() {
-    if (disposed || solved || composing) return;
+    if (disposed || solved || composing || pausedAt !== null) return;
+    if (timed && Date.now() >= deadline) { if (onAbandoned) onAbandoned(); return; }
+    cue('lock-type');
     const val = String(input.value || '');
     let i = 0;
     while (i < val.length && i < phrase.length && same(val[i], phrase[i])) i++;
@@ -198,6 +263,11 @@ export function createLockCardView(container, o = {}) {
       mistakes++;
       input.value = val.slice(0, i);
       flashWrong();
+      amount.textContent = String(lockPrize(initialPrize, mistakes));
+      cue('lock-slip');
+      const wrong = chars[i];
+      soon(() => { if (!disposed && wrong) wrong.classList.add('is-error'); }, 0);
+      soon(() => { if (wrong) wrong.classList.remove('is-error'); }, 280);
       if (onMistake) { try { onMistake(mistakes); } catch (_e) { /* ignore */ } }
     }
     typed = i;
@@ -221,10 +291,34 @@ export function createLockCardView(container, o = {}) {
 
   paint();
 
+  // A duel temporarily owns the field. Keep the typed prefix and freeze the deadline.
+  function pause(on) {
+    if (disposed || (pausedAt !== null) === on) return;
+    if (on) {
+      pausedAt = Date.now();
+      clearTimeout(clockTimer);
+      card.style.display = 'none';
+      input.disabled = true;
+      document.documentElement.removeAttribute('data-gg-lock-active');
+    } else {
+      deadline += Date.now() - pausedAt;
+      pausedAt = null;
+      card.style.display = '';
+      input.disabled = solved;
+      document.documentElement.setAttribute('data-gg-lock-active', '1');
+      if (!solved) { tick(); input.focus({ preventScroll: true }); }
+    }
+  }
+  if (timed && typeof o.observePause === 'function') unobservePause = o.observePause(pause);
+  if (timed) tick();
+
   return {
     dispose() {
       if (disposed) return;
       disposed = true;
+      unobservePause?.();
+      clearTimeout(clockTimer);
+      if (timed) document.documentElement.removeAttribute('data-gg-lock-active');
       try {
         input.removeEventListener('input', onInput);
         input.removeEventListener('compositionstart', onCompStart);
@@ -232,9 +326,18 @@ export function createLockCardView(container, o = {}) {
         input.removeEventListener('paste', onPaste);
         give.removeEventListener('click', onGive);
       } catch (_e) { /* ignore */ }
-      try { card.remove(); } catch (_e) { /* ignore */ }
+      // The card's own timing is already over (dispose IS the end); the exit
+      // below is visual only and removes the node when it lands.
+      const gone = () => { try { card.remove(); } catch (_e) { /* ignore */ } };
+      const out = fadeOut(card);
+      if (out) {
+        try { input.disabled = true; } catch (_e) { /* ignore */ }
+        try { out.addEventListener('finish', gone, { once: true }); } catch (_e) { gone(); }
+        soon(gone, 400);
+      } else gone();
     },
     focus() {
+      if (pausedAt !== null) return;
       try { input.focus({ preventScroll: true }); } catch (_e) { try { input.focus(); } catch (_e2) { /* ignore */ } }
     },
   };
@@ -249,11 +352,11 @@ export function lockTuning(intensity) {
   const i = clamp01(intensity);
   return {
     repeats: 1 + Math.floor(i * 2.4),                 // 1..3
-    gapMs: Math.round(lerp(45000, 12000, i)),          // between element cards
+    gapMs: Math.round(lerp(120000, 75000, i)),          // between element cards
   };
 }
 
-export function createLockCards({ layers, media, audio, logger, phrases } = {}) {
+export function createLockCards({ layers, media, audio, logger, phrases, getLead = () => 0, onBounty = null, observePause = null } = {}) {
   const log = logger || null;
   const warn = (m) => { if (log && log.warn) log.warn(`[gg:lockcards] ${m}`); };
 
@@ -267,6 +370,15 @@ export function createLockCards({ layers, media, audio, logger, phrases } = {}) 
 
   const stage = () => (layers && typeof layers.get === 'function' ? layers.get('stage') : null);
 
+  const views = new Set();
+  function mountView(host, options) {
+    const view = createLockCardView(host, { ...options, observePause });
+    views.add(view);
+    const dispose = view.dispose;
+    view.dispose = () => { views.delete(view); dispose(); };
+    return view;
+  }
+
   let sustained = null;      // {alive, intensity, view, timer}
 
   function mountElementCard(run) {
@@ -278,18 +390,13 @@ export function createLockCards({ layers, media, audio, logger, phrases } = {}) 
       if (!run.alive) return;
       run.timer = soon(() => mountElementCard(run), lockTuning(run.intensity).gapMs);
     };
-    run.view = createLockCardView(host, {
+    if (views.size || document.documentElement.getAttribute('data-gg-lock-active')) { run.timer = soon(() => mountElementCard(run), 2000); return; }
+    run.view = mountView(host, {
+      durationMs: 30000, bounty: rollLockBounty(getLead()), audio,
       phrase: draw(),
       repeats: tune.repeats,
-      // One slip = one small buzz. The card ALREADY shakes (`is-wrong`); this is
-      // the shake's ear half, at well under the solved chime's gain — a lock
-      // card is a typing task, not a punishment, and a loud error tone on every
-      // fat-fingered key would turn it into one.
-      onMistake: () => {
-        if (audio && typeof audio.sfx === 'function') { try { audio.sfx('lock-slip'); } catch (_e) { /* ignore */ } }
-      },
-      onSolved: () => {
-        if (audio && typeof audio.sfx === 'function') { try { audio.sfx('lock-solved'); } catch (_e) { /* ignore */ } }
+      onSolved: ({ prize }) => {
+        if (onBounty) onBounty(prize);
         const v = run.view;
         run.view = null;
         soon(() => { if (v) v.dispose(); }, 460);      // let the solved animation play
@@ -341,11 +448,9 @@ export function createLockCards({ layers, media, audio, logger, phrases } = {}) 
 
       let finished = false;
       let view = null;
-      let endTimer = 0;
       const settle = (endured) => {
         if (finished) return;
         finished = true;
-        try { clearTimeout(endTimer); } catch (_e) { /* ignore */ }
         if (view) { const v = view; view = null; try { v.dispose(); } catch (_e) { /* ignore */ } }
         if (typeof done === 'function') { try { done(endured); } catch (e) { warn(`done() threw: ${e && e.message}`); } }
       };
@@ -353,14 +458,16 @@ export function createLockCards({ layers, media, audio, logger, phrases } = {}) 
       const host = stage();
       if (!host) { settle(false); return () => settle(false); }   // nowhere to mount: receipt completed
 
-      view = createLockCardView(host, {
+      if (views.size || document.documentElement.getAttribute('data-gg-lock-active')) { settle(false); return () => {}; }
+      view = mountView(host, {
+        durationMs: runMs, bounty: rollLockBounty(getLead()), audio,
         phrase: theirs || draw(),
         repeats: tune.repeats,
-        onSolved: () => settle(true),
+        onSolved: ({ prize }) => { if (onBounty) onBounty(prize); settle(true); },
         onAbandoned: () => settle(false),
       });
       view.focus();
-      endTimer = soon(() => settle(false), runMs);
+      // The view owns the deadline, including time suspended behind a duel.
       return () => settle(false);
     },
   };

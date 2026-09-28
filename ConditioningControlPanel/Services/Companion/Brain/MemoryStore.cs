@@ -97,6 +97,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         // Curated profile keys. Constants because MemorySignalWriter, the panel and the injection
         // ordering all have to agree on the spelling, and a typo would silently create a second key.
         public const string KeyPreferredName = "preferredName";
+        /// <summary>The account's display name: what she calls them until they give a preferredName.</summary>
+        public const string KeyUsername = "username";
         public const string KeyFirstSeen = "firstSeen";
         public const string KeyLevel = "level";
         public const string KeyStreakDays = "streakDays";
@@ -112,7 +114,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         private static readonly string[] ProfileKeyOrder =
         {
-            KeyPreferredName, KeyFirstSeen, KeyLevel, KeyStreakDays,
+            KeyPreferredName, KeyUsername, KeyFirstSeen, KeyLevel, KeyStreakDays,
             KeyTotalSessions, KeyArchetype, KeyFavoriteFeatures, KeyLastSessionRecap
         };
 
@@ -155,6 +157,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly MemorySignalWriter? _signals;
         private EventHandler? _processExitHandler;
         private bool _disposed;
+        internal event Action? ChatMemoryEdited;
+        internal bool IsChatMemoryEnabled => ChatDerivedPersistenceEnabled;
 
         /// <summary>Production constructor: real path, auto-load, app signals mirrored automatically.</summary>
         public MemoryStore() : this(DefaultMemoryPath, null, null, mirrorAppSignals: true) { }
@@ -209,6 +213,19 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         }
 
         /// <summary><c>%LOCALAPPDATA%\ConditioningControlPanel\companion\memory.json</c>.</summary>
+        internal static string PreviewAccountDirectory(string? account, string? root = null)
+        {
+            var bytes = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(account ?? "local"));
+            return Path.Combine(root ?? CompanionDirectory, "preview-accounts", Convert.ToHexString(bytes).ToLowerInvariant());
+        }
+
+        internal static MemoryStore ForPreviewAccount(string? account, string? root = null)
+        {
+            var path = Path.Combine(PreviewAccountDirectory(account, root), "memory.json");
+            return root != null ? new MemoryStore(path)
+                : new MemoryStore(path, null, null, mirrorAppSignals: true);
+        }
+
         public static string DefaultMemoryPath => Path.Combine(CompanionDirectory, "memory.json");
 
         /// <summary>The companion's private data folder. Not the assets path, not a mod folder.</summary>
@@ -254,7 +271,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             // Only a real change costs a write. Level/streak signals are refreshed on every settings
             // notification, and most of those are about something else entirely.
-            if (changed) RequestSave();
+            if (changed)
+            {
+                if (key == KeyPreferredName) ChatMemoryEdited?.Invoke();
+                RequestSave();
+            }
         }
 
         // ===================== relationship =====================
@@ -394,6 +415,46 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             return fact;
         }
 
+        internal void SetAutomaticPreferredName(string? name)
+        {
+            if (!ChatDerivedPersistenceEnabled || !IsStorable(name ?? "", MemoryFact.SourceChat)) return;
+            lock (_lock)
+            {
+                if (name == null) _profile.Remove(KeyPreferredName);
+                else _profile[KeyPreferredName] = name;
+            }
+            RequestSave();
+        }
+
+        internal void ForgetUncertainAutomaticFacts()
+        {
+            lock (_lock) _facts.RemoveAll(f => f.Source == MemoryFact.SourceChat
+                && !f.Pinned && f.Kind != MemoryFactKind.Boundary);
+            RequestSave();
+        }
+
+        internal void ForgetAutomaticFact(string id)
+        {
+            lock (_lock) _facts.RemoveAll(f => f.Id == id && f.Source == MemoryFact.SourceChat);
+            RequestSave();
+        }
+
+        internal MemoryFact? SetAutomaticFact(string? previousId, string text, MemoryFactKind kind, string sourceTurnId)
+        {
+            if (!ChatDerivedPersistenceEnabled || !IsStorable(text, MemoryFact.SourceChat)) return null;
+            lock (_lock)
+            {
+                var previous = _facts.FirstOrDefault(f => f.Id == previousId);
+                if (previous != null && previous.Source != MemoryFact.SourceChat) return null;
+                if (previous != null) _facts.Remove(previous);
+                var added = AddFact(text, kind, 0.7, MemoryFact.SourceChat);
+                var cited = added with { SourceTurnId = sourceTurnId };
+                int index = _facts.FindIndex(f => f.Id == added.Id);
+                if (index >= 0) _facts[index] = cited;
+                return cited;
+            }
+        }
+
         public bool UpdateFact(string id, string? text = null, double? salience = null, bool? pinned = null)
         {
             if (string.IsNullOrEmpty(id)) return false;
@@ -417,6 +478,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     Source = text != null ? MemoryFact.SourceUserEdited : f.Source
                 };
             }
+            ChatMemoryEdited?.Invoke();
             RequestSave();
             return true;
         }
@@ -426,7 +488,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (string.IsNullOrEmpty(id)) return false;
             bool removed;
             lock (_lock) removed = _facts.RemoveAll(f => f.Id == id) > 0;
-            if (removed) RequestSave();
+            if (removed) { ChatMemoryEdited?.Invoke(); RequestSave(); }
             return removed;
         }
 
@@ -457,7 +519,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// give them the same exemption, or the clamp silently reintroduces the exact failure this
         /// exemption exists to prevent.</para>
         /// </summary>
-        public string? GetInjectionBlock(int tokenBudget)
+        public string? GetInjectionBlock(int tokenBudget) => GetInjectionBlock(tokenBudget, null);
+
+        public string? GetInjectionBlock(int tokenBudget, string? query)
         {
             int budget = Math.Min(Math.Max(tokenBudget, 0), MaxInjectionTokens);
             if (budget <= 0) return null;
@@ -502,7 +566,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (boundaries.Count > MaxBoundaryLines)
                 Append($"(+{boundaries.Count - MaxBoundaryLines}{BoundaryOverflowMarker} — stay careful.)");
 
-            foreach (var f in RankFacts(facts.Where(f => f.Kind != MemoryFactKind.Boundary)))
+            foreach (var f in RankFacts(facts.Where(f => f.Kind != MemoryFactKind.Boundary), query))
             {
                 if (!TryAppend($"- {f.Text}")) break;
             }
@@ -534,7 +598,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (text.Length > 0) ordered.Add($"{pair.Key}={text}");
             }
 
-            return ordered.Count == 0 ? null : "What you know about them: " + string.Join(", ", ordered);
+            if (ordered.Count == 0) return null;
+            var line = "What you know about them: " + string.Join(", ", ordered);
+            // Owner, 2026-09-25: she knows them by their username unless they said otherwise.
+            if (profile.ContainsKey(KeyUsername) || profile.ContainsKey(KeyPreferredName))
+                line += ". Call them by preferredName when set, otherwise by username.";
+            return line;
         }
 
         /// <summary>
@@ -542,15 +611,23 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// app runs but a genuinely more salient fact never loses to a stale one. Pinned facts sort
         /// ahead of everything: the user pinned them precisely so she would use them.
         /// </summary>
-        internal IReadOnlyList<MemoryFact> RankFacts(IEnumerable<MemoryFact> facts)
+        internal IReadOnlyList<MemoryFact> RankFacts(IEnumerable<MemoryFact> facts, string? query = null)
         {
             var now = _clock();
+            var terms = QueryTerms(query);
             return facts
                 .OrderByDescending(f => f.Pinned)
+                .ThenByDescending(f => QueryTerms(f.Text).Count(terms.Contains))
                 .ThenByDescending(f => Score(f, now) * Jitter(f.Id))
                 .ThenBy(f => f.Id, StringComparer.Ordinal) // total order, so ties never wobble
                 .ToList();
         }
+
+        private static HashSet<string> QueryTerms(string? text) => new(
+            System.Text.RegularExpressions.Regex.Matches(text ?? string.Empty, @"[\p{L}\p{N}]{3,}")
+                .Select(m => m.Value.ToLowerInvariant())
+                .Where(t => t is not ("the" or "and" or "you" or "your" or "that" or "this" or "with" or "have")),
+            StringComparer.Ordinal);
 
         /// <summary>salience × e^(-days/30) against <paramref name="now"/>. Never negative.</summary>
         internal static double Score(MemoryFact fact, DateTime now)
@@ -591,6 +668,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public void Wipe()
         {
+            ChatMemoryEdited?.Invoke();
             lock (_lock)
             {
                 // firstSeen survives. It is a latch, not a memory: MemorySignalWriter recomputes the
@@ -612,6 +690,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                      {
                          _path,
                          dir == null ? null : Path.Combine(dir, "episodes.json"),
+                         dir == null ? null : Path.Combine(dir, "maintenance.json"),
                          dir == null ? null : Path.Combine(dir, "session.json"),
                          LegacyLocalHistoryPath()
                      })
@@ -642,6 +721,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public void ForgetChatDerived()
         {
+            ChatMemoryEdited?.Invoke();
             lock (_lock)
             {
                 _relationship.Clear();
@@ -802,7 +882,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     LastUsed = f.LastUsed,
                     Uses = f.Uses,
                     Pinned = f.Pinned,
-                    Source = f.Source
+                    Source = f.Source,
+                    SourceTurnId = f.SourceTurnId
                 }).ToList()
             };
 
@@ -922,7 +1003,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     LastUsed: f.LastUsed,
                     Uses: Math.Max(0, f.Uses),
                     Pinned: f.Pinned,
-                    Source: string.IsNullOrWhiteSpace(f.Source) ? MemoryFact.SourceChat : f.Source));
+                    Source: string.IsNullOrWhiteSpace(f.Source) ? MemoryFact.SourceChat : f.Source,
+                    SourceTurnId: f.SourceTurnId));
             }
 
             return new MemorySnapshot(profile, relationship, usage, facts);
@@ -1049,6 +1131,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             public int Uses { get; set; }
             public bool Pinned { get; set; }
             public string Source { get; set; } = MemoryFact.SourceChat;
+            public string? SourceTurnId { get; set; }
         }
 
         private sealed class PersistedRelationship

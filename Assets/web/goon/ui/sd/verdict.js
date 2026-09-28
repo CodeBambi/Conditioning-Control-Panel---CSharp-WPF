@@ -9,6 +9,7 @@
  * ==========================================================================*/
 
 import { GoonRoundKind } from '../../core/contracts.js';
+import { S } from '../strings.js';
 import { GoonRoundVerdict } from '../../core/rounds/model.js';
 
 const DWELL_MS = 2200;
@@ -28,14 +29,14 @@ export function comparisonLine(outcome) {
     case GoonRoundKind.ReactionDuel: {
       const a = ms(local.reaction_ms);
       const b = ms(peer.reaction_ms);
-      return 'you ' + (a == null ? 'no press' : a + ' ms') + ' · them ' + (b == null ? 'no press' : b + ' ms');
+      return S.sd.cmp(a == null ? S.sd.noPress : S.sd.ms(a), b == null ? S.sd.noPress : S.sd.ms(b));
     }
     case GoonRoundKind.BubbleRace:
-      return 'you ' + (local.progress | 0) + ' popped · them ' + (peer.progress | 0) + ' popped';
+      return S.sd.cmpPopped(local.progress | 0, peer.progress | 0);
     case GoonRoundKind.StaringContest:
-      return 'you ' + secs(local.elapsed_ms) + ' · them ' + secs(peer.elapsed_ms);
+      return S.sd.cmp(secs(local.elapsed_ms), secs(peer.elapsed_ms));
     default:
-      return 'you ' + secs(local.elapsed_ms) + ' · them ' + secs(peer.elapsed_ms);
+      return S.sd.cmp(secs(local.elapsed_ms), secs(peer.elapsed_ms));
   }
 }
 
@@ -51,7 +52,7 @@ export function createVerdict(ctx) {
     const card = add(node, el('div', 'gg-sd-verdict-card gg-plate'));
     node._head = add(card, el('h3', 'gg-sd-verdict-head', ''));
     node._line = add(card, el('p', 'gg-sd-verdict-line', ''));
-    node._chip = add(card, el('span', 'gg-sd-suspect', 'suspect reaction'));
+    node._chip = add(card, el('span', 'gg-sd-suspect', S.sd.suspect));
     node._note = add(card, el('p', 'gg-sd-verdict-note', ''));
     ctx.mountOverlay(node);
     return node;
@@ -62,20 +63,20 @@ export function createVerdict(ctx) {
     if (!n) return;
 
     const v = outcome ? outcome.verdict : null;
-    let head = 'round aborted.';
+    let head = S.sd.aborted;
     let tone = 'draw';
-    if (v === GoonRoundVerdict.Win) { head = 'round to you.'; tone = 'win'; }
-    else if (v === GoonRoundVerdict.Loss) { head = 'round to them.'; tone = 'loss'; }
-    else if (v === GoonRoundVerdict.Draw) { head = 'dead heat.'; tone = 'draw'; }
+    if (v === GoonRoundVerdict.Win) { head = S.sd.toYou; tone = 'win'; }
+    else if (v === GoonRoundVerdict.Loss) { head = S.sd.toThem; tone = 'loss'; }
+    else if (v === GoonRoundVerdict.Draw) { head = S.sd.deadHeat; tone = 'draw'; }
     else { tone = 'abort'; }
 
     text(n._head, head);
     for (const t of ['win', 'loss', 'draw', 'abort']) cls(n, 'is-' + t, t === tone);
-    text(n._line, outcome ? comparisonLine(outcome) : 'nobody scores that one.');
+    text(n._line, outcome ? comparisonLine(outcome) : S.sd.nobody);
 
     const suspect = !!(outcome && (outcome.localSuspect || outcome.peerSuspect));
     if (n._chip) n._chip.hidden = !suspect;
-    text(n._note, suspect ? 'faster than a human blink. scored anyway.' : '');
+    text(n._note, suspect ? S.sd.tooFast : '');
 
     if (outcome && typeof outcome.netScore === 'number') ctx.setNet(outcome.netScore);
     if (outcome && typeof outcome.roundNo === 'number') ctx.setRoundLabel(outcome.roundNo, outcome.kind);

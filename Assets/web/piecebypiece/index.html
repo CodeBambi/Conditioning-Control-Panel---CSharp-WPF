@@ -26,25 +26,20 @@
        is owned entirely by the effects module (ramp/index.js). -->
   <div id="stage"><canvas id="board-canvas"></canvas></div>
 
-  <!-- The HUD. Clocks in the left corners, out of the lane the ramp's video
-       card slides through; the status column rides under whichever clock is on
-       the move. hud.js layers the behaviour on top by listening to the bus, so
-       the three ids hotseat.js writes into (time-w, time-b, status) stay exactly
-       where they were. #hud sits under #fx on purpose: the effects layer washes
-       over it, and the meter vignette lives in here for the same reason. -->
+  <!-- Player panels and essential controls stay readable over the effects. -->
   <div id="hud" class="hud">
     <div class="vig" id="hud-vig" aria-hidden="true"></div>
 
-    <div class="chip chip-b" id="chip-b" data-side="b">
-      <span class="who">black</span>
-      <span class="time" id="time-b">15:00</span>
-      <span class="tally" id="tally-b"></span>
-    </div>
-    <div class="chip chip-w" id="chip-w" data-side="w">
-      <span class="who">white</span>
-      <span class="time" id="time-w">15:00</span>
-      <span class="tally" id="tally-w"></span>
-    </div>
+    <section class="chip chip-b" id="chip-b" data-side="b" aria-label="Black player">
+      <div class="player-head"><span class="seat-dot" aria-hidden="true"></span><span class="who" id="name-b">Black</span><span class="seat-label">Black</span></div>
+      <div class="player-clock"><span class="time" id="time-b">15:00</span><span class="turn-tag" id="turn-b"></span></div>
+      <div class="player-material"><span class="captured" id="captured-b" aria-label="No captures"></span><span class="tally" id="tally-b">even</span></div>
+    </section>
+    <section class="chip chip-w" id="chip-w" data-side="w" aria-label="White player">
+      <div class="player-head"><span class="seat-dot" aria-hidden="true"></span><span class="who" id="name-w">White</span><span class="seat-label">White</span></div>
+      <div class="player-clock"><span class="time" id="time-w">15:00</span><span class="turn-tag" id="turn-w"></span></div>
+      <div class="player-material"><span class="captured" id="captured-w" aria-label="No captures"></span><span class="tally" id="tally-w">even</span></div>
+    </section>
 
     <!-- the light that moves between the chips IS the turn indicator -->
     <span class="turn-line" id="turn-line" aria-hidden="true"></span>
@@ -60,11 +55,32 @@
       <ol class="moves-list" id="moves-list"></ol>
     </div>
 
+    <div class="game-settings">
+      <button type="button" class="hud-btn" id="game-options" aria-expanded="false" aria-controls="game-options-panel">⚙ Options</button>
+      <div id="game-options-panel" class="game-options-panel" hidden>
+        <strong>Game feel</strong>
+        <div class="experience-pick" role="group" aria-label="Game feel">
+          <button type="button" class="hud-btn" data-experience="classic" aria-pressed="true">Classic</button>
+          <button type="button" class="hud-btn" data-experience="distraction" aria-pressed="false">Distraction</button>
+        </div>
+        <p id="experience-description">The board, animated captures and sound.</p>
+        <label><input type="checkbox" id="game-sound" checked> Sound effects</label>
+        <label><input type="checkbox" id="game-reduced"> Reduce motion</label>
+        <small id="game-preference-note" hidden></small>
+        <button type="button" class="hud-btn" id="game-menu">Menu</button>
+        <small id="game-menu-note" hidden>Finish or resign this online game to leave.</small>
+      </div>
+    </div>
+
     <div class="statuscol" id="status-col">
-      <p class="status" id="status">white to move</p>
-      <p class="hint" id="hud-hint" hidden>hold esc to leave the board</p>
+      <p class="status" id="status" role="status" aria-live="polite">White to move</p>
+      <p class="game-notice" id="game-notice" role="status" hidden></p>
+      <div class="intensity" id="game-intensity" hidden><div><span>Distraction</span><span id="intensity-label">Calm</span></div><meter id="intensity-meter" min="0" max="1" value="0" aria-label="Distraction intensity"></meter></div>
+      <p class="hint" id="hud-hint" hidden>Hold Esc to open the menu</p>
       <div class="dots" id="hud-dots" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     </div>
+
+    <p class="piece-focus" id="piece-focus" role="status" aria-live="polite">Click a piece, then a square. Or drag.</p>
 
     <!-- Resign and the draw: the two things a player can say to the referee
          in an online game that are not a move. hud.js shows this block only
@@ -77,12 +93,12 @@
     <div class="online" id="hud-online" hidden>
       <p class="online-note" id="hud-online-note" hidden></p>
       <div class="online-row" id="hud-draw-ask" hidden>
-        <span class="word">he offers a draw</span>
+        <span class="word">Draw offered</span>
         <button type="button" class="hud-btn warm" id="hud-draw-accept">accept</button>
         <button type="button" class="hud-btn" id="hud-draw-decline">decline</button>
       </div>
       <div class="online-row" id="hud-resign-ask" hidden>
-        <span class="word">resign?</span>
+        <span class="word">Resign this game?</span>
         <button type="button" class="hud-btn warm" id="hud-resign-yes">yes</button>
         <button type="button" class="hud-btn" id="hud-resign-no">no</button>
       </div>
@@ -98,11 +114,11 @@
   <!-- Camera views. Self-contained little component, class prefix .cam-, so a
        later HUD redesign can pick it up and move it whole. -->
   <div id="cam-views" class="cam-views">
-    <button type="button" class="cam-btn" data-view="normal" title="Normal view (1)" aria-label="Normal view">◧</button>
-    <button type="button" class="cam-btn" data-view="top" title="Top view (2)" aria-label="Top view">▦</button>
-    <button type="button" class="cam-btn" data-view="side" title="Side view (3)" aria-label="Side view">▤</button>
-    <button type="button" class="cam-btn" data-view="opponent" title="Opponent view (4)" aria-label="Opponent view">◨</button>
-    <span class="cam-free" hidden>free</span>
+    <button type="button" class="cam-btn" data-view="normal" title="Normal view (1)" aria-label="Board view">Board</button>
+    <button type="button" class="cam-btn" data-view="top" title="Top view (2)" aria-label="Overhead view">Overhead</button>
+    <button type="button" class="cam-btn" data-view="side" title="Side view (3)" aria-label="Side view">Side</button>
+    <button type="button" class="cam-btn" data-view="opponent" title="Opponent view (4)" aria-label="Other side view">Other side</button>
+    <span class="cam-free" hidden>Free camera</span>
   </div>
 
   <!-- The front door: menu, lobby, past games, profile and the end card, as one

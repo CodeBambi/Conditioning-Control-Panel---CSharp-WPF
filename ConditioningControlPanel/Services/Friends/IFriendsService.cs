@@ -29,6 +29,14 @@ public interface IFriendsService
     /// <summary>Raised on the UI thread after a successful send, for the sender's own juice.</summary>
     event Action<SendKind, Friend>? Sent;
 
+    /// <summary>Raised on the UI thread once per incoming friend request that was not there on
+    /// the last refresh. The first list after a start or a sign-in is a silent baseline.</summary>
+    event Action<FriendRequest>? RequestArrived;
+
+    /// <summary>Raised on the UI thread with the id of an incoming request that left the list
+    /// (accepted, declined or withdrawn).</summary>
+    event Action<string>? RequestGone;
+
     /// <summary>Full list now (drawer opened, pull to refresh). Cheap to call twice.</summary>
     Task RefreshAsync();
 

@@ -1263,6 +1263,19 @@ function wireInput() {
     if (e.deltaY > 0) next(); else prev();
   }, { passive: true });
 
+  // Right-click a library picture or clip: the host shows "Open file" / "Show in folder".
+  // Online items live nowhere on disk, so they get no menu.
+  document.addEventListener('contextmenu', (e) => {
+    // A control layer can sit over the media, so look under the pointer too.
+    const surface = e.target?.closest?.('[data-asset-id]')
+      || document.elementsFromPoint(e.clientX, e.clientY)
+        .map((n) => n.closest?.('[data-asset-id]')).find(Boolean);
+    const id = surface?.dataset?.assetId;
+    if (!id || isRemoteId(id)) return;
+    e.preventDefault();
+    post({ type: 'file-menu', id });
+  });
+
   document.addEventListener('keydown', (e) => {
     switch (e.key) {
       case 'ArrowDown': case 'PageDown': next(); e.preventDefault(); break;

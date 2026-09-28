@@ -288,6 +288,13 @@ namespace ConditioningControlPanel.Services
             Log.Information("Using default settings ({Reason})",
                 WasSettingsFileCorrupt ? "previous file unparseable, preserved a backup" : "fresh install detected");
             var fresh = new AppSettings();
+            // A true first run only: a corrupt file also lands here, and an existing player must
+            // never find AI chat switched on because their settings failed to parse.
+            if (Companion.CompanionExperience.IsV2Enabled && !WasSettingsFileCorrupt)
+            {
+                fresh.AiChatEnabled = true;
+                fresh.CompanionPrompt.AiProvider = AiProviderType.Cloud;
+            }
             MergeBuiltInAwarenessPresets(fresh);
             return fresh;
         }

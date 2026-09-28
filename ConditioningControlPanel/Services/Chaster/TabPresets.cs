@@ -5,8 +5,8 @@ using System.Linq;
 namespace ConditioningControlPanel.Services.Chaster;
 
 /// <summary>One named set of price rows. <see cref="PriceIds"/> is exactly what gets written to
-/// <c>AppSettings.ChasterPrices</c> when the player picks it.</summary>
-public sealed record TabPreset(string Id, IReadOnlyList<string> PriceIds);
+/// <c>AppSettings.ChasterPrices</c> when the player picks it, and the two limits go with it.</summary>
+public sealed record TabPreset(string Id, IReadOnlyList<string> PriceIds, int DayMinutes, int BacklogMinutes);
 
 /// <summary>
 /// Three ready-made sets of prices, so the page can lead with a choice instead of twenty-two
@@ -28,6 +28,16 @@ public sealed record TabPreset(string Id, IReadOnlyList<string> PriceIds);
 /// Sparkles, so it never offers a price for a feature the player cannot reach.</item>
 /// </list>
 ///
+/// <para><b>Each preset sets the stakes too (2026-09-26).</b> The prices only decide how fast a player
+/// reaches the day limit; the limit decides what a month can cost. Locktober players are locked
+/// all of October anyway, so what they weigh is how far PAST the lock end the tab can push them,
+/// and one 3 h default for every preset meant a Gentle player could still end four days late.
+/// Anchored to what Chaster locks do in the wild (published Locktober 2025 setups add 1-3 h per
+/// wheel spin, dice roll or missed task; public locks are named "chance of November"): Gentle
+/// 30 min a day (a full month of misses is under a day late), Strict 3 h (about four days, a
+/// strict Chaster lock), Circe 6 h (about eight days, the heavy community locks). Raising a limit
+/// through a preset waits a day like the slider does (<see cref="LimitChange"/>).</para>
+///
 /// <para>Presets are only an offer, like every single row: picking one writes the ids and the
 /// player can still switch any of them off. <see cref="TabPrices.NeverPriced"/> ids can never
 /// appear here, and every id is checked against the live table.</para>
@@ -44,7 +54,7 @@ public static class TabPresets
     private static readonly string[] GentleIds =
     {
         // everything that earns time back
-        "lockcard", "session", "quest", "quest_weekly", "video", "levelup", "program_done", "wall",
+        TabDayEnd.StreakEventId, "lockcard", "session", "quest", "quest_weekly", "video", "levelup", "program_done", "wall",
         // and the two smallest costs, so the tab is not a one-way street
         "typo", "crash",
     };
@@ -54,6 +64,7 @@ public static class TabPresets
         CircesMisses.EventId, "typo", "attention", NatashasFavourite.EventId, "mantra", "program_skipped",
         "remote_media", "remote_video", "escape", "watcher",
         "melt", "bubbles", "ball", "padlock", "crash",
+        TabDayEnd.IdleEventId, TabDayEnd.DailiesEventId, TabDayEnd.HeatId,
         // the one way down
         "session",
     };
@@ -62,21 +73,22 @@ public static class TabPresets
     {
         // costs
         CircesMisses.EventId, "typo", "attention", NatashasFavourite.EventId, "mantra", "program_skipped", "melt",
+        TabDayEnd.DailiesEventId, TabDayEnd.HeatId,
         // earns back
-        "lockcard", "session", "quest", "video", "levelup", "program_done",
+        TabDayEnd.StreakEventId, "lockcard", "session", "quest", "video", "levelup", "program_done",
     };
 
     public static readonly IReadOnlyList<TabPreset> All = new[]
     {
-        new TabPreset(Gentle, Clean(GentleIds)),
-        new TabPreset(Strict, Clean(StrictIds)),
-        new TabPreset(Circe, Clean(CirceIds)),
+        new TabPreset(Gentle, Clean(GentleIds), DayMinutes: 30, BacklogMinutes: 2 * 60),
+        new TabPreset(Strict, Clean(StrictIds), DayMinutes: 3 * 60, BacklogMinutes: 12 * 60),
+        new TabPreset(Circe, Clean(CirceIds), DayMinutes: 6 * 60, BacklogMinutes: 24 * 60),
     };
 
     /// <summary>Only ids that are really on the price table and are allowed to carry a price. A
     /// typo in a preset must drop the row, never invent one.</summary>
     private static IReadOnlyList<string> Clean(IEnumerable<string> ids) =>
-        ids.Where(id => TabPrices.Find(id) != null && !TabPrices.NeverPriced.Contains(id))
+        ids.Where(id => (TabPrices.Find(id) != null || TabPrices.Modifiers.Contains(id)) && !TabPrices.NeverPriced.Contains(id))
            .Distinct(StringComparer.Ordinal)
            .ToList();
 
@@ -95,11 +107,31 @@ public static class TabPresets
     public static string? Match(IEnumerable<string>? enabledIds)
     {
         var on = new HashSet<string>(enabledIds ?? Array.Empty<string>(), StringComparer.Ordinal);
-        on.RemoveWhere(id => TabPrices.Find(id) == null || TabPrices.NeverPriced.Contains(id));
+        on.RemoveWhere(id => (TabPrices.Find(id) == null && !TabPrices.Modifiers.Contains(id)) || TabPrices.NeverPriced.Contains(id));
         if (on.Count == 0) return null;
         foreach (var preset in All)
             if (on.SetEquals(preset.PriceIds)) return preset.Id;
         return Custom;
+    }
+
+    /// <summary>The month the stakes line is priced over: October.</summary>
+    public const int MonthDays = 31;
+
+    /// <summary>The most a preset can put on a lock in a month, every day at its limit. Under two
+    /// days it reads in hours (rounded up), past that in whole days (rounded up).</summary>
+    public static (int Value, bool Days) WorstMonth(TabPreset preset)
+    {
+        var hours = preset.DayMinutes * MonthDays / 60.0;
+        return hours < 48 ? ((int)Math.Ceiling(hours), false) : ((int)Math.Ceiling(hours / 24), true);
+    }
+
+    /// <summary>The two limit settings after picking <paramref name="preset"/>: a lower limit lands
+    /// now, a higher one waits its day, exactly as if the player had moved the sliders.</summary>
+    public static (LimitSetting Day, LimitSetting Backlog) RequestLimits(TabPreset preset, LimitSetting day, LimitSetting backlog, DateTime utcNow)
+    {
+        var wanted = TabLimits.FromMinutes(preset.DayMinutes, preset.BacklogMinutes);
+        return (LimitChange.Request(day, wanted.DailySeconds / 60, utcNow),
+                LimitChange.Request(backlog, wanted.BacklogSeconds / 60, utcNow));
     }
 
     public static string NameKey(string presetId) => "chaster_preset_" + presetId;

@@ -14,6 +14,7 @@
  * ==========================================================================*/
 import POWER from './cues/power.js';
 import FEEL from './cues/feel.js';
+import ENDLESS from './cues/endless.js';
 
-export const CUES = { ...POWER, ...FEEL };
+export const CUES = { ...POWER, ...FEEL, ...ENDLESS };
 export default CUES;

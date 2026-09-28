@@ -115,7 +115,7 @@ export function mountAttention({ host, tokenHost = null, match, audio = null, ge
   const ring = add(root, el('div', 'gg-att-ring'));
   const ringNum = add(ring, el('span', 'gg-att-ring-num', '—'));
   const col = add(root, el('div', 'gg-att-col'));
-  const label = add(col, el('div', 'gg-att-label', 'next check ~90s'));
+  const label = add(col, el('div', 'gg-att-label', S.attention.nextCheck(90)));
   const dots = add(col, el('div', 'gg-att-dots'));
   const dotEls = [];
   for (let i = 0; i < HISTORY; i++) dotEls.push(add(dots, el('i', 'gg-att-dot')));
@@ -146,8 +146,8 @@ export function mountAttention({ host, tokenHost = null, match, audio = null, ge
     if (root.hidden) return;
     const left = Math.max(0, nextAtElapsed - elapsed());
     const secs = Math.ceil(left / 1000);
-    text(label, token ? 'check due now' : 'next check ~' + secs + 's');
-    text(ringNum, token ? 'tap' : String(secs));
+    text(label, token ? S.attention.due : S.attention.nextCheck(secs));
+    text(ringNum, token ? S.attention.tap : String(secs));
     const pct = Math.max(0, Math.min(100, 100 - (left / CHECK_INTERVAL_MS) * 100));
     if (ring && ring.style && ring.style.setProperty) ring.style.setProperty('--gg-ring', pct.toFixed(1) + '%');
     cls(ring, 'is-due', !!token);
@@ -197,7 +197,7 @@ export function mountAttention({ host, tokenHost = null, match, audio = null, ge
     if (!node) return;
     node.type = 'button';
     add(node, el('i', 'gg-att-token-ring'));
-    add(node, el('span', 'gg-att-token-word', 'tap'));
+    add(node, el('span', 'gg-att-token-word', S.attention.tap));
     const at = placeToken();
     if (node.style) {
       node.style.left = Math.round(at.x) + 'px';
@@ -242,9 +242,9 @@ export function mountAttention({ host, tokenHost = null, match, audio = null, ge
 
     if (passed) {
       sfx(audio, 'gg-check-ok');
-      chip('focus held');
+      chip(S.attention.held);
     } else {
-      showBanner('missed check — ×0.6 for 60 seconds.');
+      showBanner(S.attention.missed);
     }
     paint();
   }

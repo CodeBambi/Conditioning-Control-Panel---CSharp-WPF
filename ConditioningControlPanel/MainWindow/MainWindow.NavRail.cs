@@ -121,7 +121,8 @@ namespace ConditioningControlPanel
         /// so its left edge meets the frame's inner edge instead of disappearing under it. It
         /// still reads as the "64px medallion zone", because the door name starts at 64 either
         /// way.</summary>
-        private const double NavDoorTileCollapsed = 44;
+        // Owner polish: keep the full-size medallion visible even with the rail collapsed.
+        private const double NavDoorTileCollapsed = 50;
         private const double NavDoorTileExpanded = 50;
 
         /// <summary>The art itself - a Viewbox over the native 64px medallion, so its rounded
@@ -139,7 +140,7 @@ namespace ConditioningControlPanel
         /// upscale. If the ring should read thicker (the "about half" reading: 36/45, ~4px of
         /// plate), these two constants are the whole knob - NavRailFlyoutTests pins the
         /// tile-relative inset, not the absolutes.</para></summary>
-        private const double NavDoorIconCollapsed = 40;
+        private const double NavDoorIconCollapsed = 46;
         private const double NavDoorIconExpanded = 46;
 
         /// <summary>Radial hue halo behind the tile. 64 shut is exactly the 56px strip plus the
@@ -540,6 +541,50 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "ApplyDoorArt failed; nav rail keeps its embedded medallions");
             }
+        }
+
+        /// <summary>
+        /// Puts the active mod's wording on the rail's labels (ticket 2026-09-24: with Circe on,
+        /// the header and dashboard were renamed and the side rail was not). Every rail label is
+        /// a <c>{loc:Str key}</c> binding; the first pass swaps each one for the same binding
+        /// through <see cref="Localization.ModAwareLocText.Converter"/>, so a language switch
+        /// still updates it live, and every pass re-reads the targets so a mod switch lands.
+        /// Called from ApplyModFeatureNames, the app's one ModChanged / LanguageChanged repaint.
+        /// </summary>
+        private void ApplyModToNavRailLabels()
+        {
+            if (NavSidebar == null) return;
+            ApplyModToNavRailLabels(NavSidebar);
+        }
+
+        private static void ApplyModToNavRailLabels(DependencyObject node)
+        {
+            if (node is TextBlock tb)
+            {
+                var be = BindingOperations.GetBindingExpression(tb, TextBlock.TextProperty);
+                var b = be?.ParentBinding;
+                if (b != null && ReferenceEquals(b.Source, Localization.LocalizationManager.Instance)
+                    && b.Path?.Path is string path && path.Length > 2 && path[0] == '[' && path[^1] == ']')
+                {
+                    if (b.Converter is Localization.ModAwareLocText.Converter)
+                    {
+                        be!.UpdateTarget();
+                    }
+                    else if (b.Converter == null)
+                    {
+                        var key = path.Substring(1, path.Length - 2);
+                        BindingOperations.SetBinding(tb, TextBlock.TextProperty, new Binding(path)
+                        {
+                            Source = Localization.LocalizationManager.Instance,
+                            Mode = BindingMode.OneWay,
+                            Converter = new Localization.ModAwareLocText.Converter(key),
+                        });
+                    }
+                }
+            }
+
+            foreach (var child in LogicalTreeHelper.GetChildren(node))
+                if (child is DependencyObject d) ApplyModToNavRailLabels(d);
         }
 
         private void CacheNavRailParts(DependencyObject root)

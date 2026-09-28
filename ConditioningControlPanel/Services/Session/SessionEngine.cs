@@ -1376,8 +1376,12 @@ namespace ConditioningControlPanel.Services
                 current.SubliminalOpacity = settings.SubliminalOpacity;
                 current.SubliminalDuration = settings.SubliminalFrames;
 
-                // Override the subliminal pool with session phrases
-                if (settings.SubliminalPhrases.Count > 0)
+                // Override the subliminal pool with session phrases (built-ins read neutral
+                // words under CCP Default, see PresetNaming.SessionWords)
+                var subliminalWords = _currentSession != null && ReferenceEquals(settings, _currentSession.Settings)
+                    ? PresetNaming.SubliminalWords(_currentSession)
+                    : settings.SubliminalPhrases;
+                if (subliminalWords.Count > 0)
                 {
                     // Disable all existing phrases
                     var keys = current.SubliminalPool.Keys.ToList();
@@ -1387,14 +1391,14 @@ namespace ConditioningControlPanel.Services
                     }
 
                     // Add/enable session phrases (mod-aware: transform triggers for active mod)
-                    foreach (var phrase in settings.SubliminalPhrases)
+                    foreach (var phrase in subliminalWords)
                     {
                         var modePhrase = App.Mods?.MakeModAware(phrase) ?? phrase;
                         current.SubliminalPool[modePhrase] = true;
                     }
 
                     App.Logger?.Information("Session: Using subliminal phrases: {Phrases}",
-                        string.Join(", ", settings.SubliminalPhrases));
+                        string.Join(", ", subliminalWords));
                 }
 
                 if (settings.SubliminalStartMinute == 0)
@@ -1439,8 +1443,11 @@ namespace ConditioningControlPanel.Services
                 current.BouncingTextSize = settings.BouncingTextSize;
                 current.BouncingTextOpacity = settings.BouncingTextOpacity;
 
-                // Override the bouncing text pool with session phrases
-                if (settings.BouncingTextPhrases.Count > 0)
+                // Override the bouncing text pool with session phrases (mod-aware like above)
+                var bouncingWords = _currentSession != null && ReferenceEquals(settings, _currentSession.Settings)
+                    ? PresetNaming.BouncingWords(_currentSession)
+                    : settings.BouncingTextPhrases;
+                if (bouncingWords.Count > 0)
                 {
                     // Disable all existing phrases
                     var keys = current.BouncingTextPool.Keys.ToList();
@@ -1450,7 +1457,7 @@ namespace ConditioningControlPanel.Services
                     }
                     
                     // Add/enable session phrases
-                    foreach (var phrase in settings.BouncingTextPhrases)
+                    foreach (var phrase in bouncingWords)
                     {
                         current.BouncingTextPool[phrase] = true;
                     }

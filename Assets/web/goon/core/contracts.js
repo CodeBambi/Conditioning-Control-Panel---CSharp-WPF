@@ -4,6 +4,8 @@
 // way out (Newtonsoft NullValueHandling.Ignore parity) and overlays inbound frames onto a
 // fresh factory object so a missing member reads as its C# default.
 
+import { clampNoiseSet } from './noiseSets.js';
+
 export const PROTOCOL_VERSION = 1;
 
 export const GoonElement = Object.freeze({
@@ -320,7 +322,7 @@ export const PAYLOAD_ELEMENT = Object.freeze({
  * Like `transfer` it enters NO intersection and can never fail a lobby.
  */
 export function makeCaps(o = {}) {
-  return {
+  const caps = {
     platform: o.platform ?? 'web',
     payloads: o.payloads ?? [],
     elements: o.elements ?? [],
@@ -328,11 +330,52 @@ export function makeCaps(o = {}) {
     min_v: o.min_v ?? PROTOCOL_VERSION,
     transfer: o.transfer ?? false,
     voice: clampVoiceCount(o.voice),
+    night: clampVoiceCount(o.night),
+    // The points model (core/points.js, 2026-09-24). A revision, on the night precedent.
+    score: clampVoiceCount(o.score),
   };
+  // NICHES (2026-09-24), APPEND-ONLY and OMITTED when empty, so every hello that has none is
+  // byte-identical to before. See cleanNiches below.
+  const niches = cleanNiches(o.niches);
+  if (niches.length) caps.niches = niches;
+  return caps;
 }
+
+/**
+ * THE HAPPY PATH FOR A SEAT THAT SENDS NO FILES (owner call 2026-09-24). A player whose pictures
+ * come from Scrolller (free, or no local library, or the send switch off) names the niches they
+ * picked in `caps.niches`, and the OPPONENT'S host fetches pictures from those niches itself, to
+ * draw on this player's throws. Only NAMES cross the wire: no url, no post id, no bytes, so there
+ * is nothing to allowlist and nothing a peer can steer but which public niche is read. Same
+ * grammar and cap as the host's GoonOnlineMediaRules (2..40 of [A-Za-z0-9_], at most 8, deduped
+ * without case). The presence of the list IS the version discriminator: a build that predates
+ * it sends none and its opponent simply draws from their own deck, exactly as before.
+ */
+export const NICHE_CAP_MAX = 8;
+const NICHE_RE = /^[A-Za-z0-9_]{2,40}$/;
+export function cleanNiches(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const n of list) {
+    if (typeof n !== 'string' || !NICHE_RE.test(n)) continue;
+    const k = n.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(n);
+    if (out.length >= NICHE_CAP_MAX) break;
+  }
+  return out;
+}
+/** A peer's `caps.niches`, from an UNTRUSTED hello, cleaned. [] when absent or unusable. */
+export function peerNiches(caps) { return cleanNiches(caps && caps.niches); }
 
 /** The voice-note protocol revision THIS build speaks. Advertised as `caps.voice`. */
 export const VOICE_CAP_VERSION = 1;
+/** 2 (2026-09-25): the Sort duel's VS reveal + noise pick (`sub:'noise'`). A peer on 1 plays Sort the old way. */
+export const NIGHT_CAP_VERSION = 2;
+/** The points model revision THIS build speaks. Advertised as `caps.score`. */
+export const SCORE_CAP_VERSION = 1;
 
 /**
  * A peer's `caps.voice`, from an UNTRUSTED hello, as a plain boolean "can we send to them".
@@ -345,6 +388,11 @@ export const VOICE_CAP_VERSION = 1;
 export function peerSpeaksVoice(caps) {
   return clampVoiceCount(caps && caps.voice) >= 1;
 }
+export function peerSpeaksNight(caps) { return clampVoiceCount(caps && caps.night) >= 1; }
+/** Their build runs the Sort duel's noise pick (night revision 2). Below that: no reveal, no pick, the old Sort. */
+export function peerPicksNoise(caps) { return clampVoiceCount(caps && caps.night) >= 2; }
+/** Their build scores with the points model. Both seats must, or neither does (legacy score). */
+export function peerScoresPoints(caps) { return clampVoiceCount(caps && caps.score) >= 1; }
 
 export function makeHello(o = {}) {
   return {
@@ -450,6 +498,9 @@ export function makeTick(o = {}) {
     closeness: o.closeness ?? null,
     charges: o.charges ?? 0,
     vwin: clampWindowCount(o.vwin),
+    // APPEND-ONLY, optional: the points model split {s,o,d,p,b,c} (core/points.js wire()).
+    // null is stripped on the way out, so a peer that predates it never sees the field.
+    sc: o.sc ?? null,
   };
 }
 
@@ -475,6 +526,8 @@ export function makePayloadReceipt(o = {}) {
     v: o.v ?? PROTOCOL_VERSION,
     id: o.id ?? '',
     status: o.status ?? '',
+    // APPEND-ONLY, optional: the share (0..1) of the throw the receiver held. Points model only.
+    held: o.held ?? null,
   };
 }
 
@@ -570,6 +623,33 @@ export function makeVoice(o = {}) {
 }
 
 /**
+ * GAME NIGHT: THE SONG (2026-09-23). One frame, host -> guest, before Live:
+ *
+ *   {t:'song', sub:'set',   url, title, dur_sec}   the host picked a track
+ *   {t:'song', sub:'clear'}                        the host went back to the default length
+ *
+ * GATED BY `caps.night`, never by version: an older peer drops an unknown `t` without a word,
+ * so core/match.js only ever sends this to a peer whose hello said night >= 1 (peerSpeaksNight).
+ * It enters no intersection and can never fail a lobby.
+ *
+ * IT IS NOT A TERM. The length the match actually runs is the consent sheet's
+ * live_duration_sec, proposed by the host through the ordinary proposeConsent road, so both
+ * lamps clear and both players sign the length they saw. `dur_sec` here is only the label.
+ * The url is re-checked on arrival (core/song.js wireSongUrl: https, cdn.bambicloud.com, nothing
+ * else) and the title sanitized, in core/match.js. The numbers are pinned in wire.js.
+ */
+export function makeSong(o = {}) {
+  return {
+    t: 'song',
+    v: o.v ?? PROTOCOL_VERSION,
+    sub: o.sub ?? '',
+    url: o.url ?? null,
+    title: o.title ?? null,
+    dur_sec: o.dur_sec ?? 0,
+  };
+}
+
+/**
  * "I am still getting my library together" (protocol §6, v1.4).
  *
  * A PRESENCE HINT, not a term and not a phase. A first-time guest who arrived on
@@ -594,6 +674,59 @@ export function makeMediaPrep(o = {}) {
     t: 'media_prep',
     v: o.v ?? PROTOCOL_VERSION,
     preparing: o.preparing ?? false,
+  };
+}
+
+/**
+ * GAME NIGHT DUEL (2026-09-23). A `t:'duel'` frame, gated on the peer's `caps.night >= 1`
+ * exactly the way `t:'voice'` is gated on `caps.voice`: an older peer drops the unknown `t`
+ * silently, so the sender checks the cap before anything leaves. Fire and forget, no receipt.
+ *
+ *   {t:'duel', sub:'cfg',   len_s}               host only, once at Live: the duel length it picked
+ *   {t:'duel', sub:'start', idx, len_s, game}    a game card was thrown: duel number idx begins
+ *   {t:'duel', sub:'score', idx, score, tile, game}  this side's own result for duel idx
+ *
+ * `game` names the Arcademy class the card holds (ui/duel/games.js). An EMPTY game is a frame
+ * from a build that only knew The Deep End, and means the-deep-end.
+ *   {t:'duel', sub:'busy',  idx}                 the receiver could not run that start: the thrower cancels
+ *   {t:'duel', sub:'noise', idx, set}            night >= 2 only: this side's NOISE board for a Sort duel,
+ *                                                an id from core/noiseSets.js (anything else clamps to '').
+ * `set` is null (stripped) on every other sub, so those frames stay byte-identical to revision 1.
+ *
+ * Every number is pinned in core/wire.js CLAMPED_FIELDS, both directions.
+ */
+export const DUEL_SUBS = Object.freeze(['cfg', 'start', 'score', 'busy', 'noise']);
+/** The duel lengths Customize offers. Anything else collapses to the first. */
+export const DUEL_LENGTHS_SEC = Object.freeze([60, 90, 120]);
+export function clampDuelSub(v) { return DUEL_SUBS.includes(v) ? v : ''; }
+export function clampDuelLen(v) {
+  const n = clampVoiceCount(v);
+  return DUEL_LENGTHS_SEC.includes(n) ? n : DUEL_LENGTHS_SEC[0];
+}
+/** Duel index: small non-negative integer. A match never sees more than a handful. */
+export function clampDuelIdx(v) { return Math.min(clampVoiceCount(v), 999); }
+/** A 2048 score: 0..1,000,000, far above anything a timed 4x4 board can reach. */
+export const DUEL_SCORE_MAX = 1000000;
+/** A tile TIER (1 = 2, 11 = 2048). 17 is the 4x4 board's theoretical ceiling. */
+export const DUEL_TILE_MAX = 17;
+export function clampDuelNum(v) { return Math.min(clampVoiceCount(v), DUEL_SCORE_MAX); }
+export function clampDuelTile(v) { return Math.min(clampVoiceCount(v), DUEL_TILE_MAX); }
+/** An Arcademy game key: lower-case letters, digits and hyphens, 1..32. Anything else is ''. */
+export function clampDuelGame(v) { return typeof v === 'string' && /^[a-z0-9-]{1,32}$/.test(v) ? v : ''; }
+
+export function makeDuel(o = {}) {
+  return {
+    t: 'duel',
+    v: o.v ?? PROTOCOL_VERSION,
+    sub: clampDuelSub(o.sub),
+    idx: clampDuelIdx(o.idx),
+    len_s: clampDuelLen(o.len_s),
+    score: clampDuelNum(o.score),
+    tile: clampDuelTile(o.tile),
+    game: clampDuelGame(o.game),
+    // Only a noise pick carries a set. null everywhere else, so stripNulls keeps the old frames
+    // byte-identical and the inbound parse (which copies factory keys) still reads it.
+    set: o.sub === 'noise' ? clampNoiseSet(o.set) : null,
   };
 }
 
@@ -643,7 +776,9 @@ export const MessageFactories = Object.freeze({
   mercy: makeMercy,
   emote: makeEmote,
   voice: makeVoice,
+  song: makeSong,
   media_prep: makeMediaPrep,
+  duel: makeDuel,
   result: makeResult,
   clock_ping: makeClockPing,
   clock_pong: makeClockPong,

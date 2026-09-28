@@ -18,6 +18,8 @@ const DRIFT_PX_PER_SEC = 42;
 /** Base bubble diameter before spec.scale. */
 const BASE_PX = 74;
 
+import { S } from '../strings.js';
+
 export function createBubbles(ctx) {
   const { el, add, cls, text, sfx } = ctx;
   let node = null;
@@ -33,8 +35,8 @@ export function createBubbles(ctx) {
     node = el('div', 'gg-sd-bubbles');
     if (!node) return null;
     const head = add(node, el('div', 'gg-sd-bub-head gg-plate'));
-    node._you = add(head, el('span', 'gg-sd-bub-you', 'you 0/0'));
-    node._them = add(head, el('span', 'gg-sd-bub-them', 'them ?'));
+    node._you = add(head, el('span', 'gg-sd-bub-you', S.sd.bubYou(0, 0)));
+    node._them = add(head, el('span', 'gg-sd-bub-them', S.sd.bubThem));
     node._ring = add(head, el('i', 'gg-sd-bub-ring'));
     node._field = add(node, el('div', 'gg-sd-bub-field'));
     ctx.mountStage(node);
@@ -167,8 +169,8 @@ export function createBubbles(ctx) {
 
   function paintCounter() {
     if (!node) return;
-    text(node._you, 'you ' + popped + '/' + count);
-    text(node._them, 'them ?');
+    text(node._you, S.sd.bubYou(popped, count));
+    text(node._them, S.sd.bubThem);
   }
 
   function clearField() {

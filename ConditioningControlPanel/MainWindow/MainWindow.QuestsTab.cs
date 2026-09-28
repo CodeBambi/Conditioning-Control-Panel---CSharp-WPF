@@ -676,7 +676,7 @@ namespace ConditioningControlPanel
                 // Shield overlay on days protected by streak shield
                 if (shieldedDates.Contains(day.Date))
                 {
-                    var shieldLabel = new TextBlock
+                    var shieldLabel = new ConditioningControlPanel.Helpers.EmojiTextBlock
                     {
                         Text = "🛡️",
                         FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI"),

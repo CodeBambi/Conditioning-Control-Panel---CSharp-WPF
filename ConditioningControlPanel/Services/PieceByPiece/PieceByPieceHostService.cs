@@ -141,9 +141,7 @@ internal static class PieceByPieceHostService
     {
         if (_host != null) { _host.FocusWeb(); return; }
 
-        // The same door the Arcademy and the descent ask for: a card's lockband is decoration, and
-        // the one code path that actually opens the window has to be the one that can say no.
-        if (!TierGate.DemandLab(ProductName)) return;
+        // Free for everyone since 2026-09-27 (owner): no tier gate on the board.
         SeasonRecapService.TrackFeature(SeasonFeatureKeys.PieceByPiece);
 
         try

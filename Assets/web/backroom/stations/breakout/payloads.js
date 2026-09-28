@@ -9,6 +9,8 @@ import { decodedSource } from '../../room/gif-decode.js';
 import { isClip, clipSource } from '../../room/clip-source.js';
 
 const MAX_RESIDENT = 8, EDGE = 192, FPS = 12;
+/** When a short first deal asks the host again (ms after the previous try). */
+const TOP_UP_MS = [1500, 3000, 6000, 12000];
 
 /** A still <img> wrapped in the same shape as a decoded source. */
 function stillSource(url) {
@@ -30,9 +32,10 @@ function stillSource(url) {
  * (the first live ball) lets only sources within r of the focus advance on tick(); the rest hold their frame.
  * A source never marked always ticks, so an older renderer keeps its faces moving.
  */
-export function createMedia({ ctx, still = false, count = 8 } = {}) {
+export function createMedia({ ctx, still = false, count = 8, decode = null, topUpMs = TOP_UP_MS,
+  setTimer = (f, ms) => setTimeout(f, ms), clearTimer = (t) => clearTimeout(t) } = {}) {
   const sources = [];
-  let words = [], disposed = false, focus = null, busy = false, deals = 0;
+  let words = [], disposed = false, focus = null, busy = false, deals = 0, topUpTimer = null, topUps = 0;
   const controller = new AbortController();
   const idx = i => (!sources.length ? -1 : ((i | 0) % sources.length + sources.length) % sources.length);
   const near = s => !focus || !s.at || Math.hypot(s.at.x - focus.x, s.at.y - focus.y) <= focus.r;
@@ -55,10 +58,10 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
     const gifs = Array.isArray(dealt.gifs) ? dealt.gifs.slice(0, MAX_RESIDENT) : [];
     await Promise.all(gifs.map(async (gif) => {
       if (!gif || !gif.url) return;
-      const src = await one(gif.url);
+      const src = await (decode || one)(gif.url);
       if (!src) return;
       if (disposed || list.length >= MAX_RESIDENT) { try { src.dispose(); } catch (e) { /* noop */ } return; }
-      list.push({ key: gif.key, src });
+      list.push({ key: gif.key, src, url: gif.url });
     }));
     if (disposed) { for (const s of list) { try { s.src.dispose(); } catch (e) { /* noop */ } } return null; }
     return { list, words: Array.isArray(dealt.words) ? dealt.words.filter(w => w && w.text).map(w => ({ key: w.key, text: String(w.text) })) : [] };
@@ -69,7 +72,34 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
     words = d.words;
     sources.push(...d.list);
     deals++;
+    scheduleTopUp();
     return true;
+  }
+  /**
+   * The first sit-down can land before the host's online pool is warm, and the host never pads a short
+   * deal (a deck cycles what it has), so the whole first wall wore one or two faces until the player left
+   * and came back. A short deal asks again a few times in the background and swaps in only a bigger one.
+   */
+  function scheduleTopUp() {
+    if (disposed || topUpTimer != null || sources.length >= Math.min(count, MAX_RESIDENT) || topUps >= topUpMs.length) return;
+    topUpTimer = setTimer(topUp, topUpMs[topUps++]);
+  }
+  async function topUp() {
+    topUpTimer = null;
+    if (disposed || sources.length >= Math.min(count, MAX_RESIDENT)) return;
+    if (!busy) {
+      busy = true;
+      try {
+        const d = await deal();
+        if (d && !disposed && d.list.length > sources.length) {
+          const old = sources.splice(0, sources.length, ...d.list);
+          for (const s of old) { try { s.src.dispose(); } catch (e) { /* noop */ } }
+          if (d.words.length) words = d.words;
+          deals++;
+        } else if (d) { for (const s of d.list) { try { s.src.dispose(); } catch (e) { /* noop */ } } }
+      } catch (e) { /* the next try, or the wall's own re-deal */ } finally { busy = false; }
+    }
+    scheduleTopUp();
   }
   /**
    * A fresh deal mid-run (every third wall, or after the room's source changed). The old pictures stay on
@@ -101,6 +131,8 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
     /** How many resident pictures can play (a still counts as not animated). */
     animated: () => sources.filter(s => s.src && s.src.animated).length,
     keys: () => sources.map(s => s.key),
+    /** The dealt url behind a resident key (the in-page effects show it at full size), or null. */
+    urlOf(key) { const s = sources.find(x => x.key === key); return s && s.url ? s.url : null; },
     frame(i) { const k = idx(i); return k < 0 ? null : sources[k].src.canvas; },
     /** Where source i sits this frame (field coords); the renderer or the station calls it before tick(). */
     mark(i, x, y) { const k = idx(i); if (k < 0) return; const s = sources[k]; if (!s.at) s.at = { x, y }; else { s.at.x = x; s.at.y = y; } },
@@ -111,7 +143,7 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
     tick(now) { for (const s of sources) { const go = s.pin || near(s); s.pin = false; if (!go) continue; try { s.src.tick(now, still); } catch (e) { /* a closed decoder */ } } },
     /** Up to n dealt word texts, for the word trail and the mantra wall. */
     trailWords(n = 12) { return words.slice(0, Math.max(0, n | 0)).map(w => w.text); },
-    dispose() { disposed = true; controller.abort(); for (const s of sources) { try { s.src.dispose(); } catch (e) { /* noop */ } } sources.length = 0; },
+    dispose() { disposed = true; if (topUpTimer != null) { try { clearTimer(topUpTimer); } catch (e) { /* noop */ } topUpTimer = null; } controller.abort(); for (const s of sources) { try { s.src.dispose(); } catch (e) { /* noop */ } } sources.length = 0; },
   };
 }
 

@@ -10,6 +10,8 @@
  * sides survive, which the judge settles on attention progress.
  * ==========================================================================*/
 
+import { S } from '../strings.js';
+
 export function createStaring(ctx) {
   const { el, add, cls, text } = ctx;
   let node = null;
@@ -18,8 +20,8 @@ export function createStaring(ctx) {
     if (node) return node;
     node = el('div', 'gg-sd-swap gg-plate');
     if (!node) return null;
-    node._head = add(node, el('h3', 'gg-sd-swap-head', 'no camera — reaction duel instead.'));
-    node._line = add(node, el('p', 'gg-sd-swap-line', 'this one needs two cameras. nobody loses it.'));
+    node._head = add(node, el('h3', 'gg-sd-swap-head', S.sd.noCamHead));
+    node._line = add(node, el('p', 'gg-sd-swap-line', S.sd.noCamLine));
     node._bar = add(node, el('i', 'gg-sd-swap-bar'));
     ctx.mountStage(node);
     return node;
@@ -31,7 +33,7 @@ export function createStaring(ctx) {
     n.hidden = false;
     cls(n, 'is-in', true);
     const ms = Math.max(1000, (spec && spec.durationMs) | 0);
-    text(n._line, 'this one needs two cameras. nobody loses it.');
+    text(n._line, S.sd.noCamLine);
     if (n._bar && n._bar.style) {
       n._bar.style.transition = 'none';
       n._bar.style.width = '100%';

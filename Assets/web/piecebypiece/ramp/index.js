@@ -24,6 +24,7 @@ import { createMeter, RAMP_TUNING, clamp01 } from './meter.js';
 import { createSchedule, videoHoldMs, sustainedFor } from './schedule.js';
 import { createLayerStack } from './layers/index.js';
 import { createFixtureMedia } from './media.js';
+import { presentation, onPresentation } from '../game/preferences.js';
 
 const TICK_MS = 90;            // scheduling cadence; layers animate on their own
 const BOARD_PUSH_MS = 200;     // how often we hand the meter to A's board
@@ -94,7 +95,7 @@ export function attachRamp(opts = {}) {
 
   // declared before the subscription below, which can fire the moment it is made
   let hostHoldSec = null;     // pbp:settings.videoHoldSec, when the host sent one
-  let reducedMotion = false;  // pbp:settings.reducedMotion: the moving layers stop
+  let reducedMotion = presentation().reducedMotion;  // pbp:settings.reducedMotion: the moving layers stop
 
   // A host-backed pool (media.js createHostMedia) forwards the host's own
   // settings frame. A fixture pool has no onSettings and this is simply skipped.
@@ -104,13 +105,14 @@ export function attachRamp(opts = {}) {
       unsubSettings = media.onSettings((s) => {
         hostHoldSec = Number.isFinite(s && s.videoHoldSec) ? s.videoHoldSec : null;
         const wasReduced = reducedMotion;
-        reducedMotion = !!(s && s.reducedMotion);
+        reducedMotion = presentation().reducedMotion || !!(s && s.reducedMotion);
         if (reducedMotion && !wasReduced) stack.clear();   // drop what is mid-flight
       });
     } catch { warn('host settings could not be subscribed'); }
   }
 
-  let enabled = true;
+  let enabled = presentation().experience === 'distraction';
+  let localSides = ['w', 'b'];
   let disposed = false;
   let rafId = 0;
   let lastTick = 0;
@@ -130,7 +132,7 @@ export function attachRamp(opts = {}) {
   const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
   /** The side the ramp is acting on: whoever is on the move. */
-  const actingSide = () => meter.active;
+  const actingSide = () => localSides.length === 1 ? localSides[0] : meter.active;
   const liveMeter = () => (overrideMeter == null ? meter.meterFor(actingSide()) : clamp01(overrideMeter));
   const liveHeat = (t) => (overrideMeter == null ? meter.heatFor(actingSide(), t) : clamp01(overrideMeter));
 
@@ -196,7 +198,11 @@ export function attachRamp(opts = {}) {
 
   /* ---- bus wiring --------------------------------------------------------- */
   const handlers = {
-    local() { /* both sides are on this screen: nothing to gate, kept for parity */ },
+    newgame() { resetMatch(); },
+    local(p) {
+      localSides = Array.isArray(p?.sides) ? p.sides.filter(s => s === 'w' || s === 'b') : ['w', 'b'];
+      resetMatch();
+    },
     clock(p) { meter.setClock(p); },
     turn(p) {
       const seeding = !seenTurn;
@@ -209,8 +215,9 @@ export function attachRamp(opts = {}) {
       // Except the first one. The board deals a `turn` at start() to seed the
       // clocks and the effects layer, and nobody has moved yet: a card there
       // covers the opening position before the player has touched a piece.
-      if (seeding || reducedMotion) return;
+      if (seeding || !enabled || reducedMotion) return;
       const waiting = otherSide(p && p.side === 'b' ? 'b' : 'w');
+      if (!localSides.includes(waiting)) return;
       const m = overrideMeter == null ? meter.meterFor(waiting) : clamp01(overrideMeter);
       stack.videoCard({ holdMs: videoHoldMs(m, tuning, hostHoldSec), side: waiting });
     },
@@ -218,15 +225,15 @@ export function attachRamp(opts = {}) {
       const t = now();
       meter.noteCapture(p, t);
       const taker = p && p.by === 'b' ? 'b' : 'w';
-      if (reducedMotion) return;   // the meter still moved; only the burst is off
+      if (!enabled || reducedMotion) return;   // the meter still moved; only the burst is off
       // both sides feel it; the one who took the piece feels it harder
-      stack.burst(schedule.burstFor('taker', meter.heatFor(taker, t)));
-      stack.burst(schedule.burstFor('victim', meter.heatFor(otherSide(taker), t)));
+      if (localSides.includes(taker)) stack.burst(schedule.burstFor('taker', meter.heatFor(taker, t)));
+      if (localSides.includes(otherSide(taker))) stack.burst(schedule.burstFor('victim', meter.heatFor(otherSide(taker), t)));
     },
-    check() { if (!reducedMotion) stack.oneshot('flash', { heat: liveHeat(now()) }); },
-    grab(p) { stack.grab(p); },
-    dragmove(p) { stack.dragmove(p); },
-    drop(p) { stack.drop(p); },
+    check() { if (enabled && !reducedMotion) stack.oneshot('flash', { heat: liveHeat(now()) }); },
+    grab(p) { if (enabled) stack.grab(p); },
+    dragmove(p) { if (enabled) stack.dragmove(p); },
+    drop(p) { if (enabled) stack.drop(p); },
     gameover() {
       meter.over = true;
       setEnabled(false);
@@ -241,7 +248,7 @@ export function attachRamp(opts = {}) {
   }
 
   function setEnabled(on) {
-    enabled = !!on;
+    enabled = !!on && !meter.over && presentation().experience === 'distraction';
     if (!enabled) {
       stack.clear();
       for (const k of Object.keys(applied)) applied[k] = UNSET;
@@ -250,9 +257,35 @@ export function attachRamp(opts = {}) {
     return enabled;
   }
 
+  function resetMatch() {
+    setEnabled(false);
+    meter.reset();
+    schedule.reset(now());
+    // Continuing a saved game restores its accumulated pressure without replaying bursts.
+    const game = globalThis.window?.PBP?.game;
+    const history = game?.rules?.chess?.history({ verbose: true }) || [];
+    for (const move of history) if (move.captured) meter.noteCapture({ by: move.color, victimSide: otherSide(move.color) }, now() - 60000);
+
+    seenTurn = false;
+    overrideMeter = null;
+    lastTick = lastBoardPush = 0;
+    setEnabled(true);
+  }
+
+  const unsubPresentation = onPresentation(p => {
+    const wasReduced = reducedMotion;
+    reducedMotion = p.reducedMotion;
+    if (reducedMotion && !wasReduced) {
+      stack.clear();
+      for (const k of Object.keys(applied)) applied[k] = UNSET;
+    }
+    setEnabled(p.experience === 'distraction');
+  });
+
   function dispose() {
     if (disposed) return;
     disposed = true;
+    unsubPresentation();
     if (rafId) { try { cancelAnimationFrame(rafId); } catch { clearTimeout(rafId); } rafId = 0; }
     if (unsubSettings) { try { unsubSettings(); } catch { /* gone */ } unsubSettings = null; }
     if (bus) for (const [type, fn] of bound) { try { bus.off(type, fn); } catch { /* gone already */ } }

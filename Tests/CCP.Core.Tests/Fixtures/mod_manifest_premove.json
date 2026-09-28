@@ -13,6 +13,9 @@
     "matrix"
   ],
   "previewImage": "preview.png",
+  "bannerImage": "banner.png",
+  "suggestedSettingsPreset": "Gentle",
+  "suggestedAssetPreset": "Drone assets",
   "theme": {
     "accentColor": "#00FF41",
     "accentLightColor": "#39FF14",
@@ -106,7 +109,10 @@
       "description": "Terse.",
       "promptSettings": {
         "tone": "clinical"
-      }
+      },
+      "sampleLines": [
+        "Proceed."
+      ]
     }
   ],
   "textReplacements": {

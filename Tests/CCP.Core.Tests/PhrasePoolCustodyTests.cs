@@ -60,6 +60,23 @@ public sealed class PhrasePoolCustodyTests : IDisposable
     };
 
     [Fact]
+    public void Begin_BuiltInUnderCcpDefault_OverridesWithNeutralWords()
+    {
+        // WPF SessionEngine.cs:1381-1383, 1447-1449: built-ins read PresetNaming's neutral words.
+        CoreMods.MakeModAwareProvider = t => t;
+        var session = Session.GetAllSessions().First(x => x.Id == "morning_drift");
+        var s = Plain();
+        PhrasePoolCustody.Begin(s, session.Settings, BuiltInMods.CCPDefaultId, session);
+
+        var sub = s.SubliminalPool.Where(p => p.Value).Select(p => p.Key).ToList();
+        var bounce = s.BouncingTextPool.Where(p => p.Value).Select(p => p.Key).ToList();
+        Assert.Equal(PresetNaming.SubliminalWords(session, BuiltInMods.CCPDefaultId).OrderBy(x => x), sub.OrderBy(x => x));
+        Assert.Equal(PresetNaming.BouncingWords(session, BuiltInMods.CCPDefaultId).OrderBy(x => x), bounce.OrderBy(x => x));
+        Assert.DoesNotContain(sub, k => k.Contains("BAMBI", StringComparison.OrdinalIgnoreCase) || k == "GOOD GIRL");
+        Assert.DoesNotContain(bounce, k => k.Contains("Good Girl", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Begin_InPlace_NoPoolINPC_ModAwareSubAndLockOnly()
     {
         CoreMods.MakeModAwareProvider = t => "M:" + t;

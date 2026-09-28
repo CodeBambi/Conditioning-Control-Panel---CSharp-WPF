@@ -106,6 +106,7 @@ public partial class LauncherWindow : Window
             RefreshLockdownVeil();
             HookEngine();
             _statusTimer.Start();
+            StartOpenTables();
 
             if (MotionFx.AllowTransitions)
                 foreach (var t in _tiles) t.Opacity = 0;
@@ -121,6 +122,7 @@ public partial class LauncherWindow : Window
     private void OnHidden()
     {
         _statusTimer.Stop();
+        StopOpenTables();
         RestoreRootOpacity();
         try { FxOnHidden(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnHidden threw"); }
     }
@@ -143,6 +145,7 @@ public partial class LauncherWindow : Window
         _fadeGuard?.Stop();
         _statusTimer.Stop();
         _shortcutTextTimer.Stop();
+        StopOpenTables();
         LauncherHost.RequestSignIn = null;
         UnhookEngine();
         var mods = App.Mods;
@@ -155,6 +158,7 @@ public partial class LauncherWindow : Window
             lockdown.LockdownDeactivated -= OnLockdownChanged;
         }
         try { FxOnClosed(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnClosed threw"); }
+        TierBadgeFxStop();
     }
 
     // ------------------------------------------------------------------ title bar
@@ -233,21 +237,41 @@ public partial class LauncherWindow : Window
     private void OnGrantsChanged()
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(DispatcherPriority.Normal, OnGrantsChanged); return; }
-        if (!IsVisible) return;
-        var flipped = LauncherCatalogue.Games.Where(g => g.Available)
-            .Any(g => !_revealedAtBuild.TryGetValue(g.Id, out var was) || was != g.Revealed);
-        if (!flipped) return;
-        Log.Information("[Launcher] grants changed a tile's reveal, redrawing tiles");
-        BuildTiles();
-        if (MotionFx.AllowTransitions)
-            foreach (var t in _tiles) t.Opacity = 0;
-        MotionFx.StaggerIn(_tiles);
+        RefreshTiles(LauncherTileTrigger.GrantsChanged);
     }
 
+    /// <summary>
+    /// The active mod changed, from whichever path (ccp-bugs #1292). The pill reads it at once;
+    /// the tiles redraw a dispatcher turn later, so a switch made through
+    /// <c>ApplyActiveModChange</c> has finished applying before the art is read again.
+    /// </summary>
     private void OnModChanged(object? sender, ModPackage mod)
     {
-        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(DispatcherPriority.Normal, RefreshMod); return; }
-        RefreshMod();
+        Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+        {
+            RefreshMod();
+            RefreshTiles(LauncherTileTrigger.ModChanged);
+        });
+    }
+
+    /// <summary>
+    /// Redraw the tiles when <see cref="LauncherTileRefresh"/> says the event changed what they
+    /// show. The one refresh path for mod switches and grant changes.
+    /// </summary>
+    private void RefreshTiles(LauncherTileTrigger trigger)
+    {
+        try
+        {
+            var now = LauncherCatalogue.Games.Where(g => g.Available)
+                .Select(g => new KeyValuePair<string, bool>(g.Id, g.Revealed));
+            if (!LauncherTileRefresh.ShouldRebuild(trigger, IsVisible, _revealedAtBuild, now)) return;
+            Log.Information("[Launcher] {Trigger} redrawing tiles", trigger);
+            BuildTiles();
+            if (MotionFx.AllowTransitions)
+                foreach (var t in _tiles) t.Opacity = 0;
+            MotionFx.StaggerIn(_tiles);
+        }
+        catch (Exception ex) { Log.Warning(ex, "[Launcher] tile refresh on {Trigger} failed", trigger); }
     }
 
     /// <summary>
@@ -430,6 +454,8 @@ public partial class LauncherWindow : Window
             };
             TierBadge.Source = badge == null ? null : ModResourceResolver.ResolveImageDecoded(badge, 64);
             TierBadge.Visibility = TierBadge.Source == null ? Visibility.Collapsed : Visibility.Visible;
+            if (TierBadge.Source != null) EnsureTierBadgeFx();
+            else TierBadgePopup.IsOpen = false;
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshAccount failed"); }
     }

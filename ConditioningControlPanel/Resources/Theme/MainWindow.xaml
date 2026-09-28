@@ -675,12 +675,12 @@
 
         <!-- Help Button Style - Small circular (?) icon for section help -->
         <Style x:Key="HelpButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="18"/>
-            <Setter Property="Height" Value="18"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
             <Setter Property="Cursor" Value="Help"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
@@ -694,10 +694,10 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="9"
-                                Width="18" Height="18">
+                                CornerRadius="11"
+                                Width="{TemplateBinding Width}" Height="{TemplateBinding Height}">
                             <TextBlock Text="?"
-                                       FontSize="11"
+                                       FontSize="13"
                                        FontWeight="SemiBold"
                                        Foreground="{TemplateBinding Foreground}"
                                        HorizontalAlignment="Center"

@@ -126,6 +126,12 @@ public class CompanionZoneRenderSmokeTests
     public void Workshop_RealizesInEveryState(string exhibit)
         => OnStaThread(() => Realize(() => new WorkshopAccordion(), CompanionMockGallery.Get(exhibit)!, 1160));
 
+    [Theory]
+    [InlineData(360)]
+    [InlineData(540)]
+    public void CompanionPicker_InitializesCompiledMarkupAtSheetWidths(double width)
+        => OnStaThread(() => Realize(() => new CompanionPickerCard(), new object(), width));
+
     [Fact]
     public void ExpandAndReveal_OpensTheDrawersWithoutADispatcherPump()
     {

@@ -10,7 +10,7 @@
 import { createRules } from './rules.js';
 import { createClock, DEFAULT_MS, formatClock } from './clock.js';
 
-export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fen, auto = 0, autoDelay = 0.45 }) {
+export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fen, auto = 0, autoDelay = 0.45, restore = null }) {
   const rules = createRules(fen);
   const pieces = board.pieces;
   let over = null;
@@ -30,7 +30,7 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
 
   function clocks() {
     const s = clock.snapshot();
-    return { w: s.w, b: s.b, total: s.total };
+    return { w: s.w, b: s.b, total: s.total, ...(s.untimed ? { untimed: true } : {}) };
   }
 
   function paint() {
@@ -40,6 +40,7 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
     hud.b.textContent = formatClock(s.b);
     hud.w.classList.toggle('on', s.active === 'w' && !over);
     hud.b.classList.toggle('on', s.active === 'b' && !over);
+    if (hud.status.dataset?.hudOwned) return;
     if (over) hud.status.textContent = statusLine(over);
     else hud.status.textContent = rules.inCheck() ? 'check' : (rules.turn() === 'w' ? 'white to move' : 'black to move');
   }
@@ -96,7 +97,8 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
       });
     }
     if (played.check) {
-      if (board.buzzCheck) board.buzzCheck(played.to);   // the man giving check rattles
+      const king = Object.entries(rules.position()).find(([, p]) => p.type === 'k' && p.side === played.turn)?.[0];
+      if (king && board.buzzCheck) board.buzzCheck(king);
       bus.emit('check', { side: played.turn });
     }
 
@@ -197,20 +199,29 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
     try { moves = rules.chess.history(); } catch { moves = []; }
     const s = clock.snapshot();
     return { moves, plies: moves.length, result: over ? { result: over.result, winner: over.winner ?? null, reason: over.reason || null } : null,
-             clocks: { w: s.w, b: s.b, total: clockMs } };
+             clocks: { w: s.untimed ? null : s.w, b: s.untimed ? null : s.b, total: clockMs, untimed: s.untimed } };
   }
 
   function start() {
     pieces.setPosition(rules.position());
     board.setSide(rules.turn(), true);
+    const end = rules.result();
+    if (end) { finish(end); return; }
     clock.start(rules.turn());
     paint();
     bus.emit('turn', { side: rules.turn(), ply: rules.ply(), clocks: clocks(), total: clockMs });
   }
 
+  if (restore) {
+    // Replay SAN so repetition, castling rights and en passant survive a resume.
+    for (const san of restore.moves || []) rules.chess.move(san);
+    clock.restore(restore.clocks);
+  }
+
   return {
     rules, clock, start, reset, record, update, tryMove, takeBack, canPick, legalTargets, resign,
-    plies: () => history.length,
+    dispose() { clock.stop(); },
+    plies: () => rules.ply(),
     turn: () => rules.turn(),
     isOver: () => !!over,
     result: () => over,

@@ -49,8 +49,11 @@ import { GoonConsts, GoonMatchPhase, GoonPayloadKind, PAYLOAD_ELEMENT, costOf } 
 import { ALWAYS_ON_ELEMENT } from '../core/draft.js';
 import { GoonPayloadRateLimiter, GoonReceiptStatus } from '../core/scoring.js';
 import { localMonotonicMs } from '../core/clock.js';
-import { dressGhost } from './throwPreview.js';
+import { dressGhost, markFor } from './throwPreview.js';
 import { S } from './strings.js';
+import { GAME_CARD_COST } from './duel/rules.js';
+import { DUEL_COPY } from './duel/copy.js';
+import { burst, centreOf, flyArc, popIn, shake as shakeNode, squash, isCalm, impactMark } from './juiceDom.js';
 
 /**
  * The rails, in owner order — which is also the KEYBOARD order (1..7), so new
@@ -71,14 +74,19 @@ import { S } from './strings.js';
  * no way to throw one back.
  */
 export const ARSENAL_ITEMS = Object.freeze([
-  { id: 'flash', rail: 'left', kind: GoonPayloadKind.FlashBurst, img: 'item_flash', label: 'flash', durationMs: 6000, cost: 1 },
-  { id: 'subliminal', rail: 'left', kind: GoonPayloadKind.SubliminalStorm, img: 'item_subliminal', label: 'subliminal', durationMs: 8000, cost: 1 },
-  { id: 'video', rail: 'left', kind: GoonPayloadKind.Video, img: 'item_video', label: 'video', durationMs: 45000, cost: 2 },
-  { id: 'lockcard', rail: 'right', kind: GoonPayloadKind.LockCard, img: 'item_lockcard', label: 'lock card', durationMs: 30000, cost: 2 },
-  { id: 'toy', rail: 'right', kind: GoonPayloadKind.ToyPattern, img: 'item_toy', label: 'toy', durationMs: 10000, cost: 2 },
-  { id: 'braindrain', rail: 'right', kind: GoonPayloadKind.BrainDrain, img: 'item_braindrain', label: 'brain drain', durationMs: 60000, cost: 3 },
-  { id: 'spiral', rail: 'left', kind: GoonPayloadKind.Spiral, img: 'item_spiral', label: 'spiral', durationMs: 40000, cost: 2 },
-  { id: 'emote', rail: 'right', kind: null, img: 'item_emote', label: 'emote', durationMs: 0, cost: 0 },
+  { id: 'flash', rail: 'left', kind: GoonPayloadKind.FlashBurst, img: 'item_flash', get label() { return S.items.flash; }, durationMs: 6000, cost: 1 },
+  { id: 'subliminal', rail: 'left', kind: GoonPayloadKind.SubliminalStorm, img: 'item_subliminal', get label() { return S.items.subliminal; }, durationMs: 8000, cost: 1 },
+  { id: 'video', rail: 'left', kind: GoonPayloadKind.Video, img: 'item_video', get label() { return S.items.video; }, durationMs: 45000, cost: 2 },
+  { id: 'lockcard', rail: 'right', kind: GoonPayloadKind.LockCard, img: 'item_lockcard', get label() { return S.items.lockcard; }, durationMs: 30000, cost: 2 },
+  { id: 'toy', rail: 'right', kind: GoonPayloadKind.ToyPattern, img: 'item_toy', get label() { return S.items.toy; }, durationMs: 10000, cost: 2 },
+  { id: 'braindrain', rail: 'right', kind: GoonPayloadKind.BrainDrain, img: 'item_braindrain', get label() { return S.items.braindrain; }, durationMs: 60000, cost: 3 },
+  { id: 'spiral', rail: 'left', kind: GoonPayloadKind.Spiral, img: 'item_spiral', get label() { return S.items.spiral; }, durationMs: 40000, cost: 2 },
+  { id: 'emote', rail: 'right', kind: null, img: 'item_emote', get label() { return S.items.emote; }, durationMs: 0, cost: 0 },
+  /* GAME NIGHT (2026-09-23): the Deep End game card. Not a payload (kind null, so no number key),
+     but it IS earned: `duel` makes it a drop-pool slot. Only built when mountArsenal gets a `duel`
+     hook (ui/duel/duelController.js), only visible from the player's second match against a peer
+     that speaks night, and at most one held. */
+  { id: 'gamecard', rail: 'right', kind: null, duel: true, img: 'item_gamecard', get label() { return DUEL_COPY.cardLabel; }, durationMs: 0, cost: GAME_CARD_COST },
 ]);
 
 /** Payload slots, i.e. everything the number keys can reach. */
@@ -97,7 +105,7 @@ const PAYLOAD_ITEMS = ARSENAL_ITEMS.filter((i) => i.kind !== null);
  * @param {number} cost resolved cost (costOf is authority; see buildTile)
  */
 export function needsArming(item, cost) {
-  return !!item && item.kind !== null && (cost | 0) > 0;
+  return !!item && (item.kind !== null || !!item.duel) && (cost | 0) > 0;
 }
 
 /** How many of an item a single drop hands you. */
@@ -114,6 +122,8 @@ const DRAG_SLOP_PX = 6;
 const RECEIPT_KEEP = 3;
 const RECEIPT_MS = 8000;
 const TIP_MS = 1000;
+/** The first game card's one-line hint stays long enough to read. */
+const HINT_MS = 6000;
 
 // ------------------------------------------------------------------ helpers
 
@@ -202,15 +212,15 @@ function makeCooldownProbe(match) {
 
 function receiptWord(status) {
   switch (status) {
-    case GoonReceiptStatus.Accepted: return { word: 'landed', tone: 'ok' };
-    case GoonReceiptStatus.Completed: return { word: 'landed', tone: 'ok' };
+    case GoonReceiptStatus.Accepted: return { word: S.recap.chipLanded, tone: 'ok' };
+    case GoonReceiptStatus.Completed: return { word: S.recap.chipLanded, tone: 'ok' };
     // 'endured' carried the note "+1 charge for them" until 2026-08-05. It was
     // true and it is not any more — enduring buys them nothing, because nothing
     // is bought. The word is the whole story: they rode it out.
-    case GoonReceiptStatus.Survived: return { word: 'endured', tone: 'gold', note: 'they rode it out' };
-    case GoonReceiptStatus.RejectedRate: return { word: 'too soon', tone: 'warn' };
-    case GoonReceiptStatus.RejectedFiltered: return { word: 'blocked', tone: 'warn' };
-    default: return { word: String(status || 'sent'), tone: 'dim' };
+    case GoonReceiptStatus.Survived: return { word: S.recap.chipEndured, tone: 'gold', note: S.recap.chipEnduredNote };
+    case GoonReceiptStatus.RejectedRate: return { word: S.recap.chipTooSoon, tone: 'warn' };
+    case GoonReceiptStatus.RejectedFiltered: return { word: S.recap.chipBlocked, tone: 'warn' };
+    default: return { word: String(status || S.itemState.sent), tone: 'dim' };
   }
 }
 
@@ -238,10 +248,12 @@ export function mountArsenal({
   leftHost, rightHost, receiptsHost = null, coolHost = null,
   match, audio = null, fx = null,
   getDropTarget = null, onTargeted = null, onEmote = null, onFired = null, onLog = null,
+  duel = null,
 } = {}) {
   const led = createLedger();
   const cool = makeCooldownProbe(match);
   const tiles = new Map();      // id -> tile record
+  const dropFlights = new Set();
   const receipts = [];          // {id, row, timer}
   let armed = null;             // tile record
   let heavyUsed = false;
@@ -252,6 +264,7 @@ export function mountArsenal({
   for (const item of ARSENAL_ITEMS) {
     // A kind OUR client cannot run never gets a slot at all.
     if (item.kind !== null && ourCaps && !ourCaps.includes(item.kind)) continue;
+    if (item.duel && !duel) continue;   // no duel controller, no game card slot
     const host = item.rail === 'left' ? leftHost : rightHost;
     const tile = buildTile(item, host);
     if (tile) tiles.set(item.id, tile);
@@ -263,7 +276,7 @@ export function mountArsenal({
     // contract has not landed yet (it returns Infinity for those, and an
     // Infinity weight would take that item out of the drop roll entirely).
     const known = item.kind === null ? 0 : costOf(item.kind);
-    const cost = item.kind === null ? 0 : (Number.isFinite(known) ? known : (item.cost | 0));
+    const cost = item.duel ? Number(item.cost) : item.kind === null ? 0 : (Number.isFinite(known) ? known : (item.cost | 0));
     // NO PLATE: the item art IS the button. Chrome would fight the sticker cutouts.
     const root = el('button', 'gg-item');
     if (!root) return null;
@@ -272,7 +285,7 @@ export function mountArsenal({
 
     const img = add(root, el('img', 'gg-item-img'));
     if (img) {
-      img.src = './assets/items/' + item.img + '.png';
+      img.src = './assets/items/' + item.img + (item.id === 'gamecard' ? '.svg' : '.png');
       img.alt = '';
       img.draggable = false;
       img.decoding = 'async';
@@ -391,12 +404,13 @@ export function mountArsenal({
         paintStack(rec);
         continue;
       }
+      if (item.duel) { paintGameCard(rec); continue; }
       let state = 'ready';
       let word = '';
-      if (isSpent(rec)) { state = 'used'; word = 'used'; }
-      else if (!peerCanTake(item.kind)) { state = 'filtered'; word = "they can't receive this"; }
+      if (isSpent(rec)) { state = 'used'; word = S.itemState.used; }
+      else if (!peerCanTake(item.kind)) { state = 'filtered'; word = S.itemState.filtered; }
       else if (rec.armed <= 0) { state = 'locked'; word = S.arsenal.locked; }
-      else if (cooling) { state = 'cooling'; word = 'cooling'; }
+      else if (cooling) { state = 'cooling'; word = S.itemState.cooling; }
       /* `else if (rec.cost > have) { state = 'poor'; word = 'need ' + rec.cost; }`
          was the "Need 1/2/3" the owner named. Removed 2026-08-05: an item you are
          holding is an item you can throw. */
@@ -412,13 +426,29 @@ export function mountArsenal({
 
     if (coolHost) {
       coolHost.hidden = !cooling;
-      if (cooling) text(coolHost, 'next payload in ' + Math.ceil(coolMs / 1000) + 's');
+      if (cooling) text(coolHost, S.itemState.nextPayload(Math.ceil(coolMs / 1000)));
     }
     if (armed && (armed.state !== 'ready' || !isLive())) disarm();
   }
 
+  /** The game card slot: hidden until it can ever drop, 'busy' while a duel runs. */
+  function paintGameCard(rec) {
+    const show = rec.armed > 0 || (!!duel && duel.visible());
+    if (rec.root) rec.root.hidden = !show;
+    let state = 'ready';
+    let word = '';
+    if (rec.armed <= 0) { state = 'locked'; word = S.arsenal.locked; }
+    else if (duel && duel.busy()) { state = 'cooling'; word = DUEL_COPY.busy; }
+    setState(rec, state, word);
+    paintStack(rec);
+    cls(rec.root, 'is-glow', state === 'ready');
+  }
+
   function setState(rec, state, word) {
     if (rec.state !== state) {
+      // READY POP: a slot coming off cooldown (or out of locked) pops back up
+      // with a spark, so the player sees the moment it can be thrown again.
+      if (state === 'ready' && (rec.state === 'cooling' || rec.state === 'locked')) readyPop(rec);
       // ('poor' left this list on 2026-08-05 with the charge requirement.)
       for (const s of ['ready', 'cooling', 'used', 'filtered', 'locked']) cls(rec.root, 'is-' + s, s === state);
       rec.state = state;
@@ -433,6 +463,13 @@ export function mountArsenal({
    * moves, so re-writing nine textContents four times a second would be pure
    * churn on a page that is already carrying an effect stack.
    */
+  function readyPop(rec) {
+    const art = rec.img || rec.root;
+    popIn(art, { from: 0.72, over: 1.16, ms: 320 });
+    const c = centreOf(art);
+    if (c && c.w) burst(c.x, c.y, { count: 7, dist: 26, spread: 22, life: 420, sizeMin: 3, sizeMax: 6, color: '255, 212, 94' });
+  }
+
   function paintStack(rec) {
     const showStack = rec.needsArm && rec.armed > 0;
     if (rec.paintedStack === rec.armed) return;
@@ -446,12 +483,12 @@ export function mountArsenal({
 
   // ------------------------------------------------------------- firing
 
-  function tipOn(rec, message) {
+  function tipOn(rec, message, ms = TIP_MS) {
     if (!rec.tip) return;
     text(rec.tip, message);
     rec.tip.hidden = false;
     try { clearTimeout(rec.tipTimer); } catch (_e) { /* gone */ }
-    rec.tipTimer = setTimeout(() => { rec.tip.hidden = true; }, TIP_MS);
+    rec.tipTimer = setTimeout(() => { rec.tip.hidden = true; }, ms);
     led.add(() => { try { clearTimeout(rec.tipTimer); } catch (_e) { /* gone */ } });
   }
 
@@ -469,8 +506,11 @@ export function mountArsenal({
   }
 
   /** The one path to the engine. Returns the engine's {ok,error,id}. */
-  function fire(rec) {
+  function fire(rec, at = null) {
+    if (rec && rec.item.duel) return fireGameCard(rec, at);
     if (!rec || rec.item.kind === null) return { ok: false, error: 'not a payload', id: null };
+    // A duel is running: throws pause until the board closes.
+    if (duel && (duel.blocksThrows?.() ?? duel.busy())) { refuse(rec, DUEL_COPY.busy); return { ok: false, error: 'duel', id: null }; }
     if (!match || typeof match.tryFirePayload !== 'function') return { ok: false, error: 'no match', id: null };
 
     // LOCKED outranks every other refusal: nothing else about the tile matters
@@ -478,9 +518,9 @@ export function mountArsenal({
     if (rec.needsArm && rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return { ok: false, error: 'locked', id: null }; }
     /* The affordability refusal stood next — shake + "costs 3 — you have 1" +
        {error:'charges'}. Gone 2026-08-05: there is no balance to be short of. */
-    if (rec.state === 'filtered') { refuse(rec, "they can't receive this"); return { ok: false, error: 'filtered', id: null }; }
-    if (rec.state === 'used') { refuse(rec, 'one brain drain a match'); return { ok: false, error: 'used', id: null }; }
-    if (rec.state === 'cooling') { refuse(rec, 'next payload in ' + Math.ceil(cool.msLeft() / 1000) + 's'); return { ok: false, error: 'cooling', id: null }; }
+    if (rec.state === 'filtered') { refuse(rec, S.itemState.filtered); return { ok: false, error: 'filtered', id: null }; }
+    if (rec.state === 'used') { refuse(rec, S.itemState.oneDrain); return { ok: false, error: 'used', id: null }; }
+    if (rec.state === 'cooling') { refuse(rec, S.itemState.nextPayload(Math.ceil(cool.msLeft() / 1000))); return { ok: false, error: 'cooling', id: null }; }
 
     const res = match.tryFirePayload({
       kind: rec.item.kind,
@@ -491,11 +531,12 @@ export function mountArsenal({
     if (res.ok) {
       cool.onFired();
       sfx(audio, 'gg-fire');
+      sfx(audio, 'throw-flight');
       // One stack per shot. At zero the slot goes straight back to locked and
       // only another drop can open it again.
       if (rec.needsArm && rec.armed > 0) rec.armed--;
       if (rec.item.kind === GoonPayloadKind.BrainDrain) { heavyUsed = true; heavyId = res.id; }
-      spark(rec);
+      spark(rec, at);
       addReceipt(res.id, rec.item.label);
       if (typeof onFired === 'function') {
         try {
@@ -504,20 +545,63 @@ export function mountArsenal({
       }
       if (typeof onLog === 'function') { try { onLog({ t: 'payload-out', kind: rec.item.label, id: res.id }); } catch (_e) { /* ignore */ } }
     } else {
-      refuse(rec, String(res.error || 'not now'));
+      refuse(rec, String(res.error || S.itemState.notNow));
     }
     paint();
     return res;
   }
 
-  /** A little pip of light thrown from the tile at the monitor. */
-  function spark(rec) {
+  function fireGameCard(rec, at = null) {
+    if (rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return { ok: false, error: 'locked', id: null }; }
+    if (!isLive() || !duel || duel.busy() || !duel.throwCard()) { refuse(rec, DUEL_COPY.busy); paint(); return { ok: false, error: 'duel', id: null }; }
+    rec.armed--;
+    sfx(audio, 'gg-fire');
+    spark(rec, at);
+    if (typeof onLog === 'function') { try { onLog({ t: 'gamecard-out' }); } catch (_e) { /* ignore */ } }
+    paint();
+    return { ok: true, error: null, id: null };
+  }
+
+  /**
+   * THE THROW (juice pass 2026-09-23): the item's own sticker flies an arc from
+   * where you let go of it (or from its tile) onto their monitor, drops a
+   * fading trail, and lands with a burst, a knock of the monitor in real
+   * pixels and a squash. Reduced motion: a straight fade. Falls back to the old
+   * pip when there is no WAAPI (a stub DOM) or no sticker to throw.
+   */
+  function spark(rec, at = null) {
     const d = doc();
     const target = typeof getDropTarget === 'function' ? getDropTarget() : null;
     if (!d || !d.body || !target || !rec.root) return;
-    const from = rectOf(rec.root);
     const to = rectOf(target);
     if (!to.width) return;
+    const noArt = !!(rec.root.classList && rec.root.classList.contains && rec.root.classList.contains('is-noart'));
+    if (!noArt && rec.img && rec.img.src && typeof d.body.animate === 'function') {
+      const tile = rectOf(rec.img);
+      const from = (at && typeof at.x === 'number')
+        ? { x: at.x, y: at.y }
+        : { x: tile.left + tile.width / 2, y: tile.top + tile.height / 2 };
+      const land = { x: to.left + to.width / 2, y: to.top + to.height / 2 };
+      const run = () => {
+        const node = el('img', 'gg-juice-throw');
+        if (!node) return;
+        node.src = rec.img.src;
+        node.alt = '';
+        add(d.body, node);
+        const ms = Math.round(Math.min(620, Math.max(380, Math.hypot(land.x - from.x, land.y - from.y) * 0.7)));
+        flyArc(node, from, land, { ms, lift: 0.32, spin: land.x < from.x ? -24 : 24, scaleTo: 0.55 }).then(() => {
+          try { node.remove(); } catch (_e) { /* gone */ }
+          impactMark(land.x, land.y, markFor(rec.item.kind));
+          squash(target, { amount: 0.05, ms: 240 });
+          // Add the shake after the replacing squash so both transforms survive.
+          shakeNode(target, 4);
+          sfx(audio, 'throw-impact');
+        });
+      };
+      if (fx && typeof fx.play === 'function') fx.play(700, run); else run();
+      return;
+    }
+    const from = rectOf(rec.root);
     const node = el('i', 'gg-spark');
     if (!node || !node.style) return;
     node.style.left = (from.left + from.width / 2) + 'px';
@@ -555,9 +639,14 @@ export function mountArsenal({
     const out = [];
     for (const rec of tiles.values()) {
       if (!rec.needsArm) continue;
+      if (rec.item.duel) {
+        if (duel && duel.eligible(rec.armed)) out.push({ id: rec.item.id, kind: null, cost: rec.item.id === 'lockcard' ? 8 : rec.cost, armed: rec.armed });
+        continue;
+      }
       if (isSpent(rec)) continue;
       if (!peerCanTake(rec.item.kind)) continue;
-      out.push({ id: rec.item.id, kind: rec.item.kind, cost: rec.cost, armed: rec.armed });
+      if (rec.item.id === 'lockcard' && rec.armed > 0) continue;
+      out.push({ id: rec.item.id, kind: rec.item.kind, cost: rec.item.id === 'lockcard' ? 8 : rec.cost, armed: rec.armed });
     }
     return out;
   }
@@ -575,9 +664,13 @@ export function mountArsenal({
   function armDrop(id, { count = DROP_STACK, from = null, silent = false } = {}) {
     const rec = tiles.get(id);
     if (!rec || !rec.needsArm) return false;
-    rec.armed += Math.max(1, count | 0);
+    if (rec.item.duel && rec.armed > 0) return false;   // one game card at a time
+    rec.armed += rec.item.duel ? 1 : Math.max(1, count | 0);
     paint();
     if (!silent) dropFlourish(rec, from);
+    if (rec.item.duel && duel && typeof duel.firstHint === 'function' && duel.firstHint()) {
+      tipOn(rec, DUEL_COPY.firstHint, HINT_MS);
+    }
     return true;
   }
 
@@ -604,28 +697,41 @@ export function mountArsenal({
     tipOn(rec, S.arsenal.drop(rec.item.label));
     const d = doc();
     if (!d || !d.body || !rec.root) return;
-    const to = rectOf(rec.root);
-    const run = () => {
-      cls(rec.root, 'is-dropped', true);
-      setTimeout(() => cls(rec.root, 'is-dropped', false), DROP_FLASH_MS);
-      if (!from || typeof from.x !== 'number' || typeof from.y !== 'number' || !to.width) return;
-      const node = el('i', 'gg-drop-fly');
-      if (!node || !node.style) return;
-      node.style.left = from.x + 'px';
-      node.style.top = from.y + 'px';
-      add(d.body, node);
-      const dx = (to.left + to.width / 2) - from.x;
-      const dy = (to.top + to.height / 2) - from.y;
-      const fly = () => {
-        if (node.style) {
-          node.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(0.35)';
-          node.style.opacity = '0';
-        }
-      };
-      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(fly); else fly();
-      setTimeout(() => { try { node.remove(); } catch (_e) { /* gone */ } }, DROP_FLASH_MS + 120);
+    let target = rec.root;
+    let to = rectOf(target);
+    if (!to.width) {
+      target = rec.root.closest?.('.gg-arsenal')?.querySelector?.('.gg-arsenal-tab') || rec.root;
+      to = rectOf(target);
+    }
+    const land = () => {
+      if (!target.isConnected) return;
+      cls(target, 'is-dropped', true);
+      squash(target, { amount: 0.1, ms: 200 });
+      sfx(audio, 'drop-land');
+      setTimeout(() => cls(target, 'is-dropped', false), DROP_FLASH_MS);
     };
-    if (fx && typeof fx.play === 'function') fx.play(DROP_FLASH_MS, run); else run();
+    if (!from || !Number.isFinite(from.x) || !Number.isFinite(from.y) || !to.width || isCalm()) { land(); return; }
+    const node = el('img', 'gg-drop-fly gg-drop-item');
+    if (!node) return;
+    node.src = rec.img?.src || '';
+    node.alt = rec.item.label;
+    node.style.left = from.x + 'px'; node.style.top = from.y + 'px';
+    add(d.body, node);
+    const retire = () => { try { node.remove(); } catch (_e) { /* gone */ } dropFlights.delete(retire); };
+    dropFlights.add(retire);
+    while (dropFlights.size > 6) dropFlights.values().next().value();
+    const dx = to.left + to.width / 2 - from.x, dy = to.top + to.height / 2 - from.y;
+    const finish = () => { if (dropFlights.has(retire)) { retire(); land(); } };
+    try {
+      const flight = node.animate([
+        { transform: 'translate(0,0) scale(.35)', opacity: 0 },
+        { transform: 'translate(0,28px) scale(1.2)', opacity: 1, offset: .25 },
+        { transform: `translate(${dx * .35}px,${Math.max(36, dy * .2)}px) scale(1)`, opacity: 1, offset: .45 },
+        { transform: `translate(${dx}px,${dy}px) scale(.65)`, opacity: .9 },
+      ], { duration: 780, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+      flight.onfinish = finish;
+    } catch (_e) { finish(); }
+    setTimeout(finish, 850);
   }
 
   // ------------------------------------------------------------- receipts
@@ -635,7 +741,7 @@ export function mountArsenal({
     const row = el('div', 'gg-receipt');
     if (!row) return;
     add(row, el('span', 'gg-receipt-kind', label));
-    const st = add(row, el('span', 'gg-receipt-state', 'sent'));
+    const st = add(row, el('span', 'gg-receipt-state', S.itemState.sent));
     const note = add(row, el('span', 'gg-receipt-note'));
     add(receiptsHost, row);
     const entry = { id, row, st, note, timer: 0 };
@@ -733,10 +839,11 @@ export function mountArsenal({
     }
 
     led.listen(root, 'pointerdown', (e) => {
-      if (rec.item.kind === null) { if (typeof onEmote === 'function') onEmote(); sfx(audio, 'gg-emote'); return; }
+      if (rec.item.kind === null && !rec.item.duel) { if (typeof onEmote === 'function') onEmote(); sfx(audio, 'gg-emote'); return; }
       // A LOCKED slot is not draggable and not armable: the gesture ends here
       // with a word, so no ghost is ever minted for an item you do not have.
       if (rec.needsArm && rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return; }
+      squash(rec.img || root, { amount: 0.14, ms: 200 });
       pid = e && e.pointerId;
       startX = (e && e.clientX) || 0;
       startY = (e && e.clientY) || 0;
@@ -775,8 +882,8 @@ export function mountArsenal({
       const target = typeof getDropTarget === 'function' ? getDropTarget() : null;
       const hit = target && inRect(rectOf(target), x, y, 12);
       if (typeof onTargeted === 'function') onTargeted(false);
-      if (hit) fire(rec);
-      else tipOn(rec, 'drop it on their monitor');
+      if (hit) fire(rec, { x, y });
+      else tipOn(rec, S.itemState.dropOnMonitor);
     }
 
     led.listen(root, 'pointerup', endPointer);
@@ -793,7 +900,7 @@ export function mountArsenal({
     const target = typeof getDropTarget === 'function' ? getDropTarget() : null;
     const x = (e && e.clientX) || 0;
     const y = (e && e.clientY) || 0;
-    if (target && inRect(rectOf(target), x, y, 12)) { disarm(); fire(rec); }
+    if (target && inRect(rectOf(target), x, y, 12)) { disarm(); fire(rec, { x, y }); }
     else disarm();
   }, true);
 
@@ -851,6 +958,7 @@ export function mountArsenal({
     unmount() {
       disarm();
       led.run();
+      for (const retire of Array.from(dropFlights)) retire();
       for (const rec of tiles.values()) { try { rec.root.remove(); } catch (_e) { /* gone */ } }
       tiles.clear();
       while (receipts.length) dropReceipt(receipts[0]);

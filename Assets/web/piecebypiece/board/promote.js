@@ -1,29 +1,6 @@
-/* ============================================================================
- * board/promote.js - what he comes up as.
- *
- * A pawn that reaches the eighth used to become a queen and that was that.
- * Now the move waits: the pawn walks onto the square, stretches up, and four
- * ghosts rise out of the square in a fan, queen, rook, bishop and knight. The
- * one under the cursor brightens. Click one and the move is played with him.
- *
- * The house rules that shape it:
- *   - a choice must never cost you the clock. Under 20 s on the mover's clock
- *     the fan does not open at all and he comes up a queen, and even with time
- *     in hand the fan queens itself after 4 s
- *   - anything you can click, you can leave: Esc, or a click off the fan, is
- *     the queen everybody wanted anyway
- *   - the new man arrives, he does not appear. He drops onto the square through
- *     anim, so the landing dust and the thud play as they do for any move
- *
- * The ghosts are Sprites with a CanvasTexture of the classic glyph, the same
- * trick board/glyphs.js uses, because there is no toy for "a queen you have
- * not chosen yet" and a flat figure reads as an offer rather than a man.
- *
- * Wiring: boot.js builds one, hands it to drag.js as the move hook (so every
- * path that plays a move comes through here and none of them has to know about
- * promotion) and pumps update(dt) off the loop's own dt, which keeps the four
- * second offer honest under a harness that steps the clock by hand.
- * ==========================================================================*/
+// Promotion stays a real choice, including under time pressure. The clock runs
+// normally and the pawn stays on its original square until a piece is chosen.
+// The sprite fan and keyboard-accessible buttons offer the same four choices.
 
 import * as THREE from 'three';
 import { squareToWorld } from './scene.js';
@@ -39,9 +16,6 @@ export const TUNING = Object.freeze({
   hoverScale: 1.22,    // the one under the cursor
   hoverDim: 0.62,      // ... and how far the others fall back
   ease: 14,            // per second, the chase on both of those
-  autoSec: 4,          // queen after this long with no answer
-  hurryMs: 20000,      // under this much clock, do not even ask
-  dropFrom: 0.95,      // the new man falls in from here
   stretch: -1.9,       // the pawn holds himself tall while you decide
   stretchEvery: 0.5,   // s, topped up so the hold does not sag
   px: 128,
@@ -55,6 +29,7 @@ const KINDS = ['q', 'r', 'b', 'n'];
 const WHITE = { q: '♕', r: '♖', b: '♗', n: '♘' };
 const BLACK = { q: '♛', r: '♜', b: '♝', n: '♞' };
 const LETTER = { q: 'Q', r: 'R', b: 'B', n: 'N' };
+const NAMES = { q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
 const FONT = '"Segoe UI Symbol", "Segoe UI", "DejaVu Sans", "Arial Unicode MS", system-ui, sans-serif';
 
 function reducedMotion() {
@@ -120,6 +95,35 @@ export function createPromote({ view, pieces, anim, bus, game, drag = null, jigg
   let open = null;                  // { from, to, side, at, t, pawn }
   let hoverKind = null;
   let stretchIn = 0;
+  let previousFocus = null;
+  const chooser = document.createElement('div');
+  chooser.setAttribute('role', 'dialog');
+  chooser.setAttribute('aria-modal', 'true');
+  chooser.setAttribute('aria-label', 'Promote pawn');
+  chooser.hidden = true;
+  chooser.style.cssText = 'position:fixed;z-index:1600;left:50%;bottom:24px;transform:translateX(-50%);max-width:calc(100% - 24px);padding:16px;border:1px solid #ad8edf;border-radius:16px;background:#21182f;color:#fff;box-shadow:0 12px 48px #0009;text-align:center;font:14px system-ui';
+  const heading = document.createElement('strong');
+  heading.textContent = 'Promote pawn';
+  chooser.append(heading);
+  const choices = document.createElement('div');
+  choices.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:12px 0';
+  const buttons = KINDS.map(kind => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = `${NAMES[kind]} (${LETTER[kind]})`;
+    button.setAttribute('aria-keyshortcuts', LETTER[kind]);
+    button.style.cssText = 'padding:10px 14px;border:1px solid #ae90d9;border-radius:10px;background:#382848;color:#fff;font:inherit;cursor:pointer';
+    button.addEventListener('click', () => choose(kind));
+    button.addEventListener('focus', () => { hoverKind = kind; });
+    choices.append(button);
+    return button;
+  });
+  chooser.append(choices);
+  const hint = document.createElement('div');
+  hint.textContent = 'Choose a piece. Esc cancels. Your clock keeps running.';
+  hint.style.cssText = 'color:#d6c8e8;font-size:12px';
+  chooser.append(hint);
+  document.body.append(chooser);
 
   function textureFor(kind, side) {
     const key = kind + ':' + side;
@@ -157,15 +161,14 @@ export function createPromote({ view, pieces, anim, bus, game, drag = null, jigg
     const move = game.rules.legalMove(from, to);
     if (!move || !String(move.flags || '').includes('p')) return false;
     const side = game.rules.turn();
-    // A clock this low is not a place to be asked a question.
-    const left = game.clock ? game.clock.remaining(side) : Infinity;
-    if (left < T.hurryMs) { game.tryMove(from, to, 'q'); return true; }
-
-    // He walks up first: the choice is made standing on the square.
+    // Keep the rules and piece map untouched until the choice is committed.
     const pawn = pieces.pieceAt(from);
-    pieces.move(from, to);
     const at = squareToWorld(to, 0);
-    open = { from, to, side, at, t: 0, pawn: pieces.pieceAt(to) || pawn };
+    if (pawn) anim?.slide?.(pawn, pawn.position.clone(), squareToWorld(from, 0), .08, { dur: .16 });
+    open = { from, to, side, at, t: 0, pawn };
+    previousFocus = document.activeElement;
+    chooser.hidden = false;
+    buttons[0].focus({ preventScroll: true });
     hoverKind = null;
     stretchIn = 0;
     if (drag && drag.suspend) drag.suspend(true);
@@ -174,23 +177,12 @@ export function createPromote({ view, pieces, anim, bus, game, drag = null, jigg
     return true;
   }
 
-  /** Play the move with the man that was picked, and let him land. */
+  /** The normal move hooks preserve the capture and transfer it to the new sculpt. */
   function choose(kind) {
-    if (!open) return null;
+    if (!open || !KINDS.includes(kind)) return null;
     const { from, to } = open;
     close();
-    const played = game.tryMove(from, to, kind);
-    if (!played) return null;
-    // He arrives rather than appearing: a short drop, so the dust and the thud
-    // fire off the same land event every other move uses.
-    const man = pieces.pieceAt(to);
-    if (man && anim && anim.slide) {
-      const dest = man.position.clone();
-      const above = dest.clone();
-      above.y += reducedMotion() ? 0.2 : T.dropFrom;
-      anim.slide(man, above, dest, 0);
-    }
-    return played;
+    return game.tryMove(from, to, kind);
   }
 
   function close() {
@@ -200,8 +192,14 @@ export function createPromote({ view, pieces, anim, bus, game, drag = null, jigg
       g.sprite.material.dispose();
     }
     ghosts.length = 0;
+    const offer = open;
     open = null;
     hoverKind = null;
+    chooser.hidden = true;
+    canvas.style.cursor = '';
+    if (previousFocus?.isConnected) previousFocus.focus?.({ preventScroll: true });
+    previousFocus = null;
+    bus.emit('promote', { from: offer.from, to: offer.to, side: offer.side, choosing: false });
     if (drag && drag.suspend) drag.suspend(false);
   }
 
@@ -224,14 +222,21 @@ export function createPromote({ view, pieces, anim, bus, game, drag = null, jigg
     if (!open || ev.button > 0) return;
     ev.preventDefault();
     ev.stopPropagation();
-    choose(aim(ev) || 'q');       // off the fan is the queen everybody wanted
+    const kind = aim(ev);
+    if (kind) choose(kind); else close();
   }
 
   function onKey(ev) {
-    if (!open) return;
-    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); choose('q'); return; }
-    const k = ev.key.toLowerCase();
-    if (KINDS.includes(k)) { ev.preventDefault(); ev.stopPropagation(); choose(k); }
+    if (!open || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    const key = ev.key.toLowerCase();
+    if (!['escape', 'tab', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown', ...KINDS].includes(key)) return;
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    if (key === 'escape') { close(); return; }
+    if (KINDS.includes(key)) { choose(key); return; }
+    const current = Math.max(0, buttons.indexOf(document.activeElement));
+    const backwards = key === 'arrowleft' || key === 'arrowup' || (key === 'tab' && ev.shiftKey);
+    buttons[(current + (backwards ? -1 : 1) + buttons.length) % buttons.length].focus();
   }
 
   function update(dt) {
@@ -254,12 +259,12 @@ export function createPromote({ view, pieces, anim, bus, game, drag = null, jigg
       stretchIn -= dt;
       if (stretchIn <= 0) { stretchIn = T.stretchEvery; jiggle.impulse(open.pawn, { squash: T.stretch }); }
     }
-    if (open.t >= T.autoSec) choose('q');
   }
 
   canvas.addEventListener('pointermove', onMove, true);
   canvas.addEventListener('pointerdown', onDown, true);
   window.addEventListener('keydown', onKey, true);
+  const off = ['gameover', 'newgame', 'local', 'resync'].map(name => bus.on(name, close));
 
   return {
     intercept, choose, close, update,
@@ -277,6 +282,8 @@ export function createPromote({ view, pieces, anim, bus, game, drag = null, jigg
     },
     dispose() {
       close();
+      for (const stop of off) stop();
+      chooser.remove();
       canvas.removeEventListener('pointermove', onMove, true);
       canvas.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('keydown', onKey, true);

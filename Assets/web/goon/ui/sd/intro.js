@@ -8,15 +8,10 @@
  * gives us anyway (MinScheduleBuffer + CountdownMs).
  * ==========================================================================*/
 
-import { GoonRoundKind } from '../../core/contracts.js';
+import { S } from '../strings.js';
 
 /** kind -> {title, rule}. The rule line is the whole tutorial. */
-export const ROUND_COPY = Object.freeze({
-  [GoonRoundKind.QuickDrawLockCard]: { title: 'quick draw', rule: 'type the card first.' },
-  [GoonRoundKind.StaringContest]: { title: 'staring contest', rule: "don't blink." },
-  [GoonRoundKind.ReactionDuel]: { title: 'reaction duel', rule: 'hit it when it turns pink. not before.' },
-  [GoonRoundKind.BubbleRace]: { title: 'bubble race', rule: 'pop them all. faster than them.' },
-});
+export const ROUND_COPY = S.sd.rounds;   // keyed by GoonRoundKind; words in ui/strings.js
 
 const MAX_COUNTDOWN_MS = 10000;
 
@@ -54,10 +49,10 @@ export function createIntro(ctx) {
   function show(intro) {
     const n = build();
     if (!n) return;
-    const copy = ROUND_COPY[intro && intro.kind] || { title: 'round', rule: 'hold on.' };
+    const copy = ROUND_COPY[intro && intro.kind] || { title: S.sd.roundFallback, rule: S.sd.holdOn };
     text(n._title, copy.title);
     text(n._rule, copy.rule);
-    text(n._chip, 'level ' + Math.max(1, (intro && intro.difficulty) | 0));
+    text(n._chip, S.sd.level(Math.max(1, (intro && intro.difficulty) | 0)));
     n.hidden = false;
     cls(n, 'is-in', true);
     lastNumber = -1;
@@ -67,9 +62,9 @@ export function createIntro(ctx) {
     const step = () => {
       const left = endsAt - Date.now();
       const num = Math.ceil(left / 1000);
-      if (left <= 0) { text(n._count, 'go'); sfx('gg-go'); hideSoon(); return; }
+      if (left <= 0) { text(n._count, S.sd.go); sfx('gg-go'); hideSoon(); return; }
       if (num !== lastNumber && num <= 3) { lastNumber = num; sfx('gg-tick'); }
-      text(n._count, num <= 3 ? String(num) : 'get ready');
+      text(n._count, num <= 3 ? String(num) : S.sd.getReady);
       cls(n._count, 'is-beat', num <= 3);
     };
     step();

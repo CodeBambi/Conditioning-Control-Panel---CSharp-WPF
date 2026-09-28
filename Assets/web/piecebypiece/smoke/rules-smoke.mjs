@@ -11,6 +11,9 @@ import { createRules, readResult } from '../game/rules.js';
 import { createClock, formatClock, DEFAULT_MS } from '../game/clock.js';
 import { createHotseat } from '../game/hotseat.js';
 import { createBus } from '../game/events.js';
+import { createSolo } from '../game/solo.js';
+import { createTurnHandoff, handoffSeconds } from '../ui/turn-handoff.js';
+import { turnOpacity, turnRecipe, readTurn } from '../game/turn-loom.js';
 
 let passed = 0;
 const failures = [];
@@ -23,6 +26,27 @@ function eq(what, got, want) {
   ok(`${what} (got ${JSON.stringify(got)}, wanted ${JSON.stringify(want)})`, JSON.stringify(got) === JSON.stringify(want));
 }
 
+// The same online turn must look identical from either seat, even after reconnect.
+{
+  eq('Loom waits ten seconds', turnOpacity(9999), 0);
+  eq('Loom halfway through its fade', turnOpacity(16000), .5);
+  eq('Loom fully replaces squares', turnOpacity(22000), 1);
+  eq('Loom clamps a long think', turnOpacity(90000), 1);
+  const clock = createClock({ perSideMs: 0, now: () => 12000 }); clock.start('w');
+  const rules = createRules();
+  const game = { clock, rules, current: { matchId: 'shared-table' }, isOver: () => false,
+    turn: () => rules.turn(), plies: () => rules.ply() };
+  const first = readTurn(game, 'white-local-seed');
+  eq('Loom ignores local seat seed online', first.key, readTurn(game, 'black-local-seed').key);
+  eq('Loom recipe is deterministic', turnRecipe(first.key), turnRecipe(first.key));
+  ok('Loom varies between turns', JSON.stringify(turnRecipe(first.key)) !== JSON.stringify(turnRecipe(first.key + '|next')));
+  rules.move('e2', 'e4');
+  eq('optimistic next turn cannot inherit old age', readTurn(game, 'local'), null);
+  clock.press('b');
+  ok('confirmed next turn gets a new recipe key', readTurn(game, 'local').key !== first.key);
+  clock.stop();
+  eq('a stopped game cannot grow the Loom', readTurn(game, 'local'), null);
+}
 // --- the referee -----------------------------------------------------------
 {
   const r = createRules();
@@ -90,13 +114,20 @@ function eq(what, got, want) {
   let clock = 0;
   const c = createClock({ perSideMs: 5000, now: () => clock });
   eq('both sides start with the full budget', c.snapshot(), { w: 5000, b: 5000, total: 5000, active: null });
+  eq('stopped clock has no current turn age', c.turnElapsedMs(), 0);
   c.start('w');
   clock += 1200;
   eq('only the side to move is charged', [c.remaining('w'), c.remaining('b')], [3800, 5000]);
+  eq('draining a balance does not reset turn age', c.turnElapsedMs(), 1200);
+  c.start('w');
+  eq('starting the same active seat preserves turn age', c.turnElapsedMs(), 1200);
   c.press('b');
+  eq('the next turn starts at zero', c.turnElapsedMs(), 0);
   clock += 800;
   eq('pressing the clock swaps who pays', [c.remaining('w'), c.remaining('b')], [3800, 4200]);
+  eq('next side has its own turn age', c.turnElapsedMs(), 800);
   c.stop();
+  eq('stopping clears the reported turn age', c.turnElapsedMs(), 0);
   clock += 10000;
   eq('a stopped clock charges nobody', [c.remaining('w'), c.remaining('b')], [3800, 4200]);
 }
@@ -110,6 +141,7 @@ function eq(what, got, want) {
   eq('running out flags that side', flagged, 'w');
   eq('a clock never goes below zero', c.remaining('w'), 0);
   ok('the clock stops once it has flagged', !c.isRunning());
+  eq('a flagged clock has no active turn age', c.turnElapsedMs(), 0);
 }
 eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000), formatClock(9400), formatClock(-5)],
   ['15:00', '1:04', '0:09.4', '0:00.0']);
@@ -240,6 +272,98 @@ eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000),
   game.tryMove('f2', 'f3'); game.tryMove('e7', 'e5'); game.tryMove('g2', 'g4'); game.tryMove('d8', 'h4');
   ok('mate ended it', game.isOver());
   ok('and there is no taking that back', game.takeBack(9000) === null);
+}
+
+// Untimed games never flag, and saved SAN retains full repetition history.
+{
+  let elapsed = 0, flags = 0;
+  const clock = createClock({ perSideMs: 0, now: () => elapsed, onFlag: () => flags++ });
+  clock.start('w'); elapsed = 3600000; clock.debit('w', 9999999);
+  eq('untimed cannot flag', flags, 0);
+  eq('untimed still measures the current turn', clock.turnElapsedMs(), 3600000);
+  clock.press('b');
+  eq('untimed turn age resets on the next side', clock.turnElapsedMs(), 0);
+  eq('untimed display', formatClock(clock.remaining('w')), 'Untimed');
+  ok('untimed snapshot marks mode', clock.snapshot().untimed && clock.snapshot().total === 0);
+  clock.stop();
+  const moves = ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1'];
+  const game = createHotseat({ bus: createBus(), board: stubBoard(), clockMs: 0, restore: { moves, clocks: { total: 0 } } });
+  game.start();
+  eq('resume keeps complete history', game.record().moves, moves);
+  eq('resume keeps ply count', game.plies(), 7);
+  game.tryMove('f6', 'g8');
+  eq('resume preserves repetition draw', game.result()?.reason, 'threefold repetition');
+  game.dispose();
+  const timed = createClock({ perSideMs: 60000, now: () => elapsed });
+  timed.restore({ w: 20000, b: 40000 }); timed.start('w'); elapsed += 2000;
+  eq('restored clock runs from saved value', timed.remaining('w'), 18000);
+  eq('restored turn starts when play resumes', timed.turnElapsedMs(), 2000);
+  timed.restore({ w: 10000, b: 20000 });
+  eq('restore stands the clock down', timed.turnElapsedMs(), 0);
+  elapsed += 50000; timed.start('w');
+  eq('time away is excluded from a resumed local turn', timed.turnElapsedMs(), 0);
+  elapsed += 500; timed.reset();
+  eq('reset clears the current turn age', timed.turnElapsedMs(), 0);
+  timed.start('w');
+  eq('a new game has a fresh turn age', timed.turnElapsedMs(), 0);
+  timed.stop();
+}
+// Computer search runs under the move performance; application waits for the handoff.
+{
+  const bus = createBus(), board = stubBoard();
+  let busy = true, request = null, terminated = 0;
+  const worker = { postMessage(value) { request = value; }, terminate() { terminated++; } };
+  board.anim = { busy: () => busy, skip: () => { busy = false; } };
+  const game = createSolo({ bus, board, options: { side: 'w', clockMs: 0 }, workerFactory: () => worker });
+  const handoff = board.turnHandoff = createTurnHandoff({ bus, game, board });
+  const tick = dt => { handoff.update(dt); game.update(dt); };
+  game.start();
+  eq('initial deal does not show a fake handoff', handoff.debug(), null);
+  game.tryMove('e2', 'e4');
+  ok('computer starts searching before the human animation settles', request?.moves[0] === 'e4');
+  worker.onmessage({ data: { id: request.id, move: { from: 'e7', to: 'e5' } } });
+  tick(2);
+  eq('an early computer result waits through the human animation', game.plies(), 1);
+  busy = false; tick(.4);
+  eq('handoff names the next solo player', handoff.debug()?.text, "Computer's turn");
+  eq('reply still waits during the card', game.plies(), 1);
+  tick(.26);
+  eq('reply lands after the animation and short handoff', game.plies(), 2);
+  eq('computer reply announces the human turn', handoff.debug()?.text, 'Your turn');
+  game.tryMove('g1', 'f3');
+  const stale = worker.onmessage, staleId = request.id;
+  worker.onmessage({ data: { id: staleId, move: { from: 'b8', to: 'c6' } } });
+  game.takeBack();
+  stale({ data: { id: staleId, move: { from: 'b8', to: 'c6' } } });
+  tick(2);
+  eq('undo cancels both queued and late worker replies', game.plies(), 2);
+  ok('undo stops the old search worker', terminated > 0);
+  game.dispose(); handoff.dispose();
+}
+{
+  const bus = createBus(), board = stubBoard();
+  let request = null, busy = true;
+  const worker = { postMessage(value) { request = value; }, terminate() {} };
+  board.anim = { busy: () => busy, skip: () => { busy = false; } };
+  const game = createSolo({ bus, board, options: { side: 'w', clockMs: 300000 }, workerFactory: () => worker });
+  game.start(); game.clock.debit('b', 295000); game.tryMove('e2', 'e4');
+  worker.onmessage({ data: { id: request.id, move: { from: 'e7', to: 'e5' } } });
+  game.update(.01);
+  eq('low clocks bypass the artificial computer pause', game.plies(), 2);
+  ok('low-clock reply settles the earlier animation before moving', !busy);
+  game.dispose();
+}
+{
+  const bus = createBus(), board = {}, game = { isOnline: true, seats: ['w'], isOver: () => false,
+    plies: () => 1, clock: { snapshot: () => ({ w: 60000, b: 60000 }) } };
+  let menu = false;
+  const handoff = createTurnHandoff({ bus, game, board, menuOpen: () => menu });
+  bus.emit('turn', { side: 'w', ply: 0 }); bus.emit('turn', { side: 'b', ply: 1 }); handoff.update(.1);
+  eq('online handoff names the opponent', handoff.debug()?.text, "Opponent's turn");
+  menu = true; handoff.update(.1);
+  eq('opening menu or replay clears the card', handoff.debug(), null);
+  eq('low-clock handoff is shortened', handoffSeconds({ snapshot: () => ({ w: 20000, b: 60000 }) }), .2);
+  handoff.dispose();
 }
 
 // --- report ----------------------------------------------------------------

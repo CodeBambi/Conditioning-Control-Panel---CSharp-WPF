@@ -80,7 +80,7 @@ export const BACK_LABEL = 'back';
 export const HAND_MARK = 'hand-tuned';
 export const ROAD_MARK = 'road';
 export const AGAIN_MARK = 'again';
-export const OVER_THERE_LINE = 'press play over there';
+export const OVER_THERE_LINE = 'bambicloud opens behind the game. just press play';
 export const EMPTY_LINE = 'no levels on this build, paste a link instead';
 
 /**
@@ -91,11 +91,11 @@ export const EMPTY_LINE = 'no levels on this build, paste a link instead';
  */
 export const STAGE_PCT = {
   reading: 0.3, decoding: 0.55, charting: 0.75, naming: 0.9,
-  opening: 0.08, fetching: 0.35, decode: 0.55, energy: 0.75, words: 0.9, loading: 0.15,
+  opening: 0.08, starting: 0.12, stuck: 0.12, fetching: 0.35, decode: 0.55, energy: 0.75, words: 0.9, loading: 0.15,
 };
 /** The mark a host's stage puts on the picked row. The web lane's own words are already marks. */
 export const STAGE_MARK = {
-  opening: 'over there', fetching: 'loading', decode: 'reading', energy: 'charting', words: 'naming',
+  opening: 'behind the game', starting: 'starting', stuck: 'press play there', fetching: 'loading', decode: 'reading', energy: 'charting', words: 'naming',
   ready: 'loaded', error: 'would not load',
 };
 

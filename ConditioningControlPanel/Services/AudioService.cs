@@ -125,7 +125,7 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var w = new WaveOutEvent();
+                var w = WaveOutTeardown.NewWaveOut();   // PlaybackStopped off the dispatcher (#1295)
                 if (preferred >= 0) w.DeviceNumber = preferred;
                 return w;
             }
@@ -148,7 +148,8 @@ namespace ConditioningControlPanel.Services
                 if (i == preferred) continue; // already failed above
                 try
                 {
-                    var w = new WaveOutEvent { DeviceNumber = i };
+                    var w = WaveOutTeardown.NewWaveOut();
+                    w.DeviceNumber = i;
                     _workingWaveOutDeviceNumber = i;
                     App.Logger?.Information("AudioService: using WaveOut device #{Num} as fallback", i);
                     return w;
@@ -840,16 +841,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void StopSound()
         {
-            try
-            {
-                _soundPlayer?.Stop();
-                _soundPlayer?.Dispose();
-                _soundFile?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Error stopping sound: {Error}", ex.Message);
-            }
+            // Off this thread and waited out properly (#1295): callers include the UI thread.
+            WaveOutTeardown.Release(_soundPlayer, _soundFile, "sound");
 
             _soundPlayer = null;
             _soundFile = null;

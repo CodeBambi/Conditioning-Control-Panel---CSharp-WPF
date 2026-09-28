@@ -45,8 +45,8 @@ public class PersonalityPromptMuxTests : IDisposable
     /// <summary>Deliberately free of "Bambi" so the mod-aware string rewrite cannot eat it.</summary>
     private const string CustomCanary = "CUSTOM-PROMPT-CANARY-7f3a speak only in riddles";
 
-    /// <summary>Gentle Trainer's deflection block — present only when that preset compiled in.</summary>
-    private const string PresetMarker = "GENTLE DEFLECTION";
+    /// <summary>Gentle Trainer's explicit-reaction block — present only when that preset compiled in.</summary>
+    private const string PresetMarker = "[SOFT TEASE]";
 
     private const string CommunityId = "community-prompt-under-test";
 
@@ -89,6 +89,30 @@ public class PersonalityPromptMuxTests : IDisposable
         SetStatic("Settings", _priorSettings);
         SetStatic("Personality", _priorPersonality);
         try { Directory.Delete(_tempDir, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public void NoAvatarSetReplacesThePersonalityWithAFixedVoice()
+    {
+        // Tube EMI was retired as the companion (2026-09-25): the old EMI set number, in the
+        // house mod with v2 on, is an ordinary avatar and every personality path stays open.
+        var previous = Environment.GetEnvironmentVariable("CCP_COMPANION_V2");
+        try
+        {
+            Environment.SetEnvironmentVariable("CCP_COMPANION_V2", "1");
+            _settings.SelectedAvatarSet = 8;
+            _settings.ActiveCompanionId = 0;
+            _settings.ActivePersonalityPresetId = PersonalityPresets.GentleTrainerId;
+            ActivateCommunityPrompt();
+
+            Assert.NotEqual("emi-fixed", App.Personality!.GetActivePreset().Id);
+            Assert.True(App.Personality.GetAllPresets().Count > 1);
+            Assert.Contains(CustomCanary, BambiSprite.GetStablePrompt());
+            Assert.DoesNotContain("You are EMI", BambiSprite.GetStablePrompt());
+            Assert.True(App.Personality.SetActivePreset(PersonalityPresets.GentleTrainerId));
+            Assert.Equal(PersonalityPresets.GentleTrainerId, App.Personality.GetActivePreset().Id);
+        }
+        finally { Environment.SetEnvironmentVariable("CCP_COMPANION_V2", previous); }
     }
 
     // ---------- 1: preset selection is authoritative ----------

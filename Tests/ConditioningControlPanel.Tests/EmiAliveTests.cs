@@ -225,14 +225,16 @@ public class EmiAliveTests
     // ---------------------------------------------------------------- the poke ladder
 
     [Fact]
-    public void ThreePokesInsideTheWindowClimbToTheRage()
+    public void PokesInsideTheWindowClimbThroughGleeToTheRage()
     {
         var t = new DateTime(2026, 8, 29, 12, 0, 0, DateTimeKind.Utc);
         var ladder = new EmiAlive.PokeLadder();
 
         Assert.Equal(EmiPokeStep.Pat, ladder.Note(t));
-        Assert.Equal(EmiPokeStep.Annoyed, ladder.Note(t.AddMilliseconds(500)));
-        Assert.Equal(EmiPokeStep.Rage, ladder.Note(t.AddMilliseconds(1000)));
+        Assert.Equal(EmiPokeStep.Pat, ladder.Note(t.AddMilliseconds(500)));
+        Assert.Equal(EmiPokeStep.Glee, ladder.Note(t.AddMilliseconds(1000)));
+        Assert.Equal(EmiPokeStep.Annoyed, ladder.Note(t.AddMilliseconds(1500)));
+        Assert.Equal(EmiPokeStep.Rage, ladder.Note(t.AddMilliseconds(2000)));
     }
 
     [Fact]
@@ -242,10 +244,11 @@ public class EmiAliveTests
         var ladder = new EmiAlive.PokeLadder();
 
         Assert.Equal(EmiPokeStep.Pat, ladder.Note(t));
-        Assert.Equal(EmiPokeStep.Annoyed, ladder.Note(t.AddMilliseconds(3_900)));
-        // 4.1 s after the second: the run is over and this is an ordinary pat again.
+        Assert.Equal(EmiPokeStep.Pat, ladder.Note(t.AddMilliseconds(3_900)));
+        // 4.1 s after the second: the run is over and the count starts again.
         Assert.Equal(EmiPokeStep.Pat, ladder.Note(t.AddMilliseconds(8_000)));
-        Assert.Equal(EmiPokeStep.Annoyed, ladder.Note(t.AddMilliseconds(8_500)));
+        Assert.Equal(EmiPokeStep.Pat, ladder.Note(t.AddMilliseconds(8_500)));
+        Assert.Equal(EmiPokeStep.Glee, ladder.Note(t.AddMilliseconds(9_000)));
     }
 
     [Fact]
@@ -254,8 +257,7 @@ public class EmiAliveTests
         var t = new DateTime(2026, 8, 29, 12, 0, 0, DateTimeKind.Utc);
         var ladder = new EmiAlive.PokeLadder();
 
-        ladder.Note(t);
-        ladder.Note(t.AddMilliseconds(300));
+        for (int i = 0; i < EmiAlive.PokeRageAt - 1; i++) ladder.Note(t.AddMilliseconds(i * 100));
         Assert.Equal(EmiPokeStep.Rage, ladder.Note(t.AddMilliseconds(600)));
 
         // Mash her for the whole minute: not one rung is climbed.
@@ -268,8 +270,10 @@ public class EmiAliveTests
         var after = t.AddMilliseconds(EmiAlive.PokeTruceMs + 1_500);
         Assert.False(ladder.InTruce(after));
         Assert.Equal(EmiPokeStep.Pat, ladder.Note(after));
-        Assert.Equal(EmiPokeStep.Annoyed, ladder.Note(after.AddMilliseconds(400)));
-        Assert.Equal(EmiPokeStep.Rage, ladder.Note(after.AddMilliseconds(800)));
+        Assert.Equal(EmiPokeStep.Pat, ladder.Note(after.AddMilliseconds(400)));
+        Assert.Equal(EmiPokeStep.Glee, ladder.Note(after.AddMilliseconds(800)));
+        Assert.Equal(EmiPokeStep.Annoyed, ladder.Note(after.AddMilliseconds(1_200)));
+        Assert.Equal(EmiPokeStep.Rage, ladder.Note(after.AddMilliseconds(1_600)));
     }
 
     [Fact]
@@ -278,8 +282,7 @@ public class EmiAliveTests
         var t = new DateTime(2026, 8, 29, 12, 0, 0, DateTimeKind.Utc);
         var ladder = new EmiAlive.PokeLadder();
 
-        ladder.Note(t);
-        ladder.Note(t.AddMilliseconds(200));
+        for (int i = 0; i < EmiAlive.PokeRageAt - 1; i++) ladder.Note(t.AddMilliseconds(i * 50));
         Assert.Equal(EmiPokeStep.Rage, ladder.Note(t.AddMilliseconds(400)));
 
         ladder.Reset();      // she was dismissed and summoned again
@@ -287,6 +290,20 @@ public class EmiAliveTests
         Assert.Equal(EmiPokeStep.Pat, ladder.Note(t.AddMilliseconds(1_000)));
         Assert.Equal(0, ladder.Count);
     }
+
+    [Theory]
+    [InlineData(0, "top")]
+    [InlineData(349, "top")]
+    [InlineData(350, "mid")]
+    [InlineData(699, "mid")]
+    [InlineData(700, "bottom")]
+    [InlineData(1050, "bottom")]
+    public void TheDropZoneIsTheThirdOfTheWorkArea(double y, string row)
+        => Assert.Equal(row, EmiTossRules.ZoneRow(y, 0, 1050));
+
+    [Fact]
+    public void ADegenerateWorkAreaIsTheMiddle()
+        => Assert.Equal("mid", EmiTossRules.ZoneRow(10, 0, 0));
 
     // ---------------------------------------------------------------- the yield rule
 

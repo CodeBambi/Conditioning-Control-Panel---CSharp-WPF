@@ -135,10 +135,13 @@ namespace ConditioningControlPanel.Models
                 // for nothing. MainWindow.Exclusives hides this card outright while
                 // JustDropService.DoorAvailable is false - a hide, not a veil, because a veil
                 // means "buy this" and this one is not for sale yet.
-                Key = "justdrop", Emoji = "🎚", Tier = 2,
+                Key = "justdrop", Emoji = "🎚", Tier = 0,
                 TitleLocKey = "jd_door_title", TaglineLocKey = "exclusives_tag_justdrop",
                 ArtResource = "Resources/features/justdrop.png",
                 FocalX = 0.5, FocalY = 0.5,
+                // Just Drop is for everyone (owner, 2026-09-25): no livery, no Prime badge,
+                // no veil and no rail star. The door itself is still the server's DoorAvailable.
+                Gate = () => ExclusiveGateState.Unlocked,
             },
             new()
             {

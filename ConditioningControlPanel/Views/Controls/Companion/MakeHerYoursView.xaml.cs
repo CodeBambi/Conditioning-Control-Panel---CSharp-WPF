@@ -21,6 +21,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public MakeHerYoursView()
         {
             InitializeComponent();
+            if (Services.Companion.CompanionExperience.IsV2Enabled)
+            {
+                PreviewTrainTag.Visibility = Visibility.Collapsed;
+                InterviewSpotlight.Visibility = Visibility.Collapsed;
+            }
             Loaded += OnLoaded;
         }
 

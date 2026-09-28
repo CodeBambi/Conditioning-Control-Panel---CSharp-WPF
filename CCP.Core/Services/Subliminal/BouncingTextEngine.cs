@@ -64,6 +64,7 @@ public sealed class BouncingTextEngine
         public double SquashTimer = -1; // seconds since last wall hit; <0 = idle
         public bool SquashAxisX;        // true = hit a vertical wall (X velocity reversed)
         public double BurstTimer = -1;  // seconds since last corner hit; <0 = idle
+        public double OverX, OverY;     // drawn reach past the measured box (last frame's transform)
     }
 
     private readonly Random _random;
@@ -200,30 +201,39 @@ public sealed class BouncingTextEngine
         double textRight = l.PosX + l.TextWidth;
         double textBottom = l.PosY + l.TextHeight;
 
-        if (l.PosX <= MinX)
+        // The walls sit INSIDE the screen by how far the effect transform (drawn about the
+        // text's centre) reaches past the measured box, so the whole drawn line stays on screen.
+        // A wall that moves in under a line already heading away (breathing) nudges it back
+        // without counting as a bounce. (WPF release/6.11.3 5609da6fd)
+        double overX = BounceOverhang.Capped(l.OverX, MaxX - MinX, l.TextWidth);
+        double overY = BounceOverhang.Capped(l.OverY, MaxY - MinY, l.TextHeight);
+        double wallL = MinX + overX, wallR = MaxX - overX;
+        double wallT = MinY + overY, wallB = MaxY - overY;
+
+        if (l.PosX <= wallL)
         {
-            l.PosX = MinX;
+            l.PosX = wallL;
+            bouncedX = l.VelX < 0;
             l.VelX = Math.Abs(l.VelX);
-            bouncedX = true;
         }
-        else if (textRight >= MaxX)
+        else if (textRight >= wallR)
         {
-            l.PosX = MaxX - l.TextWidth;
+            l.PosX = wallR - l.TextWidth;
+            bouncedX = l.VelX > 0;
             l.VelX = -Math.Abs(l.VelX);
-            bouncedX = true;
         }
 
-        if (l.PosY <= MinY)
+        if (l.PosY <= wallT)
         {
-            l.PosY = MinY;
+            l.PosY = wallT;
+            bouncedY = l.VelY < 0;
             l.VelY = Math.Abs(l.VelY);
-            bouncedY = true;
         }
-        else if (textBottom >= MaxY)
+        else if (textBottom >= wallB)
         {
-            l.PosY = MaxY - l.TextHeight;
+            l.PosY = wallB - l.TextHeight;
+            bouncedY = l.VelY > 0;
             l.VelY = -Math.Abs(l.VelY);
-            bouncedY = true;
         }
 
         bool bounced = bouncedX || bouncedY;
@@ -353,6 +363,7 @@ public sealed class BouncingTextEngine
             }
         }
 
+        (l.OverX, l.OverY) = BounceOverhang.Of(l.TextWidth, l.TextHeight, sx, sy, angle);
         return (sx, sy, angle);
     }
 

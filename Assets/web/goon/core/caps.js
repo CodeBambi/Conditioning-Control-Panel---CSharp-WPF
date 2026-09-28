@@ -42,6 +42,9 @@ export function local(overrides = {}) {
     // before the feature existed — which is the ONLY thing that keeps us from sending into the
     // dark, because `t:'voice'` is fire-and-forget and an old peer drops it without a word.
     voice: overrides.voice,
+    night: overrides.night,
+    niches: overrides.niches,
+    score: overrides.score,
   });
 }
 

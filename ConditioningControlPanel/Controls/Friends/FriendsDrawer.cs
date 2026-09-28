@@ -45,6 +45,9 @@ public sealed partial class FriendsDrawer : Border
     private readonly Border _foot = new();
     private readonly Canvas _fx = new() { IsHitTestVisible = false };
 
+    /// <summary>The leash, pinned above the list (Controls/Leash). Kept between repaints.</summary>
+    private readonly Leash.LeashDrawerSection _leash = new();
+
     private TextBox? _codeBox;
     private TextBlock? _addResult;
     private Button? _addGo;
@@ -164,6 +167,7 @@ public sealed partial class FriendsDrawer : Border
         Rebind();
         try { _svc?.SetDrawerOpen(true); } catch { }
         try { if (_svc?.Available == true) _ = SafeRefreshAsync(); } catch { }
+        try { if (_svc?.Available == true) StartTables(); } catch { }
         Render();
         PlayEntrance();
         Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => Focus()));
@@ -177,6 +181,7 @@ public sealed partial class FriendsDrawer : Border
         _picker = null;
         _addBox.Visibility = Visibility.Collapsed;
         StopAmbient();
+        StopTables();
     }
 
     private void Rebind()
@@ -205,6 +210,7 @@ public sealed partial class FriendsDrawer : Border
         _svc.SnapshotChanged -= OnSnapshot;
         _svc.Sent -= OnSent;
         _subscribed = false;
+        StopTables();
     }
 
     private async Task SafeRefreshAsync()
@@ -359,7 +365,9 @@ public sealed partial class FriendsDrawer : Border
             return;
         }
 
+        _list.Children.Add(_leash);
         var (online, offline) = FriendsDrawerRules.Split(snap);
+        (online, offline) = FriendsDrawerRules.HostingFirst(online, offline, f => TableFor(f) != null);
         if (_openId != null && !ContainsFriend(snap, _openId)) { _openId = null; _picker = null; }
 
         if (online.Count > 0)
@@ -441,6 +449,7 @@ public sealed partial class FriendsDrawer : Border
     private FrameworkElement BuildFriendRow(Friend f)
     {
         bool open = _openId == f.Id;
+        var table = TableFor(f);
         var row = new Border
         {
             CornerRadius = new CornerRadius(10),
@@ -461,8 +470,8 @@ public sealed partial class FriendsDrawer : Border
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var avatar = FriendsLook.Avatar(f.Name, f.AvatarUrl, 38, f.Online);
-        if (!f.Online) avatar.Opacity = 0.55;
+        var avatar = FriendsLook.Avatar(f.Name, f.AvatarUrl, 38, f.Online || table != null);
+        if (!f.Online && table == null) avatar.Opacity = 0.55;
         avatar.RenderTransformOrigin = new Point(0.5, 1);
         avatar.RenderTransform = new TranslateTransform();
         _avatars[f.Id] = avatar;
@@ -482,7 +491,7 @@ public sealed partial class FriendsDrawer : Border
             nameLine.Children.Add(sq);
         }
         mid.Children.Add(nameLine);
-        mid.Children.Add(ActivityLine(f));
+        mid.Children.Add(table != null ? HostingLine() : ActivityLine(f));
         Grid.SetColumn(mid, 1);
         top.Children.Add(mid);
 
@@ -501,6 +510,14 @@ public sealed partial class FriendsDrawer : Border
             };
             Grid.SetColumn(lockChip, 2);
             top.Children.Add(lockChip);
+        }
+        if (table != null)
+        {
+            top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var join = TableJoinButton(f, table);
+            Grid.SetColumn(join, 3);
+            top.Children.Add(join);
+            if (!open) DressHostingRow(row);
         }
         outer.Children.Add(top);
 
@@ -581,12 +598,14 @@ public sealed partial class FriendsDrawer : Border
             grid.Children.Add(b);
         }
         card.Children.Add(grid);
+        if (_leash.OfferChipFor(f) is { } leashChip) card.Children.Add(leashChip);
 
         var more = FriendsLook.Pill(ButtonContent("", Loc.Get("friends_action_more"), center: true),
             Brushes.Transparent, FriendsLook.MutedBrush, FriendsLook.Line2Brush, 10, new Thickness(10, 6, 10, 6));
         more.Tag = "friends-action:more";
         more.Click += (_, _) =>
         {
+            FriendsSfx.Click();
             var menu = BuildMenu(f);
             menu.PlacementTarget = more;
             menu.Placement = PlacementMode.Bottom;
@@ -612,7 +631,7 @@ public sealed partial class FriendsDrawer : Border
             lit ? FriendsLook.ButtonHoverBrush : FriendsLook.ButtonBrush, FriendsLook.TextBrush,
             lit ? FriendsLook.LilacBrush : FriendsLook.Line2Brush, 10, new Thickness(10, 8, 10, 8));
         b.Tag = "friends-action:" + act;
-        b.Click += (_, _) => { _picker = _picker == act ? null : act; Render(); };
+        b.Click += (_, _) => { FriendsSfx.Click(); _picker = _picker == act ? null : act; Render(); };
         return b;
     }
 
@@ -680,6 +699,7 @@ public sealed partial class FriendsDrawer : Border
             add.Click += async (_, _) =>
             {
                 Shockwave(add, FriendsLook.Mint);
+                FriendsSfx.Accepted();
                 try { if (_svc != null) await _svc.AcceptAsync(r.Id); } catch { }
                 await SafeRefreshAsync();
             };
@@ -690,6 +710,7 @@ public sealed partial class FriendsDrawer : Border
             no.Tag = "friends-decline";
             no.Click += async (_, _) =>
             {
+                FriendsSfx.Dismiss();
                 try { if (_svc != null) await _svc.DeclineAsync(r.Id); } catch { }
                 await SafeRefreshAsync();
             };
@@ -704,6 +725,7 @@ public sealed partial class FriendsDrawer : Border
             cancel.Tag = "friends-cancel";
             cancel.Click += async (_, _) =>
             {
+                FriendsSfx.Dismiss();
                 try { if (_svc != null) await _svc.CancelRequestAsync(r.Id); } catch { }
                 await SafeRefreshAsync();
             };
@@ -726,7 +748,34 @@ public sealed partial class FriendsDrawer : Border
         var settings = FootButton("", Loc.Get("friends_settings"));
         settings.Tag = "friends-settings";
         settings.Click += (_, _) => { SettingsRequested?.Invoke(); CloseRequested?.Invoke(); };
-        g.Children.Add(settings);
+
+        // The bell: corner notices for pokes, knocks and requests. Off keeps the Inbox rows and the cue.
+        var bellOn = App.Settings?.Current?.FriendNotificationsEnabled != false;
+        var bellGlyph = new TextBlock
+        {
+            Text = "",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 13,
+            Foreground = bellOn ? FriendsLook.LilacBrush : FriendsLook.DimBrush,
+        };
+        var bell = FriendsLook.Pill(bellGlyph, Brushes.Transparent, FriendsLook.MutedBrush, Brushes.Transparent, 9,
+            new Thickness(8, 6, 8, 6), FriendsLook.HoverBrush);
+        bell.Tag = "friends-notices";
+        bell.ToolTip = Loc.Get(bellOn ? "friends_notices_on" : "friends_notices_off");
+        bell.Click += (_, _) =>
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FriendNotificationsEnabled = !s.FriendNotificationsEnabled;
+            try { App.Settings?.Save(); } catch { }
+            FriendsSfx.Click();
+            bellGlyph.Foreground = s.FriendNotificationsEnabled ? FriendsLook.LilacBrush : FriendsLook.DimBrush;
+            bell.ToolTip = Loc.Get(s.FriendNotificationsEnabled ? "friends_notices_on" : "friends_notices_off");
+        };
+        var left = new StackPanel { Orientation = Orientation.Horizontal };
+        left.Children.Add(settings);
+        left.Children.Add(bell);
+        g.Children.Add(left);
 
         var add = FootButton("", Loc.Get("friends_add_title"));
         add.Tag = "friends-add-open";
@@ -794,6 +843,7 @@ public sealed partial class FriendsDrawer : Border
     private void CopyCode(string code, FrameworkElement from)
     {
         try { Clipboard.SetText(code); } catch { return; }
+        FriendsSfx.Click();
         if (_copied != null)
         {
             _copied.Text = Loc.Get("friends_copied");
@@ -892,10 +942,15 @@ public sealed partial class FriendsDrawer : Border
         if (good)
         {
             if (_addGo != null) Shockwave(_addGo, FriendsLook.Mint);
+            FriendsSfx.Accepted();
             if (_codeBox != null) _codeBox.Text = "";
             _ = SafeRefreshAsync();
         }
-        else if (_addGo != null) _addGo.IsEnabled = true;
+        else
+        {
+            FriendsSfx.Denied();
+            if (_addGo != null) _addGo.IsEnabled = true;
+        }
         return r;
     }
 
@@ -907,9 +962,20 @@ public sealed partial class FriendsDrawer : Border
     /// <summary>Words a send in the friend's row for two seconds.</summary>
     internal void ShowResult(string friendId, SendResult r)
     {
-        _results[friendId] = (Loc.Get(FriendsDrawerRules.SendResultKey(r)), FriendsDrawerRules.IsGood(r));
+        if (FriendsDrawerRules.IsGood(r)) FriendsSfx.Sent(); else FriendsSfx.Denied();
+        ShowResultQuiet(friendId, r);
+    }
+
+    private void ShowResultQuiet(string friendId, SendResult r)
+        => ShowTimed(friendId, Loc.Get(FriendsDrawerRules.SendResultKey(r)), FriendsDrawerRules.IsGood(r),
+            TimeSpan.FromSeconds(2));
+
+    /// <summary>Words a line in the friend's row for <paramref name="hold"/>.</summary>
+    private void ShowTimed(string friendId, string text, bool good, TimeSpan hold)
+    {
+        _results[friendId] = (text, good);
         if (_resultTimers.TryGetValue(friendId, out var old)) old.Stop();
-        var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        var t = new DispatcherTimer { Interval = hold };
         t.Tick += (_, _) =>
         {
             t.Stop();
@@ -938,6 +1004,13 @@ public sealed partial class FriendsDrawer : Border
     internal string? OpenFriendId => _openId;
 
     internal string? OpenPicker => _picker;
+
+    /// <summary>Opens a friend's card (a corner notice clicked). Leaves it open if it already is.</summary>
+    internal void OpenOn(string friendId)
+    {
+        if (_openId == friendId) return;
+        Toggle(friendId);
+    }
 
     /// <summary>Opens or folds a friend's card. One card open at a time.</summary>
     internal void Toggle(string friendId)

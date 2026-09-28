@@ -1,3 +1,4 @@
+import { drawPendulumTrail } from './pendulum-trail.js';
 import { durabilityColour, brickHueOf, brickHueIndex, cometSegments, paddleMood, squashScale, pushInZoom, PUSH_IN_S, perfectLabel, perfectSize, paddleLean, BALL_TINTS, jellyScale, bubbleIdle, wordTrailPoints, WORD_TRAIL } from './feedback.js';
 import { createEndingCard } from './ending-card.js';
 import {drawPowerIcon,drawPowerups,glyphIdle} from './powerups-render.js';
@@ -15,6 +16,8 @@ import {createRewardPicker, rewardBounds} from './bubble-rewards.js';
 import { FINALE_PULSE_PERIOD } from './finale-chaos.js';
 import { drawMetronome } from './reform.js';
 import { createLevelIntro } from './level-intro.js';
+import { drawEndlessField } from './endless-presentation.js';
+import { createPortalRenderer } from './render-portals.js';
 /* ============================================================================
  * stations/breakout/render.js - canvas 2D. Everything visual keys on the
  * snapshot's `rungs` (the juice ladder) and `state` (COLOUR / GREY). The
@@ -84,6 +87,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   const shockwaves = [], drifters = [];
   const rewardPick = createRewardPicker(rng);
   const levelIntro = createLevelIntro();
+  const portalFx = createPortalRenderer({ software });
   const landscape = createLandscape(W, H, rng, reduced);
   let breakoutFlash = 0, breakoutGif = -1, irisMelt = 0, irisBuffer = null;
   const P = createParticles({ max: 600, rng });
@@ -119,7 +123,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   const bubbleRewards = [];
   function onEvent(name, d) {
     d = d || {};
-    spellFx.event(name, d);
+    spellFx.event(name, d); portalFx.event(name, d);
     if (name === 'paddle') happy = .9;
     if (!reduced && (name === 'brick' || name === 'brickDamage' || name === 'metalHit' ||
         name === 'irisHit' || name === 'pendulumAnchorHit' || (name === 'hit' && d.kind === 'paddle'))) {
@@ -360,9 +364,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
           g.beginPath();g.moveTo(p.pivotX,p.pivotY);g.lineTo(p.x,p.y);g.stroke();g.setLineDash([]);
         }
         if(!reduced && p.trail.length>1) {
-          g.strokeStyle=col(p.mode==='sweep'?GOLD:PINK,mix,.2+p.energy*.3);
-          g.lineWidth=p.mode==='sweep'?16:5;g.beginPath();
-          p.trail.forEach((v,i)=>i?g.lineTo(v.x,v.y):g.moveTo(v.x,v.y));g.stroke();
+          const tint=p.mode==='orbit'?MINT:(p.mode==='sweep'||p.mode==='flight')?GOLD:PINK;
+          drawPendulumTrail(g,p,alpha=>col(tint,mix,alpha));
         }
       } else {
         g.translate(p.x,p.y);
@@ -370,7 +373,12 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         const rot=reduced?0:-s.time*(1+p.energy),tile=wellFx.tile('whirl',rot,0,mix,56,frameNo);
         g.save();g.beginPath();g.arc(0,0,p.r-5,0,Math.PI*2);g.clip();
         if(tile){g.rotate(rot);g.drawImage(tile,-p.r,-p.r,p.r*2,p.r*2);}g.restore();
-        g.strokeStyle=col(GOLD,mix);g.lineWidth=3;g.beginPath();g.arc(0,0,p.r,0,Math.PI*2);g.stroke();
+        g.strokeStyle=col(p.mode==='orbit'?MINT:GOLD,mix);g.lineWidth=3;g.beginPath();g.arc(0,0,p.r,0,Math.PI*2);g.stroke();
+        if(s.endless && s.state==='colour' && (p.mode==='orbit'||p.mode==='flight')) {
+          g.strokeStyle=col(p.mode==='orbit'?MINT:GOLD,mix,.65);g.lineWidth=1.5;
+          const turn=reduced?0:s.time*(p.mode==='orbit'?-2:3);
+          for(let k=0;k<3;k++){const a=turn+k*Math.PI*2/3;g.beginPath();g.arc(0,0,p.r+7,a,a+1.05);g.stroke();}
+        }
         g.strokeStyle=col(WHITE,mix,.35+p.pulse*.65);g.lineWidth=1;
         g.beginPath();g.arc(0,0,p.r-4,0,Math.PI*2);g.stroke();
       }
@@ -379,7 +387,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     if(front && s.wallAge<9) {
       g.save();g.globalAlpha=Math.min(1,9-s.wallAge);g.fillStyle=col(GOLD,mix,.75);
       g.font=`600 13px ${FONT}`;g.textAlign='center';
-      g.fillText('HIT THE HINGES. FREE THE SWING.',W/2,H-106);g.restore();
+      g.fillText(s.endless&&s.dome?'FREE THE SWING. FEED THE SPIRAL.':'HIT THE HINGES. FREE THE SWING.',W/2,H-106);g.restore();
     }
   }
   // Baked bevels separate faces from busy backgrounds without per-frame filters.
@@ -1377,6 +1385,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.save(); g.globalAlpha = clamp(.025 * s.sat,0,.025);
       g.drawImage(ambient,W/2-radius,H*.55-radius,radius*2,radius*2); g.restore();
     }
+    drawEndlessField(g, s, reduced);
     drawWalls(s, mix);
     if (s.mantra && !grey) {                                                // the mantra, large and faint behind the bricks
       g.save(); g.font = `900 62px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = col(PINK, mix, 0.09);
@@ -1417,6 +1426,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     drawPowerups(g,s);
     drawJunctionShield(s,mix,dt);
     drawPaddle(s, mix, dt); mark("particlesBallMs");
+    portalFx.draw(g, canvas, s, { now, dt, reduced }); mark("portalsMs");
     if (!extras) drawCombo(s, mix, dt);                                   // the v2 station shows the combo in its strip
     drawOverlays(s, dt, mix, grey ? null : word, now);
     if (tr && tr.kind === 'relapse' && !grey) {                             // slow-mo drain: colour leaves from the bottom up
@@ -1497,12 +1507,12 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     }
     drawFinale(s, ballTransform);
     g.save(); g.setTransform(scale,0,0,scale,ox,oy);
-    levelIntro.draw(g, s.stats.walls, s.wallAge, W, H, reduced); g.restore();
+    levelIntro.draw(g, s.stats.walls, s.wallAge, W, H, reduced, s.endlessBoard); g.restore();
     mark('foregroundMs');
   }
 
   const r = { resize, draw, onEvent, onGameEvent: onEvent, toField,
-    dispose() { smoke.clear(); endingCard.reset();letterFaces.clear();greyMetalFace=null; toughFaces.clear(); brickPictures.clear(); wordFaces.clear(); plainFaces.clear(); tierGlows.clear(); foreground?.remove(); foreground = null; spellFx.reset(); bubbleRewards.length = 0; P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); wellFx.dispose(); irisFx.dispose(); finaleFx.dispose(); finaleFreezeFrame=null; finaleOutroFrame=null; finaleOutroOwner=null; irisBuffer=null; off = null; },
+    dispose() { portalFx.dispose(); smoke.clear(); endingCard.reset();letterFaces.clear();greyMetalFace=null; toughFaces.clear(); brickPictures.clear(); wordFaces.clear(); plainFaces.clear(); tierGlows.clear(); foreground?.remove(); foreground = null; spellFx.reset(); bubbleRewards.length = 0; P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); wellFx.dispose(); irisFx.dispose(); finaleFx.dispose(); finaleFreezeFrame=null; finaleOutroFrame=null; finaleOutroOwner=null; irisBuffer=null; off = null; },
     particleCount: () => P.count() };
   return r;
 }

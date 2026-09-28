@@ -196,6 +196,9 @@ public sealed class EmiState
     /// </summary>
     [JsonProperty("petsTotal")] public int PetsTotal { get; set; }
 
+    /// <summary>Lifetime throws. The campus unlocks its veteran fling lines at 20 and 50.</summary>
+    [JsonProperty("flingsTotal")] public int FlingsTotal { get; set; }
+
     /// <summary>
     /// The pet nudge is DONE, forever. Latched once <see cref="PetsTotal"/> reaches
     /// <c>EmiNudgeMachine.PetGistCount</c> and never cleared by anything but the QA reset: a
@@ -449,6 +452,23 @@ public sealed class EmiState
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] NotePet failed");
+            return 0;
+        }
+    }
+
+    /// <summary>Count one throw and return the new lifetime total.</summary>
+    public static int NoteFling()
+    {
+        try
+        {
+            var s = Current;
+            s.FlingsTotal++;
+            SaveSoon();
+            return s.FlingsTotal;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] NoteFling failed");
             return 0;
         }
     }
