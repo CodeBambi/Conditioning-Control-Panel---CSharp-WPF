@@ -31,11 +31,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF MainWindow.StartStop.cs:58: a running session asks first; declining keeps everything on.
             if (App.Sessions?.IsRunning == true)
             {
+                Serilog.Log.Information("Start button: asking to stop the running session");
                 await ConfirmStopSession("dialog_stop_session_title", "dialog_stop_session_body");
                 if (!App.Sessions.IsRunning) StopEngine();
                 return;
             }
-            if (CoreEngine.IsRunning) StopEngine();
+            if (CoreEngine.IsRunning) { Serilog.Log.Information("Start button: stopping the engine"); StopEngine(); }
             else StartEngine();
         }
 
@@ -61,12 +62,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF StopEngine. Saved flags are left alone; <see cref="OnEngineStopped"/> clears the screen.
-        /// A running session ends early first (tray Stop, panic): it restores the pre-session settings.
-        /// ponytail: WPF's panic pauses a session instead (MainWindow.xaml.cs:1726); that is U4.</summary>
+        /// A running session is paused first, not ended (panic, tray Stop): WPF MainWindow.xaml.cs:1726.</summary>
         internal static void StopEngine()
         {
             _engineGen++;
-            App.Sessions?.Stop(completed: false);
+            App.Sessions?.Pause();
             CoreEngine.Stop();
         }
 
@@ -77,8 +77,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             LockCardWindow.ForceCloseAll();
             PinkFilterOverlay.Refresh(this);
             UpdateStartButton();
+            // A paused session keeps its labels, lock and pause button (WPF StopEngine leaves them).
+            if (App.Sessions?.IsRunning == true) { SetPauseButton(App.Sessions.IsPaused); return; }
             // WPF OnSessionStopped: the session button and the dials come back on every exit path.
             Named<Tabs.PresetsTabView>("PresetsTab")?.SetSessionButtonLabel(null);
+            if (Named<Button>("BtnPauseSession") is { } pause) pause.IsVisible = false;
             RefreshSessionFeatureLock();
         }
 

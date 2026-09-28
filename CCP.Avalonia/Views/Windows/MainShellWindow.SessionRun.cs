@@ -4,8 +4,8 @@
 // BtnStopSession_Click (:1983); plus the stop-session branch of BtnStart_Click (MainWindow.StartStop.cs:58).
 // The head owns one Core SessionRunner (App.Sessions), which runs only the ported subset - flash,
 // subliminal, bouncing text, lock cards (docs/avalonia-decisions.md).
-// ponytail: dropped, each with no service on this head: corner-GIF options, pause button + penalty (U4),
-// lockdown/remote gates, program/punch-card/Bark/profile-sync hooks, the takeaway-shelf refresh, the
+// BtnPauseSession_Click (:2021) too.
+// ponytail: dropped, each with no service on this head: corner-GIF options, lockdown/remote gates, program/punch-card/Bark/profile-sync hooks, the takeaway-shelf refresh, the
 // Withdraw summary suppression and the video-teardown wait before the recap (no video service yet).
 // ponytail: both confirms use MessageDialog, so the buttons read OK/Cancel rather than WPF's
 // "▶ Start Session"/"Not yet" and "Yes, stop"/"Keep going"; the text above them is WPF's.
@@ -16,6 +16,7 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Media;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Localization;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Avalonia.Views.Overlays;
 using ConditioningControlPanel.Localization;
@@ -77,8 +78,49 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Loc.GetF(bodyKey, session.Icon ?? "", session.Name ?? "",
                     $"{(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}",
                     $"{(int)remaining.TotalMinutes:D2}:{remaining.Seconds:D2}",
-                    potentialXP, ""));   // penalty text: no pauses before U4
-            if (confirmed && ReferenceEquals(runner.CurrentSession, session)) runner.Stop(completed: false);
+                    potentialXP, runner.PauseCount > 0 ? Loc.GetF("msg_plus_pause_penalty_0", runner.XPPenalty) : ""));
+            if (!confirmed || !ReferenceEquals(runner.CurrentSession, session)) return;
+            Log.Information("Session stop confirmed by the user");
+            runner.Stop(completed: false);
+        }
+
+        /// <summary>WPF BtnPauseSession_Click: resume at once; a pause asks first (it costs 100 XP)
+        /// unless SkipPauseXpWarning. ponytail: MessageDialog has no "don't ask again" box, so the opt-out
+        /// is only settable from the WPF head; no Lockdown refusal (no Lockdown service here).</summary>
+        private async void BtnPauseSession_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (App.Sessions is not { IsRunning: true } runner) return;
+            if (runner.IsPaused)
+            {
+                StartEffect(() =>   // effects come back, so the portal panic bind comes first
+                {
+                    if (App.Sessions is not { IsPaused: true } r) return;
+                    r.Resume();
+                    PinkFilterOverlay.Refresh(this);
+                    SetPauseButton(false);
+                    OnSessionTick();
+                });
+                return;
+            }
+            var confirmed = CoreSettings.Current.SkipPauseXpWarning || await MessageDialog.ConfirmAsync(this,
+                Loc.Get("title_pause_session_confirm"),
+                Loc.GetF("msg_pause_session_body", runner.XPPenalty, runner.XPPenalty + SessionXp.PausePenalty));
+            if (!confirmed || !runner.IsRunning) return;
+            runner.Pause();
+            PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Stop()
+            SetPauseButton(true);
+        }
+
+        /// <summary>WPF TxtPauseIcon + BtnPauseSession.ToolTip: "\u25B6" + resume while paused, else "\u23F8" + the count.</summary>
+        internal void SetPauseButton(bool paused)
+        {
+            if (Named<Button>("BtnPauseSession") is not { } b) return;
+            b.IsVisible = true;
+            if (Named<TextBlock>("TxtPauseIcon") is { } icon) icon.Text = paused ? "\u25B6" : "\u23F8";
+            var count = App.Sessions?.PauseCount ?? 0;
+            b.Bind(ToolTip.TipProperty, paused || count == 0
+                ? (Binding)new StrExtension(paused ? "tooltip_resume_session" : "tooltip_pause_session_100_xp_penalty_per_pause").ProvideValue(null!)
+                : new Binding { Source = Loc.GetF("tooltip_pause_session_100_xp_penalty_per_pause_npause", count) });
         }
 
         /// <summary>WPF OnSessionProgressUpdated (+ OnSessionStarted's red button): the lock heartbeat
@@ -87,6 +129,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             RefreshSessionFeatureLock(force: false);
             if (App.Sessions is not { IsRunning: true, CurrentSession: { } session } runner) return;
+            PinkFilterOverlay.Refresh(this);   // the delayed start and the ramp (SessionRunner.PinkOpacity)
+            if (Named<Button>("BtnPauseSession") is { IsVisible: false }) SetPauseButton(false);   // WPF OnSessionStarted
             var remaining = runner.Remaining;
             var showCountdown = CoreSettings.Current.ShowSessionCountdown != false;
             Named<Tabs.PresetsTabView>("PresetsTab")?.SetSessionButtonLabel(SessionClockLabel.StopButton(

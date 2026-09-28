@@ -183,6 +183,121 @@ public sealed class SessionRunnerTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Pause_FreezesTheClock_StopsFeatures_AndCostsOneHundredXp()
+    {
+        var old = CoreProgression.AddXPProvider;
+        double banked = 0;
+        CoreProgression.AddXPProvider = (xp, _) => banked += xp;
+        try
+        {
+            var session = OneMinute();
+            session.BonusXP = 800;
+            _runner.Start(session);
+            _logs.RecordImages(new[] { "/pics/a.png" });
+            _runner.Tick(TimeSpan.FromSeconds(20));
+            _runner.Pause();
+            _runner.Pause();   // already paused: no second charge
+
+            Assert.True(_runner.IsPaused && _runner.IsRunning && CoreSession.IsSessionRunning);
+            Assert.Equal((1, 100), (_runner.PauseCount, _runner.XPPenalty));
+            Assert.False(CoreFlash.IsRunning || CoreSubliminal.IsRunning || LockCardScheduler.Instance.IsRunning);
+            var frozen = _runner.Elapsed;
+            _runner.Tick(TimeSpan.FromSeconds(90));   // a paused session never completes
+            Assert.True(_runner.IsRunning);
+            Assert.Equal(frozen, _runner.Elapsed);
+
+            _runner.Resume();
+            _runner.Tick(TimeSpan.FromSeconds(60));
+
+            var level = CoreSettings.Current.PlayerLevel;
+            var expected = SessionXp.Compute(800, 1, level, TimeSpan.FromSeconds(60));
+            Assert.NotEqual(SessionXp.Compute(800, 0, level, TimeSpan.FromSeconds(60)), expected);
+            Assert.Equal(expected, _ready!.XPEarned);
+            Assert.Equal(expected, banked);
+        }
+        finally { CoreProgression.AddXPProvider = old; }
+    }
+
+    [Fact]
+    public void Resume_RestartsOnlyFeaturesWhoseStartMinuteHasPassed()
+    {
+        int btStarts = 0;
+        CoreBouncingText.StartAction = () => btStarts++;
+        var session = OneMinute();
+        session.DurationMinutes = 2;
+        session.Settings.BouncingTextStartMinute = 1;
+        session.Settings.LockCardStartMinute = 1;
+        _runner.Start(session);
+        _runner.Tick(TimeSpan.FromSeconds(30));
+        _runner.Pause();
+        btStarts = 0;
+
+        _runner.Resume();
+        Assert.True(CoreFlash.IsRunning && CoreSubliminal.IsRunning);   // minute 0: started before the pause
+        Assert.Equal(0, btStarts);                                     // minute 1: still deferred
+        Assert.False(LockCardScheduler.Instance.IsRunning);
+
+        _runner.Tick(TimeSpan.FromSeconds(60));
+        Assert.Equal(1, btStarts);
+        Assert.True(LockCardScheduler.Instance.IsRunning);
+    }
+
+    [Fact]
+    public void FlashRamp_FollowsElapsed_AndIsHandedBackOnStop()
+    {
+        var s = CoreSettings.Current;
+        s.FlashOpacity = 90;
+        var session = OneMinute();
+        session.DurationMinutes = 2;
+        session.Settings.RampCurve = RampCurve.Linear;
+        session.Settings.FlashOpacity = 20; session.Settings.FlashOpacityEnd = 80;
+        session.Settings.FlashPerHour = 10; session.Settings.FlashPerHourEnd = 70;
+        session.Settings.FlashScale = 150;
+        _runner.Start(session);
+
+        _runner.Tick(TimeSpan.FromSeconds(30));   // 25 %
+        Assert.Equal((35, 25, 150), (s.FlashOpacity, s.FlashFrequency, s.ImageScale));
+        _runner.Tick(TimeSpan.FromSeconds(90));   // 75 %
+        Assert.Equal((65, 55), (s.FlashOpacity, s.FlashFrequency));
+
+        _runner.Stop();
+        Assert.Equal(90, s.FlashOpacity);
+    }
+
+    [Fact]
+    public void PinkTint_StartsWithinThreeMinutesOfItsMinute_ThenRamps()
+    {
+        var rng = new Random(7);
+        var starts = Enumerable.Range(0, 2000).Select(_ => SessionRunner.RandomizedStart(true, 7, rng)).ToList();
+        Assert.All(starts, m => Assert.InRange(m, 4.0, 10.0));
+        Assert.True(starts.Min() < 4.1 && starts.Max() > 9.9);   // the whole window, not a narrower one
+        Assert.Contains(Enumerable.Range(0, 200).Select(_ => SessionRunner.RandomizedStart(true, 1, rng)), m => m == 0);   // clamped at 0
+        Assert.Equal(7, SessionRunner.RandomizedStart(false, 7, rng));
+        Assert.Equal(0, SessionRunner.RandomizedStart(true, 0, rng));
+
+        var session = OneMinute();
+        session.DurationMinutes = 10;
+        session.Settings.RampCurve = RampCurve.Linear;
+        session.Settings.PinkFilterEnabled = true;
+        session.Settings.PinkFilterStartMinute = 4;
+        session.Settings.PinkFilterStartOpacity = 10;
+        session.Settings.PinkFilterEndOpacity = 40;
+        _runner.Start(session);
+        var at = _runner.PinkStartMinute;
+        Assert.InRange(at, 1.0, 7.0);
+        Assert.False(CoreSettings.Current.PinkFilterEnabled);
+
+        _runner.Tick(TimeSpan.FromMinutes(at - 0.01));
+        Assert.False(CoreSettings.Current.PinkFilterEnabled);
+        Assert.Null(_runner.PinkOpacity);
+        _runner.Tick(TimeSpan.FromMinutes(at + 1e-4));   // TimeSpan rounds to the millisecond
+        Assert.True(CoreSettings.Current.PinkFilterEnabled);
+        Assert.Equal(10, _runner.PinkOpacity!.Value, 2);
+        _runner.Tick(TimeSpan.FromMinutes((at + 10) / 2));   // halfway through the tint's own window
+        Assert.Equal(25, _runner.PinkOpacity!.Value, 2);
+    }
+
     private static string Fixture([CallerFilePath] string here = "") =>
         Path.Combine(Path.GetDirectoryName(here)!, "Fixtures", "session_log_runner_wpf.json");
 }

@@ -62,7 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
             var want = ResolveScreenIndices(s.PinkFilterTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
             var (r, g, b) = EffectiveColor();
-            var opacity = s.PinkFilterOpacity / 100.0;
+            var opacity = (App.Sessions?.PinkOpacity ?? s.PinkFilterOpacity) / 100.0;   // a session ramps it without writing it (#471)
 
             // Same monitors as last time: repaint the brushes and leave the windows alone. This is
             // the whole reason the slider does not tear down a full-screen window per tick.
@@ -143,8 +143,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <see cref="CoreEngine"/>, and Start/Stop refresh the tint. Unseeded (renders, tests)
         /// means no engine at all, and the card owns the tint.</para>
         /// </summary>
+        /// <para>A session counts as running (WPF ResumeSession's App.Overlay.Start() after a panic) and a
+        /// paused one hides the tint (PauseSession's App.Overlay.Stop()).</para>
         private static bool ShouldShow()
-            => CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning;
+            => App.Sessions?.IsPaused != true
+               && (CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning || App.Sessions?.IsRunning == true);
 
         // Start (MainShellWindow.StartEngine) is what restores a tint left enabled - WPF OverlayService.Start().
 

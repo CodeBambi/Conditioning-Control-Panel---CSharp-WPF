@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Threading;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Models;
 using Serilog;
 
@@ -12,8 +13,10 @@ namespace ConditioningControlPanel.Services
     /// <see cref="SessionSettingsSnapshot"/>, <see cref="PhrasePoolCustody"/>, <see cref="CoreEngine"/> and
     /// <see cref="SessionLogService"/>. Drives flash, subliminal (+ whispers flag), bouncing text and lock cards.
     ///
+    /// Also pause/resume (100 XP per pause), the flash ramp and the pink tint (ramp + ±3 min random start).
+    ///
     /// ponytail: not driven here - video, bubbles, bubble count, pop quiz, mind wipe, brain drain, spiral,
-    /// pink tint, corner GIF, ducking, the flash ramp, pause/resume + penalty (U4), phase events,
+    /// corner GIF, ducking, phase events,
     /// EMI Desk, Discord, friends, season recap and achievement tracking. No settings are written for them,
     /// so the snapshot restore writes their own values back; each arrives with its Core service.
     /// </summary>
@@ -26,11 +29,23 @@ namespace ConditioningControlPanel.Services
         private PhrasePoolCustody? _custody;
         private DateTime _startTime;
         private TimeSpan _lastElapsed;
+        private TimeSpan _pausedElapsed;
+        private readonly Random _random = new();
 
         public SessionLogService SessionLog { get; }
         public Session? CurrentSession { get; private set; }
         public bool IsRunning { get; private set; }
         public int CurrentPhaseIndex { get; private set; }
+        public bool IsPaused { get; private set; }
+        public int PauseCount { get; private set; }
+        public int XPPenalty => PauseCount * SessionXp.PausePenalty;
+
+        /// <summary>SessionEngine._randomizedPinkStartMinute: the preset's start ±3 min (RandomizeStartTimes).</summary>
+        public double PinkStartMinute { get; private set; }
+
+        /// <summary>The ramped pink tint in percent once it has started, else null. WPF drives the overlay
+        /// with it directly (SetSustainedOverlayOpacity) and never writes PinkFilterOpacity (#471).</summary>
+        public double? PinkOpacity { get; private set; }
 
         /// <summary>After every live tick: WPF's ProgressUpdated, for the head's clock labels.</summary>
         public event Action? Ticked;
@@ -47,10 +62,10 @@ namespace ConditioningControlPanel.Services
         public TimeSpan Remaining => CurrentSession is { } cs && IsRunning
             ? TimeSpan.FromMinutes(cs.DurationMinutes) - Elapsed : TimeSpan.Zero;
 
-        /// <summary>SessionEngine.ElapsedTime (no pause offset until U4).</summary>
-        public TimeSpan Elapsed => IsRunning
-            ? SessionClock.Elapsed(TimeSpan.Zero, _startTime, DateTime.Now, _stopwatch.Elapsed)
-            : TimeSpan.Zero;
+        /// <summary>SessionEngine.ElapsedTime: frozen while paused.</summary>
+        public TimeSpan Elapsed => !IsRunning ? TimeSpan.Zero
+            : IsPaused ? _pausedElapsed
+            : SessionClock.Elapsed(_pausedElapsed, _startTime, DateTime.Now, _stopwatch.Elapsed);
 
         /// <summary>WPF StartSessionAsync (SessionEngine.cs:159-323), after the caller's engine start
         /// (MainWindow.Presets.cs:1619), which this does itself.</summary>
@@ -63,7 +78,11 @@ namespace ConditioningControlPanel.Services
             CurrentSession = session;
             IsRunning = true;
             CurrentPhaseIndex = 0;
-            _lastElapsed = TimeSpan.Zero;
+            IsPaused = false;
+            PauseCount = 0;
+            PinkOpacity = null;
+            _pausedElapsed = _lastElapsed = TimeSpan.Zero;
+            PinkStartMinute = RandomizedStart(session.Settings.PinkFilterEnabled, session.Settings.PinkFilterStartMinute, _random);
             _startTime = DateTime.Now;
             _stopwatch.Restart();
 
@@ -142,6 +161,50 @@ namespace ConditioningControlPanel.Services
                     () => LockCardScheduler.Instance.Start(RemainingMinutes), LockCardScheduler.Instance.Stop);
             }
             else LockCardScheduler.Instance.Stop();
+
+            // SessionEngine.cs:1479: a delayed tint stays off until its randomised minute (Tick).
+            s.PinkFilterEnabled = ss.PinkFilterEnabled && ss.PinkFilterStartMinute == 0;
+            if (s.PinkFilterEnabled) s.PinkFilterOpacity = ss.PinkFilterStartOpacity;
+        }
+
+        /// <summary>SessionEngine.RandomizeStartTimes (SessionEngine.cs:966): a delayed start moves by up to 3 min either way.
+        /// </summary>
+        internal static double RandomizedStart(bool enabled, int minute, Random random) =>
+            enabled && minute > 0 ? Math.Max(0, minute + random.NextDouble() * 6 - 3) : minute;
+
+        /// <summary>SessionEngine.PauseSession (SessionEngine.cs:499): freeze the clock, count the pause,
+        /// stop the driven services. The lock-card scheduler only - an open card stays (#875).
+        /// The head hides the pink tint (WPF App.Overlay.Stop()).</summary>
+        public void Pause()
+        {
+            if (!IsRunning || IsPaused || CurrentSession == null) return;
+            _pausedElapsed = Elapsed;
+            IsPaused = true;
+            PauseCount++;
+            _stopwatch.Stop();
+            _timer?.Change(Timeout.Infinite, Timeout.Infinite);
+            CoreFlash.Stop();
+            CoreSubliminal.Stop();
+            LockCardScheduler.Instance.Stop();
+            CoreBouncingText.Stop();
+            Log.Information("Session paused (pause #{Count}, -100 XP penalty)", PauseCount);
+        }
+
+        /// <summary>SessionEngine.ResumeSession (SessionEngine.cs:554): restart only what has reached its
+        /// start minute; a still-deferred start fires from Tick as before.</summary>
+        public void Resume()
+        {
+            if (!IsRunning || !IsPaused || CurrentSession is not { } session) return;
+            IsPaused = false;
+            _startTime = DateTime.Now;
+            _stopwatch.Start();
+            _timer?.Change(1000, 1000);
+            var ss = session.Settings;
+            if (ss.FlashEnabled && !_deferred.IsPending("flash")) CoreFlash.Start();
+            if (ss.SubliminalEnabled && !_deferred.IsPending("subliminal")) CoreSubliminal.Start();
+            if (ss.LockCardEnabled && !_deferred.IsPending("lock cards")) LockCardScheduler.Instance.Start(Remaining.TotalMinutes);
+            if (ss.BouncingTextEnabled && !_deferred.IsPending("bouncing text")) CoreBouncingText.Start();
+            Log.Information("Session resumed");
         }
 
         private void StartAt(string name, int minute, Action start, Action stop)
@@ -156,7 +219,7 @@ namespace ConditioningControlPanel.Services
         internal void Tick(TimeSpan elapsed)
         {
             var session = CurrentSession;
-            if (!IsRunning || session == null) return;
+            if (!IsRunning || IsPaused || session == null) return;
             _lastElapsed = elapsed;
             var minutes = elapsed.TotalMinutes;
             if (minutes >= session.DurationMinutes) { Stop(true, elapsed); return; }
@@ -167,9 +230,44 @@ namespace ConditioningControlPanel.Services
                 CurrentPhaseIndex = phase;
                 Log.Information("Phase changed: {Phase}", session.Phases[phase].Name);
             }
+            UpdateRamps(session, minutes);
             _deferred.FireDue(minutes);
+
+            // Pink delayed start at its randomised minute (SessionEngine.cs:849); the head shows it.
+            var s = CoreSettings.Current;
+            if (session.Settings.PinkFilterEnabled && !s.PinkFilterEnabled && minutes >= PinkStartMinute)
+            {
+                s.PinkFilterEnabled = true;
+                Log.Information("Pink filter activated at {Minutes:F1} minutes (target was {Target:F1})", minutes, PinkStartMinute);
+            }
             Ticked?.Invoke();
         }
+
+        /// <summary>SessionEngine.UpdateRampingValues (SessionEngine.cs:699), flash trio + pink.</summary>
+        private void UpdateRamps(Session session, double minutes)
+        {
+            var ss = session.Settings;
+            double total = session.DurationMinutes;
+            var curve = ss.RampCurve ?? CoreSettings.Current.RampCurve;
+            var progress = RampCurves.ApplyCurve(minutes / total, curve);
+
+            // Parked as a session overlay, never written to the persisted fields (see SetSessionFlashRamp).
+            int? opacity = null, frequency = null, scale = null;
+            if (ss.FlashEnabled && ss.FlashOpacity != ss.FlashOpacityEnd)
+                opacity = (int)Lerp(ss.FlashOpacity, ss.FlashOpacityEnd, progress);
+            if (ss.FlashEnabled && ss.FlashPerHour != ss.FlashPerHourEnd)
+                frequency = (int)Lerp(ss.FlashPerHour, ss.FlashPerHourEnd, progress);
+            if (ss.FlashEnabled && ss.FlashScale != 100) scale = ss.FlashScale;
+            CoreSettings.Current.SetSessionFlashRamp(opacity, frequency, scale);
+
+            if (ss.PinkFilterEnabled && minutes >= PinkStartMinute)
+            {
+                var pink = RampCurves.ApplyCurve((minutes - PinkStartMinute) / (total - PinkStartMinute), curve);
+                PinkOpacity = Lerp(ss.PinkFilterStartOpacity, ss.PinkFilterEndOpacity, pink);
+            }
+        }
+
+        private static double Lerp(double a, double b, double t) => a + (b - a) * Math.Clamp(t, 0, 1);
 
         public void Stop(bool completed = false) => Stop(completed, Elapsed);
 
@@ -178,7 +276,7 @@ namespace ConditioningControlPanel.Services
         {
             var session = CurrentSession;
             if (!IsRunning || session == null) return;
-            IsRunning = false;
+            IsRunning = IsPaused = false;
             _custody?.Release();
             _stopwatch.Stop();
             _timer?.Dispose();
@@ -186,6 +284,8 @@ namespace ConditioningControlPanel.Services
             _deferred.Clear();
 
             var s = CoreSettings.Current;
+            s.ClearSessionFlashRamp();   // SessionEngine.cs:390, ahead of the restore
+            PinkOpacity = null;
             _snapshot?.RestoreTo(s);
             _snapshot = null;
             _custody?.Restore(s);
@@ -197,9 +297,10 @@ namespace ConditioningControlPanel.Services
             int xp = 0;
             if (completed)
             {
-                var award = SessionXp.Compute(session.BonusXP, 0, s.PlayerLevel, elapsed);
+                var award = SessionXp.Compute(session.BonusXP, PauseCount, s.PlayerLevel, elapsed);
                 if (CoreProgression.AddXPProvider != null) { CoreProgression.AddXP(award, "Session"); xp = award; }
-                Log.Information("Session completed: {Name}, XP: {XP} (banked {Banked})", session.Name, award, xp);
+                Log.Information("Session completed: {Name}, XP: {XP} (banked {Banked}, paused {PauseCount}x, penalty: -{Penalty})",
+                    session.Name, award, xp, PauseCount, XPPenalty);
             }
             else Log.Information("Session stopped early");
 
