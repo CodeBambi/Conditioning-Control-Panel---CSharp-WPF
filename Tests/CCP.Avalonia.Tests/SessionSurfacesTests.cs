@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -13,6 +14,7 @@ using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -90,6 +92,56 @@ public sealed class SessionSurfacesTests
         Assert.Equal(session.Name, editor.FindControl<TextBox>("TxtSessionName")!.Text);
         editor.Close();
         host.Close();
+    });
+
+    [Fact]
+    public Task EditingACustomSessionSavesOverItsOwnFileWithTheSameId() => Run(() =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ccp-session-edit-" + Guid.NewGuid().ToString("N"));
+        var custom = Path.Combine(root, "custom");
+        var builtIn = Path.Combine(root, "built-in");
+        Directory.CreateDirectory(custom);
+        Directory.CreateDirectory(builtIn);
+        Window? host = null;
+        try
+        {
+            var files = new SessionFileService(custom, builtIn);
+            var definition = SessionDefinition.FromSession(Session.MorningDrift);
+            definition.Id = "mine";
+            definition.Name = "Mine";
+            files.ExportSession(definition, Path.Combine(custom, "hand-named.session.json"));
+            var manager = new SessionManager(files);
+            manager.LoadAllSessions();
+            var mine = manager.AllSessions.Single(s => s.Id == "mine");
+            var path = mine.SourceFilePath!;
+            var before = File.GetLastWriteTimeUtc(path);
+            File.SetLastWriteTimeUtc(path, before.AddMinutes(-5));
+
+            var view = new PresetsTabView { Width = 1100, Height = 760 };
+            host = new Window { Width = 1100, Height = 760, Content = view };
+            host.Show();
+            view.UseSessionManager(manager);
+            Dispatcher.UIThread.RunJobs();
+
+            var row = view.FindControl<StackPanel>("SessionRackPanel")!.Children.OfType<Border>()
+                .Single(b => (b.Tag as Session)?.Id == "mine");
+            row.GetVisualDescendants().OfType<Button>().First(b => b.IsEnabled)
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            var editor = Assert.Single(host.OwnedWindows.OfType<SessionEditorWindow>());
+            editor.FindControl<Button>("BtnSave")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(File.GetLastWriteTimeUtc(path) > before.AddMinutes(-5), "file was not rewritten");
+            var saved = files.LoadCustomSessions().Single(s => s.SourceFilePath == path);
+            Assert.Equal("mine", saved.Id);
+            Assert.Single(Directory.GetFiles(custom));
+        }
+        finally
+        {
+            host?.Close();
+            try { Directory.Delete(root, true); } catch { }
+        }
     });
 
     private static string? Text(Control root, string name) => root.FindControl<TextBlock>(name)!.Text;

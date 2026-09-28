@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// those head-owned dependencies out of the view; the built-in Core session rack is the one
     /// honest read-only slice restored here, including pointer and keyboard selection.
     ///
-    /// ponytail: needs MainWindow (preset CRUD, SessionManager, JustDropOrdersService, and the
+    /// ponytail: needs MainWindow (preset CRUD, JustDropOrdersService, and the
     /// tab FX clock), wired when those services move to Core. The remaining wiring points, all
     /// named in the XAML, are:
     ///   BtnStartSession / BtnRevealSpoilers /
@@ -839,8 +839,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (await editor.ShowDialog<bool?>(owner) != true || editor.ResultSession is not { } session) return;
             if (await PickSessionSavePath(owner, "title_save_new_session", session) is not { } path) return;
 
-            SessionLibrary().AddNewSession(session, path);
-            UseSessionManager(_sessionManager!);
+            try
+            {
+                var lib = SessionLibrary();
+                lib.AddNewSession(session, path);
+                UseSessionManager(lib);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Error(ex, "Failed to save session {Path}", path);
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_error"), ex.Message);
+                return;
+            }
             await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_success"), Loc.Get("msg_new_session_saved"));
             Serilog.Log.Information("Session created: {Name} at {Path}", session.Name, path);
         }
@@ -857,8 +867,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 edited.Id = Guid.NewGuid().ToString();
                 if (await PickSessionSavePath(owner, "title_save_as_new_custom_session", edited) is not { } path) return;
-                SessionLibrary().AddNewSession(edited, path);
-                UseSessionManager(_sessionManager!);
+                try
+                {
+                    var lib = SessionLibrary();
+                    lib.AddNewSession(edited, path);
+                    UseSessionManager(lib);
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Error(ex, "Failed to save session {Path}", path);
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_error"), ex.Message);
+                    return;
+                }
                 await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_success"),
                     Loc.Get("msg_built_in_session_saved_as_a_new_custom_sessio"));
             }
@@ -867,8 +887,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 edited.Id = session.Id;
                 edited.Source = session.Source;
                 edited.SourceFilePath = session.SourceFilePath;
-                SessionLibrary().UpdateCustomSession(edited);
-                UseSessionManager(_sessionManager!);
+                try
+                {
+                    var lib = SessionLibrary();
+                    lib.UpdateCustomSession(edited);
+                    UseSessionManager(lib);
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Error(ex, "Failed to save session {Path}", edited.SourceFilePath);
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_error"), ex.Message);
+                    return;
+                }
                 SelectSession(edited);
                 ShowDropZoneStatus($"Session updated: {edited.Name}", isError: false);
             }
