@@ -533,3 +533,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   WPF's 56->236 px 190/150 ms open/close, linear label/pill fade, 44->50 tiles, 40->46 icons, staggered door names.
 - Evidence: NavRailHoverTests (fail-proofed 4 ways); live sandbox open/closed screenshots; nav-check and click-through
   pass. Still missing: door glow/shimmer, hue glow, mod door art, watchdog, reduced motion. Review: ACCEPT.
+
+## avalonia-port/lockcard-typed-parity: +221 (user-reported: lock card typing doesn't look/work right)
+- Root causes: the success pulse threw (animation on the transform), so a correct repeat never counted; KWin left the
+  card a clipped 300x200 box (non-resizable windows aren't maximised). LockCardText moved to Core (WPF matching: ellipsis,
+  curly quotes, nbsp); input judged as it lands; the session phrase is unbound from its loc key; focus reclaim; the card
+  covers its screen (primary card on the primary screen); 52 px glyph.
+- Evidence: LockCardTypingTests (fail-proofed); live sandbox typed card: 3 repeats in 5.1 s, 0 errors. Voice solve
+  follows (speech units). Review: FIX -> r1 applied.
