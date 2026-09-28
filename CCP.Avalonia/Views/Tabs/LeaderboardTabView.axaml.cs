@@ -308,8 +308,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             // ponytail: WPF prefers App.QuestDefinitions.SeasonTitle and falls back to
             // section_seasons when it is blank - that service is
-            // ConditioningControlPanel/Services/Progression/QuestDefinitionService.cs, head-side,
-            // with no Core twin. The fallback is what shows here.
+            // CCP.Core/Services/Progression/QuestDefinitionService.cs, in Core but not yet
+            // constructed on this head. The fallback is what shows here.
             _txtSeason.Text = Loc.Get("section_seasons");
 
             if (SeasonsHaveEnded)

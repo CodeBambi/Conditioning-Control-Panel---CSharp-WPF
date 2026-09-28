@@ -89,69 +89,6 @@ public class QuestProgress
     public DateTime? LastPremiumSeenUtc { get; set; }
 
     /// <summary>
-    /// Get remaining daily rerolls (1 base + 2 for Patreon + skill tree bonuses)
-    /// </summary>
-    public int GetRemainingDailyRerolls(bool hasPatreon)
-    {
-        // Reset count if it's a new day
-        if (DailyRerollResetDate?.Date != DateTime.Today)
-        {
-            DailyRerollsUsed = 0;
-            DailyRerollResetDate = DateTime.Today;
-        }
-
-        int maxRerolls = hasPatreon ? 3 : 1;
-        maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
-        maxRerolls += App.Settings?.Current?.BonusDailyRerolls ?? 0;
-        return Math.Max(0, maxRerolls - DailyRerollsUsed);
-    }
-
-    /// <summary>
-    /// Get remaining weekly rerolls (1 base + 2 for Patreon + skill tree bonuses)
-    /// </summary>
-    public int GetRemainingWeeklyRerolls(bool hasPatreon)
-    {
-        var startOfWeek = GetStartOfWeek(DateTime.Today);
-
-        // Reset count if it's a new week
-        if (!WeeklyRerollResetDate.HasValue || WeeklyRerollResetDate.Value.Date < startOfWeek)
-        {
-            WeeklyRerollsUsed = 0;
-            WeeklyRerollResetDate = DateTime.Today;
-        }
-
-        int maxRerolls = hasPatreon ? 3 : 1;
-        // DELIBERATE, not the copy-paste from the daily branch above that it looks like. The skill
-        // tree has no weekly reroll node - quest_refresh and reroll_addict are the only two that
-        // feed GetDailyFreeRerolls - so the choice is between their bonus applying to both budgets
-        // or only to the daily one, and the shipped copy says both: the weekly reroll tooltip
-        // (tooltip_reroll_for_a_different_quest_once_per_week) reads "One reroll a week, three with
-        // Patreon, plus anything the skill tree adds", in all nine languages. Dropping this line
-        // would take rerolls off everyone who spent 15 and 20 skill points on those nodes and make
-        // nine translated strings wrong, which is not a thing to do quietly in a patch. If the
-        // weekly allowance is ever meant to be flat, the tooltip has to change with it.
-        maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
-        maxRerolls += App.Settings?.Current?.BonusWeeklyRerolls ?? 0;
-        return Math.Max(0, maxRerolls - WeeklyRerollsUsed);
-    }
-
-    /// <summary>
-    /// Check if user can reroll their daily quest
-    /// </summary>
-    public bool CanRerollDaily(bool hasPatreon)
-    {
-        return GetRemainingDailyRerolls(hasPatreon) > 0;
-    }
-
-    /// <summary>
-    /// Check if user can reroll their weekly quest
-    /// </summary>
-    public bool CanRerollWeekly(bool hasPatreon)
-    {
-        return GetRemainingWeeklyRerolls(hasPatreon) > 0;
-    }
-
-    /// <summary>
     /// Get how many daily quests have been completed today (resets on new day)
     /// </summary>
     public int GetDailyQuestsCompletedToday()
@@ -210,7 +147,7 @@ public class QuestProgress
     /// <summary>
     /// Get the start of the current week (Monday)
     /// </summary>
-    private static DateTime GetStartOfWeek(DateTime date)
+    internal static DateTime GetStartOfWeek(DateTime date)
     {
         int diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
         return date.AddDays(-diff).Date;

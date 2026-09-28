@@ -106,7 +106,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ---- STUBS ----------------------------------------------------------------
 
         // ponytail: needs ConditioningControlPanel/Services/Progression/QuestService.cs
-        // (RerollDailyQuest) plus the reroll budget on Models/QuestProgress.CanRerollWeekly.
+        // (RerollDailyQuest) plus the reroll budget, which stays head-side in
+        // ConditioningControlPanel/Models/QuestProgressRerolls.cs (it reads App.SkillTree).
         private void OnDailyCardRerollRequested(object? sender, EventArgs e) { }
 
         // ponytail: needs ConditioningControlPanel/Services/Progression/QuestService.cs
