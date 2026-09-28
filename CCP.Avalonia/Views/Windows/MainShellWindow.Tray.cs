@@ -10,8 +10,7 @@
 //     Text (so their cards stay truthful) and takes the overlays down. The app stays up.
 //   - With no tray host (Linux desktop without a StatusNotifierWatcher) Avalonia's tray falls back
 //     silently, so X would hide the window behind nothing. X is gated on a host probe: no host, X exits.
-// ponytail: balloons (TrayIconService.ShowNotification / the first-minimize balloon) need
-// org.freedesktop.Notifications; Avalonia has no API for it, so none are shown yet.
+// The first-minimize balloon (TrayIconService.cs:165-171) goes through Platform/OsNotifications.
 // ponytail: "launcher_back_to_client" is omitted - WPF hides it unless LauncherHost.SurfaceInPlay,
 // and this head has no launcher, so it is never visible. Add it with the launcher.
 
@@ -38,6 +37,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private bool _exitRequested;
         // WPF TrayIconService._windowClosed: Show() on a closed window throws.
         private bool _windowClosed;
+        // WPF TrayIconService._hasShownFirstMinimizeNotification.
+        private bool _shownFirstMinimizeNotification;
 
         internal TrayIcon CreateTray()
         {
@@ -114,6 +115,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 e.Cancel = true;
                 Hide();
                 HideAvatarTube();
+                if (!_shownFirstMinimizeNotification)
+                {
+                    _shownFirstMinimizeNotification = true;
+                    Platform.OsNotifications.Show(Loc.Get("app_title"), Loc.Get("tray_balloon_body"), ShowFromTray);
+                }
             }
             base.OnClosing(e);
         }

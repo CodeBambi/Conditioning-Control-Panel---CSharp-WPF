@@ -92,6 +92,10 @@ namespace ConditioningControlPanel.Avalonia
                 return present ? 0 : 1;
             }
 
+            // --notify-check: org.freedesktop.Notifications Notify -> id -> CloseNotification, live.
+            if (Array.IndexOf(args, "--notify-check") >= 0)
+                return Platform.OsNotifications.CheckAsync().GetAwaiter().GetResult();
+
             // --portal-check: GlobalShortcuts CreateSession -> Response 0 -> Session.Close, live.
             if (Array.IndexOf(args, "--portal-check") >= 0)
                 return Platform.PortalPanicShortcut.CheckAsync().GetAwaiter().GetResult();

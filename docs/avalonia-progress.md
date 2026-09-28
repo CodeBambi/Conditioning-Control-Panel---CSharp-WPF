@@ -308,3 +308,10 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   extension methods. One guard allowlist entry: the pack:// root that the saved cache format still requires.
 - quests.json and quest_definitions_cache.json stay byte-identical (golden fixtures from the old code, shape +
   round-trip tests, fail-proofed); built-in quest fallback unchanged. Review: ACCEPT.
+
+## avalonia-port/os-notifications: +182
+- OS notifications on Linux via org.freedesktop.Notifications (own D-Bus connection; app name + per-user PNG
+  icon; transient like a balloon; click restores the window). Wired to WPF's one-time "minimized to tray" hint.
+  No notification server -> in-app toast if the window is visible, else drop + log once; Windows falls back.
+- Evidence: OsNotificationsTests (fail-proofed); --notify-check live; dbus-monitor capture of the in-app Notify
+  with the icon path. Review: ACCEPT + fixes. Other WPF balloon callers await their features on this head.
