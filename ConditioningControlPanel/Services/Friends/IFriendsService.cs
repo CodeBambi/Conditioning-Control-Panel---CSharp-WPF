@@ -16,7 +16,9 @@ public interface IFriendsService
     FriendsSnapshot Snapshot { get; }
 
     /// <summary>Whether this account publishes what it is doing. Off by default; the drawer
-    /// asks once. Reads and writes <c>AppSettings.FriendsPresenceShared</c>.</summary>
+    /// asks once, and the header switch and the Settings row change it any time
+    /// (<see cref="FriendsPresenceSetting"/>). Reads and writes <c>AppSettings.FriendsPresenceShared</c>;
+    /// a change polls at once so friends see it within a poll.</summary>
     bool PresenceShared { get; set; }
 
     /// <summary>Raised on the UI thread after every refresh that changed anything.</summary>
@@ -60,9 +62,19 @@ public interface IFriendsService
     Task<ActResult> SetSquelchAsync(string friendId, bool on);
     Task<ActResult> ReportAsync(string friendId, string reason);
 
-    /// <summary>Hosts call this when the player enters or leaves a surface. Published to the
-    /// server only while <see cref="PresenceShared"/>; the poll cadence reads it regardless.</summary>
+    /// <summary>The old single-slot call: the activity becomes exactly this one (Panel = nothing
+    /// open). New code uses <see cref="EnterActivity"/> and <see cref="LeaveActivity"/>.</summary>
     void SetActivity(PresenceActivity activity);
+
+    /// <summary>A surface opened (a session, a game window, the Deeper player). Activities stack:
+    /// friends see the most recent one still open. Published to the server only while
+    /// <see cref="PresenceShared"/>. The default maps onto <see cref="SetActivity"/> for fakes.</summary>
+    void EnterActivity(PresenceActivity activity) => SetActivity(activity);
+
+    /// <summary>That surface closed. What was open underneath shows again (closing the Arcademy
+    /// mid-session reads "in a session", not "in the panel"). Leaving something never entered is
+    /// a no-op. The default does nothing, for fakes.</summary>
+    void LeaveActivity(PresenceActivity activity) { }
 
     /// <summary>The drawer calls this with true while open, false when it folds: it is one of
     /// the two things that put the poll on its fast cadence (the other is a friend online).</summary>

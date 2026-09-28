@@ -107,6 +107,11 @@ namespace ConditioningControlPanel.Views.Deeper
             RestoreWindowBounds(settings);
             SubscribeWebcamStateForButton();
             _instance = this;
+
+            // Friends: "in Deeper" while the player is on screen. Loaded/Closed rather than the
+            // constructor, so a window that never shows never publishes.
+            Loaded += (_, _) => { try { App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Deeper); } catch (Exception ex) { Diag.Swallowed(ex); } };
+            Closed += (_, _) => { try { App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Deeper); } catch (Exception ex) { Diag.Swallowed(ex); } };
         }
 
         // -- Single instance -----------------------------------------------------

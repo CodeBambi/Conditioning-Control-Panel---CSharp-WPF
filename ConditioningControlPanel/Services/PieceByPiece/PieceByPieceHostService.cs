@@ -200,6 +200,7 @@ internal static class PieceByPieceHostService
             // the board's own keys work from the first frame.
             _host.FocusWeb();
 
+            try { App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Chess); } catch (Exception ex) { Diag.Swallowed(ex); }
             App.Logger?.Information("PieceByPieceHostService: launched");
         }
         catch (Exception ex)
@@ -229,6 +230,7 @@ internal static class PieceByPieceHostService
             bool had = _host != null;
             try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _host = null;
+            try { App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Chess); } catch (Exception ex) { Diag.Swallowed(ex); }
             if (had) App.Logger?.Information("PieceByPieceHostService: closed");
         }
         catch (Exception ex) { App.Logger?.Debug("PieceByPieceHostService.Close: {E}", ex.Message); }

@@ -22,6 +22,8 @@ public enum PresenceActivity
     Breakout,
     Deeper,
     Remote,
+    /// <summary>Piece by Piece (chess). Wire <c>chess</c>; a server that predates it maps it to "online".</summary>
+    Chess,
 }
 
 /// <summary>A friend's presence as the server last reported it. <see cref="LockDay"/> is

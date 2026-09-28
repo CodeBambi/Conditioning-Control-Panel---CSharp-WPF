@@ -272,7 +272,8 @@ public sealed partial class FriendsDrawer : Border
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var name = MeName();
-        var avatar = FriendsLook.Avatar(name, null, 40, _svc?.Available == true ? true : null);
+        // Your own dot tells the truth: mint while friends can see you, grey while hidden.
+        var avatar = FriendsLook.Avatar(name, null, 40, PresenceDot());
         avatar.Margin = new Thickness(0, 0, 10, 0);
         g.Children.Add(avatar);
 
@@ -282,13 +283,8 @@ public sealed partial class FriendsDrawer : Border
         if (FriendsLook.TierPlate(MeTier(), 15) is { } plate) line.Children.Add(plate);
         who.Children.Add(line);
 
-        string status;
-        if (_svc?.Available != true) status = Loc.Get("friends_signed_out");
-        else if (_svc.PresenceShared) status = Loc.Get("friends_me_sharing");
-        else status = Loc.Get("friends_me_hidden");
-        var st = FriendsLook.Label(status, 12, FriendsLook.MutedBrush);
-        st.Tag = "friends-me-status";
-        who.Children.Add(st);
+        // The status line IS the presence switch (FriendsDrawer.Presence.cs).
+        who.Children.Add(PresenceStatus());
         Grid.SetColumn(who, 1);
         g.Children.Add(who);
 
