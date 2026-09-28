@@ -23,6 +23,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <!-- Copies libvosk next to the tests; Core's copy does not flow through the ProjectReference. -->
+    <PackageReference Include="Vosk" Version="0.3.38" />
   </ItemGroup>
 
   <ItemGroup>
