@@ -96,7 +96,7 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   Shutdown with pactl stubbed. ModCreator's audio preview and AwarenessPresetDetailDialog's
   keyword preview now play user-picked files.
 
-## avalonia-port/head-sounds
+## avalonia-port/head-sounds: +139
 - `CCP.Avalonia.csproj` links `Assets/sounds/**` as Content at WPF's logical path `Resources/sounds`
   with WPF's `$(ContentPackSoundsExclude)` set verbatim (flashes_audio audio and the three builtin-*
   mod payloads ship as content packs). Replaces the lone `assets/sounds/faucet_charge_drop.wav`
@@ -117,7 +117,7 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   gets `ExcludeFromSingleFile`. Live UI-sound Keincheck run: not run (no reachable caller); the
   `--audio-probe` run stands in for playback only.
 
-## avalonia-port/core-asset-import: +213
+## avalonia-port/core-asset-import: +218
 - Phase 2 units 2+3: AssetImportService, AssetExtensionRepair, AssetPresetService, SessionLogService and
   Models/SessionLog move to CCP.Core (renames). App.Logger -> Serilog Log.
 - Seams: App.EnsureCustomAssetsDirectories became CorePaths.EnsureCustomAssetsDirectories(customPath)
