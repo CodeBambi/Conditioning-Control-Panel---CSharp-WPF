@@ -345,6 +345,16 @@ namespace ConditioningControlPanel
             // The downloadable packs: the pack service seeds what the mod service reads.
             CoreReleaseContent.StampProvider = ReleaseContentService.GetStampFor;
             CoreReleaseContent.PackInfoProvider = id => ReleaseContent?.GetPackInfo(id);
+            // Install stamps are written on the UI thread (blocking); skipped once shutdown started.
+            CoreReleaseContent.UiInvoke = apply =>
+            {
+                var dispatcher = Current?.Dispatcher;
+                if (dispatcher == null) { apply(); return true; }
+                if (dispatcher.HasShutdownStarted) return false;
+                if (dispatcher.CheckAccess()) apply();
+                else dispatcher.Invoke(apply);
+                return true;
+            };
             // The build's own release identity, for the views (Settings ▸ Updates, phrase-backup
             // stamps) that need a version string or the installed build's notes and nothing else.
             CoreReleaseContent.AppVersionProvider = () => Services.UpdateService.AppVersion;

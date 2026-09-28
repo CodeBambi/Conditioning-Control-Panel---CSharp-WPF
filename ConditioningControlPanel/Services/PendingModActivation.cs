@@ -42,119 +42,25 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static MainWindow? _window;
 
-        // ---- pure rules ----
+        // ---- rules and state: PendingModChoice in Core ----
 
-        /// <summary>
-        /// Worth remembering at all? Nothing to do for an empty choice or for the mod already running
-        /// (the picker's "restore what I had" preselect is the common case of the latter).
-        /// </summary>
         internal static bool ShouldRecord(string? chosenModId, string? activeModId)
-            => !string.IsNullOrWhiteSpace(chosenModId)
-               && !string.Equals(chosenModId, activeModId, StringComparison.OrdinalIgnoreCase);
+            => PendingModChoice.ShouldRecord(chosenModId, activeModId);
 
-        /// <summary>
-        /// Does an availability signal satisfy the pending choice? ModService raises
-        /// <c>ModAvailabilityChanged</c> with a mod id, falling back to the pack id when the pack maps
-        /// to no built-in mod, so both spellings have to match.
-        /// </summary>
         internal static bool Matches(string? pendingModId, string? modOrPackId)
-        {
-            if (string.IsNullOrWhiteSpace(pendingModId) || string.IsNullOrWhiteSpace(modOrPackId))
-                return false;
-            if (string.Equals(pendingModId, modOrPackId, StringComparison.OrdinalIgnoreCase))
-                return true;
+            => PendingModChoice.Matches(pendingModId, modOrPackId);
 
-            var packId = ModService.PackIdForMod(pendingModId!);
-            return !string.IsNullOrEmpty(packId)
-                   && string.Equals(packId, modOrPackId, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// The switch is due: there is a choice, its content has landed, and it is not already the
-        /// active mod. A pending choice that is already active is satisfied, not pending — the caller
-        /// clears it instead of switching.
-        /// </summary>
         internal static bool ShouldActivate(string? pendingModId, string? activeModId, bool contentAvailable)
-            => contentAvailable
-               && !string.IsNullOrWhiteSpace(pendingModId)
-               && !string.Equals(pendingModId, activeModId, StringComparison.OrdinalIgnoreCase);
+            => PendingModChoice.ShouldActivate(pendingModId, activeModId, contentAvailable);
 
-        // ---- state ----
+        internal static string? Pending => PendingModChoice.Pending;
 
-        /// <summary>The mod waiting to be activated, or null when there is nothing pending.</summary>
-        internal static string? Pending
-        {
-            get
-            {
-                var id = App.Settings?.Current?.PendingModActivationId;
-                return string.IsNullOrWhiteSpace(id) ? null : id;
-            }
-        }
+        internal static void Record(string modId) => PendingModChoice.Record(modId, App.Mods?.ActiveModId);
 
-        /// <summary>Remembers a mod the user chose in the picker. Saved immediately — the download can outlive this session.</summary>
-        internal static void Record(string modId)
-        {
-            try
-            {
-                var settings = App.Settings?.Current;
-                if (settings == null) return;
+        internal static void Clear(string reason) => PendingModChoice.Clear(reason);
 
-                if (!ShouldRecord(modId, App.Mods?.ActiveModId))
-                {
-                    Clear("the chosen mod is already the active one");
-                    return;
-                }
-
-                settings.PendingModActivationId = modId;
-                // SaveImmediate, not the 500ms-debounced Save: the user just committed to a
-                // 77-345MB download and may kill the app right after - the choice must survive.
-                App.Settings?.SaveImmediate();
-                App.Logger?.Information(
-                    "[ModPicker] {ModId} chosen - it becomes the active mod as soon as its content is on disk", modId);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "[ModPicker] Could not record the chosen mod");
-            }
-        }
-
-        /// <summary>Drops the pending choice (applied, superseded by a manual switch, or moot).</summary>
-        internal static void Clear(string reason)
-        {
-            try
-            {
-                var settings = App.Settings?.Current;
-                if (settings == null || string.IsNullOrWhiteSpace(settings.PendingModActivationId)) return;
-
-                App.Logger?.Debug("[ModPicker] Dropping the pending activation of {ModId}: {Reason}",
-                    settings.PendingModActivationId, reason);
-                settings.PendingModActivationId = "";
-                App.Settings?.Save();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("[ModPicker] Could not clear the pending activation: {Error}", ex.Message);
-            }
-        }
-
-        /// <summary>Is this mod's media actually on disk? A mod with no pack ships in the box.</summary>
         internal static bool IsContentAvailable(string modId)
-        {
-            try
-            {
-                var packId = ModService.PackIdForMod(modId);
-                if (string.IsNullOrEmpty(packId)) return true;
-
-                var svc = App.ReleaseContent;
-                if (svc == null) return false;
-                return svc.IsFullInstall || svc.IsInstalled(packId!);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("[ModPicker] Availability check for {ModId} failed: {Error}", modId, ex.Message);
-                return false;
-            }
-        }
+            => PendingModChoice.IsContentAvailable(modId, App.ReleaseContent);
 
         // ---- wiring ----
 

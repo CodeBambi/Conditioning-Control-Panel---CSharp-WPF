@@ -15,6 +15,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("ConditioningControlPanel")]
 [assembly: InternalsVisibleTo("ConditioningControlPanel.Tests")]
 [assembly: InternalsVisibleTo("CCP.Core.Tests")]
+[assembly: InternalsVisibleTo("CCP.Core.Content.Tests")]
 [assembly: InternalsVisibleTo("CCP.Avalonia")]
 [assembly: InternalsVisibleTo("CCP.Avalonia.Tests")]
 [assembly: InternalsVisibleTo("CCP.Avalonia.Language.Tests")]
