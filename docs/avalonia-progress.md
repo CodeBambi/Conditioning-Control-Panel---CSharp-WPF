@@ -547,3 +547,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   mic (API unchanged). Same model, grammar and scoring as WPF (decisions D1-D4, oracle-deep).
 - Evidence: SpeechEngineVoskTests with the real model and Vosk's test.wav replayed through the real session path: match,
   reject a wrong phrase (heard text, not a timeout), silence times out; CI fetches the model and requires it. Review: ACCEPT.
+
+## avalonia-port/speech-linux-capture: +249 (voice unlock unit 2)
+- PulseMicSource: parec capture (pw-record fallback), pactl source list without monitors, device choice like WPF; seeds
+  CoreSpeech on the Avalonia head; Vosk referenced by the head. Recorder stderr/exit logged; the list is cached 5 s.
+- Evidence: scripts/speech-capture-check.sh (null sink -> test WAV -> parec on the monitor, never a real mic): match exit
+  0, wrong phrase exit 1, no stray recorder (evidence/speech-linux-capture/speech-check-*.txt). Review: ACCEPT.
