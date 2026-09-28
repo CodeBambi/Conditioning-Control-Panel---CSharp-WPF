@@ -24,8 +24,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// sized and placed by <see cref="FlashPlacement"/> (the math WPF itself calls), staggered
     /// 300 ms, faded by the Fade/Opacity sliders, living FlashDuration + 1 s.
     ///
-    /// <para>Every window is override-redirect and click-through (X11Overlay). Where that is not
-    /// available - Windows, a native Wayland backend, headless - nothing is shown and it is logged
+    /// <para>Every window is override-redirect and click-through (X11Overlay; on Windows its
+    /// Win32Overlay half). Where that is not available - a native Wayland backend, headless -
+    /// nothing is shown and it is logged
     /// once: a topmost picture that swallows clicks is worse than no picture.</para>
     ///
     /// <para>The ambient rhythm is Core <c>CoreFlash</c>, which calls this.</para>
@@ -147,7 +148,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var w = new FlashOverlayWindow(bmp);
             if (!X11Overlay.SetClickThrough(w, true) || !X11Overlay.SetOpacity(w, 0) || !X11Overlay.SetOverrideRedirect(w, rect))
             {
-                if (!_warnedUnavailable) Log.Warning("Flash: the X server refused an override-redirect click-through window; flashes skipped");
+                if (!_warnedUnavailable) Log.Warning("Flash: the platform refused a click-through topmost overlay window; flashes skipped");
                 _warnedUnavailable = true;
                 w.Close();
                 return false;

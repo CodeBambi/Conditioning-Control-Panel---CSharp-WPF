@@ -25,6 +25,10 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 /// above the keep-above layer — is what <see cref="SetOverrideRedirect"/> is for: an
 /// override-redirect window is never managed by the WM at all, so no WM layer policy applies.</para>
 ///
+/// <para><b>Windows goes through the same entry points.</b> A window whose platform handle is an
+/// "HWND" is routed to <see cref="Win32Overlay"/> (<see cref="BackendOf"/>), so no call site
+/// branches on the OS. <c>RestackAbove</c> has no Windows half yet and returns false there.</para>
+///
 /// <para><b>Everything in here fails silently if written carelessly</b>, which is why each guard
 /// below is explicit rather than defensive habit:</para>
 /// <list type="bullet">
@@ -39,6 +43,8 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 ///   <item>Xlib is not thread-safe and the display is shared, so every entry point locks.</item>
 /// </list>
 /// </summary>
+internal enum OverlayBackend { None, X11, Win32 }
+
 internal static class X11Overlay
 {
     // Values read from the system headers, not from memory - a wrong constant here compiles and
@@ -82,12 +88,13 @@ internal static class X11Overlay
     private static bool _initialised;
     private static bool _usable;
 
-    /// <summary>True when this process can actually drive the calls below - an X11 display is
-    /// open and the server offers XFixes. False on Windows, on headless CI and under a native
-    /// Wayland backend, where every method here is a no-op.</summary>
+    /// <summary>True when this process can actually drive the calls below - on Windows (the
+    /// <see cref="Win32Overlay"/> shim), or when an X11 display is open and the server offers
+    /// XFixes. False on headless Linux CI and under a native Wayland backend, where every method
+    /// here is a no-op.</summary>
     internal static bool IsAvailable
     {
-        get { lock (Gate) { return EnsureDisplay(); } }
+        get { if (OperatingSystem.IsWindows()) return true; lock (Gate) { return EnsureDisplay(); } }
     }
 
     /// <summary>Makes <paramref name="window"/> transparent to the mouse while it keeps drawing,
@@ -101,6 +108,7 @@ internal static class X11Overlay
     /// <returns>False when the platform cannot do this, so callers can branch without catching.</returns>
     internal static bool SetClickThrough(TopLevel window, bool clickThrough)
     {
+        if (TryGet(window, OverlayBackend.Win32, out var hwnd)) return Win32Overlay.SetClickThrough(window, hwnd, clickThrough);
         if (!TryGetXid(window, out var xid)) return false;
 
         lock (Gate)
@@ -158,6 +166,7 @@ internal static class X11Overlay
 
     private static bool SetOverrideRedirect(TopLevel window)
     {
+        if (TryGet(window, OverlayBackend.Win32, out var hwnd)) return Win32Overlay.SetOverrideRedirect(window, hwnd);
         // The struct offsets below are the LP64 layout (x86_64, arm64).
         if (IntPtr.Size != 8 || !TryGetXid(window, out var xid)) return false;
 
@@ -187,6 +196,7 @@ internal static class X11Overlay
     /// dispatcher ~1.7 s per flash burst. Works before Show(), so a window can map invisible.</summary>
     internal static bool SetOpacity(TopLevel window, double alpha)
     {
+        if (TryGet(window, OverlayBackend.Win32, out var hwnd)) return Win32Overlay.SetOpacity(window, hwnd, alpha);
         if (!TryGetXid(window, out var xid)) return false;
         lock (Gate)
         {
@@ -269,17 +279,25 @@ internal static class X11Overlay
     /// <para>Gating on the descriptor rather than on the OS is what lets the call sites stay
     /// identical across heads: on Windows, under the headless backend used by the render proof,
     /// and before the window has opened, this simply returns false.</para></summary>
-    private static bool TryGetXid(TopLevel window, out IntPtr xid)
-    {
-        xid = IntPtr.Zero;
-        var handle = window?.TryGetPlatformHandle();
-        if (handle is null || !string.Equals(handle.HandleDescriptor, "XID", StringComparison.Ordinal))
-            return false;
-        if (handle.Handle == IntPtr.Zero) return false;
+    private static bool TryGetXid(TopLevel window, out IntPtr xid) => TryGet(window, OverlayBackend.X11, out xid);
 
-        xid = handle.Handle;
-        return true;
+    private static bool TryGet(TopLevel window, OverlayBackend want, out IntPtr handle)
+    {
+        var h = window?.TryGetPlatformHandle();
+        handle = BackendOf(h) == want ? h!.Handle : IntPtr.Zero;
+        return handle != IntPtr.Zero;
     }
+
+    /// <summary>Which backend drives a window, from its platform handle alone: "XID" is X11
+    /// (this class), "HWND" is Win32 (<see cref="Win32Overlay"/>), anything else - headless,
+    /// not yet opened - is neither and every entry point returns false.</summary>
+    internal static OverlayBackend BackendOf(IPlatformHandle? handle)
+        => handle is null || handle.Handle == IntPtr.Zero ? OverlayBackend.None : handle.HandleDescriptor switch
+        {
+            "XID" => OverlayBackend.X11,
+            "HWND" => OverlayBackend.Win32,
+            _ => OverlayBackend.None,
+        };
 
     private static bool EnsureDisplay()
     {

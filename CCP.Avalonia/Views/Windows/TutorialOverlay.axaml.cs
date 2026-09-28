@@ -678,8 +678,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// its whole input area back.</summary>
         private void ClearWindowSpotlightRegion() => SetWholeWindowClickThrough(false);
 
-        /// <summary>X11Overlay is X11-only by design and returns false everywhere else (Windows,
-        /// Wayland, and the headless render), so it is called unconditionally.</summary>
+        /// <summary>X11Overlay handles X11 and (via Win32Overlay) Windows, and returns false everywhere
+        /// else (native Wayland, the headless render), so it is called unconditionally.</summary>
         private void SetWholeWindowClickThrough(bool clickThrough)
             => X11Overlay.SetClickThrough(this, clickThrough);
 
