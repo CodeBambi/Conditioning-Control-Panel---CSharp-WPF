@@ -59,9 +59,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             Loaded += (_, _) => RebindToCurrentSettings();
             Unloaded += (_, _) => Unhook();
 
-            // ponytail: WPF also repaints the hero and side plates on ModChanged through
-            // Services/ModResourceResolver.cs (WPF head) from Resources/features/subliminal.png.
-            // The Avalonia .axaml drops both plates deliberately, so nothing here to repaint yet.
+            Helpers.ModArt.BindFeaturePlates(this, "features/subliminal.png", HeroArt, SideArt);
 
             RebindToCurrentSettings();
         }

@@ -43,14 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             Loaded += (_, _) => RebindToCurrentSettings();
             Unloaded += (_, _) => Unhook();
 
-            // ponytail: the mod-aware hero and side plates are still missing, but no longer for
-            // the reason the old note gave. CoreModArt.OverridePath("features/Bubble_count.png")
-            // answers the portable half now, and the built-in art DOES ship on this head
-            // (CCP.Avalonia.csproj links ..\Assets\features\*.png to
-            // avares://CCP.Avalonia/Resources/features/). What is missing is somewhere to paint:
-            // BubbleCountFeatureControl.axaml gives neither plate an x:Name, so this file has no
-            // control to reach. Name them and ApplyFeatureArt + a CoreMods.ModChanged
-            // subscription land here; TubeFitDialog.TryLoadImage is the decode pattern.
+            Helpers.ModArt.BindFeaturePlates(this, "features/Bubble_count.png", HeroArt, SideArt);
 
             RebindToCurrentSettings();
         }

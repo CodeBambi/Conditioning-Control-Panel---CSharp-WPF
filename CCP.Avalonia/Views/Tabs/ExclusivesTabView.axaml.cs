@@ -4,8 +4,10 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -17,15 +19,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// aurora at 0.55, copied from StartExclusivesMotion - canvas composition, not service logic).
     /// Everything else is a stub or a placeholder.</para>
     ///
-    /// <para>Dropped: <c>LoadBackdrop</c> and the <c>ModChanged</c> subscription that re-ran it.
-    /// ponytail: the resolver is NOT the blocker - <c>Helpers.ModArt.TryLoad</c> plus
-    /// <c>CoreMods.ModChanged</c> answer it, and the picture exists at
-    /// <c>Assets/exclusives/vault_backdrop.png</c>. Two things are missing and neither is in this
-    /// file: <c>Assets/exclusives/**</c> is not among the <c>AvaloniaResource</c> globs in
-    /// CCP.Avalonia.csproj, so <c>avares://CCP.Avalonia/Resources/exclusives/vault_backdrop.png</c>
-    /// does not resolve; and the markup has no <c>VaultBackdrop</c> Image to paint into - the
-    /// spotlight carries <c>TxtSpotArtGlyph</c> instead. Link the folder, add the Image, then this
-    /// is four lines. Also dropped:
+    /// <para>Dropped:
     /// <c>RoundClipOnResize</c> - WPF's ClipToBounds is rectangular, so a rounded host needed clip
     /// geometry tracked against every resize; an Avalonia Border clips its child to its own
     /// CornerRadius, so the helper has no work left. Its two other callers were MainWindow's card
@@ -41,6 +35,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             _ambientFx = this.FindControl<AmbientFxCanvas>("ExclusivesAmbientFx")!;
 
+            LoadBackdrop();
             LoadPlaceholderVault();
 
             // The tab is permanently mounted on WPF and MainWindow parks its canvas through
@@ -51,6 +46,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         private void OnLoaded(object? sender, RoutedEventArgs e)
+        {
+            CoreMods.ModChanged += OnModChanged;
+            StartAmbient();
+        }
+
+        /// <summary>ModChanged may be raised off the UI thread; marshal before touching the Image.</summary>
+        private void OnModChanged(object? sender, ModPackage mod) => Dispatcher.UIThread.Post(LoadBackdrop);
+
+        /// <summary>WPF LoadBackdrop: null keeps what is already painted rather than blanking the room.</summary>
+        private void LoadBackdrop()
+        {
+            var art = Helpers.ModArt.TryLoad("exclusives/vault_backdrop.png");
+            if (art != null) this.FindControl<Image>("VaultBackdrop")!.Source = art;
+        }
+
+        private void StartAmbient()
             => _ambientFx.StartLayers(new AmbientFxConfig
             {
                 Layers = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash,
@@ -58,7 +69,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 FogPuffs = 3,
             });
 
-        private void OnUnloaded(object? sender, RoutedEventArgs e) => _ambientFx.Stop();
+        private void OnUnloaded(object? sender, RoutedEventArgs e)
+        {
+            CoreMods.ModChanged -= OnModChanged;
+            _ambientFx.Stop();
+        }
 
         // ------------------------------------------------------------------
         // Placeholder vault
@@ -183,10 +198,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// The card's resting rim. WPF takes the untiered one from the active mod's accent
         /// (ExclusiveEdgeDefault) and overwrites a tiered card's with the constant vault livery.
-        /// ponytail: the untiered rim is reachable today - CoreMods.AccentColorHex plus
-        /// CoreMods.TryParseHexColor is what FxTheme's ExclusiveEdgeDefault reduces to. The tiered
-        /// rim still needs ConditioningControlPanel/Features/VaultLivery.cs. Both literals here are
-        /// what those two produce with the default mod, so nothing reads wrong meanwhile.
+        /// ponytail: both literals are the default mod's values. The untiered rim is not a plain
+        /// accent read: ExclusiveEdgeDefault is the accent hue-shifted -59 degrees
+        /// (MainWindow.Exclusives.cs:125-174 ShiftHue/VaultPartner, head-only), so it needs that
+        /// HSV rotation in Core first; the tiered rim needs Features/VaultLivery.cs.
         /// </summary>
         public IBrush EdgeBrush => Tier > 0 ? Brush("#66FFC94E") : Brush("#4DB478FF");
 

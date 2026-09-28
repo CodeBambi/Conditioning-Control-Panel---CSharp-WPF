@@ -53,14 +53,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             Loaded += (_, _) => RebindToCurrentSettings();
             Unloaded += (_, _) => Unhook();
 
-            // ponytail: WPF repaints the hero and side plates on ModChanged from
-            // Resources/features/Phrase_Lock.png. The seam and the art are both here now -
-            // CoreModArt.OverridePath("features/Phrase_Lock.png") for a mod's version, and
-            // avares://CCP.Avalonia/Resources/features/Phrase_Lock.png for ours (the .axaml
-            // header's "does not ship in CCP.Avalonia" is stale; Assets\features\*.png is linked
-            // in CCP.Avalonia.csproj). What is missing is somewhere to put it: neither plate Border
-            // in LockCardFeatureControl.axaml carries an x:Name, and that file belongs to another
-            // layer. Name the two Borders there, then paint them here on CoreMods.ModChanged.
+            Helpers.ModArt.BindFeaturePlates(this, "features/Phrase_Lock.png", HeroArt, SideArt);
 
             RebindToCurrentSettings();
         }

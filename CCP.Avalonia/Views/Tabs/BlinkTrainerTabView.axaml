@@ -24,8 +24,7 @@
        Button.Resources Style-for-Border -> CornerRadius straight on the Button
        feat:AdaptiveSideArt.CollapseBelow -> dropped; the attached behaviour is not ported
        MediaElement                  ->  dropped; no media element on this head (see comment)
-       Image / ImageBrush art        ->  dropped; Resources/features/blink_trainer.png is not an
-                                         asset of this project yet (see comments) -->
+       Image / ImageBrush art        ->  named plate Borders painted by ModArt.BindFeaturePlates -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -92,11 +91,16 @@
                 BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2"
                 Margin="0,0,0,14">
           <Grid>
-            <!-- ponytail: the WPF hero carries a hidden <Image x:Name="ImgBlinkTrainerFeature">
-                 as the mod-art carrier, plus a right-hand plate whose ImageBrush binds to it.
-                 This head has no Resources/features/blink_trainer.png asset yet, so both are
-                 dropped rather than left as a blank rectangle. Restore them as an avares://
-                 ImageBrush when the art moves. -->
+            <!-- WPF's hidden ImgBlinkTrainerFeature carrier is not needed: ModArt.BindFeaturePlates
+                 paints both plates from features/blink_trainer.png, mod override first. -->
+            <Border x:Name="HeroArt" CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
+              <Border.OpacityMask>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                  <GradientStop Color="#00000000" Offset="0"/>
+                  <GradientStop Color="#E6000000" Offset="0.55"/>
+                </LinearGradientBrush>
+              </Border.OpacityMask>
+            </Border>
 
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
 
@@ -252,13 +256,9 @@
             </Grid>
           </StackPanel>
 
-          <!-- SIDE ART. ponytail: on WPF this Border's Background is the blink_trainer.png
-               ImageBrush; that asset is not in this project yet, so the plate carries the tab's
-               own wash and keeps the layout honest. Swap in an avares:// ImageBrush when the
-               art moves. -->
-          <Border Grid.Row="0" Grid.Column="1" Margin="14,0,0,0" CornerRadius="14"
+          <!-- SIDE ART. Background painted from code (ModArt.BindFeaturePlates). -->
+          <Border x:Name="SideArt" Grid.Row="0" Grid.Column="1" Margin="14,0,0,0" CornerRadius="14"
                   BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
-                  Background="{StaticResource TabHueWashBrush}"
                   VerticalAlignment="Top" Height="288" MinHeight="200">
             <!-- Scrim so the plate sits under the page instead of fighting it. -->
             <Border CornerRadius="12">

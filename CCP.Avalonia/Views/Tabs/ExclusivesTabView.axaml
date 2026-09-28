@@ -83,7 +83,9 @@
     <Border CornerRadius="12" ClipToBounds="True" Background="#12101F"
             BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="1">
         <Grid>
-            <!-- 1. The room. scrim so content always reads over the painting -->
+            <!-- 1. The room (painted by LoadBackdrop, mod override first) -->
+            <Image x:Name="VaultBackdrop" Stretch="UniformToFill" StretchDirection="Both" Opacity="0.9"/>
+            <!-- scrim so content always reads over the painting -->
             <Border>
                 <Border.Background>
                     <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">

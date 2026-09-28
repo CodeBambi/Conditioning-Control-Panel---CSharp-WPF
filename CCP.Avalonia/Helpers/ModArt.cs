@@ -1,7 +1,11 @@
 using System;
 using System.IO;
+using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Avalonia.Platform;
+using ConditioningControlPanel.Models;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Helpers
@@ -50,14 +54,14 @@ namespace ConditioningControlPanel.Avalonia.Helpers
         /// "features/flash.png", "achievements/lv_10.png". Traversal is rejected inside
         /// <see cref="CoreModArt.OverridePath"/>.
         /// </param>
-        internal static Bitmap? TryLoad(string? resourceName)
+        internal static Bitmap? TryLoad(string? resourceName, int? decodeWidth = null)
         {
             if (string.IsNullOrWhiteSpace(resourceName)) return null;
 
             var overridePath = CoreModArt.OverridePath(resourceName);
             if (overridePath != null)
             {
-                try { if (File.Exists(overridePath)) return new Bitmap(overridePath); }
+                try { if (File.Exists(overridePath)) { using var file = File.OpenRead(overridePath); return Decode(file, decodeWidth); } }
                 catch (Exception ex) { Log.Warning(ex, "[ModArt] mod override {Path} would not load", overridePath); }
             }
 
@@ -66,13 +70,38 @@ namespace ConditioningControlPanel.Avalonia.Helpers
                 var uri = new Uri($"avares://CCP.Avalonia/Resources/{resourceName}");
                 if (!AssetLoader.Exists(uri)) return null;
                 using var stream = AssetLoader.Open(uri);
-                return new Bitmap(stream);
+                return Decode(stream, decodeWidth);
             }
             catch (Exception ex)
             {
                 Log.Warning(ex, "[ModArt] built-in {Name} would not load", resourceName);
                 return null;
             }
+        }
+            /// <summary>WPF's DecodePixelWidth: decode straight to the width a surface shows, never larger.</summary>
+        private static Bitmap Decode(Stream stream, int? width)
+            => width is int w ? Bitmap.DecodeToWidth(stream, w) : new Bitmap(stream);
+
+        /// <summary>
+        /// A feature card's hero strip and side plate, painted from one feature PNG the way the WPF
+        /// cards' HeroArtBrush/SideArtBrush are (UniformToFill, hero right-aligned at 0.9), and
+        /// repainted on every mod switch while <paramref name="owner"/> is on screen.
+        /// </summary>
+        internal static void BindFeaturePlates(Control owner, string resourceName, Border? hero, Border? side)
+        {
+            void Paint()
+            {
+                // One decode for both plates at WPF's larger cap (side plate DecodePixelWidth=800).
+                var art = TryLoad(resourceName, 800);
+                if (art == null) return;
+                if (hero != null) hero.Background = new ImageBrush(art) { Stretch = Stretch.UniformToFill, AlignmentX = AlignmentX.Right, Opacity = 0.9 };
+                if (side != null) side.Background = new ImageBrush(art) { Stretch = Stretch.UniformToFill };
+            }
+            void OnModChanged(object? sender, ModPackage mod) => Dispatcher.UIThread.Post(Paint);
+
+            // Painted on attach only: a view built but never shown costs no decode.
+            owner.AttachedToVisualTree += (_, _) => { CoreMods.ModChanged += OnModChanged; Paint(); };
+            owner.DetachedFromVisualTree += (_, _) => CoreMods.ModChanged -= OnModChanged;
         }
     }
 }
