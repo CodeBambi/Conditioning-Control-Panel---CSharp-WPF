@@ -472,6 +472,7 @@ public sealed partial class ChasterService : IDisposable
             if (!added.Ok) return Failed(added.Status);
             App.Logger?.Information("[Chaster] settled {Seconds}s to the lock (catch-up {CatchUp}s)", plan.Seconds, plan.CatchUp);
             LadderPushLanded();
+            try { PushLanded?.Invoke(plan.Seconds); } catch (Exception ex) { Diag.Swallowed(ex, "chaster push landed listener"); }
             return SettleOutcome.Pushed;
         }
         finally { _settleGate.Release(); }

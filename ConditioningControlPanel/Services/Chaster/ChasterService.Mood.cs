@@ -11,6 +11,10 @@ public sealed partial class ChasterService
     /// next read of <see cref="Mood"/> is simply calm.</summary>
     public event Action<CircesMood, CircesMood>? MoodChanged;
 
+    /// <summary>A push reached the lock (the seconds that landed). Raised on the settle's thread,
+    /// after the tab is saved. Circe's "landed" line hangs off it.</summary>
+    public event Action<int>? PushLanded;
+
     /// <summary>Today's mood, or null when there is none to show: tab off, not linked, or the heat
     /// row off. With heat off nothing gets dearer, so a mood would be a lie.</summary>
     public CircesMood? Mood
