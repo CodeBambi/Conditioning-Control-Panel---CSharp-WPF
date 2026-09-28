@@ -3374,6 +3374,7 @@ namespace ConditioningControlPanel.Services
 
                 VideoDiag.Log("VIDEO", $"show complete +{showSw.ElapsedMilliseconds}ms - {_windows.Count} window(s) on screen");
                 VideoStarted?.Invoke(this, EventArgs.Empty);
+                App.SessionLog?.RecordVideo(LastVideoPath);
                 _ = App.Haptics?.StartVideoBackgroundVibeAsync();
                 // PHASE F: look for "<this video>.funscript" (or funscripts\<name>.funscript) and,
                 // if there is one, follow it for as long as this clip plays. Silent no-op when the

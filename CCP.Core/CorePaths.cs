@@ -1,4 +1,5 @@
 using System.IO;
+using Serilog;
 
 namespace ConditioningControlPanel
 {
@@ -55,5 +56,33 @@ namespace ConditioningControlPanel
         /// </summary>
         public static string EffectiveAssets =>
             EffectiveAssetsProvider?.Invoke() ?? Path.Combine(UserData, "assets");
+
+        /// <summary>
+        /// Ensures a configured custom assets folder and its standard subfolders
+        /// (images/videos/audio/wallpapers) exist. The default UserAssetsPath subdirs are
+        /// created unconditionally at startup, but a custom path is only known after
+        /// settings load — and if its folder is missing, EffectiveAssetsPath silently
+        /// falls back to the default location, sending imports/extractions to the wrong
+        /// place even though settings show the custom path (#391).
+        /// </summary>
+        public static void EnsureCustomAssetsDirectories(string? customPath)
+        {
+            if (string.IsNullOrWhiteSpace(customPath)) return;
+
+            try
+            {
+                // CreateDirectory creates the parent customPath too if absent.
+                Directory.CreateDirectory(Path.Combine(customPath, "images"));
+                Directory.CreateDirectory(Path.Combine(customPath, "videos"));
+                // Same reason as the default scaffold: AI audio effects read assets/audio (#1120).
+                Directory.CreateDirectory(Path.Combine(customPath, "audio"));
+                Directory.CreateDirectory(Path.Combine(customPath, "wallpapers"));
+                Log.Information("Ensured custom assets directories at {Path}", customPath);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Could not create custom assets directories at {Path} — EffectiveAssetsPath will fall back to the default location", customPath);
+            }
+        }
     }
 }

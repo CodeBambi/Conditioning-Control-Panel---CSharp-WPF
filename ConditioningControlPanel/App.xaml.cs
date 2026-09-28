@@ -2275,7 +2275,7 @@ namespace ConditioningControlPanel
             // configured CustomAssetsPath whose folder is missing makes EffectiveAssetsPath
             // silently fall back to the default AppData location, so pack extraction and
             // drag-drop imports land in the wrong place (#391).
-            EnsureCustomAssetsDirectories();
+            CorePaths.EnsureCustomAssetsDirectories(Settings?.Current?.CustomAssetsPath);
 
             // Clean up stale temp files from previous sessions (crash recovery, leaked files)
             CleanupStaleTempFiles();
@@ -5830,35 +5830,6 @@ Application State:
             if (result < InstallDateFloorUtc) result = InstallDateFloorUtc.Date;
             if (result > today) result = today;
             return result;
-        }
-
-        /// <summary>
-        /// Ensures a configured custom assets folder and its standard subfolders
-        /// (images/videos/audio/wallpapers) exist. The default UserAssetsPath subdirs are
-        /// created unconditionally at startup, but a custom path is only known after
-        /// settings load — and if its folder is missing, EffectiveAssetsPath silently
-        /// falls back to the default location, sending imports/extractions to the wrong
-        /// place even though settings show the custom path (#391).
-        /// </summary>
-        internal static void EnsureCustomAssetsDirectories()
-        {
-            var customPath = Settings?.Current?.CustomAssetsPath;
-            if (string.IsNullOrWhiteSpace(customPath)) return;
-
-            try
-            {
-                // CreateDirectory creates the parent customPath too if absent.
-                Directory.CreateDirectory(Path.Combine(customPath, "images"));
-                Directory.CreateDirectory(Path.Combine(customPath, "videos"));
-                // Same reason as the default scaffold: AI audio effects read assets/audio (#1120).
-                Directory.CreateDirectory(Path.Combine(customPath, "audio"));
-                Directory.CreateDirectory(Path.Combine(customPath, "wallpapers"));
-                Logger?.Information("Ensured custom assets directories at {Path}", customPath);
-            }
-            catch (Exception ex)
-            {
-                Logger?.Warning(ex, "Could not create custom assets directories at {Path} — EffectiveAssetsPath will fall back to the default location", customPath);
-            }
         }
 
         /// <summary>

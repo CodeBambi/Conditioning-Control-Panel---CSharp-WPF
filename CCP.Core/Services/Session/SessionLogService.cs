@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -12,8 +13,8 @@ namespace ConditioningControlPanel.Services
     /// the result to disk (capped at MaxRetainedLogs files), and raises LogReady
     /// when a session ends so the post-session dialog can render it.
     ///
-    /// Subscribed only while a session is active; subscriptions are released in
-    /// EndSession even when no media was logged.
+    /// The head's media services call RecordImages/RecordVideo; both are no-ops
+    /// unless a session is active.
     /// </summary>
     public class SessionLogService : IDisposable
     {
@@ -26,7 +27,6 @@ namespace ConditioningControlPanel.Services
         private readonly object _lock = new();
         private SessionLog? _activeLog;
         private DateTime _sessionStart;
-        private bool _isSubscribed;
 
         public event EventHandler<SessionLogReadyEventArgs>? LogReady;
 
@@ -36,7 +36,7 @@ namespace ConditioningControlPanel.Services
         {
             LogsFolder = Path.Combine(CorePaths.UserData, "session_logs");
             try { Directory.CreateDirectory(LogsFolder); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "SessionLogService: failed to create logs folder"); }
+            catch (Exception ex) { Log.Warning(ex, "SessionLogService: failed to create logs folder"); }
         }
 
         /// <summary>
@@ -50,8 +50,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (_activeLog != null)
                 {
-                    App.Logger?.Warning("SessionLogService.BeginSession called while a log was already active; discarding previous log");
-                    UnsubscribeUnlocked();
+                    Log.Warning("SessionLogService.BeginSession called while a log was already active; discarding previous log");
                 }
 
                 _sessionStart = DateTime.Now;
@@ -63,8 +62,6 @@ namespace ConditioningControlPanel.Services
                     SessionDifficulty = session.Difficulty,
                     StartedAt = _sessionStart,
                 };
-
-                SubscribeUnlocked();
             }
         }
 
@@ -79,8 +76,6 @@ namespace ConditioningControlPanel.Services
             lock (_lock)
             {
                 if (_activeLog == null) return;
-
-                UnsubscribeUnlocked();
 
                 log = _activeLog;
                 log.EndedAt = DateTime.Now;
@@ -99,7 +94,7 @@ namespace ConditioningControlPanel.Services
             }
 
             try { LogReady?.Invoke(this, new SessionLogReadyEventArgs(log)); }
-            catch (Exception ex) { App.Logger?.Error(ex, "SessionLogService: LogReady handler threw"); }
+            catch (Exception ex) { Log.Error(ex, "SessionLogService: LogReady handler threw"); }
         }
 
         /// <summary>
@@ -115,7 +110,7 @@ namespace ConditioningControlPanel.Services
             try { files = Directory.GetFiles(LogsFolder, "*.json"); }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "SessionLogService: failed to enumerate logs folder");
+                Log.Warning(ex, "SessionLogService: failed to enumerate logs folder");
                 return result;
             }
 
@@ -132,7 +127,7 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "SessionLogService: failed to read log file {File}", file);
+                    Log.Warning(ex, "SessionLogService: failed to read log file {File}", file);
                 }
             }
             return result;
@@ -142,39 +137,15 @@ namespace ConditioningControlPanel.Services
         {
             lock (_lock)
             {
-                UnsubscribeUnlocked();
                 _activeLog = null;
             }
         }
 
-        private void SubscribeUnlocked()
-        {
-            if (_isSubscribed) return;
-            try
-            {
-                if (App.Flash != null) App.Flash.FlashDisplayed += OnFlashDisplayed;
-                if (App.Video != null) App.Video.VideoStarted += OnVideoStarted;
-                _isSubscribed = true;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "SessionLogService: subscribe failed");
-            }
-        }
-
-        private void UnsubscribeUnlocked()
-        {
-            if (!_isSubscribed) return;
-            try { if (App.Flash != null) App.Flash.FlashDisplayed -= OnFlashDisplayed; } catch { }
-            try { if (App.Video != null) App.Video.VideoStarted -= OnVideoStarted; } catch { }
-            _isSubscribed = false;
-        }
-
-        private void OnFlashDisplayed(object? sender, EventArgs e)
+        /// <summary>Called by the head's flash service after each displayed batch.</summary>
+        public void RecordImages(IReadOnlyList<string>? paths)
         {
             try
             {
-                var paths = App.Flash?.LastDisplayedImagePaths;
                 if (paths == null || paths.Count == 0) return;
 
                 lock (_lock)
@@ -198,15 +169,15 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("SessionLogService.OnFlashDisplayed failed: {Error}", ex.Message);
+                Log.Debug("SessionLogService.RecordImages failed: {Error}", ex.Message);
             }
         }
 
-        private void OnVideoStarted(object? sender, EventArgs e)
+        /// <summary>Called by the head's video service when a video starts.</summary>
+        public void RecordVideo(string? path)
         {
             try
             {
-                var path = App.Video?.LastVideoPath;
                 if (string.IsNullOrEmpty(path)) return;
 
                 lock (_lock)
@@ -225,7 +196,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("SessionLogService.OnVideoStarted failed: {Error}", ex.Message);
+                Log.Debug("SessionLogService.RecordVideo failed: {Error}", ex.Message);
             }
         }
 
@@ -243,11 +214,11 @@ namespace ConditioningControlPanel.Services
                 var path = Path.Combine(LogsFolder, fileName);
                 var json = JsonConvert.SerializeObject(log, Formatting.Indented);
                 File.WriteAllText(path, json);
-                App.Logger?.Debug("SessionLogService: persisted {File} ({Count} media entries)", fileName, log.Media.Count);
+                Log.Debug("SessionLogService: persisted {File} ({Count} media entries)", fileName, log.Media.Count);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "SessionLogService: failed to persist session log");
+                Log.Warning(ex, "SessionLogService: failed to persist session log");
             }
         }
 
@@ -264,12 +235,12 @@ namespace ConditioningControlPanel.Services
                 for (int i = MaxRetainedLogs; i < files.Length; i++)
                 {
                     try { File.Delete(files[i]); }
-                    catch (Exception ex) { App.Logger?.Debug("SessionLogService: prune delete failed for {File}: {Error}", files[i], ex.Message); }
+                    catch (Exception ex) { Log.Debug("SessionLogService: prune delete failed for {File}: {Error}", files[i], ex.Message); }
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "SessionLogService: prune failed");
+                Log.Warning(ex, "SessionLogService: prune failed");
             }
         }
 
