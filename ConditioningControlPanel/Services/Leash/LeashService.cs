@@ -55,6 +55,16 @@ public sealed class LeashService : ILeashService
     private readonly HashSet<string> _completedLocal = new(StringComparer.Ordinal);
     private readonly HashSet<string> _completeUnsent = new(StringComparer.Ordinal);
     private readonly HashSet<string> _watchedAids = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> _unplayableUntil = new(StringComparer.Ordinal);
+
+    /// <summary>How long a punishment video that will not play (and that the server could not
+    /// drop) stays off the gate before it may be tried again.</summary>
+    public static readonly TimeSpan UnplayableHold = TimeSpan.FromHours(24);
+
+    /// <summary>Raised when the leash on THIS account ended from the other side or the server
+    /// (holder let go, block, remove, report, expiry, the feature switched off): the same local
+    /// safety as the sub's own cut has already run. Never raised for this client's own cut.</summary>
+    public event Action? LeashLost;
 
     public LeashService(
         ILeashApi api,
@@ -93,7 +103,22 @@ public sealed class LeashService : ILeashService
 
     private bool _wasLeashed;
 
-    public Punishment? GateDue => _cutPending ? null : LeashGateRule.Due(Snapshot.Me?.Pending, _now(), _completedLocal);
+    public Punishment? GateDue => _cutPending ? null : LeashGateRule.Due(Snapshot.Me?.Pending, _now(), GateSkips());
+
+    /// <summary>Pids the gate passes over: completed here and not yet dropped by the server, or
+    /// marked "will not play" within the last <see cref="UnplayableHold"/>.</summary>
+    private ISet<string> GateSkips()
+    {
+        var now = _now();
+        foreach (var k in _unplayableUntil.Where(kv => kv.Value <= now).Select(kv => kv.Key).ToList()) _unplayableUntil.Remove(k);
+        if (_unplayableUntil.Count == 0) return _completedLocal;
+        var set = new HashSet<string>(_completedLocal, StringComparer.Ordinal);
+        set.UnionWith(_unplayableUntil.Keys);
+        return set;
+    }
+
+    public bool IsUnplayable(string pid) =>
+        !string.IsNullOrEmpty(pid) && _unplayableUntil.TryGetValue(pid, out var until) && until > _now();
 
     /// <summary>True while the poll must run every 20 s: leashed or holding anyone.</summary>
     public bool Active => Snapshot.Active;
@@ -128,6 +153,8 @@ public sealed class LeashService : ILeashService
     {
         if (!CheckAccount()) return;
         var (snap, events) = LeashParse.Block(block);
+        // Leashed a moment ago, by a leash this client did not cut: remember it to catch the end.
+        var wasLeashed = !_cutPending && _raw.Me != null;
         _raw = snap;
 
         if (_cutPending)
@@ -142,6 +169,10 @@ public sealed class LeashService : ILeashService
             }
         }
         ResendCompletes(snap.Me);
+        ForgetUnplayable(snap.Me);
+        // The leash went away from the other side (holder let go, block, remove, expiry, the
+        // feature off): the same local safety as the sub's own cut, before anything redraws.
+        if (wasLeashed && !_cutPending && snap.Me == null) LoseLeash();
         Publish();
 
         foreach (var e in events)
@@ -224,6 +255,26 @@ public sealed class LeashService : ILeashService
         return true;
     }
 
+    public async Task<LeashSkipResult> SkipUnplayableAsync(string pid)
+    {
+        if (string.IsNullOrEmpty(pid)) return LeashSkipResult.Marked;
+        var o = await CallAsync("punish_skip", new JObject { ["pid"] = pid, ["reason"] = "unplayable" });
+        if (o != null && o.Value<bool?>("ok") == true)
+        {
+            // The server dropped it and told the holder; hide it until the next poll agrees.
+            _unplayableUntil.Remove(pid);
+            _completedLocal.Add(pid);
+            Publish();
+            _kick();
+            App.Logger?.Information("[Leash] punishment {Pid} will not play: skipped on the server", pid);
+            return LeashSkipResult.Skipped;
+        }
+        _unplayableUntil[pid] = _now() + UnplayableHold;
+        App.Logger?.Information("[Leash] punishment {Pid} will not play: kept pending, off the gate for {H} h ({Reason})",
+            pid, UnplayableHold.TotalHours, o == null ? "no reply" : LeashParse.Str(o["reason"]) ?? "?");
+        return LeashSkipResult.Marked;
+    }
+
     public async Task CutAsync()
     {
         // The local safety steps run first and whatever the network does. Never gated.
@@ -235,6 +286,9 @@ public sealed class LeashService : ILeashService
         _cutPending = true;
         try { _cutStore.Write(account); } catch (Exception ex) { App.Logger?.Debug("Leash cut store failed: {E}", ex.Message); }
         _watchedAids.Clear();
+        _unplayableUntil.Clear();
+        // The cut leash is gone here for good; a later block must not read as a second ending.
+        _raw = _raw with { Me = null };
         Publish();
         await SendCutAsync();
     }
@@ -277,6 +331,25 @@ public sealed class LeashService : ILeashService
     }
 
     // ---- internals ----
+
+    private void LoseLeash()
+    {
+        App.Logger?.Information("[Leash] the leash ended from the other side; running the cut safety");
+        _watchedAids.Clear();
+        _unplayableUntil.Clear();
+        try { _cutSafety(); }
+        catch (Exception ex) { App.Logger?.Warning("Leash cut safety failed: {E}", ex.Message); }
+        try { LeashLost?.Invoke(); }
+        catch (Exception ex) { App.Logger?.Debug("Leash lost handler failed: {E}", ex.Message); }
+    }
+
+    /// <summary>A mark lives only while its punishment is still pending.</summary>
+    private void ForgetUnplayable(MyLeash? me)
+    {
+        if (_unplayableUntil.Count == 0) return;
+        var pending = new HashSet<string>((me?.Pending ?? Array.Empty<Punishment>()).Select(p => p.Pid), StringComparer.Ordinal);
+        foreach (var pid in _unplayableUntil.Keys.Where(k => !pending.Contains(k)).ToList()) _unplayableUntil.Remove(pid);
+    }
 
     private void Handle(LeashEvent e)
     {
@@ -411,6 +484,7 @@ public sealed class LeashService : ILeashService
         _completedLocal.Clear();
         _completeUnsent.Clear();
         _watchedAids.Clear();
+        _unplayableUntil.Clear();
         LastReport = null;
         string? stored = null;
         try { stored = _cutStore.Read(); } catch (Exception ex) { App.Logger?.Debug("Leash cut store failed: {E}", ex.Message); }

@@ -36,6 +36,25 @@ public static class LeashGateRule
     public static GateChoice Pick(bool leashDue, bool homeworkDue) =>
         leashDue ? GateChoice.Leash : homeworkDue ? GateChoice.Homework : GateChoice.None;
 
+    /// <summary>
+    /// True when the task the runner is working on no longer exists (2026-09-28): the leash is
+    /// gone (holder let go, block, remove, expiry), the punishment left the queue (dropped by an
+    /// intensity change, pardoned, expired), or the assignment it watches is no longer the open
+    /// one. The host then cancels the runner and closes a locked video window.
+    /// </summary>
+    public static bool Orphaned(string? runningPid, string? runningAid, MyLeash? me)
+    {
+        if (runningPid != null)
+        {
+            if (me == null) return true;
+            foreach (var p in me.Pending) if (p.Pid == runningPid) return false;
+            return true;
+        }
+        if (runningAid != null)
+            return me?.Assignment is not { Status: AssignStatus.Open } a || a.Aid != runningAid;
+        return false;
+    }
+
     /// <summary>The punishment the gate shows: the oldest one that still needs the gate. A
     /// Chaster punishment never does (it books itself), nor does an expired one, nor one this
     /// client already completed and is waiting for the server to drop.</summary>

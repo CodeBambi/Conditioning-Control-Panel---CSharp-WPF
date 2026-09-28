@@ -341,6 +341,117 @@ public class LeashServiceTests
         Assert.True(events[0].Accepted);
         Assert.False(snap.Active);
     }
+
+    // ---- 2026-09-28 safety pass --------------------------------------------------------
+
+    [Fact]
+    public void A_leash_ended_from_the_other_side_runs_the_cut_safety_once()
+    {
+        var r = new Rig().Build();
+        var lost = 0;
+        r.Svc.LeashLost += () => lost++;
+        r.Svc.ApplyBlock(Block(Me()));
+        Assert.Equal(0, r.Safety);
+
+        // The holder let go (or a block, an expiry): the next block has no leash.
+        r.Svc.ApplyBlock(Block(null, new JArray { Ev("e9", "ended") }));
+        Assert.Equal(1, r.Safety);
+        Assert.Equal(1, lost);
+        Assert.Null(r.Svc.Snapshot.Me);
+
+        // Still not leashed: nothing runs again.
+        r.Svc.ApplyBlock(Block());
+        r.Svc.ApplyBlock(null);
+        Assert.Equal(1, r.Safety);
+    }
+
+    [Fact]
+    public void A_block_that_was_never_leashed_or_a_new_account_runs_no_safety()
+    {
+        var r = new Rig().Build();
+        r.Svc.ApplyBlock(Block());
+        r.Svc.ApplyBlock(null);
+        Assert.Equal(0, r.Safety);
+
+        r.Svc.ApplyBlock(Block(Me()));
+        r.Account = "u_other";
+        r.Svc.ApplyBlock(null);
+        Assert.Equal(0, r.Safety);
+    }
+
+    [Fact]
+    public async Task The_own_cut_runs_the_safety_once_even_when_the_server_then_agrees()
+    {
+        var r = new Rig().Build();
+        var lost = 0;
+        r.Svc.LeashLost += () => lost++;
+        r.Svc.ApplyBlock(Block(Me()));
+        await r.Svc.CutAsync();
+        r.Svc.ApplyBlock(Block(null, new JArray { Ev("e1", "ended") }));
+        Assert.Equal(1, r.Safety);
+        Assert.Equal(0, lost);
+    }
+
+    [Fact]
+    public async Task A_video_that_will_not_play_is_skipped_on_the_server_when_it_can_be()
+    {
+        var r = new Rig().Build();
+        var w = new JObject { ["kind"] = "ht", ["id"] = "123" };
+        var vid = Pun("p1", "video", 5, T0.AddHours(-2));
+        vid["watch"] = w;
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { vid, Pun("p2", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Equal("p1", r.Svc.GateDue!.Pid);
+
+        r.Api.Answer("punish_skip", new JObject { ["ok"] = true, ["status"] = "skipped" });
+        Assert.Equal(LeashSkipResult.Skipped, await r.Svc.SkipUnplayableAsync("p1"));
+        var call = r.Api.Calls.Last();
+        Assert.Equal("punish_skip", call.Op);
+        Assert.Equal("p1", (string?)call.Body["pid"]);
+        Assert.Equal("unplayable", (string?)call.Body["reason"]);
+        Assert.Equal("p2", r.Svc.GateDue!.Pid);
+        Assert.False(r.Svc.IsUnplayable("p1"));
+        Assert.Equal(0, r.Api.Count("complete"));
+    }
+
+    [Fact]
+    public async Task A_video_the_server_cannot_skip_stays_pending_but_off_the_gate_for_a_day()
+    {
+        var now = T0;
+        var r = new Rig();
+        r.Svc = new LeashService(r.Api, () => r.Account, () => now, () => r.Inputs, r.Tab, () => r.Kicks++, r.Store, () => r.Safety++);
+        var vid = Pun("p1", "video", 5, T0.AddHours(-2));
+        vid["watch"] = new JObject { ["kind"] = "ht", ["id"] = "123" };
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { vid })));
+
+        r.Api.Answer("punish_skip", new JObject { ["ok"] = false, ["reason"] = "refused" });
+        Assert.Equal(LeashSkipResult.Marked, await r.Svc.SkipUnplayableAsync("p1"));
+        Assert.True(r.Svc.IsUnplayable("p1"));
+        Assert.Null(r.Svc.GateDue);
+        Assert.Contains(r.Svc.Snapshot.Me!.Pending, p => p.Pid == "p1");
+
+        // Unknown op / offline: the same.
+        r.Api.Answer("punish_skip", null);
+        Assert.Equal(LeashSkipResult.Marked, await r.Svc.SkipUnplayableAsync("p1"));
+
+        now = T0 + LeashService.UnplayableHold - TimeSpan.FromMinutes(1);
+        Assert.Null(r.Svc.GateDue);
+        now = T0 + LeashService.UnplayableHold + TimeSpan.FromMinutes(1);
+        Assert.False(r.Svc.IsUnplayable("p1"));
+        Assert.Equal("p1", r.Svc.GateDue!.Pid);
+    }
+
+    [Fact]
+    public async Task An_unplayable_mark_goes_with_its_punishment()
+    {
+        var r = new Rig().Build();
+        var vid = Pun("p1", "video", 5, T0.AddHours(-2));
+        vid["watch"] = new JObject { ["kind"] = "ht", ["id"] = "123" };
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { vid })));
+        r.Api.Answer("punish_skip", null);
+        await r.Svc.SkipUnplayableAsync("p1");
+        r.Svc.ApplyBlock(Block(Me()));
+        Assert.False(r.Svc.IsUnplayable("p1"));
+    }
 }
 
 /// <summary>The friends poll carries the leash both ways, and runs at 20 s while the leash is on.</summary>
@@ -405,4 +516,5 @@ public class LeashPiggybackTests
         active = false;
         Assert.Equal(FriendsPollRule.SlowSeconds, svc.NextIntervalSeconds());
     }
+
 }
