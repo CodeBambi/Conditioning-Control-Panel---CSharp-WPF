@@ -562,3 +562,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - The top-right release button read "v6.9.1 IS OUT" on 6.11.3: it now names WPF's btn_v6_11_3_is_out; ReleaseButtonKeyTests
   keeps both shells on the same key (fails on the stale key).
 - Evidence: FirstRunFolderPickerTests; live: portal FileChooser.OpenFile with the "First run" window as parent. Review: ACCEPT.
+
+## avalonia-port/cloud-read-only: +475 (auth unit 6, part 1 — high risk)
+- Core ProfileAdopt owns WPF's watermark, take-higher, season-forward, curve-epoch and login-adopt rules; EntitlementTierRule
+  moved to Core (+ApplyRise). WPF ProfileSyncService / V2AuthServiceHead / SeasonRecapService / EntitlementTierSync /
+  App.ValidateRestoredSessionAsync delegate to Core (restore check now Core, per the earlier decision row).
+- Avalonia: restore-session, then a READ-ONLY profile load (GET /v2/user/profile); login applies WPF's full adopt. No write
+  endpoint anywhere on this head (tested on the startup and login paths).
+- Evidence: CloudReadOnlyTests (8 goldens incl. ceremony pending, hand-transcribed from WPF rules; 3 verified by the reviewer
+  by hand), no-write assertions fail-proofed. Part 2 (leaderboard, profile card, heartbeat) is a separate branch. Review: ACCEPT.
