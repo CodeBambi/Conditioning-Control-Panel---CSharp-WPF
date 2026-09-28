@@ -19,7 +19,7 @@ namespace ConditioningControlPanel.Services
     {
         private readonly DiscordTokenStorage _tokenStorage;
         private readonly HttpClient _httpClient;
-        private HttpListener? _callbackListener;
+        private LoopbackOAuth? _callbackListener;
         private CancellationTokenSource? _oauthCts;
         private bool _disposed;
 
@@ -186,19 +186,10 @@ namespace ConditioningControlPanel.Services
                 IsVerifying = true;
                 _oauthCts = new CancellationTokenSource();
 
-                // Generate CSRF state token (URL-safe hex)
-                var stateBytes = new byte[16];
-                using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
-                {
-                    rng.GetBytes(stateBytes);
-                }
-                var state = Convert.ToHexString(stateBytes);
-
-                // Start local HTTP listener for callback
-                _callbackListener = new HttpListener();
-                var callbackUrl = $"http://localhost:{LocalCallbackPort}/callback/";
-                _callbackListener.Prefixes.Add(callbackUrl);
-                _callbackListener.Start();
+                // Local callback listener + CSRF state (Core LoopbackOAuth, shared with every head)
+                _callbackListener = new LoopbackOAuth(LocalCallbackPort);
+                var callbackUrl = _callbackListener.CallbackUrl;
+                var state = _callbackListener.State;
 
                 App.Logger?.Information("Started Discord OAuth callback listener on {Url}", callbackUrl);
 
@@ -211,36 +202,11 @@ namespace ConditioningControlPanel.Services
                 // the clipboard and prompts the user; the callback listener keeps waiting.
                 Helpers.BrowserLauncher.OpenUrlOrPrompt(authUrl, "sign in with Discord");
 
-                // Wait for callback with timeout
-                var getContextTask = _callbackListener.GetContextAsync();
-                // Unconditionally observe any future fault. If the listener is disposed
-                // (timeout, cancel, or external Dispose) while the underlying APM call
-                // is still pending, the task faults with ObjectDisposedException and
-                // would otherwise reach the finalizer as an UnobservedTaskException.
-                _ = getContextTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
-                var timeoutTask = Task.Delay(TimeSpan.FromMinutes(OAuthTimeoutMinutes), _oauthCts.Token);
-
-                var completedTask = await Task.WhenAny(getContextTask, timeoutTask);
-
-                if (completedTask == timeoutTask)
-                {
-                    throw new TimeoutException("Discord login timed out. Please try again.");
-                }
-
-                var context = await getContextTask;
-                var query = context.Request.QueryString;
+                // Wait for callback with timeout; answers the browser and validates state (CSRF)
+                var query = await _callbackListener.WaitAsync(TimeSpan.FromMinutes(OAuthTimeoutMinutes),
+                    "Discord login timed out. Please try again.", LoopbackOAuth.DiscordSuccessHtml, LoopbackOAuth.DiscordFailureHtml, _oauthCts.Token);
                 var code = query["code"];
-                var returnedState = query["state"];
                 var error = query["error"];
-
-                // Send response to browser
-                await SendBrowserResponse(context, string.IsNullOrEmpty(error));
-
-                // Validate state to prevent CSRF
-                if (!SecurityHelper.SecureCompare(state, returnedState ?? ""))
-                {
-                    throw new SecurityException("OAuth state mismatch - possible CSRF attack");
-                }
 
                 if (!string.IsNullOrEmpty(error))
                 {
@@ -296,85 +262,19 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                _callbackListener?.Stop();
-                _callbackListener?.Close();
+                _callbackListener?.Dispose();
                 _callbackListener = null;
             }
             catch { }
         }
 
-        private async Task SendBrowserResponse(HttpListenerContext context, bool success)
-        {
-            var response = context.Response;
-            var html = success
-                ? @"<!DOCTYPE html>
-<html>
-<head>
-    <title>Discord Login Successful</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-               display: flex; justify-content: center; align-items: center;
-               height: 100vh; margin: 0; background: linear-gradient(135deg, #5865F2 0%, #1a1a2e 100%); }
-        .container { text-align: center; color: white; }
-        h1 { color: #5865F2; background: white; padding: 10px 20px; border-radius: 8px; }
-        p { color: #ccc; }
-    </style>
-</head>
-<body>
-    <div class='container'>
-        <h1>Discord Connected!</h1>
-        <p>You can close this window and return to the application.</p>
-    </div>
-</body>
-</html>"
-                : @"<!DOCTYPE html>
-<html>
-<head>
-    <title>Discord Login Failed</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-               display: flex; justify-content: center; align-items: center;
-               height: 100vh; margin: 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
-        .container { text-align: center; color: white; }
-        h1 { color: #ff4444; }
-        p { color: #888; }
-    </style>
-</head>
-<body>
-    <div class='container'>
-        <h1>Login Failed</h1>
-        <p>Please try again from the application.</p>
-    </div>
-</body>
-</html>";
-
-            var buffer = Encoding.UTF8.GetBytes(html);
-            response.ContentType = "text/html";
-            response.ContentLength64 = buffer.Length;
-            await response.OutputStream.WriteAsync(buffer);
-            response.Close();
-        }
-
         private async Task ExchangeCodeForTokensAsync(string code, string redirectUri)
         {
-            var response = await _httpClient.PostAsJsonAsync("/discord/token", new
+            var tokenResponse = await LoopbackOAuth.ExchangeAsync(_httpClient, "/discord/token", new
             {
                 code,
                 redirect_uri = redirectUri
             });
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorText = await response.Content.ReadAsStringAsync();
-                throw new Exception($"Token exchange failed: {response.StatusCode} - {errorText}");
-            }
-
-            var tokenResponse = await response.Content.ReadFromJsonAsync<DiscordTokenResponse>();
-
-            if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
-            {
-                throw new Exception($"Token exchange failed: {tokenResponse?.ErrorDescription ?? "Unknown error"}");
-            }
 
             // Store tokens securely
             _tokenStorage.StoreTokens(

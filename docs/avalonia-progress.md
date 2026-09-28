@@ -455,3 +455,11 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Live 150 s flash + subliminal + bouncing text: card p95 3.06 -> 0.23 s; bouncing-text worst frame gap 2097 -> 62 ms,
   69-152 fps; flash 6.37-6.45 s (WPF 6.45 s). 2 fail-proofed tests. Review: ACCEPT. One unexplained all-overlays vanish at
   131.7 s in one run (log overwritten; suspected stray panic key; not reproduced).
+
+## avalonia-port/loopback-oauth-core: +563
+- Auth unit 3: one Core LoopbackOAuth helper (WPF's exact localhost:4783x/callback/, CSRF state, 5-minute timeout, browser
+  pages, /…/token exchange); WPF Patreon/Discord/SubscribeStar delegate to it. Windows keeps HttpListener; elsewhere it
+  binds 127.0.0.1 and ::1 (managed HttpListener bound only ::1 here). Stray requests (favicon, wrong Host) don't end a
+  sign-in; a busy port fails before the browser opens. Decision: OAuth redirect on Linux = loopback.
+- Evidence: 19 LoopbackOAuthTests (IPv4/IPv6, bad state, error=, timeout, busy port, stray requests, port reuse, page
+  SHA-256 pinned to the WPF originals), each fail-proofed. No real provider sign-in (not provable here). Review: ACCEPT.

@@ -15,7 +15,8 @@ namespace ConditioningControlPanel
     /// device-bound secret store are exactly the three things that stay in a head, so only the
     /// ANSWERS cross here - never the transport.</para>
     /// <para>Superseded in part (decisions log, "Where OAuth and the V2 client live"): the V2
-    /// client is now Core's <c>V2AuthService</c>, and the OAuth listener follows it (unit 3).</para>
+    /// client is now Core's <c>V2AuthService</c>, and the OAuth listener and code exchange are Core's
+    /// <c>LoopbackOAuth</c>, which the WPF provider services delegate to.</para>
     ///
     /// <para><b>Unseeded means signed out and NOT ENTITLED, and that is not merely the safe answer
     /// - it is the truth.</b> A head that seeds nothing here has no OAuth flow, and the Avalonia

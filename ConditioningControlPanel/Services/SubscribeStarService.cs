@@ -30,7 +30,7 @@ namespace ConditioningControlPanel.Services
     {
         private readonly SecureTokenStorage _tokenStorage;
         private readonly HttpClient _httpClient;
-        private HttpListener? _callbackListener;
+        private LoopbackOAuth? _callbackListener;
         private CancellationTokenSource? _oauthCts;
         private bool _disposed;
 
@@ -133,24 +133,16 @@ namespace ConditioningControlPanel.Services
                 IsVerifying = true;
                 _oauthCts = new CancellationTokenSource();
 
-                // Generate CSRF state token (hex is URL-safe)
-                var stateBytes = new byte[16];
-                using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
-                {
-                    rng.GetBytes(stateBytes);
-                }
-                var state = Convert.ToHexString(stateBytes);
+                // Local callback listener for the proxy's final redirect + CSRF state
+                // (Core LoopbackOAuth, shared with every head)
+                _callbackListener = new LoopbackOAuth(LocalCallbackPort);
+                var callbackUrl = _callbackListener.CallbackUrl;
+                var state = _callbackListener.State;
 
                 // PKCE: the proxy binds the code to this state's challenge, and only the holder of
                 // the verifier can trade it. A consent link started by someone else is useless to them.
                 var verifier = Chaster.ChasterClient.NewVerifier();
                 var challenge = Chaster.ChasterClient.Challenge(verifier);
-
-                // Start local HTTP listener for the proxy's final redirect.
-                _callbackListener = new HttpListener();
-                var callbackUrl = $"http://localhost:{LocalCallbackPort}/callback/";
-                _callbackListener.Prefixes.Add(callbackUrl);
-                _callbackListener.Start();
 
                 App.Logger?.Information("Started SubscribeStar OAuth callback listener on {Url}", callbackUrl);
 
@@ -164,34 +156,11 @@ namespace ConditioningControlPanel.Services
                 // see ccp-bugs #404). The callback listener keeps waiting in the meantime.
                 Helpers.BrowserLauncher.OpenUrlOrPrompt(authUrl, "sign in with SubscribeStar");
 
-                // Wait for callback with timeout
-                var getContextTask = _callbackListener.GetContextAsync();
-                // Observe any future fault so a disposed-listener race doesn't surface
-                // as an UnobservedTaskException on the finalizer thread.
-                _ = getContextTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
-                var timeoutTask = Task.Delay(TimeSpan.FromMinutes(OAuthTimeoutMinutes), _oauthCts.Token);
-
-                var completedTask = await Task.WhenAny(getContextTask, timeoutTask);
-
-                if (completedTask == timeoutTask)
-                {
-                    throw new TimeoutException("OAuth login timed out. Please try again.");
-                }
-
-                var context = await getContextTask;
-                var query = context.Request.QueryString;
-                var returnedState = query["state"];
+                // Wait for callback with timeout; answers the browser and validates state (CSRF)
+                var query = await _callbackListener.WaitAsync(TimeSpan.FromMinutes(OAuthTimeoutMinutes),
+                    "OAuth login timed out. Please try again.", LoopbackOAuth.SuccessHtml, LoopbackOAuth.FailureHtml, _oauthCts.Token);
                 var code = query["code"];
                 var error = query["error"];
-
-                // Send response to browser
-                await SendBrowserResponse(context, string.IsNullOrEmpty(error));
-
-                // Validate state to prevent CSRF
-                if (!SecurityHelper.SecureCompare(state, returnedState ?? ""))
-                {
-                    throw new SecurityException("OAuth state mismatch - possible CSRF attack");
-                }
 
                 if (!string.IsNullOrEmpty(error))
                 {
@@ -240,63 +209,10 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                _callbackListener?.Stop();
-                _callbackListener?.Close();
+                _callbackListener?.Dispose();
                 _callbackListener = null;
             }
             catch { }
-        }
-
-        private async Task SendBrowserResponse(HttpListenerContext context, bool success)
-        {
-            var response = context.Response;
-            var html = success
-                ? @"<!DOCTYPE html>
-<html>
-<head>
-    <title>Login Successful</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-               display: flex; justify-content: center; align-items: center;
-               height: 100vh; margin: 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
-        .container { text-align: center; color: white; }
-        h1 { color: #ff69b4; }
-        p { color: #888; }
-    </style>
-</head>
-<body>
-    <div class='container'>
-        <h1>Login Successful!</h1>
-        <p>You can close this window and return to the application.</p>
-    </div>
-</body>
-</html>"
-                : @"<!DOCTYPE html>
-<html>
-<head>
-    <title>Login Failed</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-               display: flex; justify-content: center; align-items: center;
-               height: 100vh; margin: 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
-        .container { text-align: center; color: white; }
-        h1 { color: #ff4444; }
-        p { color: #888; }
-    </style>
-</head>
-<body>
-    <div class='container'>
-        <h1>Login Failed</h1>
-        <p>Please try again from the application.</p>
-    </div>
-</body>
-</html>";
-
-            var buffer = Encoding.UTF8.GetBytes(html);
-            response.ContentType = "text/html";
-            response.ContentLength64 = buffer.Length;
-            await response.OutputStream.WriteAsync(buffer);
-            response.Close();
         }
 
         /// <summary>
@@ -304,21 +220,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private async Task ExchangeViaProxyAsync(string code, string state, string verifier)
         {
-            var response = await _httpClient.PostAsJsonAsync("/substar/token", new { code, state, code_verifier = verifier });
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorText = await response.Content.ReadAsStringAsync();
-                throw new Exception($"Token exchange failed: {response.StatusCode} - {errorText}");
-            }
-
             // The exchange blob is a superset of the token shape; extra fields are ignored.
-            var tokenResponse = await response.Content.ReadFromJsonAsync<PatreonTokenResponse>();
-
-            if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
-            {
-                throw new Exception($"Token exchange failed: {tokenResponse?.ErrorDescription ?? "Unknown error"}");
-            }
+            var tokenResponse = await LoopbackOAuth.ExchangeAsync(_httpClient, "/substar/token", new { code, state, code_verifier = verifier });
 
             _tokenStorage.StoreTokens(
                 tokenResponse.AccessToken,
