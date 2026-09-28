@@ -493,3 +493,5 @@ review FIX->r1 applied; one earlier live run was unsandboxed: real settings.json
   Avalonia head seeds it fail-closed beside Patreon/SubscribeStar, all three started in parallel like WPF.
 - Evidence: 14 Core tests + seed tests (fake proxy), each fail-proofed; sandboxed live check: Settings > Account signed
   out, 0 binding errors. No real Discord account (not provable here). Review: ACCEPT, follow-up tests added.
+## avalonia-port/quiz-core-pure: +997 (quiz unit 1: WPF QuizService's offline half -> Core QuizStore, same files/JSON; WPF delegates; AI quiz stubbed this wave (decision);
+goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponytail notes are reworded in quiz unit 5)

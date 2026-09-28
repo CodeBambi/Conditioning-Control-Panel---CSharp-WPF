@@ -11,6 +11,7 @@ using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Moderation;
 using Serilog;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -19,10 +20,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// that generates its questions, and the five archetypes the final score maps onto.
     ///
     /// PORTED from ConditioningControlPanel/Windows/QuizCategoryEditorWindow.xaml.cs. Deviations:
-    ///  - <c>QuizCategoryDefinition</c> / <c>QuizArchetypeDefinition</c> live in the WPF head's
-    ///    Services/Quiz/QuizService.cs, not in CCP.Core, and neither may be touched by this port -
-    ///    so they are copied below, trimmed to the fields this view reads or writes (the
-    ///    TextEditorDialog/QuizReportWindow precedent).
+    ///  - <c>QuizCategoryDefinition</c> / <c>QuizArchetypeDefinition</c> come from Core
+    ///    (CCP.Core/Services/Quiz/QuizStore.cs).
     ///  - <c>QuizService</c> is not in Core either, so the template dropdown, the AI preview, the
     ///    built-in name-collision check and Delete are stubs. Each carries a ponytail comment.
     ///  - <c>PromptValidator</c> IS in Core, so <see cref="RunPromptValidation"/> runs for real, and
@@ -505,32 +504,5 @@ Do NOT include any other text before or after the question format. Just the ques
                 new QuizArchetypeDefinition { Name = "Velvet", MinPercentage = 86, MaxPercentage = 100, Description = "Nothing left to argue with." },
             }
         };
-    }
-
-    /// <summary>
-    /// One scoring band of a quiz category. Copied from the WPF head's
-    /// Services/Quiz/QuizService.cs: the type lives there, not in CCP.Core, and neither the WPF
-    /// head nor Core may be touched by this port.
-    /// </summary>
-    public class QuizArchetypeDefinition
-    {
-        public string Name { get; set; } = string.Empty;
-        public int MinPercentage { get; set; }
-        public int MaxPercentage { get; set; }
-        public string Description { get; set; } = string.Empty;
-    }
-
-    /// <inheritdoc cref="QuizArchetypeDefinition"/>
-    /// <remarks>Trimmed to the fields this editor reads or writes: the original also carries
-    /// EnumCategory and GetArchetypeName, neither of which this view touches.</remarks>
-    public class QuizCategoryDefinition
-    {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public string SystemPromptTemplate { get; set; } = string.Empty;
-        public string Color { get; set; } = "#FF69B4";
-        public bool IsBuiltIn { get; set; }
-        public List<QuizArchetypeDefinition> Archetypes { get; set; } = new();
     }
 }

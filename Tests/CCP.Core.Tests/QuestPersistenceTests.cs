@@ -109,7 +109,7 @@ public sealed class QuestPersistenceTests : IDisposable
     }
 
     /// <summary>Local-kind dates carry the zone's offset, so pin it (Unix honours TZ only).</summary>
-    private static void InBerlin(Action body)
+    internal static void InBerlin(Action body)
     {
         var old = Environment.GetEnvironmentVariable("TZ");
         Environment.SetEnvironmentVariable("TZ", "Europe/Berlin");
