@@ -31,7 +31,7 @@ internal sealed class AchievementStore
     /// cards / video minutes call could both be inside <c>File.WriteAllText</c> on the SAME path
     /// at the same time. See <see cref="Write"/>.
     /// </summary>
-    private readonly object _saveLock = new();
+    internal readonly object _saveLock = new(); // internal: tests assert the snapshot is taken under it
     private readonly string _path;
 
     public AchievementStore(string path) => _path = path;
@@ -107,12 +107,20 @@ internal sealed class AchievementStore
     /// sibling, because this file is the only local record of progress that cannot be recomputed.
     /// <c>File.Replace</c> does the swap and the backup in one atomic NTFS operation.</para>
     /// </summary>
-    public bool Write(AchievementProgress progress)
+    public bool Write(AchievementProgress progress) => Write(() => progress);
+
+    /// <summary>
+    /// As <see cref="Write(AchievementProgress)"/>, but reads the object to save INSIDE the lock. The
+    /// engine swaps its progress on a logout Reset; resolving it here means a background autosave that
+    /// was queued before the swap can never land the previous account's progress after it.
+    /// </summary>
+    public bool Write(Func<AchievementProgress> current)
     {
         lock (_saveLock)
         {
             try
             {
+                var progress = current();
                 var dir = Path.GetDirectoryName(_path);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 {

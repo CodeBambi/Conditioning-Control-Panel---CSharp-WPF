@@ -267,3 +267,12 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: ShellTrayTests (2, fail-proofed three ways); live D-Bus: SNI registered, menu layout, Stop everything
   3 overlays -> 0, hide/show/exit; no-watcher dbus-run-session -> X exits. Review: FIX -> fixed.
 - Gaps: OS balloons (org.freedesktop.Notifications), Lockdown refusal/exit bill on Exit, off-screen repair.
+
+## avalonia-port/achievement-engine-core: +368
+- oracle-deep achievements unit 3: Core AchievementEngine owns progress, the store, TryUnlock (WPF order: unlock ->
+  save -> log -> suppress gate -> event once), dirty/autosave/retry, Reset, SuppressPopups and exclusive gating via
+  CoreEntitlement. WPF AchievementService delegates; timers, Track* counters, forwarding and UI marshalling stay.
+- The current progress is resolved inside the store's save lock (a queued autosave can't resurrect a logged-out
+  account's progress after Reset).
+- Evidence: AchievementEngineTests (9, each fail-proofed, incl. the Reset race). Review: ACCEPT + P2 race fixed.
+- Not run: WPF tests (Windows CI). No Avalonia surface yet (unit 5).
