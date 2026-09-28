@@ -538,7 +538,8 @@ namespace ConditioningControlPanel
             {
                 CoreSecrets.ApiKey    => Services.SecureApiKeyStore.Retrieve(),
                 CoreSecrets.AuthToken => Services.SecureAuthTokenStore.Retrieve(),
-                _ => Services.SecureTokenStorage.TryReadSecret(name, out var json) ? json : null,
+                _ => Services.SecureTokenStorage.TryReadSecret(name, out var json) ? json
+                   : Services.DiscordTokenStorage.TryReadSecret(name, out json) ? json : null,
             };
             CoreSecrets.StoreProvider = (name, value) =>
             {
@@ -546,7 +547,9 @@ namespace ConditioningControlPanel
                 {
                     case CoreSecrets.ApiKey:    Services.SecureApiKeyStore.Store(value); break;
                     case CoreSecrets.AuthToken: Services.SecureAuthTokenStore.Store(value); break;
-                    default: Services.SecureTokenStorage.TryWriteSecret(name, value); break;
+                    default:
+                        if (!Services.SecureTokenStorage.TryWriteSecret(name, value)) Services.DiscordTokenStorage.TryWriteSecret(name, value);
+                        break;
                 }
             };
             SeedTutorialSeam();

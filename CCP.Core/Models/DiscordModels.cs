@@ -186,7 +186,7 @@ namespace ConditioningControlPanel.Models
             if (!string.IsNullOrEmpty(GuildAvatar) && !string.IsNullOrEmpty(Id))
             {
                 var guildExt = GuildAvatar.StartsWith("a_") ? "gif" : "png";
-                return $"https://cdn.discordapp.com/guilds/{Services.DiscordService.GuildId}/users/{Id}/avatars/{GuildAvatar}.{guildExt}?size={size}";
+                return $"https://cdn.discordapp.com/guilds/{Services.DiscordAccount.GuildId}/users/{Id}/avatars/{GuildAvatar}.{guildExt}?size={size}";
             }
 
             if (string.IsNullOrEmpty(Avatar))
