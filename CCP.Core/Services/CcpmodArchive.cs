@@ -17,6 +17,7 @@ namespace ConditioningControlPanel.Services
         public static void Extract(string zipPath, string dir, bool overwriteFiles = false)
         {
             if (OperatingSystem.IsWindows()) { ZipFile.ExtractToDirectory(zipPath, dir, overwriteFiles); return; }
+            Directory.CreateDirectory(dir);   // as the framework does: an empty archive still yields the folder
             var root = Path.GetFullPath(dir) + Path.DirectorySeparatorChar;
             using var zip = ZipFile.OpenRead(zipPath);
             foreach (var entry in zip.Entries)
