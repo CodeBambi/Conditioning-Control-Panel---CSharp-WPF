@@ -202,14 +202,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreSettings.Current.FlashEnabled = ChkEnable.IsChecked ?? false;
             CoreSettings.Save();
 
-            // Live-apply: start/stop the flash service if the engine is running. The GATE is real
-            // now (CoreSession); what it gates is not.
-            if (CoreSession.IsEngineRunning)
-            {
-                // ponytail: App.Flash.Start()/Stop() - FlashService
-                // (ConditioningControlPanel/Services/Flash/FlashService.cs), still in the WPF head:
-                // it spawns Win32 layered flash windows.
-            }
+            // WPF live-applies App.Flash.Start()/Stop() only while the engine runs. This head has
+            // no engine yet (CoreSession.IsEngineRunningProvider unseeded), so the toggle itself
+            // arms and disarms the ambient schedule.
+            // ponytail: no engine gate; gate on CoreSession.IsEngineRunning once Start/Stop is ported.
+            if (ChkEnable.IsChecked == true) CoreFlash.Start();
+            else CoreFlash.Stop();
         }
 
         private void SliderFrequency_Changed(object? sender, RangeBaseValueChangedEventArgs e)
@@ -218,9 +216,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var v = (int)e.NewValue;
             TxtFrequency.Text = v.ToString();
             CoreSettings.Current.FlashFrequency = v;
-            // ponytail: WPF also calls App.Flash.RefreshSchedule() here. Needs FlashService
-            // (ConditioningControlPanel/Services/), still in the WPF head.
             CoreSettings.Save();
+            CoreFlash.RefreshSchedule();
         }
 
         private void SliderImages_Changed(object? sender, RangeBaseValueChangedEventArgs e)
