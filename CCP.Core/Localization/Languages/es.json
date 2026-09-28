@@ -5389,6 +5389,7 @@
   "tray_wake_bambi": "Despertar a Bambi",
   "tray_wake": "Despertarles",
   "tray_show": "Mostrar la ventana",
+  "tray_stop_everything": "Detener todo",
   "btn_stop_session_no": "Seguir",
   "btn_stop_session_yes": "Parar la sesión",
   "dialog_stop_session_penalty": "\n(Penalización por pausa: -{0} XP, así que habrías ganado {1} XP.)",

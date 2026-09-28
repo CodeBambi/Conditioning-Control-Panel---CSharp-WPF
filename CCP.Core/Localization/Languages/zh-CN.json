@@ -5901,6 +5901,7 @@
   "tray_wake_bambi": "把 Bambi 叫醒",
   "tray_wake": "把他们叫醒",
   "tray_show": "显示窗口",
+  "tray_stop_everything": "全部停止",
   "btn_stop_session_no": "继续",
   "btn_stop_session_yes": "停止会话",
   "dialog_stop_session_penalty": "\n（暂停扣罚：-{0} XP，所以本来能拿 {1} XP。）",

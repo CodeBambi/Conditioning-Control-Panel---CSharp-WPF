@@ -44,6 +44,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static readonly List<(FlashOverlayWindow Window, PixelRect Rect)> Active = new();
         private static readonly Random Rng = new();
         private static bool _busy, _warnedUnavailable, _warnedEmpty, _closed;
+        private static int _generation;
+
+        /// <summary>Bumped by every CloseAll; a burst scheduled under an older one never spawns.</summary>
+        internal static int Generation => _generation;
 
         /// <summary>A burst is still spawning (WPF <c>_isBusy</c>); the ambient tick skips.</summary>
         public static bool IsBusy => _busy;
@@ -64,6 +68,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var screens = ScreenList.Enumerate(host);
             if (screens.Count == 0) return;
             _busy = true;
+            var generation = _generation;
             var scheduled = false;
             try
             {
@@ -96,7 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     {
                         try
                         {
-                            if (refused || _closed || Active.Count >= MaxConcurrent) { bmp.Dispose(); return; }
+                            if (refused || _closed || generation != _generation || Active.Count >= MaxConcurrent) { bmp.Dispose(); return; }
                             refused = !Spawn(bmp, rect, alpha, fade, lifetime);
                         }
                         catch (Exception ex) { refused = true; Log.Error(ex, "Flash: spawn failed"); }
@@ -161,10 +166,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             return true;
         }
 
-        /// <summary>Close every flash on screen and drop the spawns still queued (shell closing).</summary>
-        public static void CloseAll()
+        /// <summary>Close every flash on screen and drop the spawns still queued. <paramref name="final"/>
+        /// (shell closing) refuses every later burst; the tray's Stop everything passes false so a
+        /// re-enabled flash can show again.</summary>
+        public static void CloseAll(bool final = true)
         {
-            _closed = true;
+            _generation++;
+            _closed |= final;
             foreach (var (w, _) in Active.ToList()) w.Close();
         }
 

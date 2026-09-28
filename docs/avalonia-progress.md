@@ -257,3 +257,13 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Golden fixture written by the pre-change serializer; tests: byte-identical round trip, fixture covers exactly
   the persisted properties, truncated file recovers from .bak, parsed equality, time-zone behaviour pinned.
   Each fail-proofed. Tests (a)/(e) need TZ pinning and run on the Linux CI job. Review: ACCEPT.
+
+## avalonia-port/tray-icon: +305
+- Tray icon (Avalonia TrayIcon; SNI on Linux) with WPF's menu (Show, Wake, separator, Exit) plus Stop everything,
+  the no-hotkey panic control: stops flash/subliminal/bouncing text, unticks their Enable flags, keeps the app.
+- X hides to tray like WPF (always), hides/restores the avatar tube; with no tray host (no StatusNotifierWatcher
+  on the session bus) X really exits so overlays can never outlive a reachable UI. Exit uses Shutdown().
+- Decision logged: the icon is always visible on this head (it is the panic control).
+- Evidence: ShellTrayTests (2, fail-proofed three ways); live D-Bus: SNI registered, menu layout, Stop everything
+  3 overlays -> 0, hide/show/exit; no-watcher dbus-run-session -> X exits. Review: FIX -> fixed.
+- Gaps: OS balloons (org.freedesktop.Notifications), Lockdown refusal/exit bill on Exit, off-screen repair.

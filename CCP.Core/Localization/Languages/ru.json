@@ -5389,6 +5389,7 @@
   "tray_wake_bambi": "Разбудить Bambi",
   "tray_wake": "Разбудить",
   "tray_show": "Показать окно",
+  "tray_stop_everything": "Остановить всё",
   "btn_stop_session_no": "Продолжить",
   "btn_stop_session_yes": "Остановить сессию",
   "dialog_stop_session_penalty": "\n(Штраф за паузы: -{0} XP, то есть вы получили бы {1} XP.)",
