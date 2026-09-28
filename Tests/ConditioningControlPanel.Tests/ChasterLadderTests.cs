@@ -218,6 +218,7 @@ public class ChasterLadderTests : IDisposable
         Assert.Null(board.You);
     }
 
+#if DEBUG // DemoRaffle is a DEBUG-only demo; CI builds Release
     [Fact]
     public void The_demo_board_is_ten_mixed_rows_and_the_player_at_twenty_three()
     {
@@ -233,6 +234,7 @@ public class ChasterLadderTests : IDisposable
         Assert.True(on.Named);
     }
 
+#endif
     [Fact]
     public void A_verify_reply_is_worded()
     {
