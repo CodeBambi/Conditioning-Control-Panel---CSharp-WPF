@@ -95,7 +95,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var refused = false;
                 for (var i = 0; i < flashes.Count; i++)
                 {
-                    var (bmp, rect) = flashes[i];
+                    var (bmp, rect, path) = flashes[i];
                     var last = i == flashes.Count - 1;
                     DispatcherTimer.RunOnce(() =>
                     {
@@ -103,6 +103,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                         {
                             if (refused || _closed || generation != _generation || Active.Count >= MaxConcurrent) { bmp.Dispose(); return; }
                             refused = !Spawn(bmp, rect, alpha, fade, lifetime);
+                            // WPF FlashService.cs:1608 records the batch; per shown image here, so the
+                            // log's media count is exactly what reached the screen.
+                            if (!refused) App.Sessions?.SessionLog.RecordImages(new[] { path });
                         }
                         catch (Exception ex) { refused = true; Log.Error(ex, "Flash: spawn failed"); }
                         finally { if (last) _busy = false; }
@@ -185,12 +188,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// from the header size alone, so each picture is decoded AT its display size like WPF's
         /// decode-at-display-size - never a full-resolution source held per window.
         /// </summary>
-        private static List<(Bitmap Bitmap, PixelRect Rect)> LoadPictures(int count, IReadOnlyList<Screen> screens,
+        private static List<(Bitmap Bitmap, PixelRect Rect, string Path)> LoadPictures(int count, IReadOnlyList<Screen> screens,
             int[] targets, AppSettings s, List<PixelRect> occupied)
         {
             var root = CorePaths.EffectiveAssets;
             var dir = Path.Combine(root, "images");
-            var result = new List<(Bitmap, PixelRect)>(count);
+            var result = new List<(Bitmap, PixelRect, string)>(count);
             if (!Directory.Exists(dir) || targets.Length == 0) return result;
 
             var files = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
@@ -213,7 +216,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     var screen = screens[targets[Rng.Next(targets.Length)]];
                     var rect = Place(screen.Bounds, screen.Scaling, info.Width, info.Height, s, Rng, occupied);
                     using var stream = File.OpenRead(path);
-                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect));
+                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect, path));
                     occupied.Add(rect);
                 }
                 catch (Exception ex) { Log.Debug("Flash: could not decode {Path}: {E}", path, ex.Message); }

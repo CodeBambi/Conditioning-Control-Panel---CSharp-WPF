@@ -26,7 +26,7 @@
 // The handlers named by MainShellWindow.axaml are real methods, because a missing one is a XAML
 // compile error, not a runtime gap.
 //
-// Members dropped (87 - the four now restored are marked RESTORED):
+// Members dropped (87 - the ones now restored are marked RESTORED):
 //   private void SetupHelpButtons(…)
 //   private void SetHelpContent(…)
 //   private void HelpVideoButton_Click(…)
@@ -82,22 +82,21 @@
 //   internal void VelvetBtnSchedulerRamp_Click(…)
 //   internal void BtnCatalogue_Click(…)                RESTORED
 //   internal void BtnSessionHistory_Click(…)         RESTORED in PresetsTabView
-//   internal void BtnStartSession_Click(…)
-//   private async void StartSession(…)
+//   internal void BtnStartSession_Click(…)         RESTORED in SessionRun.cs
+//   private async void StartSession(…)             RESTORED in SessionRun.cs
 //   private void OnSessionCompleted(…)
 //   private DateTime _suppressSessionSummaryUntil
 //   internal void SuppressNextSessionSummary(…)
-//   private void OnSessionLogReady(…)                SessionCompleteWindow takes Core SessionLog; no
-//                                                    Avalonia session engine publishes LogReady yet
+//   private void OnSessionLogReady(…)              RESTORED in SessionRun.cs
 //   private SessionCompleteWindow? _liveSessionRecap
 //   private bool _liveSessionRecapTeardownHooked
 //   private void CloseLiveSessionRecap(…)
-//   private void ShowSessionSummaryWhenClear(…)
-//   private void OnSessionProgressUpdated(…)
+//   private void ShowSessionSummaryWhenClear(…)    RESTORED in SessionRun.cs
+//   private void OnSessionProgressUpdated(…)       RESTORED in SessionRun.cs
 //   private void OnSessionPhaseChanged(…)
-//   private void OnSessionStarted(…)
-//   private void OnSessionStopped(…)
-//   private void BtnStopSession_Click(…)
+//   private void OnSessionStarted(…)               RESTORED in SessionRun.cs
+//   private void OnSessionStopped(…)               RESTORED in SessionRun.cs
+//   private void BtnStopSession_Click(…)           RESTORED in SessionRun.cs
 //   private void BtnPauseSession_Click(…)
 //   public void ApplySessionSettings(…)
 //   public void UpdateSpiralOpacity(…)

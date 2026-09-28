@@ -1,7 +1,7 @@
 // PORTED from ConditioningControlPanel/MainWindow/MainWindow.StartStop.cs: BtnStart_Click (:35),
 // BtnStartMenu_Click, MenuStartNormal_Click, StartEngine (:294), StopEngine (:444) and
 // UpdateStartButton (:944), for the features Core drives (CoreEngine). The session half of
-// BtnStart_Click (stop-session dialog) arrives with the session runner.
+// BtnStart_Click (stop-session dialog) is ConfirmStopSession (MainShellWindow.SessionRun.cs).
 // ponytail: still missing, each with no service on this head: remote-control and lockdown gates,
 // Relapse/TotalSessions achievements, the video/bubble/mind-wipe/brain-drain/pop-quiz/autonomy/
 // ramp starts, the scheduler, the Presets "running" label, the hero FX and Jump right in
@@ -26,8 +26,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (sender is Button b) b.ContextMenu?.Open(b);
         }
 
-        private void BtnStart_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        private async void BtnStart_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
+            // WPF MainWindow.StartStop.cs:58: a running session asks first; declining keeps everything on.
+            if (App.Sessions?.IsRunning == true)
+            {
+                await ConfirmStopSession("dialog_stop_session_title", "dialog_stop_session_body");
+                if (!App.Sessions.IsRunning) StopEngine();
+                return;
+            }
             if (CoreEngine.IsRunning) StopEngine();
             else StartEngine();
         }
@@ -53,10 +60,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             });
         }
 
-        /// <summary>WPF StopEngine. Saved flags are left alone; <see cref="OnEngineStopped"/> clears the screen.</summary>
+        /// <summary>WPF StopEngine. Saved flags are left alone; <see cref="OnEngineStopped"/> clears the screen.
+        /// A running session ends early first (tray Stop, panic): it restores the pre-session settings.
+        /// ponytail: WPF's panic pauses a session instead (MainWindow.xaml.cs:1726); that is U4.</summary>
         internal static void StopEngine()
         {
             _engineGen++;
+            App.Sessions?.Stop(completed: false);
             CoreEngine.Stop();
         }
 
@@ -67,6 +77,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             LockCardWindow.ForceCloseAll();
             PinkFilterOverlay.Refresh(this);
             UpdateStartButton();
+            // WPF OnSessionStopped: the session button and the dials come back on every exit path.
+            Named<Tabs.PresetsTabView>("PresetsTab")?.SetSessionButtonLabel(null);
+            RefreshSessionFeatureLock();
         }
 
         /// <summary>WPF UpdateStartButton: red ■ Stop while running, the accent ▶ Start otherwise.</summary>
