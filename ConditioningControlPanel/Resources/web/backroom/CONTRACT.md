@@ -2132,7 +2132,13 @@ Deduped case-insensitively, shuffled with the deal's own seed. The four preset w
 active list never hears the presets. A dealt word may be a whole trigger phrase: the page wraps it, it is never
 truncated.
 
-**The voice.** Each word is spoken by the HOST, which owns a real chain and the app's chosen audio output device:
+**The voice.** Each word is spoken by the HOST, which owns a real chain and the app's chosen audio output device.
+
+**No synthetic speech (amended 2026-09-28, owner rule of 2026-09-25).** Only a RECORDED clip ever says a word. The
+`tts` rung (Windows speech) and the page's browser-voice fallback are GONE: on 6.10.3 the Windows rung picked a voice
+in the machine's own language and players heard English words read in German or French. A word with no recording is
+drawn and stays silent. `NoSyntheticSpeechTests` (C#) fails the build if a speech synthesiser reappears in the client.
+Where this paragraph disagrees with the table below or anything else in 10.21, this one wins.
 
 **Its level is the ROOM's, not the app's (amended 2026-09-17).** This used to be
 `MasterVolume x SubAudioVolume`, and it was the only piece of Back Room audio that read the app's settings at
@@ -2147,8 +2153,8 @@ Where this paragraph disagrees with anything above about volume, this one wins.
 |---|---|
 | `clip` | the player's OWN audio for that phrase: an enabled keyword trigger's PlayAudio action (or its legacy `AudioFilePath`), else `KeywordTriggerService.FindLinkedAudio` - the active mod's `resources/sounds/flashes_audio`, then `Resources/sub_audio`. The same precedence the subliminal whisper already uses. |
 | `preset` | a bundled Back Room clip: `Resources/Audio/backroom/words/words.json` maps a NORMALISED phrase to a plain file name in that folder. Ships with an empty map; the owner generates the clips. |
-| `tts` | Windows speech (`Windows.Media.SpeechSynthesis`, no package - the project already targets `net8.0-windows10.0.19041.0`), a female voice in the machine's language where there is one, rate 0.75, pitch 0.9, rendered to a cached wav. |
-| `none` | nothing played. ONLY then does the page speak the word itself with `speechSynthesis` (rate 0.85 / 0.7 reversed, pitch 0.8) - which is also what happens with no host at all, the Vercel phone playtest. |
+| `tts` | RETIRED (2026-09-28). No host sends it; the page still reads it for wire compatibility. |
+| `none` | nothing played: the word stays SILENT. Same with no host at all, the Vercel phone playtest. |
 
 **Normalised phrase.** Lower case, every run of non-letter / non-digit collapsed to one space, trimmed. `"Let Go!"`,
 `"let  go"` and `"LET GO"` are one word. The preset clip's file stem is that with spaces as hyphens: `let-go.mp3`.
@@ -2174,8 +2180,7 @@ Where this paragraph disagrees with anything above about volume, this one wins.
 zoom open together. A chain of 2-3 words is `WORD_GAP_MS` (500 ms) onset to onset as before, but a `durationMs`
 longer than `WORD_MS` (980 ms) holds the next onset until the clip is done, capped at `MAX_WORD_HOLD_MS` (3000 ms)
 so a bad duration can never stall the beat. `callout.cancel()`, `cancelWords()`, `suspend` and `close` all send
-`word.stop` and the host cuts the line (Law VI); a new `word.speak` also cuts the one before it, exactly as
-`speechSynthesis.cancel()` did.
+`word.stop` and the host cuts the line (Law VI); a new `word.speak` also cuts the one before it.
 
 **Files.** Page: `shared/hypno/voice.js` (the adapter), `shared/hypno/callout.js` (`voice` option, the chain hold).
 Host: `Services/BackRoom/BackRoomVoice.cs`, `IBackRoomVoice` / `BackRoomVoiceAck` in `BackRoomContracts.cs`,

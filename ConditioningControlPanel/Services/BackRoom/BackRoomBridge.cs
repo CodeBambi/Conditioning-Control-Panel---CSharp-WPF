@@ -41,8 +41,8 @@ public sealed class BackRoomBridge
         public required IBackRoomRelay Relay { get; init; }
         public IBackRoomFx Fx { get; init; } = new NullBackRoomFx();
         public IBackRoomMedia Media { get; init; } = new NullBackRoomMedia(null);
-        /// <summary>The spoken subliminal word (10.21). The default speaks nothing and says so, which
-        /// leaves the page's own speechSynthesis in charge exactly as before.</summary>
+        /// <summary>The spoken subliminal word (10.21). The default speaks nothing and says so, and the
+        /// word stays silent (no synthetic speech anywhere).</summary>
         public IBackRoomVoice Voice { get; init; } = NullBackRoomVoice.Instance;
         /// <summary>The whole <c>init</c> message (the host's settings projection).</summary>
         public required Func<object> BuildInit { get; init; }
@@ -509,11 +509,11 @@ public sealed class BackRoomBridge
     }
 
     /// <summary>The longest phrase the host will speak. A dealt word can be a whole trigger phrase;
-    /// anything past this is not a word, so it is acked <c>none</c> and the page says it itself.</summary>
+    /// anything past this is not a word, so it is acked <c>none</c> and stays silent.</summary>
     public const int MaxWordLength = 200;
 
     /// <summary>10.21 <c>word.speak</c>: the host says the subliminal word, and the ack tells the page
-    /// whether it still has to. Runs off the UI thread - it opens clips and may synthesise speech - and
+    /// how long the clip runs. Runs off the UI thread - it opens and decodes clips - and
     /// answers exactly once, <c>none</c> included, so the page never waits on a missing reply.</summary>
     private void OnWordSpeak(JObject m)
     {
