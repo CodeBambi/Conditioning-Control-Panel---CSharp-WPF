@@ -17,17 +17,12 @@ namespace ConditioningControlPanel.Services
     public class DiscordService : IDisposable
     {
         private readonly DiscordAccount _core = new(() => App.Patreon?.Core);
-        private LoopbackOAuth? _callbackListener;
         private CancellationTokenSource? _oauthCts;
         private bool _disposed;
 
-        // Configuration
-        private const string ProxyBaseUrl = ProviderSubscription.ProxyBaseUrl;
 
         /// <summary>Our Discord server's guild id — used to build per-guild avatar CDN URLs.</summary>
         public const string GuildId = DiscordAccount.GuildId;
-        private const int LocalCallbackPort = 47833; // Different port than Patreon (47832)
-        private const int OAuthTimeoutMinutes = 5;
 
         public event EventHandler<bool>? AuthenticationChanged;
         public event EventHandler<string>? AuthenticationFailed;
@@ -68,47 +63,12 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                _core.IsVerifying = true;
                 _oauthCts = new CancellationTokenSource();
 
-                // Local callback listener + CSRF state (Core LoopbackOAuth, shared with every head)
-                _callbackListener = new LoopbackOAuth(LocalCallbackPort);
-                var callbackUrl = _callbackListener.CallbackUrl;
-                var state = _callbackListener.State;
-
-                App.Logger?.Information("Started Discord OAuth callback listener on {Url}", callbackUrl);
-
-                // Open browser to authorization URL
-                var authUrl = $"{ProxyBaseUrl}/discord/authorize?redirect_uri={Uri.EscapeDataString(callbackUrl)}&state={state}";
-
-                // Robust open with fallbacks: a bare ShellExecute fails on machines with no
-                // default browser (Win32Exception 0x800401F5), silently breaking login — see
-                // ccp-bugs #373/#374/#378/#404. On total failure the helper copies the link to
-                // the clipboard and prompts the user; the callback listener keeps waiting.
-                Helpers.BrowserLauncher.OpenUrlOrPrompt(authUrl, "sign in with Discord");
-
-                // Wait for callback with timeout; answers the browser and validates state (CSRF)
-                var query = await _callbackListener.WaitAsync(TimeSpan.FromMinutes(OAuthTimeoutMinutes),
-                    "Discord login timed out. Please try again.", LoopbackOAuth.DiscordSuccessHtml, LoopbackOAuth.DiscordFailureHtml, _oauthCts.Token);
-                var code = query["code"];
-                var error = query["error"];
-
-                if (!string.IsNullOrEmpty(error))
-                {
-                    var errorDesc = query["error_description"] ?? "Unknown error";
-                    throw new Exception($"Discord authorization failed: {errorDesc}");
-                }
-
-                if (string.IsNullOrEmpty(code))
-                {
-                    throw new Exception("No authorization code received");
-                }
-
-                // Exchange code for tokens
-                await _core.ExchangeCodeAsync(code, callbackUrl);
-
-                // Get user info
-                await ValidateAndRefreshUserAsync(forceRefresh: true);
+                // Core runs the flow (listener, authorize URL, state/PKCE, exchange, validate). The browser
+                // opens through the robust launcher: on total failure it copies the link to the clipboard
+                // and prompts the user (ccp-bugs #373/#374/#378/#404); the listener keeps waiting.
+                await _core.SignInAsync(url => Helpers.BrowserLauncher.OpenUrlOrPrompt(url, "sign in with Discord"), _oauthCts.Token);
 
                 // Load custom display name from server (for returning users)
                 await LoadDisplayNameFromServerAsync();
@@ -127,11 +87,6 @@ namespace ConditioningControlPanel.Services
                 AuthenticationFailed?.Invoke(this, ex.Message);
                 throw;
             }
-            finally
-            {
-                _core.IsVerifying = false;
-                StopCallbackListener();
-            }
         }
 
         /// <summary>
@@ -140,17 +95,6 @@ namespace ConditioningControlPanel.Services
         public void CancelOAuthFlow()
         {
             _oauthCts?.Cancel();
-            StopCallbackListener();
-        }
-
-        private void StopCallbackListener()
-        {
-            try
-            {
-                _callbackListener?.Dispose();
-                _callbackListener = null;
-            }
-            catch { }
         }
 
         /// <summary>
@@ -521,7 +465,6 @@ namespace ConditioningControlPanel.Services
 
             _oauthCts?.Cancel();
             _oauthCts?.Dispose();
-            StopCallbackListener();
             _core.Dispose();
         }
     }

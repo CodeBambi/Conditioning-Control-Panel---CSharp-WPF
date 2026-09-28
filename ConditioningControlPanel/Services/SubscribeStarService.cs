@@ -22,14 +22,8 @@ namespace ConditioningControlPanel.Services
     public class SubscribeStarService : IDisposable
     {
         private readonly ProviderSubscription _core = new("substar");
-        private LoopbackOAuth? _callbackListener;
         private CancellationTokenSource? _oauthCts;
         private bool _disposed;
-
-        // Same hosted proxy as Patreon; SubscribeStar gets its own endpoints + port.
-        private const string ProxyBaseUrl = ProviderSubscription.ProxyBaseUrl;
-        private const int LocalCallbackPort = 47834; // Patreon=47832, Discord=47833
-        private const int OAuthTimeoutMinutes = 5;
 
         public SubscribeStarService() => _core.TierChanged += (_, tier) => TierChanged?.Invoke(this, tier);
 
@@ -61,53 +55,12 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                _core.IsVerifying = true;
                 _oauthCts = new CancellationTokenSource();
 
-                // Local callback listener for the proxy's final redirect + CSRF state
-                // (Core LoopbackOAuth, shared with every head)
-                _callbackListener = new LoopbackOAuth(LocalCallbackPort);
-                var callbackUrl = _callbackListener.CallbackUrl;
-                var state = _callbackListener.State;
-
-                // PKCE: the proxy binds the code to this state's challenge, and only the holder of
-                // the verifier can trade it. A consent link started by someone else is useless to them.
-                var verifier = Chaster.ChasterClient.NewVerifier();
-                var challenge = Chaster.ChasterClient.Challenge(verifier);
-
-                App.Logger?.Information("Started SubscribeStar OAuth callback listener on {Url}", callbackUrl);
-
-                // Open browser to the proxy authorize endpoint. The proxy redirects to
-                // SubscribeStar using its registered https redirect_uri, so we do NOT
-                // pass redirect_uri here (only the CSRF state, which round-trips, and the PKCE challenge).
-                var authUrl = $"{ProxyBaseUrl}/substar/authorize?state={state}&code_challenge={challenge}&code_challenge_method=S256";
-
-                // Robust open with fallbacks; on total failure copies the link to the clipboard
-                // and prompts the user (machines with no default browser otherwise fail silently —
-                // see ccp-bugs #404). The callback listener keeps waiting in the meantime.
-                Helpers.BrowserLauncher.OpenUrlOrPrompt(authUrl, "sign in with SubscribeStar");
-
-                // Wait for callback with timeout; answers the browser and validates state (CSRF)
-                var query = await _callbackListener.WaitAsync(TimeSpan.FromMinutes(OAuthTimeoutMinutes),
-                    "OAuth login timed out. Please try again.", LoopbackOAuth.SuccessHtml, LoopbackOAuth.FailureHtml, _oauthCts.Token);
-                var code = query["code"];
-                var error = query["error"];
-
-                if (!string.IsNullOrEmpty(error))
-                {
-                    throw new Exception($"SubscribeStar authorization failed: {error}");
-                }
-
-                if (string.IsNullOrEmpty(code))
-                {
-                    throw new Exception("SubscribeStar sign-in returned no code. Please try again.");
-                }
-
-                // The proxy holds the client_secret; it trades the code only against our verifier.
-                await _core.ExchangeCodeAsync(new { code, state, code_verifier = verifier });
-
-                // Validate subscription immediately
-                await ValidateSubscriptionAsync(forceRefresh: true);
+                // Core runs the flow (listener, authorize URL, state/PKCE, exchange, validate). The browser
+                // opens through the robust launcher: on total failure it copies the link to the clipboard
+                // and prompts the user (ccp-bugs #373/#374/#378/#404); the listener keeps waiting.
+                await _core.SignInAsync(url => Helpers.BrowserLauncher.OpenUrlOrPrompt(url, "sign in with SubscribeStar"), _oauthCts.Token);
 
                 App.Logger?.Information("SubscribeStar OAuth flow completed successfully");
             }
@@ -122,28 +75,12 @@ namespace ConditioningControlPanel.Services
                 AuthenticationFailed?.Invoke(this, ex.Message);
                 throw;
             }
-            finally
-            {
-                _core.IsVerifying = false;
-                StopCallbackListener();
-            }
         }
 
         /// <summary>Cancel ongoing OAuth flow</summary>
         public void CancelOAuthFlow()
         {
             _oauthCts?.Cancel();
-            StopCallbackListener();
-        }
-
-        private void StopCallbackListener()
-        {
-            try
-            {
-                _callbackListener?.Dispose();
-                _callbackListener = null;
-            }
-            catch { }
         }
 
         public void Dispose()
@@ -153,7 +90,6 @@ namespace ConditioningControlPanel.Services
 
             _oauthCts?.Cancel();
             _oauthCts?.Dispose();
-            StopCallbackListener();
             _core.Dispose();
         }
     }

@@ -1,4 +1,6 @@
 using System;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -8,7 +10,11 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
+using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -17,8 +23,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/LoginDialog.xaml.cs. Deviations:
     ///  - WPF's <c>DialogResult</c> property becomes <c>Close(bool)</c>; Avalonia carries the
-    ///    result through <c>ShowDialog&lt;bool&gt;</c>. Only the cancel path can set it here - the
-    ///    success paths belong to the stubbed services.
+    ///    result through <c>ShowDialog&lt;bool&gt;</c>.
     ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>. The three clickable TextBlocks (the
     ///    login/register toggle, Back and the device-code Cancel) mark their PointerPressed
     ///    handled, or the window-level drag handler would fire on the same click.
@@ -35,16 +40,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    rebuild, for the same reason.
     ///  - <c>ShowUsernamePanel</c>'s two title assignments are dropped: they set exactly the keys
     ///    the markup already binds.
-    ///  - <c>SanitizeError</c> and <c>ShowError</c> are gone with their only callers. Both served
-    ///    the V2AuthService paths stubbed below; they return with the services. (WPF's
-    ///    <c>MessageBox</c> is not what blocks them - <c>Dialogs.MessageDialog</c> is this head's
-    ///    equivalent and this dialog can own it.)
-    ///  - <c>_firstProviderToken</c> is dropped: nothing can set it until the OAuth services move
-    ///    to Core, and a field that is only ever null makes the stubs read as dead branches.
+    ///  - The OAuth flow is Core's (<c>ProviderSubscription/DiscordAccount.SignInAsync</c>); the browser
+    ///    opens through <c>Launcher</c>. Success applies identity only (<c>V2AuthService.ApplyIdentity</c>):
+    ///    the XP take-higher adopt and linked-tier grace arrive with the cloud load (unit 6).
     ///
-    /// Placeholder behaviour while the services live in the WPF head: a provider button jumps
-    /// straight to the display-name picker (the "needs registration" branch), the name-availability
-    /// check always says available, and Sign in via Web shows a fixed sample code with no polling.
+    /// ponytail: Sign in via Web still shows a fixed sample code with no polling (V2DeviceCodeService is
+    /// WPF-head; not in this unit).
     /// </summary>
     public partial class LoginDialog : Window
     {
@@ -54,7 +55,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         private const string VerificationUrl = "https://app.cclabs.app/dashboard/link-device";
 
+        private const string ServerUrl = "https://codebambi-proxy.vercel.app";
+        private static readonly HttpClient Http = new();
         private CancellationTokenSource? _checkCts;
+        private string? _firstProviderToken;
 
         // Track which provider was tried first
         private string? _firstProvider;
@@ -246,17 +250,104 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         #region Provider Selection
 
-        /// <summary>
-        /// ponytail: needs App.Discord / App.Patreon / App.SubscribeStar and V2AuthService, wired
-        /// when they move to Core. Until then this takes the "user needs registration" branch the
-        /// real flow reaches after a successful OAuth handshake, so the display-name picker and
-        /// everything downstream of it stays reachable from the provider buttons.
-        /// </summary>
-        private void TryLoginWithProvider(string provider)
+        private async void TryLoginWithProvider(string provider)
         {
             ShowLoading(Loc.GetF("login_connecting_to_provider", provider));
-            _firstProvider = provider;
-            ShowUsernamePanel();
+
+            try
+            {
+                // Start OAuth flow (Core); the browser opens through Avalonia's Launcher (xdg-open on Linux).
+                Action<string> open = url => _ = OpenBrowserAsync(url);
+                string? accessToken;
+                if (provider == "discord")
+                {
+                    if (AccountSeed.Discord is not { } discord) { await ShowError(Loc.Get("login_discord_service_not_available")); return; }
+                    await discord.SignInAsync(open);
+                    accessToken = discord.GetAccessToken();
+                }
+                else
+                {
+                    var sub = provider == "substar" ? AccountSeed.SubscribeStar : AccountSeed.Patreon;
+                    if (sub is null)
+                    {
+                        await ShowError(provider == "substar" ? "SubscribeStar service not available." : Loc.Get("login_patreon_service_not_available"));
+                        return;
+                    }
+                    await sub.SignInAsync(open);
+                    accessToken = sub.GetAccessToken();
+                }
+
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    ShowProviderSelection();
+                    return;
+                }
+
+                ShowLoading(Loc.Get("login_checking_account"));
+
+                // Try V2 authentication
+                var v2Auth = new V2AuthService();
+                var authResponse = provider switch
+                {
+                    "discord" => await v2Auth.AuthenticateWithDiscordAsync(accessToken),
+                    "substar" => await v2Auth.AuthenticateWithSubstarAsync(accessToken),
+                    _ => await v2Auth.AuthenticateWithPatreonAsync(accessToken),
+                };
+
+                if (!authResponse.Success)
+                {
+                    await ShowError(SanitizeError(authResponse.Error));
+                    return;
+                }
+
+                if (authResponse.User != null && !authResponse.NeedsRegistration)
+                {
+                    // Existing user found - success!
+                    Succeed(authResponse.User, authResponse.AuthToken, provider, authResponse.User.IsSeason0Og);
+                    return;
+                }
+
+                // An existing account carries this provider's email: ask rather than mint a twin
+                // (WPF AccountService.ConfirmCreateNewDespiteExistingAccount; default No).
+                if (authResponse.CanAutoLink && !await ConfirmCreateNewDespiteExistingAccount(provider, authResponse.AutoLinkDisplayName))
+                {
+                    AccountSeed.LogoutProvider(provider);
+                    ShowProviderSelection();
+                    return;
+                }
+
+                // User needs registration - go straight to username picker
+                _firstProvider = provider;
+                _firstProviderToken = accessToken;
+                ShowUsernamePanel();
+            }
+            catch (OperationCanceledException)
+            {
+                ShowProviderSelection();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Login failed for {Provider}", provider);
+                await ShowError(Loc.Get("login_failed_please_try_again"));
+            }
+        }
+
+        /// <summary>WPF BrowserLauncher.OpenUrlOrPrompt: on failure the link goes to the clipboard. The listener keeps waiting.</summary>
+        private async Task OpenBrowserAsync(string url)
+        {
+            try { if (await Launcher.LaunchUriAsync(new Uri(url))) return; }
+            catch (Exception ex) { Log.Warning(ex, "Could not open the browser for sign-in"); }
+            try { if (Clipboard is { } c) await c.SetTextAsync(url); } catch { }
+            // ponytail: WPF also shows a "link copied" prompt; the clipboard copy is the recovery here.
+        }
+
+        private async Task<bool> ConfirmCreateNewDespiteExistingAccount(string provider, string? existingDisplayName)
+        {
+            var label = provider switch { "patreon" => "Patreon", "discord" => "Discord", "substar" => "SubscribeStar", _ => provider };
+            var body = string.IsNullOrWhiteSpace(existingDisplayName)
+                ? Loc.GetF("account_existing_email_prompt_unnamed", label)
+                : Loc.GetF("account_existing_email_prompt", label, existingDisplayName);
+            return await MessageDialog.ConfirmAsync(this, Loc.Get("account_existing_email_title"), body, defaultToCancel: true);
         }
 
         #endregion
@@ -337,37 +428,84 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _btnConfirmUsername.IsEnabled = available;
         }
 
-        /// <summary>
-        /// ponytail: needs the proxy's /v2/auth/check-name and /user/check-display-name endpoints
-        /// (the WPF original picks one of three by provider and signs it with the OAuth token),
-        /// wired in the login unit (the V2 client is in Core now). Answering "available" keeps the picker usable.
-        /// </summary>
-        private static Task<bool> CheckNameAvailabilityAsync(string name) => Task.FromResult(true);
+        private async Task<bool> CheckNameAvailabilityAsync(string name)
+        {
+            try
+            {
+                // Invite + SubscribeStar use the unauthenticated check; Discord and Patreon their authed ones (WPF LoginDialog).
+                var endpoint = _firstProvider is "invite" or "substar"
+                    ? $"{ServerUrl}/v2/auth/check-name?name={Uri.EscapeDataString(name)}"
+                    : _firstProvider == "discord"
+                        ? $"{ServerUrl}/user/check-display-name-discord?name={Uri.EscapeDataString(name)}"
+                        : $"{ServerUrl}/user/check-display-name?name={Uri.EscapeDataString(name)}";
 
-        /// <summary>
-        /// ponytail: the client is Core <c>CCP.Core/Services/Account/V2AuthService.cs</c>
-        /// (RegisterAsync / AuthenticateWith*Async); what still blocks it is <c>App.UnifiedUserId</c>
-        /// (WPF head-side, no seam) and the provider services (login unit). <c>CoreSettings.Current</c> covers the settings
-        /// half already, so settings are NOT what blocks this. Do not half-port it: the flow
-        /// carries an OAuth token and a password, and a partial that writes an identity without
-        /// the server's answer is worse than the stub. The guards and the loading state are the
-        /// original's; the account creation itself is what is missing.
-        /// </summary>
-        private void BtnConfirmUsername_Click()
+                var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+                if (!string.IsNullOrEmpty(_firstProviderToken))
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _firstProviderToken);
+
+                var response = await Http.SendAsync(request);
+                if (!response.IsSuccessStatusCode) return false;
+                return (bool?)JObject.Parse(await response.Content.ReadAsStringAsync())["available"] ?? false;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("Name availability check failed: {Error}", ex.Message);
+                return false;
+            }
+        }
+
+        private async void BtnConfirmUsername_Click()
         {
             if (!_isNameAvailable) return;
 
-            if (_firstProvider == "invite"
-                && (string.IsNullOrEmpty(_pendingInviteCode) || string.IsNullOrEmpty(_pendingPassword)))
-            {
-                ClearSensitiveData();
-                _txtAvailability.Text = Loc.Get("login_session_expired");
-                return;
-            }
+            // Invite code registration doesn't use _firstProviderToken
+            if (_firstProvider != "invite" && string.IsNullOrEmpty(_firstProviderToken)) return;
+
+            var displayName = (_txtUsername.Text ?? "").Trim();
 
             // Disable button during async (audit C2)
             _btnConfirmUsername.IsEnabled = false;
             ShowLoading(Loc.Get("login_creating_account"));
+
+            try
+            {
+                var v2Auth = new V2AuthService();
+                V2AuthService.V2AuthResponse authResponse;
+
+                if (_firstProvider == "invite")
+                {
+                    if (string.IsNullOrEmpty(_pendingInviteCode) || string.IsNullOrEmpty(_pendingPassword))
+                    {
+                        ClearSensitiveData();
+                        await ShowError(Loc.Get("login_session_expired"));
+                        return;
+                    }
+                    authResponse = await v2Auth.RegisterAsync(_pendingInviteCode, displayName, _pendingPassword);
+                    ClearSensitiveData(); // Clear immediately after use (audit C1)
+                }
+                else if (_firstProvider == "discord")
+                    authResponse = await v2Auth.AuthenticateWithDiscordAsync(_firstProviderToken!, displayName);
+                else if (_firstProvider == "substar")
+                    authResponse = await v2Auth.AuthenticateWithSubstarAsync(_firstProviderToken!, displayName);
+                else
+                    authResponse = await v2Auth.AuthenticateWithPatreonAsync(_firstProviderToken!, displayName);
+
+                if (authResponse.Success && authResponse.User != null)
+                {
+                    Succeed(authResponse.User, authResponse.AuthToken, _firstProvider, legacy: false);
+                }
+                else
+                {
+                    ClearSensitiveData();
+                    await ShowError(SanitizeError(authResponse.Error));
+                }
+            }
+            catch (Exception ex)
+            {
+                ClearSensitiveData();
+                Log.Error(ex, "Failed to create account");
+                await ShowError(Loc.Get("login_failed_to_create_account"));
+            }
         }
 
         #endregion
@@ -489,23 +627,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
         }
 
-        /// <summary>
-        /// ponytail: the client (LoginAsync) is Core <c>CCP.Core/Services/Account/V2AuthService.cs</c>;
-        /// <c>App.UnifiedUserId</c> (WPF head-side, no seam) is what still blocks it (login unit).
-        /// <c>CoreSettings.Current</c> is not the blocker. The password is still wiped immediately
-        /// after the (absent) call, as audit C1 requires, and the failure path back to the form is
-        /// the original's.
-        /// </summary>
-        private void TryAccountLogin(string displayName, string password)
+        private async void TryAccountLogin(string displayName, string password)
         {
             ShowLoading(Loc.Get("login_logging_in"));
 
-            // Clear password from memory immediately after use (audit C1)
-            ClearSensitiveData();
+            try
+            {
+                var authResponse = await new V2AuthService().LoginAsync(displayName, password);
 
-            ShowAccountPanel(_isAccountRegisterMode);
-            _txtLoginDisplayName.Text = displayName;
-            _txtAccountError.Text = Loc.Get("label_unexpected_response_from_server");
+                // Clear password from memory immediately after use (audit C1)
+                ClearSensitiveData();
+
+                if (authResponse.Success && authResponse.User != null)
+                {
+                    Succeed(authResponse.User, authResponse.AuthToken, "account", legacy: false);
+                    return;
+                }
+                ShowAccountPanel(_isAccountRegisterMode);
+                _txtLoginDisplayName.Text = displayName;
+                _txtAccountError.Text = authResponse.Success
+                    ? Loc.Get("label_unexpected_response_from_server")
+                    : SanitizeError(authResponse.Error);
+            }
+            catch (Exception ex)
+            {
+                ClearSensitiveData();
+                Log.Error(ex, "Account login failed");
+                ShowAccountPanel(_isAccountRegisterMode);
+                _txtLoginDisplayName.Text = displayName;
+                _txtAccountError.Text = Loc.Get("label_login_failed_please_try_again");
+            }
         }
 
         #endregion
@@ -536,10 +687,52 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _deviceCodePanel.IsVisible = false;
         }
 
+        /// <summary>Sanitize server error messages before showing to user (audit C3).</summary>
+        private static string SanitizeError(string? error)
+        {
+            if (string.IsNullOrEmpty(error)) return "An error occurred";
+            // Strip anything that looks like internal info (stack traces, paths, Redis keys)
+            if (error.Contains("ECONNREFUSED") || error.Contains("Redis") || error.Contains("redis")
+                || error.Contains("stack") || error.Contains("\\") || error.Contains("/api/"))
+                return "Server error. Please try again later.";
+            return error;
+        }
+
+        private async Task ShowError(string message)
+        {
+            await MessageDialog.ShowAsync(this, Loc.Get("title_error"), message);
+            ShowProviderSelection();
+        }
+
+        /// <summary>The success tail every WPF path shares: identity to settings (Core, identity only
+        /// until unit 6), the session's unified id, the provider's copy of it, the result.</summary>
+        private void Succeed(V2AuthService.V2User user, string? authToken, string? provider, bool legacy)
+        {
+            V2AuthService.ApplyIdentity(CoreSettings.Current, user, authToken);
+            CoreSettings.Save();
+            CoreAccount.UnifiedUserId = user.UnifiedId;
+
+            // WPF UpdateServiceProperties
+            if (provider == "patreon" && AccountSeed.Patreon is { } p) { p.UnifiedUserId = user.UnifiedId; p.DisplayName = user.DisplayName; }
+            else if (provider == "substar" && AccountSeed.SubscribeStar is { } ss) { ss.UnifiedUserId = user.UnifiedId; ss.DisplayName = user.DisplayName; }
+            else if (provider == "discord" && AccountSeed.Discord is { } d) { d.UnifiedUserId = user.UnifiedId; d.CustomDisplayName = user.DisplayName; }
+
+            Result = new LoginResult
+            {
+                Success = true,
+                IsLegacyUser = legacy,
+                ShouldShowOgWelcome = legacy && CoreSettings.Current.HasShownOgWelcome != true,
+                UnifiedId = user.UnifiedId,
+                DisplayName = user.DisplayName,
+                Provider = provider,
+            };
+            Close(true);
+        }
+
         private void BtnCancel_Click()
         {
-            // ponytail: WPF logged the authenticated provider out here (App.Discord/SubscribeStar/
-            // Patreon .Logout()); wired when those services move to Core.
+            // Logout any providers that were authenticated during this flow
+            AccountSeed.LogoutProvider(_firstProvider);
 
             // Clear sensitive data (audit C1)
             ClearSensitiveData();

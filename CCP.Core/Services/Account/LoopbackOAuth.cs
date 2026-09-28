@@ -176,6 +176,63 @@ namespace ConditioningControlPanel.Services
             await stream.WriteAsync(body);
         }
 
+        /// <summary>What the browser flow hands back for the code exchange.</summary>
+        public sealed record Callback(string Code, string CallbackUrl, string State, string? Verifier);
+
+        /// <summary>WPF's fixed ports: Patreon 47832, Discord 47833, SubscribeStar 47834.</summary>
+        public static int Port(string provider) => provider switch { "discord" => 47833, "substar" => 47834, _ => 47832 };
+
+        /// <summary>The proxy authorize URL exactly as WPF built it. SubscribeStar carries no redirect_uri
+        /// (the proxy uses its registered https one) but a PKCE S256 challenge.</summary>
+        public static string AuthorizeUrl(string provider, string callbackUrl, string state, string? challenge) => provider == "substar"
+            ? $"{ProviderSubscription.ProxyBaseUrl}/substar/authorize?state={state}&code_challenge={challenge}&code_challenge_method=S256"
+            : $"{ProviderSubscription.ProxyBaseUrl}/{provider}/authorize?redirect_uri={Uri.EscapeDataString(callbackUrl)}&state={state}";
+
+        /// <summary>PKCE (RFC 7636): 32 random bytes, base64url (was ChasterClient.NewVerifier).</summary>
+        public static string NewVerifier() => Base64Url(RandomNumberGenerator.GetBytes(32));
+
+        /// <summary>The S256 challenge the consent page is opened with.</summary>
+        public static string Challenge(string verifier) => Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+
+        private static string Base64Url(byte[] bytes) =>
+            Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        /// <summary>
+        /// The whole browser half of a provider sign-in, as WPF's Start*Login ran it: bind, open the
+        /// authorize URL (<paramref name="openBrowser"/> is the head's), wait 5 minutes, check state and
+        /// <c>error</c>/<c>code</c>. Throws WPF's messages; the caller trades the code.
+        /// </summary>
+        public static Task<Callback> SignInAsync(string provider, Action<string> openBrowser, CancellationToken ct) =>
+            SignInAsync(provider, openBrowser, ct, Port(provider), OperatingSystem.IsWindows(), TimeSpan.FromMinutes(5));
+
+        internal static async Task<Callback> SignInAsync(string provider, Action<string> openBrowser, CancellationToken ct,
+            int port, bool useHttpListener, TimeSpan timeout)
+        {
+            using var listener = new LoopbackOAuth(port, useHttpListener);
+            var verifier = provider == "substar" ? NewVerifier() : null;
+            Serilog.Log.Information("Started {Provider} OAuth callback listener on {Url}", provider, listener.CallbackUrl);
+            openBrowser(AuthorizeUrl(provider, listener.CallbackUrl, listener.State, verifier == null ? null : Challenge(verifier)));
+
+            var discord = provider == "discord";
+            var query = await listener.WaitAsync(timeout,
+                discord ? "Discord login timed out. Please try again." : "OAuth login timed out. Please try again.",
+                discord ? DiscordSuccessHtml : SuccessHtml, discord ? DiscordFailureHtml : FailureHtml, ct);
+            var code = query["code"];
+            var error = query["error"];
+
+            if (!string.IsNullOrEmpty(error))
+                throw new Exception(provider switch
+                {
+                    "substar" => $"SubscribeStar authorization failed: {error}",
+                    "discord" => $"Discord authorization failed: {query["error_description"] ?? "Unknown error"}",
+                    _ => $"Patreon authorization failed: {query["error_description"] ?? "Unknown error"}",
+                });
+            if (string.IsNullOrEmpty(code))
+                throw new Exception(provider == "substar" ? "SubscribeStar sign-in returned no code. Please try again." : "No authorization code received");
+
+            return new Callback(code, listener.CallbackUrl, listener.State, verifier);
+        }
+
         /// <summary>Constant-time compare (was SecurityHelper.SecureCompare in the WPF head).</summary>
         private static bool SecureCompare(string a, string b) =>
             CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b));

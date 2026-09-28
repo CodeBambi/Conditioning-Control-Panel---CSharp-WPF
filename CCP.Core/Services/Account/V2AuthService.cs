@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -445,6 +446,89 @@ namespace ConditioningControlPanel.Services
                 Log.Error(ex, "[V2Auth] Register failed");
                 return new V2AuthResponse { Success = false, Error = "Registration failed. Please try again." };
             }
+        }
+
+        /// <summary>The identity half of a sign-in (WPF V2AuthServiceHead.ApplyUserDataToSettings, which calls
+        /// this first). Linked-tier grace and the XP take-higher adopt stay in the WPF head until unit 6.</summary>
+        public static void ApplyIdentity(AppSettings settings, V2User user, string? authToken)
+        {
+            settings.UnifiedId = user.UnifiedId;
+            settings.UserDisplayName = user.DisplayName;
+            settings.IsSeason0Og = user.IsSeason0Og;
+            settings.CurrentSeason = user.CurrentSeason;
+            settings.HighestLevelEver = user.HighestLevelEver;
+            settings.HasLinkedDiscord = !string.IsNullOrEmpty(user.DiscordId);
+            settings.HasLinkedPatreon = !string.IsNullOrEmpty(user.PatreonId);
+            settings.PatreonTier = user.PatreonTier;
+            // Store auth token if provided
+            if (!string.IsNullOrEmpty(authToken)) settings.AuthToken = authToken;
+        }
+
+        public enum RestoreOutcome { Kept, Validated, Cleared, TokenCleared }
+
+        /// <summary>
+        /// The check half of WPF App.ValidateRestoredSessionAsync (App.xaml.cs:4191): POST
+        /// /v2/auth/restore-session. 404 clears the unified id; 2xx stores a re-issued token; 401 clears the
+        /// token (and the id for a legacy re-auth); anything else, or a network error, keeps the cache.
+        /// Stops before the cloud profile load (unit 6). The caller clears the session's id on Cleared.
+        /// </summary>
+        public async Task<RestoreOutcome> ValidateRestoredSessionAsync(string unifiedId)
+        {
+            var settings = _settings();
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/auth/restore-session")
+                {
+                    Content = new StringContent(new JObject { ["unified_id"] = unifiedId, ["client_version"] = CoreReleaseContent.AppVersion }.ToString(),
+                        Encoding.UTF8, "application/json"),
+                };
+                var storedToken = settings?.AuthToken;
+                if (!string.IsNullOrEmpty(storedToken)) request.Headers.Add("X-Auth-Token", storedToken);
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
+                var response = await _http.SendAsync(request, cts.Token);
+
+                // Split-accounts contract D: the head's recovery owns a merge tombstone.
+                if (await TryHandleMergedAsync(response)) return RestoreOutcome.Kept;
+
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    Log.Warning("Restored session invalid (user not found on server). Clearing UnifiedUserId.");
+                    if (settings != null) { settings.UnifiedId = null; CoreSettings.Save(); }
+                    return RestoreOutcome.Cleared;
+                }
+                if (response.IsSuccessStatusCode)
+                {
+                    try
+                    {
+                        var authToken = JObject.Parse(await response.Content.ReadAsStringAsync())["auth_token"]?.ToString();
+                        if (!string.IsNullOrEmpty(authToken) && settings != null)
+                        {
+                            settings.AuthToken = authToken;
+                            CoreSettings.Save();
+                            Log.Information("Stored auth token from restore-session.");
+                        }
+                    }
+                    catch (Exception parseEx) { Log.Debug("Failed to parse restore-session auth token: {Error}", parseEx.Message); }
+                    Log.Information("Restored session validated successfully.");
+                    return RestoreOutcome.Validated;
+                }
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    var legacy = (await response.Content.ReadAsStringAsync()).Contains("legacy_user_reauth_required");
+                    Log.Warning(legacy ? "Restored session rejected (legacy user, no token ever issued). Clearing all auth state."
+                                       : "Restored session rejected (invalid token). Clearing auth token.");
+                    if (settings != null)
+                    {
+                        if (legacy) settings.UnifiedId = null;
+                        settings.AuthToken = null;
+                        CoreSettings.Save(suppressCloudBackup: true);
+                    }
+                    return legacy ? RestoreOutcome.Cleared : RestoreOutcome.TokenCleared;
+                }
+                Log.Warning("Session validation returned {Status} - keeping cached state.", response.StatusCode);
+            }
+            catch (Exception ex) { Log.Warning(ex, "Session validation failed (network error) - keeping cached state."); }
+            return RestoreOutcome.Kept;
         }
 
         /// <summary>
