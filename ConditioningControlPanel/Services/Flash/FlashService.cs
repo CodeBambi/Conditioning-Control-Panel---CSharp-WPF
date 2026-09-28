@@ -2284,6 +2284,21 @@ namespace ConditioningControlPanel.Services
         /// returns a done, shardless state, and this hands back the same null either way.
         /// UI thread (every SafeCloseFlashWindow caller is), so _random needs no guard.
         /// </summary>
+        // The last style Mix dealt, so two pops in a row never leave the same way. UI thread only.
+        private FlashExitStyle? _lastExitStyle;
+
+        /// <summary>
+        /// The leave animation for a popped compositor flash, or null for the plain cut
+        /// (FlashExitStyle.None). Owned Shatter is decided first and wins. See FlashExit.
+        /// </summary>
+        private FlashExitState? BuildExit()
+        {
+            var setting = App.Settings?.Current?.FlashExitStyle ?? FlashExitStyle.Mix;
+            if (FlashExit.Pick(setting, _lastExitStyle, _random) is not { } style) return null;
+            _lastExitStyle = style;
+            return FlashExit.Begin(style, MotionFx.Level, _random.Next());
+        }
+
         private FlashShatterState? BuildShatter(FlashWindow window, Compositor.FlashLayer.FlashItem item)
         {
             if (!window.PreviewV2 && (App.Settings?.Current?.FlashShatterEnabled != true || !OwnsFlashV2())) return null;
@@ -4930,7 +4945,9 @@ namespace ConditioningControlPanel.Services
                         var item = window.LayerItem;
                         window.LayerItem = null;
                         var shatter = shatterThis ? BuildShatter(window, item) : null;
+                        var exit = shatter == null && shatterThis ? BuildExit() : null;
                         if (shatter != null) _flashLayer?.BeginShatter(item, shatter);
+                        else if (exit != null) _flashLayer?.BeginExit(item, exit);
                         else _flashLayer?.Remove(item);
                     }
                     // Dropped with the item: a dead pendulum must not keep reserving its pivot
