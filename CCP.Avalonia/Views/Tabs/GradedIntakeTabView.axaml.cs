@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -56,6 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnAttachedToVisualTree(e);
+            RefreshPastQuizzes();   // WPF refreshes on tab navigation (MainWindow.TabNavigation.cs:548)
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
             SyncFromSettings();
         }
@@ -99,13 +101,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // that pretends the pass was spent.
         private void BtnStartIntake_Click(object? sender, RoutedEventArgs e) { }
 
-        // ponytail: the classic AI quiz, ConditioningControlPanel/MainWindow/MainWindow.Lab.cs.
-        // QuizWindow is NOT unported, as this note used to say - CCP.Avalonia/Views/Windows/
-        // QuizWindow.axaml.cs keeps its own score, sounds and companion hand-off, and the AI half
-        // is CoreAi and does answer. What is left is MainWindow.Lab.cs's own preamble around it
-        // (the tier door and the question build). Moot either way: the button is IsVisible="False"
-        // in the markup on both heads, so nothing can reach this today.
-        private void BtnStartQuiz_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF MainWindow.Lab.cs:116. The button is IsVisible="False" on both heads ("pending
+        /// removal"), so no user reaches this; kept wired so unhiding it is one attribute.</summary>
+        internal async void BtnStartQuiz_Click(object? sender, RoutedEventArgs e)
+        {
+            var lifetime = Application.Current?.ApplicationLifetime as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+            if (lifetime?.Windows.OfType<Windows.QuizWindow>().FirstOrDefault() is { } existing)
+            {
+                existing.Activate();
+                return;
+            }
+
+            if (!CoreAi.IsAvailable)
+            {
+                if (TopLevel.GetTopLevel(this) is Window owner)
+                    await Dialogs.MessageDialog.ShowAsync(owner, "Login Required",
+                        Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"));
+                return;
+            }
+
+            var quizWindow = new Windows.QuizWindow(ChkQuizFullscreen.IsChecked == true, ChkQuizDrone.IsChecked == true);
+            quizWindow.Closed += (_, _) => RefreshPastQuizzes();
+            quizWindow.Show();
+        }
+
+        /// <summary>WPF MainWindow.Lab.cs:468. ponytail: WPF hides this list with BtnStartQuiz,
+        /// pending removal; port the body (trend rows + QuizReportWindow rows) if it's ever unhidden.</summary>
+        internal void RefreshPastQuizzes()
+        {
+            if (!BtnStartQuiz.IsVisible) return;
+        }
 
         // WPF MainWindow.Lab.cs:600 → PopQuizService.TestPopQuiz.
         private void BtnTestPopQuiz_Click(object? sender, RoutedEventArgs e) =>
