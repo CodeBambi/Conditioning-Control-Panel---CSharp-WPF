@@ -15,6 +15,9 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The settings service, or null on the headless render path.</summary>
         public static SettingsService? Settings { get; private set; }
 
+        /// <summary>In-app corner toasts (WPF App.Notifications). Queues until the shell attaches it.</summary>
+        public static Helpers.NotificationService Notifications { get; } = new();
+
         private AvaloniaCoreDispatch? _desktopDispatch;
         private int _exitHandled;
         private int _warnedMissingCustomAssetsPath;
@@ -200,6 +203,20 @@ namespace ConditioningControlPanel.Avalonia
                 desktop.MainWindow = sessions is null
                     ? new Views.Windows.MainShellWindow()
                     : new Views.Windows.MainShellWindow(sessions);
+                if (global::Avalonia.Controls.ControlExtensions.FindControl<global::Avalonia.Controls.Panel>(desktop.MainWindow, "NotificationHost") is { } toastHost)
+                    Notifications.AttachHost(toastHost);
+
+                // The two toast seams, as WPF App.xaml.cs:390 and :453 seed them.
+                CoreProgram.NotifyProvider = (message, kind, duration) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    Notifications.Show(message,
+                        Enum.TryParse<Helpers.NotificationType>(kind, out var t) ? t : Helpers.NotificationType.Info,
+                        duration));
+                // ponytail: WPF's Reconnect-Patreon branch (PatreonReconnectRule, head-only) is absent -
+                // this head has no Patreon sign-in to repair, so every refusal takes the "See tiers" branch.
+                var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
+                CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
+                        Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
                 desktop.MainWindow.Closed += (_, _) =>
