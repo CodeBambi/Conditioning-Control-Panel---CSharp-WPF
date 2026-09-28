@@ -153,11 +153,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ProgramsTab, TeaseCard, TabNavigation) and PremiumFeature - both WPF-head. TierGate is NOT
         // among them any more: CCP.Core/Services/TierGate.cs, over the CoreEntitlement seam.
         //
-        // "LinkPhoneDialog and LayeredAudioWindow, none of them on this head" was FALSE and is
-        // gone: both are ported (CCP.Avalonia/Views/Dialogs/LinkPhoneDialog.axaml.cs and
-        // Views/Windows/LayeredAudioWindow.axaml.cs). They are the only two handlers in the WPF
-        // file that do not forward - and each is refused for its own reason, at its own site
-        // below. Neither is waiting on a service.
+        // LinkPhoneDialog and LayeredAudioWindow are the only two handlers in the WPF file that
+        // do not forward. LayeredAudioWindow is wired (HomeBtnAudioLayers_Click); LinkPhoneDialog
+        // is refused for its own reason at its own site below.
         // ------------------------------------------------------------------------------
         private void WireStubs()
         {

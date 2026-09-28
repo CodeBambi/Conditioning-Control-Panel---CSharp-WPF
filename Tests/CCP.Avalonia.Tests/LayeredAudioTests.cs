@@ -69,6 +69,13 @@ public sealed class LayeredAudioTests
             s.AudioLayersEnabled = false;
             layers.Restart();                                    // stopped and master off: stays off
             Assert.Equal(4, opened.Count);
+
+            layers.Start(ignoreMasterToggle: true);              // audio-only bed, master still off
+            Assert.Equal(6, opened.Count);
+            layers.Restart();                                    // was playing, master off: WPF's Start() refuses
+            Assert.True(opened[4].Disposed && opened[5].Disposed);
+            Assert.Equal(6, opened.Count);
+            Assert.False(layers.IsPlaying);
         }
         finally
         {

@@ -353,6 +353,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 _open = null;
                 Serilog.Log.Error(ex, "[AudioLayers] Could not open the Audio Layers window.");
+                // As WPF: tell the user instead of leaving a dead button.
+                if (context != null && TopLevel.GetTopLevel(context) is Window owner)
+                    _ = Dialogs.MessageDialog.ShowAsync(owner, ConditioningControlPanel.Localization.Loc.Get("title_audio_layers"),
+                        ConditioningControlPanel.Localization.Loc.GetF("msg_audio_layers_open_failed", ex.Message));
             }
         }
 

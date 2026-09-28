@@ -62,23 +62,32 @@ namespace ConditioningControlPanel.Avalonia
             var layers = LayeredAudio.Instance!;
             layers.Start();
             Thread.Sleep(1500);
-            var started = Ours();
-            Console.WriteLine($"-- 2 layers started (100%, 50%):\n{string.Join('\n', started)}");
+            var ok = Expect("2 layers started (100%, 50%)", "79,100");
             b.Volume = 20; // as the window: the setting, then the live call
             layers.SetTrackVolumeLive(b, 20);
             Thread.Sleep(500);
-            var changed = Ours();
-            Console.WriteLine($"-- layer 2 set to 20%:\n{string.Join('\n', changed)}");
+            ok &= Expect("layer 2 set to 20%", "58,100");
+            // The faucet clip is 0.23 s: still playing at the right volume ~3 s in means it looped
+            // past its end many times, re-applying volume on every restart.
+            Thread.Sleep(1000);
+            ok &= Expect("after ~13 loops of the 0.23 s clip", "58,100");
             a.Enabled = false;
             layers.Restart();
             Thread.Sleep(1500);
-            var one = Ours();
-            Console.WriteLine($"-- layer 1 disabled:\n{string.Join('\n', one)}");
+            ok &= Expect("layer 1 disabled, Restart", "58");
             layers.Stop();
             Thread.Sleep(1000);
-            var ok = started.Length == 2 && changed.Length == 2 && !changed.SequenceEqual(started) && one.Length == 1 && Ours().Length == 0;
+            ok &= Expect("stopped", "");
             Console.WriteLine($"layers: {(ok ? "PASS" : "FAIL")}");
             return ok ? 0 : 1;
+        }
+
+        private static bool Expect(string step, string want)
+        {
+            var streams = Ours();
+            var got = string.Join(',', streams.Select(l => int.Parse(l[(l.LastIndexOf(' ') + 1)..].TrimEnd('%'))).Order());
+            Console.WriteLine($"-- {step}: want [{want}] got [{got}]\n{string.Join('\n', streams)}");
+            return got == want;
         }
 
         /// <summary>Our own sink-inputs as "name volume%".</summary>

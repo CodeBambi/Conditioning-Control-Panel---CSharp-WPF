@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Threading;
 using ConditioningControlPanel.Models;
 using LibVLCSharp.Shared;
@@ -118,30 +120,62 @@ namespace ConditioningControlPanel.Avalonia.Platform
             lock (_lock) { if (_disposed) return; _disposed = true; StopInternal(); }
         }
 
-        /// <summary>A LibVLC player that repeats its file forever (WPF rewinds at EOF).</summary>
+        /// <summary>App exit: stop every player synchronously (bounded), as WPF disposes its WaveOut.</summary>
+        internal void Shutdown()
+        {
+            Task[] closing;
+            lock (_lock)
+            {
+                closing = _players.Values.OfType<VlcLayerPlayer>().Select(p => p.Closing).ToArray();
+                Dispose();
+            }
+            Task.WaitAll(closing, 2000);
+        }
+
+        /// <summary>A LibVLC player that loops its file forever (WPF rewinds at EOF).</summary>
         internal sealed class VlcLayerPlayer : ILayerPlayer
         {
             private readonly MediaPlayer _player;
             private readonly Media _media;
+            private readonly TaskCompletionSource _closed = new();
             private int _volume;
-            private bool _playing;
+            private bool _playing, _disposed;
+
+            public Task Closing => _closed.Task;
 
             public VlcLayerPlayer(LibVLC vlc, string path)
             {
                 _media = new Media(vlc, path, FromType.FromPath);
-                _media.AddOption(":input-repeat=65535");
                 _player = new MediaPlayer(_media);
                 // As in LibVlcAudio: volume set before Playing, or on libvlc's own thread, is lost.
                 _player.Playing += (_, _) => ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    lock (this) { _playing = true; _player.Volume = _volume; }
+                    lock (this) { if (_disposed) return; _playing = true; ApplyVolume(); }
+                });
+                // WPF's LoopingSampleProvider never ends: restart at EOF, never from libvlc's thread.
+                _player.EndReached += (_, _) => ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    lock (this) { if (_disposed) return; _playing = false; _player.Stop(); _player.Play(); }
                 });
                 _player.Play();
             }
 
             public int Volume
             {
-                set { lock (this) { _volume = value; if (_playing) _player.Volume = value; } }
+                set { lock (this) { if (_disposed) return; _volume = value; if (_playing) ApplyVolume(); } }
+            }
+
+            // ponytail: the pulse output drops a volume set too soon after the stream opens, so re-apply
+            // until libvlc reports it (bounded, 20 x 25 ms). Caller holds lock(this).
+            private void ApplyVolume()
+            {
+                for (var i = 0; i < 20; i++)
+                {
+                    _player.Volume = _volume;
+                    if (_player.Volume == _volume) return;
+                    Thread.Sleep(25);
+                }
+                Log.Debug("LayeredAudio: volume {V} did not stick", _volume);
             }
 
             public void Dispose()
@@ -149,7 +183,9 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 // Off the caller's thread: Stop blocks until libvlc tears the output down.
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    lock (this) { _playing = false; _player.Stop(); _player.Dispose(); _media.Dispose(); }
+                    try { lock (this) { _disposed = true; _player.Stop(); _player.Dispose(); _media.Dispose(); } }
+                    catch (Exception ex) { Log.Debug(ex, "LayeredAudio: dispose"); }
+                    finally { _closed.TrySetResult(); }
                 });
             }
         }
