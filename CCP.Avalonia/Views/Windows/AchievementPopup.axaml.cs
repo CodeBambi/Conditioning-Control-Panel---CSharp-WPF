@@ -120,11 +120,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// would make mod art unreachable), then this head's <c>avares://</c> copy, then a loose
         /// file on disk beside the exe (a content pack or hand-dropped art). Nothing found leaves
         /// the art box empty, which is the WPF original's own path for a missing file.
-        ///
-        /// <para>ponytail: only six achievement PNGs are linked into this head - the six in
-        /// <c>Assets/achievements/</c>. Every other id resolves through the disk probe or not at
-        /// all, so most popups still show an empty plate. Linking the rest is a .csproj change,
-        /// which this layer does not own.</para>
         /// </summary>
         private void LoadAchievementImage(string imageName)
         {

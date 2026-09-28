@@ -137,14 +137,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 for (int i = 1; i <= 4; i++)
                     this.FindControl<TextBlock>("Bullet" + i)!.Foreground = accent;
 
-                // ponytail: the sigil Rectangle stays hidden, and NOT for the reason the old note
-                // gave. Avalonia has OpacityMask on Visual, and Helpers.ModArt.TryLoad is already
-                // this head's ModResourceResolver.ResolveImage - so the mask itself is portable.
-                // Two things actually block it:
-                //   1. Assets/programs (sigil_*.png, plate_default.png) is NOT linked into
-                //      CCP.Avalonia.csproj, so avares://CCP.Avalonia/Resources/programs/... does
-                //      not exist and TryLoad returns null for every one. A csproj this layer does
-                //      not own; see Assets/README.md for the Link= shape.
+                // ponytail: the sigil Rectangle stays hidden. Mask + Helpers.ModArt.TryLoad are portable;
+                // what is missing is the file NAME: WPF's ProgramArt.Sigil ?? DayPlate
+                // (Services/Program/ProgramArt.cs Slug/TemplateSlug) is head-only, and a second copy
+                // here is the fork this repo forbids. Move that naming to Core, then link
+                // Assets/programs and set the mask.
                 // The rail still draws its gradient, glow and title, which is what the WPF
                 // shared-fallback-plate path looks like.
                 this.FindControl<Rectangle>("ArtGlow")!.Fill = GlowBrush(accent);

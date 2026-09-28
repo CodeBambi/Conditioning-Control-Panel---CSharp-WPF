@@ -46,6 +46,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public AiPermissionsGrid()
         {
             InitializeComponent();
+            Helpers.ModArt.BindFeaturePlates(this, "features/lab_aimemory_hero.png", null, LabAiMemoryHeroArt);
             SyncFromSettings();
             Loaded += (_, _) => ApplyTierGate();
         }

@@ -26,17 +26,12 @@
        feat:SessionLock.Owned,
        hover:HoverPop.IsEnabled          ->  dropped (WPF-head attached behaviours; they follow
                                              their services to Core)
-       ImageBrush GradedIntakeHeroBrush  ->  dropped: Resources/features/lab_quiz_hero.png is not
-                                             an AvaloniaResource in this head, and x:Name on a
-                                             brush is AVLN2000. A lime wash stands in on both
-                                             plates, exactly as SpiralFeatureControl/BrainDrain do.
-                                             ponytail: restore it as an avares:// ImageBrush when
-                                             the art moves - MainWindow.xaml.cs's labHeroMap writes
-                                             its ImageSource so drone mods can swap the green art.
-       side art Background={Binding ...  ->  painted with the same wash directly rather than bound
-         ElementName=GradedIntakeHeroArtHost} through the hero host; with the ImageBrush gone the
-                                             binding carried nothing, and dropping it leaves the
-                                             file with zero {Binding} (so no x:DataType is needed).
+       ImageBrush GradedIntakeHeroBrush  ->  x:Name on a brush is AVLN2000, so the two plate
+                                             Borders are named and ModArt.BindFeaturePlates paints
+                                             features/lab_quiz_hero.png into both, mod override
+                                             first (WPF: MainWindow.xaml.cs labHeroMap).
+       side art Background={Binding ...  ->  painted by the same call rather than bound
+         ElementName=GradedIntakeHeroArtHost}  through the hero host.
 
      HorizontalAlignment on the capped column: WPF authors the StackPanel Center. WPF's Grid
      reports the FULL proportional width of its star columns, so a Center-aligned StackPanel
@@ -61,13 +56,6 @@
             <GradientStop Color="#14B8E85C" Offset="0"/>
             <GradientStop Color="#00000000" Offset="0.55"/>
         </LinearGradientBrush>
-        <!-- Stands in for the dropped hero/side ImageBrush: opaque enough that neither plate
-             renders as an empty rectangle. ponytail: delete when lab_quiz_hero.png ships here. -->
-        <LinearGradientBrush x:Key="TabHueArtBrush" StartPoint="0%,0%" EndPoint="100%,100%">
-            <GradientStop Color="#4CB8E85C" Offset="0"/>
-            <GradientStop Color="#1AB8E85C" Offset="0.55"/>
-            <GradientStop Color="#33FF69B4" Offset="1"/>
-        </LinearGradientBrush>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -79,8 +67,7 @@
                         BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
                     <Grid ClipToBounds="True">
                         <Border x:Name="GradedIntakeHeroArtHost" CornerRadius="0,16,16,0" Width="240"
-                                HorizontalAlignment="Right" Background="{StaticResource TabHueArtBrush}"
-                                Opacity="0.9">
+                                HorizontalAlignment="Right">
                             <Border.OpacityMask>
                                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
                                     <GradientStop Color="#00000000" Offset="0"/>
@@ -338,11 +325,10 @@
                     <!-- SIDE ART. On WPF the art is the Border's BACKGROUND (an ImageBrush), not a
                          child Image: a Border clips its Background to CornerRadius but does NOT clip
                          child content, so a child Image would square off the rounded corners
-                         (round-2 lesson). The lime wash stands in until the art ships in this head.
+                         (round-2 lesson). Painted from code with the hero.
                          The scrim is kept verbatim. -->
-                    <Border Grid.Column="1" Margin="10,0,0,10" CornerRadius="14"
+                    <Border x:Name="GradedIntakeSideArt" Grid.Column="1" Margin="10,0,0,10" CornerRadius="14"
                             BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
-                            Background="{StaticResource TabHueArtBrush}"
                             VerticalAlignment="Stretch" MinHeight="200" MaxHeight="560">
                         <!-- Scrim so the plate sits under the page instead of fighting it. -->
                         <Border CornerRadius="12" IsHitTestVisible="False">

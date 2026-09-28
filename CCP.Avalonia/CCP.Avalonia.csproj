@@ -97,9 +97,8 @@
         - Twemoji (4,009 files, 19 MB) is not needed at all. Avalonia renders COLR/CPAL colour
           emoji natively, which is why the ported views draw a plain TextBlock where WPF needed
           an SVG. Packaging it would ship a fallback nothing reaches for.
-        - achievements/ is 70 files and 38 MB; six are referenced. skills/ is 27 files; one is.
-          Those two are listed file by file rather than globbed, so the assembly does not carry
-          32 MB no view asks for.
+        - skills/ is 27 files; one is referenced, so it is listed file by file. achievements/
+          (70 files, 38 MB) is globbed: AchievementPopup can show any of them.
         - Audio, video, models and mod assets are Content in the WPF head - loaded off disk at
           runtime, not compiled in - so they are not resources here either.
 
@@ -118,19 +117,17 @@
                       Link="Resources\lockdown\%(RecursiveDir)%(Filename)%(Extension)" />
     <AvaloniaResource Include="..\Assets\descent\**\*"
                       Link="Resources\descent\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\exclusives\**\*"
+                      Link="Resources\exclusives\%(RecursiveDir)%(Filename)%(Extension)" />
     <AvaloniaResource Include="..\Assets\features\*.png"
                       Link="Resources\features\%(Filename)%(Extension)" />
     <AvaloniaResource Include="..\Assets\app.ico" Link="Resources\app.ico" />
     <AvaloniaResource Include="..\Assets\*.png"
                       Link="Resources\%(Filename)%(Extension)" />
 
+    <AvaloniaResource Include="..\Assets\achievements\*.png"
+                      Link="Resources\achievements\%(Filename)%(Extension)" />
     <!-- Sparse folders: only what a view names. -->
-    <AvaloniaResource Include="..\Assets\achievements\10_hours_pink.png" Link="Resources\achievements\10_hours_pink.png" />
-    <AvaloniaResource Include="..\Assets\achievements\lv_10.png" Link="Resources\achievements\lv_10.png" />
-    <AvaloniaResource Include="..\Assets\achievements\pop_the_Thought.png" Link="Resources\achievements\pop_the_Thought.png" />
-    <AvaloniaResource Include="..\Assets\achievements\retinal_burn.png" Link="Resources\achievements\retinal_burn.png" />
-    <AvaloniaResource Include="..\Assets\achievements\spiral_eyes.png" Link="Resources\achievements\spiral_eyes.png" />
-    <AvaloniaResource Include="..\Assets\achievements\total_lockdown.png" Link="Resources\achievements\total_lockdown.png" />
     <AvaloniaResource Include="..\Assets\skills\pink_rush.png" Link="Resources\skills\pink_rush.png" />
   </ItemGroup>
 

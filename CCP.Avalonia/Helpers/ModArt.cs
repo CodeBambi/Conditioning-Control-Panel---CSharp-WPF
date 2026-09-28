@@ -1,7 +1,11 @@
 using System;
 using System.IO;
+using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Avalonia.Platform;
+using ConditioningControlPanel.Models;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Helpers
@@ -73,6 +77,26 @@ namespace ConditioningControlPanel.Avalonia.Helpers
                 Log.Warning(ex, "[ModArt] built-in {Name} would not load", resourceName);
                 return null;
             }
+        }
+            /// <summary>
+        /// A feature card's hero strip and side plate, painted from one feature PNG the way the WPF
+        /// cards' HeroArtBrush/SideArtBrush are (UniformToFill, hero right-aligned at 0.9), and
+        /// repainted on every mod switch while <paramref name="owner"/> is on screen.
+        /// </summary>
+        internal static void BindFeaturePlates(Control owner, string resourceName, Border? hero, Border side)
+        {
+            void Paint()
+            {
+                var art = TryLoad(resourceName);
+                if (art == null) return;
+                if (hero != null) hero.Background = new ImageBrush(art) { Stretch = Stretch.UniformToFill, AlignmentX = AlignmentX.Right, Opacity = 0.9 };
+                side.Background = new ImageBrush(art) { Stretch = Stretch.UniformToFill };
+            }
+            void OnModChanged(object? sender, ModPackage mod) => Dispatcher.UIThread.Post(Paint);
+
+            Paint();
+            owner.AttachedToVisualTree += (_, _) => { CoreMods.ModChanged += OnModChanged; Paint(); };
+            owner.DetachedFromVisualTree += (_, _) => CoreMods.ModChanged -= OnModChanged;
         }
     }
 }

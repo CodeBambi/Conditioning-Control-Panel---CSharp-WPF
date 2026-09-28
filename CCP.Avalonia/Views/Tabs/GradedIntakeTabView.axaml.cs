@@ -42,6 +42,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
             // x:Name fields, and the seed below reads three of them.
             InitializeComponent();
+            Helpers.ModArt.BindFeaturePlates(this, "features/lab_quiz_hero.png", GradedIntakeHeroArtHost, GradedIntakeSideArt);
 
             // The frequency readout is written from code (WPF: "{val}/session hr"), so it has to be
             // rewritten when the language changes or the {loc:Str} binding still living under that
