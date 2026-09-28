@@ -320,8 +320,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnNavBlinkTrainer_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("blinktrainer");
         private void BtnNavRemoteControl_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("remotecontrol");
 
-        // Still a stub: the web-app door launches a browser, which is a service on this head.
-        private void DoorWebApp_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
-        private void BtnNavMediaLog_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("assets");
+        // WPF MainWindow.TabNavigation.cs:986-994: open the web app, retire the banner beat.
+        private void DoorWebApp_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            try { _ = Launcher.LaunchUriAsync(new Uri("https://app.cclabs.app")); RetireWebBannerBeat(); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "DoorWebApp_Click failed"); }
+        }
+
+        // WPF MainWindow.TabNavigation.cs:1066: the Media Log is a window, deliberately no ShowTab.
+        private void BtnNavMediaLog_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            try { new MediaHistoryWindow().Show(this); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "BtnNavMediaLog_Click failed"); }
+        }
     }
 }

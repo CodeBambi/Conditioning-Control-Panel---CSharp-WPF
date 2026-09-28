@@ -159,6 +159,23 @@
                                     HorizontalAlignment="Center" Cursor="Hand">
                                 <TextBlock x:Name="TxtPickFolder" TextWrapping="Wrap"/>
                             </Button>
+
+                            <!-- the gate (WPF FirstRunWizard.xaml:172-190) -->
+                            <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="16"
+                                    Margin="0,12,0,0" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <CheckBox x:Name="ChkAgeConfirm" Theme="{StaticResource ItemCheckBox}"
+                                              VerticalAlignment="Top" Margin="0,1,14,0"/>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock x:Name="TxtAgeConfirm" Foreground="White" FontSize="13.5"
+                                                   TextWrapping="Wrap" LineHeight="20" Cursor="Hand"/>
+                                        <HyperlinkButton Padding="0" Margin="0,6,0,0" Foreground="{DynamicResource PinkBrush}"
+                                                         NavigateUri="https://app.cclabs.app/policies/prohibited-content">
+                                            <TextBlock x:Name="TxtContentPolicy" FontSize="12.5" TextDecorations="Underline"/>
+                                        </HyperlinkButton>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
@@ -297,6 +314,9 @@
                             HorizontalAlignment="Left" Cursor="Hand" IsVisible="False">
                         <TextBlock x:Name="TxtBack"/>
                     </Button>
+
+                    <TextBlock x:Name="TxtCloseHint" Grid.Column="1" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11.5" VerticalAlignment="Center" Margin="0,0,12,0" TextWrapping="Wrap"/>
 
                     <Button x:Name="BtnSkip" Grid.Column="2"
                             Theme="{StaticResource OutlineButton}" FontSize="12" Padding="18,10"
