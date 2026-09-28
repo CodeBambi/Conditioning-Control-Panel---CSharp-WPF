@@ -79,38 +79,38 @@ public static class AchievementMeters
             => Add(id, targetMinutes / 60.0, (p, _) => minutes(p) / 60.0);
 
         // ---- progression: the level milestones, straight off the tracker's own list ----
-        foreach (var (id, level) in AchievementService.LevelMilestones)
+        foreach (var (id, level) in AchievementRules.LevelMilestones)
             Add(id, level, (_, lvl) => lvl);
-        Add("window_shopping", AchievementService.WindowShoppingPointsSpent, (p, _) => p.LifetimeSkillPointsSpent);
+        Add("window_shopping", AchievementRules.WindowShoppingPointsSpent, (p, _) => p.LifetimeSkillPointsSpent);
 
         // ---- time & sessions ----
-        Hours("rose_tinted_reality", AchievementService.RoseTintedPinkFilterMinutes, p => p.TotalPinkFilterMinutes);
-        Hours("threadbare", AchievementService.ThreadbareSpiralMinutes, p => p.TotalSpiralMinutes);
-        Hours("screen_time", AchievementService.ScreenTimeVideoMinutes, p => p.TotalVideoMinutes);
-        Add("daily_maintenance", AchievementService.DailyMaintenanceConsecutiveDays, (p, _) => p.ConsecutiveDays);
-        Add("thirty_day_doll", AchievementService.ThirtyDayDollConsecutiveDays, (p, _) => p.ConsecutiveDays);
-        Add("retinal_burn", AchievementService.RetinalBurnFlashImages, (p, _) => p.TotalFlashImages);
-        Add("pavlov", GamificationBridge.PavlovKeywordTriggers, (p, _) => p.KeywordTriggersFired);
+        Hours("rose_tinted_reality", AchievementRules.RoseTintedPinkFilterMinutes, p => p.TotalPinkFilterMinutes);
+        Hours("threadbare", AchievementRules.ThreadbareSpiralMinutes, p => p.TotalSpiralMinutes);
+        Hours("screen_time", AchievementRules.ScreenTimeVideoMinutes, p => p.TotalVideoMinutes);
+        Add("daily_maintenance", AchievementRules.DailyMaintenanceConsecutiveDays, (p, _) => p.ConsecutiveDays);
+        Add("thirty_day_doll", AchievementRules.ThirtyDayDollConsecutiveDays, (p, _) => p.ConsecutiveDays);
+        Add("retinal_burn", AchievementRules.RetinalBurnFlashImages, (p, _) => p.TotalFlashImages);
+        Add("pavlov", AchievementRules.PavlovKeywordTriggers, (p, _) => p.KeywordTriggersFired);
 
         // ---- minigames & skill ----
-        Add("mathematicians_nightmare", AchievementService.MathematiciansNightmareStreak, (p, _) => p.BubbleCountCorrectStreak);
-        Add("pop_the_thought", AchievementService.PopTheThoughtBubbles, (p, _) => p.TotalBubblesPopped);
-        Add("word_perfect", AchievementService.WordPerfectLockCards, (p, _) => p.TotalLockCardsCompleted);
-        Add("eyes_front", AchievementService.EyesFrontAttentionChecks, (p, _) => p.TotalAttentionChecksPassed);
-        Add("mercy_beggar", AchievementService.MercyBeggarFailures, (p, _) => p.AttentionCheckFailures);
-        Add("pillow_talk", GamificationBridge.PillowTalkMessages, (p, _) => p.CompanionMessages);
-        Add("blink_and_youll_miss_it", GamificationBridge.BlinkAndYoullMissItBlinks, (p, _) => p.BlinkTrainerBlinks);
-        Add("teachers_pet", GamificationBridge.TeachersPetPasses, (p, _) => p.QuizzesPassed);
-        Add("honor_roll", GamificationBridge.HonorRollCategories, (p, _) => p.PerfectedQuizCategories.Count);
-        Add("hands_free", GamificationBridge.HandsFreeGazePops, (p, _) => p.GazePops);
+        Add("mathematicians_nightmare", AchievementRules.MathematiciansNightmareStreak, (p, _) => p.BubbleCountCorrectStreak);
+        Add("pop_the_thought", AchievementRules.PopTheThoughtBubbles, (p, _) => p.TotalBubblesPopped);
+        Add("word_perfect", AchievementRules.WordPerfectLockCards, (p, _) => p.TotalLockCardsCompleted);
+        Add("eyes_front", AchievementRules.EyesFrontAttentionChecks, (p, _) => p.TotalAttentionChecksPassed);
+        Add("mercy_beggar", AchievementRules.MercyBeggarFailures, (p, _) => p.AttentionCheckFailures);
+        Add("pillow_talk", AchievementRules.PillowTalkMessages, (p, _) => p.CompanionMessages);
+        Add("blink_and_youll_miss_it", AchievementRules.BlinkAndYoullMissItBlinks, (p, _) => p.BlinkTrainerBlinks);
+        Add("teachers_pet", AchievementRules.TeachersPetPasses, (p, _) => p.QuizzesPassed);
+        Add("honor_roll", AchievementRules.HonorRollCategories, (p, _) => p.PerfectedQuizCategories.Count);
+        Add("hands_free", AchievementRules.HandsFreeGazePops, (p, _) => p.GazePops);
 
         // ---- deeper ----
-        Add("down_the_rabbit_hole", GamificationBridge.DownTheRabbitHolePlays, (p, _) => p.EnhancementsPlayed);
-        Hours("permanent_resident", AchievementService.PermanentResidentDeeperMinutes, p => p.DeeperMinutes);
+        Add("down_the_rabbit_hole", AchievementRules.DownTheRabbitHolePlays, (p, _) => p.EnhancementsPlayed);
+        Hours("permanent_resident", AchievementRules.PermanentResidentDeeperMinutes, p => p.DeeperMinutes);
 
         // ---- creator ----
-        Add("curator", GamificationBridge.CuratorDistinctMods, (p, _) => p.ActivatedModIds.Count);
-        Add("community_supported", GamificationBridge.CommunityModsCount, (p, _) => p.CommunityModIds.Count);
+        Add("curator", AchievementRules.CuratorDistinctMods, (p, _) => p.ActivatedModIds.Count);
+        Add("community_supported", AchievementRules.CommunityModsCount, (p, _) => p.CommunityModIds.Count);
 
         return rules;
     }
