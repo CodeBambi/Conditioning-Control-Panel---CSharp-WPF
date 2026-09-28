@@ -119,9 +119,10 @@ public sealed class ModServiceCoreTests
         }.ToString());
         var oldProvider = CoreSettings.ServiceProvider;
         var oldLinks = CoreModsHooks.KnownVideoLinksProvider;
+        SettingsService? svc = null;
         try
         {
-            var svc = new SettingsService();
+            svc = new SettingsService();
             CoreSettings.ServiceProvider = () => svc;
             var wpfList = new System.Collections.Generic.Dictionary<string, string>(
                 HypnotubeDefaultLinks.KnownVideoTitles, StringComparer.OrdinalIgnoreCase);
@@ -135,6 +136,7 @@ public sealed class ModServiceCoreTests
         }
         finally
         {
+            Quiesce(svc);
             CoreModsHooks.KnownVideoLinksProvider = oldLinks;
             CoreSettings.ServiceProvider = oldProvider;
             ResetProfile();
