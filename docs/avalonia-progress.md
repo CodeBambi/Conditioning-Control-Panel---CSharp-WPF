@@ -659,3 +659,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   Core too; Core's heartbeat now sends the four fields. Decision rows for the body builder, unknown fields and heartbeat.
 - Evidence: SyncBodyGoldenTests (full, fresh-with-nulls, migration graft, omit-unknown, HMAC, heartbeat; goldens from the
   pre-switch code), fail-proofed. Nothing new is reachable on Avalonia yet (7c). Review: ACCEPT.
+
+## avalonia-port/logout-clear-core: +141 (auth unit 7b)
+- Core ProgressionClear.Apply = the settings half of WPF ClearProgressionData (same 28 fields, same order, XP watermark
+  cleared, UnifiedId kept); WPF calls it, then saves and resets quests/achievements/skills as before.
+- Evidence: ProgressionClearTests (every field), fail-proofed. Avalonia uses it with the push in 7c. Review: ACCEPT.
