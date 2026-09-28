@@ -362,3 +362,9 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Avalonia seeds CoreModArt in the desktop lifetime (effective once unit 5 creates ModService).
 - Evidence: CoreModArtResolutionTests (case, backslash files, traversal incl. rooted skin paths, order), fail-proofed;
   test sandbox asserted. Review: ACCEPT. Follow-ups: cache the Linux probe when mods go live; case-variant folder clashes.
+
+## avalonia-port/ccpmod-backslash-extraction: +54
+- One Core helper CcpmodArchive.Extract for every .ccpmod/zip extraction of mod content (ModService, ContentPackService x2,
+  ReleaseContentService, both ModCreatorWindow Load paths). Windows: passthrough to ZipFile.ExtractToDirectory with the
+  same arguments (identical at every caller, reviewed). Elsewhere: Windows-zipped backslash entries land in folders;
+  traversal still rejected; the target folder is created like the framework does. Test fail-proofed. Review: ACCEPT.

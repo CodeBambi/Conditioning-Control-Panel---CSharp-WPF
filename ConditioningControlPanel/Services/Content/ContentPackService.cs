@@ -484,7 +484,7 @@ namespace ConditioningControlPanel.Services
 
                 // Extract to temp folder first (run on background thread to not block UI)
                 var tempExtractPath = Path.Combine(_packsFolder, $".{packGuid}_extract");
-                await Task.Run(() => ZipFile.ExtractToDirectory(tempZipPath, tempExtractPath));
+                await Task.Run(() => CcpmodArchive.Extract(tempZipPath, tempExtractPath));
 
                 // Create encrypted pack structure
                 Directory.CreateDirectory(packFolder);
@@ -618,7 +618,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 status?.Invoke("Extracting...");
-                await Task.Run(() => ZipFile.ExtractToDirectory(zipPath, tempExtractPath));
+                await Task.Run(() => CcpmodArchive.Extract(zipPath, tempExtractPath));
 
                 Directory.CreateDirectory(packFolder);
                 var contentFolder = Path.Combine(packFolder, "content");
