@@ -351,7 +351,8 @@ namespace ConditioningControlPanel.Avalonia
                     Serilog.Log.Warning("CustomAssetsPath '{Path}' does not exist — falling back to default assets folder. Imports/extractions will go to the default location.", customPath);
             }
             return _defaultAssetsPath ??= DefaultAssetsPath(OperatingSystem.IsLinux(),
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), CorePaths.UserData);
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), CorePaths.UserData,
+                sandboxed: !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")));
         }
 
         private string? _defaultAssetsPath;
@@ -360,15 +361,26 @@ namespace ConditioningControlPanel.Avalonia
         /// The media folder used while CustomAssetsPath is empty. Windows keeps WPF's
         /// UserData/assets; Linux uses ~/ccp media (user request), created with its subfolders on
         /// first use. A Linux profile that already has files in UserData/assets keeps using it -
-        /// nothing is moved and nothing switches silently. Decided once per process.
+        /// nothing is moved and nothing switches silently. A CCP_USERDATA_DIR sandbox (tests, live
+        /// checks), an unknown home or an unreadable legacy folder also keep UserData/assets, so
+        /// nothing outside the sandbox is created. Decided once per process.
         /// </summary>
-        internal static string DefaultAssetsPath(bool isLinux, string home, string userData)
+        internal static string DefaultAssetsPath(bool isLinux, string home, string userData, bool sandboxed)
         {
             var legacy = Path.Combine(userData, "assets");
-            if (!isLinux) return legacy;
-            if (Directory.Exists(legacy) && Directory.EnumerateFiles(legacy, "*", SearchOption.AllDirectories).Any())
+            if (!isLinux || sandboxed || string.IsNullOrWhiteSpace(home)) return legacy;
+            try
             {
-                Serilog.Log.Information("Media folder: keeping {Legacy} (it already holds files) instead of ~/ccp media", legacy);
+                if (Directory.Exists(legacy) && Directory.EnumerateFiles(legacy, "*",
+                        new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true }).Any())
+                {
+                    Serilog.Log.Information("Media folder: keeping {Legacy} (it already holds files) instead of ~/ccp media", legacy);
+                    return legacy;
+                }
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "Media folder: could not read {Legacy}; keeping it", legacy);
                 return legacy;
             }
             var media = Path.Combine(home, "ccp media");
