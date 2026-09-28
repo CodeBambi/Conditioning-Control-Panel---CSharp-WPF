@@ -177,6 +177,14 @@ namespace ConditioningControlPanel
                 // Don't fire while a calibration window is already open (its
                 // verify step asks the user to blink) or while we're mid-trigger.
                 if (_rapidBlinkRecalInProgress || WebcamCalibrationWindow.IsShowing) return;
+                // Tester report 2026-09-27: the Blink Trainer asks for blinks, so a fast run of them
+                // halted the whole session; and under Lockdown the halt left a paused session that
+                // Lockdown then refused to resume. Neither is a "stop and recalibrate" moment.
+                if (App.BlinkTrainer?.IsRunning == true || App.Lockdown?.IsActive == true)
+                {
+                    _rapidBlinkTimes.Clear();
+                    return;
+                }
 
                 var now = DateTime.UtcNow;
                 _rapidBlinkTimes.Enqueue(now);
