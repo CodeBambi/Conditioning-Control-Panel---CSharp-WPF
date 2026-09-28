@@ -20,16 +20,17 @@ export function createJuice({ bus, camera, reduced = () => !!(window.PBP?.settin
     update(dt) {
       if (reduced()) { reset(); return; }
       age += dt;
-      energy *= Math.exp(-14 * dt);
+      energy *= Math.exp(-11 * dt);
       if (energy < .001) energy = 0;
     },
     render(draw) {
       if (!energy || reduced()) { draw(); return; }
       position.copy(camera.position); rotation.copy(camera.quaternion);
-      camera.translateX(sign * .032 * energy * Math.cos(age * 75));
-      camera.translateY(.025 * energy * Math.sin(age * 91 + .8));
-      camera.translateZ(-.045 * energy);
-      camera.rotateZ(sign * .002 * energy * Math.cos(age * 52));
+      // owner, 2026-09-29: a hit should be felt in normal play too, still subtle
+      camera.translateX(sign * .06 * energy * Math.cos(age * 75));
+      camera.translateY(.048 * energy * Math.sin(age * 91 + .8));
+      camera.translateZ(-.07 * energy);
+      camera.rotateZ(sign * .005 * energy * Math.cos(age * 52));
       camera.updateMatrixWorld();
       try { draw(); } finally {
         camera.position.copy(position); camera.quaternion.copy(rotation); camera.updateMatrixWorld();

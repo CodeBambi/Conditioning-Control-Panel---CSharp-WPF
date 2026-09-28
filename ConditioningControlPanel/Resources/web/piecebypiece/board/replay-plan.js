@@ -47,10 +47,11 @@ export const REPLAY = Object.freeze({
   flash: .3,        // white flash on a panel's own hit
   flashSec: .2,
   // the hit, per panel
-  punch: .11,       // zoom pulse at contact (1 + punch)
-  punchSec: .34,
-  shake: .011,      // panel shake, fraction of the stage
-  shakeSec: .3,
+  punch: .2,        // zoom pulse at contact (1 + punch)
+  punchSec: .4,
+  shake: .026,      // frame shake, fraction of the stage (owner, 2026-09-29: more)
+  shakeSec: .42,
+  shakeKin: .35,    // the other panels jolt this much with a neighbour's hit
   shakeHz: 23,
   chroma: 9,        // chromatic split at contact, px at the panel rim
   chromaSec: .32,
@@ -174,7 +175,15 @@ export function panelState(layout, i, t, end = replayLength(layout) - REPLAY.exi
   const flash = hit ? REPLAY.flash * Math.max(0, 1 - h / REPLAY.flashSec) : 0;
   const zoom = 1 + REPLAY.punch * decay(REPLAY.punchSec);
   const amp = REPLAY.shake * decay(REPLAY.shakeSec), w = h * Math.PI * 2 * REPLAY.shakeHz;
-  const sx = amp * Math.sin(w + i * 1.7), sy = amp * Math.cos(w * 1.31 + i * 2.3);
+  let sx = amp * Math.sin(w + i * 1.7), sy = amp * Math.cos(w * 1.31 + i * 2.3);
+  // a hit shakes the whole page a little: every other panel takes a smaller jolt
+  for (let j = 0; j < n; j++) {
+    if (j === i || hitAt(layout, j) >= end) continue;
+    const hj = t - hitAt(layout, j);
+    if (hj < 0 || hj >= REPLAY.shakeSec) continue;
+    const aj = REPLAY.shake * REPLAY.shakeKin * (1 - hj / REPLAY.shakeSec) ** 2, wj = hj * Math.PI * 2 * REPLAY.shakeHz;
+    sx += aj * Math.sin(wj + i * 2.9); sy += aj * Math.cos(wj * 1.17 + i * .7);
+  }
   const chroma = REPLAY.chroma * decay(REPLAY.chromaSec, 1.5);
   const burst = hit && h < REPLAY.burstSec ? h / REPLAY.burstSec : -1;
   const word = hit && h < REPLAY.wordSec
@@ -211,6 +220,20 @@ export function createLayoutDeck(random = Math.random) {
     last = bag.pop();
     return last;
   };
+}
+
+/**
+ * The replay lens zooms with the action (owner, 2026-09-29: "play more with zoom"):
+ * it creeps in over the run-up, crashes in at contact, and eases back out after.
+ * x = clip time relative to the hit; returns a field-of-view multiplier (< 1 = closer).
+ */
+export const LENS = Object.freeze({ creep: .14, creepSec: .9, crash: .16, crashSec: .45, release: .9 });
+export function lensZoom(x) {
+  const run = x < 0 ? clamp01(1 + x / LENS.creepSec) : 1;
+  const creep = LENS.creep * run * run * (3 - 2 * run);
+  const crash = x >= 0 ? LENS.crash * Math.max(0, 1 - x / LENS.crashSec) ** 2 : 0;
+  const out = x > 0 ? clamp01(x / LENS.release) : 0;
+  return 1 - (creep * (1 - .6 * out * out * (3 - 2 * out)) + crash);
 }
 
 /** A panel scaled about its own centroid, for the punch in and out. */

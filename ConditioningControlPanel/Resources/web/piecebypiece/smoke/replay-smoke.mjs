@@ -98,9 +98,9 @@ for (const layout of Object.keys(LAYOUTS)) {
     const on = panelState(layout, i, hitAt(layout, i) + .03);
     assert.ok(on.zoom > 1.05 && on.chroma > 3 && on.burst >= 0 && on.burst < .2 && on.word.alpha === 1 && on.flash > 0,
       `${layout} ${i}: the hit punches`);
-    assert.ok(Math.hypot(on.ox, on.oy) > 0 && Math.hypot(on.ox, on.oy) < .02, `${layout} ${i}: the panel shakes a little`);
+    assert.ok(Math.hypot(on.ox, on.oy) > 0 && Math.hypot(on.ox, on.oy) < .045, `${layout} ${i}: the frame shakes, within reason`);
     const after = panelState(layout, i, hitAt(layout, i) + REPLAY.wordSec + .05);
-    assert.ok(after.zoom === 1 && after.burst === -1 && after.word.alpha === 0 && Math.hypot(after.ox, after.oy) === 0, `${layout} ${i}: and settles`);
+    assert.ok(after.zoom === 1 && after.burst === -1 && after.word.alpha === 0 && Math.hypot(after.ox, after.oy) <= REPLAY.shake * REPLAY.shakeKin * 1.5, `${layout} ${i}: and settles (a neighbour's hit may still jolt it)`);
   }
   assert.ok(exitLength(true) < exitLength(false), `${layout}: a skip leaves faster`);
 }

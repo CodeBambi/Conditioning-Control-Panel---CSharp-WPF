@@ -26,7 +26,7 @@
 
 import * as THREE from 'three';
 import { LAYOUTS, clipTime, panelState, panelCount, replayLength, replayAllowed,
-  createLayoutDeck, placePoly, offStage, exitLength, orient, REPLAY, hitAt } from './replay-plan.js';
+  createLayoutDeck, placePoly, offStage, exitLength, orient, REPLAY, hitAt, lensZoom } from './replay-plan.js';
 import { REPLAY_VERT, REPLAY_FRAG, burstStyle, impactWords, boil } from './replay-fx.js';
 import { createReplayShots } from './replay-shots.js';
 import { presentation } from '../game/preferences.js';
@@ -354,6 +354,38 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     }
   }
 
+  // ---- the spotlight ---------------------------------------------------------------
+  // In a replay only the board and the two men in the fight keep their light
+  // (owner, 2026-09-29): the room, the walls and every other man sink to REST.
+  // Colours are scaled for the panel renders and put back straight after.
+  const REST_DIM = .68;
+  const saved = new Map();
+  function dimRest(clip, k) {
+    saved.clear();
+    if (k >= .999) return () => {};
+    const keep = new Set([view.boardGroup, clip.attacker, clip.victim].filter(Boolean));
+    const visit = o => {
+      if (keep.has(o) || o.isPoints) return;
+      if (o.isMesh || o.isLine || o.isSprite) {
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (!m || saved.has(m)) continue;
+          saved.set(m, [m.color?.clone(), m.emissive?.clone(), m.envMapIntensity]);
+          m.color?.multiplyScalar(k); m.emissive?.multiplyScalar(k);
+          if (typeof m.envMapIntensity === 'number') m.envMapIntensity *= k;
+        }
+      }
+      for (const c of o.children) visit(c);
+    };
+    visit(view.scene);
+    const bg = view.scene.background?.isColor ? view.scene.background.clone() : null;
+    if (bg) view.scene.background.multiplyScalar(k);
+    return () => {
+      for (const [m, [c, e, env]] of saved) { if (c) m.color.copy(c); if (e) m.emissive.copy(e); if (typeof env === 'number') m.envMapIntensity = env; }
+      saved.clear();
+      if (bg) view.scene.background.copy(bg);
+    };
+  }
+
   // ---- the frame, after the board is drawn ---------------------------------------
   function afterRender(dt) {
     record(dt);
@@ -376,6 +408,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     view.scene.traverseVisible(o => { if (o.isPoints) points.push(o); });
     for (const o of points) o.visible = false;
     const polys = [];
+    const undim = dimRest(clip, 1 - REST_DIM * clamp01(replay.t / .2) * (1 - clamp01((replay.t - replay.end) / .25)));
     const prevTarget = renderer.getRenderTarget();
     for (let i = 0; i < 3; i++) quads[i].visible = false;
     try {
@@ -395,6 +428,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
           panel: { cx, cy, w: pw, h: ph } };
         cam.aspect = bw / bh;
         shots.aim(shot, cam, ctx);
+        cam.fov *= lensZoom(clipT - clip.hit);
         // the picture travels with its panel: the lens centres on where the panel IS
         cam.setViewOffset(bw, bh, bw / 2 - placed.cx * bw, bh / 2 - placed.cy * bh, bw, bh);
         cam.updateProjectionMatrix();
@@ -422,6 +456,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     } finally {
       for (const [o, s] of live) applySnap(o, s, null, 0, group, true);
       for (const o of points) o.visible = true;
+      undim();
       renderer.setRenderTarget(prevTarget);
     }
     const auto = renderer.autoClear;
