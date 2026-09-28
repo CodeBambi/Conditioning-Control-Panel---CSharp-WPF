@@ -103,6 +103,10 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private double _progress;
         private bool _hasBlock;
         private bool _breathing;
+        private IDisposable? _visibilityWatch;
+
+        /// <summary>True while the breath animation runs. Test seam.</summary>
+        internal bool IsBreathing => _breathing;
 
         public SpiralGlyph()
         {
@@ -161,8 +165,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _numeral[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("PinkSoftBrush");
             Children.Add(_numeral);
 
-            Loaded += (_, _) => { Relayout(); RefreshMotion(); };
-            Unloaded += (_, _) => StopBreath();
+            Loaded += (_, _) =>
+            {
+                Relayout(); RefreshMotion();
+                _visibilityWatch?.Dispose();
+                _visibilityWatch = EffectiveVisibility.Watch(this, RefreshMotion);
+            };
+            Unloaded += (_, _) => { StopBreath(); _visibilityWatch?.Dispose(); _visibilityWatch = null; };
             SizeChanged += (_, _) => Relayout();
         }
 
@@ -313,7 +322,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             try
             {
-                bool wanted = IsVisible && IsLoaded && AmbientFxCanvas.Env.AllowAmbientLoops;
+                bool wanted = IsEffectivelyVisible && IsLoaded && AmbientFxCanvas.Env.AllowAmbientLoops;
                 if (!wanted) { StopBreath(); return; }
                 if (_breathing) return;
                 _breathing = true;
