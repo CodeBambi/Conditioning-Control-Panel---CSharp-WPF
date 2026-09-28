@@ -11,10 +11,9 @@
 //     door open/close height animation. ponytail: panels snap open (Height =
 //     NaN) and shut (0); the WPF MeasureDoorPanel + NavDoorExpandMs tween returns with the FX
 //     partials.
-//   - Per-tab side effects on the way in (RefreshPresetsList, spending HasSeenProgramsTab and
-//     the first-run explainer, StopPolling on leaving Available Subjects, MaybeShowFeatureIntro,
+//   - Per-tab side effects on the way in (RefreshPresetsList, StopPolling on leaving Available Subjects, MaybeShowFeatureIntro,
 //     UpdatePatreonUI, RefreshIntakePassTile, RefreshPremiumRail). Those reach App.* or a service.
-//     The FOUR that do not are restored in OnTabShown below:
+//     The FIVE that do not are restored in OnTabShown below:
 //       * StudioTab.OnTabShown() for "studio" and StudioTab.FocusRackEntry("haptics") for the
 //         haptics alias - ported view state on StudioTabView. Without the second, ShowTab("haptics")
 //         landed on the rack's last selection instead of the Haptics module, and OpenStudioModule
@@ -25,6 +24,7 @@
 //         arriving at a tab cannot find a stale lock.
 //       * UpdateProfileSharingSummary() on "discord" - see the case itself for why it lands here
 //         and not in the FX partial WPF reaches it through.
+//       * HasSeenProgramsTab and ProgramsIntroPopup.ShowIfFirstTime on "programs".
 //   - EmiDesk (EmiTargets.NoteTabOpened). The Bark hook is REAL now, through CoreBark, and fires
 //     in the same place WPF fires it - see ShowTab.
 //   - The three keys that are WINDOWS, not tabs, and the one launcher door: "patreon" (opens
@@ -194,6 +194,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // vat poll, RefreshProfileShareButton, EnsureProfileMeFirst, StaggerProfileCards)
                     // needs MainShellWindow.ProfileFx.cs / .ProfileVat.cs / .Browser.cs.
                     case "discord": UpdateProfileSharingSummary(); break;
+
+                    // WPF MainWindow.TabNavigation.cs:324-337: spend the tab's seen-flag on any
+                    // route in, then the one-time explainer on top of the tab just shown.
+                    // ponytail: no rail pulse to stop on this head (StopProgramsTabPulse).
+                    case "programs":
+                        if (!CoreSettings.Current.HasSeenProgramsTab)
+                        {
+                            CoreSettings.Current.HasSeenProgramsTab = true;
+                            CoreSettings.Save();
+                        }
+                        ProgramsIntroPopup.ShowIfFirstTime(this);
+                        break;
                 }
             }
             catch { /* a navigation must never throw */ }

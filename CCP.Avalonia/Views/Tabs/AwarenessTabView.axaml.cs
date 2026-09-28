@@ -25,8 +25,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// <para>What is NOT restored is the runtime: nothing here starts or stops an engine. The
     /// Patreon gate (<c>KeywordTriggerService.HasAccess</c>), the keyboard hook, ScreenOcr,
-    /// KeywordHighlight's overlay windows, the recently-seen-app ring, the tutorial and the preset
-    /// editor are all head-side, and each stub below names the one it wants.</para>
+    /// KeywordHighlight's overlay windows and the recently-seen-app ring are all head-side, and each stub below names the one it wants.</para>
     /// </summary>
     public partial class AwarenessTabView : UserControl
     {
@@ -143,6 +142,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 AwarenessAppListPanel.IsVisible = s.KeywordTriggerAppScope != AwarenessAppScope.Everywhere;
 
                 UpdateStatusIndicator(masterOn);
+                RefreshAwarenessPresetCards();
             }
             catch (Exception ex)
             {
@@ -397,19 +397,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ------------------------------------------------------------------ still head-side
 
         /// <summary>
-        /// WPF: MainWindow.Settings.cs:660 -&gt; StartAwarenessTutorial() -&gt;
-        /// StartTutorial(TutorialType.Awareness). The seam takes the tour by name and the head
-        /// parses it, so this is the whole call. This head does NOT seed
-        /// CoreTutorial.StartAction today, so the button reaches the seam and no tour appears -
-        /// the seam's documented no-op, not a wrong action, and one seeding line away from real.
-        ///
-        /// ponytail: the WPF version also hooks TutorialCompleted once, to pop the Puppy preset's
-        /// editor when the tour is finished rather than skipped. That half needs
-        /// ConditioningControlPanel/Views/Dialogs/AwarenessPresetDetailDialog.xaml, which has no
-        /// Avalonia twin; CoreTutorial.Finished carries the completed/skipped bool it would need.
+        /// WPF: MainWindow.Settings.cs:660 -&gt; StartAwarenessTutorial(). A tour finished (not
+        /// skipped) pops the Puppy preset's editor (MainWindow.Settings.cs:689). This head does NOT
+        /// seed CoreTutorial.StartAction today, so no tour appears yet - the seam's documented no-op.
         /// </summary>
         private void BtnAwarenessTutorial_Click(object? sender, RoutedEventArgs e)
-            => CoreTutorial.Start("Awareness");
+        {
+            EventHandler<bool>? onFinished = null;
+            onFinished = async (_, completed) =>
+            {
+                CoreTutorial.Finished -= onFinished;
+                if (!completed) return;
+                try
+                {
+                    if (Presets.GetPreset("builtin.puppy") is { } puppy) await OpenPresetDetail(puppy);
+                }
+                catch (Exception ex) { Log.Debug("Awareness tutorial editor-open failed: {Error}", ex.Message); }
+            };
+            CoreTutorial.Finished += onFinished;
+            CoreTutorial.Start("Awareness");
+        }
 
         private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e)
         {
@@ -418,19 +425,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         /// <summary>
-        /// WPF: MainWindow.Awareness.cs:1175. Its SECOND branch is ported verbatim - reveal, scroll
-        /// to and pulse the custom-trigger drawer, which KeywordTriggersPanel.RevealTriggerEditor
-        /// already does on this head and which is idempotent by design, because "nothing visibly
-        /// happened" is how this link got reported as a dead click in the first place.
-        ///
-        /// ponytail: WPF PREFERS a first branch when a preset is installed - open that preset's
-        /// inline editor. KeywordTriggerPresetService is in Core
-        /// (CCP.Core/Services/KeywordTriggerPresetService.cs), so the lookup is available; what is
-        /// missing is the dialog, ConditioningControlPanel/Views/Dialogs/AwarenessPresetDetailDialog.xaml,
-        /// which has no Avalonia twin. Falling through to the drawer is WPF's own no-preset path,
-        /// so the link is never dead and never lands somewhere wrong.
+        /// WPF: MainWindow.Awareness.cs:1175. Prefer the installed preset's editor; with none
+        /// installed, reveal, scroll to and pulse the custom-trigger drawer (idempotent by design).
         /// </summary>
-        private void LnkAwarenessAdvanced_Click(object? sender, RoutedEventArgs e)
-            => KeywordPanel?.RevealTriggerEditor();
+        private async void LnkAwarenessAdvanced_Click(object? sender, RoutedEventArgs e)
+        {
+            if (GetMostRecentlyInstalledPreset() is { } installed) await OpenPresetDetail(installed);
+            else KeywordPanel?.RevealTriggerEditor();
+        }
     }
 }
