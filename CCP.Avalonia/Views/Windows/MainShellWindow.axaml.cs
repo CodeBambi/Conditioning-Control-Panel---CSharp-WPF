@@ -90,6 +90,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeLanguageSelector();
 
             // WPF put these on the Window element itself; Avalonia routes them as attached events.
+            HookResizeEdges();
             AddHandler(DragDrop.DropEvent, Window_Drop);
             AddHandler(DragDrop.DragEnterEvent, Window_DragEnter);
             AddHandler(DragDrop.DragOverEvent, Window_DragOver);

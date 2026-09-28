@@ -326,8 +326,11 @@
     </Window.Resources>
 
     <Grid x:Name="RootGrid">
-    <!-- Viewbox scales all content proportionally with window size -->
-    <Viewbox Stretch="Fill">
+    <!-- Viewbox scales all content proportionally with window size. WPF uses Fill, which is
+         near-uniform on the landscape screens it was tuned on; on a portrait or odd-aspect work
+         area (and maximized there) Fill stretched every glyph and plate. Uniform keeps the art
+         true and centres it, the margin painted by the window's DarkerBgBrush. -->
+    <Viewbox x:Name="ShellViewbox" Stretch="Uniform">
         <!-- Design canvas at reference size. Phase 1 grew it 1489 -> 1679 by ADDING a
              190px nav-rail column on the left; column 1 is still exactly 1489 wide, so
              every tab layout keeps the width it was authored against (fx-inventory §12.8:
