@@ -6,8 +6,8 @@
 //   - The icon stays visible while the window is up (WPF shows it only while hidden). On this head
 //     the tray is the panic control a takeover needs without a global hotkey, so it must always be
 //     reachable.
-//   - "Stop everything" is an extra item for that reason: it unticks Flash, Subliminal and Bouncing
-//     Text (so their cards stay truthful) and takes the overlays down. The app stays up.
+//   - "Stop everything" is an extra item for that reason: it is StopEngine - overlays down, saved
+//     flags untouched, so the next Start brings them back. The app stays up.
 //   - With no tray host (Linux desktop without a StatusNotifierWatcher) Avalonia's tray falls back
 //     silently, so X would hide the window behind nothing. X is gated on a host probe: no host, X exits.
 // The first-minimize balloon (TrayIconService.cs:165-171) goes through Platform/OsNotifications.
@@ -72,16 +72,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static NativeMenuItem Item(string key, Action action) =>
             new(Loc.Get(key)) { Command = new CompanionRelayCommand(action) };
 
-        /// <summary>The panic item: untick the three overlay features, then stop what is on screen.</summary>
-        internal static void StopEverything()
-        {
-            var s = CoreSettings.Current;
-            s.FlashEnabled = false;
-            s.SubliminalEnabled = false;
-            s.BouncingTextEnabled = false;
-            CoreSettings.Save();
-            App.StopDesktopOverlays(final: false);
-        }
+        /// <summary>The panic item: WPF StopEngine. Saved flags stay as the user set them.</summary>
+        internal static void StopEverything() => StopEngine();
 
         /// <summary>TrayIconService.ShowWindow + MainWindow's OnShowRequested (ShowAvatarTube).</summary>
         public void ShowFromTray()

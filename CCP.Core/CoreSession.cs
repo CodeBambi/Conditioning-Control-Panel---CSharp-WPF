@@ -28,6 +28,16 @@ namespace ConditioningControlPanel
             get { try { return IsEngineRunningProvider?.Invoke() ?? false; } catch { return false; } }
         }
 
+        /// <summary>WPF <c>_sessionEngine.IsRunning &amp;&amp; CurrentSession != null</c> - a SESSION,
+        /// not the plain engine. Plain Start must not answer true here (it would grey the cards).
+        /// Unseeded until a session runner exists: false, the truth.</summary>
+        public static volatile Func<bool>? IsSessionRunningProvider;
+
+        public static bool IsSessionRunning
+        {
+            get { try { return IsSessionRunningProvider?.Invoke() ?? false; } catch { return false; } }
+        }
+
         // The running session's hold on the phrase pools, for the mod service's per-mod backup
         // (#906). WPF reads each through SessionEngine.Active, so "no active session" is folded
         // into every delegate: unseeded, or seeded with no session running, answers no-op /

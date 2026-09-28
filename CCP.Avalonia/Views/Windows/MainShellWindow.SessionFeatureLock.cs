@@ -13,10 +13,9 @@
 //
 // WHAT IS REAL HERE. The lock's whole derivation and both refusal gates, plus the paint on the
 // two surfaces this head carries:
-//   - IsSessionFeatureLockActive reads CoreSession.IsEngineRunning. That seam is the exact
-//     mapping: WPF asks _sessionEngine.IsRunning && CurrentSession != null, and the seam's
-//     unseeded answer (false = not running) is the truth for a head with no engine, so the lock
-//     is simply never active here rather than being fake-active.
+//   - IsSessionFeatureLockActive reads CoreSession.IsSessionRunning - WPF asks
+//     _sessionEngine.IsRunning && CurrentSession != null, a session and NOT the plain engine, so
+//     a plain Start never greys the cards. Unseeded until a session runner exists: never active.
 //   - The ribbon (SettingsTabView.ProgramFeatureLockRibbon / TxtProgramFeatureLock, both in the
 //     ported XAML) shows and hides with the derived state and carries the reason.
 //   - The Studio rack's feature panels (StudioTabView.HostedFeaturePanels) get the master
@@ -78,14 +77,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// True while ANY session is live - program, preset or remote. Fully derived from
-        /// <see cref="CoreSession.IsEngineRunning"/>; nothing here latches, and a fault answers
+        /// <see cref="CoreSession.IsSessionRunning"/>; nothing here latches, and a fault answers
         /// "not locked" because a stuck lock is worse than a missing one.
         /// </summary>
         internal bool IsSessionFeatureLockActive
         {
             get
             {
-                try { return CoreSession.IsEngineRunning; }
+                try { return CoreSession.IsSessionRunning; }
                 catch { return false; }
             }
         }

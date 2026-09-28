@@ -139,21 +139,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// early when <c>!_isRunning</c>, so the checkbox there arms the effect and
         /// <c>OverlayService.Start()</c> is what puts it on screen.
         ///
-        /// <para>That gate is mirrored here <b>except when there is no engine at all</b>, which is
-        /// this head today - <see cref="CoreSession"/> is unseeded, so the provider is null and
-        /// "not running" is a statement about the head rather than about the session. Mirroring it
-        /// literally would mean the checkbox could never draw anything on Linux, ever. With no
-        /// engine to own the tint's lifecycle, the card owns it; the moment a head seeds
-        /// <c>CoreSession</c> this falls back to the WPF rule on its own.</para>
+        /// <para>Mirrored here: the desktop path seeds <see cref="CoreSession"/> from
+        /// <see cref="CoreEngine"/>, and Start/Stop refresh the tint. Unseeded (renders, tests)
+        /// means no engine at all, and the card owns the tint.</para>
         /// </summary>
         private static bool ShouldShow()
             => CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning;
 
-        // ponytail: nothing calls Refresh at startup, so a tint left enabled in settings does not
-        // come back until the user touches the card. Restoring it belongs to whatever owns the
-        // app's start-up sequence - OverlayService.Start() on the WPF side - and putting it in
-        // App.OnFrameworkInitializationCompleted here would show a full-screen overlay before the
-        // shell window the user needs in order to switch it off is even up.
+        // Start (MainShellWindow.StartEngine) is what restores a tint left enabled - WPF OverlayService.Start().
 
         /// <summary>The two safety refusals. False means the window has already been closed.</summary>
         private static bool Accept(TintOverlayWindow w)

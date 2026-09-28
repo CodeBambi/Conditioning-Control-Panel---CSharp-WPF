@@ -3,7 +3,7 @@
 // The decision is the same Core PanicPolicy; the listener is Platform/X11PanicKey (XInput2 raw keys,
 // non-consuming like the WH_KEYBOARD_LL hook - docs/avalonia-decisions.md, panic key row).
 // ponytail: no game surfaces, video grace pause, bark or session engine on this head yet, so the
-// stop pass is the tray's Stop everything plus the lock card; wire each as its surface arrives. The #919b off-thread watchdog is omitted: the listener is its own thread,
+// stop pass is StopEngine plus the lock card; wire each as its surface arrives. The #919b off-thread watchdog is omitted: the listener is its own thread,
 // so a wedged UI thread cannot drop the hook, but the queued stop still waits for the UI thread.
 // ponytail: Windows has no panic listener on this head yet (WPF's WH_KEYBOARD_LL hook is not ported);
 // X11PanicKey.Start returns false there and the tray's Stop everything is the only panic control.
@@ -57,8 +57,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Serilog.Log.Information("Panic key pressed ({Rung})", rung);
             if (rung == PanicPolicy.Rung.DismissLockCard) StopLockCards();
             if (!PanicPolicy.StopsSurfaces(rung)) return;
-            StopEverything();
+            bool wasRunning = CoreEngine.IsRunning;
+            // WPF RunPanicStopTail: StopEngine while running, StopAdHocEffects otherwise - both are
+            // CoreEngine.Stop here (it stops everything either way) and neither unticks a flag.
+            StopEngine();
             StopLockCards();   // WPF StopAdHocEffects: App.LockCard.Stop(dismissOpenCards: true)
+            if (wasRunning) ShowFromTray();   // WPF: Show + Activate the main window after a running stop
 
             if ((now - _lastPanicTime).TotalMilliseconds > 2000) _panicPressCount = 0;
             if (PanicPolicy.AdvancesExitLadder(rung)) { _panicPressCount++; _lastPanicTime = now; }
@@ -79,7 +83,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static DispatcherTimer? _portalWatch;
 
         private static bool AnyEffectRunning =>
-            CoreFlash.IsRunning || CoreSubliminal.IsRunning || BouncingTextOverlay.IsRunning;
+            CoreEngine.IsRunning || CoreFlash.IsRunning || CoreSubliminal.IsRunning || BouncingTextOverlay.IsRunning;
 
         /// <summary>Every desktop-effect start goes through here. <paramref name="start"/> must re-check
         /// that the effect is still wanted: it can run up to 30 s later, after a panic or an untick.</summary>
