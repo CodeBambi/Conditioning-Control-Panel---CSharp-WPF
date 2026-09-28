@@ -1,0 +1,53 @@
+// Recipe that recorded SyncBodyGoldenTests' strings from the PRE-SyncBody WPF code
+// (ProfileSyncService.cs v2SyncData anonymous object, the descent_migration graft, SignRequest and the
+// heartbeat body, copied verbatim with fixed inputs). Run:
+//   d=$(mktemp -d); cd $d; dotnet new console -n rec -o . >/dev/null
+//   dotnet add reference <repo>/CCP.Core/CCP.Core.csproj; cp <this file> Program.cs
+//   dotnet run
+using System.Security.Cryptography;
+using System.Text;
+using ConditioningControlPanel.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+object Body(bool fresh) => new
+{
+    unified_id = "u_abc123",
+    xp = 12345,
+    level = 40,
+    achievements = new List<string> { "first_flash", "night_owl" },
+    stats = new Dictionary<string, object>
+    {
+        ["completed_sessions"] = 3,
+        ["total_video_minutes"] = Math.Round(12.34, 1),
+        ["last_streak_date"] = "2026-09-01",
+        ["quest_completion_dates"] = new List<string> { "2026-08-31" },
+    },
+    unlocked_skills = new List<string> { "skill_a" },
+    skill_points = 2,
+    total_conditioning_minutes = 90.5,
+    companion_progress = fresh ? new Dictionary<int, CompanionProgress>() : new Dictionary<int, CompanionProgress> { [0] = new CompanionProgress() },
+    allow_discord_dm = true,
+    show_online_status = false,
+    share_profile_picture = true,
+    public_share_avatar = false,
+    goon_share_avatar = true,
+    goon_share_dm = false,
+    cosmetics = fresh ? null : new ProfileCosmetics { BannerId = "b1", Accent = "#FF69B4" },
+    web_xp_claim_ack = fresh ? null : "claim-7",
+    install_date = fresh ? null : "2025-01-02",
+    descent_epoch = 1,
+    reset_weekly_quest = false,
+    reset_daily_quest = false,
+    force_streak_override = false,
+    force_skills_reset = fresh ? null : (bool?)false,
+};
+
+Console.WriteLine(JsonConvert.SerializeObject(Body(false)));
+Console.WriteLine(JsonConvert.SerializeObject(Body(true)));
+var payload = JObject.Parse(JsonConvert.SerializeObject(Body(true)));
+payload["descent_migration"] = new JObject { ["choice"] = "keep" };
+Console.WriteLine(payload.ToString(Formatting.None));
+using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes("u_abc123:ccp-anticheat-2026")))
+    Console.WriteLine(Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes("1760000000:{\"xp\":1}"))).ToLowerInvariant());
+Console.WriteLine(JsonConvert.SerializeObject(new { unified_id = "u_abc123", is_active = true, in_session = false, app_version = "6.11.3" }));
