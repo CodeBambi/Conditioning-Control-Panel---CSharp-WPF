@@ -177,6 +177,25 @@ namespace ConditioningControlPanel
                 // Don't fire while a calibration window is already open (its
                 // verify step asks the user to blink) or while we're mid-trigger.
                 if (_rapidBlinkRecalInProgress || WebcamCalibrationWindow.IsShowing) return;
+                // Tester report 2026-09-27: the Blink Trainer asks for blinks, so a fast run of them
+                // halted the whole session; and under Lockdown the halt left a paused session that
+                // Lockdown then refused to resume. Owner 2026-09-28: it also cut through Strict Lock
+                // and a disabled panic key. The gesture is a hands-free stop button, so it is never
+                // more permissive than the panic key (BlinkStopGate).
+                var s = App.Settings?.Current;
+                var block = Services.Safety.BlinkStopGate.Check(
+                    blinkTrainerRunning: App.BlinkTrainer?.IsRunning == true,
+                    lockdownActive: App.Lockdown?.IsActive == true,
+                    leashed: Controls.Leash.LeashSurfaces.IsLeashed,
+                    panicKeyEnabled: s?.PanicKeyEnabled != false,
+                    strictLockEnabled: s?.StrictLockEnabled == true);
+                if (block != Services.Safety.BlinkStopGate.Block.None)
+                {
+                    if (_rapidBlinkTimes.Count > 0)
+                        App.Logger?.Debug("Rapid-blink stop ignored: {Reason}", block);
+                    _rapidBlinkTimes.Clear();
+                    return;
+                }
 
                 var now = DateTime.UtcNow;
                 _rapidBlinkTimes.Enqueue(now);

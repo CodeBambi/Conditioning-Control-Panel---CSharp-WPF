@@ -14,6 +14,8 @@ internal static class CompanionV2TestDefault
     [ModuleInitializer]
     internal static void PinLegacyCompanion()
     {
+        // A Release build ignores the variable unless told otherwise (CI builds Release).
+        Services.Companion.CompanionExperience.HonourEnvironmentForTests = true;
         if (Environment.GetEnvironmentVariable("CCP_COMPANION_V2") == null)
             Environment.SetEnvironmentVariable("CCP_COMPANION_V2", "0");
     }
