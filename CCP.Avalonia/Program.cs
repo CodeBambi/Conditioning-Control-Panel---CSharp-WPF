@@ -11,6 +11,9 @@ namespace ConditioningControlPanel.Avalonia
         [STAThread]
         public static int Main(string[] args)
         {
+            // The session's hold on the phrase pools (#906); WPF seeds the same three in App.xaml.cs:324.
+            ConditioningControlPanel.Services.PhrasePoolCustody.Seed();
+
             // --smoke runs a headless self-check and exits, so CI can prove the head boots
             // without a display server. Without it the app starts normally.
             if (Array.IndexOf(args, "--smoke") >= 0)
