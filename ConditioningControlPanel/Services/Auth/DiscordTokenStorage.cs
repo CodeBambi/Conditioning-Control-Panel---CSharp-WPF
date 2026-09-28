@@ -30,6 +30,39 @@ namespace ConditioningControlPanel.Services
             _cachePath = Path.Combine(storageDir, "discord_cache.dat");
         }
 
+        private static readonly Lazy<DiscordTokenStorage> Shared = new(() => new DiscordTokenStorage());
+
+        /// <summary>
+        /// Core DiscordAccount's CoreSecrets names (<c>discord_auth</c> / <c>discord_cache</c>, JSON of the
+        /// same models) mapped onto this store, so files, entropy and bytes on disk are unchanged.
+        /// False for any other name. Null clears.
+        /// </summary>
+        public static bool TryReadSecret(string name, out string? json)
+        {
+            object? value = name switch
+            {
+                "discord_auth" => Shared.Value.RetrieveTokens(),
+                "discord_cache" => Shared.Value.RetrieveCachedState(),
+                _ => null,
+            };
+            json = value == null ? null : JsonConvert.SerializeObject(value);
+            return name is "discord_auth" or "discord_cache";
+        }
+
+        public static bool TryWriteSecret(string name, string? json)
+        {
+            if (name == "discord_cache")
+            {
+                if (json == null) Shared.Value.ClearCachedState();
+                else Shared.Value.StoreCachedState(JsonConvert.DeserializeObject<DiscordCachedState>(json)!);
+                return true;
+            }
+            if (name != "discord_auth") return false;
+            if (json == null) Shared.Value.ClearTokens();
+            else if (JsonConvert.DeserializeObject<DiscordTokenData>(json) is { } t) Shared.Value.StoreTokens(t.AccessToken, t.RefreshToken, t.ExpiresAt);
+            return true;
+        }
+
         /// <summary>
         /// Store tokens securely using DPAPI
         /// </summary>
