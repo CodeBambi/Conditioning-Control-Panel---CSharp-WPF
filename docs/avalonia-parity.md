@@ -430,3 +430,4 @@ New WPF surfaces from the second main sync (`avalonia-port/main-20260928b`), rea
 | win-emi-desk-extras | `ConditioningControlPanel/Windows/EmiDesk/EmiDeskWindow.Presentation.cs`, `.Toss.cs`, `.Tube.cs` | - | missing | Emi desk presentation, toss and tube additions. |
 | feat-session-summary-passive | `ConditioningControlPanel/Services/Session/SessionSummaryPresentation.cs` | - | missing | Recap opens passive (non-modal, not topmost) while a video, lock card, pop quiz or bubble count is up (#1303). |
 | companion-ccp-default-voice | builtin-ccp-default barks | - | missing | Avalonia has no bark path; folder linked but unplayed |
+| release-content-pack-script | build-content-packs.ps1 | - | blocked | $PackSpecs folders, installer-deletion paths and $ExtraDirIfEmpty still point at ConditioningControlPanel/Resources, which the shared Assets move emptied; fix with the phase-5 packaging switch (the Avalonia installer) |
