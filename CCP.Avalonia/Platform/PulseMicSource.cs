@@ -45,14 +45,25 @@ namespace ConditioningControlPanel.Avalonia.Platform
             CoreSpeech.EnumerateInputDevicesProvider = mic.ListDevices;
         }
 
-        public bool HasDevice => ListDevices().Count > 1;
+        public bool HasDevice => _sourceOverride != null || ListDevices().Count > 1;
+
+        // pactl runs on the UI thread (settings, lock card), so its answer is reused for a few seconds.
+        private static readonly object CacheGate = new();
+        private static IReadOnlyList<SpeechInputDevice>? _cached;
+        private static DateTime _cachedAt;
 
         /// <summary>"System default" (-1), then every Pulse source that is not a sink monitor, by
         /// its source name. The picker saves index + name; <see cref="Start"/> matches by name first.</summary>
         public IReadOnlyList<SpeechInputDevice> ListDevices()
         {
-            try { return ParseSources(LibVlcAudio.Pactl("list short sources")); }
-            catch { return Array.Empty<SpeechInputDevice>(); }
+            lock (CacheGate)
+            {
+                if (_cached != null && DateTime.UtcNow - _cachedAt < TimeSpan.FromSeconds(5)) return _cached;
+                try { _cached = ParseSources(LibVlcAudio.Pactl("list short sources")); }
+                catch { _cached = Array.Empty<SpeechInputDevice>(); }
+                _cachedAt = DateTime.UtcNow;
+                return _cached;
+            }
         }
 
         internal static IReadOnlyList<SpeechInputDevice> ParseSources(string pactlShortSources)
@@ -89,7 +100,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             psi.RedirectStandardError = true;
             psi.UseShellExecute = false;
             var p = Process.Start(psi) ?? throw new InvalidOperationException($"{psi.FileName} did not start");
-            p.ErrorDataReceived += (_, _) => { };
+            p.ErrorDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) Log.Debug("PulseMicSource: {Tool}: {Line}", psi.FileName, e.Data); };
             p.BeginErrorReadLine();
             var reader = new Thread(() =>
             {
@@ -107,6 +118,11 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     }
                 }
                 catch (Exception ex) { Log.Debug("PulseMicSource: capture ended: {E}", ex.Message); }
+                finally
+                {
+                    try { Log.Debug("PulseMicSource: {Tool} stream ended, exit code {Code}", psi.FileName, p.WaitForExit(2000) ? p.ExitCode : null); }
+                    catch { /* Stop already disposed the process */ }
+                }
             }) { IsBackground = true, Name = "mic-" + psi.FileName };
             reader.Start();
             Log.Information("PulseMicSource: {Tool} capturing from {Source}", psi.FileName, src ?? "default");
