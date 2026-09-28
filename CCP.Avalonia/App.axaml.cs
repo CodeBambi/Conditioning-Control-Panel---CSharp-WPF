@@ -137,6 +137,9 @@ namespace ConditioningControlPanel.Avalonia
                         phrase, s.LockCardRepeats, s.LockCardStrict, isTest, s.LockCardVoiceMode);
                 });
 
+                // Pop quiz: Core schedules, PopQuizHost opens the window (WPF App.PopQuiz).
+                CoreEngine.PopQuiz = Views.Windows.PopQuizHost.Instance.Scheduler;
+
                 // The ambient flash surface. CoreFlash owns the rhythm; a burst needs any attached
                 // visual to reach Screens, and the main window is the one that always is.
                 CoreFlash.IsBusyProvider = () => Views.Overlays.FlashOverlay.IsBusy;

@@ -75,6 +75,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             App.StopDesktopOverlays(final: false);
             LockCardWindow.ForceCloseAll();
+            PopQuizWindow.ForceCloseAll();   // WPF StartStop.cs:521, running or not
             PinkFilterOverlay.Refresh(this);
             UpdateStartButton();
             // A paused session keeps its labels, lock and pause button (WPF StopEngine leaves them).

@@ -26,6 +26,10 @@ namespace ConditioningControlPanel
         /// cards, the pink tint). Runs after every Stop, running or not.</summary>
         public static volatile Action? StoppedHook;
 
+        /// <summary>The head's pop-quiz scheduler (it owns the <see cref="IPopQuizHost"/>); null
+        /// on a head with no pop-quiz window.</summary>
+        public static volatile PopQuizScheduler? PopQuiz;
+
         /// <summary>WPF StartEngine's arming matrix, minus the services no head here has.
         /// Not idempotent in TotalSessions, exactly as WPF; callers start only when stopped.</summary>
         public static void Start()
@@ -41,6 +45,7 @@ namespace ConditioningControlPanel
             if (!audioOnly) CoreFlash.Start();   // it checks FlashEnabled itself
             if (!audioOnly && s.SubliminalEnabled) CoreSubliminal.Start();
             if (!audioOnly && s.LockCardEnabled) LockCardScheduler.Instance.Start();
+            if (!audioOnly && s.PopQuizEnabled) PopQuiz?.Start();   // WPF StartStop.cs:393
             if (!audioOnly && s.BouncingTextEnabled) CoreBouncingText.Start();
             else CoreBouncingText.Stop();   // WPF: clean up any leftover state
 
@@ -61,6 +66,7 @@ namespace ConditioningControlPanel
                 CoreBouncingText.Stop();
                 CoreSubliminal.Stop();
                 LockCardScheduler.Instance.Stop();
+                PopQuiz?.Stop();   // closes an open quiz (WPF StartStop.cs:492)
                 _running = false;
                 try { StoppedHook?.Invoke(); }
                 catch (Exception ex) { Log.Warning(ex, "Engine stop hook failed"); }

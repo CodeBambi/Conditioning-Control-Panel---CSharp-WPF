@@ -327,6 +327,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _closeTimer = null;
             _allWindows.Remove(this);
             base.OnClosed(e);
+            if (_allWindows.Count == 0) AllClosed?.Invoke();
         }
 
         // ── Anti-cheat ─────────────────────────────────────────────────────────
@@ -932,6 +933,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Whether a lock card is on screen. BubbleCountResultWindow's mercy flow polls
         /// this every 500 ms to learn when the card has been solved.</summary>
         public static bool IsAnyOpen() => _allWindows.Count > 0;
+
+        /// <summary>The last card left the screen: a pop quiz deferred behind it replays (#763).</summary>
+        public static event Action? AllClosed;
 
         /// <summary>Drop every card, solved or not - the panic exit. Strict mode does not survive
         /// this: <c>_isCompleted</c> is set first on each window so OnClosing cannot refuse.</summary>
