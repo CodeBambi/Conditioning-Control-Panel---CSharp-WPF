@@ -38,7 +38,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    Avalonia has no settable <c>Owner</c>, so ownership is <c>Show(parent)</c>.
     ///  - <c>DescentRoomSfx</c>, <c>App.DescentMigration</c>, <c>App.DescentCountdown</c> and
     ///    <c>App.ProfileSync</c> are still in the WPF head, so each is a stub below.
-    ///  - <c>DescentFuseCopy</c> is likewise still in the WPF head; its two sentences are inlined.
     ///
     /// <para><b>STILL UNREACHABLE — blocked on unported callers, not on this window.</b>
     /// <see cref="Open"/> is complete and takes its owner correctly; what is missing is everything
@@ -76,13 +75,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private const double CatchUpFadeSeconds = 0.8;
 
-        // ponytail: needs ConditioningControlPanel/Services/Descent/DescentFuseCopy.cs, inlined
-        // verbatim until it moves to Core. Two sentences, and between them every word the show
-        // says. The class itself is portable - static strings, no WPF - so this is a git mv, not a
-        // port; Core's own DescentFuseHandoff already cites DescentFuseCopy.ShowAwaits by name.
-        private const string ShowAwaitsLine = "The ceremony awaits.";
-        private const string IgnitionCopyLine = "Year One. The spiral is yours.";
-
         private readonly DescentShowKind _kind;
         private readonly bool _reduced;
         private readonly Stopwatch _clock = new();
@@ -111,7 +103,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // rectangle. Stand the room up at its bloom instead: the backdrop at full and the
             // standing line visible, which is the one frame of this window that has anything in it.
             _backdropLayer.Opacity = 1.0;
-            _showLine.Text = ShowAwaitsLine;
+            _showLine.Text = DescentFuseCopy.ShowAwaits;
             _showLine.Opacity = 1.0;
         }
 
@@ -347,7 +339,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 case DescentHandoffAction.SpeakAwaits:
                     Log.Information("[Fuse] No ceremony offer within {Seconds}s — showing the standing line and closing.",
                         DescentFuseHandoff.TimeoutSeconds);
-                    _showLine.Text = ShowAwaitsLine;
+                    _showLine.Text = DescentFuseCopy.ShowAwaits;
                     FadeTo(_showLine, _showLine.Opacity, 1.0, 0.9);
                     break;
 
@@ -378,7 +370,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void FrameIgnition(double elapsed)
         {
             var lineOpacity = DescentIgnitionTimeline.LineOpacity(elapsed, _reduced);
-            if (lineOpacity > 0 && (_showLine.Text?.Length ?? 0) == 0) _showLine.Text = IgnitionCopyLine;
+            if (lineOpacity > 0 && (_showLine.Text?.Length ?? 0) == 0) _showLine.Text = DescentFuseCopy.IgnitionLine;
             _showLine.Opacity = lineOpacity;
 
             Opacity = DescentIgnitionTimeline.ShowOpacity(elapsed, _reduced);

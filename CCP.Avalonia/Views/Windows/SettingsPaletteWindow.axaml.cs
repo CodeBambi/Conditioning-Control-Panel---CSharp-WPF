@@ -1,11 +1,17 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Animation;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia.Styling;
+using ConditioningControlPanel.Avalonia.Controls;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -18,12 +24,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    (MainShellWindow), so the remaining work is a KeyGesture on it calling
     ///    <see cref="Toggle"/> - which is a shell file, not this one. Inventing an ICommand here
     ///    would be a second API to reconcile later.
-    ///  - <c>Refresh</c> cannot query the index: <c>Services.SettingsPaletteIndex</c> lives in the
-    ///    WPF head, so this draws sample rows filtered by the query instead. See the stub below.
-    ///  - <c>ActivateSelected</c> / <c>Navigate</c> / <c>ResolveFirst</c> / <c>FindElementByName</c> /
-    ///    <c>Pulse</c> / <c>ClearPulse</c> are one stub. The shell is NOT what blocks them any more:
-    ///    <c>MainShellWindow.ShowTab</c> is ported and opens the owning door exactly as WPF's did.
-    ///    What is missing is the tab key to pass it - see the note on <see cref="Refresh"/>.
+    ///  - <c>Refresh</c> queries Core's <c>SettingsPaletteIndex.Search</c>, as WPF does.
+    ///  - <c>Navigate</c> is the same ShowTab + FocusSection + first-named-element 2s glow.
     ///  - <c>Top = Math.Max(20, Top - 70)</c> becomes a <c>Position</c> nudge: Avalonia has no
     ///    Top/Left, only a device-pixel <c>PixelPoint</c>.
     ///  - <c>PreviewKeyDown</c> becomes a tunnelling KeyDown handler, which is what Preview meant.
@@ -92,12 +94,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                // ponytail: needs LockdownService.IsActive
-                // (ConditioningControlPanel/Services/Haptics/LockdownService.cs), reached through
-                // App.Lockdown; there is no Core seam for it. Lockdown owns the screen, and a
-                // navigation palette floating above it reads as an escape hatch even though it only
-                // ever calls ShowTab - so that check must come back before this is reachable from a
-                // hotkey.
+                // ponytail: WPF refuses while App.Lockdown.IsActive. LockdownService is not on this
+                // head, so Lockdown cannot be active; add the check when it arrives.
                 if (_instance != null)
                 {
                     _instance.ClosePalette(fromEscape: false);
@@ -191,25 +189,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Refresh();
         }
 
-        /// <summary>
-        /// ponytail: needs SettingsPaletteIndex.Search and SettingsPaletteEntry
-        /// (ConditioningControlPanel/Services/SettingsPaletteIndex.cs); the index is not in Core, and
-        /// every row it returns points at a MainWindow tab key and an AppSettingsTabView section, so
-        /// it cannot move ahead of the shell. The real Refresh rebuilds rows from loc keys on every
-        /// keystroke, so a language change between two opens always shows current strings - there is
-        /// no cache. Until the index moves, these are placeholder rows, filtered the same way so the
-        /// empty state and the arrow keys are still exercised.
-        /// </summary>
+        /// <summary>Rows are rebuilt from loc keys on every keystroke, so a language change always
+        /// shows current strings - there is no cache.</summary>
         private void Refresh()
         {
             try
             {
-                var query = (_txtQuery.Text ?? "").Trim();
-                var rows = SampleRows
-                    .Where(r => query.Length == 0 ||
-                                r.Label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                                r.Context.Contains(query, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
+                var rows = SettingsPaletteIndex.Search(_txtQuery.Text)
+                                               .Select(entry => new PaletteRow(entry))
+                                               .ToList();
 
                 _listResults.ItemsSource = rows;
                 if (rows.Count > 0) _listResults.SelectedIndex = 0;
@@ -222,15 +210,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Serilog.Log.Debug("Settings palette refresh failed: {E}", ex.Message);
             }
         }
-
-        private static IReadOnlyList<PaletteRow> SampleRows { get; } = new[]
-        {
-            new PaletteRow("🔊", "Master volume", "Settings › Audio"),
-            new PaletteRow("🎥", "Webcam device", "Settings › Devices"),
-            new PaletteRow("💬", "Chat thresholds", "Settings › Chat"),
-            new PaletteRow("🏆", "Achievements", ""),
-            new PaletteRow("🎛️", "Haptics setup", "Settings › Devices"),
-        };
 
         // =====================================================================================
         //  keyboard + mouse
@@ -279,26 +258,97 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try { _listResults.ScrollIntoView(next); } catch { }
         }
 
-        /// <summary>
-        /// Closes first - the highlight pulse should be visible against the real page, and the
-        /// owner needs focus back before anything navigates.
-        ///
-        /// ponytail: the shell is no longer the blocker - <c>MainShellWindow.ShowTab</c>
-        /// (MainShellWindow.TabNavigation.cs) is ported and opens the owning door and moves the
-        /// active indicator, exactly as WPF's did. What is missing is the ROW: a
-        /// <see cref="PaletteRow"/> here is three display strings, because
-        /// <c>Services.SettingsPaletteIndex</c> (ConditioningControlPanel/Services/
-        /// SettingsPaletteIndex.cs) is not in Core and its <c>SettingsPaletteEntry</c> is what
-        /// carries the tab key and the section name. Navigating a placeholder row would send the
-        /// user to a guessed tab, so this stays closed-and-nothing-else until the index moves.
-        /// The second half is a reimplementation either way: WPF walked the visual tree by x:Name
-        /// across namescopes and hung a 2s self-removing DropShadow glow on what it found, and
-        /// that needs Avalonia's DropShadowEffect rather than WPF's.
-        /// </summary>
+        /// <summary>Closes first - the highlight should be visible against the real page, and the
+        /// owner needs focus back before anything navigates.</summary>
         private void ActivateSelected()
         {
-            if (_listResults.SelectedItem is not PaletteRow) return;
+            if (_listResults.SelectedItem is not PaletteRow row) return;
+            var owner = Owner as MainShellWindow;
             ClosePalette(fromEscape: false);
+            if (owner == null) return;
+            Dispatcher.UIThread.Post(() => Navigate(owner, row.Entry));
+        }
+
+        // =====================================================================================
+        //  navigation + highlight
+        // =====================================================================================
+
+        private const int PulseMs = 2000;
+        private static Control? _pulseTarget;
+        private static IEffect? _pulsePrevEffect;
+        private static DispatcherTimer? _pulseTimer;
+
+        /// <summary>ShowTab is the only navigation API, so a palette hit is indistinguishable
+        /// from a rail click.</summary>
+        internal static void Navigate(MainShellWindow shell, SettingsPaletteEntry entry)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(entry.TabKey)) shell.ShowTab(entry.TabKey);
+                if (!string.IsNullOrWhiteSpace(entry.SectionKey)) shell.AppSettingsPage?.FocusSection(entry.SectionKey);
+                if (entry.ElementNames.Length == 0) return;
+
+                // One more hop so the section scroll has settled before the lookup.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    // Name lookup across namescopes: every tab owns its own, so walk the tree.
+                    var target = entry.ElementNames
+                        .Select(n => shell.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == n))
+                        .FirstOrDefault(c => c != null);
+                    if (target == null)
+                    {
+                        Serilog.Log.Debug("Palette entry {Id}: no element matched [{Names}]",
+                                          entry.Id, string.Join(", ", entry.ElementNames));
+                        return;
+                    }
+                    target.BringIntoView();
+                    Pulse(target);
+                });
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "Palette navigation failed for {Id}", entry.Id);
+            }
+        }
+
+        /// <summary>A 2s accent glow around the found control, then gone. Self-removing: the
+        /// previous effect is restored, and a second pulse clears the first.</summary>
+        private static void Pulse(Control target)
+        {
+            ClearPulse();
+            _pulseTarget = target;
+            _pulsePrevEffect = target.Effect;
+            var glow = new DropShadowEffect
+            {
+                Color = Color.FromRgb(0xFF, 0x69, 0xB4),
+                BlurRadius = 22,
+                OffsetX = 0,
+                OffsetY = 0,
+                Opacity = 0.9,
+            };
+            target.Effect = glow;
+
+            // Reduced motion keeps the static glow for the same two seconds, as WPF does.
+            if (AmbientFxCanvas.Env.AllowTransitions)
+            {
+                glow.Opacity = 0.0;
+                var anim = new Animation { Duration = TimeSpan.FromMilliseconds(PulseMs), FillMode = FillMode.Forward };
+                foreach (var (cue, value) in new[] { (0.10, 0.95), (0.45, 0.45), (0.70, 0.95), (1.0, 0.0) })
+                    anim.Children.Add(new KeyFrame { Cue = new Cue(cue), Setters = { new Setter(DropShadowEffect.OpacityProperty, value) } });
+                _ = anim.RunAsync(glow);
+            }
+            _pulseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(PulseMs + 60) };
+            _pulseTimer.Tick += (_, _) => ClearPulse();
+            _pulseTimer.Start();
+        }
+
+        private static void ClearPulse()
+        {
+            _pulseTimer?.Stop();
+            _pulseTimer = null;
+            if (_pulseTarget != null) _pulseTarget.Effect = _pulsePrevEffect;
+            _pulseTarget = null;
+            _pulsePrevEffect = null;
         }
 
         private void Item_Click(object? sender, PointerReleasedEventArgs e)
@@ -313,24 +363,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     }
 
     /// <summary>
-    /// One rendered row. Strings are snapshotted here at build time (which is every keystroke),
-    /// not bound to the entry, so the ItemTemplate never re-enters the localization manager
-    /// during layout.
-    ///
-    /// <para>Top-level rather than nested in the window, because the ItemTemplate's
-    /// <c>x:DataType</c> has to name it and compiled bindings are on. It holds plain strings
-    /// instead of a <c>SettingsPaletteEntry</c>: that type lives in the WPF head's Services, which
-    /// this port may not reference.</para>
+    /// One rendered row. Strings are snapshotted at build time (every keystroke), not bound to
+    /// the entry, so the ItemTemplate never re-enters the localization manager during layout.
+    /// Top-level because the ItemTemplate's <c>x:DataType</c> has to name it.
     /// </summary>
     public sealed class PaletteRow
     {
-        public PaletteRow(string glyph, string label, string context)
+        public PaletteRow(SettingsPaletteEntry entry)
         {
-            Glyph = glyph;
-            Label = label;
-            Context = context;
+            Entry = entry;
+            Glyph = entry.Glyph;
+            Label = entry.Label;
+            Context = entry.Context;
         }
 
+        public SettingsPaletteEntry Entry { get; }
         public string Glyph { get; }
         public string Label { get; }
         public string Context { get; }

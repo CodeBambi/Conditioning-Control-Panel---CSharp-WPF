@@ -574,18 +574,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         /// <summary>
-        /// EnhancementResolver's ladder, walked here rather than called: the resolver itself is in
-        /// the WPF head and its tier 2 reaches App.EnhancementLibrary, so calling it is not an
-        /// option. Tiers 0 and 1 are — EnhancementMediaBundler is in Core and the sidecar is one
-        /// Path.Combine — so two of the three tiers are real.
+        /// Core's EnhancementResolver ladder (embedded -> sidecar -> library), as WPF calls it.
         ///
-        /// ponytail: tier 2 (EnhancementLibrary.FindMatch by media_source pattern), the
-        /// auto-promotion of an embedded enhancement into the library, and the 6 s "promoted to
-        /// library" toast all need EnhancementLibrary, which is App.UserDataPath + a
-        /// FileSystemWatcher + a WPF DispatcherTimer and has not moved. Until it does, a media file
-        /// whose enhancement lives only in the library lands in the "nothing found" branch and
-        /// offers Create-new — a real branch of the original, just reached more often than it
-        /// should be.
+        /// ponytail: this head leaves EnhancementResolver.LibraryMatchProvider unset, so the library
+        /// tier never hits; the auto-promotion of an embedded enhancement into the library and its
+        /// 6 s toast need EnhancementLibrary, which has not moved. A media file whose enhancement
+        /// lives only in the library lands in the "nothing found" branch and offers Create-new.
         /// </summary>
         private void TryAutoLoadEnhancement(string mediaPath)
         {
@@ -593,32 +587,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _btnCreateNewEnhancement.IsVisible = false;
             try
             {
-                // 0) Embedded box in the media file itself. First, because a self-contained export
-                //    beats a stale sidecar that happens to share its basename.
-                if (EnhancementMediaBundler.IsSupportedExtension(mediaPath)
-                    && EnhancementMediaBundler.TryExtract(mediaPath, out var embedded, out _)
-                    && embedded != null)
+                var resolved = EnhancementResolver.ResolveForLocalMedia(mediaPath);
+                switch (resolved.Source)
                 {
-                    _lastDiscoverySource = DiscoverySource.Embedded;
-                    if (LoadEnhancementInMemory(embedded, "embedded:" + System.IO.Path.GetFileName(mediaPath)))
+                    case EnhancementDiscoverySource.Embedded:
+                        _lastDiscoverySource = DiscoverySource.Embedded;
+                        LoadEnhancementInMemory(resolved.Enhancement!, "embedded:" + System.IO.Path.GetFileName(mediaPath));
                         return;
-                }
 
-                // 1) Side-by-side sidecar: foo.mp4 -> foo.ccpenh.json next to it.
-                var dir = System.IO.Path.GetDirectoryName(mediaPath);
-                var baseName = System.IO.Path.GetFileNameWithoutExtension(mediaPath);
-                if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(baseName))
-                {
-                    var candidate = System.IO.Path.Combine(dir, baseName + ".ccpenh.json");
-                    if (File.Exists(candidate))
-                    {
+                    case EnhancementDiscoverySource.Sidecar:
                         _lastDiscoverySource = DiscoverySource.Sidecar;
-                        LoadEnhancementFile(candidate);
+                        LoadEnhancementFile(resolved.FilePath!);
                         return;
-                    }
+
+                    case EnhancementDiscoverySource.Library:
+                        _lastDiscoverySource = DiscoverySource.Library;
+                        LoadEnhancementFile(resolved.FilePath!);
+                        return;
                 }
 
-                // 2) Nothing found — offer to author against this media.
+                // Nothing found — offer to author against this media.
                 _btnCreateNewEnhancement.IsVisible = true;
                 _txtStatus.Text = Loc.Get("deeper_player_no_enh_for_media");
             }
