@@ -253,6 +253,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             VelvetBtnCatalogue.Click += VelvetBtnCatalogue_Click;
         }
 
+        /// <summary>WPF's <c>Window.GetWindow(this) is MainWindow mw</c>: the view forwards, the shell decides.</summary>
+        private Windows.MainShellWindow? Shell => TopLevel.GetTopLevel(this) as Windows.MainShellWindow;
+
         // -- premium rail ---------------------------------------------------------------
         private void PremiumRailContent_RightClick(object? sender, PointerReleasedEventArgs e) { }  // mw.PremiumRail_RightClick(...)
         private void ChipTakeover_Click(object? sender, RoutedEventArgs e) { }        // mw.PremiumChip_Click(PremiumFeature.Takeover)
@@ -271,32 +274,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnRemoteStart_Click(object? sender, RoutedEventArgs e) { }      // mw.PremiumRemoteStart()
 
         // -- velvet mosaic (4x4 hybrid wall) --------------------------------------------
-        private void CardFlash_Click(object? sender, RoutedEventArgs e) { }           // mw.CardFlash_Click(...)
-        private void CardFlash_Toggle(object? sender, RoutedEventArgs e) { }          // mw.ToggleWallFeature("flash")
-        private void CardSubliminal_Click(object? sender, RoutedEventArgs e) { }      // mw.CardSubliminal_Click(...)
-        private void CardSubliminal_Toggle(object? sender, RoutedEventArgs e) { }     // mw.ToggleWallFeature("subliminal")
-        private void CardBouncingText_Click(object? sender, RoutedEventArgs e) { }    // mw.CardBouncingText_Click(...)
-        private void CardBouncingText_Toggle(object? sender, RoutedEventArgs e) { }   // mw.ToggleWallFeature("bouncingtext")
-        private void CardBubblePop_Click(object? sender, RoutedEventArgs e) { }       // mw.CardBubblePop_Click(...)
-        private void CardBubblePop_Toggle(object? sender, RoutedEventArgs e) { }      // mw.ToggleWallFeature("bubbles")
-        private void CardLockCard_Click(object? sender, RoutedEventArgs e) { }        // mw.CardLockCard_Click(...)
-        private void CardLockCard_Toggle(object? sender, RoutedEventArgs e) { }       // mw.ToggleWallFeature("lockcard")
-        private void ComboVideoBubble_ClickA(object? sender, RoutedEventArgs e) { }   // mw.OpenStudioModule("video")
-        private void ComboVideoBubble_ClickB(object? sender, RoutedEventArgs e) { }   // mw.OpenStudioModule("bubblecount")
-        private void ComboVideoBubble_ToggleA(object? sender, RoutedEventArgs e) { }  // mw.ToggleWallFeature("video")
-        private void ComboVideoBubble_ToggleB(object? sender, RoutedEventArgs e) { }  // mw.ToggleWallFeature("bubblecount")
-        private void ComboSpiralPink_ClickA(object? sender, RoutedEventArgs e) { }    // mw.OpenStudioModule("spiral")
-        private void ComboSpiralPink_ClickB(object? sender, RoutedEventArgs e) { }    // mw.OpenStudioModule("pinkfilter")
-        private void ComboSpiralPink_ToggleA(object? sender, RoutedEventArgs e) { }   // mw.ToggleWallFeature("spiral")
-        private void ComboSpiralPink_ToggleB(object? sender, RoutedEventArgs e) { }   // mw.ToggleWallFeature("pinkfilter")
-        private void ComboMindDrain_ClickA(object? sender, RoutedEventArgs e) { }     // mw.OpenStudioModule("mindwipe")
-        private void ComboMindDrain_ClickB(object? sender, RoutedEventArgs e) { }     // mw.OpenStudioModule("braindrain")
-        private void ComboMindDrain_ToggleA(object? sender, RoutedEventArgs e) { }    // mw.ToggleWallFeature("mindwipe")
-        private void ComboMindDrain_ToggleB(object? sender, RoutedEventArgs e) { }    // mw.ToggleWallFeature("braindrain")
+        private void CardFlash_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("flash");
+        private void CardFlash_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("flash");
+        private void CardSubliminal_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("subliminal");
+        private void CardSubliminal_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("subliminal");
+        private void CardBouncingText_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("bouncingtext");
+        private void CardBouncingText_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("bouncingtext");
+        private void CardBubblePop_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("bubbles");
+        private void CardBubblePop_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("bubbles");
+        private void CardLockCard_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("lockcard");
+        private void CardLockCard_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("lockcard");
+        private void ComboVideoBubble_ClickA(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("video");
+        private void ComboVideoBubble_ClickB(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("bubblecount");
+        private void ComboVideoBubble_ToggleA(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("video");
+        private void ComboVideoBubble_ToggleB(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("bubblecount");
+        private void ComboSpiralPink_ClickA(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("spiral");
+        private void ComboSpiralPink_ClickB(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("pinkfilter");
+        private void ComboSpiralPink_ToggleA(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("spiral");
+        private void ComboSpiralPink_ToggleB(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("pinkfilter");
+        private void ComboMindDrain_ClickA(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("mindwipe");
+        private void ComboMindDrain_ClickB(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("braindrain");
+        private void ComboMindDrain_ToggleA(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("mindwipe");
+        private void ComboMindDrain_ToggleB(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("braindrain");
         private void CardMystery_Click(object? sender, RoutedEventArgs e) { }         // mw.CardMystery_Click(...)
         /// <summary>Clicking the revealed face is clicking the box - one navigation, two faces.</summary>
         private void MysteryRevealFace_Click(object? sender, PointerReleasedEventArgs e) { }   // mw.CardMystery_Click(...)
-        private void CardVault_Click(object? sender, RoutedEventArgs e) { }           // mw.CardVault_Click(...)
+        private void CardVault_Click(object? sender, RoutedEventArgs e) => Shell?.BtnPatreonExclusives_Click(sender, e);
         private void CardJustDrop_Click(object? sender, RoutedEventArgs e) { }        // mw.CardJustDrop_Click(...)
         /// <summary>
         /// WIRED (the bark and the easter egg). WPF's handler
@@ -394,7 +397,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // -- companion + account strips --------------------------------------------------
         /// <summary>Home's companion strip. Pure navigation into the Companion door - the strip
         /// owns no portrait and no clock, so there is nothing to start or stop here.</summary>
-        private void CompanionStrip_Click(object? sender, PointerPressedEventArgs e) { }     // mw.ShowTab("companion")
+        private void CompanionStrip_Click(object? sender, PointerPressedEventArgs e) => Shell?.ShowTab("companion");
         private async void BtnUnifiedLogin_Click(object? sender, RoutedEventArgs e)
         {
             if (TopLevel.GetTopLevel(this) is Windows.MainShellWindow mw) await mw.OpenUnifiedLoginDialog();
@@ -415,8 +418,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <c>MainWindow.CardSystem_Click</c> since the mosaic tile was deleted.</summary>
         private void VelvetBtnSystem_Click(object? sender, RoutedEventArgs e) { }            // mw.CardSystem_Click(...)
         private void VelvetBtnAppInfo_Click(object? sender, RoutedEventArgs e) { }           // mw.VelvetBtnAppInfo_Click(...)
-        private void VelvetBtnSchedulerRamp_Click(object? sender, RoutedEventArgs e) { }     // mw.VelvetBtnSchedulerRamp_Click(...)
-        private void VelvetBtnCatalogue_Click(object? sender, RoutedEventArgs e) { }         // mw.BtnCatalogue_Click(...)
+        private void VelvetBtnSchedulerRamp_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("scheduler");
+        private void VelvetBtnCatalogue_Click(object? sender, RoutedEventArgs e) => Shell?.BtnCatalogue_Click(sender, e);
 
         /// <summary>
         /// Opens the head's diagnostics window. A second window rather than a swap, so the shell
