@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ConditioningControlPanel
 {
@@ -26,5 +27,25 @@ namespace ConditioningControlPanel
         {
             get { try { return IsEngineRunningProvider?.Invoke() ?? false; } catch { return false; } }
         }
+
+        // The running session's hold on the phrase pools, for the mod service's per-mod backup
+        // (#906). WPF reads each through SessionEngine.Active, so "no active session" is folded
+        // into every delegate: unseeded, or seeded with no session running, answers no-op /
+        // false / null, which is what SessionEngine.Active == null gave. A future Core session
+        // runner MUST seed these, or a mid-session mod switch backs up the session's phrases.
+
+        /// <summary>Teach the session's pool snapshot about a user pool edit (property name).</summary>
+        public static volatile Action<string?>? NoteUserPhrasePoolEdit;
+
+        /// <summary>Re-assert the pools the session prescribes after a mod switch restored others.</summary>
+        public static volatile Action? ReapplyPhrasePoolOverrides;
+
+        /// <summary>True while a session has replaced the live phrase pools with its own.</summary>
+        public static volatile Func<bool>? IsOverridingPhrasePoolsProvider;
+
+        /// <summary>The user's own pre-session pools, or null.</summary>
+        public static volatile Func<Dictionary<string, bool>?>? UserSubliminalPoolProvider;
+        public static volatile Func<Dictionary<string, bool>?>? UserLockCardPoolProvider;
+        public static volatile Func<Dictionary<string, bool>?>? UserBouncingTextPoolProvider;
     }
 }

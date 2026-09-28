@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <Import Project="..\ContentPackSounds.props" />
+  <Import Project="..\Version.props" />
 
   <!--
     The cross-platform head. This replaces WPF, it does not sit beside it: the owner's decision is

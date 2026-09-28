@@ -270,8 +270,8 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            Migrate(BuiltInMods.BambiSleepId, settings.HypnotubeLinksBambiSleep, BambiSprite.DefaultBambiSleepLinks);
-            Migrate(BuiltInMods.SissyHypnoId, settings.HypnotubeLinksSissyHypno, BambiSprite.DefaultSissyHypnoLinks);
+            Migrate(BuiltInMods.BambiSleepId, settings.HypnotubeLinksBambiSleep, HypnotubeDefaultLinks.DefaultBambiSleepLinks);
+            Migrate(BuiltInMods.SissyHypnoId, settings.HypnotubeLinksSissyHypno, HypnotubeDefaultLinks.DefaultSissyHypnoLinks);
         }
 
         /// <summary>

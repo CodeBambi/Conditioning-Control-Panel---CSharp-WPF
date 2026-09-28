@@ -58,7 +58,7 @@ Why: this is a multi-person codebase now, and a 2k-line PR cannot be reviewed.
 ### Version Locations (ALL must be updated for releases)
 | File | What |
 |------|------|
-| `ConditioningControlPanel.csproj:12` | `<Version>` tag |
+| `../Version.props` | `<Version>` tag (shared by WPF, Avalonia and Core) |
 | `Services/Update/UpdateService.cs:~23` | `AppVersion` constant |
 | `Services/Update/UpdateService.cs:~29` | `CurrentPatchNotes` |
 | `../installer.iss:16` | `MyAppVersion` |

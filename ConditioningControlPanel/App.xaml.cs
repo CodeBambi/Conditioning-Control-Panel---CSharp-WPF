@@ -328,6 +328,21 @@ namespace ConditioningControlPanel
             CoreModsHooks.EventAccentHexProvider = () => LiveEvent?.AccentHex;
             CoreModsHooks.ActiveCompanionProvider = () => Companion?.ActiveCompanion;
             CoreModsHooks.SwitchCompanion = cid => Companion?.SwitchCompanion(cid);
+            CoreModsHooks.CloseDtrhHost = () => { if (Services.Chaos.DtrhHostService.IsActive) Services.Chaos.DtrhHostService.CloseActive(); };
+            CoreModsHooks.CloseArcademyHost = () => { if (Services.Arcademy.ArcademyHostService.IsActive) Services.Arcademy.ArcademyHostService.CloseActive(); };
+            CoreModsHooks.ClearModResourceCache = Services.ModResourceResolver.ClearCache;
+            CoreModsHooks.InvalidatePortraitAvailability = Services.AvatarPortraitLoader.InvalidateAvailabilityCache;
+            CoreModsHooks.RefreshVoiceLineIndex = Services.CompanionPhraseService.RefreshVoiceLineIndex;
+            CoreModsHooks.InvalidateStablePrompt = Services.BambiSprite.InvalidateStablePrompt;
+            // Lazy: the field is reassigned when the tube reloads its link list.
+            CoreModsHooks.KnownVideoLinksProvider = () => AvatarTubeWindow.KnownVideoLinks;
+            // The running session's hold on the phrase pools (#906). Each reads Active afresh.
+            CoreSession.NoteUserPhrasePoolEdit = name => Services.SessionEngine.Active?.NoteUserPhrasePoolEdit(name);
+            CoreSession.ReapplyPhrasePoolOverrides = () => Services.SessionEngine.Active?.ReapplyPhrasePoolOverrides();
+            CoreSession.IsOverridingPhrasePoolsProvider = () => Services.SessionEngine.Active?.IsOverridingPhrasePools == true;
+            CoreSession.UserSubliminalPoolProvider = () => Services.SessionEngine.Active?.UserSubliminalPool;
+            CoreSession.UserLockCardPoolProvider = () => Services.SessionEngine.Active?.UserLockCardPool;
+            CoreSession.UserBouncingTextPoolProvider = () => Services.SessionEngine.Active?.UserBouncingTextPool;
             // The bark seam (CCP.Core/CoreBark.cs). BarkService stays here - it subscribes to some
             // fifty head services and speaks through the avatar window - so only the doorbell
             // crosses. Every lambda reads the static LAZILY: Bark is constructed in OnStartup,

@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="..\Version.props" />
+
   <!--
     Platform-agnostic engine library. Targets plain net10.0 ON PURPOSE: the target framework
     itself is the architecture test. A net10.0 assembly physically cannot reference
@@ -25,9 +27,8 @@
          runtime, with no compile error. Move both, or neither. -->
     <RootNamespace>ConditioningControlPanel</RootNamespace>
     <AssemblyName>CCP.Core</AssemblyName>
-    <!-- Keep in step with ConditioningControlPanel.csproj <Version>. Without it the dll
-         ships stamped 0.0.0.0, which makes a crash-log assembly version useless. -->
-    <Version>6.9.0</Version>
+    <!-- <Version> comes from ..\Version.props (imported below), shared with both heads. Without
+         it the dll ships stamped 0.0.0.0, which makes a crash-log assembly version useless. -->
     <!-- Deliberately NOT matching the app, which sets this false and hand-writes
          Properties/AssemblyInfo.cs. That switch turns off the whole GenerateAssemblyInfo
          target, so the app's own <Version> never reaches its dll - measured, it loads as

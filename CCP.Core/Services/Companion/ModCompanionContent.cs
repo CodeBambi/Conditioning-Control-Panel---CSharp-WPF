@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Companion
 {
@@ -41,7 +42,7 @@ namespace ConditioningControlPanel.Services.Companion
         /// husk survives. A husk that wins this ladder shadows rung 3 (the DOWNLOADED content pack)
         /// forever: the pack lands correctly under the content root and the companion still resolves
         /// to the empty install-dir folder and stays silent. Same lesson
-        /// <see cref="ReleaseContentService.CountMediaFiles"/> was written for, applied to the rung
+        /// <see cref="CoreReleaseContent.CountMediaFiles"/> was written for, applied to the rung
         /// that picks WHICH root wins.
         ///
         /// An existing folder we cannot enumerate stays a hit: refusing it would newly silence a
@@ -70,7 +71,7 @@ namespace ConditioningControlPanel.Services.Companion
             {
                 try
                 {
-                    return ReleaseContentService.CountMediaFiles(
+                    return CoreReleaseContent.CountMediaFiles(
                         Directory.EnumerateFiles(dir, "*", option), 1) > 0;
                 }
                 catch
@@ -103,7 +104,7 @@ namespace ConditioningControlPanel.Services.Companion
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ModCompanionContent: resolve failed for {Channel}: {Error}", channel, ex.Message);
+                Log.Debug("ModCompanionContent: resolve failed for {Channel}: {Error}", channel, ex.Message);
                 return new CompanionContentPick(CompanionContentSource.None, null);
             }
         }
@@ -114,8 +115,10 @@ namespace ConditioningControlPanel.Services.Companion
             string? modId = null, installedPath = null;
             try
             {
-                modId = App.Mods?.ActiveModId;
-                installedPath = App.Mods?.ActiveMod?.InstalledPath;
+                // The raw providers, not CoreMods.ActiveModId: that one answers CCPDefault when
+                // unseeded, where App.Mods answered null before the service was up.
+                modId = CoreMods.ActiveModIdProvider?.Invoke();
+                installedPath = CoreMods.ActiveModPackageProvider?.Invoke()?.InstalledPath;
             }
             catch { /* service not up yet - fall through with nulls */ }
             return Resolve(channel, modId, installedPath, fileName);
@@ -187,7 +190,7 @@ namespace ConditioningControlPanel.Services.Companion
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("ModCompanionContent: personalities.json is not valid ({Error})", ex.Message);
+                Log.Warning("ModCompanionContent: personalities.json is not valid ({Error})", ex.Message);
                 return new List<ModPersonality>();
             }
         }
@@ -243,13 +246,13 @@ namespace ConditioningControlPanel.Services.Companion
                     }
                     else
                     {
-                        App.Logger?.Warning(
+                        Log.Warning(
                             "ModCompanionContent: {Path} held no usable personalities; falling back", pick.Path);
                     }
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning("ModCompanionContent: failed to read {Path}: {Error}", pick.Path, ex.Message);
+                    Log.Warning("ModCompanionContent: failed to read {Path}: {Error}", pick.Path, ex.Message);
                 }
             }
 
@@ -294,7 +297,7 @@ namespace ConditioningControlPanel.Services.Companion
 
                 GetPersonalities(modId, installedPath, manifest?.Personalities, out var personalitySource);
 
-                App.Logger?.Information(
+                Log.Information(
                     "CompanionContent[{ModId}]: personalities={Personalities}, barkRules={BarkRules}, " +
                     "voiceLines={VoiceLines}, eventAudio={EventAudio}, mantras={Mantras}, avatarManifest={AvatarManifest}",
                     modId ?? "none",
@@ -309,15 +312,15 @@ namespace ConditioningControlPanel.Services.Companion
                 // that is the whole question when a user reports a silent companion on a modular
                 // install. The scrubber turns these into %APP%\... / %DATA%\..., which answers it.
                 if (voice.Found)
-                    App.Logger?.Information("CompanionContent[{ModId}]: voice lines resolved to {Path}", modId ?? "none", voice.Path);
+                    Log.Information("CompanionContent[{ModId}]: voice lines resolved to {Path}", modId ?? "none", voice.Path);
                 else
-                    App.Logger?.Warning(
+                    Log.Warning(
                         "CompanionContent[{ModId}]: NO voice-line folder on any rung - the companion has nothing to speak. " +
                         "On a modular install this means the audio content pack has not been downloaded.", modId ?? "none");
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ModCompanionContent: source report failed: {Error}", ex.Message);
+                Log.Debug("ModCompanionContent: source report failed: {Error}", ex.Message);
             }
         }
     }

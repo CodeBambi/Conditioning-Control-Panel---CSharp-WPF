@@ -1348,14 +1348,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        /// <summary>
-        /// Extensions that count as pack-delivered media. PNG is in deliberately: the packs carry
-        /// portrait/pose art as well as voice (builtin-sissyhypno ships 312 PNGs next to its ~1,700
-        /// audio files) and a mod whose art did not survive is just as broken to the user as a
-        /// silent one. The <c>.json</c> manifests in these folders stay in the installer, so they
-        /// must never count — that is what let a stripped install read as fully stocked.
-        /// </summary>
-        private static readonly string[] MediaExtensions = { ".mp3", ".wav", ".ogg", ".m4a", ".png" };
+        // MediaExtensions and the count itself live in CoreReleaseContent (ModCompanionContent needs them in Core).
 
         /// <summary>
         /// How many media files a mod's own subtree must hold before <see cref="HasModMediaOnDisk"/>
@@ -1377,25 +1370,7 @@ namespace ConditioningControlPanel.Services
         /// enumerations run over thousands of files during startup.
         /// </summary>
         internal static int CountMediaFiles(IEnumerable<string>? paths, int stopAt = int.MaxValue)
-        {
-            if (paths == null || stopAt <= 0) return 0;
-
-            var count = 0;
-            foreach (var path in paths)
-            {
-                if (string.IsNullOrEmpty(path)) continue;
-                var ext = Path.GetExtension(path);
-                if (string.IsNullOrEmpty(ext)) continue;
-
-                foreach (var known in MediaExtensions)
-                {
-                    if (!ext.Equals(known, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (++count >= stopAt) return count;
-                    break;
-                }
-            }
-            return count;
-        }
+            => CoreReleaseContent.CountMediaFiles(paths, stopAt);
 
         /// <summary>
         /// True when a built-in mod's media is present WITHOUT its pack being stamped — the surviving
