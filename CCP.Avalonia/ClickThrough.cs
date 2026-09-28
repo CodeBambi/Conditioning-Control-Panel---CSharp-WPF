@@ -75,12 +75,8 @@ namespace ConditioningControlPanel.Avalonia
             // The rail before anything touches it: 56px, labels clipped. Then a real pointer move
             // into it, which is the only thing that opens it - there is no click involved, which is
             // exactly why every click-based proof missed that it never opened at all.
-            // Headless Show() does not raise OnAttachedToVisualTree, so the window's one-time
-            // setup - InitializeNavRail, and with it the premium pills and the rail's hover hook -
-            // never runs under any headless proof. The real app does attach and does run it. Call
-            // it here so this driver exercises the app a user gets, and note that no headless proof
-            // in this repo has ever covered that setup pass.
-            if (!w.NavRailHooked) w.InitializeNavRail();
+            // InitializeNavRail runs in the window's constructor (a Window never gets
+            // OnAttachedToVisualTree, which is why the rail never opened live).
             var railBefore = w.NavRailExpanded;
             var rail = w.FindControl<Border>("NavSidebar");
             if (rail is not null)

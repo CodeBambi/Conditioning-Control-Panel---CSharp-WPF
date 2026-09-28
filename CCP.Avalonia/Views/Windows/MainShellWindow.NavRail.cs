@@ -1,92 +1,28 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.NavRail.cs (1107 lines),
-// with ONE exception: the rail's one-time setup pass now exists, and it does the one thing in
-// WPF's InitializeNavRail that resolves on this head - painting the premium pills.
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.NavRail.cs (1107 lines): the rail's
+// setup pass (premium pills), the hover flyout (56 -> 236 px, 190/150 ms QuadraticEaseOut), the
+// global label fade, the medallion tile/icon growth, the staggered door-name fade + rise, the
+// scrollbar flip and the popup hold latch. See HookNavRailHover.
 //
-// ponytail: the rest is still a wholesale stub. Every other member below reaches App.*, a service,
-// a device, a WebView2 or Win32 - none of which this head may touch. The file exists and each
-// member is NAMED so nothing disappears silently; the bodies come back when the services move to
-// Core.
-//
-// The rail on this head does not expand: it is authored 56px wide in MainShellWindow.axaml and
-// nothing widens it, so SetNavRailExpanded and with it the label/pill collapse fade have no port
-// and no caller. MainShellWindow.NavPremiumTags.NavPremiumTagElements - which exists only to be
-// faded by that method - therefore stays uncalled, deliberately, rather than being given an
-// invented caller. It returns the pills that resolved; the fade returns with the rail's width
-// animation, the label cache (_navRailLabels) and MotionFx.AllowTransitions.
-//
-// The handlers named by MainShellWindow.axaml are real (empty) methods, because a
-// missing one is a XAML compile error, not a runtime gap.
-//
-// Members dropped (61, three of them since answered - see the annotations):
-//   private const double NavRailCollapsedWidth
-//   private const double NavRailExpandedWidth
-//   private const int NavRailAnimMs
-//   private const int NavRailCollapseAnimMs
-//   private const double NavDoorTileCollapsed
-//   private const double NavDoorTileExpanded
-//   private const double NavDoorIconCollapsed
-//   private const double NavDoorIconExpanded
-//   private const double NavDoorGlowCollapsed
-//   private const double NavDoorGlowExpanded
-//   private const double NavDoorGlowActive
-//   private const double NavDoorGlowOpen
-//   private const int NavDoorGlowFadeMs
-//   private const double NavDoorTileIdleOpacity
-//   private const double NavDoorLabelRise
-//   private const int NavDoorLabelFadeMs
-//   private const int NavDoorLabelSlideMs
-//   private const int NavDoorLabelStaggerMs
-//   private const double NavDoorLabelGlowLo
-//   private const double NavDoorLabelGlowHi
-//   private const double NavDoorLabelGlowStatic
-//   private const int NavDoorLabelGlowBreathMs
-//   private const int NavDoorLabelShimmerSweepMs
-//   private const int NavDoorLabelShimmerPeriodMs
-//   private const int NavDoorLabelFxStaggerMs
-//   private const string NavDoorLabelHostTag
-//   private const string NavRailStaticTextTag
-//   private bool _navRailExpanded
-//   private bool _navRailReady          (deliberately NOT ported - see InitializeNavRail below)
-//   private int _navRailHoldCount
-//   private readonly List<TextBlock> _navRailLabels
-//   private readonly List<ButtonBase> _navRailButtons
-//   private readonly List<NavDoorRow> _navDoorRows
-//   private readonly HashSet<TextBlock> _navDoorLabelTexts
-//   private sealed class NavDoorRow
-//   private void InitializeNavRail(…)   (PARTLY PORTED below: its RefreshNavPremiumTags call)
-//   internal static Func<string, string?>? PossessionReroute
-//   private void HookNavDoorRerouteSeam(…)
-//   private void NavDoor_PossessionReroute(…)
-//   private void BtnNavSearch_Click(…)   (PORTED below)
-//   private const int NavDoorArtDecodeWidth
-//   private void ApplyDoorArt(…)
-//   private void CacheNavRailParts(…)
-//   private void CacheNavDoorRows(…)
-//   private void BuildNavDoorLabelFx(…)
-//   private static void StartNavDoorLabelFx(…)
-//   private static void StopNavDoorLabelFx(…)
-//   private static Brush? BuildNavDoorGlow(…)
-//   private void RefreshNavDoorActive(…)
-//   private void SetNavDoorGlow(…)
-//   private void ApplyNavDoorRows(…)
-//   private static void SetNavRailSize(…)
-//   private void SetNavRailExpanded(…)
-//   private readonly List<(…)
-//   private bool _navRailAirspaceLogged
-//   private void ApplyNavRailAirspace(…)
-//   private void HoldOverlappingBrowsers(…)
-//   private void ApplyNavRailDoorState(…)
-//   internal void SyncNavRailToPointer(…)
-//   internal void HoldNavRailOpen(…)
-//   internal void ReleaseNavRailOpen(…)
+// ponytail: still dropped, each needing a service/effect this head lacks - door-name glow breath
+// and shimmer (BuildNavDoorLabelFx/Start/Stop), the hue glow ellipse and active tile tint
+// (BuildNavDoorGlow/RefreshNavDoorActive/SetNavDoorGlow), mod-aware ApplyDoorArt, the possession
+// reroute seam, the WebView airspace holds, ApplyNavRailDoorState, the stuck-rail watchdog and
+// the MotionFx reduced-motion snap. The handlers named by MainShellWindow.axaml are real methods,
+// because a missing one is a XAML compile error, not a runtime gap.
 
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.LogicalTree;
+using Avalonia.Media;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -96,22 +32,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// The rail's one-time setup pass, cut down to what this head can answer. WPF calls this
         /// from MainWindow_Loaded (MainWindow.NavRail.cs:263) after templates are applied; this
-        /// window's OnLoaded override is owned by MainShellWindow.Marquee.cs and OnOpened by
-        /// .WorkAreaFit.cs, so the hook here is OnAttachedToVisualTree - which is EARLIER than
-        /// Loaded and is enough, because everything below is a namescope lookup by x:Name rather
-        /// than a visual-tree walk (WPF needed Loaded for CacheNavRailParts, which is a walk and
-        /// is not ported).
+        /// head calls it from the constructor, right after XAML load, which is enough: the pills
+        /// are namescope lookups and CacheNavRailParts walks the
+        /// LOGICAL tree, which XAML load has already built (WPF walked the visual tree, so it
+        /// needed Loaded).
         ///
         /// <para>Internal and repeatable so NavCheck can call it directly. WPF's
-        /// <c>_navRailReady</c> latch is NOT ported: it guards the caches and the pointer
-        /// subscriptions, none of which are here, and the one thing that IS here is eight
-        /// namescope lookups that are correct however many times they run. The latch returns with
-        /// what it protects - and without it, an assertion can force the pills on and watch this
-        /// put them back, which a latched one-shot would silently decline to do.</para>
-        ///
-        /// <para>ponytail: CacheNavDoorRows, HookNavDoorRerouteSeam, ApplyDoorArt, the two pointer
-        /// subscriptions that call SetNavRailExpanded and ApplyNavRailAirspace all still need
-        /// MainWindow.NavRail.cs's services and the rail's width animation.</para>
+        /// <c>_navRailReady</c> latch is split: the pills repaint on every call (an assertion can
+        /// force them on and watch this put them back), the hover hook latches on
+        /// <c>_navRailHooked</c>.</para>
         /// </summary>
         internal void InitializeNavRail()
         {
@@ -133,25 +62,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Debug("HookNavRailHover: {E}", ex.Message); }
         }
 
-        private const double NavRailCollapsedWidth = 56;   // WPF MainWindow.NavRail.cs:61
-        private const double NavRailExpandedWidth = 236;   // WPF MainWindow.NavRail.cs:81
-        private const int NavRailAnimMs = 190;             // WPF MainWindow.NavRail.cs:85
-        private const int NavRailCollapseAnimMs = 150;     // WPF MainWindow.NavRail.cs:106
+        // WPF MainWindow.NavRail.cs:61-145. Sizes the XAML authors as the shut state.
+        private const double NavRailCollapsedWidth = 56;
+        private const double NavRailExpandedWidth = 236;
+        private const int NavRailAnimMs = 190;
+        private const int NavRailCollapseAnimMs = 150;
+        private const double NavDoorTileCollapsed = 44, NavDoorTileExpanded = 50;
+        private const double NavDoorIconCollapsed = 40, NavDoorIconExpanded = 46;
+        private const double NavDoorLabelRise = 14;
+        private const int NavDoorLabelFadeMs = 220, NavDoorLabelSlideMs = 260, NavDoorLabelStaggerMs = 30;
+        private const string NavRailStaticTextTag = "navrailstatic";
 
         private bool _navRailExpanded;
         private bool _navRailHooked;
+        private Border? _navRail;
+        private readonly List<Control> _navRailLabels = new();
+        private readonly List<(Border Tile, Viewbox Icon, Control Host, TranslateTransform Slide)> _navDoorRows = new();
+        private readonly HashSet<object> _navRailHolds = new();
 
         /// <summary>
-        /// The rail widens under the pointer and shuts when it leaves, which is how every label in
-        /// it becomes readable: the labels are already in the tree and simply clipped by a 56px
-        /// rail, so the width IS the feature. WPF drives this from NavSidebar's MouseEnter/
-        /// MouseLeave (MainWindow.NavRail.cs:284-310); the same two events here.
-        ///
-        /// Only the width is ported. WPF also fades the labels and the premium pills on the same
-        /// clock so text never paints outside the clip mid-tween - that needs the label cache and
-        /// MotionFx, and this file's header lists both as still dropped. The effect of leaving the
-        /// fade out is that labels appear at full opacity as soon as there is room for them rather
-        /// than easing in; nothing is drawn outside the rail, because the rail clips.
+        /// WPF's InitializeNavRail hover half (MainWindow.NavRail.cs:308-402): cache the rail's
+        /// parts, author the shut state, then open on pointer-over and shut on leave / outside
+        /// press / deactivation. The pointer test is <c>rail.IsPointerOver</c> (WPF IsMouseOver):
+        /// hit-test aware and immune to the Viewbox scale, where window coordinates against the
+        /// rail's parent-local Bounds were not. Tunnel + handledEventsToo so no child can swallow
+        /// the move. Popups opened from the rail hold it
+        /// through <see cref="HoldNavRailOpen"/>; the WPF watchdog is not ported (every trigger
+        /// here is level, re-read on each move).
         /// </summary>
         private void HookNavRailHover()
         {
@@ -159,47 +96,130 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var rail = this.FindControl<Border>("NavSidebar");
             if (rail is null) return;
             _navRailHooked = true;
+            _navRail = rail;
 
-            rail.Width = NavRailCollapsedWidth;
-            rail.Transitions = new Transitions
-            {
-                new DoubleTransition
-                {
-                    Property = Layoutable.WidthProperty,
-                    Duration = TimeSpan.FromMilliseconds(NavRailAnimMs),
-                    Easing = new QuadraticEaseOut(),
-                },
-            };
+            CacheNavRailParts(rail);
+            _navRailLabels.AddRange(NavPremiumTagElements);
 
-            // Driven from the WINDOW's pointer moves, not the rail's PointerEntered. NavSidebar is
-            // a Border whose Background sits on an inner element, and a Border with no Background of
-            // its own is not hit-testable in Avalonia - so PointerEntered never arrives on it and a
-            // rail hooked that way silently never opens. WPF hits the same shape and also carries a
-            // window-level MouseMove for the collapse (MainWindow.NavRail.cs:292 and 315-321); this
-            // is that, used for both edges. Geometry, not hit-testing, so it cannot be defeated by a
-            // transparent parent or a child that swallows the event.
-            PointerMoved += (_, e) =>
+            // Shut state first, THEN the transitions, so the first frame does not tween.
+            ApplyNavRail(false);
+            rail.Transitions = Eased(Layoutable.WidthProperty);
+            // Linear, as WPF's label/pill fade (SetNavRailExpanded builds it with no easing).
+            foreach (var l in _navRailLabels)
+                l.Transitions = new Transitions { new DoubleTransition { Property = Visual.OpacityProperty } };
+            foreach (var r in _navDoorRows)
             {
-                var p = e.GetPosition(this);
-                var r = rail.Bounds;
-                SetNavRailExpanded(rail, p.X >= r.X && p.X <= r.X + rail.Width && p.Y >= r.Y && p.Y <= r.Bottom);
-            };
-            PointerExited += (_, _) => SetNavRailExpanded(rail, false);
+                r.Tile.Transitions = Eased(Layoutable.WidthProperty, Layoutable.HeightProperty);
+                r.Icon.Transitions = Eased(Layoutable.WidthProperty, Layoutable.HeightProperty);
+                r.Host.Transitions = Eased(Visual.OpacityProperty);
+                r.Slide.Transitions = Eased(TranslateTransform.YProperty);
+            }
+
+            // IsPointerOver is hit-test aware, like WPF's IsMouseOver: an overlay covering the rail
+            // (tutorial, remote control, fullscreen browser) owns the pointer, so the rail stays shut.
+            void Sync(PointerEventArgs e)
+            {
+                bool over = rail.IsPointerOver;
+                if (over || _navRailHolds.Count == 0) SetNavRailExpanded(over);
+            }
+            AddHandler(PointerMovedEvent, (_, e) => Sync(e), RoutingStrategies.Tunnel, handledEventsToo: true);
+            AddHandler(PointerPressedEvent, (_, e) => Sync(e), RoutingStrategies.Tunnel, handledEventsToo: true);
+            PointerExited += (_, _) => { if (_navRailHolds.Count == 0) SetNavRailExpanded(false); };
+            Deactivated += (_, _) => { if (_navRailHolds.Count == 0) SetNavRailExpanded(false); };
         }
 
-        /// <summary>WPF's SetNavRailExpanded, width only. Early-outs on the state it is already
-        /// in, as WPF does, so a pointer moving inside the rail is one field read per move.</summary>
-        private void SetNavRailExpanded(Border rail, bool expand)
+        private static Transitions Eased(params AvaloniaProperty[] props)
         {
-            if (_navRailExpanded == expand) return;
+            var t = new Transitions();
+            foreach (var p in props)
+                t.Add(new DoubleTransition { Property = p, Easing = new QuadraticEaseOut() });
+            return t;
+        }
+
+        /// <summary>WPF CacheNavRailParts + CacheNavDoorRows (:545-620): a door medallion is a
+        /// Button whose content Grid is Ellipse, Border (tile), Viewbox (icon), Grid (name host),
+        /// picked by type as WPF does. Every other TextBlock is a label faded with the rail,
+        /// except the navrailstatic ones (the lens and the entry icons - Images on WPF).</summary>
+        private void CacheNavRailParts(ILogical root)
+        {
+            foreach (var child in root.LogicalChildren)
+            {
+                if (child is Button { Content: Grid { Children: [Ellipse, Border tile, Viewbox icon, Grid host] } })
+                {
+                    var slide = new TranslateTransform();
+                    host.RenderTransform = slide;
+                    _navDoorRows.Add((tile, icon, host, slide));
+                }
+                else if (child is TextBlock tb)
+                {
+                    if (tb.Tag as string != NavRailStaticTextTag) _navRailLabels.Add(tb);
+                }
+                else CacheNavRailParts(child);
+            }
+        }
+
+        /// <summary>WPF SetNavRailExpanded + ApplyNavDoorRows (:837-960). Early-outs on the state
+        /// it is already in, so a pointer moving inside the rail is one field read per move.</summary>
+        private void SetNavRailExpanded(bool expand)
+        {
+            if (_navRailExpanded == expand || _navRail is null) return;
             _navRailExpanded = expand;
 
-            // Closing is quicker than opening on WPF, and that asymmetry is deliberate: the rail
-            // overlays the page, so it must get out of the way faster than it arrives.
-            if (rail.Transitions is { Count: > 0 } t && t[0] is DoubleTransition d)
-                d.Duration = TimeSpan.FromMilliseconds(expand ? NavRailAnimMs : NavRailCollapseAnimMs);
+            // Durations first: a transition reads them when the value changes.
+            int ms = expand ? NavRailAnimMs : NavRailCollapseAnimMs;
+            Time(_navRail, ms);
+            foreach (var l in _navRailLabels) Time(l, expand ? ms : ms / 2);   // labels lead in, trail out
+            for (int i = 0; i < _navDoorRows.Count; i++)
+            {
+                var r = _navDoorRows[i];
+                int delay = expand ? i * NavDoorLabelStaggerMs : 0;
+                Time(r.Tile, ms);
+                Time(r.Icon, ms);
+                Time(r.Host, expand ? NavDoorLabelFadeMs : ms / 2, delay);
+                Time(r.Slide, expand ? NavDoorLabelSlideMs : ms / 2, delay);
+            }
+            ApplyNavRail(expand);
+        }
 
-            rail.Width = expand ? NavRailExpandedWidth : NavRailCollapsedWidth;
+        private static void Time(Animatable a, int ms, int delayMs = 0)
+        {
+            foreach (var t in a.Transitions ?? new Transitions())
+                if (t is DoubleTransition d)
+                {
+                    d.Duration = TimeSpan.FromMilliseconds(ms);
+                    d.Delay = TimeSpan.FromMilliseconds(delayMs);
+                }
+        }
+
+        private void ApplyNavRail(bool expand)
+        {
+            _navRail!.Width = expand ? NavRailExpandedWidth : NavRailCollapsedWidth;
+            foreach (var l in _navRailLabels) l.Opacity = expand ? 1 : 0;
+            foreach (var r in _navDoorRows)
+            {
+                r.Tile.Width = r.Tile.Height = expand ? NavDoorTileExpanded : NavDoorTileCollapsed;
+                r.Icon.Width = r.Icon.Height = expand ? NavDoorIconExpanded : NavDoorIconCollapsed;
+                r.Host.Opacity = expand ? 1 : 0;
+                r.Slide.Y = expand ? 0 : NavDoorLabelRise;
+            }
+            // Shut, a bar would sit over the medallions (WPF :955-958).
+            if (this.FindControl<ScrollViewer>("NavRailScroll") is { } sv)
+                sv.VerticalScrollBarVisibility = expand ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+        }
+
+        /// <summary>WPF HoldNavRailOpen/ReleaseNavRailOpen (:1309-1351): a popup opened from the
+        /// rail keeps it out until the last holder lets go; then it shuts unless the pointer is
+        /// on it. No popup on this head calls it yet (the favorites rail and friends chip that do on
+        /// WPF are not ported).</summary>
+        internal void HoldNavRailOpen(object owner)
+        {
+            if (_navRailHolds.Add(owner)) SetNavRailExpanded(true);
+        }
+
+        internal void ReleaseNavRailOpen(object owner)
+        {
+            if (_navRailHolds.Remove(owner) && _navRailHolds.Count == 0 && _navRail?.IsPointerOver != true)
+                SetNavRailExpanded(false);
         }
 
         /// <summary>Whether the rail is currently open. NavCheck and the click-through driver read
@@ -207,12 +227,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal bool NavRailExpanded => _navRailExpanded;
 
         internal bool NavRailHooked => _navRailHooked;
-
-        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
-        {
-            base.OnAttachedToVisualTree(e);
-            InitializeNavRail();
-        }
 
         /// <summary>
         /// The rail's search pill, one line as in WPF (MainWindow.NavRail.cs:480-484). WPF's Toggle
