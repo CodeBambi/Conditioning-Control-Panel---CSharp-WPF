@@ -34,10 +34,14 @@ namespace ConditioningControlPanel
             s.TotalSessions++;
             CoreSettings.Save();
 
-            CoreFlash.Start();   // always; it checks FlashEnabled itself
-            if (s.SubliminalEnabled) CoreSubliminal.Start();
-            if (s.LockCardEnabled) LockCardScheduler.Instance.Start();
-            if (s.BouncingTextEnabled) CoreBouncingText.Start();
+            // #668 Audio-Only Hypno (WPF :304): the visual features sit the session out.
+            // ponytail: WPF also starts the layered audio bed (LayeredAudio.Start(ignoreMasterToggle: true));
+            // no head here has it in Core yet - add it with the audio-layers port.
+            bool audioOnly = s.AudioOnlySession;
+            if (!audioOnly) CoreFlash.Start();   // it checks FlashEnabled itself
+            if (!audioOnly && s.SubliminalEnabled) CoreSubliminal.Start();
+            if (!audioOnly && s.LockCardEnabled) LockCardScheduler.Instance.Start();
+            if (!audioOnly && s.BouncingTextEnabled) CoreBouncingText.Start();
             else CoreBouncingText.Stop();   // WPF: clean up any leftover state
 
             _running = true;

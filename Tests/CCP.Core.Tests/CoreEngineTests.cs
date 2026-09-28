@@ -9,12 +9,15 @@ namespace CCP.Core.Tests;
 public sealed class CoreEngineTests
 {
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Start_arms_by_saved_flags_and_Stop_disarms_without_touching_them(bool on)
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]   // #668 audio-only: flags On, nothing visual starts
+    public void Start_arms_by_saved_flags_and_Stop_disarms_without_touching_them(bool flags, bool audioOnly)
     {
         var s = CoreSettings.Current;
-        s.FlashEnabled = s.SubliminalEnabled = s.LockCardEnabled = s.BouncingTextEnabled = on;
+        s.AudioOnlySession = audioOnly;
+        var on = flags && !audioOnly;
+        s.FlashEnabled = s.SubliminalEnabled = s.LockCardEnabled = s.BouncingTextEnabled = flags;
         int btStart = 0, btStop = 0, hook = 0;
         CoreBouncingText.StartAction = () => btStart++;
         CoreBouncingText.StopAction = () => btStop++;
@@ -24,19 +27,20 @@ public sealed class CoreEngineTests
         {
             CoreEngine.Start();
             Assert.True(CoreEngine.IsRunning);
-            Assert.True(CoreFlash.IsRunning);   // always started; it gates on FlashEnabled itself
+            Assert.Equal(!audioOnly, CoreFlash.IsRunning);   // started unless audio-only; it gates on FlashEnabled itself
             Assert.Equal(on, CoreSubliminal.IsRunning);
             Assert.Equal(on, LockCardScheduler.Instance.IsRunning);
             Assert.Equal((on ? 1 : 0, on ? 0 : 1), (btStart, btStop));
             Assert.Equal(sessions + 1, s.TotalSessions);
 
+            var stopsBefore = btStop;
             CoreEngine.Stop();
             Assert.False(CoreEngine.IsRunning || CoreFlash.IsRunning || CoreSubliminal.IsRunning || LockCardScheduler.Instance.IsRunning);
             Assert.Equal(1, hook);
-            Assert.True(btStop >= 1);
-            Assert.Equal(on, s.FlashEnabled && s.SubliminalEnabled && s.LockCardEnabled && s.BouncingTextEnabled);
+            Assert.Equal(stopsBefore + 1, btStop);
+            Assert.Equal(flags, s.FlashEnabled && s.SubliminalEnabled && s.LockCardEnabled && s.BouncingTextEnabled);
         }
-        finally { CoreEngine.Stop(); CoreEngine.StoppedHook = null; CoreBouncingText.StartAction = CoreBouncingText.StopAction = null; }
+        finally { s.AudioOnlySession = false; CoreEngine.Stop(); CoreEngine.StoppedHook = null; CoreBouncingText.StartAction = CoreBouncingText.StopAction = null; }
     }
 
     [Fact]

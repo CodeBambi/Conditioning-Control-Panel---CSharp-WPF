@@ -263,7 +263,15 @@ namespace ConditioningControlPanel.Avalonia
                         Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
-                desktop.MainWindow.Closed += (_, _) => StopDesktopOverlays();
+                // WPF RequestExit (MainWindow.Launcher.cs:126) stops the engine first: the lock-card
+                // schedule would otherwise keep the process alive.
+                desktop.MainWindow.Closed += (_, _) =>
+                {
+                    CoreEngine.StoppedHook = null;   // the shell is gone; do not repaint it
+                    CoreEngine.Stop();
+                    StopDesktopOverlays();
+                    Views.Windows.LockCardWindow.ForceCloseAll();
+                };
                 // Tray: restore, wake, Stop everything (the no-hotkey panic control) and the real Exit.
                 try
                 {

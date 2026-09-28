@@ -42,33 +42,40 @@ public sealed class ShellTrayTests
             // Stop everything is StopEngine: schedules stop, queued flashes are dropped, the saved
             // flags stay On (the card stays ticked), and the shell stays open. A plain Start never
             // raises the session feature lock.
-            CoreEngine.StoppedHook = shell.OnEngineStopped;
-            CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;   // as App seeds it
-            CoreSettings.Current.FlashEnabled = CoreSettings.Current.SubliminalEnabled = CoreSettings.Current.BouncingTextEnabled = true;
-            shell.StartEngine();
-            Assert.True(CoreEngine.IsRunning && CoreFlash.IsRunning && CoreSubliminal.IsRunning);
-            Assert.False(shell.IsSessionFeatureLockActive);
-            Assert.Equal(Loc.Get("label_stop"), shell.Named<TextBlock>("TxtStartLabel")!.Text);
-            var card = new BouncingTextFeatureControl();   // a shown card repaints from the flag
-            var cardWindow = new Window { Content = card };
-            cardWindow.Show();
-            var cardEnable = card.GetVisualDescendants().OfType<CheckBox>().First(c => c.Name == "ChkEnable");
-            Assert.True(cardEnable.IsChecked);
-            Assert.True(cardEnable.IsEnabled);
-            var generation = FlashOverlay.Generation;
-            items[2].Command!.Execute(null);
-            Assert.False(CoreEngine.IsRunning);
-            Assert.False(CoreFlash.IsRunning);
-            Assert.False(CoreSubliminal.IsRunning);
-            Assert.Equal(generation + 1, FlashOverlay.Generation);
-            Assert.True(CoreSettings.Current.FlashEnabled && CoreSettings.Current.SubliminalEnabled && CoreSettings.Current.BouncingTextEnabled);
-            Assert.Equal(Loc.Get("label_start"), shell.Named<TextBlock>("TxtStartLabel")!.Text);
-            Assert.True(shell.IsVisible);
-            Dispatcher.UIThread.RunJobs();
-            Assert.True(cardEnable.IsChecked);
-            CoreEngine.StoppedHook = null;
-            CoreSession.IsEngineRunningProvider = null;
-            cardWindow.Close();
+            try
+            {
+                CoreEngine.StoppedHook = shell.OnEngineStopped;
+                CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;   // as App seeds it
+                CoreSettings.Current.FlashEnabled = CoreSettings.Current.SubliminalEnabled = CoreSettings.Current.BouncingTextEnabled = true;
+                shell.StartEngine();
+                Assert.True(CoreEngine.IsRunning && CoreFlash.IsRunning && CoreSubliminal.IsRunning);
+                Assert.False(shell.IsSessionFeatureLockActive);
+                Assert.Equal(Loc.Get("label_stop"), shell.Named<TextBlock>("TxtStartLabel")!.Text);
+                var card = new BouncingTextFeatureControl();   // a shown card repaints from the flag
+                var cardWindow = new Window { Content = card };
+                cardWindow.Show();
+                var cardEnable = card.GetVisualDescendants().OfType<CheckBox>().First(c => c.Name == "ChkEnable");
+                Assert.True(cardEnable.IsChecked);
+                Assert.True(cardEnable.IsEnabled);
+                var generation = FlashOverlay.Generation;
+                items[2].Command!.Execute(null);
+                Assert.False(CoreEngine.IsRunning);
+                Assert.False(CoreFlash.IsRunning);
+                Assert.False(CoreSubliminal.IsRunning);
+                Assert.Equal(generation + 1, FlashOverlay.Generation);
+                Assert.True(CoreSettings.Current.FlashEnabled && CoreSettings.Current.SubliminalEnabled && CoreSettings.Current.BouncingTextEnabled);
+                Assert.Equal(Loc.Get("label_start"), shell.Named<TextBlock>("TxtStartLabel")!.Text);
+                Assert.True(shell.IsVisible);
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(cardEnable.IsChecked);
+                cardWindow.Close();
+            }
+            finally
+            {
+                CoreEngine.StoppedHook = null;
+                CoreSession.IsEngineRunningProvider = null;
+                CoreEngine.Stop();
+            }
 
             // X goes to the tray; Show brings it back; Exit really closes.
             var closed = false;
