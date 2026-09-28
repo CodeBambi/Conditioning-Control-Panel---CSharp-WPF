@@ -288,3 +288,16 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: tab renders 3/50 from a sandbox fixture; sha256 unchanged after a 60 s idle session; tests
   fail-proofed (idle exit writes nothing, dirty exit persists, premium/free counts with literal numbers).
 - Gaps: card grid, ItemUnlockedPopup (WardrobeCatalog is WPF-only), no user path reaches an unlock yet.
+
+## avalonia-port/panic-hotkey: +873
+- Panic key on Linux. PanicPolicy moved to Core (100% rename). X11/XWayland focus: XInput2 raw key presses on
+  the root window (non-consuming, modifier-blind = WPF's low-level hook; layout changes re-resolve the keycode).
+  WPF's press handling: lock card and Ctrl+K palette rungs first, then tray Stop everything + lock cards; a second
+  press within 2 s exits. Devices rebind wired (an abandoned rebind cancels when the window loses focus).
+- Wayland-native focus: GlobalShortcuts portal bound only while effects run (decision C, oracle-deep); fallback
+  with a one-time notice when the portal is missing/refused/unanswered (proven live: KDE dialog unanswered -> fallback).
+  D-Bus bug found and fixed (MessageWriter struct passed by value -> invalid body -> bus disconnect).
+- Discovery: KWin routes Xwayland's XTest through libei, so synthetic presses can't prove anything on the live
+  desktop; scripts/panic-check.sh proves the X path in a throwaway kwin --virtual + standalone Xwayland (fail-proven).
+- Evidence: PanicKeyTests (5, fail-proofed), --panic-check, --portal-check, --tray-probe; two review rounds.
+- Not run: an accepted portal bind + Activated, a physical key press on the live desktop, Windows.

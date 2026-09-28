@@ -119,7 +119,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>Windows always has a tray; Linux has one only while a StatusNotifierWatcher owns its name.</summary>
-        private static bool ProbeTrayHost()
+        internal static bool ProbeTrayHost()
         {
             if (OperatingSystem.IsWindows()) return true;
             try

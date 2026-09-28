@@ -84,6 +84,24 @@ namespace ConditioningControlPanel.Avalonia
             if (Array.IndexOf(args, "--overlay-check") >= 0)
                 return OverlayCheck.Run();
 
+            // --tray-probe: prints whether a StatusNotifierWatcher owns its name (X hides to tray only then).
+            if (Array.IndexOf(args, "--tray-probe") >= 0)
+            {
+                var present = Views.Windows.MainShellWindow.ProbeTrayHost();
+                Console.WriteLine($"tray host present: {present}");
+                return present ? 0 : 1;
+            }
+
+            // --portal-check: GlobalShortcuts CreateSession -> Response 0 -> Session.Close, live.
+            if (Array.IndexOf(args, "--portal-check") >= 0)
+                return Platform.PortalPanicShortcut.CheckAsync().GetAwaiter().GetResult();
+
+            // --panic-check [Key] presses the panic key through XTest against the real app on a temp
+            // profile and fails unless one press stops bouncing text and a double press exits.
+            var pc = Array.IndexOf(args, "--panic-check");
+            if (pc >= 0)
+                return PanicCheck.Run(pc + 1 < args.Length ? args[pc + 1] : "Pause");
+
             // --audio-probe plays a clip through the REAL LibVLC output and ducks/unducks other
             // apps via CoreAudio, printing pactl's view of each step. Run with another stream
             // playing (e.g. a looping pw-play) to see its volume drop and come back.

@@ -162,7 +162,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // WPF live-applies only while the engine runs. This head has no engine yet, so - the
             // same decision as the Flash card - the toggle itself starts and stops the overlay.
             // ponytail: no engine gate; gate on CoreSession.IsEngineRunning once Start/Stop is ported.
-            if (want) CoreBouncingText.Start();
+            if (want) Windows.MainShellWindow.StartEffect(() => { if (CoreSettings.Current.BouncingTextEnabled) CoreBouncingText.Start(); });
             else CoreBouncingText.Stop();
         }
 

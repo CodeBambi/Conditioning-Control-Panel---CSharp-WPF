@@ -2,10 +2,12 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Views.AvatarTube;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using Serilog;
 
@@ -50,6 +52,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CmbMicDevice.SelectionChanged += CmbMicDevice_SelectionChanged;
             BtnMicRefresh.Click += BtnMicRefresh_Click;
             BtnChatShortcutDevices.Click += BtnChatShortcut_Click;
+            BtnPanicKey.Click += BtnPanicKey_Click;
             BtnWebcamRevokeConsent.Click += BtnWebcamRevokeConsent_Click;
 
             SyncFromSettings();
@@ -419,9 +422,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 CoreSettings.Save();
                 Log.Information("Panic key enabled");
             }
-            // ponytail: WPF also stops/starts the low-level keyboard hook here (MainWindow's
-            // _keyboardHook, ConditioningControlPanel/Services/Input/), a Win32 WH_KEYBOARD_LL hook
-            // with no equivalent on this head - so there is no hook to leave running either.
+            // WPF also stops/starts its keyboard hook here; the X11 listener reads PanicKeyEnabled on
+            // every press instead (MainShellWindow.PanicKey.cs), so there is nothing to toggle.
         }
 
         /// <summary>Posted, not assigned inline: the revert has to run after the dialog's event
@@ -433,9 +435,51 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             _loading = false;
         });
 
-        // ponytail: BtnPanicKey / BtnPauseKey capture the next key through MainWindow's global
-        // keyboard hook (MainWindow.xaml.cs UpdatePanicKeyButton / _isCapturingPanicKey); the
-        // buttons show the stored binding but cannot rebind it on this head.
+        /// <summary>
+        /// WPF BtnPanicKey_Click (MainWindow.UiUpdates.cs:2440) + the capture branch of
+        /// OnGlobalKeyPressed (MainWindow.xaml.cs:916): no dialog, the button reads "Press any
+        /// key..." and the NEXT key, any key, becomes the panic key. WPF takes it from its global
+        /// hook; here the window has focus after the click, so a tunnelling KeyDown gets it first.
+        /// Capture stays set a beat after the key so the X11 listener's copy of that same press
+        /// (queued on the UI thread in either order) is not also a panic.
+        /// </summary>
+        private void BtnPanicKey_Click(object? sender, RoutedEventArgs e)
+        {
+            if (TopLevel.GetTopLevel(this) is not { } top) return;
+            MainShellWindow.CapturingPanicKey = true;
+            SetButtonLabel(BtnPanicKey, "Press any key...");
+            top.AddHandler(KeyDownEvent, OnCaptureKey, RoutingStrategies.Tunnel);
+            // WPF's global hook always got the next key; an in-window capture can be abandoned by
+            // clicking away, which would leave the panic key disabled for good. Losing the window cancels.
+            if (top is Window window) window.Deactivated += OnCancel;
+
+            void Detach()
+            {
+                top.RemoveHandler(KeyDownEvent, OnCaptureKey);
+                if (top is Window w) w.Deactivated -= OnCancel;
+            }
+
+            void OnCancel(object? s, EventArgs a)
+            {
+                Detach();
+                MainShellWindow.CapturingPanicKey = false;
+                SetButtonLabel(BtnPanicKey, $"🔑 {CoreSettings.Current.PanicKey}");
+            }
+
+            void OnCaptureKey(object? s, KeyEventArgs k)
+            {
+                Detach();
+                k.Handled = true;
+                CoreSettings.Current.PanicKey = k.Key.ToString();
+                CoreSettings.Save();
+                SetButtonLabel(BtnPanicKey, $"🔑 {CoreSettings.Current.PanicKey}");
+                Log.Information("Panic key changed to: {Key}", k.Key);
+                DispatcherTimer.RunOnce(() => MainShellWindow.CapturingPanicKey = false, TimeSpan.FromMilliseconds(300));
+            }
+        }
+
+        // ponytail: BtnPauseKey still only shows its binding - the pause key parks a video (the #735
+        // grace pause), and this head has no grace pause for it to reach yet.
 
         // =====================================================================================
         //  the chat shortcut (MainWindow.SessionIO.cs BtnChatShortcut_Click / RefreshChatShortcutLabel)
