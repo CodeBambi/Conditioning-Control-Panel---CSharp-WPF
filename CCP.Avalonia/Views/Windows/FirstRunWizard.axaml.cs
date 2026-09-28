@@ -196,7 +196,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <para><see cref="Run"/> is now real, and <c>MainShellWindow.FirstRun.cs</c> calls it: the
     /// shell claims the gate in its constructor and opens this window once it is on screen. Both
     /// of the wizard's outgoing actions land on this head - the content-folder picker is
-    /// <c>MainShellWindow.RequestPickAssetsFolder</c> and the short walk is
+    /// <c>MainShellWindow.PickAssetsFolder</c>, opened at once from the button, and the short walk is
     /// <c>CoreTutorial.Start("ShortWalk")</c>, a seam this head has not seeded, so that button
     /// reaches the tour service and no tour appears (the same state AwarenessTabView and
     /// ModCreatorWindow are in).</para>
@@ -279,8 +279,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Set by "Take the tour"; read by the caller after the modal returns.</summary>
         public bool StartTourRequested { get; private set; }
 
-        /// <summary>Set by the Welcome step's folder button; the picker opens after this window closes.</summary>
-        public bool PickAssetsFolderRequested { get; private set; }
+        /// <summary>The folder the Welcome step's button applied, shown on that button.</summary>
+        private string? _pickedFolder;
 
         /// <summary>
         /// The only constructor. WPF's took the owning MainWindow so the mod commit could call
@@ -438,16 +438,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// Opens the wizard modally on <paramref name="owner"/> and performs whatever the user
-        /// asked for on the way out: the content-folder picker FIRST (it is a modal too, so it
-        /// must not race the tour), then the short walk. Never throws - a first-run screen must
+        /// asked for on the way out: the short walk (the folder picker already ran from its button). Never throws - a first-run screen must
         /// never be the reason a fresh install fails to start.
         ///
         /// <para>WPF's <c>Run(MainWindow)</c> is synchronous because <c>ShowDialog</c> is;
         /// Avalonia's is awaitable, so this returns a Task and the caller awaits it. The tail runs
         /// straight after the await rather than from a second dispatcher post: WPF needed the post
         /// only to get off <c>ShowDialog</c>'s nested message loop, and <c>await</c> already is
-        /// that. The picker is awaited before the tour starts, which is what WPF's one shared
-        /// action bought.</para>
+        /// that.</para>
         ///
         /// <para><c>StartTutorial(TutorialType.ShortWalk)</c> becomes
         /// <c>CoreTutorial.Start("ShortWalk")</c> - the seam takes the head's tutorial-type name as
@@ -474,12 +472,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
 
             if (wizard == null) return;
-
-            if (wizard.PickAssetsFolderRequested)
-            {
-                try { await owner.RequestPickAssetsFolder(); }
-                catch (Exception ex) { Log.Warning(ex, "[FirstRun] Assets folder picker failed"); }
-            }
 
             if (wizard.StartTourRequested)
             {
@@ -577,7 +569,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 "Running many features at once, especially at high frequencies, is heavy on older machines. " +
                 "Turn some off or lower their rates in Settings if things get sluggish.");
 
-            _txtPickFolder.Text = Str("fr8_welcome_pick_folder", "Choose a content folder");
+            _txtPickFolder.Text = _pickedFolder ?? Str("fr8_welcome_pick_folder", "Choose a content folder");
 
             // --- step 2 ---
             _txtModHeading.Text = Str("fr8_modpick_heading", "Pick your flavour");
@@ -864,6 +856,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnNext_Click(object? sender, RoutedEventArgs e)
         {
+            if (!_btnPickFolder.IsEnabled) return;   // folder picker still open: finish after it answers
             if (_step == 2) CommitModChoice();
 
             if (_step >= StepCount)
@@ -877,20 +870,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ShowStep(_step + 1);
         }
 
-        private void BtnPickFolder_Click(object? sender, RoutedEventArgs e)
+        private async void BtnPickFolder_Click(object? sender, RoutedEventArgs e)
         {
-            // Deferred rather than opened here: in WPF the folder browser is a modal owned by
-            // MainWindow, and stacking it under this modal is exactly the modal-on-modal the wizard
-            // exists to remove. The caller opens it the instant this window is gone.
-            PickAssetsFolderRequested = true;
+            // Opened here, owned by this window: WPF deferred it (FirstRunWizard.xaml.cs:1175) only
+            // to dodge a modal-on-modal Win32 folder browser, and the user saw nothing happen
+            // (docs/avalonia-decisions.md). Same guard, write and follow-ups as the shell's picker.
             _btnPickFolder.IsEnabled = false;
-            _txtPickFolder.Text = Str("fr8_welcome_pick_folder_queued",
-                "We'll ask for your content folder right after this");
+            if (await MainShellWindow.PickAssetsFolder(this) is { } chosen)
+            {
+                _pickedFolder = chosen;
+                _txtPickFolder.Text = chosen;
+            }
+            _btnPickFolder.IsEnabled = true;
         }
 
         private void Window_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key != Key.Escape) return;
+            if (!_btnPickFolder.IsEnabled) { e.Handled = true; return; }   // same: don't close under the picker
             e.Handled = true;
             CloseSafely();
         }

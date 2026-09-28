@@ -45,6 +45,10 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Serilog" Version="3.1.1" />
+    <!-- Vosk: the speech engine (Services/Speech/SpeechEngine.cs). Managed side is netstandard2.0.
+         Its build/ targets add libvosk to Core's output, picked by the BUILD MACHINE's OS (not the RID),
+         and that file copies on to every consumer; heads still reference Vosk themselves. -->
+    <PackageReference Include="Vosk" Version="0.3.38" />
   </ItemGroup>
 
   <!--

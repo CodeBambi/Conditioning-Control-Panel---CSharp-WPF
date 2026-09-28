@@ -541,3 +541,24 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   covers its screen (primary card on the primary screen); 52 px glyph.
 - Evidence: LockCardTypingTests (fail-proofed); live sandbox typed card: 3 repeats in 5.1 s, 0 errors. Voice solve
   follows (speech units). Review: FIX -> r1 applied.
+
+## avalonia-port/speech-core-engine: +890 (voice unlock unit 1; user-reported: speak-to-unlock doesn't work)
+- The Vosk engine moved into Core (SpeechEngine) behind a mic-source seam; WPF SpeechService derives from it with its NAudio
+  mic (API unchanged). Same model, grammar and scoring as WPF (decisions D1-D4, oracle-deep).
+- Evidence: SpeechEngineVoskTests with the real model and Vosk's test.wav replayed through the real session path: match,
+  reject a wrong phrase (heard text, not a timeout), silence times out; CI fetches the model and requires it. Review: ACCEPT.
+
+## avalonia-port/speech-linux-capture: +249 (voice unlock unit 2)
+- PulseMicSource: parec capture (pw-record fallback), pactl source list without monitors, device choice like WPF; seeds
+  CoreSpeech on the Avalonia head; Vosk referenced by the head. Recorder stderr/exit logged; the list is cached 5 s.
+- Evidence: scripts/speech-capture-check.sh (null sink -> test WAV -> parec on the monitor, never a real mic): match exit
+  0, wrong phrase exit 1, no stray recorder (evidence/speech-linux-capture/speech-check-*.txt). Review: ACCEPT.
+
+## avalonia-port/firstrun-folder-picker: +235 (user-reported x2)
+- First-run "Choose a content folder" did nothing visible: the click only queued the picker until the wizard closed (a
+  WPF modal-on-modal workaround). It now opens the portal folder picker at once, owned by the wizard, through the shell's
+  single PickAssetsFolder (same #1053 guard, settings write, images/videos folders); the button shows the chosen folder;
+  the wizard can't close under an open picker. Decision logged (deliberate, user-requested).
+- The top-right release button read "v6.9.1 IS OUT" on 6.11.3: it now names WPF's btn_v6_11_3_is_out; ReleaseButtonKeyTests
+  keeps both shells on the same key (fails on the stale key).
+- Evidence: FirstRunFolderPickerTests; live: portal FileChooser.OpenFile with the "First run" window as parent. Review: ACCEPT.

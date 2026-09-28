@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Avalonia;
 using Serilog;
 #if DEBUG
@@ -126,6 +127,36 @@ namespace ConditioningControlPanel.Avalonia
                 return AudioProbe.Run();
             if (Array.IndexOf(args, "--layers-probe") >= 0)
                 return AudioProbe.RunLayers();
+
+            // --speech-check <modelRoot> <pulseSource> <phrase>: one real grammar session through
+            // PulseMicSource on the given source (scripts/speech-capture-check.sh feeds a null sink's
+            // monitor; never a real mic). Exit 0 = matched, 1 = not matched.
+            var sc = Array.IndexOf(args, "--speech-check");
+            if (sc >= 0 && sc + 3 >= args.Length)
+            {
+                Console.Error.WriteLine("usage: --speech-check <modelRoot> <pulseSource> <phrase>");
+                return 2;
+            }
+            if (sc >= 0)
+            {
+                using var engine = new ConditioningControlPanel.Services.Speech.SpeechEngine(
+                    new Platform.PulseMicSource(args[sc + 2]), new[] { args[sc + 1] });
+                var heard = engine.RecognizePhraseAsync(args[sc + 3],
+                    new ConditioningControlPanel.Services.Speech.RecognizeOptions { Timeout = TimeSpan.FromSeconds(12) })
+                    .GetAwaiter().GetResult();
+                Console.WriteLine($"speech-check: matched={heard.Matched} heard='{heard.Transcript}' score={heard.Score:0.00} " +
+                                  $"loud={heard.LoudEnough} timedOut={heard.TimedOut} unavailable={heard.Unavailable}");
+                // Still alive, so a recorder that Stop failed to kill would still be here (no SIGPIPE yet).
+                System.Threading.Thread.Sleep(500);
+                var src = args[sc + 2];
+                var stray = System.IO.Directory.GetDirectories("/proc").Any(d =>
+                {
+                    try { var c = System.IO.File.ReadAllText(d + "/cmdline"); return c.Contains(src) && (c.StartsWith("parec") || c.StartsWith("pw-record")); }
+                    catch { return false; }
+                });
+                if (stray) { Console.Error.WriteLine("speech-check: recorder still running after the session"); return 3; }
+                return heard.Matched ? 0 : 1;
+            }
 
             // --video-check <file> [out.png] plays a video in the real MiniPlayerWindow and fails
             // unless frames change, seek moves, pause freezes and close frees the player.

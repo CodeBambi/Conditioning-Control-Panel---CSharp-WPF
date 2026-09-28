@@ -91,35 +91,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// a Task, so callers fire and forget (<c>_ = RequestPickAssetsFolder();</c>) the way the
         /// WPF wrappers called the click handler.
         /// </summary>
-        internal async Task RequestPickAssetsFolder()
+        internal Task RequestPickAssetsFolder() => PickAssetsFolder(this);
+
+        /// <summary>
+        /// The picker behind <see cref="RequestPickAssetsFolder"/>, owned by <paramref name="owner"/>
+        /// (the shell, or the first-run wizard). Returns the folder it applied, or null.
+        /// </summary>
+        internal static async Task<string?> PickAssetsFolder(global::Avalonia.Controls.Window owner)
         {
             try
             {
+                var storage = owner.StorageProvider;
                 var current = CoreSettings.Current.CustomAssetsPath;
                 var start = !string.IsNullOrWhiteSpace(current) && Directory.Exists(current)
                     ? current
                     : CorePaths.EffectiveAssets;
 
-                var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
                 {
                     Title = "Select a folder for your custom assets (images and videos)",
                     AllowMultiple = false,
-                    SuggestedStartLocation = await StorageProvider.TryGetFolderFromPathAsync(start),
+                    SuggestedStartLocation = await storage.TryGetFolderFromPathAsync(start),
                 });
-                if (folders.Count != 1 || folders[0].TryGetLocalPath() is not { } selected) return;
+                if (folders.Count != 1 || folders[0].TryGetLocalPath() is not { } selected) return null;
 
                 // #1053: this folder becomes the root of every media scan in the app, and the app
                 // also writes into it (images/, videos/, .packs/, .temp/). Neither belongs on the
                 // Desktop or a drive root.
                 if (IsPersonalFolderRoot(selected))
                 {
-                    await MessageDialog.ShowAsync(this, "Pick a folder of your own",
+                    await MessageDialog.ShowAsync(owner, "Pick a folder of your own",
                         "That folder is one of your system's own - your Desktop, Documents, " +
                         "Pictures, Downloads, your home folder or a whole drive." +
                         Environment.NewLine + Environment.NewLine +
                         "The app both reads and writes here, so pick or make a folder that holds " +
                         "nothing but your assets.");
-                    return;
+                    return null;
                 }
 
                 Directory.CreateDirectory(Path.Combine(selected, "images"));
@@ -129,12 +136,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 CoreSettings.Save();
                 Log.Information("Custom assets path set to: {Path}", selected);
 
-                await MessageDialog.ShowAsync(this, Loc.Get("title_assets_folder_set"),
+                await MessageDialog.ShowAsync(owner, Loc.Get("title_assets_folder_set"),
                     Loc.GetF("msg_custom_assets_folder_set_0", selected));
+                return selected;
             }
             catch (Exception ex)
             {
                 Log.Warning(ex, "RequestPickAssetsFolder failed");
+                return null;
             }
         }
 
