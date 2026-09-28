@@ -31,7 +31,13 @@ namespace ConditioningControlPanel.Avalonia.Platform
         {
             if (!OperatingSystem.IsLinux()) return; // ponytail: Windows Avalonia has no mic source yet; reuse WPF's NAudio one when it gets one
             var mic = new PulseMicSource();
-            var engine = new SpeechEngine(mic, SpeechEngine.DefaultModelRoots);
+            Use(new SpeechEngine(mic, SpeechEngine.DefaultModelRoots), mic);
+        }
+
+        /// <summary>Point <see cref="Speech"/> and <see cref="CoreSpeech"/> at one engine and mic
+        /// (the lock-card tests hand in a WAV-fed pair, never a real microphone).</summary>
+        internal static void Use(SpeechEngine engine, IMicSource mic)
+        {
             Speech = engine;
             CoreSpeech.IsAvailableProvider = () => engine.IsAvailable;
             CoreSpeech.HasCaptureDeviceProvider = () => mic.HasDevice;
