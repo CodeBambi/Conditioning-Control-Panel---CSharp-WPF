@@ -196,6 +196,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // needs MainShellWindow.ProfileFx.cs / .ProfileVat.cs / .Browser.cs.
                     case "discord": UpdateProfileSharingSummary(); break;
 
+                    // WPF MainWindow.TabNavigation.cs:429: every show re-fetches the board (read-only).
+                    case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;
+
                     // WPF MainWindow.TabNavigation.cs:324-337: spend the tab's seen-flag on any
                     // route in, then the one-time explainer on top of the tab just shown.
                     // ponytail: no rail pulse to stop on this head (StopProgramsTabPulse).
