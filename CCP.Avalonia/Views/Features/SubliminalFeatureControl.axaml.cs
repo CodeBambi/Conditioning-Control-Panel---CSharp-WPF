@@ -25,10 +25,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// sentinel: the face ships as a WPF <c>pack://</c> Resource and is not packed on this head,
     /// so offering it would name a font nothing can resolve.</para>
     ///
-    /// <para>Still head-side: the flash SURFACE (the per-screen click-through window) and the
+    /// <para>Still head-side: the flash SURFACE (Views/Overlays/SubliminalOverlay) and the
     /// mod-aware feature art. The loop itself is not - the enable toggle, the interval and the
-    /// phrase pick are <see cref="CoreSubliminal"/>. Nothing on this head arms that scheduler
-    /// yet; see <see cref="ChkEnable_Changed"/> for exactly what is missing.</para>
+    /// phrase pick are <see cref="CoreSubliminal"/>; see <see cref="ChkEnable_Changed"/> for how
+    /// this head arms it.</para>
     /// </summary>
     public partial class SubliminalFeatureControl : UserControl
     {
@@ -185,19 +185,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// does not repeat any of that: two copies of "compare, write, gate, save" is exactly how
         /// the heads drift apart.
         ///
-        /// <para><b>What this actually does on THIS head today: it persists, and it does not arm.</b>
-        /// The scheduler is real and portable, but Core only starts it behind
-        /// <c>CoreSession.IsEngineRunning</c>, and this head seeds no
-        /// <c>IsEngineRunningProvider</c> (see <c>CCP.Avalonia/App.axaml.cs</c>) - so the gate
-        /// answers false and the toggle stops at the save. Two things have to arrive before a
-        /// subliminal appears here: that flag, and a <c>CoreSubliminal.ShowProvider</c> over a
-        /// click-through overlay in <c>CCP.Avalonia/Views/Overlays/</c>. Routing through the one
-        /// authority now is what makes both a seeding line rather than a rewrite.</para>
+        /// <para>Core only arms the scheduler behind <c>CoreSession.IsEngineRunning</c>, and this head
+        /// has no engine yet, so - the same decision as the Flash card - the toggle itself arms
+        /// and disarms it. The show surface is <c>Views/Overlays/SubliminalOverlay</c>, seeded in App.</para>
         /// </summary>
         private void ChkEnable_Changed(object? sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            CoreSubliminal.SetEnabled(ChkEnable.IsChecked ?? false);
+            var on = ChkEnable.IsChecked ?? false;
+            CoreSubliminal.SetEnabled(on);
+            // ponytail: no engine gate; drop these two lines once CoreSession.IsEngineRunning is seeded.
+            if (on) CoreSubliminal.Start();
+            else CoreSubliminal.Stop();
         }
 
         private void SliderPerMin_Changed(object? sender, RangeBaseValueChangedEventArgs e)

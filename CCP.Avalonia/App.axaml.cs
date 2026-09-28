@@ -99,6 +99,24 @@ namespace ConditioningControlPanel.Avalonia
                     if (desktop.MainWindow is { } host) Views.Overlays.FlashOverlay.TriggerOnce(host);
                 };
 
+                // Subliminal and bouncing-text surfaces. Core owns the schedule / the motion;
+                // these draw on click-through overlays (Views/Overlays), hosted like the flash.
+                CoreSubliminal.ShowProvider = text =>
+                {
+                    if (desktop.MainWindow is { } host) Views.Overlays.SubliminalOverlay.Show(host, text);
+                };
+                CoreSubliminal.RunStateChanged = running =>
+                {
+                    if (!running) global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Overlays.SubliminalOverlay.CloseAll);
+                };
+                CoreBouncingText.StartAction = () =>
+                {
+                    if (desktop.MainWindow is { } host) Views.Overlays.BouncingTextOverlay.Start(host);
+                };
+                CoreBouncingText.StopAction = Views.Overlays.BouncingTextOverlay.Stop;
+                CoreBouncingText.RefreshAction = Views.Overlays.BouncingTextOverlay.Refresh;
+                CoreBouncingText.RestartAction = Views.Overlays.BouncingTextOverlay.Restart;
+
                 // No CoreMods seeding here, deliberately. ModService is still in the WPF head, so
                 // this head has nothing to seed the mod seam with and leaves every provider null.
                 // Unseeded is the supported state: CoreMods answers from the built-in manifests,
@@ -158,16 +176,6 @@ namespace ConditioningControlPanel.Avalonia
                 // literal truth here, not a placeholder - and it is the only safe unseeded answer,
                 // because an entitlement seam that failed open would hand every Linux user the
                 // paid tier.
-                //
-                // CoreBouncingText stays unseeded, and the split is the point: the motion, the
-                // colour modes and the XP rate limit are BouncingTextEngine in Core and identical
-                // on both heads, but nothing here owns a full-screen click-through surface to paint
-                // logos on yet. Unseeded, the Lab card's Start/Stop/Refresh/Restart are silent
-                // no-ops - the same answer the WPF card got from App.BouncingText?. before the
-                // service existed - and the checkbox still reads from the saved setting, so it says
-                // "on, drawing nothing" rather than lying about being off. Seeding this needs an
-                // overlay window in Views/Overlays/ plus the two facts the engine cannot work out
-                // for itself: screen bounds and glyph metrics.
                 //
                 // CoreSpeech is deliberately left unseeded: there is no speech engine on this head
                 // yet, and the seam's unseeded answers (no mic, empty device list, NotProbed) are
