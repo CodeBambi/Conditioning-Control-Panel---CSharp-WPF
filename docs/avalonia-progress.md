@@ -50,3 +50,17 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Follow-up (next branch): Avalonia still uses local stand-ins for these types
   (SettingsPaletteWindow, DescentFuse/CeremonyWindow, SpiralTabView, EnhancementPlayerWindow).
 - Not run: WPF tests (Windows-only).
+
+## avalonia-port/wire-core-standins-1: +332
+- Deletes the Avalonia stand-ins for types #1768/#1769 moved to Core: DescentFuseWindow and
+  SpiralTabView read DescentFuseCopy; DescentCeremonyWindow reads DescentCeremonyCopy and
+  DescentMigrationChoices (only the Offer stand-in stays: DescentMigrationOffer is head-only);
+  SettingsPaletteWindow lists SettingsPaletteIndex.Search and navigates (ShowTab, FocusSection,
+  2s glow), and the rail's search pill opens it; EnhancementPlayerWindow calls EnhancementResolver.
+- Ledger: win-settings-palette stub -> wired. shell-nav-rail, win-descent-fuse,
+  win-descent-ceremony, views-tab-spiral, views-deeper-enhancement-player stay stub (notes updated).
+- Evidence: Tests/CCP.Avalonia.Tests/CoreStandInTests.cs (5 cases); Keincheck palette open,
+  "volume" query and Enter -> Settings > Audio, spiral fog text, under
+  ~/ccp-port/evidence/wire-core-standins-1/.
+- Not run: WPF tests (Windows-only); Descent windows and enhancement auto-load have no user path
+  Keincheck can drive.

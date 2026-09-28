@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using ConditioningControlPanel.Services.Descent;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -26,11 +27,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// "Not tonight" button, and taking it costs nothing.</para>
     ///
     /// PORTED from ConditioningControlPanel/Windows/DescentCeremonyWindow.xaml.cs. Deviations:
-    ///  - <c>DescentMigrationOffer</c>, <c>DescentMigrationChoices</c>, <c>DescentMigration</c> and
-    ///    <c>DescentCeremonyCopy</c> are all still in the WPF head, and this project may not
-    ///    reference it, so <see cref="Offer"/>, <see cref="Choices"/> and <see cref="Copy"/> below
-    ///    are local stand-ins carrying the fields and strings this window actually reads. The copy
-    ///    is placeholder — the real sentences come back when DescentCeremonyCopy moves to Core.
+    ///  - Copy and choices are Core's <c>DescentCeremonyCopy</c> / <c>DescentMigrationChoices</c>.
+    ///    <c>DescentMigrationOffer</c> and <c>DescentMigration</c> are still head-only, so
+    ///    <see cref="Offer"/> below stands in for the fields this window reads.
     ///  - <c>App.Settings</c> is NOT a stub any more: the player level comes from
     ///    <c>CoreSettings.Current.PlayerLevel</c>, so the standing line and the closing act carry
     ///    the real number. <c>DescentMigrationService.ApplyChoice</c> and the companion's
@@ -120,7 +119,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // submit will use — so the number on the card is the number they get, not an estimate.
             // ponytail: needs DescentMigration.Resolve(string, DescentMigrationOffer).Level in
             // ConditioningControlPanel/Services/Descent/DescentMigration.cs, which also holds
-            // DescentMigrationOffer and DescentMigrationChoices. Core carries only the persisted
+            // DescentMigrationOffer. Core carries only the persisted
             // flags (AppSettings.DescentMigrationCompleted / .DescentMigrationChoice), not the
             // relevel maths. The sample offer carries the level the resolve would have produced.
             _restoreLevel = _offer.ResolvedRestoreLevel;
@@ -128,8 +127,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             PopulateCopy();
 
             this.FindControl<Button>("BtnIntroContinue")!.Click += (_, _) => ShowAct(_actChoice);
-            this.FindControl<Button>("BtnChooseRestore")!.Click += (_, _) => AskToConfirm(Choices.Restore);
-            this.FindControl<Button>("BtnChooseCycle")!.Click += (_, _) => AskToConfirm(Choices.Cycle);
+            this.FindControl<Button>("BtnChooseRestore")!.Click += (_, _) => AskToConfirm(DescentMigrationChoices.Restore);
+            this.FindControl<Button>("BtnChooseCycle")!.Click += (_, _) => AskToConfirm(DescentMigrationChoices.Cycle);
             this.FindControl<Button>("BtnConfirmBack")!.Click += (_, _) => { _pendingChoice = null; ShowAct(_actChoice); };
             _btnConfirmYes.Click += (_, _) => OnConfirmYes();
             this.FindControl<Button>("BtnDoneClose")!.Click += (_, _) => Close();
@@ -139,7 +138,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // All that survives of WPF's OnLoaded: the glow breath is declarative in the XAML now,
             // but the companion's opening line still belongs to the moment the ceremony appears.
-            Loaded += (_, _) => Say(Copy.CompanionIntro);
+            Loaded += (_, _) => Say(DescentCeremonyCopy.CompanionIntro);
 
             Closed += OnClosedInternal;
 
@@ -154,36 +153,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var currentLevel = CoreSettings.Current.PlayerLevel;
 
-            this.FindControl<TextBlock>("IntroHeadline")!.Text = Copy.IntroHeadline;
-            this.FindControl<TextBlock>("IntroStanding")!.Text = Copy.IntroStanding(
+            this.FindControl<TextBlock>("IntroHeadline")!.Text = DescentCeremonyCopy.IntroHeadline;
+            this.FindControl<TextBlock>("IntroStanding")!.Text = DescentCeremonyCopy.IntroStanding(
                 currentLevel, _offer.TotalXpEarned, _offer.DevotionDays);
-            this.FindControl<TextBlock>("IntroBody")!.Text = Copy.IntroBody;
-            this.FindControl<Button>("BtnIntroContinue")!.Content = Copy.IntroContinue;
+            this.FindControl<TextBlock>("IntroBody")!.Text = DescentCeremonyCopy.IntroBody;
+            this.FindControl<Button>("BtnIntroContinue")!.Content = DescentCeremonyCopy.IntroContinue;
 
-            this.FindControl<TextBlock>("ChoiceHeadline")!.Text = Copy.ChoiceHeadline;
+            this.FindControl<TextBlock>("ChoiceHeadline")!.Text = DescentCeremonyCopy.ChoiceHeadline;
 
-            this.FindControl<TextBlock>("RestoreTitle")!.Text = Copy.RestoreTitle;
-            this.FindControl<TextBlock>("RestoreKicker")!.Text = Copy.RestoreKicker;
-            this.FindControl<TextBlock>("RestoreDelta")!.Text = Copy.RestoreDelta(currentLevel, _restoreLevel);
-            this.FindControl<TextBlock>("RestoreBody")!.Text = Copy.RestoreBody(currentLevel, _restoreLevel);
-            this.FindControl<Button>("BtnChooseRestore")!.Content = Copy.RestoreTitle;
+            this.FindControl<TextBlock>("RestoreTitle")!.Text = DescentCeremonyCopy.RestoreTitle;
+            this.FindControl<TextBlock>("RestoreKicker")!.Text = DescentCeremonyCopy.RestoreKicker;
+            this.FindControl<TextBlock>("RestoreDelta")!.Text = DescentCeremonyCopy.RestoreDelta(currentLevel, _restoreLevel);
+            this.FindControl<TextBlock>("RestoreBody")!.Text = DescentCeremonyCopy.RestoreBody(currentLevel, _restoreLevel);
+            this.FindControl<Button>("BtnChooseRestore")!.Content = DescentCeremonyCopy.RestoreTitle;
 
-            this.FindControl<TextBlock>("CycleTitle")!.Text = Copy.CycleTitle;
-            this.FindControl<TextBlock>("CycleKicker")!.Text = Copy.CycleKicker;
-            this.FindControl<TextBlock>("CycleBonus")!.Text = Copy.CycleBonusLine();
-            this.FindControl<TextBlock>("CycleBody")!.Text = Copy.CycleBody();
-            this.FindControl<Button>("BtnChooseCycle")!.Content = Copy.CycleTitle;
+            this.FindControl<TextBlock>("CycleTitle")!.Text = DescentCeremonyCopy.CycleTitle;
+            this.FindControl<TextBlock>("CycleKicker")!.Text = DescentCeremonyCopy.CycleKicker;
+            this.FindControl<TextBlock>("CycleBonus")!.Text = DescentCeremonyCopy.CycleBonusLine();
+            this.FindControl<TextBlock>("CycleBody")!.Text = DescentCeremonyCopy.CycleBody();
+            this.FindControl<Button>("BtnChooseCycle")!.Content = DescentCeremonyCopy.CycleTitle;
 
-            this.FindControl<TextBlock>("BothDoorsFooter")!.Text = Copy.BothDoorsFooter;
+            this.FindControl<TextBlock>("BothDoorsFooter")!.Text = DescentCeremonyCopy.BothDoorsFooter;
 
-            this.FindControl<TextBlock>("ConfirmHeadline")!.Text = Copy.ConfirmHeadline;
-            this.FindControl<Button>("BtnConfirmBack")!.Content = Copy.ConfirmBack;
+            this.FindControl<TextBlock>("ConfirmHeadline")!.Text = DescentCeremonyCopy.ConfirmHeadline;
+            this.FindControl<Button>("BtnConfirmBack")!.Content = DescentCeremonyCopy.ConfirmBack;
 
-            this.FindControl<TextBlock>("DoneHeadline")!.Text = Copy.DoneHeadline;
-            this.FindControl<Button>("BtnDoneClose")!.Content = Copy.DoneClose;
+            this.FindControl<TextBlock>("DoneHeadline")!.Text = DescentCeremonyCopy.DoneHeadline;
+            this.FindControl<Button>("BtnDoneClose")!.Content = DescentCeremonyCopy.DoneClose;
 
-            this.FindControl<Button>("BtnLater")!.Content = Copy.Later;
-            this.FindControl<TextBlock>("LaterHint")!.Text = Copy.LaterHint;
+            this.FindControl<Button>("BtnLater")!.Content = DescentCeremonyCopy.Later;
+            this.FindControl<TextBlock>("LaterHint")!.Text = DescentCeremonyCopy.LaterHint;
         }
 
         // ------------------------------------------------------------------
@@ -250,8 +249,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void AskToConfirm(string choice)
         {
             _pendingChoice = choice;
-            _confirmBody.Text = Copy.ConfirmBody(choice);
-            _btnConfirmYes.Content = Copy.ConfirmYes(choice);
+            _confirmBody.Text = DescentCeremonyCopy.ConfirmBody(choice);
+            _btnConfirmYes.Content = DescentCeremonyCopy.ConfirmYes(choice);
             _confirmError.IsVisible = false;
             ShowAct(_actConfirm);
         }
@@ -261,7 +260,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_committed) return;
 
             var choice = _pendingChoice;
-            if (!Choices.IsValid(choice))
+            if (!DescentMigrationChoices.IsValid(choice))
             {
                 ShowAct(_actChoice);
                 return;
@@ -283,10 +282,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _committed = true;
 
             var level = CoreSettings.Current.PlayerLevel;
-            _doneBody.Text = Copy.DoneBody(choice!, level);
+            _doneBody.Text = DescentCeremonyCopy.DoneBody(choice!, level);
             ShowAct(_actDone);
 
-            Say(Copy.CompanionDone(choice!));
+            Say(DescentCeremonyCopy.CompanionDone(choice!));
         }
 
         /// <summary>
@@ -325,7 +324,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         // ------------------------------------------------------------------
-        // Local stand-ins for the WPF head's Descent services
+        // The one stand-in left: DescentMigrationOffer / DescentMigration are still head-only.
         // ------------------------------------------------------------------
 
         /// <summary>
@@ -348,116 +347,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 DevotionDays = 213,
                 ResolvedRestoreLevel = 38,
             };
-        }
-
-        /// <summary>ponytail: mirrors DescentMigrationChoices
-        /// (ConditioningControlPanel/Services/Descent/DescentMigration.cs); the two literals are
-        /// the wire values.</summary>
-        private static class Choices
-        {
-            public const string Restore = "restore";
-            public const string Cycle = "cycle";
-            public static bool IsValid(string? choice) => choice == Restore || choice == Cycle;
-        }
-
-        /// <summary>
-        /// PLACEHOLDER COPY. The real sentences live in DescentCeremonyCopy in the WPF head; the
-        /// short constants are verbatim, the multi-paragraph bodies are stood in for so the acts
-        /// render with real text rather than blank panels.
-        /// ponytail: needs DescentCeremonyCopy
-        /// (ConditioningControlPanel/Services/Descent/DescentCeremonyCopy.cs) — this class deletes
-        /// itself entirely when that moves to Core.
-        /// </summary>
-        private static class Copy
-        {
-            /// <summary>ponytail: mirrors DescentMigration.CycleXpBonus (1.10), in
-            /// ConditioningControlPanel/Services/Descent/DescentMigration.cs.</summary>
-            private const double CycleXpBonus = 1.10;
-
-            public const string IntroHeadline = "The last season has ended.";
-
-            public const string IntroBody =
-                "Nothing was wiped. Nothing will be — this time the wipe simply doesn't happen.\n\n" +
-                "But the ladder underneath you has been rebuilt, and it keeps getting steeper all " +
-                "the way down. A level is going to mean more than it used to.\n\n" +
-                "So you get to choose how you meet it. Once.";
-
-            public const string IntroContinue = "Show me the two doors";
-
-            public static string IntroStanding(int level, double lifetimeXp, int devotionDays) =>
-                $"You stand at Level {level}  ·  {lifetimeXp.ToString("N0", CultureInfo.CurrentCulture)} lifetime XP  ·  " +
-                $"{devotionDays} {(devotionDays == 1 ? "day" : "days")} of devotion";
-
-            public const string ChoiceHeadline = "Two doors. Both of them go down.";
-
-            public const string RestoreTitle = "Take it all back";
-            public const string RestoreKicker = "Everything you built, re-measured.";
-
-            public static string RestoreBody(int oldLevel, int newLevel) =>
-                $"Your lifetime XP is spent again on the new ladder, and it buys you Level {newLevel}.\n\n" +
-                "The number moves because the ladder moved — not because anything was taken. And " +
-                "the stages you already climbed come back to you one per day.";
-
-            public static string RestoreDelta(int oldLevel, int newLevel) =>
-                oldLevel == newLevel
-                    ? $"Level {oldLevel} → Level {newLevel}  (unchanged)"
-                    : $"Level {oldLevel} → Level {newLevel}";
-
-            public const string CycleTitle = "Descend again";
-            public const string CycleKicker = "Cycle I. From the top.";
-
-            public static string CycleBody() =>
-                "Level 1. The whole fall again, first night to last, with everything you learned " +
-                "the first time.\n\n" +
-                "A Cycle wipes nothing but the number. What it adds is a permanent mark on your " +
-                "card, and a bonus on every point of XP you earn from here on.";
-
-            public static string CycleBonusLine() =>
-                $"+{(CycleXpBonus - 1.0) * 100:0.#}% XP, permanently";
-
-            public const string BothDoorsFooter =
-                "Either way: the veteran badge and your keepsake archive are yours. And either way " +
-                "the spiral starts tonight at Day 1. Nobody arrives with a track already lit. " +
-                "We all fall together.";
-
-            public const string ConfirmHeadline = "This is the part that doesn't come back.";
-
-            public static string ConfirmBody(string choice) =>
-                (choice == Choices.Cycle
-                    ? "You are choosing to descend again. Your level goes to 1 tonight and stays " +
-                      "there until you earn it back.\n\n"
-                    : "You are choosing to take it all back. Your level is re-measured on the new " +
-                      "ladder and the stages you climbed will be handed back one a day.\n\n") +
-                "There is no undo. You get asked this once, and this is the once.\n\n" +
-                "Take a breath first if you need one. The door will still be here.";
-
-            public static string ConfirmYes(string choice) =>
-                choice == Choices.Cycle ? "Yes. Take me back to Level 1." : "Yes. Give it back to me.";
-
-            public const string ConfirmBack = "Not that one";
-
-            public const string DoneHeadline = "It's done.";
-
-            public static string DoneBody(string choice, int level) =>
-                choice == Choices.Cycle
-                    ? $"Cycle I. Level {level}.\n\nThe mark is on your card and it stays there. " +
-                      "The spiral starts tonight, at Day 1 — the same Day 1 as everyone else."
-                    : $"Level {level}, measured on the ladder you're actually standing on.\n\n" +
-                      "The spiral starts tonight, at Day 1 — the same Day 1 as everyone else.";
-
-            public const string DoneClose = "Begin";
-
-            public const string Later = "Not tonight";
-
-            public const string LaterHint =
-                "Closing this changes nothing. The ceremony will be waiting the next time you sync.";
-
-            public const string CompanionIntro = "Come here. Something is ending, and I want you with me for it.";
-
-            public static string CompanionDone(string choice) =>
-                choice == Choices.Cycle
-                    ? "All the way back to the top with you. Good. I get to watch you fall all over again."
-                    : "There you are. Same you, honest numbers. Let's keep going down.";
         }
     }
 }

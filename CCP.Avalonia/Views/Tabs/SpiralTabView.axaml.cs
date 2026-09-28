@@ -15,6 +15,7 @@ using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Descent;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
@@ -50,8 +51,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///   <item><c>MotionFx</c>, <c>DescentRoomSfx</c> and <c>DescentBarkWatcher</c> are
     ///     WPF-head services; each is a stub at its call site. <c>HelpPopover</c> is real on
     ///     this head and carries the shared Core topic.</item>
-    ///   <item><c>DescentFuseCopy</c> is likewise still in the WPF head; its six lines for this
-    ///     room are inlined verbatim below.</item>
     /// </list>
     ///
     /// <para><b>Escape is never handled here.</b> The global panic key must reach its hook
@@ -75,24 +74,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ============================== the copy ==============================
         //
-        // ponytail: needs DescentFuseCopy (WPF head, Services/Descent), inlined verbatim until it
-        // moves to Core. Hardcoded English by contract (CONTRACT-FUSE-0816 §4) in both heads, so
-        // there is no loc key to reference and inventing one would be worse than the copy.
-
-        private const string FogEyebrowCopy = "a door you haven't opened yet";
-
-        private const string FogLineCopy =
-            "The fog isn't hiding something from you. It's keeping something for you.";
-
-        private const string FogTailCopy =
-            "When the clock runs out, you'll be shown in. Until then, keep your devotion where it belongs.";
-
-        /// <summary>What stands where the digits were once the instant has passed. NOT a duration
-        /// and NOT an apology: the server re-offers on every sync.</summary>
-        private const string FogImminentCopy = "any moment now.";
-
-        /// <summary>The waiting room's one line. It must never grow a button.</summary>
-        private const string WaitingLineCopy = "the spiral is finding you.";
+        // Every fog/waiting sentence is Core's DescentFuseCopy; only the splash line is this view's.
 
         /// <summary>The splash's one line, lower case to match the waiting room's register — the
         /// same voice saying the same kind of thing, one step earlier.</summary>
@@ -120,8 +102,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>
         /// The pulse's HALF cycle. ponytail: needs <c>SpiralRoom.FogPulseSecondsFor(phase)</c>, whose
-        /// tempo ladder runs 2.8s → 0.52s as the phase closes in. <c>DescentFusePhase</c> is a WPF
-        /// head type, so this head cannot know the phase and takes that function's own default rung
+        /// tempo ladder runs 2.8s → 0.52s as the phase closes in. <c>SpiralRoom</c> and
+        /// <c>App.DescentCountdown</c> are still WPF-head, so this head cannot know the phase and takes that function's own default rung
         /// (the <c>_ =&gt; 3.0</c> arm, which is where a dark fuse lands anyway).
         /// </summary>
         private const double FogPulseSeconds = 3.0;
@@ -265,10 +247,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             _fogDigitsHost = this.FindControl<Grid>("FogDigitsHost")!;
 
-            this.FindControl<TextBlock>("FogEyebrow")!.Text = FogEyebrowCopy;
-            this.FindControl<TextBlock>("FogLine")!.Text = FogLineCopy;
-            this.FindControl<TextBlock>("FogTail")!.Text = FogTailCopy;
-            this.FindControl<TextBlock>("WaitingLine")!.Text = WaitingLineCopy;
+            this.FindControl<TextBlock>("FogEyebrow")!.Text = DescentFuseCopy.FogEyebrow;
+            this.FindControl<TextBlock>("FogLine")!.Text = DescentFuseCopy.FogLine;
+            this.FindControl<TextBlock>("FogTail")!.Text = DescentFuseCopy.FogTail;
+            this.FindControl<TextBlock>("WaitingLine")!.Text = DescentFuseCopy.WaitingLine;
             this.FindControl<TextBlock>("SplashLine")!.Text = SplashCopy;
 
             _splashGlyph.Data = BuildSpiralGeometry();
@@ -511,7 +493,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// the branch the original takes for a fuse that is null or spent — which is the honest one
         /// for a head that cannot see the clock.</para>
         /// </summary>
-        private void ApplyFogReadout() => ApplyReadout(FogImminentCopy, hero: false);
+        private void ApplyFogReadout() => ApplyReadout(DescentFuseCopy.FogImminent, hero: false);
 
         /// <summary>
         /// Type the readout and size it for what it actually is.

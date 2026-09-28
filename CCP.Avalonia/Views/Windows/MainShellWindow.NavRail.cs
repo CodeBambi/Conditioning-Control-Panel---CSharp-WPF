@@ -17,7 +17,7 @@
 // The handlers named by MainShellWindow.axaml are real (empty) methods, because a
 // missing one is a XAML compile error, not a runtime gap.
 //
-// Members dropped (61, two of them since answered - see the annotations):
+// Members dropped (61, three of them since answered - see the annotations):
 //   private const double NavRailCollapsedWidth
 //   private const double NavRailExpandedWidth
 //   private const int NavRailAnimMs
@@ -57,7 +57,7 @@
 //   internal static Func<string, string?>? PossessionReroute
 //   private void HookNavDoorRerouteSeam(…)
 //   private void NavDoor_PossessionReroute(…)
-//   private void BtnNavSearch_Click(…)
+//   private void BtnNavSearch_Click(…)   (PORTED below)
 //   private const int NavDoorArtDecodeWidth
 //   private void ApplyDoorArt(…)
 //   private void CacheNavRailParts(…)
@@ -215,16 +215,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// The rail's search pill. WPF is one line — <c>SettingsPaletteWindow.Toggle(this)</c>
-        /// (MainWindow.NavRail.cs:406) — and it stays a stub on purpose, not for want of a service
-        /// in this file. <c>SettingsPaletteWindow.Toggle</c> records the refusal itself
-        /// (Views/Windows/SettingsPaletteWindow.axaml.cs): its Lockdown check has no Core seam, and
-        /// a navigation palette floating over an active lockdown reads as an escape hatch. Its
-        /// <c>Refresh</c> also cannot query <c>Services/SettingsPaletteIndex.cs</c>, so today it
-        /// draws SAMPLE rows that navigate nowhere. Wiring the pill would open a search box that
-        /// finds fake settings and honours no lockdown. Both halves come back together.
+        /// The rail's search pill, one line as in WPF (MainWindow.NavRail.cs:480-484). WPF's Toggle
+        /// also refuses during Lockdown; LockdownService is not on this head, so Lockdown cannot be
+        /// active here and there is nothing to refuse.
         /// </summary>
-        private void BtnNavSearch_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        private void BtnNavSearch_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+            => SettingsPaletteWindow.Toggle(this);
 
     }
 }
