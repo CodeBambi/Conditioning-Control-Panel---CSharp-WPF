@@ -141,3 +141,16 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Ledger: win-session-editor, win-session-log-history, win-session-complete stub -> wired;
   shell-session-io stays stub with an updated note.
 - Not run: file-picker save live; WPF tests.
+
+## avalonia-port/wire-programs-roadmap-awareness: +507
+- Programs intro opens on the first Programs visit (CoreSettings flags, Core built-in programs and
+  CoreMods; ProgramService is never constructed). Enrol stays disabled: no run panel or session runner here.
+- RoadmapStepPopup and the track/badge messages open from RoadmapService.StepCompleted on the shell's
+  single roadmap instance (subscription covered by a Language test).
+- Awareness preset grid ported; built-in presets linked from Assets/AwarenessPresets like WPF. Cards,
+  "+ New Preset" and the advanced link open AwarenessPresetDetailDialog (seen live). Tour hook gated on the
+  Awareness tour via new CoreTutorial.CurrentTourName; it never fires until this head has a tutorial runner.
+  The Awareness nav button now shows its tab.
+- Evidence: ProgramsRoadmapAwarenessOpenersTests (4) + LanguageSelectorTests roadmap assertion, each
+  fail-proofed; evidence/avalonia-port/wire-programs-roadmap-awareness/. Two review rounds.
+- Not run: WPF tests; Chaster confirm on activate (not ported; lock time is declined, the safe direction).

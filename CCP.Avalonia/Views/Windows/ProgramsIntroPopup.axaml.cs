@@ -1,10 +1,15 @@
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Threading;
+using ConditioningControlPanel.Models.Program;
+using ConditioningControlPanel.Services.Program;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -20,13 +25,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// folder. That is deliberate rather than lazy - see the note on ShowIfFirstTime.
     ///
     /// PORTED from ConditioningControlPanel/Windows/ProgramsIntroPopup.xaml.cs. Deviations:
-    ///  - <c>ShowIfFirstTime</c> is dropped, not stubbed. App.Settings and App.Mods are NOT the
-    ///    blockers any more (CoreSettings / CoreMods answer both), but App.Programs is:
-    ///    ConditioningControlPanel/Services/Program/ProgramService.cs is head-side and the gate is
-    ///    "has a program been started", which nothing here can answer. An empty gate that silently
-    ///    never shows the card would be worse than no gate.
-    ///  - <c>ProgramDefinition</c> is in the WPF head, so <see cref="Featured"/> is a local
-    ///    stand-in holding exactly the four fields the card dresses itself from.
+    ///  - <c>ShowIfFirstTime</c> reads CoreSettings / CoreMods and the built-in library; no
+    ///    ProgramService is constructed (its timers must not start on a head with no run panel).
+    ///    No StartupLadder here, so the card opens directly instead of via the Inbox presenter.
     ///  - <c>ProgramArt.Sigil/DayPlate</c> stays unresolved, blocked on the unlinked
     ///    <c>Assets/programs</c> art rather than on the resolver - see the note at its call site.
     ///    The sigil stays hidden and the rail shows its gradient, glow and program title, which is
@@ -36,9 +37,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class ProgramsIntroPopup : Window
     {
         /// <summary>Render constructor: sample data, so --render-all can discover the window.</summary>
-        internal ProgramsIntroPopup() : this(Featured.Sample()) { }
+        internal ProgramsIntroPopup() : this(BuiltInPrograms.All().FirstOrDefault()) { }
 
-        public ProgramsIntroPopup(Featured? featured)
+        public ProgramsIntroPopup(ProgramDefinition? featured)
         {
             AvaloniaXamlLoader.Load(this);
             ApplyFeaturedProgram(featured);
@@ -61,6 +62,55 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
         }
 
+        /// <summary>Set between queueing the popup and opening it, so a double-click queues one card.</summary>
+        private static bool _opening;
+
+        /// <summary>
+        /// Shows the explainer once per install (WPF ProgramsIntroPopup.xaml.cs:46,73). The flag is
+        /// spent just before the dialog opens, never when queued, so a failed show leaves it owed.
+        /// Wholly guarded: an explainer must never be the reason the Programs tab fails to open.
+        /// </summary>
+        internal static void ShowIfFirstTime(Window? owner)
+        {
+            try
+            {
+                if (CoreSettings.Current.HasSeenProgramsIntro || _opening) return;
+                var featured = PickFeaturedProgram();
+
+                _opening = true;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    try
+                    {
+                        var live = CoreSettings.Current;
+                        if (live.HasSeenProgramsIntro) return;
+                        var popup = new ProgramsIntroPopup(featured);
+                        live.HasSeenProgramsIntro = true;
+                        CoreSettings.Save();
+                        if (owner is { IsVisible: true }) _ = popup.ShowDialog(owner);
+                        else popup.Show();
+                    }
+                    catch (Exception ex) { Log.Warning(ex, "Programs intro popup failed to show"); }
+                    finally { _opening = false; }
+                });
+            }
+            catch (Exception ex)
+            {
+                _opening = false;
+                Log.Warning(ex, "Programs intro popup gate failed");
+            }
+        }
+
+        /// <summary>The program themed on the active mod, else the first in the library.</summary>
+        private static ProgramDefinition? PickFeaturedProgram()
+        {
+            var library = BuiltInPrograms.All();
+            if (library.Count == 0) return null;
+            var modId = CoreMods.ActiveModId;
+            return library.FirstOrDefault(p => string.Equals(p.ModId, modId, StringComparison.OrdinalIgnoreCase))
+                   ?? library[0];
+        }
+
         /// <summary>
         /// Points the sigil rail at the featured program, or collapses it.
         ///
@@ -69,7 +119,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// banner is a 2800x113 texture strip authored to wash behind a one-line card, and at this
         /// size it would read as a smear rather than as the program's emblem.
         /// </summary>
-        private void ApplyFeaturedProgram(Featured? program)
+        private void ApplyFeaturedProgram(ProgramDefinition? program)
         {
             var artPanel = this.FindControl<Border>("ArtPanel")!;
             try
@@ -95,9 +145,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 //      CCP.Avalonia.csproj, so avares://CCP.Avalonia/Resources/programs/... does
                 //      not exist and TryLoad returns null for every one. A csproj this layer does
                 //      not own; see Assets/README.md for the Link= shape.
-                //   2. ProgramArt's key is Slug(program.Id) and DayPlate's is the session
-                //      template's display name - both off ProgramDefinition, which is head-side
-                //      (Featured below carries four display fields, not an Id or a day list).
                 // The rail still draws its gradient, glow and title, which is what the WPF
                 // shared-fallback-plate path looks like.
                 this.FindControl<Rectangle>("ArtGlow")!.Fill = GlowBrush(accent);
@@ -163,25 +210,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void TryClose()
         {
             try { Close(); } catch { }
-        }
-
-        /// <summary>
-        /// Stand-in for the head's ProgramDefinition: the four fields the card dresses itself from,
-        /// nothing more. Replaced by the real definition when Models/Program moves to Core.
-        /// </summary>
-        public sealed class Featured
-        {
-            public string Title { get; set; } = "";
-            public string Subtitle { get; set; } = "";
-            public string? AccentColor { get; set; }
-            public string? ModId { get; set; }
-
-            internal static Featured Sample() => new()
-            {
-                Title = "First Week",
-                Subtitle = "Seven days, one session a day",
-                AccentColor = "#FF8AB4",
-            };
         }
     }
 }

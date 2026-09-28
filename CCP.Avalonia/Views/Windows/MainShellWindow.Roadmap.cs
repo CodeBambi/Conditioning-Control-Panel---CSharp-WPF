@@ -23,10 +23,16 @@
 //                               picker is async on Avalonia: SubmitPhoto must be awaited behind the
 //                               answer, never fired beside it.
 //   RefreshRoadmapStats()       aggregates across all three tracks.
-//   OnRoadmapStepCompleted(…) / OnRoadmapTrackUnlocked(…)  subscribe to Roadmap.StepCompleted and
-//                               Roadmap.TrackUnlocked once the nodes exist to repaint.
+//   OnRoadmapStepCompleted is below; the node repaint it triggered in WPF is QuestsTabView's own
+//                               RefreshRoadmapUI after SubmitPhoto. The system sound is not ported.
 
+using System;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -50,7 +56,39 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// application exit. That method checks the backing field rather than this property, so a
         /// profile that never opened the roadmap does not create a service just to dispose it.</para>
         /// </summary>
-        internal static RoadmapService Roadmap => _roadmap ??= new RoadmapService();
+        internal static RoadmapService Roadmap => _roadmap ??= CreateRoadmap();
+
+        private static RoadmapService CreateRoadmap()
+        {
+            var roadmap = new RoadmapService();
+            roadmap.StepCompleted += OnRoadmapStepCompleted;
+            return roadmap;
+        }
+
+        /// <summary>WPF MainWindow.Roadmap.cs:452: the step popup, then the milestone messages.</summary>
+        internal static void OnRoadmapStepCompleted(object? sender, RoadmapStepCompletedEventArgs e)
+        {
+            Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    new RoadmapStepPopup(e.StepDefinition, e.StepProgress).Show();
+
+                    var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+                    if (owner is not { IsVisible: true }) return;
+                    if (e.UnlockedNewTrack)
+                        await MessageDialog.ShowAsync(owner, "Track Unlocked!",
+                            "Congratulations! You've unlocked a new track!\n\n" +
+                            "Check the track tabs to continue your transformation.");
+                    if (e.EarnedBadge)
+                        await MessageDialog.ShowAsync(owner, "Badge Earned!",
+                            "🏆 CONGRATULATIONS! 🏆\n\n" +
+                            "You have completed the entire Transformation Roadmap!\n\n" +
+                            "You have earned the \"Certified Blowdoll\" badge!");
+                }
+                catch (Exception ex) { Log.Warning(ex, "Roadmap step popup failed"); }
+            });
+        }
 
         internal static void DisposeRoadmapIfCreated() => _roadmap?.Dispose();
     }

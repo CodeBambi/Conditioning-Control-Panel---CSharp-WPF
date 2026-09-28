@@ -5,7 +5,10 @@
 // move services"). The file exists and each member is NAMED so nothing disappears
 // silently; the bodies come back when the services move to Core.
 //
-// Members dropped (41):
+// The preset grid, new-preset tile and advanced link (10 members) live in
+// CCP.Avalonia/Views/Tabs/AwarenessTabView.Presets.cs.
+//
+// Members dropped (31):
 //   private bool _awarenessSubscribed
 //   private void SyncAwarenessTabUI(…)
 //   private bool _presetsChangedSubscribed
@@ -37,16 +40,6 @@
 //   internal void TxtAwarenessHighlightHex_KeyDown(…)
 //   private void ApplyAwarenessHighlightColor(…)
 //   private void SyncAwarenessHighlightSwatchUi(…)
-//   private void AwarenessPresetCard_Click(…)
-//   public void RefreshAwarenessPresetCards(…)
-//   private System.Windows.Controls.Border BuildAwarenessPresetCard(…)
-//   private System.Windows.Controls.Button BuildPresetToggleButton(…)
-//   private System.Windows.Controls.Button BuildPresetTrashButton(…)
-//   private System.Windows.Controls.Border BuildNewPresetCard(…)
-//   private void NewPresetCard_Click(…)
-//   private void UpdateAwarenessAdvancedLinkText(…)
-//   private KeywordTriggerPreset? GetMostRecentlyInstalledPreset(…)
-//   internal void LnkAwarenessAdvanced_Click(…)
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {

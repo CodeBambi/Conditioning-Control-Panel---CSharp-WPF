@@ -30,9 +30,7 @@
 //  - Colours that WPF read off Application.Current.Resources are read off this control's
 //    resource chain instead, with the same keys and the same literal fallbacks.
 //
-// ponytail: the WPF painter's App.Achievements celebration on a completed step is not here —
-// that is OnRoadmapStepCompleted (MainWindow.Roadmap.cs:452), a subscription this file does not
-// take, and it needs App.Achievements plus the sound service, neither of which is in Core.
+// The completed-step popup is MainShellWindow.OnRoadmapStepCompleted (WPF MainWindow.Roadmap.cs:452).
 
 using System;
 using System.IO;
