@@ -71,7 +71,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private static HttpClient Configure(HttpClient http)
+        internal static HttpClient Configure(HttpClient http)
         {
             http.Timeout = TimeSpan.FromSeconds(30);
             http.DefaultRequestHeaders.Add("X-Client-Version", CoreReleaseContent.AppVersion);
