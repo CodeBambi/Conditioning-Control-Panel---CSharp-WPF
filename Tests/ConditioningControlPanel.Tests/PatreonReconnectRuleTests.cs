@@ -404,7 +404,11 @@ public class PatreonReconnectRuleTests
     [Fact]
     public void TierGateRefusal_AsksTheRule()
     {
-        var source = ReadSource("Services", "TierGate.cs");
+        // TierGate moved to Core; the head's refusal handler is where the reconnect offer lives now.
+        var app = SourceRoots.ReadProductFile("App.xaml.cs");
+        var at = app.IndexOf("CoreEntitlement.ShowDeniedHandler", StringComparison.Ordinal);
+        Assert.True(at > 0, "the head's TierGate refusal handler has moved");
+        var source = app.Substring(at, Math.Min(1500, app.Length - at));
         Assert.Contains("PatreonReconnectRule.Decide", source, StringComparison.Ordinal);
         Assert.Contains("tiergate_denied_reconnect", source, StringComparison.Ordinal);
         Assert.Contains("StartPatreonReconnectFromGate", source, StringComparison.Ordinal);
