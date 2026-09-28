@@ -202,12 +202,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreSettings.Current.FlashEnabled = ChkEnable.IsChecked ?? false;
             CoreSettings.Save();
 
-            // WPF live-applies App.Flash.Start()/Stop() only while the engine runs. This head has
-            // no engine yet (CoreSession.IsEngineRunningProvider unseeded), so the toggle itself
-            // arms and disarms the ambient schedule.
-            // ponytail: no engine gate; gate on CoreSession.IsEngineRunning once Start/Stop is ported.
-            if (ChkEnable.IsChecked == true) Windows.MainShellWindow.StartEffect(() => { if (CoreSettings.Current.FlashEnabled) CoreFlash.Start(); });
-            else CoreFlash.Stop();
+            // Live-apply only while the engine runs (WPF FlashFeatureControl.xaml.cs:268).
+            CoreEngine.ApplyLive("flash", CoreSettings.Current.FlashEnabled);
         }
 
         private void SliderFrequency_Changed(object? sender, RangeBaseValueChangedEventArgs e)

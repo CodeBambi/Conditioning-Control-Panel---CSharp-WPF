@@ -390,3 +390,15 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   picker never opens here, like WPF without ReleaseContent (decision logged; it waits for the pack service). The Avalonia
   ModPacks copy is deleted in favour of Core ModService.PackIdForMod (identical mapping).
 - Evidence: ShowIfNeeded rule tests (fail-proofed); live sandbox upgrader profile: no picker, settings untouched.
+
+## avalonia-port/engine-start-stop: +402
+- Session runner U1: Core CoreEngine mirrors WPF StartEngine/StopEngine (flash always; subliminal, lock-card schedule and
+  bouncing text per saved flag; all four skipped under audio-only; head stop hook closes overlays and lock cards). The
+  shell Start/Stop drives it; card and wall toggles save while stopped and apply live while running. Tray Stop, panic
+  and closing the shell stop the engine and keep saved flags. The session feature lock reads the new
+  CoreSession.IsSessionRunning, so a plain Start never greys cards. Decision row replaces arm-from-toggle and tray rows.
+- Evidence: CoreEngineTests (arming matrix incl. audio-only), tray and panic tests (fail-proofed); live sandbox: 0 overlays
+  on relaunch, Start shows all three, Stop and tray Stop clear them in about 0.1 s with flags On; panic-check PASS, FAIL
+  when broken. Review: FIX -> round 1 applied (audio-only, shell close, test cleanup).
+- Not run live: a physical panic key on KWin; closing the shell with lock cards up. Stubbed: session stop dialog, Jump
+  right in, audio-only audio bed, ramp and scheduler.

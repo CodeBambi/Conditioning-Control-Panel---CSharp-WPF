@@ -1,58 +1,86 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.StartStop.cs (1067 lines).
-//
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
-//
-// The handlers named by MainShellWindow.axaml are real (empty) methods, because a
-// missing one is a XAML compile error, not a runtime gap.
-//
-// Members dropped (28):
-//   private void BtnStart_Click(…)
-//   private void BtnStartMenu_Click(…)
-//   private void MenuStartNormal_Click(…)
-//   private void MenuJumpRightIn_Click(…)
-//   internal void RandomizeAndStart(…)
-//   private static readonly string[] FlashImageExtensions
-//   private static readonly string[] WallpaperImageExtensions
-//   private static bool FolderHasAnyMedia(…)
-//   private static bool IsLocalOnlyMediaSource(…)
-//   private static void OpenPackCatalogue(…)
-//   private void WarnIfFlashLibraryEmpty(…)
-//   internal void WarnIfWallpaperLibraryEmpty(…)
-//   public void StartEngine(…)
-//   private bool _stopInProgress
-//   private DateTime? _emiEngineStartedUtc
-//   public void StopEngine(…)
-//   private void StopEngineCore(…)
-//   private void StartRampTimer(…)
-//   private void StopRampTimer(…)
-//   private void RampTimer_Tick(…)
-//   private void CheckSchedulerOnStartup(…)
-//   private void CheckSchedulerAfterSettingsChange(…)
-//   private void SchedulerTimer_Tick(…)
-//   private bool IsInScheduledTimeWindow(…)
-//   private void ApplySettingsLive(…)
-//   private void UpdateStartButton(…)
-//   private void UpdateStartButtonForRemoteControl(…)
-//   private static T? FindVisualChild<T>(…)
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.StartStop.cs: BtnStart_Click (:35),
+// BtnStartMenu_Click, MenuStartNormal_Click, StartEngine (:294), StopEngine (:444) and
+// UpdateStartButton (:944), for the features Core drives (CoreEngine). The session half of
+// BtnStart_Click (stop-session dialog) arrives with the session runner.
+// ponytail: still missing, each with no service on this head: remote-control and lockdown gates,
+// Relapse/TotalSessions achievements, the video/bubble/mind-wipe/brain-drain/pop-quiz/autonomy/
+// ramp starts, the scheduler, the Presets "running" label, the hero FX and Jump right in
+// (RandomizeAndStart).
+
+using Avalonia.Controls;
+using Avalonia.Data;
+using Avalonia.Media;
+using ConditioningControlPanel.Avalonia.Localization;
+using ConditioningControlPanel.Avalonia.Views.Overlays;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // ponytail: needs the services in MainWindow.StartStop.cs; wired when they move to Core.
-        private void BtnStartMenu_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        // Bumped by every Stop, so a Start still waiting on the portal bind (up to 30 s) is dropped
+        // if the user stopped or panicked meanwhile.
+        private static int _engineGen;
 
-        // ponytail: needs the services in MainWindow.StartStop.cs; wired when they move to Core.
-        private void BtnStart_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        private void BtnStartMenu_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (sender is Button b) b.ContextMenu?.Open(b);
+        }
 
-        // ponytail: needs the services in MainWindow.StartStop.cs; wired when they move to Core.
+        private void BtnStart_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (CoreEngine.IsRunning) StopEngine();
+            else StartEngine();
+        }
+
+        // ponytail: needs RandomizeAndStart's mix + the session lock refusal; wired with Jump right in.
         private void MenuJumpRightIn_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
 
-        // ponytail: needs the services in MainWindow.StartStop.cs; wired when they move to Core.
-        private void MenuStartNormal_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        private void MenuStartNormal_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (!CoreEngine.IsRunning) StartEngine();
+        }
 
+        /// <summary>WPF StartEngine, through the portal wrapper so the panic key is bound first.</summary>
+        internal void StartEngine()
+        {
+            var gen = ++_engineGen;
+            StartEffect(() =>
+            {
+                if (gen != _engineGen || CoreEngine.IsRunning) return;
+                CoreEngine.Start();
+                PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Start()
+                UpdateStartButton();
+            });
+        }
+
+        /// <summary>WPF StopEngine. Saved flags are left alone; <see cref="OnEngineStopped"/> clears the screen.</summary>
+        internal static void StopEngine()
+        {
+            _engineGen++;
+            CoreEngine.Stop();
+        }
+
+        /// <summary><see cref="CoreEngine.StoppedHook"/>: the head half of StopEngineCore.</summary>
+        internal void OnEngineStopped()
+        {
+            App.StopDesktopOverlays(final: false);
+            LockCardWindow.ForceCloseAll();
+            PinkFilterOverlay.Refresh(this);
+            UpdateStartButton();
+        }
+
+        /// <summary>WPF UpdateStartButton: red ■ Stop while running, the accent ▶ Start otherwise.</summary>
+        internal void UpdateStartButton()
+        {
+            var running = CoreEngine.IsRunning;
+            if (Named<Button>("BtnStart") is { } b)
+            {
+                if (running) b.Bind(BackgroundProperty, new Binding { Source = new SolidColorBrush(Color.FromRgb(255, 107, 107)) });
+                else b.Bind(BackgroundProperty, b.GetResourceObservable("AccentGradientBrush"));
+            }
+            if (Named<TextBlock>("TxtStartIcon") is { } icon) icon.Text = running ? "■" : "▶";
+            Named<TextBlock>("TxtStartLabel")?.Bind(TextBlock.TextProperty,
+                (Binding)new StrExtension(running ? "label_stop" : "label_start").ProvideValue(null!));
+        }
     }
 }
