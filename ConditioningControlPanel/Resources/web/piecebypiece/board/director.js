@@ -21,8 +21,9 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { LAYOUTS, SHOTS, clipTime, panelState, panelCount, replayLength, replayAllowed,
-  createLayoutDeck, scalePoly, orient, REPLAY } from './replay-plan.js';
+import { LAYOUTS, clipTime, panelState, panelCount, replayLength, replayAllowed,
+  createLayoutDeck, scalePoly, orient, REPLAY, hitAt } from './replay-plan.js';
+import { createReplayShots } from './replay-shots.js';
 import { presentation } from '../game/preferences.js';
 
 export const FOLLOW = Object.freeze({
@@ -232,42 +233,30 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     const mid = clip.from.clone().add(clip.to).multiplyScalar(.5); mid.y = 0;
     const perp = new THREE.Vector3(dN.z, 0, -dN.x);
     if (perp.dot(camera.position.clone().sub(mid)) < 0) perp.negate();   // the side the player is looking from
-    replay = { clip: { ...clip, duration: clip.t }, layout, t: 0, end: replayLength(layout) - REPLAY.exit, dN, mid, perp };
-    bus?.emit?.('replay-show', { layout });
+    const full = { ...clip, duration: clip.t };
+    replay = { clip: full, layout, t: 0, prevT: -1, end: replayLength(layout) - REPLAY.exit, dN, mid, perp, exiting: false,
+      shots: shots.pick(layout, full) };
+    bus?.emit?.('replay-show', { layout, n: panelCount(layout), hit: clip.hitInfo || null });
   }
-  function skip() { if (replay && replay.t < replay.end) replay.end = replay.t; }
+  function skip() { if (replay && replay.t < replay.end) { replay.end = replay.t; replay.skipped = true; } }
+  // Replay beats for sound and effects, fired once each as presentation time crosses them:
+  //   replay-show {layout,n,hit}  replay-panel-in {i,n,layout}  replay-panel-hit {i,n,layout,hit}
+  //   replay-exit {layout,skipped}  replay-done {}
+  // `hit` is the original capture's own 'hit' payload (piece, sound, impact, victim...).
+  function beats(prev, t) {
+    const { layout, clip } = replay, n = panelCount(layout);
+    const crossed = x => prev < x && t >= x;
+    for (let i = 0; i < n; i++) {
+      if (crossed(i * REPLAY.enterGap)) bus?.emit?.('replay-panel-in', { i, n, layout });
+      if (!replay.skipped && crossed(hitAt(layout, i)) && t < replay.end) bus?.emit?.('replay-panel-hit', { i, n, layout, hit: clip.hitInfo || null });
+    }
+    if (!replay.exiting && t >= replay.end) { replay.exiting = true; bus?.emit?.('replay-exit', { layout, skipped: !!replay.skipped }); }
+  }
   function cancel() { replay = null; rec = null; follow = null; weight = 0; pendingVictim = null; paintDom(null); }
 
-  // cameras for the three shots
-  const cams = { low: new THREE.PerspectiveCamera(34, 1, .05, 120), chase: new THREE.PerspectiveCamera(48, 1, .05, 120),
-    top: new THREE.PerspectiveCamera(32, 1, .05, 120) };
-  const at = new THREE.Vector3();
-  function aimShot(shot, cam, clipT) {
-    const { clip, dN, mid, perp } = replay;
-    const prog = clamp01((clipT - (clip.hit - 1)) / 2.4);
-    const to = clip.to;
-    if (shot === 'low') {
-      cam.position.copy(mid).addScaledVector(perp, 3.3 - .5 * prog).addScaledVector(dN, -.3 + .7 * prog); cam.position.y = .55;
-      at.copy(mid).addScaledVector(dN, .45 * prog); at.y = .6;
-    } else if (shot === 'chase') {
-      const a = clip.attacker.position;
-      cam.position.copy(a).addScaledVector(dN, -2.1).addScaledVector(perp, .55); cam.position.y = 1.35 + Math.max(0, a.y) * .4;
-      at.copy(to); at.y = .6;
-    } else {
-      cam.position.copy(to).addScaledVector(dN, -1.25).addScaledVector(perp, .7 + .6 * prog); cam.position.y = 6.9 - 1.1 * prog;
-      at.copy(to).addScaledVector(dN, -.4); at.y = 0;
-    }
-    clearOfMen(cam.position, shot === 'low' ? perp : shot === 'chase' ? dN.clone().negate() : null, clip);
-    cam.lookAt(at);
-  }
-  // A replay camera must never stand inside a man: his outline shell would wrap the
-  // lens and wash the whole panel out. Step back along `away`, then up, until clear.
-  function clearOfMen(pos, away, clip) {
-    const blocked = () => group.children.some(p => p.userData.type && p !== clip.attacker && p !== clip.victim
-      && Math.hypot(p.position.x - pos.x, p.position.z - pos.z) < .8 && pos.y < 2.1);
-    for (let i = 0; i < 4 && away && blocked(); i++) pos.addScaledVector(away, .4);
-    for (let i = 0; i < 6 && blocked(); i++) pos.y += .35;
-  }
+  // cameras, one per panel; where they stand is board/replay-shots.js
+  const shots = createReplayShots({ group, random });
+  const cams = [0, 1, 2].map(() => new THREE.PerspectiveCamera(40, 1, .05, 120));
 
   // render targets + masked quads
   const comp = new THREE.Scene(), compCam = new THREE.Camera(), quadGeo = new THREE.PlaneGeometry(2, 2);
@@ -335,6 +324,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     if (!replay) return;
     if (menuUp()) { cancel(); return; }
     if (!paused()) replay.t += dt;
+    beats(replay.prevT, replay.t); replay.prevT = replay.t;
     const { layout, clip } = replay;
     const n = panelCount(layout);
     if (replay.t > replay.end + REPLAY.exit + .05) { replay = null; paintDom(null); bus?.emit?.('replay-done', {}); return; }
@@ -360,14 +350,21 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
         const cx = full.reduce((a, p) => a + p[0], 0) / full.length, cy = full.reduce((a, p) => a + p[1], 0) / full.length;
         const clipT = clipTime(layout, i, replay.t, clip);
         showFrame(clip, clipT);
-        const cam = cams[SHOTS[layout][i]];
+        const cam = cams[i], shot = replay.shots[i];
+        const xs = full.map(p => p[0]), ys = full.map(p => p[1]);
+        const ctx = { clip, clipT, t: replay.t, i, n, layout, dN: replay.dN, mid: replay.mid, perp: replay.perp, bw, bh,
+          panel: { cx, cy, w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) } };
         cam.aspect = bw / bh;
-        aimShot(SHOTS[layout][i], cam, clipT);
+        shots.aim(shot, cam, ctx);
         cam.setViewOffset(bw, bh, bw / 2 - cx * bw, bh / 2 - cy * bh, bw, bh);
         cam.updateProjectionMatrix();
+        const hide = shots.occluders(shot, cam, ctx) || [];
+        const wasVisible = hide.map(o => o.visible);
+        for (const o of hide) o.visible = false;
         renderer.setRenderTarget(targets[i]);
         renderer.clear();
-        renderer.render(view.scene, cam);
+        try { renderer.render(view.scene, cam); }
+        finally { hide.forEach((o, k) => { o.visible = wasVisible[k]; }); }
         cam.clearViewOffset();
         const q = quads[i], u = q.material.uniforms, pl = planesFor(pts, bw, bh);
         pl.forEach((v, j) => u.planes.value[j].set(v[0], v[1], v[2]));
@@ -413,7 +410,9 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     if (victim) startRecording(piece, victim, from, to);
     startFollow(piece, from, to, !!victim);
   }
-  off.push(bus?.on?.('hit', () => { if (rec && !rec.done && rec.hit == null) rec.hit = rec.t; }));
+  off.push(bus?.on?.('hit', p => {
+    if (rec && !rec.done && rec.hit == null) { rec.hit = rec.t; rec.hitInfo = p ? { ...p } : null; }
+  }));
   for (const name of ['local', 'newgame', 'menu', 'takeback', 'gameover']) off.push(bus?.on?.(name, cancel));
   const onDown = () => skip();
   const onKey = e => { if (!e.ctrlKey && !e.altKey && !e.metaKey) skip(); };
@@ -430,7 +429,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     active: () => !!replay,
     stats: () => ({ follow: follow ? { weight, capture: follow.capture, mine: follow.mine } : null,
       recording: rec ? { t: rec.t, frames: rec.frames.length, hit: rec.hit } : null,
-      replay: replay ? { layout: replay.layout, t: replay.t, end: replay.end, clip: replay.clip.duration, hit: replay.clip.hit } : null }),
+      replay: replay ? { layout: replay.layout, t: replay.t, end: replay.end, clip: replay.clip.duration, hit: replay.clip.hit, shots: replay.shots } : null }),
     dispose() {
       for (const f of off) f?.();
       globalThis.window?.removeEventListener('pointerdown', onDown, true);
