@@ -267,3 +267,24 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: ShellTrayTests (2, fail-proofed three ways); live D-Bus: SNI registered, menu layout, Stop everything
   3 overlays -> 0, hide/show/exit; no-watcher dbus-run-session -> X exits. Review: FIX -> fixed.
 - Gaps: OS balloons (org.freedesktop.Notifications), Lockdown refusal/exit bill on Exit, off-screen repair.
+
+## avalonia-port/achievement-engine-core: +368
+- oracle-deep achievements unit 3: Core AchievementEngine owns progress, the store, TryUnlock (WPF order: unlock ->
+  save -> log -> suppress gate -> event once), dirty/autosave/retry, Reset, SuppressPopups and exclusive gating via
+  CoreEntitlement. WPF AchievementService delegates; timers, Track* counters, forwarding and UI marshalling stay.
+- The current progress is resolved inside the store's save lock (a queued autosave can't resurrect a logged-out
+  account's progress after Reset).
+- Evidence: AchievementEngineTests (9, each fail-proofed, incl. the Reset race). Review: ACCEPT + P2 race fixed.
+- Not run: WPF tests (Windows CI). No Avalonia surface yet (unit 5).
+
+## avalonia-port/achievements-wire: +238
+- The Avalonia head creates the Core AchievementEngine (~/.config achievements.json), seeds
+  CoreProgram.UnlockAchievementProvider and CoreProgression.TrackBubbleCountResultProvider like WPF, shows
+  AchievementPopup per unlock on the UI thread, and saves on exit only when dirty. Free/patron counts and the
+  bubble-count streak moved into the engine (WPF delegates). The Achievements tab reads live counts.
+- Local-only (decisions log): no sync, no streak writes, no ResetProgress. Test apps use a sandbox path, so no
+  test can touch a real achievements.json (proven: the real file is still absent after both desktop suites).
+- Fixed on the way: a closed shell kept answering language changes (flaky SpiralHelpPopoverTests).
+- Evidence: tab renders 3/50 from a sandbox fixture; sha256 unchanged after a 60 s idle session; tests
+  fail-proofed (idle exit writes nothing, dirty exit persists, premium/free counts with literal numbers).
+- Gaps: card grid, ItemUnlockedPopup (WardrobeCatalog is WPF-only), no user path reaches an unlock yet.

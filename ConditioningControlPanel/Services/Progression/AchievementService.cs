@@ -1,7 +1,4 @@
 using System;
-using System.IO;
-using System.Text;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
@@ -16,13 +13,14 @@ namespace ConditioningControlPanel.Services;
 /// </summary>
 public class AchievementService : IDisposable
 {
-    private AchievementProgress _progress;
+    /// <summary>Progress, store, unlock, save and the event: one implementation shared with every head (CCP.Core).</summary>
+    private readonly AchievementEngine _engine = new(new AchievementStore(AchievementStore.DefaultPath));
     private readonly DispatcherTimer _saveTimer;
     private readonly DispatcherTimer _trackingTimer;
-    private bool _isDirty;
 
-    /// <summary>achievements.json, one implementation shared with every head (CCP.Core).</summary>
-    private readonly AchievementStore _store = new(AchievementStore.DefaultPath);
+    // The Track* bodies below still read these names; both live on the engine.
+    private AchievementProgress _progress => _engine.Progress;
+    private bool _isDirty { get => _engine.IsDirty; set => _engine.IsDirty = value; }
 
     /// <summary>
     /// Flush <see cref="TrackBubblePopped"/> to disk every this many pops (#1071).
@@ -58,13 +56,30 @@ public class AchievementService : IDisposable
     /// When true, TryUnlock still records achievements but suppresses popup notifications.
     /// Used during post-login sync to silently restore cloud achievements.
     /// </summary>
-    public bool SuppressPopups { get; set; }
+    public bool SuppressPopups { get => _engine.SuppressPopups; set => _engine.SuppressPopups = value; }
 
     public AchievementProgress Progress => _progress;
     
     public AchievementService()
     {
-        _progress = _store.Load();
+        // Fire-and-forget to the UI thread (BeginInvoke, #684): the unlock is already persisted by the
+        // engine and nothing here reads back a result, so a background-thread unlock must never block
+        // behind the UI thread - a wedged dispatcher used to hang the caller forever via Invoke.
+        _engine.Unlocked += (_, achievement) => DispatcherHelper.RunOnUI(() =>
+        {
+            try
+            {
+                App.Logger?.Debug("Firing AchievementUnlocked event for: {Name}", achievement.Name);
+                AchievementUnlocked?.Invoke(this, achievement);
+                // ONE call only: this fired twice, which stacked two overlapping copies of the
+                // same pattern on the toy rather than making it play any stronger.
+                _ = App.Haptics?.AchievementPatternAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to fire achievement event");
+            }
+        });
 
         // Reset continuous/session-based counters on startup (these shouldn't persist)
         _progress.ContinuousSpiralMinutes = 0;
@@ -83,11 +98,9 @@ public class AchievementService : IDisposable
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _saveTimer.Tick += (s, e) =>
         {
-            if (!_isDirty) return;
-            _isDirty = false;
-            // Still off the UI thread, but through the one writer (AchievementStore) that holds its lock and lands
+            // Off the UI thread, through the one writer (AchievementStore) that holds its lock and lands
             // the bytes atomically - this tick used to race the synchronous Save() below.
-            _ = Task.Run(WriteProgress);
+            _ = _engine.SaveIfDirtyAsync();
         };
         _saveTimer.Start();
         
@@ -111,22 +124,8 @@ public class AchievementService : IDisposable
             _progress.UnlockedAchievements.Count);
     }
     
-    /// <summary>
-    /// The one writer: <see cref="AchievementStore.Write"/> (CCP.Core) holds the lock and lands
-    /// the bytes atomically. A failed write re-arms the dirty flag so the next tick retries - the
-    /// old timer cleared it BEFORE the write, so a failed write silently discarded everything
-    /// since the last good one.
-    /// </summary>
-    private void WriteProgress()
-    {
-        if (!_store.Write(_progress)) _isDirty = true;
-    }
-
-    public void Save()
-    {
-        _isDirty = false;
-        WriteProgress();
-    }
+    /// <summary>Synchronous save through the engine; a failed write re-arms the dirty flag.</summary>
+    public void Save() => _engine.Save();
     
     /// <summary>
     /// Bank the login streak when the calendar day rolls over while the app is running.
@@ -545,31 +544,7 @@ public class AchievementService : IDisposable
     /// <summary>
     /// Track bubble count game result
     /// </summary>
-    public void TrackBubbleCountResult(bool correct)
-    {
-        if (correct)
-        {
-            _progress.BubbleCountCorrectStreak++;
-            if (_progress.BubbleCountCorrectStreak > _progress.BubbleCountBestStreak)
-            {
-                _progress.BubbleCountBestStreak = _progress.BubbleCountCorrectStreak;
-            }
-
-            if (_progress.BubbleCountCorrectStreak >= MathematiciansNightmareStreak)
-            {
-                TryUnlock("mathematicians_nightmare");
-            }
-        }
-        else
-        {
-            _progress.BubbleCountCorrectStreak = 0;
-        }
-
-        // Track total correct/failed games
-        TrackBubbleCountGameResult(correct);
-
-        _isDirty = true;
-    }
+    public void TrackBubbleCountResult(bool correct) => _engine.TrackBubbleCountResult(correct);
     
     /// <summary>
     /// Track Lock Card completion
@@ -828,74 +803,10 @@ public class AchievementService : IDisposable
         _isDirty = true;
     }
     
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _alreadyUnlockedNoted = new();
-
-    /// <summary>True the first time an already-held achievement is re-asked for in this run.</summary>
-    internal static bool FirstAlreadyUnlockedNote(string achievementId) =>
-        _alreadyUnlockedNoted.TryAdd(achievementId, 0);
-
     /// <summary>
-    /// Try to unlock an achievement (only fires event if not already unlocked)
+    /// Try to unlock an achievement (only fires event if not already unlocked). Persists immediately.
     /// </summary>
-    public bool TryUnlock(string achievementId)
-    {
-        if (_progress.IsUnlocked(achievementId))
-        {
-            // Once per id per run. Minute trackers and every bubble pop re-ask for an achievement
-            // they already hold, which wrote a line a second and pushed the useful lines out of
-            // bug reports (#1268 #1269).
-            if (FirstAlreadyUnlockedNote(achievementId))
-                App.Logger?.Debug("Achievement {Id} already unlocked (further repeats not logged)", achievementId);
-            return false; // Already unlocked
-        }
-
-        App.Logger?.Debug("TryUnlock called for: {Id}", achievementId);
-
-        if (!Achievement.All.TryGetValue(achievementId, out var achievement))
-        {
-            App.Logger?.Warning("Unknown achievement ID: {Id}", achievementId);
-            return false;
-        }
-        
-        _progress.Unlock(achievementId);
-        _isDirty = true;
-        Save(); // Save immediately on unlock
-
-        App.Logger?.Information("🏆 Achievement unlocked: {Name} (ID: {Id}){Suppressed}", achievement.Name, achievementId,
-            SuppressPopups ? " (popup suppressed)" : "");
-
-        if (SuppressPopups) return true;
-
-        // Fire event to show popup. Fire-and-forget (BeginInvoke, #684): the unlock itself is already
-        // persisted above and nothing here reads back a result, so a background-thread unlock must never
-        // block behind the UI thread - a wedged dispatcher used to hang the caller forever via Invoke.
-        // The inner try-catch preserves the old swallow-and-log contract for handler exceptions, which
-        // a synchronous Invoke used to marshal back to the catch below.
-        try
-        {
-            DispatcherHelper.RunOnUI(() =>
-            {
-                try
-                {
-                    App.Logger?.Debug("Firing AchievementUnlocked event for: {Name}", achievement.Name);
-                    AchievementUnlocked?.Invoke(this, achievement);
-                    // ONE call only: this fired twice, which stacked two overlapping copies of the
-                    // same pattern on the toy rather than making it play any stronger.
-                    _ = App.Haptics?.AchievementPatternAsync();
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Error(ex, "Failed to fire achievement event");
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Error(ex, "Failed to fire achievement event");
-        }
-        
-        return true;
-    }
+    public bool TryUnlock(string achievementId) => _engine.TryUnlock(achievementId);
 
     // ========== NEW STAT TRACKING METHODS ==========
 
@@ -940,18 +851,7 @@ public class AchievementService : IDisposable
     /// <summary>
     /// Track bubble count game result (success/failure)
     /// </summary>
-    public void TrackBubbleCountGameResult(bool success)
-    {
-        if (success)
-        {
-            _progress.TotalBubbleCountCorrect++;
-        }
-        else
-        {
-            _progress.TotalBubbleCountFailed++;
-        }
-        _isDirty = true;
-    }
+    public void TrackBubbleCountGameResult(bool success) => _engine.TrackBubbleCountGameResult(success);
 
     /// <summary>
     /// Track session started
@@ -1037,9 +937,7 @@ public class AchievementService : IDisposable
     /// </summary>
     public void ResetProgress()
     {
-        _progress = new AchievementProgress();
-        _isDirty = false;
-        Save();
+        _engine.Reset();
         App.Logger?.Information("AchievementService progress reset");
     }
 
@@ -1066,16 +964,7 @@ public class AchievementService : IDisposable
     /// An earned <see cref="Achievement.IsPremiumFeature"/> badge is counted here
     /// unconditionally - it is a receipt, and a lapse never takes it back.
     /// </summary>
-    public int GetUnlockedCount(bool exclusive)
-    {
-        var count = 0;
-        foreach (var id in _progress.UnlockedAchievements)
-        {
-            if (Achievement.All.TryGetValue(id, out var a) && a.IsExclusive == exclusive)
-                count++;
-        }
-        return count;
-    }
+    public int GetUnlockedCount(bool exclusive) => _engine.GetUnlockedCount(exclusive);
 
     /// <summary>
     /// Get total achievement count filtered by exclusivity.
@@ -1091,20 +980,7 @@ public class AchievementService : IDisposable
     /// It is deliberately NOT IsExclusive: an exclusive badge disappears from the
     /// gallery on a downgrade, and a graduation receipt must never do that.
     /// </summary>
-    public int GetTotalCount(bool exclusive)
-    {
-        var hasPremium = App.Patreon?.HasPremiumAccess == true;
-        var count = 0;
-        foreach (var a in Achievement.All.Values)
-        {
-            if (a.IsHidden) continue; // parked — not earnable in this build
-            if (a.IsExclusive != exclusive) continue;
-            // Locked, premium-only, and the user has no premium: out of the denominator.
-            if (a.IsPremiumFeature && !hasPremium && !_progress.IsUnlocked(a.Id)) continue;
-            count++;
-        }
-        return count;
-    }
+    public int GetTotalCount(bool exclusive) => _engine.GetTotalCount(exclusive);
 
     /// <summary>
     /// The pair for one-line blended surfaces (the profile bubble): everything this user
@@ -1114,44 +990,17 @@ public class AchievementService : IDisposable
     /// Never feed these to the achievements tab: its free/patron counters are
     /// deliberately separate numbers.
     /// </summary>
-    public (int Unlocked, int Total) GetReachableCounts()
-    {
-        var hasPremium = App.Patreon?.HasPremiumAccess == true;
-        int unlocked = 0, total = 0;
-        foreach (var a in Achievement.All.Values)
-        {
-            if (_progress.IsUnlocked(a.Id)) { unlocked++; total++; continue; }
-            if (a.IsHidden) continue; // parked — not earnable in this build
-            if (a.IsExclusive && !hasPremium) continue;
-            if (a.IsPremiumFeature && !hasPremium) continue;
-            total++;
-        }
-        return (unlocked, total);
-    }
+    public (int Unlocked, int Total) GetReachableCounts() => _engine.GetReachableCounts();
 
     /// <summary>
-    /// Whether the current user is entitled to EARN patron-exclusive achievements.
-    /// Note: this gates only NEW earns via <see cref="TryUnlockExclusive"/>. Cloud
-    /// restore uses the ungated <see cref="TryUnlock"/>, so a user who earned an
-    /// exclusive and later downgraded keeps it.
+    /// Whether the current user is entitled to EARN patron-exclusive achievements (CoreEntitlement,
+    /// seeded from App.Patreon). Cloud restore uses the ungated TryUnlock, so a downgrade keeps them.
     /// </summary>
-    public bool CanUnlockExclusive => App.Patreon?.HasPremiumAccess == true;
+    public bool CanUnlockExclusive => AchievementEngine.CanUnlockExclusive;
 
-    /// <summary>
-    /// Entitlement-gated unlock for patron-exclusive achievements. No-op (returns
-    /// false) for non-entitled users; otherwise behaves exactly like TryUnlock.
-    /// </summary>
-    public bool TryUnlockExclusive(string achievementId)
-    {
-        if (_progress.IsUnlocked(achievementId)) return false;
-        if (!CanUnlockExclusive)
-        {
-            App.Logger?.Debug("Exclusive achievement {Id} withheld — user not entitled", achievementId);
-            return false;
-        }
-        return TryUnlock(achievementId);
-    }
-    
+    /// <summary>No-op (false) for non-entitled users; otherwise exactly TryUnlock.</summary>
+    public bool TryUnlockExclusive(string achievementId) => _engine.TryUnlockExclusive(achievementId);
+
     /// <summary>
     /// Last chance the process gets to persist progress: App.OnExit calls this and then ends in
     /// <c>TerminateProcess</c>, which skips finalizers and ProcessExit handlers entirely. Each step

@@ -18,6 +18,10 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>In-app corner toasts (WPF App.Notifications). Queues until the shell attaches it.</summary>
         public static Helpers.NotificationService Notifications { get; } = new();
 
+        /// <summary>The achievement engine (achievements.json), or null on the headless render path.
+        /// Local-only: no sync, no streak writes, no ResetProgress on this head (oracle-achievements.md).</summary>
+        internal static AchievementEngine? Achievements { get; private set; }
+
         private AvaloniaCoreDispatch? _desktopDispatch;
         private int _exitHandled;
         private int _warnedMissingCustomAssetsPath;
@@ -27,6 +31,9 @@ namespace ConditioningControlPanel.Avalonia
         /// override it with a manager backed by explicit temporary folders.
         /// </summary>
         protected virtual SessionManager CreateSessionManager() => new();
+
+        /// <summary>achievements.json. Tests that run the desktop path override it with a sandbox path.</summary>
+        protected virtual string AchievementsPath => AchievementStore.DefaultPath;
 
         public override void Initialize()
         {
@@ -164,11 +171,18 @@ namespace ConditioningControlPanel.Avalonia
                 // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
                 // open. Seeding it with anything would put a tour on screen that nothing drives.
 
-                // CoreProgram: four of its five providers stay unseeded - this head has no
-                // PatreonService, AchievementService, ContentPackService or RoadmapService, so it
-                // answers "no premium, no badge, no pack videos, no roadmap". NotifyProvider is
-                // seeded below, once the shell's toast host exists. HasPremium false still refuses
-                // a premium enrolment rather than granting one.
+                // Achievements: the Core engine over the same achievements.json WPF uses, seeded the
+                // way WPF App.xaml.cs:384/:394 seeds the two unlock seams. Unlocked is raised on the
+                // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
+                Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
+                Achievements.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
+                CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
+                CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+
+                // CoreProgram: its patreon, pack-video and roadmap providers stay unseeded - this head
+                // has no PatreonService, ContentPackService or RoadmapService, so it answers "no
+                // premium, no pack videos, no roadmap". NotifyProvider is seeded below, once the
+                // shell's toast host exists. HasPremium false still refuses a premium enrolment.
 
                 // CoreAccount is deliberately left unseeded, and this one is a constraint rather
                 // than a gap. PatreonService owns an HttpListener OAuth callback and a
@@ -250,6 +264,15 @@ namespace ConditioningControlPanel.Avalonia
             Views.Overlays.BouncingTextOverlay.Stop();
         }
 
+        /// <summary>WPF App.OnAchievementUnlocked (App.xaml.cs:3815): one popup per unlock, shown at once.
+        /// ponytail: no ItemUnlockedPopup - the reward map (WardrobeCatalog) is head-side in WPF;
+        /// no sound, no Discord webhook - neither service exists on this head.</summary>
+        internal static void ShowAchievementPopup(Models.Achievement a)
+        {
+            try { new Views.Windows.AchievementPopup(a.Name, a.FlavorText, a.ImageName).Show(); }
+            catch (Exception ex) { Serilog.Log.Error(ex, "Failed to show achievement popup for: {Name}", a.Name); }
+        }
+
         private string ResolveEffectiveAssetsPath()
         {
             var customPath = Settings?.Current.CustomAssetsPath;
@@ -276,6 +299,10 @@ namespace ConditioningControlPanel.Avalonia
             // background save must not see the shutdown-safe drop provider below.
             try { Settings?.SaveImmediate(); }
             catch { /* SettingsService logs save failures; exit must continue */ }
+
+            // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
+            // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
+            try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never
             // opened the quest page.
