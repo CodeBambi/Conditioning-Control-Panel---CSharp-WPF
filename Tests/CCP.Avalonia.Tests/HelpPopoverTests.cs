@@ -70,8 +70,7 @@ public sealed class HelpPopoverTests
 
                 // A real headless pointer move starts the same hover timer as a desktop pointer.
                 Move(host, button);
-                await Task.Delay(150);
-                Dispatcher.UIThread.RunJobs();
+                await WaitForOpen(button);
                 Assert.True(HelpPopover.IsOpen(button));
                 Assert.False(HelpPopover.IsPinned(button));
 
@@ -119,8 +118,7 @@ public sealed class HelpPopoverTests
 
                 // Reopen by hover and verify a host click-away closes an unpinned card too.
                 Move(host, button);
-                await Task.Delay(150);
-                Dispatcher.UIThread.RunJobs();
+                await WaitForOpen(button);
                 Assert.True(HelpPopover.IsOpen(button));
                 ClickAt(host, OutsidePopup(popup, host));
                 Assert.False(HelpPopover.IsOpen(button), "unpinned card ignored click-away");
@@ -198,8 +196,7 @@ public sealed class HelpPopoverTests
                     Assert.NotNull(featureButton);
                     Assert.True(featureButton!.IsVisible);
                     Move(featureHost, featureButton);
-                    await Task.Delay(150);
-                    Dispatcher.UIThread.RunJobs();
+                    await WaitForOpen(featureButton);
                     Assert.True(HelpPopover.IsOpen(featureButton));
 
                     featureHost.Content = null;
@@ -209,9 +206,11 @@ public sealed class HelpPopoverTests
 
                     featureHost.Content = featureCard;
                     Dispatcher.UIThread.RunJobs();
-                    Move(featureHost, featureButton);
-                    await Task.Delay(150);
+                    // Leave first: a stationary pointer raises no PointerEntered, and the card opens on enter.
+                    featureHost.MouseMove(new Point(1, 1), RawInputModifiers.None);
                     Dispatcher.UIThread.RunJobs();
+                    Move(featureHost, featureButton);
+                    await WaitForOpen(featureButton);
                     Assert.True(HelpPopover.IsOpen(featureButton), "FeatureCard.Loaded did not reattach help");
                 }
                 finally
@@ -256,6 +255,18 @@ public sealed class HelpPopoverTests
                 .SetupWithoutStarting();
         }
         LocalizationManager.Instance.SetLanguage("en");
+    }
+
+    // The card opens on a 100 ms DispatcherTimer; a fixed 150 ms sleep raced it on a loaded Windows
+    // runner. Poll instead, bounded; the Assert after it reports a miss.
+    private static async Task WaitForOpen(Button button)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        do
+        {
+            await Task.Delay(50);
+            Dispatcher.UIThread.RunJobs();
+        } while (!HelpPopover.IsOpen(button) && DateTime.UtcNow < deadline);
     }
 
     private static void Move(TopLevel host, Control target)
