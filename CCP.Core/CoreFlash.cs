@@ -49,7 +49,9 @@ namespace ConditioningControlPanel
         {
             lock (Gate)
             {
-                if (_isRunning) return;
+                // Already running: re-arm anyway, so a tick that saw the feature disabled (and so did
+                // not re-arm) cannot leave a started schedule dead.
+                if (_isRunning) { ArmLocked(); return; }
                 _isRunning = true;
                 _timer ??= new Timer(OnTick, null, Timeout.Infinite, Timeout.Infinite);
                 ArmLocked();
