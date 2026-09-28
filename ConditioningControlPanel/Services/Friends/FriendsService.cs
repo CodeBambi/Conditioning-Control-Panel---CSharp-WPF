@@ -44,7 +44,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     private bool _busy;
     private bool _kickPending;
     private bool _disposed;
-    private PresenceActivity _activity = PresenceActivity.Panel;
+    private readonly PresenceActivityStack _activities = new();
     private HashSet<string> _online = new(StringComparer.Ordinal);
     private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
     private readonly Queue<string> _seenOrder = new();
@@ -116,13 +116,29 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     /// <summary>True while the leash wants the 20 s cadence (leashed or holding anyone).</summary>
     public Func<bool>? LeashActive { get; set; }
 
-    /// <summary>The activity this app would publish. Read by tests and the drawer's own row.</summary>
-    public PresenceActivity Activity => _activity;
+    /// <summary>The activity this app would publish: the top of the stack (see
+    /// <see cref="PresenceActivityStack"/>). Read by tests and the drawer's own row.</summary>
+    public PresenceActivity Activity => _activities.Top;
 
+    /// <summary>The old single-slot call: replaces the whole stack. Hosts use
+    /// <see cref="EnterActivity"/> / <see cref="LeaveActivity"/>.</summary>
     public void SetActivity(PresenceActivity activity)
     {
-        if (_activity == activity) return;
-        _activity = activity;
+        if (_activities.Replace(activity)) ActivityMoved();
+    }
+
+    public void EnterActivity(PresenceActivity activity)
+    {
+        if (_activities.Enter(activity)) ActivityMoved();
+    }
+
+    public void LeaveActivity(PresenceActivity activity)
+    {
+        if (_activities.Leave(activity)) ActivityMoved();
+    }
+
+    private void ActivityMoved()
+    {
         // Presence is only worth a request when someone can see it.
         if (_readShared() && Available) Kick();
     }
@@ -230,7 +246,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             JObject? report = null;
             try { report = LeashReportProvider?.Invoke(); }
             catch (Exception ex) { App.Logger?.Debug("Leash report failed: {E}", ex.Message); }
-            var reply = await _api.PollAsync(shared ? _activity : null, shared ? _lockDay() : null, shared, report);
+            var reply = await _api.PollAsync(shared ? _activities.Top : null, shared ? _lockDay() : null, shared, report);
             if (_account() != sentFor) return;
             if (reply != null)
             {

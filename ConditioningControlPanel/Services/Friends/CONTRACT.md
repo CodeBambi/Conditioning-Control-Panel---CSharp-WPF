@@ -54,7 +54,8 @@ Ids on the wire are unified ids (`u_...`). The client never shows one.
 - `watch`: `{ kind, id, title? }`, `kind` in `catalogue` (`id` `^[A-Za-z0-9_-]{1,64}$`), `flavour`
   (`id` in `trance pink frills shiny censored`), `ht` (`id` `^[0-9]{1,8}$`); `title` <= 40 chars,
   letters, digits, spaces and `.,'-` only, stored but never trusted (the receiver resolves the id)
-- `activity`: `panel session backroom race goon goon_hosting arcademy breakout deeper remote`
+- `activity`: `panel session backroom race goon goon_hosting arcademy breakout deeper remote chess`
+  (`chess` added 2026-09-28; a server that predates it stores `online`)
 - `reason`: `spam harassment underage impersonation other`
 - friend code: `CCP-` + 5 chars from `23456789ABCDEFGHJKLMNPQRSTUVWXYZ`, case-insensitive on input
 
