@@ -117,7 +117,7 @@ export function createReplayShots({ group, random = Math.random } = {}) {
   function actionCentre(spec, clip) {
     const c = contactOf(clip);
     if (spec.subject === 'contact') return c;
-    const near = subjectFor({ ...spec, window: [-.15, .15], flight: false }, clip);
+    const near = subjectFor({ ...spec, window: [-.05, .05], flight: false }, clip);
     const lo = [0, 1, 2].map(k => Math.min(...near.map(q => q[k] - q[3]))), hi = [0, 1, 2].map(k => Math.max(...near.map(q => q[k] + q[3])));
     const m = [0, 1, 2].map(k => (lo[k] + hi[k]) / 2);
     return [(m[0] + c[0]) / 2, Math.min(spec.ceil, (m[1] + c[1]) / 2), (m[2] + c[2]) / 2];

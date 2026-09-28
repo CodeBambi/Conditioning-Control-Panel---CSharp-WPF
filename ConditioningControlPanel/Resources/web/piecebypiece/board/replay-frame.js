@@ -29,7 +29,7 @@ export const SHOT_BANK = Object.freeze({
   close:  { size: 1, fov: 34, el: [.2, .34], az: [-.5, .5], share: .72, window: [-.28, .3], ceil: 1.25, subject: 'pair', motion: 'orbit' },
   low:    { size: 1, fov: 40, el: [-.05, .05], az: [-.45, .45], share: .7, window: [-.3, .35], ceil: 1.35, subject: 'pair', motion: 'push' },
   medium: { size: 2, fov: 40, el: [.3, .44], az: [.62, 1.0], share: .68, window: [-.5, .45], ceil: 1.6, subject: 'pair', motion: 'push' },
-  wide:   { size: 3, fov: 44, el: [.44, .62], az: [-.8, .8], share: .58, window: [-1.2, .9], ceil: 1.8, subject: 'pair', flight: true, motion: 'drift' },
+  wide:   { size: 3, fov: 44, el: [.44, .62], az: [-.8, .8], share: .62, window: [-1.2, .9], ceil: 1.8, subject: 'pair', flight: true, motion: 'drift' },
   top:    { size: 4, fov: 34, el: [1.2, 1.36], az: [-1.2, 1.2], share: .6, window: [-1.0, .9], ceil: 2.6, subject: 'pair', flight: true, motion: 'spin' },
 });
 
@@ -38,7 +38,7 @@ export const FRAME = Object.freeze({
   minDist: 1.25,      // never nearer the subject's centre than this
   maxDist: 20,        // nor further (the room is a 60 unit dome; this stays well inside it)
   floorY: .24,        // the lens never goes lower than this above the board
-  flightReach: 3.0,   // a flung victim counts for framing this far from contact, no further
+  flightReach: 1.8,   // a flung victim counts for framing this far from contact, no further
   contactR: .24,      // the extreme close holds this ball round the contact point
   manR: .3,           // a man, as a column this wide
   nearHide: .75,      // a man whose skin comes nearer the lens than this is hidden
