@@ -27,7 +27,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    <c>CoreMods.ActiveModId</c>, over the real <c>ModPackage</c>/<c>ModManifest</c> models in
     ///    Core. With no mod service seeded (this head today) that is the one built-in CCP Default,
     ///    which is exactly what <c>App.Mods</c> answered before its service came up.
-    ///  - <c>ModPackCatalog</c> is a WPF-head type, so the mod-id → pack-id mapping comes from
+    ///  - <c>ModService.PackIdForMod</c> is a WPF-head type, so the mod-id → pack-id mapping comes from
     ///    <see cref="ModPickerCatalog"/>, its twin on this head.
     ///  - Installing, uninstalling, activating for real, exporting and sharing all need the WRITE
     ///    half of <c>CCP.Core/Services/ModService.cs</c> (WPF reaches it as
@@ -139,7 +139,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         // Built-in mods ship without their media on a modular install (docs/CONTENT_PACKS_PLAN.md §4):
         // the manifests, theme and text all work, but the voice lines / portraits / DTRH barks come
         // down as a release-hosted pack. This section adds the per-mod Download control for that.
-        // The mod id -> pack id mapping lives in ONE place: ModPackCatalog.
+        // The mod id -> pack id mapping lives in ONE place: ModService.PackIdForMod.
 
         /// <summary>True when the pack row currently on screen belongs to <paramref name="packId"/>.</summary>
         private bool IsPackRowShowing(string packId)
