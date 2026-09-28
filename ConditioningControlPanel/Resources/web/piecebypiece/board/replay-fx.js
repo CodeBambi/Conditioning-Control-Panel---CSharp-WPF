@@ -45,9 +45,9 @@ export const REPLAY_FRAG = `uniform sampler2D map; uniform vec2 res; uniform vec
       if (bstyle != 1.0) {
         float k = (atan(d.y, d.x) / 6.2831853 + .5) * 84.0;
         float h = hash(vec2(floor(k), seed));
-        float inner = mix(.3, 1.05, burst);
-        float line = step(.5, h) * step(fract(k), h * .5) * smoothstep(inner, inner + .14, r);
-        c = mix(c, vec3(1.0, .96, .99), line * fade * .85);
+        float inner = mix(.42, 1.1, burst);
+        float line = step(.58, h) * step(fract(k), h * .45) * smoothstep(inner, inner + .16, r);
+        c = mix(c, vec3(1.0, .96, .99), line * fade * .75);
       }
       if (bstyle != 0.0) {
         float cell = 11.0; vec2 g = mod(p, cell) - cell * .5;

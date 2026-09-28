@@ -44,7 +44,7 @@ export const REPLAY = Object.freeze({
   dim: .56,         // brightness of the panels not taking their hit
   desat: .7,        // and how much colour they lose
   rest: .9,         // brightness when nobody is taking a hit
-  flash: .42,       // white flash on a panel's own hit
+  flash: .3,        // white flash on a panel's own hit
   flashSec: .2,
   // the hit, per panel
   punch: .11,       // zoom pulse at contact (1 + punch)
@@ -100,7 +100,7 @@ export function clipTime(layout, i, t, clip) {
 
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const easeOutBack = (t, c1 = 1.7) => { const c3 = c1 + 1; return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2; };
-const easeInBack = (t, c1 = 1.2) => (c1 + 1) * t ** 3 - c1 * t ** 2;
+const easeInBack = (t, c1 = .8) => (c1 + 1) * t ** 3 - c1 * t ** 2;
 const easeIn = t => t * t * t;
 const easeOut = t => 1 - (1 - t) ** 3;
 
