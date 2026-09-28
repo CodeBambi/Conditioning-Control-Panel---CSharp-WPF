@@ -13,9 +13,7 @@ public enum QuestType
     Weekly
 }
 
-// QuestCategory moved to CCP.Core/Models/QuestCategory.cs: ProgramDay.Verifier is typed on it
-// and the program ledger is in Core now. The rest of this file stays here - its icon paths are
-// pack:// URIs, which only PresentationFramework resolves.
+// QuestCategory lives in CCP.Core/Models/QuestCategory.cs (ProgramDay.Verifier is typed on it).
 
 
 public class QuestDefinition

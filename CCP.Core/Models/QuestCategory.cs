@@ -4,8 +4,7 @@ namespace ConditioningControlPanel.Models;
 /// How an activity is counted. Lives in Core rather than beside QuestDefinition because
 /// ProgramDay.Verifier is typed on it - a program day is proven through the same choke point a
 /// quest is (QuestService.UpdateQuestProgress), which is the whole reason the program ledger did
-/// not need a second tracking pass. Quest.cs itself stays in the WPF head: every quest icon is a
-/// pack:// URI, and only PresentationFramework resolves those.
+/// not need a second tracking pass.
 /// </summary>
 public enum QuestCategory
 {
