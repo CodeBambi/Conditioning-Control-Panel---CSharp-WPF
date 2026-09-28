@@ -170,7 +170,8 @@ namespace ConditioningControlPanel.Services.Companion
                     Id = id,
                     Name = name,
                     Description = d.Description,
-                    PromptSettings = prompts
+                    PromptSettings = prompts,
+                    SampleLines = PersonalitySamples.Clean(d.SampleLines)
                 });
             }
             return result;

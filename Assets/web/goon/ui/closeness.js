@@ -78,7 +78,7 @@ export function mountCloseness({ host, match, audio = null, onLog = null, coach 
   const root = el('div', 'gg-dial gg-plate');
   if (!root || !host) return { unmount() { led.run(); }, set() {}, value() { return null; } };
 
-  add(root, el('div', 'gg-dial-label', "you're telling them"));
+  add(root, el('div', 'gg-dial-label', S.closeness.telling));
   const segRow = add(root, el('div', 'gg-dial-stops'));
   const stops = [];
   for (let i = 0; i < CLOSENESS_STOPS.length; i++) {
@@ -86,12 +86,12 @@ export function mountCloseness({ host, match, audio = null, onLog = null, coach 
     if (!b) continue;
     b.type = 'button';
     add(b, el('i', 'gg-dial-bar'));
-    add(b, el('span', 'gg-dial-word', CLOSENESS_STOPS[i]));
+    add(b, el('span', 'gg-dial-word', S.closeness.stops[i]));
     b.setAttribute && b.setAttribute('data-gg-stop', String(i));
     led.listen(b, 'click', () => set(i));
     stops.push(b);
   }
-  add(root, el('div', 'gg-dial-fine', 'they can only see what you say.'));
+  add(root, el('div', 'gg-dial-fine', S.closeness.fine));
   add(host, root);
 
   // -Infinity, not 0: nowMs() is a monotonic clock that starts near zero, so a

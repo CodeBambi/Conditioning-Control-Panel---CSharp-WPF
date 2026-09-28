@@ -514,3 +514,15 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: PopQuizHostTests (fail-proofed 6 ways); live sandbox: quiz on Start, answering closes it, Stop closes an open
   one in <43 ms, a lock card defers it, Test opens one, broken arming shows none. XP not banked (no provider on this head).
   Review: FIX -> r1 applied. Open: one quiz closed by itself in one run (close reasons now logged).
+
+## avalonia-port/main-20260928b: +90661 (main sync #2, merge only)
+- One --no-ff merge of origin/release/6.11.3 (383 commits; decision logged: release/6.11.3 is where the user's work lands,
+  GitHub main is unchanged). 6 content + 179 location/delete conflicts resolved toward the stack's layout (Assets/, Core
+  delegation); Version.props 6.11.3. Compile fixes in the merge: PresetNaming, ModAudioPolicy, CompanionExperience,
+  PersonalitySamples moved to Core. Review: ACCEPT.
+
+## avalonia-port/main-20260928b-compat: +240
+- Release behaviour carried into Core: bounce-wall overhang, the CoreAccount identity event, AiEffectControlGate (Avalonia
+  grid shows the effective value), CCP Default neutral session words in PhrasePoolCustody. WPF tests read the moved Assets
+  and language files through SourceRoots (a Linux test asserts each path exists). 12 parity rows added as missing, plus a
+  blocked row for the content-pack script (phase 5). Review: FIX -> r1 applied.

@@ -39,8 +39,17 @@ namespace ConditioningControlPanel.Views.Tabs
         /// event plumbing.</summary>
         private MainWindow? Owner => Window.GetWindow(this) as MainWindow;
 
-        // The DESCENT shims and the Goon, Arcademy, Piece by Piece and Back Room shims left on
-        // 2026-09-18 with their cards: the games are launched from the CC Labs launcher now.
+        private void BtnPlayBreakoutDemo_Click(object sender, RoutedEventArgs e)
+            => Owner?.LaunchPlayBreakoutDemo();
+
+        private void BtnPlayBreakout_Click(object sender, RoutedEventArgs e)
+            => Owner?.LaunchPlayBreakout();
+
+        private void BtnPlayGoon_Click(object sender, RoutedEventArgs e)
+            => Owner?.LaunchPlayGoon();
+
+        private void BtnPlayChess_Click(object sender, RoutedEventArgs e)
+            => Owner?.LaunchPlayChess();
 
         // ---- TOGETHER --------------------------------------------------------------------
 

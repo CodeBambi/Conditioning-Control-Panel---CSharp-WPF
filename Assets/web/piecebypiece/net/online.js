@@ -71,6 +71,7 @@ export function createDriverSwitch(initial) {
     get seats() { return cur.seats || ['w', 'b']; },
     /** True while an online driver is in the chair. */
     get isOnline() { return !!cur.matchId; },
+    get isSolo() { return !!cur.isSolo; },
 
     /**
      * Put a different driver in the chair. The outgoing one is disposed, which

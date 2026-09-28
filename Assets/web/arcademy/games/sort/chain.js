@@ -14,6 +14,11 @@
  *             beat the casino stages loudest
  *   ALMOST    swiped in the 10% before the window opened - the near-miss you
  *             lost, and the reason the ring is drawn at all
+ *   QUICK     swiped in the first QUICK_MS after the ring arms (the mint
+ *             flash, Mort, #1291). It pays exactly what a PERFECT pays and
+ *             reads as one on the ledger: a second way into the same bonus,
+ *             for the player who knows the card on sight. It always closes
+ *             before the ALMOST band opens, so the windows never overlap.
  *
  * A WRONG SWIPE IS ONE RUNG DOWN, NEVER OUT. The chain resets to the FLOOR of
  * the rung below, on a 1.5s fade, so a mistake at rung 6 costs the two seconds
@@ -45,6 +50,8 @@ export const CHAIN = Object.freeze({
   JUST_FRAC: 0.12,
   /** ALMOST is the 10% of ring immediately BEFORE the gold arc opens. */
   ALMOST_FRAC: 0.10,
+  /** QUICK: the first this-many ms after a ring arms pay as a PERFECT. */
+  QUICK_MS: 500,
   /** A wrong swipe walks the rung down over this long. */
   WRONG_FADE_MS: 1500,
   /** Reaching one of these rungs pays a major jackpot, once each per class. */
@@ -94,23 +101,38 @@ export function ripeAt(ringMs) {
 }
 
 /**
+ * The ms mark where the QUICK window shuts on a ring of this length: QUICK_MS,
+ * or earlier on a short ring, so it always shuts before the ALMOST band opens.
+ */
+export function quickUntil(ringMs) {
+  const ms = Math.max(1, Number(ringMs) || 1);
+  return Math.min(CHAIN.QUICK_MS, ms * (1 - CHAIN.PERFECT_FRAC - CHAIN.ALMOST_FRAC));
+}
+
+/**
  * Read a swipe against its ring.
  * @param {number} elapsedMs  ms since the card became grabbable
  * @param {number} ringMs     the ring this card was dealt with
+ * @param {{quick?:boolean}} [opts]  quick:false reads the swipe with no QUICK
+ *            window (a gesture made before the ring armed never earns it)
  * @returns {{frac:number, perfect:boolean, just:boolean, almost:boolean,
- *            closed:boolean, verdict:'perfect'|'just'|'almost'|'early'|'closed'}}
+ *            quick:boolean, closed:boolean,
+ *            verdict:'perfect'|'just'|'quick'|'almost'|'early'|'closed'}}
+ *   `perfect` is true in BOTH bonus windows; `quick` says it was the early one.
  */
-export function verdictFor(elapsedMs, ringMs) {
+export function verdictFor(elapsedMs, ringMs, opts) {
   const ms = Math.max(1, Number(ringMs) || 1);
   const at = Math.max(0, Number(elapsedMs) || 0);
   const frac = at / ms;
   const closed = frac >= 1;
-  const perfect = !closed && frac >= (1 - CHAIN.PERFECT_FRAC);
+  const late = !closed && frac >= (1 - CHAIN.PERFECT_FRAC);
   const just = !closed && frac >= (1 - CHAIN.JUST_FRAC);
+  const quick = !(opts && opts.quick === false) && !closed && !late && at < quickUntil(ms);
+  const perfect = late || quick;
   const almost = !perfect && !closed
     && frac >= (1 - CHAIN.PERFECT_FRAC - CHAIN.ALMOST_FRAC);
-  const verdict = closed ? 'closed' : just ? 'just' : perfect ? 'perfect' : almost ? 'almost' : 'early';
-  return { frac, perfect, just, almost, closed, verdict };
+  const verdict = closed ? 'closed' : just ? 'just' : late ? 'perfect' : quick ? 'quick' : almost ? 'almost' : 'early';
+  return { frac, perfect, just, almost, quick, closed, verdict };
 }
 
 /**
@@ -183,4 +205,4 @@ export function ladderFrac(chain, rung, cap) {
   return clamp((c - from) / span, 0, 1);
 }
 
-export default { CHAIN, rungForStreak, ringMsFor, verdictFor, afterClean, afterWrong, afterPass };
+export default { CHAIN, rungForStreak, ringMsFor, verdictFor, quickUntil, afterClean, afterWrong, afterPass };

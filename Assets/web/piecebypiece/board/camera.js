@@ -14,9 +14,9 @@
  * State is spherical around a look-at target: theta is the azimuth (0 sits on
  * the +Z side, which is white's home), phi is measured DOWN from straight up,
  * so phi 0 is a bird's eye and a big phi is a low camera. Everything the game
- * used to do to the camera still happens on top of that: setSide swings round
- * behind whoever is to move (only while the normal preset is on and the player
- * has not taken the camera themselves), and the ramp's sway is an additive
+ * used to do to the camera still happens on top of that: setSide chooses a seat at the new deal; turns keep a stable view. The rig sits
+ * behind that seat while the normal preset is on and the player
+ * has not taken the camera themselves, and the ramp's sway is an additive
  * wobble applied last, after the rig has placed the camera for the frame.
  *
  * Wiring: scene.js builds the rig and forwards setSide / update / setCameraSway
@@ -141,8 +141,9 @@ export function createCameraRig({ camera, canvas, isDragging = null }) {
     notify();
   }
 
-  /** The automatic swing behind whoever is to move. */
+  /** Set the seat at a new deal; ordinary turns keep the view stable. */
   function setSide(side, instant = false) {
+    if (!instant) return;
     moverSide = side === 'b' ? 'b' : 'w';
     if (free || preset !== 'normal') return;   // the player is in charge, or a
     const to = sideAngle(moverSide);           // fixed view is on
@@ -377,7 +378,11 @@ export function attachCameraUi({ rig, root = document.getElementById('cam-views'
   window.addEventListener('keydown', onKey);
 
   const off = rig.onChange((s) => {
-    for (const b of buttons) b.classList.toggle('on', b.dataset.view === s.preset);
+    for (const b of buttons) {
+      const active = b.dataset.view === s.preset;
+      b.classList.toggle('on', active);
+      b.setAttribute('aria-pressed', String(active));
+    }
     if (chip) chip.hidden = !s.free;
   });
 

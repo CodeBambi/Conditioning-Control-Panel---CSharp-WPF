@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://ccp.assets; media-src 'self' data: https://ccp.assets; style-src 'self'; script-src 'self'">
+<title>CCP · The Emi experience</title><link rel="stylesheet" href="show.css"></head>
+<body><main id="stage">
+ <div id="backdrop"></div><div id="rays"></div><div id="wash"></div><div id="spiral"></div><div id="drain"></div><div id="subliminal" class="subliminal"></div><div id="objects"></div><canvas id="sparkles"></canvas>
+ <div id="logo"><img alt="CCP"></div>
+ <div id="emi"><div class="halo"></div><img alt="Emi"></div>
+ <header><div id="beats" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span class="brand">CCP <i>×</i> EMI</span><button id="stop" hidden>Stop show</button></header>
+ <section id="card"><span class="eyebrow">THE EMI SHOW</span><h1 id="greeting"></h1><p id="hint"></p><div id="presets"></div><p id="status" role="status"></p><p id="warning"></p><div class="actions"><button id="ready" class="primary" disabled></button><button id="later"></button></div></section>
+ <section id="caption" aria-live="polite"><span id="beatLabel"></span><p id="line"></p></section>
+ <section id="ending" hidden><button id="apply" class="primary"></button><button id="explore"></button><button id="replay"></button></section>
+ <footer><span id="panic"><kbd></kbd><span id="panicHint"></span></span><span id="time">00:35</span></footer><div id="progress"></div>
+</main><script type="module" src="show.js"></script></body></html>

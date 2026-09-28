@@ -37,7 +37,25 @@ import { mount } from './station.js';
 import { bridge, isHosted, mintId, announceReady, markInitialized } from '../../bridge.js';
 
 const q = new URLSearchParams(location.search);
-const wait = ms => new Promise(r => setTimeout(r, ms));
+const settingsFns = new Set();
+let hostInit = {};
+let station;
+function applyHost(m) {
+  hostInit = { ...hostInit, ...m };
+  if (m.breakout) ctx.breakout = m.breakout;
+  if (m.gates) ctx.gates = m.gates;
+  if (m.audio) ctx.audio = m.audio;
+  if (m.media) {
+    const changed = ctx.mediaSettings?.effective !== m.media.effective;
+    ctx.mediaSettings = m.media;
+    if (changed) window.dispatchEvent(new Event('br-media-changed'));
+  }
+  if (typeof m.reduced === 'boolean') ctx.reduced = m.reduced;
+  if (m.motion) ctx.motion = m.motion;
+  if (m.intensity) ctx.intensity = m.intensity;
+  if (Number.isFinite(m.sp)) { sp = m.sp; for (const fn of spFns) fn(sp); }
+  for (const fn of settingsFns) fn(m);
+}
 const coarse = matchMedia('(pointer: coarse)').matches;
 const PRESET = ['DROP', 'RELAX', 'LET GO', 'SINK', 'OBEY', 'FOCUS', 'BLANK', 'SOFT', 'EMPTY', 'GOOD', 'DEEPER', 'STILL'];
 const qWords = (q.get('words') || '').split(',').map(w => w.trim()).filter(Boolean);
@@ -79,7 +97,12 @@ const ctx = {
   onSp: fn => { spFns.add(fn); return () => spFns.delete(fn); },
   reduced: q.has('still') || matchMedia('(prefers-reduced-motion: reduce)').matches,
   motion: q.has('still') ? 'Reduced' : 'Full', intensity: 'Normal',
-  lex: (key, fallback) => fallback,
+  lex: (key, fallback) => hostInit.lex?.[key] || fallback,
+  breakout: null,
+  commitAudio: (key,value) => {
+    if (hostInit.breakoutStandalone) bridge.send({ type:'room-option', key: {music:'musicVolume',sfx:'sfxVolume',sub:'subVolume'}[key], value: Math.round(value*100) });
+  },
+  onSettings: fn => { settingsFns.add(fn); return () => settingsFns.delete(fn); },
   gates: { subliminal: !q.has('nosub') },
   variant: null,
   hostBack: null,
@@ -88,14 +111,28 @@ const ctx = {
 
 /* The bridge holds every frame until init: say ready, take the host's init (the phone shim answers at once), then open the lane. */
 if (isHosted) {
-  await new Promise((res) => { const t = setTimeout(res, 1500); bridge.once('init', () => { clearTimeout(t); res(); }); try { announceReady(); } catch (e) { res(); } });
+  await new Promise((res) => {
+    const timer = setTimeout(res, 1500);
+    bridge.on('init', m => { applyHost(m); clearTimeout(timer); res(); });
+    announceReady();
+  });
+  bridge.on('settings', applyHost);
+  bridge.on('suspend', m => station?.suspend(!!m.on));
+  bridge.on('media-warm', () => window.dispatchEvent(new Event('br-media-changed')));
   markInitialized();
 }
 
-const station = await mount(ctx);
+station = await mount(ctx);
 const sit = document.getElementById('sit');
-async function stand() { await station.close(); sit.hidden = false; sit.focus(); }
-async function open() { sit.hidden = true; await station.open(); }
+/* The host's contract (room/main.js): settle inside 300 ms, then exit-done, or the window waits out its forced close. */
+const settle = () => Promise.race([station?.close().catch(() => {}), new Promise(r => setTimeout(r, 250))]);
+async function stand() {
+  if (hostInit.breakoutStandalone) { await settle(); bridge.send({ type: 'exit', station: 'breakout' }); bridge.send({ type: 'exit-done' }); return; }
+  await station.close();
+  sit.hidden = false; sit.focus();
+}
+if (isHosted) bridge.on('close', async () => { await settle(); bridge.send({ type: 'exit-done' }); });
+async function open() { sit.hidden = true; await station.open(); if (isHosted) bridge.send({ type: 'station-open', station: 'breakout' }); }
 sit.onclick = open;
 await open();
 

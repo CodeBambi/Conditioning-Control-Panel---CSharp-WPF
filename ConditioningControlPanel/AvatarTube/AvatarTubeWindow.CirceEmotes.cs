@@ -250,6 +250,32 @@ namespace ConditioningControlPanel
             return false;
         }
 
+        /// <summary>
+        /// The idle clip of a mod's animated emote set, for still previews (the companion picker's
+        /// portrait). A mod-local set{N} folder wins, then the embedded registry. Null when the set
+        /// is not animated, so the caller falls back to pose art. Static on purpose: the picker
+        /// needs it with the tube closed, and for mods that are not active.
+        /// </summary>
+        internal static Uri? EmoteIdleClipUri(string? modId, int set, string? installedPath)
+        {
+            if (string.IsNullOrEmpty(modId)) return null;
+            try
+            {
+                if (!string.IsNullOrEmpty(installedPath))
+                {
+                    var dir = System.IO.Path.Combine(installedPath, "resources", "emotes", $"set{set}");
+                    var local = System.IO.Path.Combine(dir, "idle.gif");
+                    if (System.IO.File.Exists(System.IO.Path.Combine(dir, "emotes.json")) && System.IO.File.Exists(local))
+                        return new Uri(local, UriKind.Absolute);
+                }
+                foreach (var e in LoadEmoteRegistry())
+                    if (string.Equals(e.modId, modId, StringComparison.OrdinalIgnoreCase) && e.set == set)
+                        return new Uri($"pack://application:,,,/Resources/{e.folder}/idle.gif", UriKind.Absolute);
+            }
+            catch { }
+            return null;
+        }
+
         private static List<(string modId, int set, string folder)> LoadEmoteRegistry()
         {
             if (_emoteRegistry != null) return _emoteRegistry;

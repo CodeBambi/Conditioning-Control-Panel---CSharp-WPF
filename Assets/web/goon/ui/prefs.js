@@ -133,6 +133,13 @@ export const PREF_DEFAULTS = Object.freeze({
    */
   arsenalOpen: 'auto',
   /**
+   * THE SORT DUEL'S NOISE BOARD, picked before the match on ui/screens/noiseSetup.js
+   * (right after the flavour card) and changeable in Options > Pictures. A set id from
+   * core/noiseSets.js; '' = never chosen (the step is still owed, and a duel rolls one).
+   * Readers clamp it, so a stale id from an older table reads as ''.
+   */
+  noiseSet: '',
+  /**
    * WHERE THE PLAYER PARKED THE OPPONENT'S MONITOR, and how big they made it
    * (ui/opponent.js — drag + wheel, "like the gifs"). Three plain numbers rather
    * than one blob because `coerce` below already keeps numbers honest against a
@@ -215,6 +222,15 @@ export const PREF_DEFAULTS = Object.freeze({
    * -------------------------------------------------------------------------- */
   voiceNotesEnabled: false,
   voiceAckSeen: false,
+  /* SENDING MY FILES (2026-09-23). A patron perk, OFF until the player switches it on in
+   * options or the lobby. Before this key existed the lobby's write was dropped (set()
+   * refuses unknown keys) and every read came back undefined, which boot read as ON. */
+  mediaTransferEnabled: false,
+  /* THE LIVING BACKGROUND's intensity (exec/background.js), 0..1. 1 = full heat as
+   * built (the default); 0 = a still dark gradient. A slider, not a toggle (owner,
+   * 2026-09-24). Mirrored onto <html data-gg-bgint> below; reduced motion and the
+   * lite tier still win over it. */
+  bgIntensity: 1,
   voiceVolume: 0.9,
   voiceEmoteMap: Object.freeze({}),
 });
@@ -352,7 +368,7 @@ function coerce(key, value) {
   if (typeof def === 'number') {
     const n = Number(value);
     if (!isFinite(n)) return def;
-    return (key.endsWith('Volume')) ? clamp01(n) : n;
+    return (key.endsWith('Volume') || key === 'bgIntensity') ? clamp01(n) : n;
   }
   /* AN OBJECT DEFAULT (voiceEmoteMap, so far) — checked BEFORE the string
    * fall-through, which is the whole reason this branch exists: `String({})` is
@@ -412,6 +428,8 @@ const REFLECT = Object.freeze({
    *  store plays its videos at the volume exec/videos.js chose on its own. */
   mediaVolume: MEDIA_SPEC,
   masterVolume: MEDIA_SPEC,
+  /** exec/background.js scales the living backdrop by this (absent = 1). */
+  bgIntensity: { attr: 'data-gg-bgint', derive: (values) => clamp01(values.bgIntensity).toFixed(2) },
 });
 
 /**

@@ -748,10 +748,11 @@ namespace ConditioningControlPanel
             try
             {
                 var tab = SettingsTab;
+                if (tab?.ImgLogo != null) tab.ImgLogo.AmbientAllowed = ChromeAmbientAllowed;
                 var scale = tab?.LogoDriftScale;
                 if (scale == null || scale.IsFrozen) return;
 
-                bool wanted = ChromeAmbientAllowed && tab!.LogoFaceLogo?.IsVisible == true;
+                bool wanted = ChromeAmbientAllowed && tab!.LogoFaceLogo?.IsVisible == true && !tab.ImgLogo.IsAnimatedArtwork;
                 if (!wanted)
                 {
                     scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
@@ -779,7 +780,7 @@ namespace ConditioningControlPanel
             {
                 if (_logoSheenTimer == null) return;
                 var tab = SettingsTab;
-                bool wanted = ChromeAmbientAllowed && tab?.LogoFaceLogo?.IsVisible == true;
+                bool wanted = ChromeAmbientAllowed && tab?.LogoFaceLogo?.IsVisible == true && !tab.ImgLogo.IsAnimatedArtwork;
                 if (!wanted)
                 {
                     _logoSheenTimer.Stop();
@@ -803,7 +804,7 @@ namespace ConditioningControlPanel
             {
                 if (_logoSheenTimer != null) _logoSheenTimer.Interval = NextLogoSheenGap();
                 var tab = SettingsTab;
-                if (tab?.LogoFaceLogo?.IsVisible != true) return;
+                if (tab?.LogoFaceLogo?.IsVisible != true || tab.ImgLogo.IsAnimatedArtwork) return;
                 if (!ChromeAmbientAllowed) return;
                 SweepSheen(tab.LogoFaceLogo, tab.LogoSheen, tab.LogoSheenSlide, LogoSheenSeconds, 0.26);
             }

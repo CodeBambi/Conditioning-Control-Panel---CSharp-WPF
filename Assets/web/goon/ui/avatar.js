@@ -26,6 +26,7 @@
  *
  * Import-safe under node: every document touch is inside a function.
  * ==========================================================================*/
+import { play } from './juiceDom.js';
 
 /** The event D emits and E consumes. Frozen by the contract (§6). */
 export const AVA_EVENT = 'gg-ava';
@@ -124,7 +125,11 @@ export function avatarNode({ side = 'you', name = '', dataUri = null, size = 'lo
       child.textContent = initialOf(name);
       try { child.style.setProperty('--gg-ava-hue', String(hueFromName(name))); } catch (_e) { /* stub DOM */ }
     }
+    const swap = !!node.firstChild;
     try { node.replaceChildren(child); } catch (_e) { try { node.appendChild(child); } catch (_e2) { /* ignore */ } }
+    // A picture that lands over the placeholder tile fades in rather than blinking over it.
+    // Opacity only: the reaction one-shots (ui/avatarFx.js) own this child's transform.
+    if (swap) play(child, [{ opacity: 0 }, { opacity: 1 }], { duration: 220, easing: 'ease-out' });
   }
 
   // The tile goes in NOW, unconditionally, even when a picture is on its way:

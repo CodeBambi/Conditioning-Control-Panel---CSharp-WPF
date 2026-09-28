@@ -7,6 +7,7 @@
              xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:local="clr-namespace:ConditioningControlPanel"
+             xmlns:launcher="clr-namespace:ConditioningControlPanel.Services.Launcher"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
     <!--
@@ -26,13 +27,12 @@
         StartMantraSession) so nothing else on the surface loses a launch path. Do NOT "restore"
         them here: two doors to one feature is what the restructure exists to stop.
 
-        2026-09-18: THE GAMES LEFT THIS PAGE for the CC Labs launcher (Windows\Launcher). Down
-        the Rabbit Hole, Racing Thoughts, Goon Game, the Arcademy, the Back Room and Piece by
-        Piece are launched from the launcher's tiles (Services\Launcher\LauncherCatalogue.cs)
-        and nowhere on this wall; the panel keeps only what is a panel feature. Same rule as
-        above: one door per feature, do not re-add a game card here.
+        2026-09-27: Breakout Demo, full Breakout and Goon Game also live on Play.
+        Both Breakout cards share their launch service with the launcher.
 
-        What is left is eight cards:
+        The page groups games and panel features:
+
+            GAMES     2 x 2        Breakout Demo | Breakout / Goon Game | Piece by Piece
 
             TOGETHER  2 columns    Remote Control                  (half width, on purpose)
             EYES      3 columns    Gaze | Focus Gaze | Blink Trainer   (+ the webcam chip)
@@ -335,6 +335,124 @@
                 </TextBlock>
                 <TextBlock Text="{loc:Str pl6_play_subtitle}" Foreground="{DynamicResource TextDimBrush}"
                            FontSize="12" Margin="0,0,0,16"/>
+
+                <!-- Breakout and Goon are also available here beside the panel features. -->
+                <TextBlock Text="{loc:Str rf_play_zone_games}" Style="{StaticResource PlayZoneTag}" Margin="2,4,2,8"/>
+                <UniformGrid Columns="2">
+                    <Grid x:Name="SlotBreakoutDemo" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Image Source="{x:Static launcher:BreakoutCardArt.Demo}" Stretch="UniformToFill"/>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_breakoutdemo_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_breakoutdemo_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <Button Grid.Row="3" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayBreakoutDemo_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
+                                <Border Style="{StaticResource PlayBadgePill}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-12,-12,0,0" Panel.ZIndex="10">
+                                    <TextBlock Text="{loc:Str exclusives_badge_new}" Style="{StaticResource PlayBadgePillText}"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotBreakout" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCardT2}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Image Source="{x:Static launcher:BreakoutCardArt.Full}" Stretch="UniformToFill"/>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_breakout_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_breakout_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <Button Grid.Row="3" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayBreakout_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
+                                <Border x:Name="PlayLockBreakout" x:FieldModifier="internal" Style="{StaticResource PlayLockBandT2}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_t2}" Style="{StaticResource PlayLockTeaserT2}"/>
+                                    </StackPanel>
+                                </Border>
+                                <fx:TierBadge Style="{StaticResource PlayTierBadge}" Tier="2"/>
+                                <Border Style="{StaticResource PlayBadgePill}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-12,-12,0,0" Panel.ZIndex="10">
+                                    <TextBlock Text="{loc:Str exclusives_badge_new}" Style="{StaticResource PlayBadgePillText}"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotGoon" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush x:Name="PlayGoonHeroBrush" x:FieldModifier="internal" ImageSource="pack://application:,,,/Resources/features/goon_game_tile.png" Stretch="UniformToFill"/></Border.Background></Border>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_goon_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_goon_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <Button Grid.Row="3" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayGoon_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <!-- Piece by Piece: free for everyone (owner, 2026-09-27). -->
+                    <Grid x:Name="SlotPieceByPiece" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush ImageSource="pack://application:,,,/Resources/features/piecebypiece.png" Stretch="UniformToFill"/></Border.Background></Border>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_piecebypiece_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_piecebypiece_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <Button Grid.Row="3" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayChess_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
+                                <Border Style="{StaticResource PlayBadgePill}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-12,-12,0,0" Panel.ZIndex="10">
+                                    <TextBlock Text="{loc:Str exclusives_badge_new}" Style="{StaticResource PlayBadgePillText}"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </UniformGrid>
 
                 <!-- ===================== ZONE: TOGETHER =====================
                      One card now. Goon Game moved to the CC Labs launcher with the other games

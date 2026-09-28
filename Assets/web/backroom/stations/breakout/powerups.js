@@ -1,3 +1,4 @@
+import {transitPortal} from './portals.js';
 import {junctionProtected} from './junction-shield.js';
 import {metalActive} from './grey-metal.js';
 import {rotatedBrickContact} from './reform.js';
@@ -18,7 +19,7 @@ export const LASER_LEAD=.16, FALLBACK_SPB=60/96;
 /** Sim seconds a handed beat clock may stand still before the laser's grid runs on the sim clock instead (one beat at 96 bpm). */
 export const BEAT_STALL_S=FALLBACK_SPB;
 /** A drop's sway around the column it fell from. Eases in so it leaves the brick's centre; the renderer reuses it for the trail. */
-export const swayX=(d,age=d.age)=>(d.x0??d.x)+Math.sin(age*2.4+(d.ph||0))*6*Math.min(1,Math.max(0,age)*2);
+export const swayX=(d,age=d.age)=>d.portalMotion ? d.x-(d.age-age)*(d.vx||0) : (d.x0??d.x)+Math.sin(age*2.4+(d.ph||0))*6*Math.min(1,Math.max(0,age)*2);
 export function ordinaryTarget(br,s) {
   return br.alive&&!br.reformSafe&&!(br.irisAlpha<.15)&&!metalActive(br,s.state)&&
     !br.finaleMetal&&!br.finaleRing&&!br.finaleDefense&&!br.finaleCenterGuard&&!br.finaleGate&&
@@ -108,10 +109,14 @@ export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=nu
     if(!p.fireball)for(const b of s.balls)b.fireContacts?.clear();
     const top=s.paddle.y-s.paddle.h/2;
     p.drops=p.drops.filter(d=>{
-      const old=d.y;d.vy=Math.min(DROP_VMAX,(d.vy??DROP_V0)+DROP_ACCEL*dt);d.y+=d.vy*dt;d.age+=dt;
-      d.x=Math.min(s.w-14,Math.max(14,swayX(d)));
+      const previous={x:d.x,y:d.y},old=d.y;d.vy=Math.min(DROP_VMAX,(d.vy??DROP_V0)+DROP_ACCEL*dt);d.y+=d.vy*dt;d.age+=dt;
+      if(d.portalMotion)d.x+=(d.vx||0)*dt;
+      else {d.x=Math.min(s.w-14,Math.max(14,swayX(d)));d.vx=dt>0?(d.x-previous.x)/dt:0;}
+      const transported=transitPortal(d,previous,s.portals,{radius:14,kind:'powerup',emit});
+      if(transported)d.portalMotion=true;
+      if(d.portalMotion && (d.x<14 || d.x>s.w-14)){d.x=Math.max(14,Math.min(s.w-14,d.x));d.vx*=-1;}
       // The reach grew with the sway (11 -> 14), so a drop that would have been caught on a straight fall still is.
-      if(old-11<=top&&d.y+11>=top&&Math.abs(d.x-s.paddle.x)<=s.paddle.w/2+DROP_REACH){activate(d.kind);return false;}
+      if(!transported&&d.vy>0&&old-11<=top&&d.y+11>=top&&Math.abs(d.x-s.paddle.x)<=s.paddle.w/2+DROP_REACH){activate(d.kind);return false;}
       if(!d.missed&&d.y-11>top){d.missed=true;emit('powerMiss',{kind:d.kind,x:d.x});}
       return d.y<s.h+24&&d.age<10;
     });
@@ -126,17 +131,21 @@ export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=nu
     } else p.eighth=null;
     p.shots=p.shots.filter(shot=>{
       if(epoch!==p.epoch||s.wallAge<1.9)return false;
-      for(let i=0;i<Math.ceil(780*dt/3);i++){
-        shot.y-=780*dt/Math.ceil(780*dt/3);
+      shot.vx??=0;shot.vy??=-780;shot.age=(shot.age||0)+dt;
+      const steps=Math.max(1,Math.ceil(Math.hypot(shot.vx,shot.vy)*dt/3));
+      for(let i=0;i<steps;i++){
+        const previous={x:shot.x,y:shot.y};
+        shot.x+=shot.vx*dt/steps;shot.y+=shot.vy*dt/steps;
+        transitPortal(shot,previous,s.portals,{kind:'shot',emit});
         for(const br of s.bricks){
           if(!br.alive||br.reformSafe||br.irisAlpha<.15)continue;
           if(!rotatedBrickContact(shot,br))continue;
           emit('laserHit',{x:shot.x,y:shot.y});
-          if(ordinaryTarget(br,s)||laserFinaleTarget(br,s))damage(br,{...shot,vx:0,vy:-780});
+          if(ordinaryTarget(br,s)||laserFinaleTarget(br,s))damage(br,{...shot});
           return false;
         }
       }
-      return epoch===p.epoch&&shot.y>-12;
+      return epoch===p.epoch&&shot.y>-12&&(!s.endless || (shot.x>-12&&shot.x<s.w+12&&shot.y<s.h+12&&shot.age<3));
     });
     if(epoch!==p.epoch)p.shots.length=0;
   }

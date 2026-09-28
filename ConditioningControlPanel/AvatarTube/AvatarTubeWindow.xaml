@@ -80,6 +80,206 @@
     </Window.Resources>
 
     <Grid>
+        <!-- Speech bubble. Its own popup window, OUTSIDE the scaled design canvas, so text is real
+             size and the bubble can go anywhere on the monitor instead of wherever the tube window
+             happens to reach. Placed in physical px by AvatarTubeLayout.SpeechBubblePlacement:
+             inside the work area, off main's window, tail aimed at the avatar. -->
+        <Popup x:Name="SpeechPopup"
+               AllowsTransparency="True"
+               Placement="Absolute"
+               StaysOpen="True"
+               PopupAnimation="None"
+               Focusable="False"
+               IsOpen="False">
+            <Grid x:Name="SpeechPopupRoot">
+                <Path x:Name="SpeechTail"
+                      Panel.ZIndex="1"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Top"
+                      IsHitTestVisible="False"
+                      Data="M0,0 L7,9 L14,0"
+                      Fill="#EB150F1E"
+                      Stroke="{DynamicResource PinkBrush}"
+                      StrokeThickness="1"
+                      RenderTransformOrigin="0.5,0.5"
+                      Visibility="{Binding Visibility, ElementName=SpeechBubble}">
+                    <Path.RenderTransform>
+                        <ScaleTransform x:Name="SpeechTailFlip" ScaleY="1"/>
+                    </Path.RenderTransform>
+                </Path>
+                    <Border x:Name="SpeechBubble"
+                            Visibility="Collapsed"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Opacity="1"
+                            Margin="16"
+                            MouseEnter="SpeechBubble_MouseEnter"
+                            MouseLeave="SpeechBubble_MouseLeave"
+                            MinWidth="120" MaxWidth="340"
+                            Background="#EB150F1E"
+                            CornerRadius="14"
+                            BorderBrush="{DynamicResource PinkBrush}"
+                            BorderThickness="1"
+                            Padding="16,14"
+                            TextOptions.TextFormattingMode="Display"
+                            TextOptions.TextRenderingMode="Grayscale">
+                        <Border.Effect>
+                            <DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.55"/>
+                        </Border.Effect>
+
+                        <Grid>
+                            <!-- Single-message mode: existing bubble content -->
+                            <ScrollViewer x:Name="SpeechScroller"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          MaxHeight="280"
+                                          Style="{StaticResource TinyPinkScrollViewer}">
+
+                                <StackPanel>
+                                <!-- Speech text: white on dark glass, real 15px, relaxed leading -->
+                                <TextBlock x:Name="TxtSpeech"
+                                           Text=""
+                                           Foreground="#F4EEF8"
+                                           FontSize="15"
+                                           FontWeight="Normal"
+                                           LineHeight="21"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Left"
+                                           Padding="0,0,6,0"/>
+                                <!-- Ask card answers (AvatarTubeWindow.Asks.cs); empty and collapsed otherwise -->
+                                <WrapPanel x:Name="AskButtons" Visibility="Collapsed" Margin="0,10,0,0"/>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- AI-generated content badge (top-left). Visibility is controlled in code-behind
+                                 based on whether the current bubble text came from an AI inference vs. a canned
+                                 phrase. Required for CCBill AI Content Merchant Addendum visible-labeling. -->
+                            <Border x:Name="AiBadge"
+                                    Visibility="Collapsed"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Margin="-6,-6,0,0"
+                                    Width="22" Height="14"
+                                    CornerRadius="4"
+                                    Background="{DynamicResource PinkBrush}"
+                                    Panel.ZIndex="20"
+                                    IsHitTestVisible="False">
+                                <TextBlock Text="{loc:Str label_ai_badge}"
+                                           Foreground="White"
+                                           FontSize="9"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- Moderation-refusal POLICY badge (same slot as AiBadge). Shown by code-behind
+                                 when ModerationGuard blocks an input or output. Mutually exclusive with the
+                                 AI badge - they share the corner slot but visibility is managed in one place
+                                 (ShowGiggle / ShowModerationRefusalBubble). Amber to distinguish from the pink
+                                 AI badge. Part of P1.1 (CCBill substantive moderation). -->
+                            <Border x:Name="PolicyBadge"
+                                    Visibility="Collapsed"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Margin="-6,-6,0,0"
+                                    Width="44" Height="14"
+                                    CornerRadius="4"
+                                    Background="#FFC107"
+                                    Panel.ZIndex="20"
+                                    IsHitTestVisible="False">
+                                <TextBlock Text="{loc:Str label_policy_badge}"
+                                           Foreground="Black"
+                                           FontSize="9"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- Chat history mode: scrollable WhatsApp-style log -->
+                            <Grid x:Name="ChatHistoryView" Visibility="Collapsed">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <DockPanel Grid.Row="0" Margin="0,0,0,6" LastChildFill="True">
+                                    <Button x:Name="BtnCloseChatHistory"
+                                            DockPanel.Dock="Right"
+                                            Content="✕"
+                                            Width="24" Height="24"
+                                            FontSize="14"
+                                            FontWeight="Bold"
+                                            Background="Transparent"
+                                            Foreground="{DynamicResource PinkBrush}"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Click="BtnCloseChatHistory_Click"
+                                            ToolTip="{loc:Str tooltip_close_chat_history}"/>
+                                    <TextBlock Text="{loc:Str label_chat_history_title}"
+                                               Foreground="{DynamicResource PinkBrush}"
+                                               FontSize="16"
+                                               FontWeight="Bold"
+                                               VerticalAlignment="Center"/>
+                                </DockPanel>
+
+                                <ScrollViewer x:Name="ChatHistoryScroller"
+                                              Grid.Row="1"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              MaxHeight="420"
+                                              Style="{StaticResource TinyPinkScrollViewer}">
+                                    <Grid>
+                                        <!-- Empty-state hint when no chat history yet -->
+                                        <TextBlock x:Name="TxtChatHistoryEmpty"
+                                                   Text="{loc:Str label_chat_history_empty}"
+                                                   Foreground="#AAAAAA"
+                                                   FontSize="14"
+                                                   FontStyle="Italic"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,20,0,20"
+                                                   Visibility="Collapsed"/>
+
+                                        <ItemsControl x:Name="ChatHistoryList"
+                                                      HorizontalContentAlignment="Stretch">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border CornerRadius="10" Padding="9,6" Margin="2,3" MaxWidth="380">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="HorizontalAlignment" Value="Left"/>
+                                                                <Setter Property="Background" Value="#3D2A55"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                                        <Setter Property="Background" Value="#FF69B4"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <StackPanel>
+                                                            <TextBlock Tag="{Binding Text}"
+                                                                       Loaded="ChatHistoryText_Loaded"
+                                                                       Foreground="White"
+                                                                       FontSize="14"
+                                                                       TextWrapping="Wrap"/>
+                                                            <TextBlock Text="{Binding TimeLabel}"
+                                                                       Foreground="#DDDDDD"
+                                                                       FontSize="10"
+                                                                       HorizontalAlignment="Right"
+                                                                       Margin="0,2,0,0"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Grid>
+                                </ScrollViewer>
+                            </Grid>
+                        </Grid>
+                    </Border>
+            </Grid>
+        </Popup>
+
         <!-- Viewbox scales content uniformly to fit any screen size -->
         <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False">
             <!-- Design canvas at fixed reference size - will be scaled -->
@@ -92,173 +292,6 @@
                    VerticalAlignment="Center"
                    IsHitTestVisible="False"/>
 
-            <!-- Speech Bubble - Z-Index 10, positioned next to avatar -->
-            <!-- Dynamic bubble that sizes to content, grows UPWARD, scrolls when exceeding max -->
-            <Border x:Name="SpeechBubble"
-                    Panel.ZIndex="10"
-                    Visibility="Collapsed"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Bottom"
-                    Opacity="0.92"
-                    Margin="0,0,125,550"
-                    MouseEnter="SpeechBubble_MouseEnter"
-                    MouseLeave="SpeechBubble_MouseLeave"
-                    MinWidth="120" MaxWidth="380"
-                    Background="{StaticResource BubbleGradient}"
-                    CornerRadius="20"
-                    BorderBrush="{DynamicResource PinkBrush}"
-                    BorderThickness="3"
-                    Padding="15,12">
-
-                <Grid>
-                    <!-- Single-message mode: existing bubble content -->
-                    <ScrollViewer x:Name="SpeechScroller"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  MaxHeight="280"
-                                  Style="{StaticResource TinyPinkScrollViewer}">
-
-                        <!-- Speech text with bubbly pink font -->
-                        <TextBlock x:Name="TxtSpeech"
-                                   Text=""
-                                   Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="20"
-                                   FontWeight="Bold"
-                                   TextWrapping="Wrap"
-                                   TextAlignment="Left"
-                                   Padding="0,0,8,0">
-                            <TextBlock.Effect>
-                                <DropShadowEffect Color="Black" BlurRadius="2" ShadowDepth="1.5" Direction="315" Opacity="0.8"/>
-                            </TextBlock.Effect>
-                        </TextBlock>
-                    </ScrollViewer>
-
-                    <!-- AI-generated content badge (top-left). Visibility is controlled in code-behind
-                         based on whether the current bubble text came from an AI inference vs. a canned
-                         phrase. Required for CCBill AI Content Merchant Addendum visible-labeling. -->
-                    <Border x:Name="AiBadge"
-                            Visibility="Collapsed"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Top"
-                            Margin="-6,-6,0,0"
-                            Width="22" Height="14"
-                            CornerRadius="4"
-                            Background="{DynamicResource PinkBrush}"
-                            Panel.ZIndex="20"
-                            IsHitTestVisible="False">
-                        <TextBlock Text="{loc:Str label_ai_badge}"
-                                   Foreground="White"
-                                   FontSize="9"
-                                   FontWeight="Bold"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
-                    </Border>
-
-                    <!-- Moderation-refusal POLICY badge (same slot as AiBadge). Shown by code-behind
-                         when ModerationGuard blocks an input or output. Mutually exclusive with the
-                         AI badge - they share the corner slot but visibility is managed in one place
-                         (ShowGiggle / ShowModerationRefusalBubble). Amber to distinguish from the pink
-                         AI badge. Part of P1.1 (CCBill substantive moderation). -->
-                    <Border x:Name="PolicyBadge"
-                            Visibility="Collapsed"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Top"
-                            Margin="-6,-6,0,0"
-                            Width="44" Height="14"
-                            CornerRadius="4"
-                            Background="#FFC107"
-                            Panel.ZIndex="20"
-                            IsHitTestVisible="False">
-                        <TextBlock Text="{loc:Str label_policy_badge}"
-                                   Foreground="Black"
-                                   FontSize="9"
-                                   FontWeight="Bold"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
-                    </Border>
-
-                    <!-- Chat history mode: scrollable WhatsApp-style log -->
-                    <Grid x:Name="ChatHistoryView" Visibility="Collapsed">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-
-                        <DockPanel Grid.Row="0" Margin="0,0,0,6" LastChildFill="True">
-                            <Button x:Name="BtnCloseChatHistory"
-                                    DockPanel.Dock="Right"
-                                    Content="✕"
-                                    Width="24" Height="24"
-                                    FontSize="14"
-                                    FontWeight="Bold"
-                                    Background="Transparent"
-                                    Foreground="{DynamicResource PinkBrush}"
-                                    BorderThickness="0"
-                                    Cursor="Hand"
-                                    Click="BtnCloseChatHistory_Click"
-                                    ToolTip="{loc:Str tooltip_close_chat_history}"/>
-                            <TextBlock Text="{loc:Str label_chat_history_title}"
-                                       Foreground="{DynamicResource PinkBrush}"
-                                       FontSize="16"
-                                       FontWeight="Bold"
-                                       VerticalAlignment="Center"/>
-                        </DockPanel>
-
-                        <ScrollViewer x:Name="ChatHistoryScroller"
-                                      Grid.Row="1"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      MaxHeight="420"
-                                      Style="{StaticResource TinyPinkScrollViewer}">
-                            <Grid>
-                                <!-- Empty-state hint when no chat history yet -->
-                                <TextBlock x:Name="TxtChatHistoryEmpty"
-                                           Text="{loc:Str label_chat_history_empty}"
-                                           Foreground="#AAAAAA"
-                                           FontSize="14"
-                                           FontStyle="Italic"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,20,0,20"
-                                           Visibility="Collapsed"/>
-
-                                <ItemsControl x:Name="ChatHistoryList"
-                                              HorizontalContentAlignment="Stretch">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border CornerRadius="10" Padding="9,6" Margin="2,3" MaxWidth="380">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="HorizontalAlignment" Value="Left"/>
-                                                        <Setter Property="Background" Value="#3D2A55"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                                                <Setter Property="Background" Value="#FF69B4"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <StackPanel>
-                                                    <TextBlock Tag="{Binding Text}"
-                                                               Loaded="ChatHistoryText_Loaded"
-                                                               Foreground="White"
-                                                               FontSize="14"
-                                                               TextWrapping="Wrap"/>
-                                                    <TextBlock Text="{Binding TimeLabel}"
-                                                               Foreground="#DDDDDD"
-                                                               FontSize="10"
-                                                               HorizontalAlignment="Right"
-                                                               Margin="0,2,0,0"/>
-                                                </StackPanel>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </Grid>
-                        </ScrollViewer>
-                    </Grid>
-                </Grid>
-            </Border>
 
             <!-- Text Input Panel (hidden by default) - Z-Index 3, positioned near avatar -->
             <Border x:Name="InputPanel"

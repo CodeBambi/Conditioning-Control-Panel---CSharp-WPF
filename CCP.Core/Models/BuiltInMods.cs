@@ -1130,21 +1130,22 @@ namespace ConditioningControlPanel.Models
                     "TRANCE"
                 },
 
-                // Generic bouncing-text pool. Mirrors the historical AppSettings default
-                // so every mode that doesn't theme its own bouncing text (Bambi, Sissy,
-                // Drone) keeps exactly the words it had before bouncing text became
-                // mod-aware. Locked overrides this with its own themed pool.
+                // Generic bouncing-text pool: classic, gender-neutral trance words only, the same
+                // list as the AppSettings fresh-install default. Every mode that doesn't theme its
+                // own bouncing text (Bambi, Sissy, Drone, Infection) falls back to this one when its
+                // pool is empty; Locked overrides it with its own themed pool. GOOD GIRL / BIMBO /
+                // PRETTY / PINK left in the 2026-09-25 pivot (CCP Default ships classic triggers).
                 BouncingTextPool = new Dictionary<string, bool>
                 {
-                    { "GOOD GIRL", true },
+                    { "DEEPER", true },
                     { "OBEY", true },
                     { "SUBMIT", true },
-                    { "BIMBO", true },
+                    { "BLANK", true },
                     { "EMPTY", true },
                     { "MINDLESS", true },
                     { "OBEDIENT", true },
-                    { "PRETTY", true },
-                    { "PINK", true },
+                    { "RELAX", true },
+                    { "SINK", true },
                     { "DROP", true }
                 },
 
@@ -1181,19 +1182,20 @@ namespace ConditioningControlPanel.Models
                     // Baseline HypnoTube pool the Companion may suggest (non-VIP only).
                     DefaultVideoLinks = new Dictionary<string, string>
                     {
-                        { "Femboy World - TS PMV", "https://hypnotube.com/video/femboy-world-ts-pmv-132071.html" },
-                        { "Be A Whore For Ugly Old Men", "https://hypnotube.com/video/be-a-whore-for-ugly-old-men-43466.html" },
-                        { "Suck Cock For Her", "https://hypnotube.com/video/suck-cock-for-her-120099.html" },
-                        { "The ABC Of Transgirls", "https://hypnotube.com/video/the-abc-of-transgirls-47510.html" },
-                        { "KinkyAmySteele - Hypno Mix 1", "https://hypnotube.com/video/kinkyamysteele-hypno-mix-1-113420.html" },
-                        { "How To Achieve Plapgasm - Lesson 1 5", "https://hypnotube.com/video/how-to-achieve-plapgasm-lesson-1-5-130244.html" },
-                        { "Demolition - Straight To Gay PMV", "https://hypnotube.com/video/demolition-straight-to-gay-pmv-131891.html" },
-                        { "Sissy Steps 1", "https://hypnotube.com/video/sissy-steps-1-57601.html" },
-                        { "Your Friends Use You", "https://hypnotube.com/video/your-friends-use-you-97735.html" },
-                        { "Lover Of Cum", "https://hypnotube.com/video/lover-of-cum-132491.html" },
-                        { "Bambi TikTok 4", "https://hypnotube.com/video/bambi-tiktok-4-113594.html" },
-                        { "Cock Suck Encouragement 1", "https://hypnotube.com/video/cock-suck-encouragement-1-515.html" },
-                        { "To Be A Sissy Hypno Slut - Extended Loop", "https://hypnotube.com/video/to-be-a-sissy-hypno-slut-extended-loop-8520.html" }
+                        { "Hypno Trance", "https://hypnotube.com/video/hypno-trance-127460.html" },
+                        { "Deep Acceptance", "https://hypnotube.com/video/deep-acceptance-113157.html" },
+                        { "I Wanna", "https://hypnotube.com/video/i-wanna-122259.html" },
+                        { "OMGFY - Special Edition", "https://hypnotube.com/video/omgfy-special-edition-82977.html" },
+                        { "Dont Think Slut 2", "https://hypnotube.com/video/dont-think-slut-2-72084.html" },
+                        { "Riding The Dick of Destiny - The Goon Files Ep 3", "https://hypnotube.com/video/riding-the-dick-of-destiny-the-goon-files-ep-3-99377.html" },
+                        { "Gooner PMV", "https://hypnotube.com/video/gooner-pmv-143769.html" },
+                        { "Press Install - PMV By Dosha", "https://hypnotube.com/video/press-install-pmv-by-dosha-143541.html" },
+                        { "Want Your Body", "https://hypnotube.com/video/want-your-body-143843.html" },
+                        { "You Wont Make It - Shut Up And Plap 2", "https://hypnotube.com/video/you-wont-make-it-shut-up-and-plap-2-143667.html" },
+                        { "Plap Slop - Vol Brainfuck 2", "https://hypnotube.com/video/plap-slop-vol-brainfuck-2-143504.html" },
+                        { "Plap Slop - Vol Brainfuck 2 - Beta Safe", "https://hypnotube.com/video/plap-slop-vol-brainfuck-2-beta-safe-143503.html" },
+                        { "Plap Slop Vol 4", "https://hypnotube.com/video/plap-slop-vol-4-143419.html" },
+                        { "Pump Melts Brain", "https://hypnotube.com/video/pump-melts-brain-143964.html" }
                     }
                 },
 
@@ -2037,6 +2039,20 @@ namespace ConditioningControlPanel.Models
         /// pack-not-downloaded-yet gap — theme/identity/subliminals/triggers so the card and a
         /// premature activation look right; barks/mantras/personalities/phrases arrive with the pack.
         /// </summary>
+        /// <summary>
+        /// The nurse's tube fit. The pack's own mod.json says 0.9 / +40, which overfills the glass
+        /// (feet past the floor, desk run 2026-09-25), so ModService prefers this code fit over the
+        /// pack's for infection-control until the pack is rebuilt with it.
+        /// </summary>
+        public static ModTubeLayout InfectionControlTubeFit() => new()
+        {
+            AvatarOffsetX = 0,
+            AvatarDetachedOffsetX = 0,
+            AvatarScale = 0.74,
+            AvatarOffsetY = 95,
+            AvatarDetachedOffsetY = 95
+        };
+
         private static ModManifest CreateInfectionControl()
         {
             return new ModManifest
@@ -2107,17 +2123,7 @@ namespace ConditioningControlPanel.Models
                     { "Spiral Overlay", "Hypnotic Resistance Overlay" }
                 },
 
-                // The nurse sits lower and smaller in her tube than the default avatar. Same five
-                // values the pack ships, so the fit does not jump when the pack finishes
-                // extracting (and is right on first activation if it never does).
-                TubeLayout = new ModTubeLayout
-                {
-                    AvatarOffsetX = 0,
-                    AvatarDetachedOffsetX = 0,
-                    AvatarScale = 0.9,
-                    AvatarOffsetY = 40,
-                    AvatarDetachedOffsetY = 40
-                },
+                TubeLayout = InfectionControlTubeFit(),
 
                 SubliminalPool = new Dictionary<string, bool>
                 {

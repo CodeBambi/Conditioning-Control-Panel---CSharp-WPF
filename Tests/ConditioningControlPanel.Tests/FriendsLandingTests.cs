@@ -278,6 +278,62 @@ public class FriendsLandingTests
 
     // ---------------------------------------------------------------- rig
 
+    // ---------------------------------------------------------------- friend requests
+
+    private static FriendRequest Req(string id) => new(id, "Sam", null, null, T0);
+
+    [Fact]
+    public void ARequestWithThePanelUpFilesARowAndAnnounces()
+    {
+        var (svc, sink, _) = Rig(() => PanelUp);
+        svc.Request(Req("r1"));
+        Assert.Equal(new[] { "reqrow:r1", "reqsay:r1:False" }, sink.Calls);
+    }
+
+    [Fact]
+    public void ARequestWhileHiddenIsARowOnlyAndSilent()
+    {
+        var hidden = new LandingWorld(false, false, false, false, false, false);
+        var (svc, sink, router) = Rig(() => hidden);
+        svc.Request(Req("r1"));
+        router.Release();
+        Assert.Equal(new[] { "reqrow:r1" }, sink.Calls);
+    }
+
+    [Fact]
+    public void RequestsDuringAHoldGiveOneCueWhenItEnds()
+    {
+        var world = PanelUp with { Lockdown = true };
+        var (svc, sink, router) = Rig(() => world);
+        svc.Request(Req("r1"));
+        svc.Request(Req("r2"));
+        router.Release();
+        Assert.Equal(new[] { "reqrow:r1", "reqrow:r2" }, sink.Calls);
+        Assert.True(router.RequestCuePending);
+
+        world = PanelUp;
+        router.Release();
+        router.Release();
+        Assert.Equal(new[] { "reqrow:r1", "reqrow:r2", "reqcue" }, sink.Calls);
+    }
+
+    [Fact]
+    public void ARequestOverAGameAnnouncesInGame()
+    {
+        var game = PanelUp with { GameHostActive = true };
+        var (svc, sink, _) = Rig(() => game);
+        svc.Request(Req("r1"));
+        Assert.Contains("reqsay:r1:True", sink.Calls);
+    }
+
+    [Fact]
+    public void AGoneRequestTakesItsRowBack()
+    {
+        var (svc, sink, _) = Rig(() => PanelUp);
+        svc.Gone("r1");
+        Assert.Equal(new[] { "reqgone:r1" }, sink.Calls);
+    }
+
     private static (FakeFriends, RecordingSink, FriendsLandingRouter) Rig(Func<LandingWorld> world, Func<DateTimeOffset>? now = null)
     {
         var svc = new FakeFriends();
@@ -293,6 +349,10 @@ public class FriendsLandingTests
         public void Knock(InboxItem item, bool inGame) => Calls.Add($"knock:{item.Id}:{inGame}");
         public void Inbox(InboxItem item) => Calls.Add($"inbox:{item.Id}");
         public void SentBeat(SendKind kind, Friend to) => Calls.Add($"sent:{kind}:{to.Name}");
+        public void RequestRow(FriendRequest request) => Calls.Add($"reqrow:{request.Id}");
+        public void RequestAnnounce(FriendRequest request, bool inGame) => Calls.Add($"reqsay:{request.Id}:{inGame}");
+        public void RequestCue() => Calls.Add("reqcue");
+        public void RequestGone(string requestId) => Calls.Add($"reqgone:{requestId}");
     }
 
     private sealed class FakeFriends : IFriendsService
@@ -303,6 +363,10 @@ public class FriendsLandingTests
         public event Action<FriendsSnapshot>? SnapshotChanged;
         public event Action<InboxItem>? Delivered;
         public event Action<SendKind, Friend>? Sent;
+        public event Action<FriendRequest>? RequestArrived;
+        public event Action<string>? RequestGone;
+        public void Request(FriendRequest r) => RequestArrived?.Invoke(r);
+        public void Gone(string id) => RequestGone?.Invoke(id);
 
         public void Deliver(InboxItem item) => Delivered?.Invoke(item);
         public void RaiseSent(SendKind k, Friend f) => Sent?.Invoke(k, f);

@@ -55,7 +55,9 @@ namespace ConditioningControlPanel.Services
         public bool GrantLooksDead { get; private set; }
 
         /// <summary>False until <see cref="InitializeAsync"/> settled this launch's entitlement
-        /// (#1048: a destructive repair must never fire against the pre-validation blank).</summary>
+        /// (#1048: a destructive repair must never fire against the pre-validation blank). Waiting for
+        /// this was not enough (#1307): it also flips when validation threw, so the tier check moved
+        /// to the point of use (AiEffectControlGate). Never write a setting from an entitlement read.</summary>
         public bool EntitlementResolved { get; private set; }
 
         /// <param name="prefix">"patreon" or "substar". <paramref name="settings"/> defaults to CoreSettings; <paramref name="handler"/> is for tests.</param>

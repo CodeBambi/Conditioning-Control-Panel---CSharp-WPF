@@ -11,8 +11,9 @@ using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services.Friends;
 
-/// <summary>What one <c>poll</c> came back with: who is online, and the drained inbox.</summary>
-public sealed record FriendsPollReply(IReadOnlyList<string> Online, IReadOnlyList<InboxItem> Inbox);
+/// <summary>What one <c>poll</c> came back with: who is online, and the drained inbox.
+/// <paramref name="Leash"/> is the leash block (Leash CONTRACT), null when the key was absent.</summary>
+public sealed record FriendsPollReply(IReadOnlyList<string> Online, IReadOnlyList<InboxItem> Inbox, JObject? Leash = null);
 
 /// <summary>The wire as the service sees it. <see cref="FriendsApi"/> is the only real one; tests hand in a fake.
 /// Nothing here throws: a fault is a null reply, <see cref="SendResult.TryLater"/> or false.</summary>
@@ -23,6 +24,11 @@ public interface IFriendsApi
     /// <summary><paramref name="activity"/> and <paramref name="lockDay"/> are sent only when
     /// <paramref name="shared"/> is true; the caller already decided that.</summary>
     Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, CancellationToken ct = default);
+
+    /// <summary>The same poll carrying the leashed client's day report (Leash CONTRACT R). A null
+    /// report sends nothing extra. Default: the plain poll (fakes that know nothing of the leash).</summary>
+    Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
+        CancellationToken ct = default) => PollAsync(activity, lockDay, shared, ct);
 
     Task<AddResult> RequestAsync(string code, CancellationToken ct = default);
 
@@ -154,9 +160,14 @@ public sealed class FriendsApi : IFriendsApi
         return o != null && Ok(o) ? ParseState(o) : null;
     }
 
-    public async Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, CancellationToken ct = default)
+    public Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, CancellationToken ct = default) =>
+        PollAsync(activity, lockDay, shared, null, ct);
+
+    public async Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
+        CancellationToken ct = default)
     {
         var body = new JObject { ["shared"] = shared };
+        if (leashReport != null) body["leash_report"] = leashReport;
         if (shared)
         {
             var wire = activity is { } a ? ActivityToWire(a) : null;
@@ -313,7 +324,7 @@ public sealed class FriendsApi : IFriendsApi
         if (o["inbox"] is JArray ia)
             foreach (var t in ia)
                 if (t is JObject io && ParseItem(io) is { } item) inbox.Add(item);
-        return new FriendsPollReply(online, inbox);
+        return new FriendsPollReply(online, inbox, o["leash"] as JObject);
     }
 
     /// <summary>One inbox item, or null when it does not fit the grammar (the server should never

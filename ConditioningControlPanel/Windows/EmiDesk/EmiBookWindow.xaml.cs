@@ -227,6 +227,14 @@ public partial class EmiBookWindow : Window
 
     private void WireControls()
     {
+        BtnFirstShow.Content = ConditioningControlPanel.Localization.Loc.Get("first_show_replay");
+        BtnCompleteGuide.Content = ConditioningControlPanel.Localization.Loc.Get("first_show_completeGuide");
+        BtnFirstShow.Click += (_, _) =>
+        {
+            EmiBook.Close();
+            ConditioningControlPanel.Services.FirstShow.FirstShowService.Open(Application.Current.MainWindow);
+        };
+        BtnCompleteGuide.Click += (_, _) => EmiCodex.OpenManualInBrowser();
         BtnClose.Click += (_, _) => EmiBook.Close();
         BtnPrev.Click += (_, _) => Step(-1);
         BtnNext.Click += (_, _) => Step(+1);

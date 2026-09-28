@@ -76,7 +76,7 @@ export function mount(container, ctx) {
       el('span', { class: 'gg-draft-who', text: match.localDisplayName || S.lobby.you }),
       youSig,
     ]),
-    el('span', { class: 'gg-duel-vs', text: 'vs', 'aria-hidden': 'true' }),
+    el('span', { class: 'gg-duel-vs', text: S.aria.vs, 'aria-hidden': 'true' }),
     el('div', { class: 'gg-draft-side gg-draft-side--them' }, [
       el('span', { class: 'gg-draft-who', text: match.opponent.displayName || S.lobby.them }),
       themSig,
@@ -86,7 +86,7 @@ export function mount(container, ctx) {
   /* ----------------------------------------------------------- the grid */
 
   const tiles = new Map();   // element -> {node, badge}
-  const grid = el('div', { class: 'gg-elems', role: 'group', 'aria-label': 'effects both of you allow' });
+  const grid = el('div', { class: 'gg-elems', role: 'group', 'aria-label': S.aria.effects });
 
   for (const meta of ELEMENTS) {
     const alwaysOn = meta.id === ALWAYS_ON_ELEMENT;

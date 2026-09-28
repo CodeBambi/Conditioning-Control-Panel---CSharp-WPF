@@ -45,13 +45,21 @@ public class EmiChannelCatalogueTests
     }
 
     [Fact]
-    public void The_owner_unlocked_the_ten_second_rotation()
+    public void The_rotation_leaves_room_for_her_to_be_alive()
     {
-        // "one every 10 sec or so is fine" (owner, 2026-08-30). The close resets the idle clock,
-        // so these constants together are the ~10 s on / ~10 s off television rhythm, and the
-        // fidget wheel's screen-beat floor agrees with the glass's own clock.
-        Assert.Equal(TimeSpan.FromSeconds(10), EmiChannels.IdleBeforeFlip);
+        // 2026-09-25 (owner): the 10 s on / 10 s off rotation held the glass half the time and
+        // gated off every idle beat. An untouched desk now waits 30-60 s, drawn fresh per close,
+        // and the fidget wheel's screen beat (10 s rest) can finally win a turn before the flip.
+        Assert.Equal(TimeSpan.FromSeconds(30), EmiChannels.IdleBeforeFlipMin);
+        Assert.Equal(TimeSpan.FromSeconds(60), EmiChannels.IdleBeforeFlipMax);
         Assert.Equal(TimeSpan.FromSeconds(10), EmiChannels.ChannelLife);
-        Assert.Equal(10_000, EmiAlive.ScreenBeatRestMs);
+        Assert.True(EmiAlive.ScreenBeatRestMs < EmiChannels.IdleBeforeFlipMin.TotalMilliseconds);
+
+        var rng = new Random(7);
+        for (int i = 0; i < 200; i++)
+        {
+            var d = EmiChannels.NextIdleBeforeFlip(rng);
+            Assert.InRange(d, EmiChannels.IdleBeforeFlipMin, EmiChannels.IdleBeforeFlipMax);
+        }
     }
 }

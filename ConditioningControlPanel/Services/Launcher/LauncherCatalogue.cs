@@ -34,6 +34,8 @@ namespace ConditioningControlPanel.Services.Launcher;
 /// card in its place: no title, no art, a "?" and a Play button that goes to the Back Room, where
 /// the reveal is bought. The entry stays Available so <c>--game</c> and a shortcut still reach
 /// <see cref="Launch"/>, which owns its own refusal.</param>
+/// <param name="RequiresAccount">False only for entries that explicitly allow signed-out play.</param>
+/// <param name="IsNew">Shows the existing NEW badge on the card.</param>
 public sealed record LauncherEntry(
     string Id,
     string TitleKey,
@@ -45,7 +47,9 @@ public sealed record LauncherEntry(
     Func<bool> IsLocked,
     Action Launch,
     Func<bool> IsActive,
-    Func<bool>? IsRevealed = null)
+    Func<bool>? IsRevealed = null,
+    bool RequiresAccount = true,
+    bool IsNew = false)
 {
     public string Title
     {
@@ -77,10 +81,8 @@ public sealed record LauncherEntry(
         }
     }
 
-    /// <summary>True while nobody is signed in. Every game needs an account (Sep 18 2026 owner
-    /// decision), so this is one fact for the whole catalogue, read through
-    /// <see cref="LauncherCatalogue.NeedsAccount"/>.</summary>
-    public bool NeedsAccount => LauncherCatalogue.NeedsAccount;
+    /// <summary>Account requirement for this entry. The free Breakout demo also opens signed out.</summary>
+    public bool NeedsAccount => RequiresAccount && LauncherCatalogue.NeedsAccount;
 
     /// <summary><see cref="IsActive"/> wrapped: a probe that throws reads as closed.</summary>
     public bool Active
@@ -112,9 +114,8 @@ public sealed record LauncherEntry(
 /// What is NOT here, on purpose: Remote, Companion and sessions. Those are panel features
 /// (Sep 18 2026 owner decision: the split is games vs CCP, not 2D vs 3D). The Graded Intake is
 /// the one panel tab with a tile, because it is the best first thing a new account can do; its
-/// Launch opens the panel on the tab instead of a window. Breakout is a station inside the Back
-/// Room with no deep link yet, so it rides the Back Room tile until the room grows a
-/// <c>?station=</c> parameter.
+/// Launch opens the panel on the tab instead of a window. Breakout has separate demo and full
+/// entries that open its standalone host.
 /// </summary>
 public static class LauncherCatalogue
 {
@@ -122,13 +123,13 @@ public static class LauncherCatalogue
     public const string PanelId = "panel";
 
     /// <summary>
-    /// Piece by Piece is hidden on the Play page for 6.9.5 ("not ready for release"). The launcher
-    /// follows the same switch so the two surfaces never disagree about what exists.
+    /// Piece by Piece was hidden from 6.9.5 ("not ready for release"). Back on 2026-09-27 (owner),
+    /// free for everyone, on the launcher and on Play. One switch for both surfaces.
     /// </summary>
-    public static readonly bool PieceByPieceAvailable = false;
+    public static readonly bool PieceByPieceAvailable = true;
 
     /// <summary>
-    /// Whether an account is signed in. Every game needs one; the panel does not. Settable so a
+    /// Whether an account is signed in. Entries may explicitly allow signed-out play. Settable so a
     /// test can walk the refusal without an App.
     /// </summary>
     public static Func<bool> SignedIn { get; set; } = () => App.IsLoggedIn;
@@ -173,7 +174,7 @@ public static class LauncherCatalogue
     internal static bool TryLaunch(LauncherEntry entry)
     {
         if (!entry.Available) { Log.Information("[Launcher] {Id} is not available in this build", entry.Id); return false; }
-        if (NeedsAccount) { Log.Information("[Launcher] {Id} refused: nobody is signed in", entry.Id); return false; }
+        if (entry.NeedsAccount) { Log.Information("[Launcher] {Id} refused: nobody is signed in", entry.Id); return false; }
         try
         {
             entry.Launch();
@@ -207,10 +208,11 @@ public static class LauncherCatalogue
         var list = new List<LauncherEntry>();
 
         void G(string id, string? art, string glyph, Color hue, Func<bool> available, Func<bool> locked,
-               Action launch, Func<bool> active, Func<bool>? revealed = null)
+               Action launch, Func<bool> active, Func<bool>? revealed = null,
+               bool requiresAccount = true, bool isNew = false)
         {
             list.Add(new LauncherEntry(id, "launcher_game_" + id + "_title", "launcher_game_" + id + "_blurb",
-                art, glyph, hue, available, locked, launch, active, revealed));
+                art, glyph, hue, available, locked, launch, active, revealed, requiresAccount, isNew));
         }
 
         // Order is the order on the launcher: the newest, loudest room first, the quiet ones last.
@@ -218,7 +220,22 @@ public static class LauncherCatalogue
         // The Back Room: free, no gate, no account needed (the SP relay just goes quiet signed out).
         G("backroom", "features/backroom.png", "♦", Tile(0xB9, 0x5C, 0xD8), Always, Never,
             () => BackRoom.BackRoomHostService.Launch(),
-            () => BackRoom.BackRoomHostService.IsActive);
+            () => BackRoom.BackRoomHostService.IsRoomActive);
+
+        G("breakoutdemo", null, "●", Tile(0x8C, 0xF5, 0xC8), Always, Never,
+            () => BackRoom.BreakoutHostService.LaunchDemo(),
+            () => BackRoom.BackRoomHostService.IsBreakoutDemoActive, requiresAccount: false, isNew: true);
+        G("breakout", null, "●", Tile(0x55, 0xB7, 0xFF), Always,
+            () => !BackRoom.BreakoutAccess.FullAllowed,
+            () => BackRoom.BreakoutHostService.LaunchFull(),
+            () => BackRoom.BackRoomHostService.IsBreakoutFullActive, isNew: true);
+
+        // Piece by Piece: free for everyone (owner, 2026-09-27), so no lock and no account: the
+        // computer plays anyone, and the board's own lobby asks a signed-out player to sign in.
+        G("piecebypiece", "features/piecebypiece.png", "♟", Tile(0x7B, 0x5C, 0xFF),
+            () => PieceByPieceAvailable, Never,
+            () => PieceByPiece.PieceByPieceHostService.Launch(),
+            () => PieceByPiece.PieceByPieceHostService.IsActive, requiresAccount: false, isNew: true);
 
         // Racing Thoughts: a Back Room unlock since 2026-09-18. Without a track the tile is the
         // mystery card pointing at the counter; the entry stays Available so a shortcut still
@@ -255,13 +272,6 @@ public static class LauncherCatalogue
         G("goon", "features/goon_game_tile.png", "●", Tile(0x76, 0xC8, 0x93), Always, Never,
             () => GoonGame.GoonHostService.Launch(duckMainWindow: false),
             () => GoonGame.GoonHostService.IsActive);
-
-        // Piece by Piece: Launch owns the Lab gate. Hidden while the Play card is hidden.
-        G("piecebypiece", null, "♟", Tile(0x7B, 0x5C, 0xFF),
-            () => PieceByPieceAvailable,
-            () => !LabOk("launcher_game_piecebypiece_title", null),
-            () => PieceByPiece.PieceByPieceHostService.Launch(),
-            () => PieceByPiece.PieceByPieceHostService.IsActive);
 
         // Graded Intake: a panel tab, not a window, so Launch opens the panel on it and IsActive
         // never reports a window (the launcher does not wait for the panel). Locked when the

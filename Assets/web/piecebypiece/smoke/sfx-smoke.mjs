@@ -11,6 +11,8 @@
  * ==========================================================================*/
 
 import { createBus } from '../game/events.js';
+import { createCrowd } from '../audio/crowd.js';
+import { Chess } from '../vendor/chess.js';
 import { createSfx, TUNING } from '../audio/sfx.js';
 
 class Param {
@@ -155,6 +157,11 @@ sfx.play('draw');
 expect(names().at(-1) === 'draw', 'draw sting plays by hand');
 expect(sfx.play('cardOpen') && sfx.play('cardClose'), 'card whooshes play by hand');
 
+for (const name of ['crowdApplause','crowdCheer','crowdBoo','hooves','neigh','stomp','headbutt','whip','sweep','spin','breakdance','charge','launch']) {
+  const before = fake.started.length;
+  expect(sfx.play(name) && fake.started.length > before, name + ' schedules its sound');
+}
+
 doc.hidden = true; doc.fire('visibilitychange');
 expect(sfx.state().volume === 0 && !sfx.play('grab'), 'hidden tab: master to 0 and nothing schedules');
 doc.hidden = false; doc.fire('visibilitychange');
@@ -163,7 +170,7 @@ win.PBP.settings.sfxVolume = 0.25;
 sfx.play('tick');
 expect(Math.abs(sfx.state().volume - 0.25) < 1e-9, 'settings.sfxVolume is read on play');
 win.PBP.settings.sfxVolume = 0;
-expect(!sfx.play('tick'), 'volume 0 schedules nothing');
+expect(!sfx.play('crowdBoo') && !sfx.play('crowdCheer') && !sfx.play('tick') && !sfx.play('neigh') && !sfx.play('launch'), 'volume 0 silences new capture sounds too');
 
 expect(Object.isFrozen(TUNING), 'TUNING is frozen');
 expect(fake.wires.some((w) => w[0] === 'gain' && w[1] === 'destination'), 'the master reaches the destination');
@@ -171,6 +178,35 @@ expect(fake.wires.some((w) => w[0] === 'gain' && w[1] === 'destination'), 'the m
 bus.emit('check', { side: 'w' });
 sfx.dispose();
 expect(!sfx.state().pulsing && fake.state === 'closed', 'dispose stops the pulse and closes the context');
+
+
+// Completed exchange evidence, with a deterministic clock and delayed cue scheduler.
+{
+  const events = createBus(), chess = new Chess('6k1/8/5n2/8/8/8/8/3Q2K1 w - - 0 1');
+  let time = 0, pending = null, audible = true, settled = true; const crowdLog = [];
+  const audience = createCrowd({ bus: events, game: { rules: { chess } }, now: () => time,
+    play: name => { crowdLog.push(name); return true; }, canPlay: () => audible, settled: () => settled,
+    later: fn => { pending = fn; return 1; }, clear: () => { pending = null; } });
+  const move = san => { time += 2000; chess.move(san); events.emit('turn'); };
+  const flush = () => { time += 600; const fn = pending; pending = null; fn?.(); };
+  move('Qh5'); move('Nxh5'); flush();
+  expect(crowdLog.length === 0, 'crowd waits for a reply before judging a heavy loss');
+  move('Kg2'); flush();
+  expect(crowdLog.at(-1) === 'crowdBoo', 'safe queen walked into capture and a quiet reply confirms the loss');
+  chess.load('6k1/8/5n2/8/5N2/8/8/3Q2K1 w - - 0 1'); events.emit('local'); crowdLog.length = 0;
+  move('Qh5'); move('Nxh5'); move('Nxh5'); flush();
+  expect(!crowdLog.includes('crowdBoo'), 'an actual recapture suppresses the negative reaction');
+  chess.load('6k1/8/5n2/8/8/8/8/3Q2K1 w - - 0 1'); events.emit('local'); crowdLog.length = 0;
+  for (const san of ['Qh5', 'Nxh5', 'Kg2']) { time += 10; chess.move(san); events.emit('turn'); }
+  flush(); expect(crowdLog.length === 0, 'bulk catch-up cannot stack audience reactions');
+  events.emit('gameover', { result: 'checkmate' }); time += 1500; settled = false; flush();
+  expect(crowdLog.length === 0, 'audience waits for the visible capture to settle');
+  settled = true; flush();
+  expect(crowdLog.at(-1) === 'crowdCheer', 'checkmate earns a finish cheer');
+  events.emit('gameover', { result: 'checkmate' }); audible = false; audience.update(); flush();
+  expect(crowdLog.length === 1, 'menu, replay or mute cancels a pending crowd cue');
+  audience.dispose();
+}
 
 if (problems.length) { console.log('\n' + problems.length + ' problem(s)'); process.exit(1); }
 console.log('\nsfx smoke: every cue schedules');

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -261,198 +261,29 @@ namespace ConditioningControlPanel
         /// </summary>
         // Season Recap is shown at most once per app run; guards the two trigger paths
         // (startup month-check and the server-reset nudge from ProfileSyncService).
-        private bool _seasonRecapShown;
-
-        /// <summary>
-        /// Presents the Season Recap card when the user has been reset. Triggers on EITHER:
-        ///   • a monthly rollover (UTC month != LastSeasonResetSeen) — fires on any day of the
-        ///     new month, not just the 1st; or
-        ///   • a server-driven reset (AppSettings.SeasonResetPending, set by ProfileSyncService
-        ///     when the server returns level_reset) — this is how an admin reset of a single
-        ///     account surfaces the card mid-month, and makes the feature testable.
-        ///
-        /// Snapshots the just-ended season BEFORE clearing its counters, then shows the card
-        /// (or the legacy textual notice when there's no season data yet). The actual level/XP/
-        /// streak reset still happens via the server + SkillTreeService — this only wraps it.
-        /// Safe to call repeatedly; shows at most once per app run. Public so ProfileSyncService
-        /// can nudge it the moment a reset arrives.
-        /// </summary>
+        /// <summary>Legacy sync entry point. Monthly bookkeeping is silent; seasons are retired.</summary>
         public void TryPresentSeasonRecap()
         {
             try
             {
-                if (_seasonRecapShown) return;
-                if (App.Settings?.Current == null) return;
-
-                // Season boundary is server-authoritative (SeasonRecapService.CurrentSeasonKey prefers the
-                // server's CurrentSeason over wall-clock). Using wall-clock here made the recap fire on the
-                // local 1st-of-month before the server actually ended the season, rolling the bucket early
-                // and losing the real month's totals.
-                var currentSeason = Services.SeasonRecapService.CurrentSeasonKey;
-                var lastSeasonSeen = App.Settings.Current.LastSeasonResetSeen ?? "";
-                var highestLevel = App.Settings.Current.HighestLevelEver;
-                var resetPending = App.Settings.Current.SeasonResetPending;
-
-                // A NEW PC adopting the server's season is not a rollover. On a fresh settings
-                // file LastSeasonResetSeen and SeasonStatsSeason are both empty, and the first
-                // sync writes the server's real key - at which point every test below reads the
-                // empty key as "before" the server's and announces a season end this machine
-                // never witnessed, with no snapshot to show for it. Write the key down and say
-                // nothing. Deliberately ahead of the highestLevel gate: a level-1 install that
-                // returned early here would leave the empty keys in place and fire the same false
-                // recap the moment it reached level 2. Anyone who HAS seen a season (either key
-                // set) falls through to the real rollover logic untouched.
-                //
-                // And so does anyone the SERVER just reset. SeasonResetPending is only ever set by
-                // ProfileSyncService off an explicit level_reset, which is how an admin reset of a
-                // single account surfaces at all; clearing that latch on the way past would have
-                // swallowed it silently on exactly the install least able to notice - a fresh
-                // settings file with both keys empty. A reset the server declared is real news
-                // whatever this machine remembers, so it falls through to the pending path.
-                var statsSeasonSeen = App.Settings.Current.SeasonStatsSeason ?? "";
-                if (Services.SeasonRecapService.ShouldAdoptSilently(lastSeasonSeen, statsSeasonSeen,
-                        Services.SeasonRecapService.IsSeasonKeyServerConfirmed, resetPending))
+                var settings = App.Settings?.Current;
+                if (settings == null || !Services.SeasonRecapService.IsSeasonKeyServerConfirmed) return;
+                var month = Services.SeasonRecapService.CurrentSeasonKey;
+                if (string.CompareOrdinal(month, settings.LastSeasonResetSeen ?? "") > 0)
                 {
-                    App.Settings.Current.LastSeasonResetSeen = currentSeason;
-                    App.Settings.Current.SeasonStatsSeason = currentSeason;
-                    App.Settings.Current.SeasonResetPending = false;
-                    App.Settings.Save();
-                    App.Logger?.Information("Adopted server season {Season} silently (fresh settings, nothing to recap)", currentSeason);
-                    return;
+                    if (string.IsNullOrEmpty(settings.SeasonStatsSeason))
+                        settings.SeasonStatsSeason = month;
+                    else
+                        Services.SeasonRecapService.CaptureAndRollover(month);
+                    settings.LastSeasonResetSeen = month;
                 }
-
-                // Brand-new users (never leveled up) skip this. They'll see it once they progress.
-                if (highestLevel < 2) return;
-
-                // Seasons only ever move FORWARD. Fire only when the current season is strictly AFTER the
-                // last one we showed a recap for — never on an equal or backward (desynced) key. Ordinal
-                // compare is chronological for zero-padded yyyy-MM; an empty lastSeasonSeen (first run) is
-                // "before" any real key, so first-timers still fire.
-                //
-                // AND ONLY WHEN THE SERVER SAID SO. CurrentSeasonKey falls back to the wall-clock month
-                // when the server's key is unknown, and that fallback rolls itself over on the 1st for
-                // every never-synced install — which is how someone whose account was never touched gets
-                // a card, or the plain MessageBox below, announcing that their level and XP were reset.
-                // The Descent makes that permanently wrong rather than occasionally wrong: after
-                // 2026-09-01 no reset is ever coming, so a wall-clock rollover can only ever be a lie.
-                // A reset is the server's to declare; the SeasonResetPending path below is already
-                // server-driven (ProfileSyncService sets it off an explicit level_reset), so this is the
-                // only path that could invent one.
-                var monthRolled = Services.SeasonRecapService.IsSeasonKeyServerConfirmed
-                                  && string.CompareOrdinal(currentSeason, lastSeasonSeen) > 0;
-
-                // A replayed server level_reset can leave SeasonResetPending set on an upgrade launch even
-                // when the season didn't actually change. Only treat it as a real pending reset if the current
-                // (server) season is strictly ahead of the live stats bucket; otherwise clear the stale latch
-                // and skip, so we don't fire a spurious "Season N ended" recap for the in-progress month (#450)
-                // or a backward one during a wall-clock/server desync.
-                var statsSeason = App.Settings.Current.SeasonStatsSeason ?? "";
-                var reallyPending = resetPending && string.CompareOrdinal(currentSeason, statsSeason) > 0;
-                if (!monthRolled && !reallyPending)
-                {
-                    if (resetPending)
-                    {
-                        App.Settings.Current.SeasonResetPending = false;
-                        App.Settings.Save();
-                    }
-                    return;
-                }
-
-                _seasonRecapShown = true;
-                App.Logger?.Information("Presenting season recap (monthRolled={Month}, resetPending={Pending}, last={Old}, current={New}, highestLevel={Highest})",
-                    monthRolled, resetPending, string.IsNullOrEmpty(lastSeasonSeen) ? "(none)" : lastSeasonSeen, currentSeason, highestLevel);
-
-                // Priority 40 on the startup ladder: behind What's New (30) and the wizard (20),
-                // ahead of the upgrader's mod picker (50). Only the PRESENTATION moved here - every
-                // predicate above still runs synchronously, at the same instant, on the same
-                // caller's thread, so which launches present a recap has not changed. The presenter
-                // owns IsStartupDialogShowing around this lambda; it no longer sets it itself.
-                EnqueueStartupModal("season-recap", 40, owner =>
-                {
-                    try
-                    {
-                        // Snapshot the just-ended season BEFORE its counters are cleared, then roll
-                        // the bucket. CaptureAndRollover writes the JSON first and only then clears —
-                        // order is load-bearing (an empty snapshot = an empty card).
-                        var snapshot = Services.SeasonRecapService.CaptureAndRollover(currentSeason);
-
-                        // Advance the persisted idempotency latch IMMEDIATELY after the
-                        // destructive roll and BEFORE presenting the card. CaptureAndRollover
-                        // has already written the snapshot (if any) and cleared the live
-                        // counters. If we deferred this write until after ShowDialog and the
-                        // window threw (XAML resource lookups in a DataTemplate are a known
-                        // hazard in this codebase), the catch below would swallow it, the latch
-                        // would never advance, and the next launch would re-roll the now-empty
-                        // season — permanently losing the real recap. Persist the latch first.
-                        App.Settings.Current.LastSeasonResetSeen = currentSeason;
-                        App.Settings.Current.SeasonResetPending = false;
-                        App.Settings.Save();
-
-                        if (snapshot != null)
-                        {
-                            var vm = new ViewModels.SeasonRecapViewModel(snapshot);
-                            var recapWindow = new Controls.SeasonRecapWindow(vm) { Owner = owner ?? this };
-                            recapWindow.ShowDialog();
-                        }
-                        else
-                        {
-                            // No meaningful season data yet (e.g. first reset after this feature
-                            // shipped, before any tracking accrued) — fall back to the legacy notice
-                            // so the user still understands what happened.
-                            //
-                            // AND IT HAS TO KNOW WHICH PATH BROUGHT IT HERE. Two things reach this
-                            // dialog and only one of them is a reset: a board rotation (the server's
-                            // season key moved on and nothing of the user's was touched) and an
-                            // explicit server level_reset (an admin acting on one account). The old
-                            // text was one message that enumerated "What resets: Current Level and XP"
-                            // for both, which after the Descent is the single sentence the ceremony
-                            // promised nobody would read again. A rotation now says what actually
-                            // happened; the admin path keeps the honest wipe list.
-                            string message, caption;
-                            if (reallyPending)
-                            {
-                                message =
-                                    "Your season was reset on the server.\n\n" +
-                                    "What resets:\n" +
-                                    "  - Current Level and XP\n" +
-                                    "  - Daily quest streak\n" +
-                                    "  - Monthly leaderboard position\n" +
-                                    "  - Mechanical enhancements (re-buy them to raise your Prestige)\n\n" +
-                                    "What's preserved:\n" +
-                                    "  - All achievements\n" +
-                                    "  - Highest Level Ever (yours: " + highestLevel + ")\n" +
-                                    "  - Your sparkle points balance\n" +
-                                    "  - Permanent stat enhancements and your Prestige\n" +
-                                    "  - Total lifetime XP\n" +
-                                    "  - Patreon perks and whitelist";
-                                caption = "Season Reset";
-                            }
-                            else
-                            {
-                                message =
-                                    "The monthly leaderboard has rotated, which it does at the start of every month so everyone gets a fresh run at the rankings.\n\n" +
-                                    "That is all that changed. Your level, your XP, your streak and everything you have unlocked carry forward exactly as they were, and they will keep doing that from here on.\n\n" +
-                                    "Highest Level Ever: " + highestLevel + "\n\n" +
-                                    "Welcome to season " + currentSeason + "!";
-                                caption = "New Board, Same Progress";
-                            }
-
-                            MessageBox.Show(
-                                message,
-                                caption,
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Information);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning(ex, "Failed to present season recap");
-                    }
-                });
+                else if (!settings.SeasonResetPending) return;
+                settings.SeasonResetPending = false;
+                App.Settings!.Save();
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Error checking for season recap");
+                App.Logger?.Warning(ex, "Failed to update monthly bookkeeping");
             }
         }
 

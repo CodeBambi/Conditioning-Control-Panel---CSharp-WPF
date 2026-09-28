@@ -16,9 +16,14 @@
 // JOINING is free for everyone, including people with no account at all: see `anonymous` on the
 // constructor for the server-minted `g_` seat identity that carries them. The weekly free pass
 // (402 no_pass) is gone; it is still PARSED, so an old server keeps producing a sentence.
+//
+// OPEN TABLES (2026-09-23). Every 1v1 became a Prime perk: /join answers 401 `signin` with no
+// account and 403 `no_join_access` below tier 2, checked before the room is touched. The practice
+// match never reaches this file and stays free. `list()` and `open()` are the lobby's two calls.
 
 import { postNet } from '../bridge.js';
 import { GoonConsts } from '../core/contracts.js';
+import { listingBody, normalizeOpen } from './openTables.js';
 
 export const GOON_PATHS = Object.freeze({
   invite: '/v2/goon/invite',
@@ -26,6 +31,10 @@ export const GOON_PATHS = Object.freeze({
   leave: '/v2/goon/leave',
   signal: '/v2/goon/signal',
   relay: '/v2/goon/relay',
+  /** Open tables (2026-09-23): the host lists or renews its waiting room. */
+  list: '/v2/goon/list',
+  /** Open tables: every listed room this account may see. */
+  open: '/v2/goon/open',
 });
 
 /** Machine-readable `lastError` values. Mirrors GoonSignalingClient's Error* constants. */
@@ -36,6 +45,14 @@ export const GoonSignalError = Object.freeze({
   NoPass: 'no_pass',
   /** /invite refused: minting a room is a tier-2 perk. Joining stays free for everyone. */
   NoHostAccess: 'no_host_access',
+  /** /join refused (2026-09-23): every 1v1 is Prime now, joining included. Practice stays free. */
+  NoJoinAccess: 'no_join_access',
+  /** No account behind the call: /join and /open need one now. */
+  SignIn: 'signin',
+  /** /list refusals: not your room, somebody already sat down, the room is gone. */
+  NotHost: 'not_host',
+  NotLobby: 'not_lobby',
+  NoRoom: 'no_room',
   UnknownCode: 'unknown_code',
   AlreadyJoined: 'already_joined',
   /** The code you typed is your OWN room — one account cannot sit on both seats. */
@@ -472,6 +489,45 @@ export class GoonSignalingClient {
     };
   }
 
+  /**
+   * OPEN TABLES: list, renew or unlist this host's waiting room. The host calls it
+   * on open, on every visibility change, and every 60 s while nobody has sat down.
+   * `visibility: 'off'` removes the listing (the code keeps working).
+   * Nothing typed by the host goes on the wire: flags and one number only.
+   * @param {string} code
+   * @param {{visibility?:string, song?:boolean, cardSec?:number, pictures?:boolean, token?:string}} [o]
+   * @returns {Promise<{visibility:string, expiresInSec:number}|null>}
+   */
+  async list(code, o = {}) {
+    const body = Object.assign({ unified_id: this.unifiedId }, listingBody(Object.assign({}, o, { code })));
+    if (o && typeof o.token === 'string' && o.token) body.token = o.token;
+    const json = await this._call(GOON_PATHS.list, body);
+    if (!json) return null;
+    if (json.ok === false) { this._refused(json); return null; }
+    return {
+      visibility: typeof json.visibility === 'string' ? json.visibility : body.visibility,
+      expiresInSec: intOr(json.expiresInSec, 150),
+    };
+  }
+
+  /**
+   * OPEN TABLES: every listed room this account may see, plus what it may do.
+   * Signed-in accounts only (401 signin otherwise); a free account still gets the rows.
+   * @returns {Promise<{you:{canHost:boolean,canJoin:boolean}|null, tables:object[], lastOpenedAgoSec:number|null}|null>}
+   */
+  async open() {
+    const json = await this._call(GOON_PATHS.open, { unified_id: this.unifiedId });
+    if (!json) return null;
+    if (json.ok === false) { this._refused(json); return null; }
+    return normalizeOpen(json);
+  }
+
+  /** A 2xx that still said no ({ok:false, reason}). */
+  _refused(json) {
+    this.lastError = (json && (typeof json.reason === 'string' ? json.reason : (typeof json.error === 'string' ? json.error : null)))
+      || GoonSignalError.Malformed;
+  }
+
   // ------------------------------------------------------------------ plumbing
 
   /**
@@ -524,7 +580,9 @@ export class GoonSignalingClient {
       return json;
     }
 
-    const serverError = json && typeof json.error === 'string' ? json.error : null;
+    // The open-tables routes answer `{ok:false, reason}`; the older ones `{error}`. Either names it.
+    const serverError = json && typeof json.error === 'string' ? json.error
+      : (json && typeof json.reason === 'string' ? json.reason : null);
 
     switch (status) {
       case 401:

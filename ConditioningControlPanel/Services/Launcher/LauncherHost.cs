@@ -307,10 +307,10 @@ public static partial class LauncherHost
         var entry = LauncherCatalogue.Find(id);
         if (entry == null) return false;
 
-        if (LauncherCatalogue.NeedsAccount)
+        if (entry.NeedsAccount)
         {
-            // Every game needs an account. With the launcher up, its sign-in flow takes over;
-            // otherwise the caller shows the launcher, which wears the same rule on every tile.
+            // Account-bound entries use the launcher sign-in flow; the free demo is exempt.
+            // Otherwise the caller shows the launcher, whose tile carries the same account rule.
             Log.Information("[Launcher] {Id} refused: nobody is signed in", entry.Id);
             if (IsShown)
             {
@@ -325,6 +325,15 @@ public static partial class LauncherHost
             // The host owns the refusal toast; the launcher stays up behind it.
             LauncherCatalogue.TryLaunch(entry.Id);
             return false;
+        }
+
+        // A leash punishment pending: every game tile leads to the gate first. The panel comes
+        // up and the gate lands there (MainWindow.Leash.cs); Panic and Cut leash are on it.
+        if (App.MainWindowRef?.LeashBlocksGames == true)
+        {
+            Log.Information("[Launcher] {Id} waits: a leash punishment is pending", entry.Id);
+            OpenPanel(null, () => App.MainWindowRef?.PresentLeashGateFromLauncher());
+            return true;
         }
 
         _panelRequested = false;
@@ -345,11 +354,20 @@ public static partial class LauncherHost
             // The exit beat plays over the game's first frames, the fade being its tail. A host
             // that died in the meantime has already cleared the wait (and shown the launcher), so
             // the late hide stands down.
-            After(FadeLeadMs(delay), () => { if (StillWaiting()) FadeThenHide(stillWanted: StillWaiting); });
+            After(FadeLeadMs(delay), () => { if (StillWaiting()) FadeThenHide(RaiseGame, StillWaiting); });
         }
-        else FadeThenHide(stillWanted: StillWaiting);
+        else FadeThenHide(RaiseGame, StillWaiting);
         StartReturnPoll();
         return true;
+    }
+
+    // The game came up while the launcher was still on screen; the hide that follows can pass
+    // activation to whatever is next in the z-order (often nothing of ours, the panel sits in the
+    // tray). Hand the foreground back to the game once the launcher is gone.
+    private static void RaiseGame()
+    {
+        try { ChaosWebViewHost.BringActiveGameToFront(); }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] raising the game failed"); }
     }
 
     /// <summary>

@@ -840,7 +840,7 @@ namespace ConditioningControlPanel
 
             var routing = Services.AchievementSharePromptRule.Decide(
                 s.DiscordShareAchievements,
-                ChaosWebViewHost.AnyGameActive,
+                Services.AchievementSharePromptRule.GameOnScreen(ChaosWebViewHost.AnyGameActive),
                 App.StartupLadder?.Held == true,
                 // The general case behind the other two: the panel closes to the tray, and a link
                 // can resolve minutes after the click with no game and no launcher to blame.
@@ -1959,10 +1959,13 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
+                // The switch shows the EFFECTIVE value (#1307): unticked while Tier 2 is not
+                // confirmed, without touching the saved choice.
+                var effectsOn = ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow;
                 if (CompanionTab.ChkCapEffects != null)
-                    CompanionTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
+                    CompanionTab.ChkCapEffects.IsChecked = effectsOn;
                 if (CompanionTab.EffectPermsPanel != null)
-                    CompanionTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
+                    CompanionTab.EffectPermsPanel.Visibility = effectsOn
                         ? Visibility.Visible : Visibility.Collapsed;
 
                 // Effect permission grid

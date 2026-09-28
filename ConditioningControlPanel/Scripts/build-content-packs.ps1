@@ -345,26 +345,26 @@ function New-PackZip($spec, [string]$ZipPath, $Files) {
 # Pattern shape: <dir>\**\<filemask>  (the only shape the csproj uses).
 $CsprojStripPatterns = @(
     # $(ContentPackSoundsExclude)
-    'Resources\sounds\flashes_audio\**\*.mp3'
-    'Resources\sounds\flashes_audio\**\*.wav'
-    'Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3'
-    'Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav'
-    'Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg'
-    'Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a'
-    'Resources\sounds\companion_audio\mods\builtin-locked\**\*.mp3'
-    'Resources\sounds\companion_audio\mods\builtin-locked\**\*.wav'
-    'Resources\sounds\companion_audio\mods\builtin-locked\**\*.ogg'
-    'Resources\sounds\companion_audio\mods\builtin-locked\**\*.m4a'
-    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3'
-    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav'
-    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg'
-    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a'
-    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png'
+    '..\Assets\sounds\flashes_audio\**\*.mp3'
+    '..\Assets\sounds\flashes_audio\**\*.wav'
+    '..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3'
+    '..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav'
+    '..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg'
+    '..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a'
+    '..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.mp3'
+    '..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.wav'
+    '..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.ogg'
+    '..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.m4a'
+    '..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3'
+    '..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav'
+    '..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg'
+    '..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a'
+    '..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png'
     # $(ContentPackWebExclude)
-    'Resources\web\intake\assets\vo\**\*.mp3'
-    'Resources\web\intake\assets\sfx\**\*.mp3'
-    'Resources\web\intake\assets\music\**\*.mp3'
-    'Resources\web\dtrh\assets\**\*.mp3'
+    '..\Assets\web\intake\assets\vo\**\*.mp3'
+    '..\Assets\web\intake\assets\sfx\**\*.mp3'
+    '..\Assets\web\intake\assets\music\**\*.mp3'
+    '..\Assets\web\dtrh\assets\**\*.mp3'
 )
 
 # ---------------------------------------------------------------------------------------------
@@ -399,7 +399,7 @@ function Get-InBoxOverrideSet {
             if ($rel -match '[*?$@%]') {
                 throw "`$($InBoxOverrideProperty) entry '$rel' is not a plain file path. The allowlist is exact names only."
             }
-            $set[(Join-Path $ProjectDir $rel).ToLowerInvariant()] = $true
+            $set[[System.IO.Path]::GetFullPath((Join-Path $ProjectDir $rel)).ToLowerInvariant()] = $true
         }
     }
     return $set
@@ -415,7 +415,7 @@ function Get-StrippedFileSet {
             throw "Strip pattern '$pattern' is not of the form <dir>\**\<filemask>. " +
                   "Either fix the pattern or teach Get-StrippedFileSet the new shape."
         }
-        $dir  = Join-Path $ProjectDir $split[0]
+        $dir  = [System.IO.Path]::GetFullPath((Join-Path $ProjectDir $split[0]))
         $mask = $split[1]
         if (-not (Test-Path -LiteralPath $dir)) {
             throw "Strip pattern '$pattern': source folder missing: $dir`n" +

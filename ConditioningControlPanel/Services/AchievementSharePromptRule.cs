@@ -26,6 +26,16 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public static class AchievementSharePromptRule
     {
+        /// <summary>
+        /// Whether a game owns the screen, asked two ways. <paramref name="webGameHostUp"/> is the
+        /// WebView2 game-window counter; it cannot see the Rabbit Hole DESCENT, which runs inside
+        /// the app (its spiral and the two doors) rather than in a game window. The panic key's
+        /// surface registry does see it, so a prompt at the doors still goes to the Inbox
+        /// (ticket 2026-09-24, Pika: "I couldn't click the thing underneath it").
+        /// </summary>
+        internal static bool GameOnScreen(bool webGameHostUp)
+            => webGameHostUp || Safety.GameSurfaces.AnyOwnsTheScreen();
+
         /// <param name="alreadySharing">The user has already opted in; there is nothing to offer.</param>
         /// <param name="gameHostUp">A game window (DtRH, the race, the Back Room, the Arcademy and
         /// the rest) is on screen.</param>

@@ -15,9 +15,9 @@
  *
  * Wire (v1):
  *   Host -> Page : init · manifest · fullscreen · ping · end-run ·
- *                  haptics-state · net-post-result
+ *                  haptics-state · net-post-result · share-card-result
  *   Page -> Host : ready · log · boot-error · heartbeat · pong · exit ·
- *                  exit-done · fullscreen-set · net-post
+ *                  exit-done · fullscreen-set · net-post · share-card
  *
  * HARD RULES (both learned the expensive way in intake/dtrh):
  *   1. NOTHING may throw at module import — WebView2 has no devtools, so a
@@ -26,6 +26,9 @@
  *   2. ONE handler per message type. A second on('x') THROWS here (intake let
  *      the second silently displace the first, which cost days).
  * ==========================================================================*/
+
+import { createWebMediaHost, mediaInitBlock } from './net/webMedia.js';
+import { browserLang, normalizeLang } from './core/i18n.js';
 
 export const PROTOCOL = 1;
 
@@ -90,9 +93,23 @@ export function on(type, fn) {
 /** Drop a handler (the only sanctioned way to re-register a type). */
 export function off(type) { return handlers.delete(type); }
 
-/** Post a frame to the host (no-op standalone / under node). */
+/**
+ * THE BROWSER STAND-IN (2026-09-24). With no C# host, a few page -> host frames still want an
+ * answer (online pictures: media-flavour, media-more, peer-niches). Standalone boot installs
+ * net/webMedia.js here; it answers through dispatch(), exactly like a host frame. Hosted this
+ * stays null and nothing changes.
+ */
+let localHost = null;
+
+/** Is a browser stand-in answering host frames (standalone only)? */
+export function hasLocalHost() { return !webview && !!localHost; }
+
+/** Post a frame to the host (standalone: the stand-in, if it wants it; under node: no-op). */
 export function send(msg) {
-  try { if (webview) webview.postMessage(msg); } catch (_e) { /* host gone */ }
+  try {
+    if (webview) webview.postMessage(msg);
+    else if (localHost) localHost(msg);
+  } catch (_e) { /* host gone */ }
 }
 
 /**
@@ -396,6 +413,8 @@ export function standaloneInit() {
     type: 'init',
     protocol: PROTOCOL,
     hosted: false,
+    // No app to ask, so the browser's own preference picks the copy; `?lang=` overrides it.
+    lang: q.get('lang') ? normalizeLang(q.get('lang')) : browserLang(),
     solo: q.get('solo') !== '0',
     // Field-for-field the host's shape (GoonHostService.OnPageReady) so the page
     // never branches on where the frame came from.
@@ -473,6 +492,10 @@ export function standaloneInit() {
       authToken: q.get('token') || '',
       viaHost: false,
     },
+    /* ONLINE PICTURES IN A BROWSER (2026-09-24): the flavour card and its Scrolller pool,
+     * answered by net/webMedia.js instead of C#. `flavour` is always '' here, so the pick is
+     * the opt-in for this visit only. Absent where there is no fetch to answer it with. */
+    media: (typeof fetch === 'function') ? mediaInitBlock(prefs) : null,
     prefs,
     fullscreen: false,
   };
@@ -532,6 +555,19 @@ if (!isHosted && typeof document !== 'undefined') {
        * the phone-link flow boots signed out. */
       const init = standaloneInit();
       if (stripAfterInit.length) stripUrlParams(stripAfterInit);
+      if (init.media) {
+        try {
+          const web = createWebMediaHost({
+            // A frame back to the page goes on a microtask, never inside the send that caused it.
+            emit: (frame) => { Promise.resolve().then(() => dispatch(frame)); },
+            fetch: (u, o) => fetch(u, o),
+            savePrefs,
+            online: init.media.online,
+            log: (msg) => log('info', msg),
+          });
+          localHost = (msg) => { web.handle(msg); };
+        } catch (e) { log('warn', 'web media stand-in failed: ' + (e && e.message || e)); }
+      }
       dispatch(init);
       dispatch({ type: 'manifest', images: [], videos: [], skipped: 0, truncated: false });
     } catch (e) {

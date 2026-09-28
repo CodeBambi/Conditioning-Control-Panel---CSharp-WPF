@@ -82,7 +82,10 @@ public sealed partial class ChasterService
             var tokens = await _client.ExchangeAsync(code, verifier, cts.Token).ConfigureAwait(false);
             if (!tokens.Ok || string.IsNullOrEmpty(tokens.Value!.RefreshToken)) return LinkOutcome.Failed;
 
-            StoreTokens(tokens.Value, null);
+            // Linking over a live link: the old grant is revoked, not left alive on Chaster.
+            var old = ReplaceTokens(tokens.Value);
+            if (old is { RefreshToken.Length: > 0 } && old.RefreshToken != tokens.Value.RefreshToken)
+                _ = _client.RevokeAsync(old.RefreshToken);
             // Being away only counts from the day the account was linked.
             lock (_gate) { _tab.LastSeenDay = CircesTab.DayKey(_localNow()); SaveTab(); }
             App.Logger?.Information("[Chaster] linked (offline token: {Offline})", tokens.Value.RefreshExpiresIn == 0);
