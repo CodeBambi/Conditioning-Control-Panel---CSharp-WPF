@@ -29,8 +29,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// nothing is shown and it is logged
     /// once: a topmost picture that swallows clicks is worse than no picture.</para>
     ///
-    /// <para>ponytail: not here yet, each a later branch - the session scheduler (Start/Stop,
-    /// FlashFrequency), audio + ducking (lifetime then follows the sound's length), clickable
+    /// <para>The ambient rhythm is Core <c>CoreFlash</c>, which calls this.</para>
+    ///
+    /// <para>ponytail: not here yet, each a later branch - audio + ducking (lifetime then follows the sound's length), clickable
     /// flashes (hydra multiply / XP / pops - FlashClickable is ignored, always click-through),
     /// GIF animation (first frame only), glow, content-pack and remote pools, avatar pre-announce.</para>
     /// </summary>
@@ -43,6 +44,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static readonly List<(FlashOverlayWindow Window, PixelRect Rect)> Active = new();
         private static readonly Random Rng = new();
         private static bool _busy, _warnedUnavailable, _warnedEmpty;
+
+        /// <summary>A burst is still spawning (WPF <c>_isBusy</c>); the ambient tick skips.</summary>
+        public static bool IsBusy => _busy;
 
         /// <summary>Fire one burst. Any attached visual works as <paramref name="host"/>; it only
         /// reaches <c>Screens</c>. Like WPF's _isBusy, a second press is ignored from the click

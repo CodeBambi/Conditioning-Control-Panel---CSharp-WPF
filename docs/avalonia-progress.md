@@ -193,3 +193,12 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   empty input shape), timeline 0.28-0.29 s stagger, 6.40 s lifetime; KWin opacity ramp. Two review rounds.
 - Not run: a physical click through an overlay (no xdotool), a desktop screenshot over another app (session
   locked), non-compositing X11 WMs (no fade there), Windows (no Win32 shim yet).
+
+## avalonia-port/session-scheduler-core: +154
+- CoreFlash: WPF's ambient flash rhythm in Core (3600/FlashFrequency s ±30%, min 3 s; skip when busy or a
+  display change is settling). WPF FlashService now calls CoreFlash.NextIntervalSeconds (bit-identical).
+- Avalonia: the Flash card's Enable toggle arms/disarms the schedule; the Per Hour slider re-rolls like
+  WPF RefreshSchedule. Differences (engine Start/Stop not ported, DND guard, launch arming, Stop leaving
+  bursts to finish) recorded in the decisions log and the feat-flash row.
+- Evidence: CoreFlashScheduleTests (11, fail-proofed); live with a temp profile at 180/h: 4 automatic bursts
+  at 24.2/20.0/21.7 s gaps, none in 75 s after disabling; 0 binding errors. Review: ACCEPT.
