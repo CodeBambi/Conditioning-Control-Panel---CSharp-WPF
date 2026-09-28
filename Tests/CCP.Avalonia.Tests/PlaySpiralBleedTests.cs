@@ -62,4 +62,43 @@ public sealed class PlaySpiralBleedTests
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>The same hidden-ancestor gap in the other ambient surfaces: each must stop when a
+    /// PARENT hides and start again when it comes back.</summary>
+    [Fact]
+    public async Task OtherAmbientSurfacesParkAndResumeWithTheirParent()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+
+            var vat = new VatGlassCanvas { Width = 200, Height = 200 };
+            var orb = new TakeoverOrb { Width = 200, Height = 200 };
+            var glyph = new SpiralGlyph { Width = 40, Height = 40 };
+            var tab = new StackPanel { Children = { vat, orb, glyph } };
+            var w = new Window { Content = new Panel { Children = { tab } }, Width = 600, Height = 600 };
+            w.Show();
+            w.Activate();
+            orb.SetActive(true);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vat.IsTicking && orb.IsRunning && glyph.IsBreathing, "a surface never started - the test proves nothing");
+
+            tab.IsVisible = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vat.IsTicking, "vat kept ticking under a hidden parent");
+            Assert.False(orb.IsRunning, "orb kept ticking under a hidden parent");
+            Assert.False(glyph.IsBreathing, "spiral glyph kept breathing under a hidden parent");
+
+            tab.IsVisible = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vat.IsTicking, "vat did not resume");
+            Assert.True(orb.IsRunning, "orb did not resume");
+            Assert.True(glyph.IsBreathing, "spiral glyph did not resume");
+            w.Close();
+            return Task.CompletedTask;
+        });
+    }
 }

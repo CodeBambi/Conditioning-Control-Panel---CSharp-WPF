@@ -261,11 +261,16 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         // ============================== lifecycle ==============================
 
+        // A hidden ANCESTOR (the tab) parks and resumes the clock; see EffectiveVisibility.
+        private IDisposable? _visibilityWatch;
+
         private void OnLoaded(object? sender, RoutedEventArgs e)
         {
             try
             {
                 HookWindow(TopLevel.GetTopLevel(this) as Window);
+                _visibilityWatch?.Dispose();
+                _visibilityWatch = EffectiveVisibility.Watch(this, Evaluate);
                 if (!_modHooked) { CoreMods.ModChanged += OnModChanged; _modHooked = true; }
                 Evaluate();
             }
@@ -278,6 +283,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
             {
                 StopClock();
                 UnhookWindow();
+                _visibilityWatch?.Dispose();
+                _visibilityWatch = null;
                 if (_modHooked) { CoreMods.ModChanged -= OnModChanged; _modHooked = false; }
             }
             catch (Exception ex) { Log("TakeoverOrb.OnUnloaded: " + ex.Message); }
@@ -305,10 +312,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
         ///
         /// The gate itself (ShouldRun) reads IsEffectivelyVisible, which is the real twin of WPF's
         /// UIElement.IsVisible: the plain IsVisible is only this control's own flag and stays true
-        /// under a collapsed ancestor. Avalonia's IsEffectivelyVisibleChanged event is internal, so
-        /// an ancestor collapsing raises nothing here - but Tick() re-checks ShouldRun first, so the
-        /// clock still stops itself within one frame, and Loaded fires when a TabControl reattaches
-        /// the content. ponytail: if a host ever hides an ancestor WITHOUT detaching, call Pause().
+        /// under a collapsed ancestor. Ancestor flips arrive through EffectiveVisibility.Watch
+        /// (hooked on Loaded), so the clock parks and resumes with its tab.
         /// </summary>
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
