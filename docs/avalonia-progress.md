@@ -652,3 +652,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   (pending removal in WPF; decision logged), so no user path reaches the quiz on either head. Fixed the score pulse /
   surrender shake animating the transform (it threw on the first question).
 - Evidence: QuizWindowStaticTests (gate, full run with a golden history shape, trend, report), fail-proofed. Review: ACCEPT.
+
+## avalonia-port/sync-body-core: +281 (auth unit 7a)
+- Core SyncBody: WPF's sync body in WPF's order, one Known flag per field (unknown fields are omitted, never sent as null);
+  WPF sets every flag, so its bytes are identical. The HMAC Signature/SignRequest and WPF's four-field heartbeat body are in
+  Core too; Core's heartbeat now sends the four fields. Decision rows for the body builder, unknown fields and heartbeat.
+- Evidence: SyncBodyGoldenTests (full, fresh-with-nulls, migration graft, omit-unknown, HMAC, heartbeat; goldens from the
+  pre-switch code), fail-proofed. Nothing new is reachable on Avalonia yet (7c). Review: ACCEPT.

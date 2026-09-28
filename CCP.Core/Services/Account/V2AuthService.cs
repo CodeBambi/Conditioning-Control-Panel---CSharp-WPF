@@ -717,18 +717,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Send heartbeat to update online status
         /// </summary>
-        public async Task<bool> SendHeartbeatAsync(string unifiedId)
+        public async Task<bool> SendHeartbeatAsync(string unifiedId, bool isActive = true, bool inSession = false)
         {
             try
             {
-                var payload = new JObject
-                {
-                    ["unified_id"] = unifiedId
-                };
-
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/user/heartbeat");
                 AddAuthHeader(request);
-                request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+                request.Content = new StringContent(SyncBody.Heartbeat(unifiedId, isActive, inSession, CoreReleaseContent.AppVersion), Encoding.UTF8, "application/json");
                 var response = await _http.SendAsync(request);
 
                 if (await TryHandleMergedAsync(response)) return false;
