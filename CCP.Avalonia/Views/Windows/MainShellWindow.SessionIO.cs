@@ -1,6 +1,7 @@
 // NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.SessionIO.cs (2212 lines).
-// Sorted member by member against the fifteen Core seams. Nothing here is restored, and the two
-// notes below exist so the next pass does not repeat the checks.
+// Sorted member by member against the fifteen Core seams. SessionBtn_Edit and
+// BtnCreateSession_Click are restored in PresetsTabView (EditSession / BtnCreateSession_Click) over
+// Core SessionManager + SessionFileService; the rest is below.
 //
 // FIRST, A LEAD THAT DOES NOT APPLY TO THIS HEAD. MainShellWindow.CatalogueSubmissions.cs restored
 // its read half (CatalogueKindSessions, CanonicalCataloguePathKey, GetCatalogueRecord,
@@ -12,9 +13,8 @@
 // The lead is correct about the DEPENDENCY and wrong about the work being small. It becomes true
 // the moment BuildSessionRackRow exists.
 //
-// SECOND, THE REAL BLOCKER: Services.SessionManager
-// (ConditioningControlPanel/Services/Session/SessionManager.cs) and its two companions,
-// SessionFileService (same folder) and AssetImportService. SessionManager owns AllSessions, the
+// SECOND: Services.SessionManager, SessionFileService and AssetImportService are now in Core
+// (CCP.Core/Services/Session, CCP.Core/Services/Content). SessionManager owns AllSessions, the
 // reload and add/remove events, DeleteSession's refusal to touch a built-in, and the disk sync;
 // every member below either reads it or repaints something it changed. Models.Session IS in Core,
 // which is why the FILTER half looks portable - see the next paragraph for why it is still out.
@@ -38,8 +38,8 @@
 //
 //   Session lifecycle - InitializeSessionManager, OnSessionsReloaded, OnSessionAdded,
 //   OnSessionRemoved, RegisterExternallySavedSession, SyncCustomSessionsFromDisk, GetSessionById,
-//   SessionBtn_Edit, SessionBtn_Export, SessionBtn_Delete, SessionBtn_Share,
-//   SessionContextMenu_Export, ExportSessionToFile, BtnExportSession_Click, BtnCreateSession_Click.
+//   SessionBtn_Export, SessionBtn_Delete, SessionBtn_Share,
+//   SessionContextMenu_Export, ExportSessionToFile, BtnExportSession_Click.
 //   SessionBtn_Share also needs the catalogue client (App.Catalogue) and the WRITE half of
 //   MainShellWindow.CatalogueSubmissions.cs, which is out for its head-only SubmissionResult type.
 //

@@ -58,8 +58,8 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.False(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
                 Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
                 Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);
-                Assert.False(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
-                Assert.False(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
                 Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
                 Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
                 Assert.True(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
@@ -343,8 +343,8 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.False(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
                 Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
                 Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);
-                Assert.False(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
-                Assert.False(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
                 Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
                 Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
                 Assert.True(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
@@ -357,7 +357,7 @@ public sealed class PresetsSessionCatalogueTests
                     var rowGrid = Assert.IsType<Grid>(row.Child);
                     var actions = Assert.IsType<StackPanel>(rowGrid.Children[8]);
                     Assert.Equal(2, actions.Children.Count);
-                    Assert.All(actions.Children.OfType<Button>(), button => Assert.False(button.IsEnabled));
+                    Assert.Equal(new[] { true, false }, actions.Children.OfType<Button>().Select(button => button.IsEnabled));
                 });
 
                 LocalizationManager.Instance.SetLanguage("zh-CN");
@@ -587,7 +587,7 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.All(panel.Children.OfType<Border>(), row =>
                 {
                     var actions = Assert.IsType<StackPanel>(Assert.IsType<Grid>(row.Child).Children[8]);
-                    Assert.All(actions.Children.OfType<Button>(), button => Assert.False(button.IsEnabled));
+                    Assert.Equal(new[] { true, false }, actions.Children.OfType<Button>().Select(button => button.IsEnabled));
                 });
             }
             finally
