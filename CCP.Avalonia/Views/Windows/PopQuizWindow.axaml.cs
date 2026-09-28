@@ -181,9 +181,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// The WPF body verbatim against the seams: <c>App.Settings.Current</c> is
         /// <see cref="CoreSettings.Current"/>, <c>App.Audio</c> is <see cref="CoreAudio"/> and
-        /// <c>App.Logger</c> is Serilog's static <c>Log</c>. Silent on this head for the WPF
-        /// no-op branch: the chimes are Content in the WPF head and are not laid down beside
-        /// CCP.Avalonia, so the probe misses.
+        /// <c>App.Logger</c> is Serilog's static <c>Log</c>. The chimes ship at Resources/sounds
+        /// on both heads (SharedSoundsPackagingTests).
         /// </summary>
         private static void PlayChime()
         {

@@ -1044,9 +1044,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// The WPF body against the seam: <c>App.Audio.PlayOneShot</c> is
         /// <see cref="CoreAudio.PlayOneShot"/> and <c>App.Settings.Current.MasterVolume</c> is
-        /// <see cref="CoreSettings"/>. Silent on this head today for the WPF no-op branch:
-        /// Resources/sounds is Content in the WPF head and is not laid down beside CCP.Avalonia,
-        /// so <c>File.Exists</c> misses - honest silence, not a lie about playback.
+        /// <see cref="CoreSettings"/>. Resources/sounds ships on both heads
+        /// (SharedSoundsPackagingTests); a missing file is still silence.
         /// </summary>
         private static void PlaySound(string fileName, float multiplier)
         {

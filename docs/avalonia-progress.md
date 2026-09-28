@@ -95,3 +95,17 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   duck at master volume 0. `CoreAudioTests` now cover ref count, generation, force-unduck and
   Shutdown with pactl stubbed. ModCreator's audio preview and AwarenessPresetDetailDialog's
   keyword preview now play user-picked files.
+
+## avalonia-port/head-sounds
+- `CCP.Avalonia.csproj` links `Assets/sounds/**` as Content at WPF's logical path `Resources/sounds`
+  with WPF's `$(ContentPackSoundsExclude)` set verbatim (flashes_audio audio and the three builtin-*
+  mod payloads ship as content packs). Replaces the lone `assets/sounds/faucet_charge_drop.wav`
+  link; `--smoke` and `--audio-probe` now read the clip from `Resources/sounds`.
+- Output: 145 files, 10,997,611 bytes, byte-identical to the set WPF's globs select from `Assets/sounds`.
+  bin/Release/net10.0 677,483,550 -> 688,460,831 bytes.
+- `SharedSoundsPackagingTests`: every file a PlayOneShot caller names exists under BaseDirectory, and
+  no flashes_audio ships. Both proven to fail (excluded `chaos/ui_click.mp3`; planted a flashes mp3).
+- Ledger: nothing goes stub->wired. No sound caller is reachable: PopQuizWindow, QuizWindow,
+  SessionCompleteWindow, ChaosOverlayWindow and BubbleCountWindow.ShowOnAllMonitors have no
+  production opener, and AvatarTube's giggle only fires from the render ctor. Notes updated.
+- Evidence: ~/ccp-port/evidence/head-sounds/ (live `--audio-probe` with pactl capture).

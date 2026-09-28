@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Avalonia
         public static int Run()
         {
             new LibVlcAudio().Seed();
-            var clip = Path.Combine(AppContext.BaseDirectory, "assets", "sounds", "faucet_charge_drop.wav");
+            var clip = Path.Combine(AppContext.BaseDirectory, "Resources", "sounds", "faucet_charge_drop.wav");
             var started = new ManualResetEventSlim();
             var finished = new ManualResetEventSlim();
             var sw = Stopwatch.StartNew();

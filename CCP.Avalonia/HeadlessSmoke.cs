@@ -48,7 +48,7 @@ namespace ConditioningControlPanel.Avalonia
 
             // Audio: a real clip through LibVLC (dummy output, no sound card needed) must report
             // started, then finished, within 2 s. Unseeded CoreAudio would fire finished only.
-            var clip = System.IO.Path.Combine(AppContext.BaseDirectory, "assets", "sounds", "faucet_charge_drop.wav");
+            var clip = System.IO.Path.Combine(AppContext.BaseDirectory, "Resources", "sounds", "faucet_charge_drop.wav");
             try
             {
                 new Platform.LibVlcAudio("--aout=dummy").Seed();

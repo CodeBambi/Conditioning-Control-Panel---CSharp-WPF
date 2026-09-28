@@ -47,9 +47,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The ~230 ms clip the smoke run plays through LibVlcAudio to prove started/finished fire. -->
-    <Content Include="..\Assets\sounds\faucet_charge_drop.wav" Link="assets\sounds\faucet_charge_drop.wav">
+    <!-- The shared sounds at the same logical path as the WPF head (Resources\sounds), with the
+         SAME exclude set as its $(ContentPackSoundsExclude): that audio ships as a downloadable
+         content pack, not in-box. Keep this list mirrored with ConditioningControlPanel.csproj. -->
+    <Content Include="..\Assets\sounds\**\*" Link="Resources\sounds\%(RecursiveDir)%(Filename)%(Extension)"
+             Exclude="..\Assets\sounds\flashes_audio\**\*.mp3;..\Assets\sounds\flashes_audio\**\*.wav;..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.mp3;..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.wav;..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.ogg;..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.m4a;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
 

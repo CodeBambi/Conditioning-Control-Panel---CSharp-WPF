@@ -156,8 +156,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// The WPF body verbatim, against the seams: <c>App.Settings.Current</c> is
         /// <see cref="CoreSettings.Current"/> and <c>App.Audio</c> is <see cref="CoreAudio"/>.
-        /// Silent on this head for the WPF no-op branch: the sound files are Content in the WPF
-        /// head and are not laid down beside CCP.Avalonia, so every probe misses.
+        /// lvup.mp3 ships at Resources/sounds on both heads (SharedSoundsPackagingTests).
         /// </summary>
         private void PlayCompletionSound()
         {

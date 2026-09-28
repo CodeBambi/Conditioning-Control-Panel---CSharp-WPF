@@ -1226,9 +1226,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// One of giggle5-8. Bambi Sleep suppresses the canned "hehehe" outright - it sounds cheap
         /// next to that mod's real voiceline barks, so a clip-less bubble there stays silent.
         ///
-        /// <para><b>ponytail: this head ships no <c>Resources/sounds</c>.</b> Only a MOD's override
-        /// resolves today, so a stock install is silent here. That is a missing asset link in
-        /// CCP.Avalonia.csproj, not a missing seam - and File.Exists means a miss is silence rather
+        /// <para>A MOD's override wins, else the shipped Resources/sounds copy. File.Exists means a
+        /// miss is silence rather
         /// than a bogus path handed to the audio service, which is WPF's own behaviour for
         /// giggle6 (it ships as .wav, and the shipped-file lookup only ever asks for .mp3).</para>
         /// </summary>
