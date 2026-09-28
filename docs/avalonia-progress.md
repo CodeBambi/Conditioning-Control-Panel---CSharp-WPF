@@ -383,3 +383,10 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   shell's Manage Mods. Share hidden until the catalogue client exists.
 - Evidence: activate-persists test (fail-proofed); live sandbox: activate -> relaunch still active -> uninstall.
 - Not run live: install/export through the native file picker. No live re-theme after a switch (next launch).
+
+## avalonia-port/dialogs-mod-picker-wired: +148
+- ModService unit 8: ModPickerDialog.ShowIfNeeded runs WPF's show rules in WPF's order and is called at shell startup on
+  the upgrade path (never alongside the first-run wizard). This head has no content-pack service yet (oracle §5), so the
+  picker never opens here, like WPF without ReleaseContent (decision logged; it waits for the pack service). The Avalonia
+  ModPacks copy is deleted in favour of Core ModService.PackIdForMod (identical mapping).
+- Evidence: ShowIfNeeded rule tests (fail-proofed); live sandbox upgrader profile: no picker, settings untouched.

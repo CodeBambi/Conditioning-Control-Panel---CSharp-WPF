@@ -25,9 +25,9 @@
 //     CCP.Core/Services/EmiDesk/ carries the book's layout and text, not the desk - so the HOLD
 //     has nothing to hold back on this head. Nothing talks over the wizard here either way.
 //   * `QueueEmiKnock(knockSeenVersion)`, listed as dropped in MainShellWindow.axaml.cs already.
-//   * The whole `else` branch (ShowWhatsNewIfNeeded / TryPresentSeasonRecap / the upgrader's
-//     ModPickerDialog). MainShellWindow.Marquee.cs documents why those three are still stubs:
-//     they need App.Achievements, App.Seasons and App.xaml.cs's startup-dialog queue. One
+//   * The rest of the `else` branch (ShowWhatsNewIfNeeded / TryPresentSeasonRecap; the upgrader's
+//     ModPickerDialog IS called, see OnUpgradeShellOpened). MainShellWindow.Marquee.cs documents
+//     why those two are still stubs: they need App.Achievements, App.Seasons and App.xaml.cs's startup-dialog queue. One
 //     consequence worth naming: LastSeenVersion is therefore only ever stamped by the first-run
 //     gate below, never on an upgrade launch. That is pre-existing and this file does not
 //     worsen it - the fix is ShowWhatsNewIfNeeded, not a second stamp here.
@@ -52,14 +52,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                if (!FirstRunWizard.ShouldRunAndClaim()) return;
-                Opened += OnFirstRunShellOpened;
+                if (FirstRunWizard.ShouldRunAndClaim()) Opened += OnFirstRunShellOpened;
+                // WPF's else branch (MainWindow.xaml.cs:618-624): the upgrader gets the picker,
+                // pre-ticked with the mod they were running. Its own guards decide; on this head
+                // there is no pack service, so it declines exactly as WPF does without one.
+                else Opened += OnUpgradeShellOpened;
             }
             catch (Exception ex)
             {
                 // A first-run screen must never be the reason a fresh install fails to start.
                 Log.Warning(ex, "[FirstRun] Could not arm the first-run wizard");
             }
+        }
+
+        private void OnUpgradeShellOpened(object? sender, EventArgs e)
+        {
+            Opened -= OnUpgradeShellOpened;
+            Dispatcher.UIThread.Post(async () =>
+                await Dialogs.ModPickerDialog.ShowIfNeeded(this, preselectActiveMod: true), DispatcherPriority.Normal);
         }
 
         private void OnFirstRunShellOpened(object? sender, EventArgs e)
