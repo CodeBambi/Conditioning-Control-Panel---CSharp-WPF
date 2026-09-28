@@ -2,6 +2,7 @@ using System;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Serilog;
@@ -11,11 +12,38 @@ namespace ConditioningControlPanel.Services
     /// <summary>
     /// Service for v5.5+ authentication using the v2 API endpoints.
     /// Handles monthly seasons system with OG recognition.
+    ///
+    /// <para>Lives in Core so every head talks to the server through one client (decision:
+    /// "Where OAuth and the V2 client live" = Core, WPF delegating). Settings come from the
+    /// constructor argument (default <see cref="CoreSettings.Current"/>); the version from
+    /// <see cref="CoreReleaseContent.AppVersion"/>. Applying a profile to settings stays in the
+    /// WPF head (<c>V2AuthServiceHead.ApplyUserDataToSettings</c>) until unit 6.</para>
     /// </summary>
     public class V2AuthService
     {
-        private static readonly HttpClient _http = new();
+        // One shared client per process, as before; configured on first use rather than at type
+        // init so the head has seeded CoreReleaseContent.AppVersion by then.
+        private static readonly Lazy<HttpClient> Shared = new(() => Configure(new HttpClient()));
+        private readonly HttpClient _http;
+        private readonly Func<AppSettings?> _settings;
         private const string SERVER_URL = "https://codebambi-proxy.vercel.app";
+
+        /// <summary>
+        /// Contract D (409 merged) handler. The recovery re-runs head sign-in, so the head seeds
+        /// this with <c>MergedAccountRecovery.TryHandleAsync</c>. Unseeded = never handled.
+        /// </summary>
+        public static volatile Func<HttpResponseMessage, string?, Task<bool>>? MergedRecovery;
+
+        private static Task<bool> TryHandleMergedAsync(HttpResponseMessage response, string? body = null) =>
+            MergedRecovery?.Invoke(response, body) ?? Task.FromResult(false);
+
+        /// <param name="settings">Where the auth token and unified id are read. Default: <see cref="CoreSettings.Current"/>.</param>
+        /// <param name="handler">Test seam; null uses the shared production client.</param>
+        public V2AuthService(Func<AppSettings?>? settings = null, HttpMessageHandler? handler = null)
+        {
+            _settings = settings ?? (() => CoreSettings.Current);
+            _http = handler == null ? Shared.Value : Configure(new HttpClient(handler));
+        }
 
         /// <summary>Redact auth_token and password values from JSON strings before logging.</summary>
         private static string RedactSensitiveFields(string json)
@@ -41,11 +69,12 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        static V2AuthService()
+        private static HttpClient Configure(HttpClient http)
         {
-            _http.Timeout = TimeSpan.FromSeconds(30);
-            _http.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
-            _http.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
+            http.Timeout = TimeSpan.FromSeconds(30);
+            http.DefaultRequestHeaders.Add("X-Client-Version", CoreReleaseContent.AppVersion);
+            http.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{CoreReleaseContent.AppVersion}");
+            return http;
         }
 
         #region Response Models
@@ -483,7 +512,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                    if (await TryHandleMergedAsync(response, json))
                         return new LinkResponse { Success = false, Error = "account_merged" };
                     return new LinkResponse
                     {
@@ -533,7 +562,7 @@ namespace ConditioningControlPanel.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     // Contract D: profile fetch on a merge tombstone.
-                    if (await MergedAccountRecovery.TryHandleAsync(response, json)) return null;
+                    if (await TryHandleMergedAsync(response, json)) return null;
 
                     // TRUNCATED, and it matters more here than at the other call
                     // sites: the vat put this request on a 60s cadence, so a server
@@ -590,7 +619,7 @@ namespace ConditioningControlPanel.Services
                 request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
                 var response = await _http.SendAsync(request);
 
-                if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
+                if (await TryHandleMergedAsync(response)) return false;
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex)
@@ -617,7 +646,7 @@ namespace ConditioningControlPanel.Services
                 request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
                 var response = await _http.SendAsync(request);
 
-                if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
+                if (await TryHandleMergedAsync(response)) return false;
                 return response.IsSuccessStatusCode;
             }
             catch
@@ -644,7 +673,7 @@ namespace ConditioningControlPanel.Services
                 request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
                 var response = await _http.SendAsync(request);
 
-                if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
+                if (await TryHandleMergedAsync(response)) return false;
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex)
@@ -657,9 +686,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Adds the X-Auth-Token header to a V2 API request if an auth token is available.
         /// </summary>
-        private static void AddAuthHeader(HttpRequestMessage request)
+        private void AddAuthHeader(HttpRequestMessage request)
         {
-            var token = App.Settings?.Current?.AuthToken;
+            var token = _settings()?.AuthToken;
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Add("X-Auth-Token", token);
         }
@@ -694,7 +723,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var unifiedId = App.Settings?.Current?.UnifiedId;
+                var unifiedId = _settings()?.UnifiedId;
                 if (string.IsNullOrEmpty(unifiedId))
                     return new MobileLinkResponse { Success = false, Error = "not_logged_in" };
 
@@ -713,7 +742,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                    if (await TryHandleMergedAsync(response, json))
                         return new MobileLinkResponse { Success = false, Error = "account_merged" };
                     var error = ParseErrorMessage(json, response.StatusCode);
                     Log.Warning("[V2Auth] Mobile link authorize failed: {Status} {Error}", (int)response.StatusCode, error);
@@ -739,59 +768,6 @@ namespace ConditioningControlPanel.Services
                 Log.Error(ex, "[V2Auth] Mobile link authorize exception");
                 return new MobileLinkResponse { Success = false, Error = ex.Message };
             }
-        }
-
-        /// <summary>
-        /// Apply v2 user data to local settings, optionally storing an auth token.
-        /// </summary>
-        public void ApplyUserDataToSettings(V2User user, string? authToken = null)
-        {
-            var settings = App.Settings?.Current;
-            if (settings == null) return;
-
-            settings.UnifiedId = user.UnifiedId;
-            settings.UserDisplayName = user.DisplayName;
-            settings.IsSeason0Og = user.IsSeason0Og;
-            settings.CurrentSeason = user.CurrentSeason;
-            settings.HighestLevelEver = user.HighestLevelEver;
-            settings.HasLinkedDiscord = !string.IsNullOrEmpty(user.DiscordId);
-            settings.HasLinkedPatreon = !string.IsNullOrEmpty(user.PatreonId);
-            settings.PatreonTier = user.PatreonTier;
-
-            // Discord/unified-login users with a LINKED Patreon sub have no local Patreon
-            // tokens, so PatreonService.CurrentTier stays None and nothing else refreshes the
-            // cached-premium window for them. The canonical HasPremiumAccess gate (now used by
-            // the Takeover paths, #465) relies on that window — extend it here so a
-            // server-confirmed linked tier keeps premium alive, mirroring the 2-week grace
-            // direct Patreon validation writes. Never shorten an existing longer window.
-            EntitlementTierRule.ExtendGrace(settings, user.PatreonTier, DateTime.UtcNow);
-
-            // Store auth token if provided
-            if (!string.IsNullOrEmpty(authToken))
-            {
-                settings.AuthToken = authToken;
-            }
-
-            // Sync level/XP using "take higher" logic to prevent progress loss
-            // Server returns TOTAL accumulated XP, but PlayerXP stores current-level XP
-            if (user.Level > 0)
-            {
-                var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
-                var serverTotalXp = (double)user.Xp;
-
-                if (serverTotalXp >= localTotalXp)
-                {
-                    settings.PlayerLevel = user.Level;
-                    settings.PlayerXP = App.Progression?.GetCurrentLevelXP(user.Level, user.Xp) ?? 0;
-                }
-                else
-                {
-                    Log.Information("[V2Auth] Keeping local progress (higher): Local Level {LocalLevel} ({LocalXP} total) > Server Level {ServerLevel} ({ServerXP} total)",
-                        settings.PlayerLevel, (int)localTotalXp, user.Level, user.Xp);
-                }
-            }
-
-            App.Settings?.Save();
         }
     }
 }
