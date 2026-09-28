@@ -553,3 +553,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   CoreSpeech on the Avalonia head; Vosk referenced by the head. Recorder stderr/exit logged; the list is cached 5 s.
 - Evidence: scripts/speech-capture-check.sh (null sink -> test WAV -> parec on the monitor, never a real mic): match exit
   0, wrong phrase exit 1, no stray recorder (evidence/speech-linux-capture/speech-check-*.txt). Review: ACCEPT.
+
+## avalonia-port/firstrun-folder-picker: +235 (user-reported x2)
+- First-run "Choose a content folder" did nothing visible: the click only queued the picker until the wizard closed (a
+  WPF modal-on-modal workaround). It now opens the portal folder picker at once, owned by the wizard, through the shell's
+  single PickAssetsFolder (same #1053 guard, settings write, images/videos folders); the button shows the chosen folder;
+  the wizard can't close under an open picker. Decision logged (deliberate, user-requested).
+- The top-right release button read "v6.9.1 IS OUT" on 6.11.3: it now names WPF's btn_v6_11_3_is_out; ReleaseButtonKeyTests
+  keeps both shells on the same key (fails on the stale key).
+- Evidence: FirstRunFolderPickerTests; live: portal FileChooser.OpenFile with the "First run" window as parent. Review: ACCEPT.
