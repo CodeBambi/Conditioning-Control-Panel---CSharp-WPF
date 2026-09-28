@@ -65,7 +65,7 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Not run: WPF tests (Windows-only); Descent windows and enhancement auto-load have no user path
   Keincheck can drive.
 
-## avalonia-port/wire-core-standins-2: +500
+## avalonia-port/wire-core-standins-2: +593
 - Wires the second batch of #1768 Core types: PresetsTabView lists Core presets and exports /
   drop-imports through PresetFileService; EnhancementsTabView draws SkillDefinition.All (read-only,
   SkillTreeService is head-only); SessionEditorWindow drops its EditorSession stand-in for
@@ -80,7 +80,7 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   hit-tests fall through to the window backdrop Panel); SessionEditorWindow and QuizWindow have no
   user path.
 
-## avalonia-port/audio-libvlc
+## avalonia-port/audio-libvlc: +403
 - Real one-shot audio: LibVLCSharp 3.10.1 (VideoLAN.LibVLC.Windows 3.0.24 on Windows only; Linux
   uses system libvlc). `Platform/LibVlcAudio.cs` seeds `CoreAudio` in App.axaml.cs only if LibVLC
   initialises. Duck/Unduck on Linux via `pactl` on other apps' sink-inputs (ref count + generation
