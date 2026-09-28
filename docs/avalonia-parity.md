@@ -412,7 +412,7 @@ matters, a performance note (startup, tab switch, list scroll, overlays, media).
 | theme-main-window | `ConditioningControlPanel/Resources/Theme/MainWindow.xaml` | `CCP.Avalonia/Theme/Styles.xaml` | stub | Avalonia Styles.xaml ports selected keys only; its header explicitly leaves remaining WPF styles unported. |
 | theme-season-recap-card | `ConditioningControlPanel/Resources/Theme/SeasonRecapCard.xaml` | `CCP.Avalonia/Views/Controls/SeasonRecapCard.axaml` | stub | Keys are copied into view-local resources, but per-mod recoloring is static; animated foil gradient is also absent. |
 
-## main-sync-2 additions (release/6.11.3, 11 rows)
+## main-sync-2 additions (release/6.11.3, 12 rows)
 
 New WPF surfaces from the second main sync (`avalonia-port/main-20260928b`), read from source, not yet ported.
 
@@ -429,3 +429,4 @@ New WPF surfaces from the second main sync (`avalonia-port/main-20260928b`), rea
 | feat-friends-open-tables | `ConditioningControlPanel/Controls/Friends/FriendsDrawer.Tables.cs`, `Windows/Launcher/LauncherWindow.OpenTables.cs`, `Windows/Friends/FriendNotices.cs` | - | missing | Open goon tables in the friends drawer and launcher; friend notices. |
 | win-emi-desk-extras | `ConditioningControlPanel/Windows/EmiDesk/EmiDeskWindow.Presentation.cs`, `.Toss.cs`, `.Tube.cs` | - | missing | Emi desk presentation, toss and tube additions. |
 | feat-session-summary-passive | `ConditioningControlPanel/Services/Session/SessionSummaryPresentation.cs` | - | missing | Recap opens passive (non-modal, not topmost) while a video, lock card, pop quiz or bubble count is up (#1303). |
+| companion-ccp-default-voice | builtin-ccp-default barks | - | missing | Avalonia has no bark path; folder linked but unplayed |

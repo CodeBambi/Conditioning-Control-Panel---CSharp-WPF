@@ -202,7 +202,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             EffectPermsPanel.IsVisible = on;
 
             var p = CoreSettings.Current.CompanionPrompt;
-            if (p == null || p.AllowAiToControlEffects == on) return;
+            if (p == null) return;
             p.AllowAiToControlEffects = on;
             CoreSettings.Save();
         }

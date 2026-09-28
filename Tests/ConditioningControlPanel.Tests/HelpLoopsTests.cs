@@ -83,7 +83,7 @@ public sealed class HelpLoopsTests
         Assert.NotEmpty(keys);
         foreach (var lang in Languages)
         {
-            var path = Path.Combine(AppDir(), "Localization", "Languages", lang + ".json");
+            var path = SourceRoots.FindProductFile("Localization", "Languages", lang + ".json");
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var missing = keys.Where(k => !doc.RootElement.TryGetProperty(k, out _)).ToList();
             Assert.True(missing.Count == 0, $"{lang}.json lacks: " + string.Join(", ", missing));
@@ -93,7 +93,7 @@ public sealed class HelpLoopsTests
     [Fact]
     public void NoHelpTopic_PointsAtAMissingClip()
     {
-        var dir = Path.Combine(AppDir(), "Resources", "tutorial_videos");
+        var dir = Path.Combine(SourceRoots.RepoRoot, "Assets", "tutorial_videos");
         var broken = HelpContentService.GetAllSectionIds()
             .Select(HelpContentService.GetContent)
             .Where(c => c.HasClip && !File.Exists(Path.Combine(dir, c.ClipFile!)))
@@ -179,14 +179,5 @@ public sealed class HelpLoopsTests
                 enc.Save(fs);
             }
         }, timeoutSeconds: 120);
-    }
-
-    private static string AppDir()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return Path.Combine(dir!.FullName, "ConditioningControlPanel");
     }
 }

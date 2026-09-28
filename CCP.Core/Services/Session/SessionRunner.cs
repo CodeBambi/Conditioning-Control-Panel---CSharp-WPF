@@ -92,7 +92,7 @@ namespace ConditioningControlPanel.Services
             CoreSettings.SaveImmediate();
 
             _snapshot = SessionSettingsSnapshot.Capture(s);
-            _custody = PhrasePoolCustody.Begin(s, session.Settings, CoreMods.ActiveModId);
+            _custody = PhrasePoolCustody.Begin(s, session.Settings, CoreMods.ActiveModId, session);
             Apply(session.Settings, s);
 
             _timer = new Timer(_ => CoreDispatch.Post(() => Tick(Elapsed)), null, 1000, 1000);

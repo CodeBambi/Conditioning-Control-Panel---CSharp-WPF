@@ -25,18 +25,9 @@ public class PresetNamingTests
         BuiltInMods.LockedId, BuiltInMods.DronificationId, BuiltInMods.InfectionControlId,
     };
 
-    private static string AppDir()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root");
-        return Path.Combine(dir!.FullName, "ConditioningControlPanel");
-    }
-
     private static Dictionary<string, string> LoadLanguage(string lang)
     {
-        var path = Path.Combine(AppDir(), "Localization", "Languages", lang + ".json");
+        var path = SourceRoots.FindProductFile("Localization", "Languages", lang + ".json");
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         var map = new Dictionary<string, string>();
         foreach (var p in doc.RootElement.EnumerateObject())

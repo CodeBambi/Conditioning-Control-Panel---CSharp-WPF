@@ -32,10 +32,25 @@ public class SharedAssetLayoutTests
     [InlineData("Assets/web/backroom/music/midnight-jackpot.mp3")]
     [InlineData("Assets/web/backroom/music/coin-arpeggio.mp3")]
     [InlineData("Assets/web/backroom/music/neon-jackpot.mp3")]
+    // Paths the Windows-only tests read (ModAudioPolicyTests, HelpLoopsTests, PresetNamingTests):
+    // proven here so a move that strands them fails on Linux too.
+    [InlineData("Assets/AwarenessPresets/bimbo.json")]
+    [InlineData("Assets/AwarenessPresets/puppy.json")]
+    [InlineData("Assets/AwarenessPresets/chastity.json")]
+    [InlineData("Assets/sounds/GOOD GIRL.mp3")]
+    [InlineData("Assets/sounds/00 Bimbo Drone.mp3")]
+    [InlineData("CCP.Core/Localization/Languages/en.json")]
     public void ReferencedAssetLivesInSharedTree(string relative)
     {
         Assert.True(File.Exists(Path.Combine(RepoRoot(), relative)), relative + " is missing from the shared Assets tree");
     }
+
+    [Theory]
+    [InlineData("Assets/sounds")]
+    [InlineData("Assets/sub_audio")]
+    [InlineData("Assets/tutorial_videos")]
+    public void TestReadDirectoryExists(string relative)
+        => Assert.True(Directory.Exists(Path.Combine(RepoRoot(), relative)), relative + " is missing");
 
     [Theory]
     [InlineData("ConditioningControlPanel/Resources/sounds")]

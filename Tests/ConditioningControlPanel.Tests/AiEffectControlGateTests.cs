@@ -74,15 +74,13 @@ namespace ConditioningControlPanel.Tests
         [Fact]
         public void Every_effect_reader_goes_through_the_gate()
         {
-            var app = Path.Combine(RepoRoot(), "ConditioningControlPanel");
             // Any mention of the property in code (not a comment) is a read, except the gate itself,
             // the settings model (declaration, defaults, Clone) and the click handler's own write.
             // A narrower pattern (== true / != true) let `if (cp.AllowAiToControlEffects)` through.
             var mention = new Regex(@"\bAllowAiToControlEffects\b");
             var clickWrite = new Regex(@"\bAllowAiToControlEffects\s*=\s*on\s*;");
-            var offenders = Directory.EnumerateFiles(app, "*.cs", SearchOption.AllDirectories)
-                .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
-                         && !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar))
+            // Every product root (WPF, Core, Avalonia, VR): the gate itself now lives in Core.
+            var offenders = SourceRoots.EnumerateProductSources("*.cs")
                 .Where(f => !f.EndsWith("AiEffectControlGate.cs", StringComparison.Ordinal)
                          && !f.EndsWith("CompanionPromptSettings.cs", StringComparison.Ordinal))
                 .SelectMany(f => File.ReadAllLines(f)
