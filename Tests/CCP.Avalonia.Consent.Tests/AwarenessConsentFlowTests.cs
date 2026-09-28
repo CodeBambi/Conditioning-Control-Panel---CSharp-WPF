@@ -255,6 +255,7 @@ public sealed class AwarenessConsentFlowTests
         var settings = new AppSettings
         {
             Welcomed = true,
+            HasAcceptedAgeVerification = true,   // a welcomed profile has passed the 18+ gate; without it the app-level age dialog (#1844) opens over the shell
             Language = "en",
             UseAwarenessV2 = true,
         };
