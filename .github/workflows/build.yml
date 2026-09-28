@@ -23,7 +23,16 @@ jobs:
       - run: dotnet build CCP.Core/CCP.Core.csproj -c Release
       # Core.Tests is the Linux-only behavior gate for the engine. Keep it separate from the
       # smoke runner so persistence/lifecycle regressions report as ordinary test failures.
+      # The speech tests need the small Vosk model (~40 MB, not in the repo). Required here, so a
+      # failed fetch fails the job instead of silently skipping the engine's only real proof.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccp-test/vosk
+          key: vosk-model-small-en-us-0.15
+      - run: bash .github/scripts/fetch-vosk-model.sh
       - run: dotnet test Tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release
+        env:
+          CCP_REQUIRE_VOSK: "1"
       - name: Test Core settings publication (isolated profile)
         run: dotnet test Tests/CCP.Core.Settings.Tests/CCP.Core.Settings.Tests.csproj -c Release
 
