@@ -130,6 +130,39 @@ public sealed class CoreStandInTests
     });
 
     [Fact]
+    public Task PresetDropImportsThroughPresetFileServiceWithFreshId() => Run(() =>
+    {
+        // CopyToCustomPresets writes under ApplicationData, which is XDG_CONFIG_HOME on Linux.
+        var dir = Directory.CreateTempSubdirectory("ccp-preset-");
+        var oldConfig = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", dir.FullName);
+        var users = ConditioningControlPanel.CoreSettings.Current.UserPresets;
+        var before = users.Count;
+        try
+        {
+            var colliding = ConditioningControlPanel.Models.Preset.GetDefaultPresets()[0];
+            colliding.Name = "Dropped";
+            var file = Path.Combine(dir.FullName, "dropped.preset.json");
+            new PresetFileService().ExportPreset(colliding, file);
+
+            var tab = new PresetsTabView();
+            tab.HandlePresetDrop(file);
+
+            Assert.Equal(before + 1, users.Count);
+            var added = users[^1];
+            Assert.NotEqual(colliding.Id, added.Id);
+            Assert.Contains(tab.FindControl<WrapPanel>("PresetCardsPanel")!.Children.OfType<Border>(),
+                b => (b.Tag as string) == added.Id);
+        }
+        finally
+        {
+            if (users.Count > before) users.RemoveRange(before, users.Count - before);
+            Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", oldConfig);
+            dir.Delete(recursive: true);
+        }
+    });
+
+    [Fact]
     public Task EnhancementsTabDrawsCoreSkillDefinitionCatalogue() => Run(() =>
     {
         var tab = new EnhancementsTabView();

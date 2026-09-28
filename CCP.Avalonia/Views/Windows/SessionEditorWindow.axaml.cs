@@ -1038,6 +1038,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             });
             if (files.Count != 1 || files[0].TryGetLocalPath() is not { } path) return;
 
+            try { ImportSessionFile(path); }
+            catch (Exception ex)
+            {
+                // Same reason as export: an unhandled throw here would close the editor.
+                Log.Error(ex, "session editor: import failed");
+                Warn("title_import_error", Loc.Get("msg_failed_to_import_session"));
+            }
+        }
+
+        private void ImportSessionFile(string path)
+        {
             if (!_fileService.ValidateSessionFile(path, out var error))
             {
                 Warn("title_import_error", Loc.GetF("msg_invalid_session_file", error));
@@ -1081,6 +1092,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Title = Loc.Get("title_export_session"),
                 SuggestedFileName = SessionFileService.GetExportFileName(_session.ToSession()),
+                DefaultExtension = ".session.json",
                 FileTypeChoices = new[]
                 {
                     new FilePickerFileType("Session Files") { Patterns = new[] { "*.session.json" } },
@@ -1088,7 +1100,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             });
             if (file?.TryGetLocalPath() is not { } path) return;
 
-            _fileService.ExportSession(_session.ToSession(), path);
+            try
+            {
+                _fileService.ExportSession(_session.ToSession(), path);
+            }
+            catch (Exception ex)
+            {
+                // No unhandled-exception handler on this head: a write error must not take the edit down.
+                Log.Error(ex, "session editor: export failed");
+                _ = MessageDialog.ShowAsync(this, Loc.Get("title_export_failed"), ex.Message);
+                return;
+            }
             _ = MessageDialog.ShowAsync(this, Loc.Get("title_export_successful"), Loc.GetF("msg_session_exported_to", path));
         }
 

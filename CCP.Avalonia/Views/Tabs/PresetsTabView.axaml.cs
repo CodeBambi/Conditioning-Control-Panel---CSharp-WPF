@@ -58,7 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtSessionDuration.Text = Loc.Get("label_30_minutes");
             TxtSessionXP.Text = Loc.Get("label_50_xp");
             TxtSessionDifficulty.Text = Loc.Get("label_easy_2");
-            SeedPlaceholders();
+            SeedRailRackAndTakeaway();
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -272,7 +272,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // The Takeaway strip remains render furniture until its store moves. The preset rail and
         // the session rack read Core (Preset, AppSettings.UserPresets, Session).
 
-        private void SeedPlaceholders()
+        private void SeedRailRackAndTakeaway()
         {
             RefreshPresetsList();
             SeedRackToolbar();
@@ -399,8 +399,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void ShowDropZoneStatus(string message, bool isError)
         {
             DropZoneStatus.Text = message;
-            DropZoneStatus.Foreground = isError ? Brushes.OrangeRed : Brushes.LightGreen;
+            DropZoneStatus.Foreground = isError
+                ? new SolidColorBrush(Color.FromRgb(255, 100, 100))
+                : this.TryFindResource("PinkBrush", out var pink) ? pink as IBrush : null;
             DropZoneStatus.IsVisible = true;
+            DispatcherTimer.RunOnce(() => DropZoneStatus.IsVisible = false, TimeSpan.FromSeconds(3));
         }
 
         private Border PresetChip(Preset preset)

@@ -42,6 +42,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // own handler consumes the wheel.
             SkillTreeScroller.AddHandler(PointerWheelChangedEvent, OnSkillTreeWheel, RoutingStrategies.Tunnel);
 
+            Repaint();
+        }
+
+        private System.ComponentModel.INotifyPropertyChanged? _settings;
+
+        // WPF repaints from SkillTreeService events; the Core signal is AppSettings.PropertyChanged.
+        // UnlockedSkills only raises on assignment, not on an in-place Add.
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            _settings = CoreSettings.Current;
+            _settings.PropertyChanged += OnSettingsChanged;
+            Repaint();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            if (_settings != null) _settings.PropertyChanged -= OnSettingsChanged;
+            _settings = null;
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        private void OnSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(AppSettings.SkillPoints) or nameof(AppSettings.UnlockedSkills))
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(Repaint);
+        }
+
+        private void Repaint()
+        {
+            SkillTreeCanvas.Children.Clear();
+            SecretSkills.Children.Clear();
             PaintTree();
             PaintSecretRail();
         }
@@ -154,7 +186,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             info.Children.Add(Text(Loc.Get("label_sparkle_points"), Color.FromRgb(0xB0, 0xB0, 0xB0), 10));
             // The live count, as CreateSkillTreeHeader reads it. Spending is what needs
             // SkillTreeService; the balance is a plain setting and reads correctly today.
-            info.Children.Add(Text($"{CoreSettings.Current.SkillPoints}", Color.FromRgb(0xFF, 0x69, 0xB4), 24, bold: true));
+            info.Children.Add(Text(CoreSettings.Current.SkillPoints.ToString("N0"), Color.Parse(CoreMods.AccentColorHex), 24, bold: true));
             points.Children.Add(info);
 
             stack.Children.Add(new Border
