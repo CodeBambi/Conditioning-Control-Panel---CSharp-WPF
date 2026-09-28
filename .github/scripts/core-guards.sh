@@ -40,18 +40,22 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 # ---------------------------------------------------------------------------------------------
-# BASELINE - EMPTY. Nothing is exempt; every pattern above is enforced on every line of CCP.Core.
+# BASELINE - one entry (below). Everything else is enforced on every line of CCP.Core.
 #
 # It held seven WPF pack:// URIs in CompanionDefinition.cs and SeasonRecap.cs. Those are gone: Core
 # now stores a bare file name and the WPF head composes "pack://application:,,,/Resources/{id}",
 # so the entries were deleted here in the same PR, as the ratchet below requires.
 #
-# The mechanism is kept for the next migration wave, unused. Rules if it is ever repopulated: exact
+# The mechanism is in use again (entry below). Rules for any entry: exact
 # "file:line" only - no globs, no directory or pattern exemptions - and the guard FAILS on an entry
 # that stops matching, so a listed line is either fixed-and-deleted or line-shifted-and-corrected.
 # An allowlist that cannot go stale is how it stays a ratchet instead of a graveyard.
 # ---------------------------------------------------------------------------------------------
+# CCP.Core/Models/Quest.cs:336 - QuestDefinition.PackResources. Persisted data, not a load:
+# quest_definitions_cache.json stores ImagePath in pack:// form (quests-core), and Core never
+# resolves it. Goes when the cache format stops carrying head URIs.
 cat > "$WORK/baseline.txt" <<'EOF'
+CCP.Core/Models/Quest.cs:336
 EOF
 : > "$WORK/seen.txt"
 

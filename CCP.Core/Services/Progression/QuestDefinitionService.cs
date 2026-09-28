@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services;
 
@@ -113,14 +114,16 @@ public class QuestDefinitionService : IDisposable
             || key == DateTime.Now.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    public QuestDefinitionService()
+    public QuestDefinitionService() : this(CorePaths.UserData) { }
+
+    /// <summary>Cache root as an argument so tests never touch the real profile.</summary>
+    internal QuestDefinitionService(string appDataPath)
     {
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
+        _httpClient.DefaultRequestHeaders.Add("X-Client-Version", CoreReleaseContent.AppVersion);
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{CoreReleaseContent.AppVersion}");
 
         // Set up cache directories
-        var appDataPath = CorePaths.UserData;
         _cacheDir = appDataPath;
         _imageCacheDir = Path.Combine(appDataPath, "quest-images");
         _cacheFilePath = Path.Combine(_cacheDir, CacheFileName);
@@ -209,12 +212,12 @@ public class QuestDefinitionService : IDisposable
     {
         try
         {
-            App.Logger?.Information("Fetching quest definitions from server...");
+            Log.Information("Fetching quest definitions from server...");
 
             var response = await _httpClient.GetAsync($"{ServerBaseUrl}{QuestDefinitionsEndpoint}");
             if (!response.IsSuccessStatusCode)
             {
-                App.Logger?.Warning("Failed to fetch quest definitions: {StatusCode}", response.StatusCode);
+                Log.Warning("Failed to fetch quest definitions: {StatusCode}", response.StatusCode);
                 return;
             }
 
@@ -223,7 +226,7 @@ public class QuestDefinitionService : IDisposable
 
             if (serverResponse?.Success != true || serverResponse.Quests == null)
             {
-                App.Logger?.Warning("Invalid quest definitions response from server");
+                Log.Warning("Invalid quest definitions response from server");
                 return;
             }
 
@@ -250,14 +253,14 @@ public class QuestDefinitionService : IDisposable
             _cache = newCache;
             SaveCache();
 
-            App.Logger?.Information("Quest definitions updated: v{Version}, {Daily} daily, {Weekly} weekly, {Seasonal} seasonal",
+            Log.Information("Quest definitions updated: v{Version}, {Daily} daily, {Weekly} weekly, {Seasonal} seasonal",
                 newCache.Version, newCache.Daily.Count, newCache.Weekly.Count, newCache.Seasonal.Count);
 
             QuestDefinitionsUpdated?.Invoke();
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Error fetching quest definitions from server");
+            Log.Error(ex, "Error fetching quest definitions from server");
         }
     }
 
@@ -305,7 +308,7 @@ public class QuestDefinitionService : IDisposable
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to parse quest: {Quest}", q.ToString());
+                Log.Warning(ex, "Failed to parse quest: {Quest}", q.ToString());
             }
         }
 
@@ -319,18 +322,28 @@ public class QuestDefinitionService : IDisposable
     {
         return category?.ToLowerInvariant() switch
         {
-            "flash" => ModResourceResolver.ResolveUri("features/flash.png"),
-            "spiral" => ModResourceResolver.ResolveUri("features/spiral_overlay.png"),
-            "bubbles" => ModResourceResolver.ResolveUri("features/Bubble_pop.png"),
-            "pinkfilter" => ModResourceResolver.ResolveUri("features/Pink_filter.png"),
-            "video" => ModResourceResolver.ResolveUri("features/mandatory_videos.png"),
-            "session" => ModResourceResolver.ResolveUri("features/bambi takeover.png"),
-            "lockcard" => ModResourceResolver.ResolveUri("features/Phrase_Lock.png"),
-            "bubblecount" => ModResourceResolver.ResolveUri("features/Bubble_count.png"),
-            "streak" => ModResourceResolver.ResolveUri("achievements/daily_maintenance.png"),
-            _ => ModResourceResolver.ResolveUri("logo.png")
+            "flash" => ResolveUri("features/flash.png"),
+            "spiral" => ResolveUri("features/spiral_overlay.png"),
+            "bubbles" => ResolveUri("features/Bubble_pop.png"),
+            "pinkfilter" => ResolveUri("features/Pink_filter.png"),
+            "video" => ResolveUri("features/mandatory_videos.png"),
+            "session" => ResolveUri("features/bambi takeover.png"),
+            "lockcard" => ResolveUri("features/Phrase_Lock.png"),
+            "bubblecount" => ResolveUri("features/Bubble_count.png"),
+            "streak" => ResolveUri("achievements/daily_maintenance.png"),
+            _ => ResolveUri("logo.png")
         };
     }
+
+    /// <summary>
+    /// What WPF's ModResourceResolver.ResolveUri returned here: the event-skin/mod override as a
+    /// file:// URI (CoreModArt is seeded from that same chain), else the pack:// path every
+    /// QuestDefinition.ImagePath already uses - so cached definitions keep their exact shape.
+    /// </summary>
+    private static string ResolveUri(string resourcePath) =>
+        CoreModArt.OverridePath(resourcePath) is { } file
+            ? new Uri(file, UriKind.Absolute).AbsoluteUri
+            : QuestDefinition.PackResources + resourcePath;
 
     /// <summary>
     /// Download and cache quest images from CDN
@@ -375,11 +388,11 @@ public class QuestDefinitionService : IDisposable
                 await File.WriteAllBytesAsync(localPath, imageBytes);
                 quest.CachedImagePath = localPath;
 
-                App.Logger?.Debug("Cached quest image: {QuestId} -> {Path}", quest.Id, localPath);
+                Log.Debug("Cached quest image: {QuestId} -> {Path}", quest.Id, localPath);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to cache quest image for {QuestId} from {Host}", quest.Id, Logging.UrlLog.Host(quest.ImageUrl));
+                Log.Warning(ex, "Failed to cache quest image for {QuestId} from {Host}", quest.Id, Logging.UrlLog.Host(quest.ImageUrl));
             }
         }
     }
@@ -430,7 +443,7 @@ public class QuestDefinitionService : IDisposable
     /// <summary>
     /// Load cached definitions from disk
     /// </summary>
-    private void LoadCache()
+    internal void LoadCache()
     {
         try
         {
@@ -448,11 +461,11 @@ public class QuestDefinitionService : IDisposable
                 RestoreCachedImagePaths(_cache.Seasonal);
             }
 
-            App.Logger?.Debug("Loaded quest definitions cache: v{Version}", _cache?.Version ?? 0);
+            Log.Debug("Loaded quest definitions cache: v{Version}", _cache?.Version ?? 0);
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning(ex, "Failed to load quest definitions cache");
+            Log.Warning(ex, "Failed to load quest definitions cache");
             _cache = null;
         }
     }
@@ -483,7 +496,7 @@ public class QuestDefinitionService : IDisposable
     /// <summary>
     /// Save current cache to disk
     /// </summary>
-    private void SaveCache()
+    internal void SaveCache()
     {
         try
         {
@@ -494,7 +507,7 @@ public class QuestDefinitionService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning(ex, "Failed to save quest definitions cache");
+            Log.Warning(ex, "Failed to save quest definitions cache");
         }
     }
 

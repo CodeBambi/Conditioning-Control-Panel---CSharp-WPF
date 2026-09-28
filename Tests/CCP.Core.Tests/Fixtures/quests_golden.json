@@ -1,0 +1,63 @@
+{
+  "DailyQuest": {
+    "DefinitionId": "daily_flash_50",
+    "CurrentProgress": 12,
+    "IsCompleted": false,
+    "CompletedAt": null
+  },
+  "DailyQuests": [
+    {
+      "DefinitionId": "daily_flash_50",
+      "CurrentProgress": 12,
+      "IsCompleted": false,
+      "CompletedAt": null
+    },
+    {
+      "DefinitionId": "daily_spiral_10",
+      "CurrentProgress": 10,
+      "IsCompleted": true,
+      "CompletedAt": "2025-03-13T22:15:30+01:00"
+    },
+    {
+      "DefinitionId": "s\u00E9ason_\u30D3",
+      "CurrentProgress": 0,
+      "IsCompleted": false,
+      "CompletedAt": null
+    }
+  ],
+  "WeeklyQuest": {
+    "DefinitionId": "weekly_bubbles_500",
+    "CurrentProgress": 321,
+    "IsCompleted": false,
+    "CompletedAt": null
+  },
+  "DailyRerollsUsed": 1,
+  "WeeklyRerollsUsed": 0,
+  "DailyRerollResetDate": "2025-03-14T00:00:00+01:00",
+  "WeeklyRerollResetDate": null,
+  "DailyQuestGeneratedAt": "2025-03-14T07:03:09.1234567+01:00",
+  "WeeklyQuestGeneratedAt": "2025-03-10T00:00:00+01:00",
+  "DailyQuestsCompletedToday": 1,
+  "DailyCompletionResetDate": "2025-03-14T00:00:00+01:00",
+  "TotalDailyQuestsCompleted": 87,
+  "TotalWeeklyQuestsCompleted": 9,
+  "TotalXPFromQuests": 23450,
+  "DailyQuestCompletionDates": [
+    "2025-03-12T00:00:00+01:00",
+    "2025-03-13T00:00:00+01:00"
+  ],
+  "quest_completion_log": [
+    {
+      "d": "2025-03-12",
+      "q": "daily_flash_50"
+    },
+    {
+      "d": "2025-03-13",
+      "q": "s\u00E9ason_\u30D3"
+    }
+  ],
+  "DailyRolledUnresolved": true,
+  "WeeklyRolledUnresolved": false,
+  "OwnerUnifiedId": "u_\u00F1_42",
+  "LastPremiumSeenUtc": "2025-03-01T18:00:00Z"
+}
