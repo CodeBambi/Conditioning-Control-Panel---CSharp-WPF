@@ -35,6 +35,7 @@ namespace ConditioningControlPanel
         private ILeashTaskRunner? _leashRunner;
         private readonly LeashHoldToCut _leashHold = new();
         private int _leashHoldTicked;
+        private int _leashHoldShown;
         private string? _leashUnplayablePid;
 
         private void InitializeLeash()
@@ -49,6 +50,7 @@ namespace ConditioningControlPanel
                     else
                     {
                         _leashHold.Up();
+                        LeashHoldRing.Dismiss();
                         // Off the leash by any road (a cut, the holder, a block, sign out): nothing
                         // the leash started may stay running or locked.
                         EndLeashTask("leash off");
@@ -299,28 +301,44 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>A key-down of the panic key while leashed: true = a repeat of a held key,
-        /// swallow it. Five seconds of holding asks "Cut the leash?".</summary>
+        /// swallow it. Five seconds of holding asks "Cut the leash?"; the hold shows a 5..1 ring.</summary>
         private bool LeashHoldSwallows(System.Windows.Input.Key key)
         {
             var s = App.Settings?.Current;
             if (s == null || key.ToString() != s.PanicKey) return false;
             var now = DateTime.UtcNow;
             var (repeat, due) = _leashHold.Down(now, LeashSurfaces.IsLeashed);
-            if (!repeat) _leashHoldTicked = 0;
-            if (due) Dispatcher.BeginInvoke(AskToCutFromHold);
-            // The tick only ever rides a swallowed repeat (never the first down, which is the
-            // real panic press) and is posted, so the hook returns at once.
-            else if (repeat && _leashHold.HeldFor(now) is { } held && LeashHoldTick.Due(held, _leashHoldTicked) is int sec)
+            if (!repeat) { _leashHoldTicked = 0; _leashHoldShown = 0; }
+            if (due)
             {
-                _leashHoldTicked = sec;
-                Dispatcher.BeginInvoke(LeashFx.Tick);
+                Dispatcher.BeginInvoke(LeashHoldRing.Dismiss);
+                Dispatcher.BeginInvoke(AskToCutFromHold);
+            }
+            // The tick and the ring only ever ride a swallowed repeat (never the first down, which
+            // is the real panic press) and are posted, so the hook returns at once.
+            else if (repeat && _leashHold.HeldFor(now) is { } held)
+            {
+                var left = LeashHoldTick.SecondsLeft(held);
+                if (left != _leashHoldShown)
+                {
+                    _leashHoldShown = left;
+                    Dispatcher.BeginInvoke(() => LeashHoldRing.ShowHeld(held));
+                }
+                if (LeashHoldTick.Due(held, _leashHoldTicked) is int sec)
+                {
+                    _leashHoldTicked = sec;
+                    Dispatcher.BeginInvoke(LeashFx.Tick);
+                }
             }
             return repeat;
         }
 
         private void OnLeashKeyReleased(System.Windows.Input.Key key)
         {
-            if (key.ToString() == App.Settings?.Current?.PanicKey) _leashHold.Up();
+            if (key.ToString() != App.Settings?.Current?.PanicKey) return;
+            _leashHold.Up();
+            _leashHoldShown = 0;
+            Dispatcher.BeginInvoke(LeashHoldRing.Dismiss);
         }
 
         private void AskToCutFromHold()

@@ -26,14 +26,17 @@ public interface ILeashService
 
     // Holder side.
     Task<LeashSendResult> OfferAsync(string friendId);
-    Task ReleaseAsync(string leashedId);
+    /// <summary>The holder lets go. True when the server took it.</summary>
+    Task<bool> ReleaseAsync(string leashedId);
     Task<LeashSendResult> AssignAsync(string leashedId, AssignKind kind, int size, LeashWatch? watch = null);
     Task<LeashSendResult> PunishAsync(string leashedId, PunishKind kind, int size, LeashWatch? watch = null);
     Task<LeashSendResult> RewardAsync(string leashedId, RewardKind kind, string? stickerOrPoke = null, int? size = null);
     Task<LeashSendResult> TugAsync(string leashedId);
 
     // Leashed side.
-    Task<bool> AnswerAsync(string holderId, bool accept, LeashIntensity intensity);
+    /// <summary>Only <see cref="LeashAnswerResult.Done"/> is a success; the ask card keeps itself
+    /// open and says why on anything else.</summary>
+    Task<LeashAnswerResult> AnswerAsync(string holderId, bool accept, LeashIntensity intensity);
     /// <summary>Never refused, never priced, never gated. Works offline-first: the local state
     /// drops the leash at once and the call is retried until the server has it.</summary>
     Task CutAsync();

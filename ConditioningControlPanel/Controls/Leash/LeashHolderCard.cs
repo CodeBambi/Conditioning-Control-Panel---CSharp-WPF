@@ -187,13 +187,33 @@ public sealed class LeashHolderCard : Border
         replay.Click += (_, _) => ReplaySnapRequested?.Invoke(_h);
         m.Items.Add(replay);
         var release = new MenuItem { Header = Loc.GetF("leash_menu_release", _h.Who.Name) };
-        release.Click += async (_, _) =>
-        {
-            try { if (_svc() is { } s) await s.ReleaseAsync(_h.Who.Id); } catch { }
-            LeashFx.Cut();
-        };
+        // Letting go asks first (2026-09-28): it ends the leash for both and sets a 24 h cooldown.
+        release.Click += (_, _) => LeashCutConfirmWindow.Confirm(
+            Loc.GetF("leash_release_confirm_title", _h.Who.Name),
+            Loc.GetF("leash_release_confirm_body", _h.Who.Name),
+            Loc.Get("leash_release_confirm_yes"),
+            Loc.Get("leash_cut_confirm_no"),
+            "leash-release-confirm",
+            () => _ = ReleaseAsync());
         m.Items.Add(release);
         return m;
+    }
+
+    /// <summary>Lets go. The cut sound and the line play only when the server took it.</summary>
+    internal async Task<bool> ReleaseAsync()
+    {
+        bool ok = false;
+        try { if (_svc() is { } s) ok = await s.ReleaseAsync(_h.Who.Id); }
+        catch (Exception ex) { App.Logger?.Debug("[Leash] release failed: {E}", ex.Message); }
+        if (ok) LeashFx.Cut();
+        else LeashFx.Denied();
+        try
+        {
+            App.Notifications?.Show(Loc.GetF(ok ? "leash_release_done" : "leash_release_failed", _h.Who.Name),
+                ok ? Services.NotificationType.Info : Services.NotificationType.Warning);
+        }
+        catch { }
+        return ok;
     }
 
     private FrameworkElement Figures()

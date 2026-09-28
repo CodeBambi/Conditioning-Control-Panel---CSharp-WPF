@@ -462,6 +462,10 @@ public class LeashTaskRunnerTests
         var w = new LeashWatch("ht", "9", null);
         Assert.False(r.Runner.StartAssignmentWatch(new Assignment("a1", AssignKind.Minutes, 30, null, "d", AssignStatus.Open, T0)));
         Assert.False(r.Runner.StartAssignmentWatch(new Assignment("a2", AssignKind.Video, 1, w, "d", AssignStatus.Done, T0)));
+        Assert.True(LeashAssignRule.OfferWatch(new Assignment("a3", AssignKind.Video, 1, w, "d", AssignStatus.Open, T0)));
+        Assert.False(LeashAssignRule.OfferWatch(new Assignment("a4", AssignKind.Video, 1, null, "d", AssignStatus.Open, T0)));
+        Assert.False(LeashAssignRule.OfferWatch(new Assignment("a5", AssignKind.Video, 1, w, "d", AssignStatus.Missed, T0)));
+        Assert.False(LeashAssignRule.OfferWatch(null));
     }
 
     [Fact]

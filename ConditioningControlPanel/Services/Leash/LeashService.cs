@@ -204,10 +204,12 @@ public sealed class LeashService : ILeashService
     public Task<LeashSendResult> OfferAsync(string friendId) =>
         SendAsync("offer", new JObject { ["to"] = friendId });
 
-    public async Task ReleaseAsync(string leashedId)
+    public async Task<bool> ReleaseAsync(string leashedId)
     {
         var o = await CallAsync("release", new JObject { ["who"] = leashedId });
-        if (o != null) _kick();
+        if (o == null || o.Value<bool?>("ok") != true) return false;
+        _kick();
+        return true;
     }
 
     public Task<LeashSendResult> AssignAsync(string leashedId, AssignKind kind, int size, LeashWatch? watch = null)
@@ -245,21 +247,41 @@ public sealed class LeashService : ILeashService
 
     // ---- leashed side ----
 
-    public async Task<bool> AnswerAsync(string holderId, bool accept, LeashIntensity intensity)
+    public async Task<LeashAnswerResult> AnswerAsync(string holderId, bool accept, LeashIntensity intensity)
     {
         var body = new JObject { ["from"] = holderId, ["accept"] = accept };
         if (accept) body["intensity"] = LeashParse.IntensityToWire(intensity);
         var o = await CallAsync("answer", body);
-        if (o == null || o.Value<bool?>("ok") != true) return false;
-        _kick();
-        return true;
+        var result = AnswerFromWire(o, accept);
+        if (result == LeashAnswerResult.Done || result == LeashAnswerResult.Gone) _kick();
+        return result;
+    }
+
+    /// <summary>The answer reply as the ask card needs it. <c>ok:true</c> alone is not a success:
+    /// the server answers an expired or withdrawn offer with <c>{ ok:true, status:"gone" }</c>.</summary>
+    internal static LeashAnswerResult AnswerFromWire(JObject? o, bool accept)
+    {
+        if (o == null) return LeashAnswerResult.Failed;
+        var ok = o.Value<bool?>("ok") == true;
+        var word = LeashParse.Str(ok ? o["status"] : o["reason"]);
+        if (!ok) return word == "off" ? LeashAnswerResult.Off : word == "gone" ? LeashAnswerResult.Gone : LeashAnswerResult.Failed;
+        return word switch
+        {
+            "on" when accept => LeashAnswerResult.Done,
+            "declined" when !accept => LeashAnswerResult.Done,
+            "gone" => LeashAnswerResult.Gone,
+            _ => LeashAnswerResult.Failed,
+        };
     }
 
     public async Task<LeashSkipResult> SkipUnplayableAsync(string pid)
     {
         if (string.IsNullOrEmpty(pid)) return LeashSkipResult.Marked;
         var o = await CallAsync("punish_skip", new JObject { ["pid"] = pid, ["reason"] = "unplayable" });
-        if (o != null && o.Value<bool?>("ok") == true)
+        // Every worded status answers ok:true (cap, refused, not_found too), so read the status: only
+        // `skipped` dropped it. `not_found` means it is already gone, which the next poll confirms.
+        var skipStatus = o?.Value<bool?>("ok") == true ? LeashParse.Str(o["status"]) : null;
+        if (skipStatus is "skipped" or "not_found")
         {
             // The server dropped it and told the holder; hide it until the next poll agrees.
             _unplayableUntil.Remove(pid);
@@ -271,7 +293,7 @@ public sealed class LeashService : ILeashService
         }
         _unplayableUntil[pid] = _now() + UnplayableHold;
         App.Logger?.Information("[Leash] punishment {Pid} will not play: kept pending, off the gate for {H} h ({Reason})",
-            pid, UnplayableHold.TotalHours, o == null ? "no reply" : LeashParse.Str(o["reason"]) ?? "?");
+            pid, UnplayableHold.TotalHours, o == null ? "no reply" : skipStatus ?? LeashParse.Str(o["reason"]) ?? "?");
         return LeashSkipResult.Marked;
     }
 
