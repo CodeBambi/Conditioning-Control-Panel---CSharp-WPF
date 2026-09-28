@@ -326,13 +326,17 @@
     </Window.Resources>
 
     <Grid x:Name="RootGrid">
-    <!-- Viewbox scales all content proportionally with window size -->
-    <Viewbox Stretch="Fill">
+    <!-- Viewbox scales all content with window size. WPF is always Fill; here Fill holds only
+         while the window is within 15% of the 1585:901 canvas aspect (every 16:10-16:9
+         landscape screen), and Uniform - centred, top-aligned, DarkerBgBrush bands - outside it,
+         so a portrait maximize no longer stretches the art ~2.2x. Chosen in code:
+         MainShellWindow.WindowChrome.cs UpdateShellStretch; docs/avalonia-decisions.md. -->
+    <Viewbox x:Name="ShellViewbox" Stretch="Fill" HorizontalAlignment="Center" VerticalAlignment="Top">
         <!-- Design canvas at reference size. Phase 1 grew it 1489 -> 1679 by ADDING a
              190px nav-rail column on the left; column 1 is still exactly 1489 wide, so
              every tab layout keeps the width it was authored against (fx-inventory §12.8:
              they clip silently otherwise). The Window's default/min Width grew by the same
-             1.1276 factor so the Viewbox's Stretch="Fill" keeps the old aspect.
+             1.1276 factor so the Viewbox keeps the old aspect (and stays in its Fill band).
 
              2026-08-11: column 0 now reserves only the COLLAPSED rail (56px), so the canvas
              is 1545 and the window shed the 132px the labels used to occupy. Column 1 is
@@ -340,7 +344,7 @@
              labels, not to re-author every tab. The expanded rail overlays this column
              instead of widening it; see MainWindow.NavRail.cs for why that is mandatory
              rather than merely convenient. Window Width/MinWidth moved by the same 1545/1679
-             factor so Stretch="Fill" keeps the aspect it was tuned at (1656 -> 1524,
+             factor so the window keeps the aspect it was tuned at (1656 -> 1524,
              1198 -> 1102) - change one of these four numbers and you must change all four.
 
              2026-08-11 (later, owner: "hovering the menu opens it correctly, but it covers
@@ -356,7 +360,7 @@
              authored against and they clip silently with no scrollbar if it moves
              (fx-inventory §12.8). Same rule Phase 1 followed. And because the canvas grew,
              the two Window widths at the top of this file move by the same 1585/1679 factor
-             (1656 -> 1563, 1198 -> 1131) to hold the aspect Stretch="Fill" was tuned at. -->
+             (1656 -> 1563, 1198 -> 1131) to hold the aspect the Viewbox's Fill band is centred on. -->
         <Grid x:Name="DesignCanvas" Width="1585" Height="901">
             <Grid.ColumnDefinitions>
                 <!-- 56 rail + 40 gutter. The rail does NOT stretch into the gutter. -->

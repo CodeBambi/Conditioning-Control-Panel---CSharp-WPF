@@ -252,6 +252,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
             ReadEnvironment();
         }
 
+        /// <summary>True while the frame clock runs. Tests read it; nothing else needs to.</summary>
+        internal bool IsTicking => _timer.IsEnabled;
+
         /// <summary>The layers this canvas was last asked to run.</summary>
         public AmbientFxLayers Layers => _config.Layers;
 
@@ -633,8 +636,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         private void HookWindow(Window? window)
         {
-            if (ReferenceEquals(_window, window)) return;
+            if (window != null && ReferenceEquals(_window, window)) return;
             UnhookWindow();
+            _windowHooks.Add(EffectiveVisibility.Watch(this, Evaluate));
             _window = window;
             if (_window == null) return;
             _windowHooks.Add(_window.GetObservable(WindowBase.IsActiveProperty).Subscribe(new Ping(this)));
@@ -682,7 +686,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             bool oneShotLive = (_burst != null && _burstN > 0) || _tokN > 0;
             if (_paused || _faults >= FaultLimit) return false;
             if (!_running && !oneShotLive) return false;
-            if (!IsLoaded || !IsVisible) return false;
+            if (!IsLoaded || !IsEffectivelyVisible) return false;
             if (!oneShotLive)
             {
                 if (_targetFps <= 0) return false;

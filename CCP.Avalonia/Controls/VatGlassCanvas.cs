@@ -395,11 +395,16 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         // ============================== lifecycle ==============================
 
+        // A hidden ANCESTOR (the tab) parks and resumes the clock; see EffectiveVisibility.
+        private IDisposable? _visibilityWatch;
+
         private void OnLoaded(object? sender, RoutedEventArgs e)
         {
             try
             {
                 HookWindow(TopLevel.GetTopLevel(this) as Window);
+                _visibilityWatch?.Dispose();
+                _visibilityWatch = EffectiveVisibility.Watch(this, Evaluate);
                 if (!_modHooked) { CoreMods.ModChanged += OnModChanged; _modHooked = true; }
                 ReadPalette();
                 Evaluate();
@@ -413,6 +418,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
             {
                 StopClock();
                 UnhookWindow();
+                _visibilityWatch?.Dispose();
+                _visibilityWatch = null;
                 if (_modHooked) { CoreMods.ModChanged -= OnModChanged; _modHooked = false; }
             }
             catch (Exception ex) { Log.Debug("VatGlassCanvas.OnUnloaded: {E}", ex.Message); }
@@ -510,11 +517,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// would leave IsVisible true and the clock stepping motes at 30fps behind a hidden
         /// tab.</para>
         /// </summary>
-        // ponytail: Avalonia 12 keeps IsEffectivelyVisibleChanged internal, so there is no
-        // ancestor-visibility event to gate on and OnPropertyChanged sees only the LOCAL
-        // IsVisible. The clock therefore stops one tick (33ms) after an ancestor hides, on
-        // Tick's own ShouldRun check, and restarts on Loaded or the next reading rather than
-        // the instant the ancestor comes back. Subscribe to the event if Avalonia makes it public.
+        /// <summary>True while the frame clock runs. Test seam.</summary>
+        internal bool IsTicking => _timer.IsEnabled;
+
         public bool IsPresenting => IsLoaded && IsEffectivelyVisible && WindowIsPresenting(_window);
 
         /// <summary>

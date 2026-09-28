@@ -615,3 +615,17 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: TubeDockMathTests, AvatarTubeWindowingTests (fail-proofed); live KWin/XWayland: docks at 767,746 / follows to
   967,946, detach topmost, restore after restart, input region ends at the shell edge. A real WM drag and a real click
   through the margin weren't possible (Keincheck can't drag; the screen was locked). Review: FIX -> r1 applied.
+
+## avalonia-port/play-spiral-bleed: +218 (user-reported: Play's spiral kept showing on other pages)
+- Root cause: Avalonia's IsVisible covers only the control itself, so Play's tier rims (drawn in the window's adorner layer),
+  ember canvas and badges never saw their tab hide; the rims bled over other tabs and the loops kept burning CPU. New
+  EffectiveVisibility.Watch parks/resumes them with their tab; the same fix for Vat glass, the takeover orb and the spiral glyph.
+- Evidence: PlaySpiralBleedTests (fail-proofed); live Play -> Home clean x3 (before/after screenshots). Review: ACCEPT.
+
+## avalonia-port/shell-resize-maximize: +251 (user-reported: maximized looks bad; can't resize by the sides)
+- The frameless shell gets 5 px edges and 12 px corners (WPF's resize border) that hand the drag to the window manager
+  with the right cursor, off while maximized. Min size clamps to the screen's work area (this screen is narrower than it).
+- Viewbox: Fill like WPF while the window's shape is within ±15% of the 1585:901 canvas, otherwise Uniform, top-aligned
+  (oracle-deep; decision logged). The portrait maximize that stretched everything 2.2x now keeps the art's shape.
+- Evidence: ShellResizeMaximizeTests (15, fail-proofed); live maximize/restore screenshots. Not proven live: a real window-manager
+  edge drag and the hover cursor. Review: ACCEPT + the oracle's policy.
