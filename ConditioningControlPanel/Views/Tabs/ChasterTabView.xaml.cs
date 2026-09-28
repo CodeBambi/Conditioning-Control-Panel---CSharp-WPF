@@ -1141,8 +1141,18 @@ namespace ConditioningControlPanel.Views.Tabs
                     row.IsChecked = on.Contains(id);
                     PaintRowLit(id, on.Contains(id));
                 }
+                ChkFlashDodge.IsChecked = App.Settings?.Current?.ChasterFlashDodge == true;
             }
             finally { _loading = false; }
+        }
+
+        /// <summary>Red flashes, with a 4 s ring to dodge them, or no red flashes at all (the
+        /// default). Sits under the costs board, beside Natasha's row.</summary>
+        private void ChkFlashDodge_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading || App.Settings?.Current is not { } settings) return;
+            settings.ChasterFlashDodge = ChkFlashDodge.IsChecked == true;
+            App.Settings?.Save();
         }
 
         private IEnumerable<ToggleButton> LitRows() =>

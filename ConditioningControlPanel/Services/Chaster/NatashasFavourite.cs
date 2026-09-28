@@ -3,9 +3,10 @@ using System;
 namespace ConditioningControlPanel.Services.Chaster;
 
 /// <summary>
-/// Natasha's favourite: about one ambient bubble in ten and one flash in ten wears a faint red.
-/// Pop that bubble yourself, or see that flash, and 5:00 goes on the tab. Hold the bubble
-/// instead and it is 1:00 off (see "pop, hold, let go" below) (owner, 2026-09-26: it is the
+/// Natasha's favourite: about one ambient bubble in ten (and, with the dodge setting on, one
+/// flash in ten) wears a faint red. Pop that bubble yourself, or let that flash's ring run out,
+/// and 5:00 goes on the tab. Hold the bubble instead and it is 1:00 off (see "pop, hold, let go"
+/// and "the flash dodge" below) (owner, 2026-09-26: it is the
 /// one price that meets everyday use, so it should sting, and the red should hide better). The cue is meant to mix in
 /// with the others (a thin red halo, and every couple of seconds a short red blink across the
 /// picture), visible to someone who knows, easy to miss for someone who does not.
@@ -128,6 +129,35 @@ public static class NatashasFavourite
         BubbleWashBase + (animate ? WashAlphaAt(aliveSec) : 0);
 
     public static double WashAlphaAt(double aliveSec) => WashPeak * BlinkAt(aliveSec);
+
+    // ============================== the flash dodge ==============================
+    // A red flash used to book +5:00 the moment it showed: nothing to do, nothing to learn. Now it
+    // is a setting (AppSettings.ChasterFlashDodge, off by default: off means no red flashes at
+    // all). On, a red flash shows a 4 s ring; click it or fling it away before the ring empties
+    // and nothing books, let the ring empty and it is +5:00.
+
+    /// <summary>How long the ring gives the player.</summary>
+    public const int DodgeMs = 4000;
+
+    /// <summary>A red flash is only dealt to someone who touched the mouse or keyboard within
+    /// this many seconds: a player who walked away cannot dodge, so they are never dealt one.</summary>
+    public const int DodgeIdleSec = 60;
+
+    /// <summary>A red flash stays up at least this long, so a short flash duration can never
+    /// fade it out from under the ring (that would be a free dodge nobody made).</summary>
+    public const int DodgeMinLifetimeMs = DodgeMs + 600;
+
+    /// <summary>Whether a flash may be dealt red at all (the roll itself still decides).</summary>
+    public static bool FlashMayRoll(bool dodgeOn, int idleSeconds) =>
+        dodgeOn && idleSeconds >= 0 && idleSeconds < DodgeIdleSec;
+
+    /// <summary>1..0, how much ring is left <paramref name="elapsedMs"/> after the flash showed.</summary>
+    public static double DodgeLeft(double elapsedMs) =>
+        double.IsNaN(elapsedMs) ? 1 : 1 - Math.Clamp(elapsedMs / DodgeMs, 0, 1);
+
+    /// <summary>At the ring's end: book +5:00 only if the flash is still up and no hand or stare
+    /// dismissed or flung it. A flash the app cleared (panic, stop) is not up, so it books nothing.</summary>
+    public static bool DodgeBooks(bool stillUp, bool dodged) => stillUp && !dodged;
 
     private static double Pulse(double t)
     {
