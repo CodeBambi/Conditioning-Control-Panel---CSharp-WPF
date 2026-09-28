@@ -24,7 +24,7 @@ public sealed class LockCardVoiceTests
     private const string Spoken = "one zero zero zero one";   // what the fixture says
 
     [Fact]
-    public Task SpeakingThePhraseCompletesTheCard() => Run(Wav(), Spoken, async card =>
+    public Task SpeakingThePhraseCompletesTheCard() => Run(Wav(), Spoken, async (card, _) =>
     {
         Snap(card, "voice-listening");
         await Until(() => card.IsCompleted, 30);
@@ -32,7 +32,7 @@ public sealed class LockCardVoiceTests
     });
 
     [Fact]
-    public Task AWrongPhraseKeepsTheCardOpen() => Run(Wav(), "hello my darling", async card =>
+    public Task AWrongPhraseKeepsTheCardOpen() => Run(Wav(), "hello my darling", async (card, _) =>
     {
         await Until(() => card.VoiceState.StartsWith("✗"), 30);
         Snap(card, "voice-again");
@@ -41,14 +41,52 @@ public sealed class LockCardVoiceTests
     });
 
     [Fact]
-    public Task SixUnavailableAttemptsFallBackToTyping() => Run(Array.Empty<byte>(), Spoken, async card =>
+    public Task SixUnavailableAttemptsFallBackToTyping() => Run(Array.Empty<byte>(), Spoken, async (card, _) =>
     {
         await Until(() => !card.VoiceMode, 15);
         Snap(card, "voice-fallback-typing");
         Assert.False(card.IsCompleted);
     }, holdMic: true);
 
-    private static Task Run(byte[] pcm, string phrase, Func<LockCardWindow, Task> body, bool holdMic = false) =>
+    /// <summary>Closing mid-listen (panic) cuts the open mic now, not when its 10 s window ends;
+    /// Run's tail checks every Start was stopped.</summary>
+    [Fact]
+    public Task ClosingMidListenClosesTheMic() => Run(Array.Empty<byte>(), Spoken,
+        (card, mic) => Until(() => mic.Starts > 0, 10));
+
+    /// <summary>No consent: a voice card is a typing card and the mic is never opened.</summary>
+    [Fact]
+    public Task WithoutConsentTheMicNeverOpens() => Run(Wav(), Spoken, async (card, mic) =>
+    {
+        await Task.Delay(1000);
+        Assert.Equal(0, mic.Starts);
+    }, consent: false);
+
+    /// <summary>WPF's "not installed yet" hint, naming the Linux folder the model goes in.</summary>
+    [Fact]
+    public void NoModelHintNamesTheLinuxFolder()
+    {
+        try
+        {
+            CoreSpeech.HasCaptureDeviceProvider = () => true;
+            CoreSpeech.IsAvailableProvider = () => false;
+            CoreSpeech.ModelStatusProvider = () => CoreSpeechModelStatus.NoModelFound;
+            var hint = ConditioningControlPanel.Avalonia.Views.Features.LockCardFeatureControl.VoiceHint(true);
+            Assert.Contains("not installed yet", hint);
+            Assert.Contains(Path.Combine(CorePaths.UserData, "Models", "vosk"), hint);
+        }
+        finally { ResetSpeech(); }
+    }
+
+    private static void ResetSpeech()
+    {
+        CoreSpeech.IsAvailableProvider = null;
+        CoreSpeech.HasCaptureDeviceProvider = null;
+        CoreSpeech.ModelStatusProvider = null;
+        CoreSpeech.EnumerateInputDevicesProvider = null;
+    }
+
+    private static Task Run(byte[] pcm, string phrase, Func<LockCardWindow, WavMicSource, Task> body, bool holdMic = false, bool consent = true) =>
         AvaloniaTestDispatcher.RunAsync(async () =>
         {
             if (Application.Current is null)
@@ -57,29 +95,30 @@ public sealed class LockCardVoiceTests
                     .SetupWithoutStarting();
             var mic = new WavMicSource(pcm);
             using var engine = new SpeechEngine(mic, new[] { Model() });
-            var consent = CoreSettings.Current.MicConsentGiven;
+            var savedConsent = CoreSettings.Current.MicConsentGiven;
             using var hold = new CancellationTokenSource();
             try
             {
                 PulseMicSource.Use(engine, mic);
-                CoreSettings.Current.MicConsentGiven = true;
+                CoreSettings.Current.MicConsentGiven = consent;
                 // Another owner holding the mic: every card listen comes back Unavailable.
                 if (holdMic) _ = engine.RecognizePhraseAsync(Spoken, new RecognizeOptions { Timeout = TimeSpan.FromSeconds(60) }, hold.Token);
                 LockCardWindow.ShowOnAllMonitors(phrase, 1, strictMode: false, isTest: true, voiceMode: true);
                 Dispatcher.UIThread.RunJobs();
                 var card = LockCardWindow.Primary!;
-                Assert.True(card.VoiceMode, "voice was requested with engine + consent but the card is typing");
-                await body(card);
+                Assert.Equal(consent, card.VoiceMode);
+                await body(card, mic);
+                // Privacy: once every card is gone, no capture session and no open mic remain.
+                hold.Cancel();
+                LockCardWindow.ForceCloseAll();
+                await Until(() => mic.Starts == mic.Stops && !engine.IsListening, 5);
             }
             finally
             {
                 hold.Cancel();
                 LockCardWindow.ForceCloseAll();
-                CoreSettings.Current.MicConsentGiven = consent;
-                CoreSpeech.IsAvailableProvider = null;
-                CoreSpeech.HasCaptureDeviceProvider = null;
-                CoreSpeech.ModelStatusProvider = null;
-                CoreSpeech.EnumerateInputDevicesProvider = null;
+                CoreSettings.Current.MicConsentGiven = savedConsent;
+                ResetSpeech();
             }
         });
 
@@ -132,6 +171,7 @@ public sealed class LockCardVoiceTests
 
         public IDisposable Start(Action<byte[], int> onPcm)
         {
+            Interlocked.Increment(ref Starts);
             var cts = new CancellationTokenSource();
             _ = Task.Run(async () =>
             {
@@ -144,7 +184,20 @@ public sealed class LockCardVoiceTests
                     try { await Task.Delay(10, cts.Token); } catch (OperationCanceledException) { }
                 }
             });
-            return cts;
+            return new Handle(cts, this);
+        }
+
+        public int Starts, Stops;
+
+        private sealed class Handle(CancellationTokenSource cts, WavMicSource mic) : IDisposable
+        {
+            private int _done;
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _done, 1) != 0) return;
+                cts.Cancel();
+                Interlocked.Increment(ref mic.Stops);
+            }
         }
     }
 }

@@ -213,25 +213,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         }
 
         /// <summary>Refresh the grey hint under the voice toggle to reflect mic availability.</summary>
-        private void UpdateVoiceHint()
+        private void UpdateVoiceHint() => TxtVoiceHint.Text = VoiceHint(ChkVoiceMode.IsChecked ?? false);
+
+        /// <summary>WPF's four hints (LockCardFeatureControl.xaml.cs:269-285) from CoreSpeech. The two
+        /// model hints name the Linux folder: no model ships on this head, and Resources/Models/vosk
+        /// sits inside a read-only install.</summary>
+        internal static string VoiceHint(bool on)
         {
-            var on = ChkVoiceMode.IsChecked ?? false;
             if (!on)
-            {
-                TxtVoiceHint.Text = "Say the phrase out loud instead of typing it (offline mic). Falls back to typing if no mic.";
-                return;
-            }
-            // The same four hints WPF picks, now from CoreSpeech rather than App.Speech. With no
-            // speech service seeded (this head) HasCaptureDevice is false, so it lands on the
-            // second branch - which is the honest answer, not a placeholder.
+                return "Say the phrase out loud instead of typing it (offline mic). Falls back to typing if no mic.";
+            var folder = System.IO.Path.Combine(CorePaths.UserData, "Models", "vosk");
             if (CoreSpeech.IsAvailable)
-                TxtVoiceHint.Text = "On — speak the phrase to dismiss the card. Typing stays available if the mic can't hear you.";
-            else if (!CoreSpeech.HasCaptureDevice)
-                TxtVoiceHint.Text = "No microphone detected — lock cards will use typing until one is connected.";
-            else if (CoreSpeech.ModelStatus == CoreSpeechModelStatus.LoadFailed)
-                TxtVoiceHint.Text = "Speech model found but it would not load — remove any extra model you added under Resources\\Models\\vosk, then restart.";
-            else
-                TxtVoiceHint.Text = "Speech model not installed yet — lock cards will use typing until it is.";
+                return "On — speak the phrase to dismiss the card. Typing stays available if the mic can't hear you.";
+            if (!CoreSpeech.HasCaptureDevice)
+                return "No microphone detected — lock cards will use typing until one is connected.";
+            if (CoreSpeech.ModelStatus == CoreSpeechModelStatus.LoadFailed)
+                return $"Speech model found but it would not load — remove any extra model you added under {folder}, then restart.";
+            return $"Speech model not installed yet — lock cards will use typing until it is. Unzip vosk-model-small-en-us-0.15 into {folder}";
         }
 
         private async void BtnManagePhrases_Click(object? sender, RoutedEventArgs e)
