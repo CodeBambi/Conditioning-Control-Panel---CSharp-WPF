@@ -727,13 +727,7 @@ namespace ConditioningControlPanel.Services
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/heartbeat");
                     AddAuthHeader(v2Request);
                     v2Request.Content = new StringContent(
-                        JsonConvert.SerializeObject(new
-                        {
-                            unified_id = unifiedId,
-                            is_active = App.ActivityTracker?.IsIdle != true,
-                            in_session = App.IsSessionRunning,
-                            app_version = UpdateService.AppVersion
-                        }),
+                        SyncBody.Heartbeat(unifiedId, App.ActivityTracker?.IsIdle != true, App.IsSessionRunning, UpdateService.AppVersion),
                         Encoding.UTF8, "application/json");
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
@@ -1616,13 +1610,14 @@ namespace ConditioningControlPanel.Services
                     PrizeFeed.NoteAccount(unifiedId);
                     raiseSource = "V2 sync";
                     var questProgress = App.Quests?.Progress;
-                    var v2SyncData = new
+                    var v2SyncData = new SyncBody
                     {
-                        unified_id = unifiedId,
-                        xp = (int)totalXp,
-                        level = settings.PlayerLevel,
-                        achievements = achievementProgress?.UnlockedAchievements?.ToList() ?? new List<string>(),
-                        stats = new Dictionary<string, object>
+                        Known = SyncBody.Field.All,
+                        UnifiedId = unifiedId,
+                        Xp = (int)totalXp,
+                        Level = settings.PlayerLevel,
+                        Achievements = achievementProgress?.UnlockedAchievements?.ToList() ?? new List<string>(),
+                        Stats = new Dictionary<string, object>
                         {
                             ["completed_sessions"] = achievementProgress?.CompletedSessions?.Count ?? 0,
                             ["longest_session_minutes"] = achievementProgress?.LongestSessionMinutes ?? 0,
@@ -1662,44 +1657,44 @@ namespace ConditioningControlPanel.Services
                             ["daily_quests_completed_today"] = questProgress?.GetDailyQuestsCompletedToday() ?? 0,
                             ["daily_completion_reset_date"] = questProgress?.DailyCompletionResetDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? ""
                         },
-                        unlocked_skills = settings.UnlockedSkills?.ToList() ?? new List<string>(),
-                        skill_points = settings.SkillPoints,
-                        total_conditioning_minutes = settings.TotalConditioningMinutes,
-                        companion_progress = settings.CompanionProgressData,
-                        allow_discord_dm = settings.AllowDiscordDm,
-                        show_online_status = settings.ShowOnlineStatus,
-                        share_profile_picture = settings.ShareProfilePicture,
+                        UnlockedSkills = settings.UnlockedSkills?.ToList() ?? new List<string>(),
+                        SkillPoints = settings.SkillPoints,
+                        TotalConditioningMinutes = settings.TotalConditioningMinutes,
+                        CompanionProgress = settings.CompanionProgressData,
+                        AllowDiscordDm = settings.AllowDiscordDm,
+                        ShowOnlineStatus = settings.ShowOnlineStatus,
+                        ShareProfilePicture = settings.ShareProfilePicture,
                         // PUBLIC web profile card (app.cclabs.app/u/<slug>) avatar consent. A
                         // separate, explicit opt-in: share_profile_picture above governs only
                         // signed-in surfaces, and neither it nor the goon flags below imply
                         // "anyone with the link". Default false, so an old client that never
                         // sends this reads as no-consent server side.
-                        public_share_avatar = settings.PublicShareRealAvatar,
+                        PublicShareAvatar = settings.PublicShareRealAvatar,
                         // Goon Game consent flags (GOON_DISCORD_CONTRACT §2). Sharer-only;
                         // the server snapshots these into the room card at invite/join and
                         // drops the cached avatar bytes when a flag is revoked.
                         // GoonRichPresence is deliberately NOT sent — local-only.
-                        goon_share_avatar = settings.GoonShareAvatar,
-                        goon_share_dm = settings.GoonShareDiscordDm,
+                        GoonShareAvatar = settings.GoonShareAvatar,
+                        GoonShareDm = settings.GoonShareDiscordDm,
                         // Trainer Card customization (Profile redesign Phase 2). Sanitized on the
                         // way out so a hand-edited settings.json cannot push ids nothing renders,
                         // and so the server's own validation has less to reject. NULL while the
                         // local loadout is empty and unconfirmed - see BuildCosmeticsPayload, an
                         // all-empty object means "unequip everything" to the server.
-                        cosmetics = BuildCosmeticsPayload(settings),
+                        Cosmetics = BuildCosmeticsPayload(settings),
                         // Web XP claim ack: the id of the claim this client last APPLIED. Sent on
                         // every sync, not just the one after a claim - the server settles the pending
                         // bucket when it sees its own id come back, and ignores stale/unknown ones.
                         // Null until the first claim ever lands, which is a perfectly good "nothing
                         // applied yet" to the server.
-                        web_xp_claim_ack = settings.LastWebXpClaimId,
+                        WebXpClaimAck = settings.LastWebXpClaimId,
                         // One Descent (PLAN.md Phase A): best on-disk evidence of this install's
                         // age, stamped once at startup (App.EnsureInstallDateRecorded). The server
                         // stores it once as legacy_install_date and silently drops anything it
                         // cannot parse, so a null here — every sync before the field was ever
                         // recorded — is a no-op, not an error. Fallback data for the Year One
                         // anchor only; nothing reads it back.
-                        install_date = string.IsNullOrWhiteSpace(settings.InstallDate) ? null : settings.InstallDate,
+                        InstallDate = string.IsNullOrWhiteSpace(settings.InstallDate) ? null : settings.InstallDate,
                         // THE EPOCH ECHO (CONTRACTS-0812 §1). Unconditional, on every body, from
                         // every build that carries this line — it identifies the CLIENT, not the
                         // account, so it does not wait for a flag and it does not read settings.
@@ -1710,12 +1705,12 @@ namespace ConditioningControlPanel.Services
                         // account and an unsynced old-curve phone pushing a pre-migration level
                         // back up through the take-higher merge. Legacy clients see no error and
                         // no wire change; their level writes just stop landing.
-                        descent_epoch = DescentEpochs.ClientEpoch,
+                        DescentEpoch = DescentEpochs.ClientEpoch,
                         // Send false to clear server-side reset flags only when acknowledging
-                        reset_weekly_quest = false,
-                        reset_daily_quest = false,
-                        force_streak_override = false,
-                        force_skills_reset = settings.PendingSkillsResetAck ? (bool?)false : null
+                        ResetWeeklyQuest = false,
+                        ResetDailyQuest = false,
+                        ForceStreakOverride = false,
+                        ForceSkillsReset = settings.PendingSkillsResetAck ? (bool?)false : null
                     };
 
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/sync");
@@ -4433,20 +4428,7 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
-            var payload = $"{timestamp}:{body}";
-
-            // Key derived from unified_id + embedded app key
-            const string appKey = "ccp-anticheat-2026";
-            var keyMaterial = $"{unifiedId}:{appKey}";
-            var keyBytes = Encoding.UTF8.GetBytes(keyMaterial);
-
-            using var hmac = new HMACSHA256(keyBytes);
-            var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
-            var signature = Convert.ToHexString(hash).ToLowerInvariant();
-
-            request.Headers.Add("X-CCP-Timestamp", timestamp);
-            request.Headers.Add("X-CCP-Signature", signature);
+            SyncBody.SignRequest(request, unifiedId, body);
             return true;
         }
 

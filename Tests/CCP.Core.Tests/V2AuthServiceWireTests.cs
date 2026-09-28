@@ -101,7 +101,7 @@ public sealed class V2AuthServiceWireTests : IDisposable
             Post("/v2/auth/link", "{\n  \"unified_id\": \"u_abc123\",\n  \"provider\": \"discord\",\n  \"access_token\": \"dtok\"\n}", true),
             $"GET {Url}/v2/user/profile?unified_id=u%20a%26b\nUser-Agent: ConditioningControlPanel/{Ver}\nX-Auth-Token: {Tok}\nX-Client-Version: {Ver}\n\n",
             Post("/v2/user/update", "{\n  \"unified_id\": \"u_abc123\",\n  \"xp\": 10,\n  \"level\": 2,\n  \"achievements\": [\n    \"a1\"\n  ]\n}", true),
-            Post("/v2/user/heartbeat", "{\n  \"unified_id\": \"u_abc123\"\n}", true),
+            Post("/v2/user/heartbeat", $"{{\"unified_id\":\"u_abc123\",\"is_active\":true,\"in_session\":false,\"app_version\":\"{Ver}\"}}", true),
             Post("/v2/user/delete-account", "{\n  \"unified_id\": \"u_abc123\",\n  \"confirmation\": \"DELETE\"\n}", true),
             Post("/v2/auth/device/authorize", "{\n  \"unified_id\": \"u_abc123\",\n  \"client\": \"ccp-desktop\"\n}", true),
         };
