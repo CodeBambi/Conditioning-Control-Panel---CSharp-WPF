@@ -1114,6 +1114,17 @@ namespace ConditioningControlPanel.Models
             set { _flashGazeDisabledByDecoupling = value; OnPropertyChanged(); }
         }
 
+        private bool _flashStayUntilPopped = false;
+        /// <summary>
+        /// Ambient flashes stay on screen until clicked (or popped by a stare), up to a 10-minute
+        /// safety lifetime and 40 on screen. Needs <see cref="FlashClickable"/>. See FlashStayRule.
+        /// </summary>
+        public bool FlashStayUntilPopped
+        {
+            get => _flashStayUntilPopped;
+            set { _flashStayUntilPopped = value; OnPropertyChanged(); }
+        }
+
         private bool _corruptionMode = false; // Hydra effect
         public bool CorruptionMode
         {
@@ -5022,6 +5033,20 @@ namespace ConditioningControlPanel.Models
         {
             get => _brainDrainMeltEnabled;
             set { _brainDrainMeltEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _brainDrainKeepPicturesClear = false;
+        /// <summary>
+        /// Brain Drain blurs everything EXCEPT the app's own pictures: flashes, videos, lock cards,
+        /// subliminals and bubbles stay sharp over the blurred desktop. The blur window is tucked
+        /// under the lowest CCP window in the topmost band (OverlayService, BrainDrainKeepClear).
+        /// Off by default so the classic look does not change under anyone.
+        /// </summary>
+        [JsonProperty]
+        public bool BrainDrainKeepPicturesClear
+        {
+            get => _brainDrainKeepPicturesClear;
+            set { _brainDrainKeepPicturesClear = value; OnPropertyChanged(); }
         }
 
         private bool _allowOverlayCapture = false;

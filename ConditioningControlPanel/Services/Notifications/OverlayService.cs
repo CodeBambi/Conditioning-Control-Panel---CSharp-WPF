@@ -3107,7 +3107,57 @@ public class OverlayService : IDisposable
             App.Logger?.Debug("ReassertZOrder (attention layer) failed: {Error}", ex.Message);
         }
 
+        // Last, so it wins over every pin above in the same pass (DWM composes after we return).
+        try { SinkBrainDrainUnderOwnWindows(); }
+        catch (Exception ex) { App.Logger?.Debug("ReassertZOrder (brain drain keep clear) failed: {Error}", ex.Message); }
+
         return anyRecovered;
+    }
+
+    /// <summary>
+    /// "Keep pictures clear" (<see cref="AppSettings.BrainDrainKeepPicturesClear"/>): put every
+    /// blur window directly under the lowest visible topmost window this process owns, so flashes,
+    /// videos, lock cards, subliminals and bubbles stay sharp and only the rest of the desktop blurs.
+    /// Runs on every reconciler tick (2 Hz) and only calls SetWindowPos when a blur window has
+    /// drifted above one of ours. See <see cref="BrainDrainKeepClear"/>.
+    /// </summary>
+    private void SinkBrainDrainUnderOwnWindows()
+    {
+        if (App.Settings?.Current?.BrainDrainKeepPicturesClear != true || !BrainDrainShowing) return;
+
+        var drains = new HashSet<IntPtr>();
+        foreach (var w in _brainDrainBlurWindows)
+        {
+            var h = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+            if (h != IntPtr.Zero) drains.Add(h);
+        }
+        if (App.Compositor is { } engine)
+            foreach (var h in engine.GetVisibleExcludedHostHandles()) drains.Add(h);
+        if (drains.Count == 0) return;
+
+        uint ownPid = (uint)Environment.ProcessId;
+        var band = new List<BrainDrainKeepClear.BandEntry>();
+        var drainOrder = new List<IntPtr>();
+        // Walk the topmost band only: it ends at the first non-topmost window. Capped so a
+        // pathological window list can never stall the UI thread.
+        int steps = 0;
+        for (IntPtr h = GetTopWindow(IntPtr.Zero); h != IntPtr.Zero && steps++ < 1024; h = GetWindow(h, GW_HWNDNEXT))
+        {
+            if ((GetWindowLong(h, GWL_EXSTYLE) & WS_EX_TOPMOST) == 0) break;
+            if (!IsWindowVisible(h)) continue;
+            bool drain = drains.Contains(h);
+            GetWindowThreadProcessId(h, out uint pid);
+            band.Add(new BrainDrainKeepClear.BandEntry(h, pid == ownPid, drain));
+            if (drain) drainOrder.Add(h);
+        }
+
+        var anchor = BrainDrainKeepClear.AnchorIfNeeded(band);
+        if (anchor == IntPtr.Zero) return;
+        foreach (var d in drainOrder)
+        {
+            SetWindowPos(d, anchor, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            anchor = d; // keep the blur windows stacked together, in their current order
+        }
     }
 
     /// <summary>Shared empty result for the attention-layer accessors (no per-tick allocation when
@@ -3452,6 +3502,20 @@ public class OverlayService : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool IsWindow(IntPtr hwnd);
 
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hwnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetTopWindow(IntPtr hwnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    private const uint GW_HWNDNEXT = 2;
+
     private const uint MONITOR_DEFAULTTONEAREST = 2;
 
     [System.Runtime.InteropServices.DllImport("shcore.dll")]
@@ -3603,6 +3667,12 @@ public class OverlayService : IDisposable
                 try { App.Compositor?.RefreshCaptureAffinity(); }
                 catch (Exception ex) { App.Logger?.Debug("Compositor capture affinity refresh failed: {E}", ex.Message); }
                 RefreshLegacyBrainDrainCaptureAffinity();
+            }
+            else if (e.PropertyName == nameof(App.Settings.Current.BrainDrainKeepPicturesClear))
+            {
+                // Either way the next sweep settles it: on sinks the blur under CCP's own windows,
+                // off lets the forced pass raise it back to the top of the topmost band.
+                ReassertZOrder(force: true);
             }
             // Add other property names for PinkFilter, Spiral, etc. here if needed
             // else if (e.PropertyName == nameof(App.Settings.Current.PinkFilterEnabled) ||

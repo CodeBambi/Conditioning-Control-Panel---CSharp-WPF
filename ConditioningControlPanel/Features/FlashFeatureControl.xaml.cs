@@ -148,6 +148,7 @@ namespace ConditioningControlPanel.Features
                 SliderMaxOnScreen.Value = s.HydraLimit;
                 TxtMaxOnScreen.Text = s.HydraLimit.ToString();
                 ChkClickable.IsChecked = s.FlashClickable;
+                ChkStayUntilPopped.IsChecked = s.FlashStayUntilPopped;
                 ChkCorruption.IsChecked = s.CorruptionMode;
                 ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
                 ChkGlow.IsChecked = s.FlashGlowEnabled;
@@ -176,6 +177,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.SimultaneousImages) ||
                 e.PropertyName == nameof(Models.AppSettings.HydraLimit) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashClickable) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashStayUntilPopped) ||
                 e.PropertyName == nameof(Models.AppSettings.CorruptionMode) ||
                 e.PropertyName == nameof(Models.AppSettings.HydraLinkedTiming) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGlowEnabled) ||
@@ -316,6 +318,15 @@ namespace ConditioningControlPanel.Features
             var s = App.Settings?.Current;
             if (s == null) return;
             s.FlashClickable = ChkClickable.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        private void ChkStayUntilPopped_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashStayUntilPopped = ChkStayUntilPopped.IsChecked ?? false;
             App.Settings?.Save();
         }
 
