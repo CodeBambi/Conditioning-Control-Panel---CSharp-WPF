@@ -17,6 +17,8 @@ public class SkillTreeRulesTests
         Assert.Equal(1.0, SkillTreeRules.GetRerollBonusMultiplier(s));
         s.UnlockedSkills = new List<string> { "better_quests", "quest_refresh" };
         Assert.Equal(1.25, SkillTreeRules.GetRerollBonusMultiplier(s));
+        s.UnlockedSkills.Add("sparkle_boost_3");
+        Assert.Equal(3, SkillTreeRules.GetSparkleBoostTier(s));
         Assert.Equal(1, SkillTreeRules.GetDailyFreeRerolls(s));
     }
 
@@ -33,9 +35,12 @@ public class SkillTreeRulesTests
         Assert.False(SkillTreeRules.CanPurchaseSkill(s, "sparkle_boost_2")); // unaffordable
 
         s.SkillPoints = 1000;
-        Assert.False(SkillTreeRules.IsSecretSkillAvailable(s, "eternal_doll"));
+        s.HighestLevelEver = 49;
+        Assert.False(SkillTreeRules.CanPurchaseSkill(s, "eternal_doll"));
         s.HighestLevelEver = 50;
-        Assert.True(SkillTreeRules.IsSecretSkillAvailable(s, "eternal_doll"));
+        Assert.True(SkillTreeRules.CanPurchaseSkill(s, "eternal_doll"));
+        s.EarlyMorningUsageCount = 9;
+        Assert.False(SkillTreeRules.IsSecretSkillAvailable(s, "early_bird_bimbo"));
         s.NightTimeUsageCount = 10;
         Assert.True(SkillTreeRules.IsSecretSkillAvailable(s, "night_shift"));
         Assert.False(SkillTreeRules.CanPurchaseSkill(s, "no_such_skill"));

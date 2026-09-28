@@ -22,9 +22,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// <para>The tree canvas and the secret rail are MainWindow.Enhancements.cs's DrawSkillTree /
     /// PopulateSecretSkills over Core's <c>Models.SkillDefinition.All</c>, with ownership read
-    /// from <c>AppSettings.UnlockedSkills</c>. Purchasing is unavailable: CanPurchaseSkill /
-    /// PurchaseSkillAsync / IsSecretSkillAvailable live in the head-only SkillTreeService, so
-    /// every unowned node draws in its locked state and nothing is clickable.</para>
+    /// through Core <c>SkillTreeRules.HasSkill</c>. Purchasing is unavailable: PurchaseSkillAsync
+    /// is a server call behind account auth (not ported), so every unowned node draws locked and
+    /// nothing is clickable.</para>
     /// </summary>
     public partial class EnhancementsTabView : UserControl
     {
@@ -151,7 +151,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             return c;
         }
 
-        /// <summary>DrawConnectionLines' colours, minus the purchasable accent (needs SkillTreeService).</summary>
+        /// <summary>DrawConnectionLines' colours, minus the purchasable accent (purchasing is not ported).</summary>
         private static Control Connector(double x1, double y1, double x2, double y2, bool childOwned, bool parentOwned) => new Line
         {
             StartPoint = new Point(x1, y1),
@@ -270,8 +270,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             return node;
         }
 
-        /// <summary>PopulateSecretSkills. Every unowned secret draws hidden: whether its
-        /// requirement is met is SkillTreeService.IsSecretSkillAvailable, head-side.</summary>
+        /// <summary>PopulateSecretSkills. Every unowned secret draws hidden; revealing a met
+        /// requirement (SkillTreeRules.IsSecretSkillAvailable, now in Core) is not drawn yet.</summary>
         private void PaintSecretRail()
         {
             var settings = CoreSettings.Current;
