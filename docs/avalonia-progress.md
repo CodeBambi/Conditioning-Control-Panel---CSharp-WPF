@@ -202,3 +202,13 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   bursts to finish) recorded in the decisions log and the feat-flash row.
 - Evidence: CoreFlashScheduleTests (11, fail-proofed); live with a temp profile at 180/h: 4 automatic bursts
   at 24.2/20.0/21.7 s gaps, none in 75 s after disabling; 0 binding errors. Review: ACCEPT.
+
+## avalonia-port/win32-overlay-shim: +260
+- Win32 click-through topmost overlays behind the same overlay entry points (dispatch by platform handle:
+  XID -> X11, HWND -> Win32): WPF's style bits (LAYERED|TOOLWINDOW, TRANSPARENT+NOACTIVATE only while
+  click-through), HWND_TOPMOST via SetWindowPos, opacity via SetLayeredWindowAttributes, bits kept across
+  Avalonia style rebuilds via Win32Properties.AddWindowStylesCallback.
+- --overlay-check gains a Windows readback (style bits, visibility, rect, and a CAPTUREBLT pixel read proving
+  the overlay draws); new advisory CI step on the windows job (continue-on-error until its first green run).
+- Evidence: OverlayBackendDispatchTests (fail-proofed); Linux --overlay-check still PASS. Two review rounds.
+- Not run: anything on Windows locally; the CI step is the only proof. DPI risk on mixed-scale monitors noted.
