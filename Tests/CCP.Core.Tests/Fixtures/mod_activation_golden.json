@@ -1,0 +1,156 @@
+{
+  "ActiveModId": "builtin-bambisleep",
+  "SubliminalPool": {
+    "BAMBI SLEEP": true,
+    "GOOD GIRL": false,
+    "MY OWN PHRASE": true,
+    "BAMBI FREEZE": true,
+    "BIMBO DOLL": true,
+    "DROP FOR COCK": true,
+    "SNAP AND FORGET": true,
+    "PRIMPED AND PAMPERED": true,
+    "BAMBI DOES AS SHE'S TOLD": true,
+    "BAMBI CUM AND COLLAPSE": true,
+    "ZAP COCK DRAIN OBEY": true,
+    "GIGGLETIME": true,
+    "BAMBI UNIFORM LOCK": true,
+    "COCK ZOMBIE NOW": true,
+    "JUST OBEY": true,
+    "TURN YOUR BRAIN OFF": true,
+    "GOOD GIRLS DONT THINK": true,
+    "DONT THINK SILLY": true,
+    "COCK TURNS MY BRAIN OFF": true,
+    "I CANT RESIST MY TRIGGERS": true,
+    "THERES NO NEED TO THINK": true
+  },
+  "AttentionPool": {
+    "FOCUS ON ME": true
+  },
+  "LockCardPhrases": {
+    "GOOD GIRLS OBEY": true,
+    "BAMBI SLEEP": false,
+    "MY LOCK LINE": true
+  },
+  "CustomTriggers": [
+    "GOOD GIRL",
+    "BAMBI FREEZE",
+    "MY TRIGGER"
+  ],
+  "BouncingTextPool": {
+    "BOUNCE ME": true
+  },
+  "SubliminalPoolByMod": {
+    "builtin-bambisleep": {
+      "BAMBI SLEEP": true,
+      "GOOD GIRL": false,
+      "MY OWN PHRASE": true,
+      "BAMBI FREEZE": true,
+      "BIMBO DOLL": true,
+      "DROP FOR COCK": true,
+      "SNAP AND FORGET": true,
+      "PRIMPED AND PAMPERED": true,
+      "BAMBI DOES AS SHE'S TOLD": true,
+      "BAMBI CUM AND COLLAPSE": true,
+      "ZAP COCK DRAIN OBEY": true,
+      "GIGGLETIME": true,
+      "BAMBI UNIFORM LOCK": true,
+      "COCK ZOMBIE NOW": true,
+      "JUST OBEY": true,
+      "TURN YOUR BRAIN OFF": true,
+      "GOOD GIRLS DONT THINK": true,
+      "DONT THINK SILLY": true,
+      "COCK TURNS MY BRAIN OFF": true,
+      "I CANT RESIST MY TRIGGERS": true,
+      "THERES NO NEED TO THINK": true
+    },
+    "drone-mode": {
+      "COMPLY": true
+    },
+    "builtin-sissyhypno": {
+      "GOOD GIRL": false,
+      "MY OWN PHRASE": true,
+      "BIMBO DOLL": true,
+      "JUST OBEY": true,
+      "TURN YOUR BRAIN OFF": true,
+      "GOOD GIRLS DONT THINK": true,
+      "DONT THINK SILLY": true,
+      "THERES NO NEED TO THINK": true
+    }
+  },
+  "AttentionPoolByMod": {
+    "builtin-bambisleep": {
+      "FOCUS ON ME": true
+    },
+    "builtin-sissyhypno": {
+      "FOCUS ON ME": true
+    }
+  },
+  "LockCardPhrasesByMod": {
+    "builtin-bambisleep": {
+      "GOOD GIRLS OBEY": true,
+      "BAMBI SLEEP": false,
+      "MY LOCK LINE": true
+    },
+    "builtin-sissyhypno": {
+      "GOOD GIRLS OBEY": true,
+      "I LOVE BEING PROGRAMMED": true,
+      "MY LOCK LINE": true,
+      "DEEP SLEEP": true,
+      "DROP FOR ME": true,
+      "EMPTY AND OBEDIENT": true
+    }
+  },
+  "CustomTriggersByMod": {
+    "builtin-bambisleep": [
+      "GOOD GIRL",
+      "BAMBI FREEZE",
+      "MY TRIGGER"
+    ],
+    "drone-mode": [
+      "UNIT FREEZE"
+    ],
+    "builtin-sissyhypno": [
+      "GOOD GIRL",
+      "MY TRIGGER"
+    ]
+  },
+  "BouncingTextPoolByMod": {
+    "builtin-bambisleep": {
+      "BOUNCE ME": true
+    },
+    "builtin-sissyhypno": {
+      "BOUNCE ME": true
+    }
+  },
+  "VideoLinksByMod": {
+    "drone-mode": {
+      "Unit Loop": "https://example.com/video/unit-loop"
+    },
+    "builtin-bambisleep": {
+      "My Own Loop": "https://hypnotube.com/video/my-own-loop-123.html"
+    }
+  },
+  "TubeLayoutOverridesByMod": {
+    "builtin-bambisleep": {
+      "avatarOffsetX": 12,
+      "avatarDetachedOffsetX": -4,
+      "avatarScale": 1.1,
+      "avatarOffsetY": 3,
+      "avatarDetachedOffsetY": 0
+    }
+  },
+  "RemovedDefaultSubliminals": [
+    "BAMBI RESET"
+  ],
+  "UserAddedSubliminals": [
+    "MY OWN PHRASE"
+  ],
+  "UserAddedCustomTriggers": [
+    "MY TRIGGER"
+  ],
+  "sissy_bambi_trigger_migration_done": true,
+  "PersonaVoiceFenceUtc": "stamped-during-run",
+  "PersonaIdentityFenceUtc": "stamped-during-run",
+  "hypnotube_links_bambi_sleep": "https://hypnotube.com/video/my-own-loop-123.html",
+  "hypnotube_links_sissy_hypno": ""
+}

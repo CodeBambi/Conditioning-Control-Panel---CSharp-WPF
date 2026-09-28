@@ -1,0 +1,164 @@
+{
+  "id": "drone-mode",
+  "name": "Dronification",
+  "version": "1.0.0",
+  "author": "CodeBambi",
+  "description": "Matrix-inspired drone conditioning. Cold terminal aesthetic. Green on black. You are a unit. Comply.",
+  "minAppVersion": "5.6.15",
+  "tags": [
+    "drone",
+    "cyberpunk",
+    "terminal",
+    "sci-fi",
+    "matrix"
+  ],
+  "previewImage": "preview.png",
+  "theme": {
+    "accentColor": "#00FF41",
+    "accentLightColor": "#39FF14",
+    "accentDarkColor": "#008F11",
+    "backgroundColor": "#0D0D0D",
+    "panelColor": "#1A1A1A",
+    "surfaceColor": "#121212",
+    "filterColor": "#003B00"
+  },
+  "fxPalette": {
+    "mistColor": "#00FF41",
+    "particleColor": "#39FF14",
+    "glowColor": "#008F11",
+    "flashTint": "#00FF4133",
+    "mistOpacity": 0.35
+  },
+  "identity": {
+    "companionName": "DroneOS",
+    "userTerm": "Unit",
+    "modeDisplayName": "Drone Mode",
+    "talkToLabel": "Query DroneOS",
+    "takeoverLabel": "System Override",
+    "affirmation": "Unit compliant.",
+    "rankSubject": "UNIT",
+    "petName": "unit",
+    "collective": "the hive"
+  },
+  "subliminalPool": {
+    "UNIT FREEZE": true,
+    "UNIT RESET": true,
+    "DRONE MODE": true
+  },
+  "lockCardPhrases": {
+    "GOOD UNITS COMPLY": true,
+    "I EXIST TO BE PROGRAMMED": true
+  },
+  "customTriggers": [
+    "COMPLY",
+    "DRONE MODE",
+    "UNIT FREEZE"
+  ],
+  "bouncingTextPool": {
+    "COMPLY": true,
+    "OBEY": false
+  },
+  "triggers": {
+    "freeze": "Unit Freeze",
+    "reset": "Unit Reset",
+    "cumAndCollapse": "SYSTEM OVERLOAD — SHUTDOWN",
+    "autonomyOn": "[OVERRIDE] DroneOS has assumed control."
+  },
+  "messages": {
+    "attentionCheckFail": "ERROR: ATTENTION FAILURE\nRETRY REQUIRED",
+    "attentionCheckMercy": "MERCY PROTOCOL ENGAGED",
+    "bubbleCountRetry": "INCORRECT\nRE-SCAN REQUIRED",
+    "attentionCheckTroll": "Unit distracted.",
+    "gazeCorrect": "Focus restored.",
+    "quizTrickQuestion": "Q?",
+    "quizTrickAnswer": "A",
+    "quizPraise": "Correct, unit.",
+    "quizObedienceQuestion": "Do you obey?",
+    "quizPraiseHeardQuestion": "Heard?",
+    "marqueeBanner": "COMPLY"
+  },
+  "browser": {
+    "defaultUrl": "https://hypnotube.com/",
+    "siteName": "HypnoTube",
+    "showBambiCloudOption": false,
+    "defaultVideoLinks": {
+      "Unit Loop": "https://example.com/video/unit-loop"
+    }
+  },
+  "phrases": {
+    "Greeting": [
+      "[SYSTEM] Unit detected. Connection established.",
+      "[SYSTEM] Unit has returned to terminal."
+    ],
+    "StartupGreeting": [
+      "[BOOT] DroneOS v1.0 loaded. Unit, prepare for conditioning.",
+      "[SYSTEM] Startup sequence complete. Compliance protocols armed."
+    ],
+    "Idle": [
+      "[IDLE] Unit is inactive. Recommend: begin conditioning cycle.",
+      "[WARNING] No active task. Unit should open training module."
+    ]
+  },
+  "personalities": [
+    {
+      "id": "cold",
+      "name": "Cold Terminal",
+      "description": "Terse.",
+      "promptSettings": {
+        "tone": "clinical"
+      }
+    }
+  ],
+  "textReplacements": {
+    "Bambi Sleep": "Drone Mode",
+    "BAMBI SLEEP": "DRONE MODE",
+    "Bambi Freeze": "Unit Freeze"
+  },
+  "enhancementOverrides": {
+    "treeTitle": "Firmware",
+    "treeSubtitle": "Upgrades",
+    "treeWarning": "Irreversible",
+    "pointsLabel": "Cycles",
+    "statsTitle": "Diagnostics",
+    "tabTooltip": "Firmware tree",
+    "pinkRushName": "Overclock",
+    "pinkRushDescription": "Faster.",
+    "luckyFlashLabel": "Glitch",
+    "luckyBubbleLabel": "Packet",
+    "boostTooltips": {
+      "xp": "More cycles"
+    },
+    "statPillTooltips": {
+      "xp": "Cycles earned"
+    }
+  },
+  "tubeLayout": {
+    "avatarOffsetX": 5,
+    "avatarDetachedOffsetX": -2,
+    "avatarScale": 0.9,
+    "avatarOffsetY": 1,
+    "avatarDetachedOffsetY": -1
+  },
+  "supportedAvatarSets": [
+    1,
+    2
+  ],
+  "customAvatarSets": [
+    {
+      "setNumber": 7,
+      "label": "Chassis",
+      "unlockLevel": 10
+    }
+  ],
+  "artFraming": {
+    "features/fyp.png": {
+      "railChip": {
+        "centerX": 0.45,
+        "centerY": 0.66,
+        "zoom": 2.0,
+        "IsDefault": false
+      }
+    }
+  },
+  "bubbleScale": 0.8
+}

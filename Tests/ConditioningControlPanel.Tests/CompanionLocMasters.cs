@@ -104,6 +104,12 @@ internal static class TestLocalizationBootstrap
     [ModuleInitializer]
     internal static void UseEnglish()
     {
+        // Sandbox the profile first: CorePaths.UserData is cached on first read, and the
+        // localization call below is the first reader. ModActivationGoldenTests depends on it.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")))
+            Environment.SetEnvironmentVariable("CCP_USERDATA_DIR",
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ccp-wpf-tests-" + Guid.NewGuid().ToString("N")));
+
         try
         {
             LocalizationManager.Instance.Initialize("en");
