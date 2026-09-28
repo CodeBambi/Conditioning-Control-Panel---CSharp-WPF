@@ -30,6 +30,7 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         {
             RefreshTierBadge();
             RefreshChaster();
+            RefreshFriendsPresence();
         }
 
         // Same fixed brand values as the header chip (MainWindow.UiUpdates.cs): gold is the Tier-1
@@ -48,12 +49,12 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         public AccountSettingsSection()
         {
             InitializeComponent();
-            Loaded += (_, __) => { RefreshTierBadge(); RefreshChaster(); SubscribeChaster(true); };
+            Loaded += (_, __) => { RefreshTierBadge(); RefreshChaster(); RefreshFriendsPresence(); SubscribeChaster(true); };
             Unloaded += (_, __) => SubscribeChaster(false);
             // Settings is a page you arrive at, not one you sit on: repainting when it becomes
             // visible is enough to catch a login that happened on another door, and costs nothing
             // when it does not.
-            IsVisibleChanged += (_, __) => { if (IsVisible) { RefreshTierBadge(); RefreshChaster(); } };
+            IsVisibleChanged += (_, __) => { if (IsVisible) { RefreshTierBadge(); RefreshChaster(); RefreshFriendsPresence(); } };
         }
 
         /// <summary>
@@ -110,6 +111,41 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             {
                 App.Logger?.Debug("AccountSettingsSection.RefreshTierBadge failed: {E}", ex.Message);
             }
+        }
+
+        // ------------------------------------------------------------------ Friends presence
+
+        private bool _refreshingPresence;
+
+        /// <summary>The "show friends what I'm doing" row, read back from the friends service (the
+        /// drawer header flips the same switch).</summary>
+        internal void RefreshFriendsPresence()
+        {
+            if (ChkFriendsPresence == null) return;
+            _refreshingPresence = true;
+            try
+            {
+                ChkFriendsPresence.IsChecked = Services.Friends.FriendsPresenceSetting.Read(
+                    App.Friends, () => App.Settings?.Current?.FriendsPresenceShared == true);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "friends presence row"); }
+            finally { _refreshingPresence = false; }
+        }
+
+        private void ChkFriendsPresence_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_refreshingPresence || ChkFriendsPresence == null) return;
+            Services.Friends.FriendsPresenceSetting.Write(
+                ChkFriendsPresence.IsChecked == true,
+                App.Friends,
+                v =>
+                {
+                    var s = App.Settings?.Current;
+                    if (s == null) return;
+                    s.FriendsPresenceShared = v;
+                    App.Settings?.Save();
+                },
+                () => global::ConditioningControlPanel.Controls.Friends.PresenceAsk.MarkAsked());
         }
 
         // ---- forwarding shims (identical bodies to the ones PatreonTabView carried) ----
