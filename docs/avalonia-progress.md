@@ -301,3 +301,10 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   desktop; scripts/panic-check.sh proves the X path in a throwaway kwin --virtual + standalone Xwayland (fail-proven).
 - Evidence: PanicKeyTests (5, fail-proofed), --panic-check, --portal-check, --tray-probe; two review rounds.
 - Not run: an accepted portal bind + Activated, a physical key press on the live desktop, Windows.
+
+## avalonia-port/quests-core: +456
+- Core-extraction unit 4: Quest, QuestProgress and QuestDefinitionService moved to Core (App.Logger -> Log,
+  AppVersion via CoreReleaseContent, mod-art resolution via CoreModArt). Reroll methods stay head-side as
+  extension methods. One guard allowlist entry: the pack:// root that the saved cache format still requires.
+- quests.json and quest_definitions_cache.json stay byte-identical (golden fixtures from the old code, shape +
+  round-trip tests, fail-proofed); built-in quest fallback unchanged. Review: ACCEPT.
