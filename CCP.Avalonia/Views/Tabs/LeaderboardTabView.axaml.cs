@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -11,6 +12,7 @@ using Avalonia.Media;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
@@ -27,10 +29,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// name - filter, search, sort, podium, tier bands, empty state - and the search box, the four
     /// filter chips, the six legend headers, the Monthly/All-Time pill and "jump to me" are wired
     /// to it. None of that needed a service on WPF either: it is view logic over
-    /// <c>_leaderboardRanked</c>, which here is the placeholder roster.
+    /// <c>_leaderboardRanked</c>, which here is the fetched board (<see cref="RefreshLeaderboardAsync"/>, read-only).
     ///
-    /// What is still stubbed is everything that needs the network or another tab: refresh, the
-    /// Discord DM, the season recap and the row double-click. Each is named at its call site.
+    /// What is still stubbed: the Discord DM, the season recap and the row double-click. Each is named at its call site.
     ///
     /// Dropped: LstLeaderboard_PreviewMouseWheel and its ScrollViewer/row-pitch measuring. Its
     /// whole reason was that WPF's VirtualizingPanel.ScrollUnit=Pixel - forced on so "Jump to me"
@@ -115,10 +116,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             this.FindControl<Button>("BtnLeaderboardAllTime")!.Click += (_, _) => SetLeaderboardMode(true);
             this.FindControl<Button>("BtnJumpToMe")!.Click += BtnJumpToMe_Click;
 
-            // ponytail: BtnRefreshLeaderboard, the row double-click and the per-row Discord chip
-            // all need Services/LeaderboardService (ConditioningControlPanel/Services) - a fetch,
-            // a profile lookup on the Discord tab and a browser hop. Left unhooked rather than
-            // hooked to something that cannot answer.
+            this.FindControl<Button>("BtnRefreshLeaderboard")!.Click += (_, _) => _ = RefreshLeaderboardAsync();
+            // ponytail: the row double-click (profile lookup on the Discord tab) and the per-row Discord chip (a
+            // browser hop) are still unhooked.
 
             // WPF derives this from the viewer's own skills: UpdateTrophyCaseColumns
             // (MainWindow.Leaderboard.cs:1432) sets it from App.SkillTree.HasSkill("trophy_case")
@@ -135,7 +135,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Unloaded += OnLeaderboardTabUnloaded;
             PropertyChanged += OnLeaderboardTabPropertyChanged;
 
-            LoadPlaceholderBoard();
+            RebuildLeaderboardView();
         }
 
         /// <summary>
@@ -157,11 +157,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal bool IsAllTimeMode { get; private set; }
 
         /// <summary>
-        /// Switch boards. WPF re-fetches here (the two boards are different server slices) and
-        /// resets the sort to rank so the podium and the bands line up with the ranks; the reset
-        /// is kept, the fetch is what this head does not have.
-        /// ponytail: the All-Time SLICE needs Services/LeaderboardService - the rows below are the
-        /// seasonal placeholder either way, so only the labels change today.
+        /// Switch boards and re-fetch (the two boards are different server slices), resetting the sort to rank so the
+        /// podium and the bands line up with the ranks (MainWindow.Leaderboard.cs:778 BtnLeaderboardMode_Click).
         /// </summary>
         internal void SetLeaderboardMode(bool isAllTime)
         {
@@ -173,6 +170,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshSeasonHeader();
             ApplyModeLabels();
             RebuildLeaderboardView();
+            _ = RefreshLeaderboardAsync();
         }
 
         /// <summary>
@@ -341,67 +339,122 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         // ------------------------------------------------------------------
-        // Placeholder board
+        // The board (read-only)
         // ------------------------------------------------------------------
 
+        /// <summary>Tests only: the client every refresh uses.</summary>
+        internal static Func<LeaderboardClient> NewClient = () => new LeaderboardClient();
+
+        private LeaderboardPage<LeaderboardRow>? _page;
+
         /// <summary>
-        /// Fill the ranked list and paint the sticky you-bar with sample rows, then let
-        /// <see cref="RebuildLeaderboardView"/> lay them out - podium, tier bands and all - exactly
-        /// as it does for a real slice.
-        ///
-        /// ponytail: needs LeaderboardService + LeaderboardEntry, both pinned to the WPF head
-        /// (LeaderboardEntry reads App.UnifiedUserId and builds a System.Windows.Media.Brush).
-        /// Wired when they move to Core. The sample deliberately covers every branch the templates
-        /// carry - podium ranks 1/2/3, a tier band, an OG row, patron tiers I/II/III, a Discord
-        /// chip, a no-badges row, an offline row and the current-user row - so the render proof
-        /// exercises the markup rather than one happy path.
+        /// MainWindow.Leaderboard.cs:953 RefreshLeaderboardAsync + RankLeaderboardEntries. Offline or a failed fetch leaves
+        /// the board empty and says so in the status line, as WPF does. Never throws.
+        /// ponytail: no profile push before the fetch (write, unit 7), no rank snapshot (LeaderboardRankSnapshotService
+        /// is WPF-only), so every arrow is the muted dash; no Bark hook.
         /// </summary>
-        private void LoadPlaceholderBoard()
+        internal async Task RefreshLeaderboardAsync()
         {
-            _ranked.AddRange(new[]
+            var status = this.FindControl<TextBlock>("TxtLeaderboardStatus")!;
+            var button = this.FindControl<Button>("BtnRefreshLeaderboard")!;
+            status.Text = Loc.Get("label_loading_2");
+            button.IsEnabled = false;
+            try
             {
-                Row(1, "Bambi Prime", 312, "1.4M", 41, true, og: true, tier: 3, discord: "1", streak: 96, best: 214.5),
-                Row(2, "velvet_hush", 298, "1.2M", 39, true, tier: 2, discord: "2", streak: 71, best: 180.0),
-                Row(3, "Nyx", 271, "988.4k", 37, false, og: true, streak: 55, best: 143.5),
-                Row(4, "spiral.doll", 244, "812.0k", 34, true, tier: 1, streak: 48, best: 121.0),
-                Row(5, "Quiet Signal", 231, "770.6k", 33, false, discord: "5", streak: 40, best: 98.5),
-                Row(6, "hollow-eyed", 219, "702.1k", 30, true, streak: 33, best: 87.0),
-                Row(7, "you", 204, "664.3k", 28, true, me: true, tier: 1, streak: 27, best: 76.5),
-                Row(8, "MK_Ultraviolet", 190, "610.9k", 26, false, og: true, streak: 21, best: 64.0),
-                Row(11, "pliant_kitten", 155, "480.2k", 22, true, discord: "11", streak: 14, best: 51.5),
-                Row(12, "drifting", 141, "421.8k", 19, false, streak: 9, best: 40.0),
-                Row(13, "blink", 128, "377.4k", 16, true, tier: 2, streak: 4, best: 28.5),
-            });
+                // WPF LeaderboardService.RefreshAsync: offline returns false with no error text.
+                var (page, error) = CoreSettings.Current.OfflineMode
+                    ? (null, null)
+                    : await NewClient().FetchAsync<LeaderboardRow>(IsAllTimeMode ? "all-time" : "monthly",
+                        CoreAccount.UnifiedUserId, DateTime.UtcNow);
+                if (page == null)
+                {
+                    status.Text = error ?? Loc.Get("label_failed_to_load");
+                    return;
+                }
+                _page = page;
+                _ranked.Clear();
+                _ranked.AddRange(LeaderboardClient.Rank(page.Entries!, IsAllTimeMode));
+                _sortKey = "rank";
+                RebuildLeaderboardView();
+                status.Text = Loc.GetF("lb_online_and_total", page.OnlineUsers, page.TotalUsers);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error refreshing leaderboard");
+                status.Text = Loc.Get("label_error_loading_leaderboard");
+            }
+            finally
+            {
+                button.IsEnabled = true;
+            }
+        }
 
-            RebuildLeaderboardView();
+        /// <summary>MainWindow.Leaderboard.cs:749 UpdateYourRankDisplay: the server rank only, never a row's Rank (#693).</summary>
+        private void UpdateYourRankDisplay()
+        {
+            var txt = this.FindControl<TextBlock>("TxtYourRank")!;
+            var rank = _page?.YourRank is > 0 ? _page.YourRank.Value : 0;
+            txt.IsVisible = rank > 0;
+            if (rank > 0)
+                txt.Text = _page!.YourTotal is > 0
+                    ? Loc.GetF("label_your_rank_0_of_1", rank, _page.YourTotal.Value)
+                    : Loc.GetF("label_your_rank_0", rank);
+        }
 
-            // Header status + your-rank badge. Keys and argument order from
-            // MainWindow.Leaderboard.cs (UpdateYourRankDisplay / the refresh path).
-            this.FindControl<TextBlock>("TxtLeaderboardStatus")!.Text = Loc.GetF("lb_online_and_total", 148, 2317);
-            var yourRank = this.FindControl<TextBlock>("TxtYourRank")!;
-            yourRank.Text = Loc.GetF("label_your_rank_0_of_1", 7, 2317);
-            yourRank.IsVisible = true;
+        /// <summary>
+        /// MainWindow.Leaderboard.cs:1263 UpdateYouBar. Reads the ranked board, not the filtered view, so a filter that
+        /// hides you does not blank it.
+        /// ponytail: delta is always the dash (no snapshot); off the board, achievements show 0 and the percentile only
+        /// the server-rank branch of GetPlayerPercentile.
+        /// </summary>
+        private void UpdateYouBar()
+        {
+            T F<T>(string n) where T : Control => this.FindControl<T>(n)!;
+            var rank = _page?.YourRank is > 0 ? _page.YourRank.Value : 0;
+            var name = CoreAccount.DisplayName;
+            F<Border>("YouBar").IsVisible = rank > 0 || !string.IsNullOrWhiteSpace(name);
 
-            // Sticky you-bar. It reads the ranked board, not the filtered view: WPF's UpdateYouBar
-            // is driven by the server's own row, so a filter that hides you must not blank it.
-            var me = _ranked.First(r => r.IsCurrentUser);
-            this.FindControl<TextBlock>("TxtYouDelta")!.Text = "\u25B22";
-            this.FindControl<TextBlock>("TxtYouRankNumber")!.Text = me.Rank.ToString(CultureInfo.InvariantCulture);
-            this.FindControl<Ellipse>("EllYouAvatar")!.Fill = me.AvatarBrush;
-            this.FindControl<TextBlock>("TxtYouInitials")!.Text = me.Initials;
-            this.FindControl<TextBlock>("TxtYouName")!.Text = me.DisplayName;
-            this.FindControl<TextBlock>("TxtYouLevel")!.Text = me.LevelColumnValue.ToString(CultureInfo.InvariantCulture);
-            this.FindControl<TextBlock>("TxtYouXp")!.Text = me.XpColumnDisplay;
-            this.FindControl<TextBlock>("TxtYouAchievements")!.Text = me.AchievementsDisplay;
+            var myId = CoreAccount.UnifiedUserId;
+            var myIndex = string.IsNullOrEmpty(myId) ? -1 : _ranked.FindIndex(r => r.UnifiedId == myId);
+            var me = myIndex >= 0 ? _ranked[myIndex] : null;
+            var s = CoreSettings.Current;
 
-            var bar = this.FindControl<ProgressBar>("BarYouAchievements")!;
-            bar.Maximum = me.AchievementsTotal;
-            bar.Value = me.AchievementsCount;
+            F<TextBlock>("TxtYouRankNumber").Text = rank > 0 ? rank.ToString(CultureInfo.InvariantCulture) : "\u2013";
+            F<TextBlock>("TxtYouDelta").Text = "\u2013";
+            F<TextBlock>("TxtYouName").Text = name ?? "";
+            F<TextBlock>("TxtYouInitials").Text = LeaderboardEntryData.BuildInitials(name);
+            F<Ellipse>("EllYouAvatar").Fill = LeaderboardRow.BuildAvatarBrush(name);
 
-            var above = _ranked.First(r => r.Rank == me.Rank - 1);
-            this.FindControl<TextBlock>("TxtYouGap")!.Text =
-                Loc.GetF("lb_gap_to_next", (37800L).ToString("N0", CultureInfo.CurrentCulture), above.DisplayName, above.Rank);
-            this.FindControl<TextBlock>("TxtYouPercent")!.Text = Loc.GetF("lb_top_percent", 1);
+            var level = me?.LevelColumnValue ?? (IsAllTimeMode ? s.HighestLevelEver : s.PlayerLevel);
+            F<TextBlock>("TxtYouLevel").Text = level > 0 ? level.ToString(CultureInfo.InvariantCulture) : "\u2013";
+            F<TextBlock>("TxtYouXp").Text = me?.XpColumnDisplay
+                ?? (IsAllTimeMode ? "\u2013" : FormatCompact(XpCurve.GetTotalXP(s.PlayerLevel, s.PlayerXP, s.DescentEpoch)));
+
+            var earned = me?.AchievementsCount ?? 0;
+            var earnable = Math.Max(1, ConditioningControlPanel.Models.Achievement.All.Values.Count(a => !a.IsHidden));
+            F<TextBlock>("TxtYouAchievements").Text = $"{earned} / {earnable}";
+            var bar = F<ProgressBar>("BarYouAchievements");
+            bar.Maximum = earnable;
+            bar.Value = Math.Min(earned, earnable);
+
+            string? gap = null;
+            if (me != null)
+            {
+                if (me.Rank <= 1 || myIndex <= 0) gap = Loc.Get("lb_gap_leader");
+                else
+                {
+                    var above = _ranked[myIndex - 1];
+                    var diff = above.XpColumnValue - me.XpColumnValue;
+                    gap = diff > 0 ? Loc.GetF("lb_gap_to_next", diff.ToString("N0"), above.DisplayName, above.Rank) : Loc.Get("lb_gap_unknown");
+                }
+            }
+            F<TextBlock>("TxtYouGap").Text = gap ?? "";
+            F<TextBlock>("TxtYouGap").IsVisible = !string.IsNullOrEmpty(gap);
+
+            var pct = _page?.YourRank is > 0 && _page.YourTotal is > 0
+                ? Math.Clamp((int)Math.Ceiling((double)_page.YourRank.Value / _page.YourTotal.Value * 100), 1, 99) : 0;
+            F<TextBlock>("TxtYouPercent").Text = pct > 0 ? Loc.GetF("lb_top_percent", pct) : "";
+            F<TextBlock>("TxtYouPercent").IsVisible = pct > 0;
         }
 
         /// <summary>
@@ -475,6 +528,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
                 _roster.ItemsSource = display;
                 _empty.IsVisible = view.Count == 0 && _ranked.Count > 0;
+                UpdateYourRankDisplay();
+                UpdateYouBar();
             }
             catch (Exception ex)
             {
@@ -500,6 +555,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (me != null) _roster.ScrollIntoView(me);
         }
 
+        /// <summary>MainWindow.Leaderboard.cs:1412.</summary>
+        private static string FormatCompact(double value) =>
+            value >= 1_000_000 ? $"{value / 1_000_000.0:F1}M" : value >= 1_000 ? $"{value / 1_000.0:F1}k" : ((int)value).ToString();
+
         /// <summary>0 = 1-3, 1 = 4-10, 2 = 11-25, 3 = 26-50, 4 = 51-100, 5 = 101-200, 6 = 201+.</summary>
         private static int TierIndexForRank(int rank)
         {
@@ -511,28 +570,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (rank <= 200) return 5;
             return 6;
         }
-
-        private static LeaderboardRow Row(int rank, string name, int level, string xp, int achievements,
-                                          bool online, bool og = false, int tier = 0, string? discord = null,
-                                          bool me = false, int streak = 0, double best = 0)
-            => new()
-            {
-                Rank = rank,
-                DisplayName = name,
-                LevelColumnValue = level,
-                XpColumnDisplay = xp,
-                AchievementsCount = achievements,
-                IsOnline = online,
-                IsSeason0Og = og,
-                EffectivePatreonTier = tier,
-                DiscordId = discord,
-                IsCurrentUser = me,
-                HasTrophyCase = streak > 0,
-                HighestStreak = streak,
-                LongestSessionMinutes = best,
-                // Rank movement, baked exactly as LeaderboardEntry.ApplyRankDelta does it.
-                DeltaState = rank switch { 1 => "up", 3 => "down", 5 => "new", _ => "same" },
-            };
 
         /// <summary>
         /// A tier band, built the way MainWindow.Leaderboard.cs BuildTierBand does: the tier name
@@ -562,13 +599,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ------------------------------------------------------------------
         // What is still MainWindow's
         // ------------------------------------------------------------------
-        // ponytail: BtnRefreshLeaderboard needs Services/LeaderboardService (the fetch, the online
-        // count and YourRank); the row double-click needs it plus DiscordTabView's profile search,
-        // which is itself a stub here; the per-row Discord chip opens a browser from inside a
-        // DataTemplate, so it needs a Click in LeaderboardTabView.axaml as well as a launcher;
-        // BtnViewSeasonRecap needs MainWindow.SeasonRecap.cs and is IsVisible="False" until it has
-        // a recap to show. All four are unhooked rather than hooked to something that cannot
-        // answer - see ConditioningControlPanel/MainWindow/MainWindow.Leaderboard.cs.
+        // ponytail: the row double-click needs DiscordTabView's profile search, which is itself a stub here; the
+        // per-row Discord chip opens a browser from inside a DataTemplate, so it needs a Click in
+        // LeaderboardTabView.axaml as well as a launcher; BtnViewSeasonRecap needs MainWindow.SeasonRecap.cs and is
+        // IsVisible="False" until it has a recap to show.
     }
 
     /// <summary>
@@ -585,81 +619,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     }
 
     /// <summary>
-    /// One roster row. The Avalonia-side stand-in for Services.LeaderboardEntry, which cannot be
-    /// referenced from here: it reads App.UnifiedUserId and hands back a System.Windows.Media
-    /// brush. Property names, formatting and the derived flags are copied from it so the port is
-    /// a rename away from the real model when it reaches Core.
+    /// One roster row: Core's <see cref="LeaderboardEntryData"/> (the wire model WPF's LeaderboardEntry also derives
+    /// from) plus this head's avatar brush and the flags Avalonia's templates bind instead of WPF DataTriggers.
     /// </summary>
-    public sealed class LeaderboardRow
+    public sealed class LeaderboardRow : LeaderboardEntryData
     {
-        public int Rank { get; set; }
-        public string DisplayName { get; set; } = "";
-        public int LevelColumnValue { get; set; }
-        public string XpColumnDisplay { get; set; } = "";
-        public int AchievementsCount { get; set; }
-        public bool IsOnline { get; set; }
-        public bool IsSeason0Og { get; set; }
-        public bool IsCurrentUser { get; set; }
-        public bool HasTrophyCase { get; set; }
-        public int HighestStreak { get; set; }
-        public double LongestSessionMinutes { get; set; }
-        public int SeasonsCompleted { get; set; }
-        public string? DiscordId { get; set; }
-        public bool IsAllTimeView { get; set; }
-
-        /// <summary>Denominator for the achievements column and its bar; they can't disagree.</summary>
-        public int AchievementsTotal => 60;
-
-        public string AchievementsDisplay => $"{AchievementsCount} / {AchievementsTotal}";
-
-        /// <summary>
-        /// Caption for <see cref="LevelColumnValue"/>. On the All-Time board the number is
-        /// HighestLevelEver, not a current standing, so calling it "Level" next to an XP-ordered
-        /// rank makes the board look mis-sorted.
-        /// </summary>
-        public string LevelLabel => Loc.Get(IsAllTimeView ? "lb_col_peak" : "label_level");
-
-        /// <summary>The server ships tier 0 for some legacy patrons; the badge treats that as I.</summary>
-        public int EffectivePatreonTier { get; set; }
-        public bool ShowPatreonChip => EffectivePatreonTier > 0;
         public bool IsPatreonTier2 => EffectivePatreonTier == 2;
         public bool IsPatreonTier3 => EffectivePatreonTier == 3;
-
-        /// <summary>Roman numeral suffix on the patron chip, so the chip text stays localizable.</summary>
-        public string PatreonTierRoman => EffectivePatreonTier switch { 3 => "III", 2 => "II", 1 => "I", _ => "" };
-
-        public bool HasDiscord => !string.IsNullOrEmpty(DiscordId);
-
-        /// <summary>Seasons-completed chip - All-Time board only.</summary>
-        public bool ShowSeasonsChip => IsAllTimeView && SeasonsCompleted > 0;
-        public string SeasonsChipText => SeasonsCompleted.ToString(CultureInfo.InvariantCulture);
-
-        public bool HasNoBadges => !IsSeason0Og && !ShowPatreonChip && !HasDiscord && !ShowSeasonsChip;
-
-        public string HighestStreakDisplay => HasTrophyCase ? HighestStreak.ToString(CultureInfo.InvariantCulture) : "";
-        public string LongestSessionDisplay => HasTrophyCase ? LongestSessionMinutes.ToString("F1", CultureInfo.CurrentCulture) : "";
-
         public bool IsRank1 => Rank == 1;
         public bool IsRank2 => Rank == 2;
         public bool IsRank3 => Rank == 3;
-
-        /// <summary>"up" | "down" | "same" | "new" | "none". Drives the arrow's colour.</summary>
-        public string DeltaState { get; set; } = "none";
         public bool IsDeltaUp => DeltaState == "up";
         public bool IsDeltaDown => DeltaState == "down";
         public bool IsDeltaNew => DeltaState == "new";
-
-        /// <summary>Pre-rendered arrow text ("▲2", "▼1", "–", or the NEW chip label).</summary>
-        public string DeltaText => DeltaState switch
-        {
-            "up" => "▲2",
-            "down" => "▼1",
-            "new" => Loc.Get("lb_delta_new"),
-            _ => "–",
-        };
-
-        /// <summary>1-2 uppercase initials for the generated avatar.</summary>
-        public string Initials => BuildInitials(DisplayName);
 
         private IBrush? _avatarBrush;
 
@@ -669,35 +641,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// same subject always gets the same colours. Copied from LeaderboardEntry.BuildAvatarBrush.
         /// </summary>
         public IBrush AvatarBrush => _avatarBrush ??= BuildAvatarBrush(DisplayName);
-
-        /// <summary>1-2 uppercase initials from a display name. "?" when there's nothing usable.</summary>
-        public static string BuildInitials(string? name)
-        {
-            if (string.IsNullOrWhiteSpace(name)) return "?";
-
-            var parts = name.Split(new[] { ' ', '_', '-', '.', '|' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2)
-            {
-                var a = FirstLetterOrDigit(parts[0]);
-                var b = FirstLetterOrDigit(parts[1]);
-                if (a != '\0' && b != '\0') return string.Concat(char.ToUpperInvariant(a), char.ToUpperInvariant(b));
-            }
-
-            var chars = new List<char>(2);
-            foreach (var c in name.Trim())
-            {
-                if (!char.IsLetterOrDigit(c)) continue;
-                chars.Add(char.ToUpperInvariant(c));
-                if (chars.Count == 2) break;
-            }
-            return chars.Count > 0 ? new string(chars.ToArray()) : "?";
-        }
-
-        private static char FirstLetterOrDigit(string s)
-        {
-            foreach (var c in s) if (char.IsLetterOrDigit(c)) return c;
-            return '\0';
-        }
 
         /// <summary>
         /// Frozen two-stop gradient derived from a stable hash of the name. Hues are clamped to

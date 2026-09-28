@@ -7,19 +7,16 @@
 // inline in MainWindow.xaml. The port gave it a view, CCP.Avalonia/Views/Tabs/LeaderboardTabView,
 // which already owns the parts that need no service: the season countdown and its timer
 // start/stop discipline, SetLeaderboardMode + the Level-column relabel for the All-Time board, the
-// tier band construction (its Band(index) is BuildTierBand with the same four bound tables), and a
-// placeholder board so the page renders finished rather than gapped. Anything restored HERE that
+// tier band construction (its Band(index) is BuildTierBand with the same four bound tables), and the
+// read-only fetch. Anything restored HERE that
 // paints a row would be a second copy no click can reach - the tab's own axaml names the tab's
 // handlers, not this window's, and NO member of this partial is referenced from
 // MainShellWindow.axaml at all. That is why the class body below is deliberately empty.
 //
 // WHAT IS ACTUALLY BLOCKED, and by what:
-//   The rows. RefreshLeaderboardAsync / RankLeaderboardEntries / RebuildLeaderboardView /
-//   UpdateYouBar / UpdateYourRankDisplay / UpdateTrophyCaseColumns all start from
-//   Services.LeaderboardEntry over the account API (and the trophy-case columns additionally need
-//   SkillService). Neither is in Core. Sorting, searching and filtering are pure list work over
-//   those rows and are blocked only by having no rows - they are a half-hour once the fetch exists,
-//   and they belong in the VIEW when it happens.
+//   The rows are no longer blocked: LeaderboardTabView.RefreshLeaderboardAsync fetches through Core's
+//   LeaderboardClient (read-only) and paints UpdateYourRankDisplay / UpdateYouBar there. Still missing: the
+//   trophy-case columns (SkillService) and the rank snapshot deltas.
 //   BtnLeaderboardDiscord_Click needs the Discord DM path; ReleaseLinks in Core carries links, not
 //   the DM.
 //   BtnJumpToMe_Click and the whole _lbFx* group are WPF-specific: an attached DependencyProperty

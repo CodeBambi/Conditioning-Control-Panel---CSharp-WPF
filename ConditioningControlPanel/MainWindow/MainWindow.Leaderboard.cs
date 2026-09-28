@@ -1035,15 +1035,7 @@ namespace ConditioningControlPanel
 
             // Rank by the same key the server's sorted set uses, so a row's Rank agrees with
             // the server-provided YourRank instead of drifting from it.
-            var ordered = isAllTime
-                ? App.Leaderboard.Entries.OrderByDescending(x => x.TotalXpEarned).ThenByDescending(x => x.HighestLevelEver).ToList()
-                : App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ThenByDescending(x => x.Level).ToList();
-
-            for (int i = 0; i < ordered.Count; i++)
-            {
-                ordered[i].Rank = i + 1;
-                ordered[i].IsAllTimeView = isAllTime;
-            }
+            var ordered = Services.LeaderboardClient.Rank(App.Leaderboard.Entries, isAllTime);
 
             // (2) READ - eager, before anything writes a new snapshot.
             var myId = App.UnifiedUserId;
