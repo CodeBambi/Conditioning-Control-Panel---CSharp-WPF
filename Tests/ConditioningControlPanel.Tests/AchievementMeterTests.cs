@@ -24,7 +24,7 @@ public class AchievementMeterTests
 
         Assert.NotNull(meter);
         Assert.Equal(76, meter!.Value.Current);
-        Assert.Equal(AchievementService.EyesFrontAttentionChecks, meter.Value.Target);
+        Assert.Equal(AchievementRules.EyesFrontAttentionChecks, meter.Value.Target);
         Assert.False(meter.Value.IsComplete);
         Assert.Equal(0.76, meter.Value.Fraction, precision: 6);
     }
@@ -70,7 +70,7 @@ public class AchievementMeterTests
         Assert.Equal(10, meter.Value.Target);
 
         // Every milestone the tracker unlocks on is in the meter table with the same level.
-        foreach (var (id, level) in AchievementService.LevelMilestones)
+        foreach (var (id, level) in AchievementRules.LevelMilestones)
         {
             var m = AchievementMeters.Compute(Achievement.All[id], progress, playerLevel: level);
             Assert.True(m!.Value.IsComplete, $"'{id}' should read complete at level {level}");
@@ -99,7 +99,7 @@ public class AchievementMeterTests
 
         var meter = AchievementMeters.Compute(Achievement.All["pop_the_thought"], progress, playerLevel: 1);
 
-        Assert.Equal(AchievementService.PopTheThoughtBubbles, meter!.Value.Current);
+        Assert.Equal(AchievementRules.PopTheThoughtBubbles, meter!.Value.Current);
         Assert.True(meter.Value.IsComplete);
     }
 

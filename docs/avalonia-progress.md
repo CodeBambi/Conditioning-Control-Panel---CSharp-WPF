@@ -232,3 +232,12 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: TextOverlayTests (4, fail-proofed); live timelines and X content grabs; shell-close proof with a
   negative control; frame stats 145-155 fps after the per-screen repaint fix. Two review rounds.
 - Gaps: audio/haptics/XP hooks, engine gating, video pause, topmost re-assert on Windows.
+
+## avalonia-port/achievement-read-rules: +553
+- oracle-deep achievements unit 1: Core AchievementRules (single copy of WPF's thresholds), Achievement and
+  AchievementMeter moved to Core, AchievementProgress split (data + pure statics in Core; App-dependent
+  streak methods as head-side extension methods, call sites unchanged). Persisted shape unchanged.
+- Decisions logged: achievements.json path, Avalonia local-only until auth, streak read-only until skill-tree seams.
+- Evidence: AchievementProgressShapeTests pins every persisted property (name, type, order, loads back, no
+  converter, double.MaxValue default), fail-proofed. Review: ACCEPT after the test hardening.
+- Not run: WPF tests (Windows CI). No Avalonia surface yet.

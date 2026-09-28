@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using static ConditioningControlPanel.Services.AchievementRules;
 
 namespace ConditioningControlPanel.Services;
 
@@ -57,66 +58,7 @@ public class AchievementService : IDisposable
     // a single long stall — sleep/resume, the app suspended for minutes — can only ever add 10s.
     private const double AutonomyTickCreditCapMinutes = 10.0 / 60.0;
 
-    // ===== Cumulative-counter thresholds =====
-    // Named so the number the tracker branches on and the number the achievement's Requirement
-    // string promises the user can be pinned together by a test instead of drifting apart.
-
-    /// <summary>"screen_time" — 10 cumulative hours of mandatory video.</summary>
-    internal const double ScreenTimeVideoMinutes = 600;
-
-    /// <summary>"threadbare" — 10 cumulative hours under the spiral.</summary>
-    internal const double ThreadbareSpiralMinutes = 600;
-
-    /// <summary>"eyes_front" — attention checks passed, lifetime.</summary>
-    internal const int EyesFrontAttentionChecks = 100;
-
-    /// <summary>"word_perfect" — lock cards completed, lifetime.</summary>
-    internal const int WordPerfectLockCards = 50;
-
-    /// <summary>"thirty_day_doll" — consecutive launch days.</summary>
-    internal const int ThirtyDayDollConsecutiveDays = 30;
-
-    /// <summary>"window_shopping" — sparkle points spent, lifetime (the Prestige metric).</summary>
-    internal const long WindowShoppingPointsSpent = 100;
-
-    // The rest of the countable thresholds, pulled out of the trackers so the gallery meter
-    // (AchievementMeters) reads the number the tracker branches on, not a copy of it.
-
-    /// <summary>"rose_tinted_reality" - 10 cumulative hours of pink filter.</summary>
-    internal const double RoseTintedPinkFilterMinutes = 600;
-
-    /// <summary>"permanent_resident" - 10 cumulative hours in the Deeper player.</summary>
-    internal const double PermanentResidentDeeperMinutes = 600;
-
-    /// <summary>"daily_maintenance" - consecutive launch days.</summary>
-    internal const int DailyMaintenanceConsecutiveDays = 7;
-
-    /// <summary>"retinal_burn" - flash images shown, lifetime.</summary>
-    internal const int RetinalBurnFlashImages = 5000;
-
-    /// <summary>"pop_the_thought" - bubbles popped, lifetime.</summary>
-    internal const int PopTheThoughtBubbles = 1000;
-
-    /// <summary>"mathematicians_nightmare" - correct bubble counts in a row.</summary>
-    internal const int MathematiciansNightmareStreak = 5;
-
-    /// <summary>"mercy_beggar" - attention checks failed, lifetime.</summary>
-    internal const int MercyBeggarFailures = 3;
-
-    /// <summary>
-    /// The level milestones, lowest first. <see cref="CheckLevelAchievements"/> walks this list
-    /// and the gallery meter reads it, so the two cannot disagree.
-    /// </summary>
-    internal static readonly (string Id, int Level)[] LevelMilestones =
-    {
-        ("plastic_initiation", 10),
-        ("dumb_bimbo", 20),
-        ("fully_synthetic", 50),
-        ("docile_cow", 75),
-        ("perfect_plastic_puppet", 100),
-        ("brainwashed_slavedoll", 125),
-        ("platinum_puppet", 150),
-    };
+    // The unlock thresholds live in CCP.Core AchievementRules (one copy, shared with the meter).
 
 
     public event EventHandler<Achievement>? AchievementUnlocked;
