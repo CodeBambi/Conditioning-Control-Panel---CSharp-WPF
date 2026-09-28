@@ -107,9 +107,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // in the markup on both heads, so nothing can reach this today.
         private void BtnStartQuiz_Click(object? sender, RoutedEventArgs e) { }
 
-        // ponytail: needs ConditioningControlPanel/Services/Quiz/PopQuizService.cs, which shows a
-        // WPF PopQuizWindow. Head-side by construction and unported; not a settings write, so
-        // CoreSettings is no help here.
+        // ponytail: needs an Avalonia IPopQuizHost + PopQuizScheduler.Show(isTest: true) (Core) — quiz unit 3.
         private void BtnTestPopQuiz_Click(object? sender, RoutedEventArgs e) { }
 
         private void ChkPopQuizEnabled_Changed(object? sender, RoutedEventArgs e)
