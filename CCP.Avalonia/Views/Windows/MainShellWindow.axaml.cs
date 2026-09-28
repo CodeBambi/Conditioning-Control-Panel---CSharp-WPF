@@ -127,8 +127,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void Window_DragLeave(object? sender, RoutedEventArgs e) { }
 
         // ---- the two handlers MainShellWindow.axaml takes from this file ---------------------
-        // ponytail: needs ModService + ModManagerDialog's host; wired when they move to Core.
-        private void BtnManageMods_Click(object? sender, RoutedEventArgs e) { }
+        // WPF MainWindow.xaml.cs:2883. ponytail: WPF then runs ApplyActiveModChange on
+        // ModWasChanged; this head has no live re-theme yet, so a switch lands on next launch.
+        private async void BtnManageMods_Click(object? sender, RoutedEventArgs e)
+        {
+            try { await new Dialogs.ModManagerDialog().ShowDialog(this); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "[ModManager] failed to open"); }
+        }
         private void ModSelectorCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
 
         // MainWindow.Settings.cs's BtnExit_Click: the real exit, not the X-to-tray close.

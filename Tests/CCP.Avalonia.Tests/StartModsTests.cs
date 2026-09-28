@@ -1,3 +1,6 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
 using System;
 using System.IO;
 using System.Linq;
@@ -79,5 +82,51 @@ public sealed class StartModsTests
             foreach (var dir in new[] { "mods", "builtin_mods" })
                 if (Directory.Exists(Path.Combine(root, dir))) Directory.Delete(Path.Combine(root, dir), recursive: true);
         }
+    }
+    /// <summary>Mod manager's Activate (WPF ModManagerDialog.xaml.cs:578-582): switches the service and saves settings.ActiveModId.</summary>
+    [Fact]
+    public async System.Threading.Tasks.Task ModManagerActivatePersistsTheSelectedModToSettings()
+    {
+        await CCP.Avalonia.Testing.AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<AvApp>().UseSkia()
+                    .UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var root = CorePaths.UserData;
+            Assert.Equal(TestUserDataProfile.Root, root);
+            var saved = Providers.Select(f => f.GetValue(null)).ToArray();
+            var oldSettings = CoreSettings.ServiceProvider;
+            SettingsService? svc = null;
+            try
+            {
+                svc = new SettingsService();
+                CoreSettings.ServiceProvider = () => svc;
+                AvApp.StartMods();
+                var dialog = new global::ConditioningControlPanel.Avalonia.Views.Dialogs.ModManagerDialog();
+                var list = dialog.FindControl<global::Avalonia.Controls.ListBox>("ModList")!;
+                list.SelectedItem = list.Items.OfType<global::Avalonia.Controls.ListBoxItem>()
+                    .First(i => (string?)i.Tag == BuiltInMods.SissyHypnoId);
+                dialog.FindControl<global::Avalonia.Controls.Button>("BtnActivate")!
+                    .RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(global::Avalonia.Controls.Button.ClickEvent));
+
+                Assert.Equal(BuiltInMods.SissyHypnoId, AvApp.Mods!.ActiveModId);
+                Assert.True(dialog.ModWasChanged);
+                svc.SaveImmediate();
+                Assert.Equal(BuiltInMods.SissyHypnoId,
+                    JObject.Parse(File.ReadAllText(Path.Combine(root, "settings.json")))["ActiveModId"]?.Value<string>());
+            }
+            finally
+            {
+                svc?.SaveImmediate();
+                svc?.SealForReset();
+                CoreSettings.ServiceProvider = oldSettings;
+                for (var i = 0; i < Providers.Length; i++) Providers[i].SetValue(null, saved[i]);
+                foreach (var f in Directory.GetFiles(root, "settings*")) File.Delete(f);
+                foreach (var dir in new[] { "mods", "builtin_mods" })
+                    if (Directory.Exists(Path.Combine(root, dir))) Directory.Delete(Path.Combine(root, dir), recursive: true);
+            }
+            return System.Threading.Tasks.Task.CompletedTask;
+        });
     }
 }

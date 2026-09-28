@@ -376,3 +376,10 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - The Hypnotube known-title table moved to Core, so a legacy-link migration saves canonical titles on either head.
 - Evidence: StartModsTests (golden round trip through the head path, fail-proofed); legacy-link migration test with and
   without the WPF provider; live sandbox launch. Review: ACCEPT + P2 fixed. No real profile touched.
+
+## avalonia-port/dialogs-mod-manager-wired: +110
+- ModService unit 7: the mod manager activates (+ saves ActiveModId), uninstalls (resets the active mod), installs a
+  .ccpmod (picker -> InstallModAsync, WPF messages) and exports; refreshes on ModAvailabilityChanged; opened from the
+  shell's Manage Mods. Share hidden until the catalogue client exists.
+- Evidence: activate-persists test (fail-proofed); live sandbox: activate -> relaunch still active -> uninstall.
+- Not run live: install/export through the native file picker. No live re-theme after a switch (next launch).
