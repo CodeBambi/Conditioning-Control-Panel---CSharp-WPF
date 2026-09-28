@@ -40,9 +40,9 @@ public class SparkleRefusalAdoptTests
     public void AlreadyUnlockedRepeat_IsNotedOncePerId()
     {
         var id = "test_repeat_" + System.Guid.NewGuid().ToString("N");
-        Assert.True(AchievementService.FirstAlreadyUnlockedNote(id));
-        Assert.False(AchievementService.FirstAlreadyUnlockedNote(id));
-        Assert.False(AchievementService.FirstAlreadyUnlockedNote(id));
-        Assert.True(AchievementService.FirstAlreadyUnlockedNote(id + "_other"));
+        Assert.True(AchievementEngine.FirstAlreadyUnlockedNote(id));
+        Assert.False(AchievementEngine.FirstAlreadyUnlockedNote(id));
+        Assert.False(AchievementEngine.FirstAlreadyUnlockedNote(id));
+        Assert.True(AchievementEngine.FirstAlreadyUnlockedNote(id + "_other"));
     }
 }
