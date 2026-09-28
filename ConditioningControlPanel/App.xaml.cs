@@ -1141,21 +1141,12 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Unified user ID that links Patreon and Discord accounts together
         /// </summary>
-        public static event EventHandler? UnifiedIdentityChanged;
-        public static string? UnifiedUserId
+        public static event EventHandler? UnifiedIdentityChanged
         {
-            get => CoreAccount.UnifiedUserId;
-            set
-            {
-                if (string.Equals(CoreAccount.UnifiedUserId, value, StringComparison.Ordinal)) return;
-                CoreAccount.UnifiedUserId = value;
-                foreach (EventHandler handler in UnifiedIdentityChanged?.GetInvocationList() ?? Array.Empty<Delegate>())
-                {
-                    try { handler(null, EventArgs.Empty); }
-                    catch (Exception ex) { Logger?.Debug("Identity observer failed ({Kind})", ex.GetType().Name); }
-                }
-            }
+            add => CoreAccount.UnifiedIdentityChanged += value;
+            remove => CoreAccount.UnifiedIdentityChanged -= value;
         }
+        public static string? UnifiedUserId { get => CoreAccount.UnifiedUserId; set => CoreAccount.UnifiedUserId = value; }
 
         /// <summary>
         /// Snapshot of the UnifiedUserId as restored from settings at startup, captured

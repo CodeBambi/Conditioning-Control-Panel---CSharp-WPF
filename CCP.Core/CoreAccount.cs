@@ -1,5 +1,7 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel
 {
@@ -36,8 +38,25 @@ namespace ConditioningControlPanel
     public static class CoreAccount
     {
         /// <summary>The unified user id linking the providers for this session (WPF: <c>App.UnifiedUserId</c>,
-        /// which reads and writes this). The provider lifecycle adopts it only when it is empty.</summary>
-        public static volatile string? UnifiedUserId;
+        /// which reads and writes this). The provider lifecycle adopts it only when it is empty.
+        /// A change raises <see cref="UnifiedIdentityChanged"/>; one failing observer never stops the rest.</summary>
+        public static string? UnifiedUserId
+        {
+            get => Volatile.Read(ref _unifiedUserId);
+            set
+            {
+                if (string.Equals(Interlocked.Exchange(ref _unifiedUserId, value), value, StringComparison.Ordinal)) return;
+                foreach (EventHandler handler in UnifiedIdentityChanged?.GetInvocationList() ?? Array.Empty<Delegate>())
+                {
+                    try { handler(null, EventArgs.Empty); }
+                    catch (Exception ex) { Log.Debug("Identity observer failed ({Kind})", ex.GetType().Name); }
+                }
+            }
+        }
+        private static string? _unifiedUserId;
+
+        /// <summary>The unified identity changed (sign-in, sign-out, account switch). WPF: <c>App.UnifiedIdentityChanged</c>.</summary>
+        public static event EventHandler? UnifiedIdentityChanged;
 
         public static volatile Func<bool>? IsLoggedInProvider;
         public static volatile Func<string?>? DisplayNameProvider;

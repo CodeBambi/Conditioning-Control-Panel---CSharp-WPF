@@ -28,6 +28,6 @@ namespace ConditioningControlPanel.Services.Companion
 
         /// <summary>The live answer: current settings and current Lab access.</summary>
         public static bool IsOnNow
-            => IsOn(App.Settings?.Current?.CompanionPrompt, App.Patreon?.HasLabAccess == true);
+            => IsOn(CoreSettings.Current?.CompanionPrompt, CoreAccount.HasLabAccess);
     }
 }

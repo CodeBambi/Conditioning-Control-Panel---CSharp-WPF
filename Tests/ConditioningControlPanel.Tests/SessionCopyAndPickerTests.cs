@@ -40,11 +40,7 @@ public class SessionCopyAndPickerTests
 
     private static Dictionary<string, string> LoadLanguage(string lang)
     {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root");
-        var path = Path.Combine(dir!.FullName, "ConditioningControlPanel", "Localization", "Languages", lang + ".json");
+        var path = SourceRoots.FindProductFile("Localization", "Languages", lang + ".json");
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         var map = new Dictionary<string, string>();
         foreach (var p in doc.RootElement.EnumerateObject())
