@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Services.Stakes;
 /// <c>{type:'stake-state', match, lock?}</c> (Goon sends <c>lock:true</c> at Countdown),
 /// <c>{type:'stake-settle', match}</c> (the match is over: poll until settled, then book).</para>
 ///
-/// <para>host -&gt; page: <c>{type:'stake', op, ...the route reply verbatim}</c>. The host adds
+/// <para>host -&gt; page: <c>{type:'stake', op, game, match?, ...the route reply verbatim}</c>. The host adds
 /// <c>time_ok</c> and <c>labels</c> to <c>limits</c>, <c>booked_s</c> to a settled
 /// <c>state</c>, and <c>op:'settled'</c> (with <c>gave_up</c> when nothing settled in time) for
 /// the watch. A fault the page can show is <c>{ok:false, reason}</c> like any refusal
@@ -94,10 +94,10 @@ public sealed class StakeBridge
         var match = Match(msg);
         if (match == null) { Post("offer", Refusal("no_match")); return; }
         var stake = StakeRules.Normalise((string?)msg["kind"], IntOr(msg["amount"]));
-        if (stake is not { } s) { Post("offer", Refusal("bad_amount")); return; }
+        if (stake is not { } s) { Post("offer", Refusal("bad_amount"), match); return; }
         if (s.Kind == StakeKind.Time)
         {
-            if (!SafeTimeOk()) { Post("offer", Refusal("no_chaster")); return; }
+            if (!SafeTimeOk()) { Post("offer", Refusal("no_chaster"), match); return; }
             // The pick IS the consent: the row a loss books on goes on now, before anything is sent.
             try { _enableLossRow(); } catch (Exception ex) { App.Logger?.Debug("Stakes: loss row switch failed: {E}", ex.Message); }
         }
@@ -113,7 +113,7 @@ public sealed class StakeBridge
             ["idem"] = idem,
         }).ConfigureAwait(false);
         _settlement.AdoptBalance("offer", sentFor, reply);
-        Post("offer", reply != null ? (JObject)reply.DeepClone() : Refusal(sentFor == null ? "signin" : "offline"));
+        Post("offer", reply != null ? (JObject)reply.DeepClone() : Refusal(sentFor == null ? "signin" : "offline"), match);
     }
 
     private async Task StateAsync(JObject msg)
@@ -126,13 +126,13 @@ public sealed class StakeBridge
         // the first move locks there.
         if (msg.Value<bool?>("lock") == true) body["lock"] = true;
         var reply = await _api.CallAsync("state", body).ConfigureAwait(false);
-        if (reply == null) { Post("state", Refusal(sentFor == null ? "signin" : "offline")); return; }
+        if (reply == null) { Post("state", Refusal(sentFor == null ? "signin" : "offline"), match); return; }
         var o = (JObject)reply.DeepClone();
         // Whichever sees the settled reply first books it; the settlement books a match once.
         var outcome = _settlement.Settle(_game, match, sentFor, reply);
         if (outcome.Result == null) _settlement.AdoptBalance("state", sentFor, reply);
         else o["booked_s"] = outcome.BookedSeconds;
-        Post("state", o);
+        Post("state", o, match);
     }
 
     private async Task SettleAsync(JObject msg)
@@ -141,16 +141,17 @@ public sealed class StakeBridge
         if (match == null) return;
         var (reply, outcome) = await _settlement.WatchAsync(_api, _game, match).ConfigureAwait(false);
         var o = outcome.Result != null && reply != null ? (JObject)reply.DeepClone() : new JObject { ["ok"] = true, ["gave_up"] = true };
-        o["match"] = match;
         if (outcome.Result != null) o["booked_s"] = outcome.BookedSeconds;
-        Post("settled", o);
+        Post("settled", o, match);
     }
 
-    private void Post(string op, JObject o)
+    private void Post(string op, JObject o, string? match = null)
     {
         o["type"] = "stake";
         o["op"] = op;
         o["game"] = _game;
+        // Which match the frame is about, so a page that moved on can drop a late one.
+        if (match != null) o["match"] = match;
         try { _post(o); }
         catch (Exception ex) { App.Logger?.Debug("Stakes: post failed: {E}", ex.Message); }
     }
