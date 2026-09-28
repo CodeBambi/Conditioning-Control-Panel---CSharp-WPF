@@ -195,6 +195,9 @@ namespace ConditioningControlPanel.Avalonia
                     Console.WriteLine($"[Audio] LibVLC unavailable, audio disabled: {ex.Message}");
                     Serilog.Log.Warning(ex, "[Audio] LibVLC unavailable; audio disabled on this head");
                 }
+                // Speech: Core Vosk engine over parec, seeding CoreSpeech (model is a drop-in, no download).
+                try { Platform.PulseMicSource.Seed(); }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "[Speech] engine unavailable on this head"); }
                 // CoreMindWipe stays unseeded, and it is the audio surface that is missing rather
                 // than the feature: MindWipeSchedule (Core) already decides the tick interval, the
                 // per-tick probability, the session escalation and which clips are candidates.
