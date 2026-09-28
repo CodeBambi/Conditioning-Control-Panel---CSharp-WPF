@@ -4002,7 +4002,10 @@ namespace ConditioningControlPanel.Services
         /// Server validates cost, prerequisites, and deducts points.
         /// Returns (success, error) — on success, updates local SkillPoints and UnlockedSkills from server response.
         /// </summary>
-        public async Task<(bool success, string? error)> PurchaseSkillAsync(string skillId)
+        public Task<(bool success, string? error)> PurchaseSkillAsync(string skillId)
+            => PurchaseSkillAsync(skillId, afterSync: false);
+
+        private async Task<(bool success, string? error)> PurchaseSkillAsync(string skillId, bool afterSync)
         {
             var settings = App.Settings?.Current;
             var unifiedId = settings?.UnifiedId;
@@ -4096,6 +4099,16 @@ namespace ConditioningControlPanel.Services
                     var refusedSkill = Models.SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
                     if (refusedSkill != null && settings != null)
                     {
+                        // First refusal: sync once so the server credits the level-ups and bubble
+                        // milestones it has not seen yet, then ask again (#1300). Only a refusal
+                        // that survives the sync lowers the wallet.
+                        var step = SparklePoints.AfterBalanceRefusal(settings.SkillPoints, result.SkillPoints, refusedSkill.Cost, afterSync);
+                        if (step == SparklePoints.RefusalStep.SyncAndRetry && await SyncProfileAsync())
+                        {
+                            App.Logger?.Information("Skill purchase: balance refusal at {Server} vs local {Local}, synced, asking again",
+                                result.SkillPoints, settings.SkillPoints);
+                            return await PurchaseSkillAsync(skillId, afterSync: true);
+                        }
                         var adopted = SparklePoints.AdoptAfterRefusal(settings.SkillPoints, result.SkillPoints, refusedSkill.Cost);
                         if (adopted.HasValue)
                         {
