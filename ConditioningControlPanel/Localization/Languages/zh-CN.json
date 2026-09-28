@@ -4466,6 +4466,7 @@
   "haptics_devices_merged": "通过 {1} 连接的 {0} 个玩具",
   "haptics_no_provider_enabled": "请先勾选至少一个提供方 - Lovense、Intiface 或模拟。",
   "haptics_connect_failed_hint": "没有任何响应。请确认提供方正在运行，并且在同一个网络里。",
+  "haptics_intiface_url_invalid": "这个 Intiface 地址无法使用：{0}。请试试 ws://127.0.0.1:12345，端口前要用冒号。",
   "haptics_feel": "手感",
   "haptics_feel_sub": "一个旋钮决定多强，一排标签决定什么脾气。其余都是可选的。",
   "haptics_intensity": "强度",

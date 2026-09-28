@@ -3611,6 +3611,7 @@
   "haptics_devices_merged": "{0} brinquedo(s) via {1}",
   "haptics_no_provider_enabled": "Marque pelo menos um provedor primeiro - Lovense, Intiface ou Mock.",
   "haptics_connect_failed_hint": "Ninguém respondeu. Verifique se o provedor está rodando e na mesma rede.",
+  "haptics_intiface_url_invalid": "Esse endereço do Intiface não funciona: {0}. Tente ws://127.0.0.1:12345, com dois-pontos antes da porta.",
   "haptics_feel": "A sensação",
   "haptics_feel_sub": "Um controle para a força e uma fileira de chips para o jeito. Todo o resto é opcional.",
   "haptics_intensity": "Intensidade",
