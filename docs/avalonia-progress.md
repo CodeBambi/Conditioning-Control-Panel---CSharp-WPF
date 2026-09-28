@@ -222,3 +222,13 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: MiniPlayerVideoTests + --video-check (fail-proofed: skipped Play -> exit 1; no teardown -> crash);
   screenshot on the real desktop. Review: ACCEPT.
 - Gaps: no production opener (Assets tree held back on content packs), animated GIFs show one frame.
+
+## avalonia-port/overlay-text-families: +746
+- Subliminals and bouncing text as click-through overlays on the X11/Win32 mechanism, driven by the existing
+  Core schedules/engine, with WPF's look and timing (subliminal envelope from the first painted frame;
+  bouncing text per-frame loop with WPF's dt clamp, only the screens near the logo repainted).
+- Card toggles arm the features (same decision as flashes). Closing the shell now stops every overlay
+  and schedule (was: a UI-less process kept overlays up).
+- Evidence: TextOverlayTests (4, fail-proofed); live timelines and X content grabs; shell-close proof with a
+  negative control; frame stats 145-155 fps after the per-screen repaint fix. Two review rounds.
+- Gaps: audio/haptics/XP hooks, engine gating, video pause, topmost re-assert on Windows.
