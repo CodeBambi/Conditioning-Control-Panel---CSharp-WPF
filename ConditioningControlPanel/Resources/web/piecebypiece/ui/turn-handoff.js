@@ -15,6 +15,12 @@ export function handoffSeconds(clock) {
   return least < 10000 ? 0 : least < 30000 ? .20 : .65;
 }
 
+/** The pause between the move coming to rest and the card: a second, less when time is short. */
+export function settleSeconds(duration, afterReplay = false) {
+  if (duration < .5) return .15;
+  return afterReplay ? .45 : 1.0;
+}
+
 export const CARD_STYLES = Object.freeze(['slam', 'ribbon', 'tag']);
 const LIFE = { slam: 1.0, ribbon: 1.05, tag: 1.1 };
 const clamp01 = v => Math.max(0, Math.min(1, v));
@@ -132,8 +138,19 @@ export function createTurnHandoff({ bus, game, board, root = null, menuOpen = ()
       const duration = handoffSeconds(game.clock);
       if (!duration) { clear(); hide(); return; }
       // The move settles first, and a full-screen capture replay plays out, before the card.
-      if (board.anim?.busy?.() || board.director?.holding?.()) { pending.age = 0; return; }
-      if (!pending.shown) { pending.shown = true; show(pending.side, duration < .5); }
+      if (board.anim?.busy?.() || board.director?.holding?.()) {
+        pending.age = 0; pending.still = 0;
+        if (board.director?.holding?.()) pending.replayed = true;
+        return;
+      }
+      // Then a beat with the man standing still on his square (owner, 2026-09-28): the card
+      // never lands on top of the capture. Shorter after a replay, and under clock pressure.
+      if (!pending.shown) {
+        pending.still = (pending.still || 0) + Math.max(0, dt);
+        if (pending.still < settleSeconds(duration, pending.replayed)) return;
+        pending.shown = true; show(pending.side, duration < .5);
+        return;   // the card's own time starts on the next frame
+      }
       pending.age += Math.max(0, dt);
       if (pending.age >= duration) clear();
     },
