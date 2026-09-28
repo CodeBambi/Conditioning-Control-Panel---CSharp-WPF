@@ -406,7 +406,7 @@
                                     <!-- ==== identity ==== -->
                                     <StackPanel Grid.Column="1" Margin="16,0,14,0" VerticalAlignment="Top">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock x:Name="TxtProfileViewerName" Text="{loc:Str login_display_name}"
+                                            <TextBlock x:Name="TxtProfileViewerName"
                                                        FontWeight="SemiBold"
                                                        Foreground="White" FontSize="23" TextTrimming="CharacterEllipsis"
                                                        VerticalAlignment="Center"/>
@@ -493,7 +493,7 @@
 
                                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                             <Ellipse Width="7" Height="7" Fill="#43B581" VerticalAlignment="Center" Margin="0,1,6,0"/>
-                                            <TextBlock x:Name="TxtProfileViewerOnline" Text="{loc:Str label_online}"
+                                            <TextBlock x:Name="TxtProfileViewerOnline"
                                                        Foreground="#43B581" FontSize="11" VerticalAlignment="Center"/>
                                         </StackPanel>
 
@@ -751,7 +751,7 @@
                                     </Border>
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_videos}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Grid.Column="2" x:Name="TxtProfileViewerVideos" Text="{loc:Str label_0h}"
+                                    <TextBlock Grid.Column="2" x:Name="TxtProfileViewerVideos"
                                                Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
                                                VerticalAlignment="Center" TextAlignment="Right"/>
                                 </Grid>
@@ -895,7 +895,7 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <TextBlock x:Name="TxtNoAchievements" Text="{loc:Str label_no_achievements_yet}"
+                                        <TextBlock x:Name="TxtNoAchievements"
                                                    Foreground="#8079A3" FontSize="11" FontStyle="Italic"
                                                    HorizontalAlignment="Center" IsVisible="False"/>
                                     </StackPanel>

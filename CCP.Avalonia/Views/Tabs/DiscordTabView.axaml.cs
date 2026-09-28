@@ -1,10 +1,17 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -15,10 +22,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// The tab owns no logic of its own on WPF either — each handler is a one-line forward to
     /// <c>Window.GetWindow(this) is MainWindow mw</c>. The Avalonia twin of that lookup is
     /// <see cref="Host"/>, and the host is <see cref="MainShellWindow"/>, so a handler whose WPF
-    /// target has been restored on the shell is now a forward again rather than a no-op. One is:
-    /// <see cref="BtnProfilePrivacy_Click"/> opens the real Privacy &amp; Sharing dialog. The rest
-    /// still reach search, the profile ledger, the vat, the faucet, the wardrobe or the spiral map,
-    /// none of which exist on this head — each says which symbol it is waiting on.
+    /// target has been restored on the shell is now a forward again rather than a no-op: Privacy
+    /// and Clear. The card itself (own card, search, lookup) lives on this tab, not the shell, so it
+    /// reaches its controls through the generated fields. The vat, faucet, wardrobe and spiral map
+    /// handlers are still empty - each says which symbol it is waiting on.
     ///
     /// THE CTOR CALLS <c>InitializeComponent()</c>, NOT <c>AvaloniaXamlLoader.Load(this)</c>, and
     /// that is not cosmetic: the loader never assigns the generated <c>x:Name</c> fields, so under
@@ -62,83 +69,205 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             InitializeComponent();
             PrivacyPanel = new ProfilePrivacyPanel();
-            LoadPlaceholderProfile();
         }
 
         // ------------------------------------------------------------------
-        // Placeholder card
+        // The card (read-only): WPF MainWindow.Browser.cs BtnViewMyProfile_Click, SearchAndDisplayProfile,
+        // DisplayOwnProfile, DisplayProfileEntry and RefreshProfileViewerAsync, on the tab itself.
+        // ponytail: no avatar picture (no Discord avatar URL or remote image load on this head), no Patreon
+        // badge/banner art, no edit-name/delete/Discord-DM buttons (writes, unit 7), no cosmetics, no staff
+        // flag for your own card (no Discord service): each stays hidden rather than drawn wrong.
         // ------------------------------------------------------------------
 
-        /// <summary>
-        /// Puts the hero card, the Record and the Showcase on screen with sample numbers.
-        ///
-        /// The WPF tab boots with ProfileCardWrapper collapsed and only the "search for a user"
-        /// plate up; MainWindow.ProfileCard.cs fills and reveals it once the account service
-        /// answers. There is no account service on this head, so the whole Trainer Card — the
-        /// thing this view IS — would never draw and the render proof would cover a heading and an
-        /// empty plate. The state below is the one the real app shows a signed-in user with four
-        /// pins, so every template on the card is exercised.
-        ///
-        /// The vat bay, the faucet and the descent receipt stay dark, deliberately: they are
-        /// server-gated on WPF too (the `descent` block is withheld outside the rollout dial), and
-        /// their whole safety property is that a dark vat measures to exactly the 104px avatar.
-        /// ponytail: replace with the real ledger when MainWindow.ProfileCard moves to Core.
-        /// </summary>
-        private void LoadPlaceholderProfile()
+        private LeaderboardPage<LeaderboardRow>? _board;
+        private int _cardRequest;   // newest request wins; an older one finishing late draws nothing
+        private bool _meFirstDone;
+
+        /// <summary>WPF MainWindow.ProfileCard.cs:61: the first show opens on your own card, never over one already up.</summary>
+        internal void EnsureProfileMeFirst()
         {
-            Find<Grid>("ProfileCardWrapper").IsVisible = true;
-            Find<Border>("NoProfileSelected").IsVisible = false;
-
-            // Identity. TxtProfileViewerName is left on its {loc:Str login_display_name} default:
-            // assigning .Text over a loc binding is undone by the next language change
-            // (CLAUDE.md, "setting text from code").
-            Find<Button>("BtnChangeDisplayName").IsVisible = true;
-            Find<Button>("BtnDeleteProfile").IsVisible = true;
-            Find<Button>("BtnProfileDiscord").IsVisible = true;
-            Find<Border>("OgBannerBadge").IsVisible = true;
-            Find<Border>("StaffBadge").IsVisible = true;
-            Find<Border>("WhitelistBadge").IsVisible = true;
-            Find<Border>("ProfileSpiralPlate").IsVisible = true;
-
-            // Plates + XP bar.
-            Find<TextBlock>("TxtProfileViewerLevel").Text = "27";
-            Find<TextBlock>("TxtProfileViewerRank").Text = "#12";
-            Find<TextBlock>("TxtProfileXpProgress").Text = "3,420 / 5,000 XP";
-            SetMeter("ProfileXpBar", 0.684);
-
-            // The Record.
-            Find<TextBlock>("TxtProfileViewerXp").Text = "48,310";
-            Find<TextBlock>("TxtProfileViewerBubbles").Text = "1,208";
-            Find<TextBlock>("TxtProfileViewerGifs").Text = "96";
-            Find<TextBlock>("TxtProfileViewerLockCards").Text = "31";
-            Find<TextBlock>("TxtProfileViewerAchievements").Text = "18";
-            // TxtProfileViewerVideos keeps its {loc:Str label_0h} default, same reason as the name.
-
-            // The Showcase. Four pins, so the placeholder plates step aside exactly as
-            // MainWindow.ProfileCard.cs makes them.
-            Find<ItemsControl>("ProfilePinnedShowcase").ItemsSource = SampleTiles(4);
-            Find<StackPanel>("ProfilePinnedPlaceholders").IsVisible = false;
-            Find<ItemsControl>("ProfileAchievementGrid").ItemsSource = SampleTiles(18);
-            Find<Expander>("ProfileAllAchievementsExpander").IsExpanded = true;
-
-            // Keys and argument order copied from MainWindow.ProfileCard.RefreshProfileAchievements.
-            Find<TextBlock>("TxtProfileAllAchievementsHeader").Text = Loc.GetF("profile_showcase_all_count", 18);
-            Find<TextBlock>("TxtProfileUnlockSummary").Text = Loc.GetF("profile_showcase_progress", 18, 40, 45);
-            Find<TextBlock>("TxtProfileNextUp").Text = Loc.GetF("profile_showcase_next_up", "Spiral Eyes");
-            SetMeter("ProfileUnlockBar", 0.45);
+            if (_meFirstDone) return;
+            _meFirstDone = true;
+            if (!ProfileCardWrapper.IsVisible) _ = ViewMyProfileAsync();
         }
 
-        /// <summary>Sample tiles. The art is pack:// in the WPF head, so Image is null and each
-        /// tile draws as its plate — the frame, the star and the tooltip are what these prove.</summary>
-        private static List<ProfileAchievementTile> SampleTiles(int count)
+        /// <summary>WPF BtnViewMyProfile_Click: your board row when you are on it, else the local card.</summary>
+        internal async Task ViewMyProfileAsync()
         {
-            var list = new List<ProfileAchievementTile>(count);
-            for (var i = 0; i < count; i++)
-                list.Add(new ProfileAchievementTile($"sample_{i}", $"Sample achievement {i + 1}"));
-            return list;
+            var req = ++_cardRequest;
+            var name = CoreSettings.Current.UserDisplayName;
+            var entry = string.IsNullOrEmpty(name) ? null : await FindOnBoardAsync(name);
+            if (req != _cardRequest) return;
+            if (entry != null) DisplayProfileEntry(entry); else DisplayOwnProfile();
         }
 
-        /// <summary>Writes a two-column meter's fill as WPF's ProfileXpFillCol/RestCol pair did.</summary>
+        /// <summary>WPF MainWindow.Leaderboard.cs:930 (row double-click): the name goes into the search box, then the search.</summary>
+        internal Task OpenProfileAsync(string name)
+        {
+            TxtProfileSearch.Text = name;
+            return SearchAsync(name);
+        }
+
+        /// <summary>WPF SearchAndDisplayProfile: found shows the card, not found puts the "search for a user" plate up.</summary>
+        internal async Task SearchAsync(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return;
+            var req = ++_cardRequest;
+            var entry = await FindOnBoardAsync(name);
+            if (req != _cardRequest) return;
+            if (entry != null) { DisplayProfileEntry(entry); return; }
+            NoProfileSelected.IsVisible = true;
+            ProfileCardWrapper.IsVisible = false;
+        }
+
+        /// <summary>WPF searches LeaderboardService's cached board and fetches only when it is empty; this tab has no
+        /// shared cache, so each search fetches the monthly board (a GET). Offline fetches nothing and searches the last
+        /// board this tab saw, as WPF searches its cache.</summary>
+        private async Task<LeaderboardRow?> FindOnBoardAsync(string name)
+        {
+            if (!CoreSettings.Current.OfflineMode)
+            {
+                try
+                {
+                    var (page, _) = await LeaderboardTabView.NewClient().FetchAsync<LeaderboardRow>("monthly", CoreAccount.UnifiedUserId, DateTime.UtcNow);
+                    if (page?.Entries != null) { page.Entries = LeaderboardClient.Rank(page.Entries, false); _board = page; }
+                }
+                catch (Exception ex) { Log.Warning(ex, "Trainer Card board fetch failed"); }
+            }
+            return TrainerCardText.Find(_board?.Entries, name);
+        }
+
+        /// <summary>WPF DisplayOwnProfile: local settings and achievement progress, rank from the last board.</summary>
+        internal void DisplayOwnProfile()
+        {
+            var s = CoreSettings.Current;
+            var progress = App.Achievements?.Progress;
+            ShowCard(s.IsSeason0Og);
+            ApplyIdentityBadges(false, null, CoreAccount.IsWhitelisted);
+            TxtProfileViewerName.Text = s.UserDisplayName ?? "You";
+            SetOnline(true, Loc.Get("label_online"));
+            TxtProfileViewerLevel.Text = s.PlayerLevel.ToString();
+            TxtProfileViewerRank.Text = TrainerCardText.Rank(_board?.YourRank is > 0
+                ? _board.YourRank : _board?.Entries?.FirstOrDefault(e => e.IsCurrentUser)?.Rank);
+            TxtProfileViewerXp.Text = TrainerCardText.Number(XpCurve.GetTotalXP(s.PlayerLevel, s.PlayerXP, s.DescentEpoch));
+            TxtProfileViewerBubbles.Text = TrainerCardText.Number(progress?.TotalBubblesPopped ?? 0);
+            TxtProfileViewerVideos.Text = TrainerCardText.Video(progress?.TotalVideoMinutes ?? 0);
+            TxtProfileViewerGifs.Text = TrainerCardText.Number(progress?.TotalFlashImages ?? 0);
+            TxtProfileViewerLockCards.Text = TrainerCardText.Number(progress?.TotalLockCardsCompleted ?? 0);
+            var unlocked = App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0;
+            var total = FreeTotal();
+            TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
+            Host?.SetProfileViewingSelf(true);
+            SetXpMeter(s.PlayerLevel, s.PlayerXP);
+            Host?.UpdateProfileShowcase(unlocked, total, progress?.UnlockedAchievements);
+            ShowAchievements(progress?.UnlockedAchievements, Loc.Get("label_no_achievements_yet"));
+        }
+
+        /// <summary>WPF DisplayProfileEntry: the board row now, then the fresh lookup (online, badges, achievements).</summary>
+        internal void DisplayProfileEntry(LeaderboardRow entry)
+        {
+            var s = CoreSettings.Current;
+            ShowCard(entry.IsSeason0Og);
+            var isOwn = string.Equals(entry.DisplayName, s.UserDisplayName, StringComparison.OrdinalIgnoreCase);
+            ApplyIdentityBadges(false, null, isOwn && CoreAccount.IsWhitelisted);
+            TxtProfileViewerName.Text = entry.DisplayName;
+            SetOnline(entry.IsOnline, entry.IsOnline ? "Online" : "Offline"); // WPF's literals
+            TxtProfileViewerLevel.Text = entry.Level.ToString();
+            TxtProfileViewerRank.Text = TrainerCardText.Rank(entry.Rank);
+            TxtProfileViewerXp.Text = entry.XpDisplay;
+            TxtProfileViewerBubbles.Text = entry.BubblesPoppedDisplay;
+            TxtProfileViewerVideos.Text = TrainerCardText.Video(entry.VideoMinutes);
+            TxtProfileViewerGifs.Text = entry.GifsSpawnedDisplay;
+            TxtProfileViewerLockCards.Text = entry.LockCardsCompleted.ToString();
+            TxtProfileViewerAchievements.Text = entry.AchievementsDisplay;
+            ShowAchievements(null, $"{entry.AchievementsCount} achievements unlocked");
+            // entry.Xp is lifetime; the meter wants progress inside the level.
+            Host?.SetProfileViewingSelf(isOwn);
+            SetXpMeter(entry.Level, XpCurve.GetCurrentLevelXP(entry.Level, entry.Xp, s.DescentEpoch));
+            Host?.UpdateProfileShowcase(entry.AchievementsCount, FreeTotal(),
+                isOwn ? App.Achievements?.Progress?.UnlockedAchievements : null);
+            if (entry.DisplayName.Length > 0 && !s.OfflineMode) _ = RefreshProfileViewerAsync(entry.DisplayName);
+        }
+
+        /// <summary>WPF RefreshProfileViewerAsync: GET /user/lookup, drawn only while the same user is still on screen.</summary>
+        private async Task RefreshProfileViewerAsync(string name)
+        {
+            var lookup = await LeaderboardTabView.NewClient().LookupUserAsync(name);
+            if (lookup == null || TxtProfileViewerName.Text != name) return;
+            SetOnline(lookup.IsOnline, lookup.IsOnline ? "Online" : "Offline");
+            if (string.Equals(name, CoreSettings.Current.UserDisplayName, StringComparison.OrdinalIgnoreCase))
+                ApplyIdentityBadges(false, null, CoreAccount.IsWhitelisted);
+            else ApplyIdentityBadges(lookup.IsStaff, lookup.StaffRole, lookup.IsWhitelisted);
+            if (lookup.Achievements is { Count: > 0 }) ShowAchievements(lookup.Achievements, "");
+            else if (lookup.AchievementsCount > 0) ShowAchievements(null, $"{lookup.AchievementsCount} achievements unlocked");
+        }
+
+        private void ShowCard(bool og)
+        {
+            ProfileCardWrapper.IsVisible = true;
+            NoProfileSelected.IsVisible = false;
+            OgBorderContainer.IsVisible = og;
+            OgBannerBadge.IsVisible = og;
+        }
+
+        private void SetOnline(bool online, string text)
+        {
+            var brush = SolidColorBrush.Parse(online ? "#43B581" : "#747F8D");
+            TxtProfileViewerOnline.Text = text;
+            TxtProfileViewerOnline.Foreground = brush;
+            ProfileHeroAvatar.PresenceDot.Fill = brush;
+        }
+
+        /// <summary>WPF ApplyProfileIdentityBadges: the staff pill's border encodes the role.</summary>
+        private void ApplyIdentityBadges(bool isStaff, string? staffRole, bool isWhitelisted)
+        {
+            StaffBadge.IsVisible = isStaff || !string.IsNullOrEmpty(staffRole);
+            if (StaffBadge.IsVisible)
+            {
+                var (from, to, text) = (staffRole ?? "admin") switch
+                {
+                    "owner" => ("#8A2BE2", "#C77DFF", "#D9B8FF"),
+                    "support" => ("#2F86FF", "#6FC3FF", "#B8D9FF"),
+                    _ => ("#DC143C", "#FF6B85", "#FFB3C2"),
+                };
+                StaffBadge.BorderBrush = new LinearGradientBrush
+                {
+                    StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                    EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                    GradientStops = { new GradientStop(Color.Parse(from), 0), new GradientStop(Color.Parse(to), 1) },
+                };
+                StaffBadgeLabel.Foreground = SolidColorBrush.Parse(text);
+            }
+            WhitelistBadge.IsVisible = isWhitelisted;
+        }
+
+        /// <summary>WPF LoadProfileAchievementImages. No achievement art on this head, so each tile draws as its plate.</summary>
+        private void ShowAchievements(IEnumerable<string>? ids, string emptyText)
+        {
+            var tiles = ids?.Select(id => Achievement.All.Values.FirstOrDefault(a => a.Id == id)).OfType<Achievement>()
+                .Select(a => new ProfileAchievementTile(a.Id, CoreMods.MakeModAware(a.Name))).ToList();
+            var any = tiles is { Count: > 0 };
+            ProfileAchievementGrid.ItemsSource = any ? tiles : null;
+            TxtNoAchievements.Text = emptyText;
+            TxtNoAchievements.IsVisible = !any;
+        }
+
+        /// <summary>Free achievements only, so the patron set never folds into the count (WPF DisplayOwnProfile).</summary>
+        private static int FreeTotal() => App.Achievements?.GetTotalCount(exclusive: false)
+            ?? Achievement.All.Values.Count(a => !a.IsExclusive && !a.IsHidden && !(a.IsPremiumFeature && !CoreEntitlement.HasPremium));
+
+        /// <summary>WPF MainWindow.ProfileCard.cs UpdateProfileXpMeter, minus the descent-bonus suffix (receipt not ported).</summary>
+        private void SetXpMeter(int level, double levelXp)
+        {
+            var needed = XpCurve.GetXPForLevel(Math.Max(1, level), CoreSettings.Current.DescentEpoch);
+            var have = Math.Max(0, levelXp);
+            if (needed > 0 && have > needed) have = needed;
+            var fraction = needed > 0 ? have / needed : 0;
+            if (double.IsNaN(fraction) || double.IsInfinity(fraction)) fraction = 0;
+            SetMeter("ProfileXpBar", Math.Clamp(fraction, 0, 1));
+            TxtProfileXpProgress.Text = Loc.GetF("profile_xp_progress", $"{have:N0}", $"{needed:N0}");
+        }
+
         private void SetMeter(string gridName, double fraction)
         {
             var grid = Find<Grid>(gridName);
@@ -154,21 +283,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void BtnChangeDisplayName_Click(object? sender, RoutedEventArgs e) { }
 
-        // ponytail: WPF forwards to MainWindow.Browser.cs:ClearProfileViewer, which ends in
-        // SetProfileViewingSelf(true). The shell's twin (MainShellWindow.Browser.cs) is still a
-        // stub, and re-implementing the clear here would be a second copy competing for the same
-        // controls.
-        private void BtnClearProfile_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF forwards to MainWindow.Browser.cs:ClearProfileViewer; a search still in flight is dropped.</summary>
+        private void BtnClearProfile_Click(object? sender, RoutedEventArgs e)
+        {
+            _cardRequest++;
+            Host?.BtnClearProfile_Click(sender, e);
+        }
 
         private void BtnDeleteProfile_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProfileDiscord_Click(object? sender, RoutedEventArgs e) { }
 
-        // ponytail: both need MainWindow.Browser.cs:SearchAndDisplayProfile / DisplayOwnProfile -
-        // a leaderboard round-trip and the account service. Those are the two members that call
-        // MainShellWindow.SetProfileViewingSelf and UpdateProfileShowcase, so both stay uncalled
-        // until the shell's Browser partial is real.
-        private void BtnProfileSearch_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnViewMyProfile_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnProfileSearch_Click(object? sender, RoutedEventArgs e) => _ = SearchAsync(TxtProfileSearch.Text);
+        private void BtnViewMyProfile_Click(object? sender, RoutedEventArgs e) => _ = ViewMyProfileAsync();
 
         /// <summary>The link-notice button reuses the Privacy panel's login/link flow verbatim on
         /// WPF — that handler drives BtnDiscordTabLogin on the long-lived panel instance.</summary>
@@ -188,7 +314,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// "Public profile" row — MainWindow owns the URL and the launcher.</summary>
         private void BtnProfileShare_Click(object? sender, RoutedEventArgs e) { }
 
-        private void TxtProfileSearch_KeyDown(object? sender, KeyEventArgs e) { }
+        private void TxtProfileSearch_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter) _ = SearchAsync(TxtProfileSearch.Text);
+        }
 
         /// <summary>The Trainer Card's spiral plate. Opens the expanded map window — the same door
         /// the nav rail's miniature uses (MainWindow.ProfileSpiral.cs).</summary>

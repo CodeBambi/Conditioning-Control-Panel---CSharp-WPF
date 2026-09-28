@@ -16,18 +16,16 @@
 // beside DiscordTabView, because the axaml's two DataTemplates name it (x:DataType).
 //
 // Still head-side, each with the exact symbol and where it lives today:
-//   EnsureProfileMeFirst        - calls DiscordTabView.BtnViewMyProfile_Click, which forwards to
-//                                 MainWindow's leaderboard-then-local profile fetch
-//                                 (ConditioningControlPanel/MainWindow/MainWindow.Browser.cs).
+//   EnsureProfileMeFirst        - ported onto DiscordTabView (with the whole card read), called on
+//                                 every show of the discord tab (MainShellWindow.TabNavigation.cs).
 //   RefreshProfileStatBadges    - Services.ModResourceResolver.ResolveImage
 //                                 (ConditioningControlPanel/Services/ModResourceResolver.cs)
 //                                 decodes to System.Windows.Media.ImageSource and falls back to a
 //                                 pack:// URI. CoreModArt.OverridePath answers the override half,
 //                                 but this head ships no Resources/achievements/*.png to fall back
 //                                 to, so there is nothing to paint yet.
-//   UpdateProfileXpMeter        - ProgressionService.GetXPForLevel
-//                                 (ConditioningControlPanel/Services/Progression/ProgressionService.cs).
-//                                 CoreProgression carries AddXP only, not the level curve.
+//   UpdateProfileXpMeter        - ported onto DiscordTabView.SetXpMeter (Core XpCurve), minus the
+//                                 descent-bonus suffix.
 //   RefreshProfileDescentReceipt- DescentReceipt / DescentMigration.ActiveCycleXpBonus
 //                                 (ConditioningControlPanel/Services/Descent/). SetProfileViewingSelf
 //                                 below still enforces the half that is portable: a searched card
@@ -37,9 +35,8 @@
 //                                 (ConditioningControlPanel/Models/Achievement.cs).
 //   RefreshProfileSpiralPlate   - MainShellWindow.ProfileSpiral.cs, still a stub.
 //
-// No caller yet for any member below: the buttons that invoke them are DiscordTabView's inert
-// handlers (BtnProfilePrivacy_Click, BtnProfileSearch_Click) and MainShellWindow.Browser.cs's
-// profile render, none of which this layer owns.
+// Callers: DiscordTabView (own card, search, lookup) calls SetProfileViewingSelf and
+// UpdateProfileShowcase; BtnProfilePrivacy_Click opens the Privacy dialog.
 
 using System;
 using System.Collections;
