@@ -78,6 +78,15 @@
           </details>
           <small id="pictures-status" role="status"></small>
         </div>
+        <strong>Camera</strong>
+        <label><input type="checkbox" id="game-follow" checked> Follow the move</label>
+        <label><input type="checkbox" id="game-replays" checked> Replay captures</label>
+        <div class="turncard-pick" role="group" aria-label="Turn card">
+          <span>Turn card</span>
+          <button type="button" class="hud-btn" data-turncard="slam" aria-pressed="true">Slam</button>
+          <button type="button" class="hud-btn" data-turncard="ribbon" aria-pressed="false">Ribbon</button>
+          <button type="button" class="hud-btn" data-turncard="tag" aria-pressed="false">Tag</button>
+        </div>
         <label><input type="checkbox" id="game-sound" checked> Sound effects</label>
         <label><input type="checkbox" id="game-reduced"> Reduce motion</label>
         <small id="game-preference-note" hidden></small>

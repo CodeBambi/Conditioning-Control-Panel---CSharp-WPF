@@ -20,6 +20,10 @@ export function presentation() {
     volume: Math.min(volume, hostVolume),
     reducedMotion: !!saved.reducedMotion || hostReduced || !!osMotion?.matches,
     motionLocked: hostReduced || !!osMotion?.matches,
+    // Camera (owner, 2026-09-28): follow the move, replay captures, and the turn card's look.
+    followCam: saved.followCam !== false,
+    replays: saved.replays !== false,
+    turnCard: ['slam', 'ribbon', 'tag'].includes(saved.turnCard) ? saved.turnCard : 'slam',
     soundLocked: hostVolume === 0,
   };
 }
@@ -34,6 +38,9 @@ export function setPresentation(patch) {
   if (['classic', 'distraction'].includes(patch.experience)) saved.experience = patch.experience;
   if (typeof patch.reducedMotion === 'boolean') saved.reducedMotion = patch.reducedMotion;
   if (Number.isFinite(patch.volume)) saved.volume = clamp(patch.volume);
+  if (typeof patch.followCam === 'boolean') saved.followCam = patch.followCam;
+  if (typeof patch.replays === 'boolean') saved.replays = patch.replays;
+  if (['slam', 'ribbon', 'tag'].includes(patch.turnCard)) saved.turnCard = patch.turnCard;
   try { globalThis.localStorage?.setItem(KEY, JSON.stringify(saved)); } catch { /* session only */ }
   return apply();
 }

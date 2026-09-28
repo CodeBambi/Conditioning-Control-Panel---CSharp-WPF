@@ -17,6 +17,7 @@ import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
 import { createSolo } from './game/solo.js';
 import { createTurnHandoff } from './ui/turn-handoff.js';
+import { createDirector } from './board/director.js';
 import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
@@ -92,6 +93,12 @@ function main() {
   window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: false } };
   board.turnHandoff = createTurnHandoff({ bus, game, board, menuOpen: () => !!window.PBP.door?.isUp() });
   { const dispose = view.dispose; view.dispose = () => { board.turnHandoff.dispose(); dispose(); }; }
+  // The follow camera and the capture replay (board/director.js). It blends on top
+  // of the rig after the rig has placed the camera, and draws its panels over the
+  // finished frame, so nothing below it has to know it exists.
+  board.director = createDirector({ view, anim, bus, game, root: dom.stage });
+  { const base = view.update; view.update = (dt) => { base(dt); board.director.update(dt); }; }
+  { const dispose = view.dispose; view.dispose = () => { board.director.dispose(); dispose(); }; }
   /**
    * Deal an online game onto this board. The front door calls it with the Match
    * its lobby handed back; everything after that - the seat, the clocks, the
@@ -320,6 +327,7 @@ function main() {
     // A paused local game holds the computer's reply too; an online seat keeps talking to the server.
     if (window.PBP.game && window.PBP.game.update && (!pausedGame || onlineSeat())) window.PBP.game.update(dt);
     view.render();
+    board.director.afterRender(dt);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
