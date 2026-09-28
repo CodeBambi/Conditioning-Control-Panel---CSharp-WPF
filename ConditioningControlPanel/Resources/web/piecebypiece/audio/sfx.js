@@ -1,5 +1,6 @@
 import { createCrowdVoices } from './crowd-voices.js';
 import { createCrowd } from './crowd.js';
+import { createTrance } from './trance.js';
 
 /* ============================================================================
  * audio/sfx.js - the board makes sounds.
@@ -81,6 +82,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   let master = null;
   let noise = null;
   let crowdVoices = null;
+  let trance = null;         // Distraction's sound bed (audio/trance.js), made with the context
   let disposed = false;
   let wet = null;            // the delay's return, beside the master
   let meter = 0;
@@ -125,6 +127,10 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     noise = buf;
+    // Distraction's bed rides the same master (volume, hidden-tab mute); the
+    // heart skips a beat while the check pulse is thumping so the two never stumble
+    trance = createTrance({ ctx, master, noise, clips: () => settings().whispers || [], canBeat: () => !checkTimer });
+    trance.setMeter(meter);
     return ctx;
   }
   function wake() {
@@ -150,7 +156,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       try { wet.gain.setTargetAtTime(wetLevel, ctx.currentTime, 0.15); } catch { wet.gain.value = wetLevel; }
     }
   }
-  function setMeter(m) { meter = clamp01(m); applyRoom(); }
+  function setMeter(m) { meter = clamp01(m); applyRoom(); if (trance) trance.setMeter(meter); }
   const tune = (node) => { if (drift && node.detune) { try { node.detune.value = drift; } catch { /* a source without detune */ } } };
 
   // --- the palette ------------------------------------------------------------
@@ -427,6 +433,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     state: () => ({
       context: ctx ? ctx.state : 'none', volume: master ? master.gain.value : 0, pulsing: !!checkTimer, over, hover,
       meter, wet: +wetLevel.toFixed(3), drift: Math.round(drift), lowClock, room: !!wet,
+      trance: trance ? trance.debug() : null,
     }),
     setMeter,
     setVolume(v) { if (v <= 0) crowd.cancel(); settings().sfxVolume = clamp01(v); if (master) master.gain.value = doc && doc.hidden ? 0 : clamp01(v); },
@@ -434,6 +441,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       disposed = true;
       crowd.dispose();
       stopPulse();
+      if (trance) { trance.dispose(); trance = null; }
       for (const off of offs) { try { off(); } catch { /* gone */ } }
       if (observer) observer.disconnect();
       if (doc) {

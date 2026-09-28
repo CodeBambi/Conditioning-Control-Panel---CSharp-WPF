@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -26,7 +27,7 @@ namespace ConditioningControlPanel.Services.PieceByPiece;
 ///
 /// <para>Protocol (the effects ramp codes against these shapes; do not widen them casually):
 /// <list type="bullet">
-/// <item>host -&gt; page, once after boot: <c>{ type: 'pbp:settings', videoHoldSec, reducedMotion }</c></item>
+/// <item>host -&gt; page, once after boot: <c>{ type: 'pbp:settings', videoHoldSec, reducedMotion, whispers }</c></item>
 /// <item>page -&gt; host: <c>{ type: 'pbp:media-request', kinds: ['image','gif','video'], count }</c></item>
 /// <item>host -&gt; page: <c>{ type: 'pbp:media', images: [url...], gifs: [...], videos: [...] }</c></item>
 /// <item>page -&gt; host: <c>{ type: 'pbp:exit' }</c> - close the window</item>
@@ -177,6 +178,12 @@ internal static partial class PieceByPieceHostService
                 // Downloaded audio packs mirror the ccp.game tree under their own origin.
                 ChaosWebViewHost.ContentMapping(),
             };
+            // Distraction's whispers fall back to these when the player has no brain drain clips
+            // of their own (PbpWhisperClips). Only mapped when the folder exists: a mapping onto a
+            // missing folder fails the whole host.
+            foreach (var (whisperHost, whisperDir) in WhisperFolders())
+                if (Directory.Exists(whisperDir))
+                    mappings.Add((whisperHost, whisperDir, CoreWebView2HostResourceAccessKind.Allow));
 
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
             {
@@ -324,6 +331,7 @@ internal static partial class PieceByPieceHostService
                 type = "pbp:settings",
                 videoHoldSec = SafeVideoHoldSec(),
                 reducedMotion = SafeReducedMotion(),
+                whispers = SafeWhisperClips(),
             });
         }
         catch (Exception ex) { App.Logger?.Debug("PieceByPiece: settings post failed: {E}", ex.Message); }
@@ -699,6 +707,34 @@ internal static partial class PieceByPieceHostService
     /// <summary>The app's motion setting, capped by the OS animation switch (MotionFx owns that
     /// resolution). Reduced and Off both read as reduced motion on the page: it has no third
     /// state to offer.</summary>
+    private static (string Host, string Dir)[] WhisperFolders() => new[]
+    {
+        (PbpWhisperClips.SubAudioHost, Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio")),
+        (PbpWhisperClips.WordsHost, BackRoom.BackRoomVoice.WordsRoot()),
+    };
+
+    /// <summary>Distraction's whisper clips: the player's brain drain folder, else what the
+    /// active mod may whisper (<see cref="PbpWhisperClips"/>). Never throws; empty = no whispers.</summary>
+    private static IReadOnlyList<string> SafeWhisperClips()
+    {
+        try
+        {
+            static IEnumerable<string>? Names(string? dir)
+                => !string.IsNullOrEmpty(dir) && Directory.Exists(dir) ? Directory.GetFiles(dir).Select(Path.GetFileName)! : null;
+            var folders = WhisperFolders();
+            bool subAudio = App.Settings?.Current?.SubAudioAudible == true
+                            && ModAudioPolicy.UsesSharedSubAudio(App.Mods?.ActiveModId);
+            return PbpWhisperClips.Build(
+                Names(Path.Combine(App.EffectiveAssetsPath, PbpWhisperClips.BrainDrainFolder)),
+                subAudio, Names(folders[0].Dir), Names(folders[1].Dir));
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("PieceByPiece: whisper clips failed: {E}", ex.Message);
+            return Array.Empty<string>();
+        }
+    }
+
     private static bool SafeReducedMotion()
     {
         try { return MotionFx.Level != Models.MotionLevel.Full; }

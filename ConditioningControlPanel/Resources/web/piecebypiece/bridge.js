@@ -9,7 +9,7 @@
  *
  * The four messages the board itself needs:
  *
- *   host -> page   { type: 'pbp:settings', videoHoldSec, reducedMotion }   once
+ *   host -> page   { type: 'pbp:settings', videoHoldSec, reducedMotion, whispers }   once
  *   page -> host   { type: 'pbp:media-request', kinds: [...], count }
  *   host -> page   { type: 'pbp:media', images: [...], gifs: [...], videos: [...] }
  *   page -> host   { type: 'pbp:exit' }
