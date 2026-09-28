@@ -718,7 +718,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var themed = App.Mods?.GetPhrases(category);
+                var themed = CoreMods.GetPhrases(category);
                 if (themed is { Length: > 0 }) return new List<string>(themed);
             }
             catch

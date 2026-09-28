@@ -27,3 +27,14 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Starting totals: 59 missing, 247 stub, 56 wired, 0 verified.
 - Evidence: statuses read from source only; nothing verified yet. Reviewer spot-check: 20/20
   statuses correct, 2 uncovered theme files added, stub/wired rule tightened.
+
+## avalonia-port/core-pure-moves-1: +2/-2
+- Moves 6 portable WPF-head files into CCP.Core: PresetFileService, QuizSessionGenerator
+  (App.Mods -> CoreMods, same fallback), TimelineSession, SkillTree, DescentBarkPolicy,
+  DescentStageCopy. No ledger row changes status yet; this unblocks Avalonia wiring for
+  shell-preset-io, win-quiz, win-session-editor, views-tab-enhancements and the Descent windows.
+- Skipped (need head-only types first, next branch): SettingsPaletteIndex,
+  EnhancementImportRules, MandatoryVideoEnhancementScanner, DescentCeremonyCopy, DescentFuseCopy.
+- Evidence: Core/Avalonia/WPF-tests builds, core-guards, Core + 6 Avalonia test projects,
+  LinuxSmoke, --smoke all green. Reviewer: ACCEPT (no P0-P2).
+- Not run: WPF tests (Windows-only).
