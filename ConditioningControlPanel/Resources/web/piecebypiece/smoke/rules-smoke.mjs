@@ -326,9 +326,14 @@ eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000),
   eq('an early computer result waits through the human animation', game.plies(), 1);
   busy = false; tick(.4);
   eq('handoff names the next solo player', handoff.debug()?.text, "Computer's turn");
-  eq('reply still waits during the card', game.plies(), 1);
-  tick(.26);
-  eq('reply lands after the animation and short handoff', game.plies(), 2);
+  eq('reply still waits while the move settles', game.plies(), 1);
+  tick(.5);
+  eq('the card waits a beat after the piece comes to rest', handoff.shown(), null);
+  tick(.2);
+  eq('the card shows after the settle', handoff.shown()?.text, "Computer's turn");
+  eq('reply still waits during the settle and the card', game.plies(), 1);
+  tick(.66);
+  eq('reply lands after the animation, the settle and short handoff', game.plies(), 2);
   eq('computer reply announces the human turn', handoff.debug()?.text, 'Your turn');
   game.tryMove('g1', 'f3');
   const stale = worker.onmessage, staleId = request.id;

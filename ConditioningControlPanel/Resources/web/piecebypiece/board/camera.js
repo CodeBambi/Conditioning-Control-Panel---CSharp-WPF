@@ -337,6 +337,10 @@ export function createCameraRig({ camera, canvas, isDragging = null }) {
     /** Elevation of the camera above the board plane, in degrees. */
     elevation() { return (Math.PI / 2 - phi) / DEG; },
     setDragGuard(fn) { dragGuard = fn; },
+    /** True while the player's hand is on the camera (an orbit, pan or pinch). */
+    interacting() { return !!mode; },
+    /** Where the rig is looking, before the sway; board/director.js blends from here. */
+    lookTarget(out = new THREE.Vector3()) { return out.copy(target); },
     onChange(fn) { listeners.add(fn); fn(state()); return () => listeners.delete(fn); },
     /** Light up the button row and the number keys. One call, from boot.js. */
     attachUi(root) { return attachCameraUi({ rig: api, root }); },

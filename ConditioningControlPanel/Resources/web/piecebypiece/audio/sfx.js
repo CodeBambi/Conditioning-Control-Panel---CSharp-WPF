@@ -30,6 +30,20 @@ import { createTrance } from './trance.js';
  *   whisper    a breathy sigh, quiet     board/watch.js, when a man is held
  *              too long
  *
+ * The capture replay (board/director.js beats; never the live 'hit'):
+ *   replayIn    a tape rewind, then a riser into panel 0's hit  `replay-show`
+ *   replaySlam  a comic thunk + paper snap, a step higher per panel
+ *                                         `replay-panel-in`
+ *   replayHit   the ORIGINAL capture's own sound again, stretched and pitched
+ *              down (slow motion), through a deep room tail, a little
+ *              different per panel; panel 0 adds a sub drop
+ *                                         `replay-panel-hit`
+ *   replayOut   a whoosh out               `replay-exit`
+ *   replayStop  a tape stop when skipped   `replay-exit` skipped: every replay
+ *              voice still ringing is faded out under it
+ *   While a replay is up the crowd and the trance bed sit on their own gain
+ *   and duck to TUNING.replay.duck, back up on `replay-done` (or any reset).
+ *
  * The room (sfx.setMeter, driven by board.setMeter): a feedback delay sits
  * beside the master and its wet level follows the meter, nothing at 0.25 and
  * 0.35 at 1.0; past 0.55 every new voice is detuned, down to two semitones
@@ -62,8 +76,44 @@ export const TUNING = Object.freeze({
     driftFrom: 0.55, driftCents: 200,    // detune: 0 at driftFrom, this flat at 1
     lowClockMs: 30000,                   // dry while the mover has less than this
   },
+  // The capture replay. Levels matched to the live kit, not heard: rewind and
+  // whoosh sit at the card whoosh (.1), the slam at hopland/kick, the sub at
+  // the check pulse, a slowed hit at .7 of its live gain because it lasts longer.
+  replay: Object.freeze({
+    rewind: { from: 5200, to: 700, sec: .28, gain: .08, chatterHz: 38, chatterGain: .035 },
+    riser: { at: .22, sec: .40, from: 180, to: 2600, gain: .065, toneFrom: 110, toneTo: 330, toneGain: .03 },
+    slam: { hz: 118, to: 52, sec: .13, gain: .2, snapHz: 520, snapGain: .07, paperGain: .05, stepSemis: 3 },
+    // panel i: how much slower, how much lower, how loud, where
+    panels: [
+      { stretch: 2.2, pitch: .58, gain: .72, pan: 0 },
+      { stretch: 1.8, pitch: .66, gain: .6, pan: -.28 },
+      { stretch: 1.5, pitch: .75, gain: .52, pan: .28 },
+    ],
+    sub: { hz: 52, to: 27, sec: .75, gain: .28, filterHz: 140 },
+    tail: { taps: [.13, .29], feedback: .42, filterHz: 1150, gain: .42 },
+    out: { from: 3800, to: 240, sec: .26, gain: .09, thumpHz: 90, thumpGain: .08 },
+    stop: { from: 340, to: 38, sec: .24, gain: .1, filterHz: 1400, hissGain: .05, fadeSec: .05 },
+    duck: .55, duckTc: .08, releaseTc: .25, safetyMs: 4500,
+  }),
   logSize: 32,
 });
+
+const SIGNATURE = Object.freeze({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' });
+/**
+ * The cues a live 'hit' plays, in order: the rebound under a heavy man's (or
+ * a kick's) strike, then the strike itself. The replay plays the same list.
+ */
+export function hitCues(p) {
+  const main = p?.sound || (p?.manner === 'signature' ? (SIGNATURE[p.piece] || 'capture') : 'whip');
+  return (['q', 'r', 'b'].includes(p?.piece) || p?.sound === 'kick') ? ['rebound', main] : [main];
+}
+/** How panel i replays its hit (stretch, pitch, gain, pan); past the table, the last row. */
+export function replayVoice(i) {
+  const P = TUNING.replay.panels;
+  return P[Math.max(0, Math.min(P.length - 1, i | 0))];
+}
+/** Panel i's slam pitch: a few semitones higher each panel. */
+export const slamRise = (i) => 2 ** (((i | 0) * TUNING.replay.slam.stepSemis) / 12);
 
 function reducedMotion(win) {
   const s = win && win.PBP && win.PBP.settings;
@@ -90,6 +140,14 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   let cuePitch = 1;
   let drift = 0;             // cents, applied to every new voice
   let lowClock = false;      // the mover is under lowClockMs
+  let beds = null;           // crowd + trance ride this gain, so a replay can duck them
+  let deepIn = null;         // the replay's deep room: dry to master, and into two taps
+  let tailOut = null;        // the taps' return, faded on a skip
+  let replayGain = null;     // this replay's voices, faded on a skip
+  let sink = null;           // where tone/hiss connect; null = master
+  let stretch = 1;           // time stretch for tone/hiss (a replayed hit is slow motion)
+  let ducked = false;
+  let duckTimer = 0;
   const log = [];
   const settings = () => (win && win.PBP && win.PBP.settings) || {};
   const volume = () => {
@@ -127,9 +185,13 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     noise = buf;
+    // the beds (crowd, trance) through one gain on the master, for the replay duck
+    beds = ctx.createGain();
+    beds.gain.value = 1;
+    beds.connect(master);
     // Distraction's bed rides the same master (volume, hidden-tab mute); the
     // heart skips a beat while the check pulse is thumping so the two never stumble
-    trance = createTrance({ ctx, master, noise, clips: () => settings().whispers || [], canBeat: () => !checkTimer });
+    trance = createTrance({ ctx, master: beds, noise, clips: () => settings().whispers || [], canBeat: () => !checkTimer });
     trance.setMeter(meter);
     return ctx;
   }
@@ -162,7 +224,8 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   // --- the palette ------------------------------------------------------------
   /** An oscillator with a gain envelope: attack straight up, decay to zero. */
   function tone(type, hz, sec, gain, { at = 0, slideTo = null, filterHz = null } = {}) {
-    const t0 = ctx.currentTime + at;
+    const t0 = ctx.currentTime + at * stretch;
+    sec *= stretch;
     const osc = ctx.createOscillator();
     const env = ctx.createGain();
     osc.type = type;
@@ -181,13 +244,14 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       head = f;
     }
     head.connect(env);
-    env.connect(master);
+    env.connect(sink || master);
     osc.start(t0);
     osc.stop(t0 + sec + 0.02);
   }
   /** Filtered noise with a sweep, for taps and whooshes. */
   function hiss(sec, gain, { at = 0, from = 1000, to = 1000, type = 'bandpass', attack = null } = {}) {
-    const t0 = ctx.currentTime + at;
+    const t0 = ctx.currentTime + at * stretch;
+    sec *= stretch;
     const src = ctx.createBufferSource();
     src.buffer = noise;
     tune(src);
@@ -199,7 +263,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     env.gain.setValueAtTime(0.0001, t0);
     env.gain.exponentialRampToValueAtTime(gain, t0 + (attack != null ? Math.min(attack, sec * 0.5) : Math.min(0.03, sec * 0.3)));
     env.gain.exponentialRampToValueAtTime(0.0001, t0 + sec);
-    src.connect(f); f.connect(env); env.connect(master);
+    src.connect(f); f.connect(env); env.connect(sink || master);
     src.start(t0);
     src.stop(t0 + sec + 0.02);
   }
@@ -210,7 +274,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   };
 
   function audience(kind) {
-    if (!crowdVoices) crowdVoices = createCrowdVoices({ ctx, master, noise });
+    if (!crowdVoices) crowdVoices = createCrowdVoices({ ctx, master: beds || master, noise });
     crowdVoices.play(kind);
   }
   const cues = {
@@ -301,7 +365,143 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     cardOpen() { const W = TUNING.whoosh; hiss(W.sec, W.gain, { from: W.lowHz, to: W.highHz, type: 'lowpass' }); },
     cardClose() { const W = TUNING.whoosh; hiss(W.sec, W.gain, { from: W.highHz, to: W.lowHz, type: 'lowpass' }); },
     whisper() { const W = TUNING.whisper; hiss(W.sec, W.gain, { from: W.from, to: W.to, type: 'bandpass', attack: W.attack }); },
+
+    // --- the capture replay ---------------------------------------------------
+    replayIn() {
+      const R = TUNING.replay, W = R.rewind, S = R.riser;
+      withSink(freshReplay(), 1, () => {
+        // the rewind: bright noise running down fast, a flutter of tape chatter over it
+        hiss(W.sec, W.gain, { from: W.from, to: W.to, attack: .01 });
+        tone('square', W.chatterHz * 9, W.sec * .9, W.chatterGain, { slideTo: W.chatterHz * 3, filterHz: 1800 });
+        // the riser into panel 0's hit, swelling, cut by the hit itself
+        hiss(S.sec, S.gain, { at: S.at, from: S.from, to: S.to, type: 'bandpass', attack: S.sec * .5 });
+        tone('triangle', S.toneFrom, S.sec, S.toneGain, { at: S.at, slideTo: S.toneTo, filterHz: 900 });
+      });
+    },
+    replaySlam({ i = 0 } = {}) {
+      const S = TUNING.replay.slam, k = slamRise(i);
+      withSink(replayGain, 1, () => {
+        tone('sine', S.hz * k, S.sec, S.gain, { slideTo: S.to * k });
+        tone('triangle', S.snapHz * k, .04, S.snapGain, { slideTo: S.snapHz * k * .5 });
+        hiss(.09, S.paperGain, { from: 5200 * k, to: 1400, type: 'highpass', attack: .004 });
+      });
+    },
+    replayHit({ i = 0, hit = null } = {}) {
+      const R = TUNING.replay, V = replayVoice(i);
+      const list = hit ? hitCues(hit) : ['capture'];
+      const mass = { p: 1.08, n: 1, b: 1.04, r: .89, q: .96, k: .86 }[hit?.piece] || 1;
+      const opts = { piece: hit?.piece, height: hit?.height ?? 1 };
+      const into = panelNode(V);
+      withSink(into, V.stretch, () => {
+        for (const name of list) {
+          cuePitch = (name === 'rebound' ? 1 : mass) * V.pitch;
+          cues[name](opts);
+        }
+      });
+      if (i === 0) {
+        const U = R.sub;
+        cuePitch = 1;
+        withSink(replayGain, 1, () => tone('sine', U.hz, U.sec, U.gain, { slideTo: U.to, filterHz: U.filterHz }));
+      }
+      return list;
+    },
+    replayOut() {
+      const O = TUNING.replay.out;
+      withSink(replayGain, 1, () => {
+        hiss(O.sec, O.gain, { from: O.from, to: O.to, type: 'lowpass', attack: .02 });
+        tone('sine', O.thumpHz, .12, O.thumpGain, { at: .04, slideTo: O.thumpHz * .6 });
+      });
+    },
+    replayStop() {
+      const T = TUNING.replay.stop;
+      fadeReplay(T.fadeSec);
+      // the tape stop goes straight to the master: the replay bus is fading
+      tone('sawtooth', T.from, T.sec, T.gain, { slideTo: T.to, filterHz: T.filterHz });
+      hiss(T.sec * .8, T.hissGain, { from: 2600, to: 180, type: 'lowpass', attack: .004 });
+    },
   };
+
+  // --- the replay's own graph --------------------------------------------------
+  /** Build the deep room once: deepIn -> master dry, and -> two dark taps -> tailOut -> master. */
+  function ensureDeep() {
+    if (deepIn || !ctx) return deepIn;
+    const D = TUNING.replay.tail;
+    deepIn = ctx.createGain();
+    deepIn.gain.value = 1;
+    deepIn.connect(master);
+    tailOut = ctx.createGain();
+    tailOut.gain.value = D.gain;
+    tailOut.connect(master);
+    if (typeof ctx.createDelay === 'function') {
+      for (const sec of D.taps) {
+        const d = ctx.createDelay(1.0);
+        d.delayTime.value = sec;
+        const back = ctx.createGain();
+        back.gain.value = D.feedback;
+        const dark = ctx.createBiquadFilter();
+        dark.type = 'lowpass';
+        dark.frequency.value = D.filterHz;
+        deepIn.connect(d);
+        d.connect(dark); dark.connect(back); back.connect(d);
+        dark.connect(tailOut);
+      }
+    }
+    return deepIn;
+  }
+  /** A new gain for this replay's voices (a skip fades the old one away). */
+  const retired = [];        // old replay gains, let go of once long silent
+  function retire(node) {
+    if (node) retired.push(node);
+    while (retired.length > 2) { try { retired.shift().disconnect(); } catch { /* gone */ } }
+  }
+  function freshReplay() {
+    ensureDeep();
+    retire(replayGain);
+    replayGain = ctx.createGain();
+    replayGain.gain.value = 1;
+    replayGain.connect(deepIn);
+    try { tailOut.gain.cancelScheduledValues?.(ctx.currentTime); tailOut.gain.setTargetAtTime(TUNING.replay.tail.gain, ctx.currentTime, .02); }
+    catch { tailOut.gain.value = TUNING.replay.tail.gain; }
+    return replayGain;
+  }
+  /** One panel's hit: its own gain and pan into the replay gain. */
+  function panelNode(V) {
+    if (!replayGain) freshReplay();
+    const g = ctx.createGain();
+    g.gain.value = V.gain;
+    if (V.pan && typeof ctx.createStereoPanner === 'function') {
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = V.pan;
+      g.connect(pan); pan.connect(replayGain);
+    } else g.connect(replayGain);
+    return g;
+  }
+  function fadeReplay(sec) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (const node of [replayGain, tailOut]) {
+      if (!node) continue;
+      try { node.gain.setTargetAtTime(0, t, sec / 3); } catch { node.gain.value = 0; }
+    }
+    retire(replayGain);
+    replayGain = null;
+  }
+  /** Run fn with tone/hiss pointed at `node` and stretched; always put them back. */
+  function withSink(node, s, fn) {
+    const prevSink = sink, prevStretch = stretch;
+    sink = node || (ensureDeep(), freshReplay());
+    stretch = s;
+    try { fn(); } finally { sink = prevSink; stretch = prevStretch; }
+  }
+  function duck(on) {
+    if (duckTimer) { clearTimeout(duckTimer); duckTimer = 0; }
+    ducked = !!on;
+    if (on) duckTimer = setTimeout(() => duck(false), TUNING.replay.safetyMs);
+    if (!beds || !ctx) return;
+    const R = TUNING.replay;
+    try { beds.gain.setTargetAtTime(on ? R.duck : 1, ctx.currentTime, on ? R.duckTc : R.releaseTc); }
+    catch { beds.gain.value = on ? R.duck : 1; }
+  }
 
   function play(name, opts = {}) {
     if (disposed || !cues[name]) return false;
@@ -313,8 +513,10 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     const varied = ['hop', 'hopland', 'land', 'stomp', 'headbutt', 'whip', 'launch', 'rebound', 'kick'].includes(name);
     const mass = { p: 1.08, n: 1, b: 1.04, r: .89, q: .96, k: .86 }[opts.piece] || 1;
     cuePitch = varied ? mass * (.97 + Math.random() * .06) : 1;
-    try { cues[name](opts); } catch (e) { console.warn('[pbp] cue failed ' + name, e); return false; }
-    log.push({ name, opts, pitch: cuePitch, at: ctx.currentTime, state: ctx.state });
+    let made;
+    try { made = cues[name](opts); } catch (e) { console.warn('[pbp] cue failed ' + name, e); return false; }
+    finally { sink = null; stretch = 1; }
+    log.push({ name, opts, pitch: cuePitch, at: ctx.currentTime, state: ctx.state, ...(Array.isArray(made) ? { cues: made } : {}) });
     if (log.length > TUNING.logSize) log.shift();
     return true;
   }
@@ -358,9 +560,15 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     if (!p || p.refused || p.skipped) return;
     play(p.capture && !['whip', 'signature'].includes(p.manner) ? 'capture' : 'land', { height: p.height });
   });
-  on('hit', p => { if (['q', 'r', 'b'].includes(p?.piece) || p?.sound === 'kick') play('rebound'); });
   on('captureCue', p => { if (p?.name) play(p.name); });
-  on('hit', p => { play(p?.sound || (p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip'), { piece: p?.piece, height: p?.height }); });
+  on('hit', p => { for (const name of hitCues(p)) play(name, name === 'rebound' ? {} : { piece: p?.piece, height: p?.height }); });
+  // the capture replay (board/director.js): its own cues, never the live ones above
+  on('replay-show', p => { duck(true); play('replayIn', { layout: p?.layout, n: p?.n }); });
+  on('replay-panel-in', p => play('replaySlam', { i: p?.i | 0, layout: p?.layout }));
+  on('replay-panel-hit', p => play('replayHit', { i: p?.i | 0, layout: p?.layout, hit: p?.hit || null }));
+  on('replay-exit', p => play(p?.skipped ? 'replayStop' : 'replayOut', { layout: p?.layout }));
+  on('replay-done', () => duck(false));
+  for (const type of ['local', 'newgame', 'menu', 'takeback', 'gameover']) on(type, () => { if (ducked) { fadeReplay(.05); duck(false); } });
   on('check', () => { checkArmed = true; startPulse(); });
   on('turn', () => {
     lastSecond = -1;
@@ -427,12 +635,21 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     play,
     wake,
     crowd,
-    update: crowd.update,
+    update() {
+      crowd.update();
+      // The director can drop a replay without replay-exit/replay-done (a new
+      // move, the menu, a reset): once it no longer shows one, stop ducking and
+      // let the slowed hits still ringing go.
+      if (!ducked) return;
+      const director = win?.PBP?.board?.director;
+      if (director && typeof director.active === 'function' && !director.active()) { fadeReplay(.1); duck(false); }
+    },
     log: () => log.slice(),
     ready: () => !!ctx,
     state: () => ({
       context: ctx ? ctx.state : 'none', volume: master ? master.gain.value : 0, pulsing: !!checkTimer, over, hover,
       meter, wet: +wetLevel.toFixed(3), drift: Math.round(drift), lowClock, room: !!wet,
+      ducked, beds: beds ? +beds.gain.value.toFixed(3) : null,
       trance: trance ? trance.debug() : null,
     }),
     setMeter,
@@ -441,6 +658,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       disposed = true;
       crowd.dispose();
       stopPulse();
+      if (duckTimer) { clearTimeout(duckTimer); duckTimer = 0; }
       if (trance) { trance.dispose(); trance = null; }
       for (const off of offs) { try { off(); } catch { /* gone */ } }
       if (observer) observer.disconnect();
@@ -450,7 +668,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
         doc.removeEventListener('visibilitychange', onVisibility);
       }
       if (ctx && ctx.close) { try { ctx.close(); } catch { /* already */ } }
-      ctx = null; master = null; wet = null;
+      ctx = null; master = null; wet = null; beds = null; deepIn = null; tailOut = null; replayGain = null;
     },
   };
 }
