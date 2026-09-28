@@ -181,3 +181,15 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   supervisor re-run); live Keincheck run with a temp profile; 0 binding errors. Two review rounds.
 - Ledger: win-layered-audio verified; shell-home-audio, shell-audio-playback-devices, views-settings-audio updated.
 - Gaps: output-device selection (this head has no device picker yet); audio-only session start (no session engine).
+
+## avalonia-port/overlay-flashes: +660/-275
+- Image flashes as click-through override-redirect overlays, one window per image, WPF placement
+  (FlashPlacement moved to Core; the WPF FlashService now calls it, logic unchanged), WPF timing
+  (1 s delay, 300 ms stagger, lifetime FlashDuration + 1 s, linear 1/32 fade at WPF's rate), images decoded
+  at display size, compositor-side fade via _NET_WM_WINDOW_OPACITY, busy guard like WPF.
+- Manual trigger: head-only "▶ Test" on the Flash card (decision logged); the session scheduler that fires
+  flashes is the next unit.
+- Evidence: FlashOverlayPlacementTests (fail-proofed); X readback of 5 overlays (override-redirect, depth 32,
+  empty input shape), timeline 0.28-0.29 s stagger, 6.40 s lifetime; KWin opacity ramp. Two review rounds.
+- Not run: a physical click through an overlay (no xdotool), a desktop screenshot over another app (session
+  locked), non-compositing X11 WMs (no fade there), Windows (no Win32 shim yet).

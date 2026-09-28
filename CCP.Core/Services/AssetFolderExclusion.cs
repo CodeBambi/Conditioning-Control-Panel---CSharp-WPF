@@ -38,6 +38,25 @@ public static class AssetFolderExclusion
     }
 
     /// <summary>
+    /// The files in <paramref name="files"/> the user has not unticked - neither listed in
+    /// <c>DisabledAssetPaths</c> nor under a <c>DisabledAssetFolders</c> entry - with paths made
+    /// relative to <paramref name="assetsRoot"/>. Both sides are compared case-insensitively and
+    /// separator-agnostic: the saved string can differ from the runtime path by either.
+    /// </summary>
+    public static List<string> Enabled(List<string> files, string assetsRoot, AppSettings? s)
+    {
+        if (s == null || (s.DisabledAssetPaths.Count == 0 && s.DisabledAssetFolders.Count == 0)) return files;
+        static string N(string p) => p.Replace('\\', '/');
+        var disabled = new HashSet<string>(s.DisabledAssetPaths.Select(N), StringComparer.OrdinalIgnoreCase);
+        var folders = s.DisabledAssetFolders.ToArray();
+        return files.Where(f =>
+        {
+            var rel = N(Path.GetRelativePath(assetsRoot, f));
+            return !disabled.Contains(rel) && !IsUnderAny(rel, folders);
+        }).ToList();
+    }
+
+    /// <summary>
     /// A folder was ticked or unticked as a whole. Unticked: remember it (its own sub-markers are
     /// then redundant). Ticked: forget it, every marker under it, and every marker above it,
     /// because an ancestor that now holds an enabled folder is no longer fully excluded.

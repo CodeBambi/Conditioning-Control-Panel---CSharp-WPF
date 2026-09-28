@@ -41,6 +41,12 @@
                 <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" CornerRadius="99"
                         Background="#8C131320" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" Padding="12,5,8,5">
                     <StackPanel Orientation="Horizontal">
+                        <!-- Head-only: WPF has no manual trigger on this card. One burst on the desktop,
+                             exactly as a scheduled flash would draw it (Views/Overlays/FlashOverlay). -->
+                        <Button x:Name="BtnTestFlash" Theme="{DynamicResource OutlineButton}" Margin="0,0,10,0"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str btn_test_2}"/>
+                        </Button>
                         <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <CheckBox x:Name="ChkEnable"

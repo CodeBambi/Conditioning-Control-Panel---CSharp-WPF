@@ -64,6 +64,7 @@ internal static class X11Overlay
     [DllImport(LibX11)] private static extern IntPtr XSetErrorHandler(XErrorHandler handler);
     [DllImport(LibX11)] private static extern IntPtr XDefaultRootWindow(IntPtr display);
     [DllImport(LibX11)] private static extern IntPtr XInternAtom(IntPtr display, string name, bool onlyIfExists);
+    [DllImport(LibX11)] private static extern int XChangeProperty(IntPtr display, IntPtr window, IntPtr property, IntPtr type, int format, int mode, IntPtr[] data, int count);
     [DllImport(LibX11)] private static extern int XSendEvent(IntPtr display, IntPtr window, bool propagate, long mask, IntPtr sendEvent);
 
     [DllImport(LibXfixes)] private static extern int XFixesQueryExtension(IntPtr display, out int eventBase, out int errorBase);
@@ -177,6 +178,25 @@ internal static class X11Overlay
                 return !_xErrored; // e.g. BadWindow: the server refused the request
             }
             finally { Marshal.FreeHGlobal(attrs); }
+        }
+    }
+
+    /// <summary>Whole-window alpha applied by the COMPOSITOR (<c>_NET_WM_WINDOW_OPACITY</c>), the X11
+    /// form of a layered window's alpha. Unlike a visual Opacity it costs the app no re-render:
+    /// measured on XWayland/GLX, re-rendering the overlays every fade frame stalled the UI
+    /// dispatcher ~1.7 s per flash burst. Works before Show(), so a window can map invisible.</summary>
+    internal static bool SetOpacity(TopLevel window, double alpha)
+    {
+        if (!TryGetXid(window, out var xid)) return false;
+        lock (Gate)
+        {
+            if (!EnsureDisplay()) return false;
+            // Format-32 property data is an array of C longs, i.e. pointer-sized on LP64.
+            var value = (IntPtr)(long)(Math.Clamp(alpha, 0, 1) * uint.MaxValue);
+            XChangeProperty(_display, xid, XInternAtom(_display, "_NET_WM_WINDOW_OPACITY", false),
+                (IntPtr)6 /* XA_CARDINAL */, 32, 0 /* PropModeReplace */, new[] { value }, 1);
+            XFlush(_display);
+            return true;
         }
     }
 

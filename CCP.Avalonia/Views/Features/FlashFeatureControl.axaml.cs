@@ -33,6 +33,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             InitializeComponent();
 
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
+            BtnTestFlash.Click += (_, _) => Overlays.FlashOverlay.TriggerOnce(this);
+            // No click-through overlays on this platform (Windows head, headless): nothing to test.
+            BtnTestFlash.IsEnabled = Platform.X11Overlay.IsAvailable;
             SliderFrequency.ValueChanged += SliderFrequency_Changed;
             SliderImages.ValueChanged += SliderImages_Changed;
             SliderMaxOnScreen.ValueChanged += SliderMaxOnScreen_Changed;
