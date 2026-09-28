@@ -99,6 +99,8 @@ namespace ConditioningControlPanel
         public static volatile Func<string?>? PinkRushDescriptionProvider;
         public static volatile Func<(byte R, byte G, byte B)?>? FilterColorRgbProvider;
         public static volatile Func<IReadOnlyDictionary<string, bool>?>? DefaultSubliminalPoolProvider;
+        /// <summary>ModService.ReapplyActiveModPools: re-read the active mod's pools (PhrasePoolCustody.Restore after a mid-session switch).</summary>
+        public static volatile Action? ReapplyActiveModPoolsProvider;
 
         private static readonly Lazy<IReadOnlyDictionary<string, ModPackage>> VanillaMods = new(() =>
             new Dictionary<string, ModPackage>(StringComparer.OrdinalIgnoreCase)
@@ -233,6 +235,7 @@ namespace ConditioningControlPanel
             PinkRushDescriptionProvider = mods.GetPinkRushDescription;
             FilterColorRgbProvider = () => mods.GetFilterColorRgb();
             DefaultSubliminalPoolProvider = () => mods.GetDefaultSubliminalPool();
+            ReapplyActiveModPoolsProvider = mods.ReapplyActiveModPools;
             mods.ModChanged += RaiseModChanged;
             mods.ModAvailabilityChanged += (sender, id) =>
             {

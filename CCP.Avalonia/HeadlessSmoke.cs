@@ -46,6 +46,12 @@ namespace ConditioningControlPanel.Avalonia
             Check("UrlPromptDialog strings resolve",
                   url.LocCancel != "btn_cancel", url.LocCancel);
 
+            // Program.Main seeds the phrase-pool delegates; unseeded, a mid-session mod switch backs up session phrases (#906).
+            Check("session phrase-pool delegates seeded",
+                  CoreSession.NoteUserPhrasePoolEdit != null && CoreSession.ReapplyPhrasePoolOverrides != null
+                  && CoreSession.UserPhrasePoolsWhileOverriding != null
+                  && CoreSession.UserPhrasePoolsWhileOverriding() == null);
+
             // Audio: a real clip through LibVLC (dummy output, no sound card needed) must report
             // started, then finished, within 2 s. Unseeded CoreAudio would fire finished only.
             var clip = System.IO.Path.Combine(AppContext.BaseDirectory, "Resources", "sounds", "faucet_charge_drop.wav");
