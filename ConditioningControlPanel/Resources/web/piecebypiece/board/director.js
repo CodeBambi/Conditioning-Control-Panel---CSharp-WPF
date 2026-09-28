@@ -13,7 +13,11 @@
  * inset. The layout rotates at random (trio, duo, corner, never the same twice
  * running). The panels are staggered so the hit lands in panel 1, then 2, then
  * 3, with the panel taking its hit lit and the others dimmed; all timing is
- * board/replay-plan.js. A click, a tap or a key skips it, and the board keeps
+ * board/replay-plan.js. Panels slide in from their own edge with a swing past
+ * the seat, take their hit (punch, shake, chromatic split, speed lines or a
+ * halftone ring, an impact word, a flash) and slide back out, faster on a skip;
+ * the look is one shader pass per panel, board/replay-fx.js. The HUD fades down
+ * behind a full-screen replay. A click, a tap or a key skips it, and the board keeps
  * taking input throughout. Online and a low clock get the corner only; under
  * 10 s, reduced motion, or the option off, nothing.
  *
@@ -22,7 +26,8 @@
 
 import * as THREE from 'three';
 import { LAYOUTS, clipTime, panelState, panelCount, replayLength, replayAllowed,
-  createLayoutDeck, scalePoly, orient, REPLAY, hitAt } from './replay-plan.js';
+  createLayoutDeck, placePoly, offStage, exitLength, orient, REPLAY, hitAt } from './replay-plan.js';
+import { REPLAY_VERT, REPLAY_FRAG, burstStyle, impactWords, boil } from './replay-fx.js';
 import { createReplayShots } from './replay-shots.js';
 import { presentation } from '../game/preferences.js';
 
@@ -92,20 +97,6 @@ function applySnap(obj, a, b, f, group, live) {
   const skins = skinsOf(obj);
   a.skins.forEach((m, i) => { if (skins[i]) { skins[i].opacity = m[0]; skins[i].transparent = m[1]; skins[i].depthWrite = m[2]; } });
 }
-
-// ---- the compositor ------------------------------------------------------------
-const VERT = 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }';
-const FRAG = `uniform sampler2D map; uniform vec2 res; uniform vec3 planes[6]; uniform int count;
-  uniform float flash; uniform float light;
-  void main(){
-    vec2 p = gl_FragCoord.xy;
-    for (int i = 0; i < 6; i++) { if (i >= count) break; if (dot(planes[i].xy, p) + planes[i].z < 0.0) discard; }
-    vec3 c = texture2D(map, p / res).rgb * light;
-    c = mix(c, vec3(1.0), flash);
-    gl_FragColor = vec4(c, 1.0);
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
-  }`;
 
 export function createDirector({ view, anim, bus, game, root = null, random = Math.random }) {
   const { renderer, camera, pieceGroup: group } = view;
@@ -234,14 +225,18 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     const perp = new THREE.Vector3(dN.z, 0, -dN.x);
     if (perp.dot(camera.position.clone().sub(mid)) < 0) perp.negate();   // the side the player is looking from
     const full = { ...clip, duration: clip.t };
+    const impact = clip.hitInfo?.impact;
     replay = { clip: full, layout, t: 0, prevT: -1, end: replayLength(layout) - REPLAY.exit, dN, mid, perp, exiting: false,
-      shots: shots.pick(layout, full) };
+      shots: shots.pick(layout, full), words: impactWords(impact, random), bstyle: burstStyle(impact), seed: Math.floor(random() * 997),
+      tilt: [0, 1, 2].map(() => (random() - .5) * 16), pinned: null };
+    hudDown(layout !== 'corner');
+    chip.classList.remove('stamp'); void chip.offsetWidth; chip.classList.add('stamp');
     bus?.emit?.('replay-show', { layout, n: panelCount(layout), hit: clip.hitInfo || null });
   }
   function skip() { if (replay && replay.t < replay.end) { replay.end = replay.t; replay.skipped = true; } }
   // Replay beats for sound and effects, fired once each as presentation time crosses them:
   //   replay-show {layout,n,hit}  replay-panel-in {i,n,layout}  replay-panel-hit {i,n,layout,hit}
-  //   replay-exit {layout,skipped}  replay-done {}
+  //   replay-exit {layout,skipped}  replay-done {} ({cancelled:true} when cut short)
   // `hit` is the original capture's own 'hit' payload (piece, sound, impact, victim...).
   function beats(prev, t) {
     const { layout, clip } = replay, n = panelCount(layout);
@@ -250,9 +245,18 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
       if (crossed(i * REPLAY.enterGap)) bus?.emit?.('replay-panel-in', { i, n, layout });
       if (!replay.skipped && crossed(hitAt(layout, i)) && t < replay.end) bus?.emit?.('replay-panel-hit', { i, n, layout, hit: clip.hitInfo || null });
     }
-    if (!replay.exiting && t >= replay.end) { replay.exiting = true; bus?.emit?.('replay-exit', { layout, skipped: !!replay.skipped }); }
+    if (!replay.exiting && t >= replay.end) { replay.exiting = true; hudDown(false); bus?.emit?.('replay-exit', { layout, skipped: !!replay.skipped }); }
   }
-  function cancel() { replay = null; rec = null; follow = null; weight = 0; pendingVictim = null; paintDom(null); }
+  // A replay cut short (the game moved on, a new game, the menu) still says it is
+  // done, so the sound lane's duck and tails let go.
+  function dropReplay() {
+    if (!replay) return;
+    replay = null; paintDom(null);
+    bus?.emit?.('replay-done', { cancelled: true });
+  }
+  function cancel() { dropReplay(); rec = null; follow = null; weight = 0; pendingVictim = null; paintDom(null); }
+  // The HUD (clocks, camera buttons, hints) steps back behind a full-screen replay.
+  function hudDown(on) { globalThis.document?.body?.classList.toggle('pbp-replay-full', !!on); }
 
   // cameras, one per panel; where they stand is board/replay-shots.js
   const shots = createReplayShots({ group, random });
@@ -268,8 +272,10 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
       const mat = new THREE.ShaderMaterial({
         uniforms: { map: { value: rt.texture }, res: { value: new THREE.Vector2(bw, bh) },
           planes: { value: Array.from({ length: 6 }, () => new THREE.Vector3()) }, count: { value: 0 },
-          flash: { value: 0 }, light: { value: 1 } },
-        vertexShader: VERT, fragmentShader: FRAG, depthTest: false, depthWrite: false,
+          flash: { value: 0 }, light: { value: 1 }, desat: { value: 0 }, zoom: { value: 1 }, chroma: { value: 0 },
+          burst: { value: -1 }, bstyle: { value: 0 }, wipe: { value: -1 }, time: { value: 0 }, seed: { value: 0 },
+          radius: { value: 1 }, grain: { value: .024 }, center: { value: new THREE.Vector2() }, wipeDir: { value: new THREE.Vector2(1, 0) } },
+        vertexShader: REPLAY_VERT, fragmentShader: REPLAY_FRAG, depthTest: false, depthWrite: false,
       });
       const q = new THREE.Mesh(quadGeo, mat); q.frustumCulled = false; q.renderOrder = targets.length; q.visible = false;
       comp.add(q); targets.push(rt); quads.push(q);
@@ -292,27 +298,57 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
   const dom = document.createElement('div');
   dom.className = 'pbp-replay'; dom.hidden = true; dom.setAttribute('aria-hidden', 'true');
   dom.innerHTML = '<svg class="pbp-replay-seams" preserveAspectRatio="none"></svg>'
+    + '<b class="pbp-replay-word"></b><b class="pbp-replay-word"></b><b class="pbp-replay-word"></b>'
     + '<div class="pbp-replay-chip"><i></i>REPLAY</div><div class="pbp-replay-skip">Click to skip</div>';
   host?.appendChild(dom);
   const seams = dom.querySelector('svg'), chip = dom.querySelector('.pbp-replay-chip'), hint = dom.querySelector('.pbp-replay-skip');
+  const words = [...dom.querySelectorAll('.pbp-replay-word')];
   function paintDom(frame) {
-    if (!frame) { dom.hidden = true; seams.innerHTML = ''; return; }
+    if (!frame) {
+      dom.hidden = true; seams.innerHTML = ''; hudDown(false); chip.classList.remove('stamp');
+      for (const w of words) w.style.opacity = 0;
+      return;
+    }
     dom.hidden = false;
-    const { w, h, polys, alpha, layout, portrait } = frame;
+    const { w, h, polys, alpha, layout, t } = frame;
     seams.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    seams.innerHTML = polys.map(({ pts, lit }) => {
-      const d = pts.map(([x, y]) => `${(x * w).toFixed(1)},${(y * h).toFixed(1)}`).join(' ');
-      return `<polygon points="${d}" class="seam${layout === 'corner' ? ' corner' : ''}"/>`
-        + (lit || layout === 'corner' ? `<polygon points="${d}" class="lit"/>` : '');
+    const corner = layout === 'corner';
+    // ink seams: drawn on as the panel lands, boiling a little, retracting on the way out
+    seams.innerHTML = polys.map(({ pts, seat, lit, seam }) => {
+      const d = pts.map(([x, y], v) => {
+        const [bx, by] = boil(seat[v][0], seat[v][1], t, corner ? 1 : 1.6);
+        return `${(x * w + bx).toFixed(1)},${(y * h + by).toFixed(1)}`;
+      }).join(' ');
+      const dash = `stroke-dasharray="1 1" stroke-dashoffset="${(1 - seam).toFixed(3)}"`;
+      return `<polygon points="${d}" pathLength="1" ${dash} class="seam${corner ? ' corner' : ''}"/>`
+        + (lit || corner ? `<polygon points="${d}" pathLength="1" ${dash} class="lit"/>` : '');
     }).join('');
     chip.style.opacity = hint.style.opacity = alpha;
-    if (layout === 'corner') {
-      const box = orient(LAYOUTS.corner[0], portrait);
-      const xs = box.map(p => p[0]), ys = box.map(p => p[1]);
+    // the impact word rides its own panel, up and to one side of the action
+    words.forEach((el, i) => {
+      const p = polys.find(q => q.i === i);
+      if (!p || !(p.word.alpha > 0)) { el.style.opacity = 0; return; }
+      const xs = p.pts.map(q => q[0]), ys = p.pts.map(q => q[1]);
+      const pw = (Math.max(...xs) - Math.min(...xs)) * w, ph = (Math.max(...ys) - Math.min(...ys)) * h;
+      const size = Math.max(26, Math.min(120, Math.min(pw, ph) * (corner ? .24 : .2)));
+      const side = i % 2 ? 1 : -1, text = frame.words[i] || 'POP';
+      // up and to one side of the action, but always wholly inside its panel
+      const hw = size * .36 * text.length + 10, hh = size * .6 + 8;
+      const x0 = Math.min(...xs) * w + hw, x1 = Math.max(...xs) * w - hw, y0 = Math.min(...ys) * h + hh, y1 = Math.max(...ys) * h - hh;
+      const fit = (v, a, b) => (a > b ? (a + b) / 2 : Math.max(a, Math.min(b, v)));
+      el.textContent = text;
+      el.style.fontSize = `${size.toFixed(0)}px`;
+      el.style.left = `${fit(p.cx * w + side * pw * .18, x0, x1).toFixed(1)}px`;
+      el.style.top = `${fit(p.cy * h - ph * .26, y0, y1).toFixed(1)}px`;
+      el.style.opacity = p.word.alpha.toFixed(3);
+      el.style.transform = `translate(-50%, -50%) rotate(${(frame.tilt[i] || 0).toFixed(1)}deg) scale(${p.word.scale.toFixed(3)})`;
+    });
+    if (corner && polys[0]) {
+      const xs = polys[0].pts.map(p => p[0]), ys = polys[0].pts.map(p => p[1]);
       chip.style.left = `${Math.min(...xs) * w + 10}px`; chip.style.top = `${Math.min(...ys) * h - 34}px`;
       hint.style.left = `${Math.min(...xs) * w + 10}px`; hint.style.top = `${Math.max(...ys) * h + 8}px`;
       hint.style.right = 'auto'; hint.style.bottom = 'auto';
-    } else {
+    } else if (!corner) {
       chip.style.left = '16px'; chip.style.top = '16px';
       hint.style.left = 'auto'; hint.style.top = 'auto'; hint.style.right = '16px'; hint.style.bottom = '16px';
     }
@@ -323,11 +359,12 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     record(dt);
     if (!replay) return;
     if (menuUp()) { cancel(); return; }
-    if (!paused()) replay.t += dt;
+    if (replay.pinned != null) replay.t = replay.pinned;
+    else if (!paused()) replay.t += dt;
     beats(replay.prevT, replay.t); replay.prevT = replay.t;
     const { layout, clip } = replay;
     const n = panelCount(layout);
-    if (replay.t > replay.end + REPLAY.exit + .05) { replay = null; paintDom(null); bus?.emit?.('replay-done', {}); return; }
+    if (replay.t > replay.end + exitLength(replay.skipped) + .05) { replay = null; paintDom(null); bus?.emit?.('replay-done', {}); return; }
     renderer.getDrawingBufferSize(buf);
     const bw = buf.x, bh = buf.y, portrait = bw < bh;
     ensureTargets(bw, bh);
@@ -343,20 +380,23 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     for (let i = 0; i < 3; i++) quads[i].visible = false;
     try {
       for (let i = 0; i < n; i++) {
-        const st = panelState(layout, i, replay.t, replay.end);
-        if (st.scale < .002) continue;
+        const st = panelState(layout, i, replay.t, replay.end, { portrait, skipped: !!replay.skipped });
         const full = orient(LAYOUTS[layout][i], portrait);
-        const { pts } = scalePoly(full, st.scale);
+        const placed = placePoly(full, st.scale, st.ox, st.oy);
+        if (st.scale < .002 || offStage(placed.pts)) continue;
+        const pts = placed.pts;
         const cx = full.reduce((a, p) => a + p[0], 0) / full.length, cy = full.reduce((a, p) => a + p[1], 0) / full.length;
         const clipT = clipTime(layout, i, replay.t, clip);
         showFrame(clip, clipT);
         const cam = cams[i], shot = replay.shots[i];
         const xs = full.map(p => p[0]), ys = full.map(p => p[1]);
+        const pw = Math.max(...xs) - Math.min(...xs), ph = Math.max(...ys) - Math.min(...ys);
         const ctx = { clip, clipT, t: replay.t, i, n, layout, dN: replay.dN, mid: replay.mid, perp: replay.perp, bw, bh,
-          panel: { cx, cy, w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) } };
+          panel: { cx, cy, w: pw, h: ph } };
         cam.aspect = bw / bh;
         shots.aim(shot, cam, ctx);
-        cam.setViewOffset(bw, bh, bw / 2 - cx * bw, bh / 2 - cy * bh, bw, bh);
+        // the picture travels with its panel: the lens centres on where the panel IS
+        cam.setViewOffset(bw, bh, bw / 2 - placed.cx * bw, bh / 2 - placed.cy * bh, bw, bh);
         cam.updateProjectionMatrix();
         const hide = shots.occluders(shot, cam, ctx) || [];
         const wasVisible = hide.map(o => o.visible);
@@ -368,9 +408,16 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
         cam.clearViewOffset();
         const q = quads[i], u = q.material.uniforms, pl = planesFor(pts, bw, bh);
         pl.forEach((v, j) => u.planes.value[j].set(v[0], v[1], v[2]));
-        u.count.value = pl.length; u.flash.value = st.flash; u.light.value = st.light;
+        u.count.value = pl.length; u.flash.value = st.flash; u.light.value = st.light; u.desat.value = st.desat;
+        u.zoom.value = st.zoom; u.chroma.value = st.chroma; u.burst.value = st.burst; u.bstyle.value = replay.bstyle;
+        u.wipe.value = st.wipe; u.time.value = replay.t; u.seed.value = replay.seed + i * 13;
+        u.radius.value = .5 * Math.max(pw * st.scale * bw, ph * st.scale * bh);
+        u.center.value.set(placed.cx * bw, (1 - placed.cy) * bh);
+        u.wipeDir.value.set(-st.dir[0], st.dir[1]);
+        q.renderOrder = st.lit ? 10 : i;       // the panel taking its hit punches over its neighbours
         q.visible = true;
-        polys.push({ pts, lit: st.lit });
+        polys.push({ i, pts, seat: full, cx: placed.cx, cy: placed.cy, lit: st.lit, seam: st.seam,
+          word: st.lit || n === 1 ? st.word : { alpha: 0, scale: 0 } });
       }
     } finally {
       for (const [o, s] of live) applySnap(o, s, null, 0, group, true);
@@ -381,9 +428,9 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     renderer.autoClear = false;
     renderer.render(comp, compCam);
     renderer.autoClear = auto;
-    const a = clamp01(replay.t / .2) * (1 - clamp01((replay.t - replay.end) / .25));
+    const a = clamp01(replay.t / .12) * (1 - clamp01((replay.t - replay.end) / (exitLength(replay.skipped) * .8)));
     const rect = view.renderer.domElement.getBoundingClientRect();
-    paintDom({ w: rect.width, h: rect.height, polys, alpha: a, layout, portrait });
+    paintDom({ w: rect.width, h: rect.height, polys, alpha: a, layout, portrait, t: replay.t, words: replay.words, tilt: replay.tilt });
   }
 
   // ---- wiring ------------------------------------------------------------------------
@@ -403,7 +450,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     };
   }
   function noteMove(piece, from, to) {
-    if (replay) { replay = null; paintDom(null); }      // the game moved on; so do we
+    dropReplay();                                        // the game moved on; so do we
     const victim = pendingVictim && pendingVictim.userData.side !== piece.userData.side ? pendingVictim : null;
     pendingVictim = null;
     if (rec && !rec.done) rec = null;
@@ -421,6 +468,8 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
 
   return {
     update, afterRender, skip, cancel,
+    /** Hold the replay at presentation time t (null lets it run again): a screenshot harness's seek. */
+    pin(t) { if (replay) replay.pinned = t == null ? null : Math.max(0, +t); return !!replay; },
     /** True while a full-screen replay owns the view: the turn card and the computer wait for it. */
     holding() {
       if (replay) return replay.layout !== 'corner';

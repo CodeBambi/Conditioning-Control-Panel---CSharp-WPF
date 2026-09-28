@@ -31,17 +31,34 @@ export const REPLAY = Object.freeze({
   lead: .62,        // replay start to panel 0's hit
   stagger: .46,     // each later panel hits this much after the one before
   tail: .95,        // after the last hit, before the panels leave
-  exit: .3,         // the panels shrinking away
-  enter: .3,        // a panel punching in
-  enterGap: .08,    // and the next one a beat behind
+  exit: .32,        // the panels sliding back out, stagger included
+  exitGap: .04,     // last panel leaves first, the next this much later
+  exitSkip: .16,    // a skipped replay leaves all at once, this fast
+  enter: .34,       // a panel sliding in from its own edge
+  enterGap: .07,    // and the next one a beat behind
+  overshoot: 1.35,  // how far past its seat a panel swings on arrival (easeOutBack c1)
   slow: .28,        // playback speed at the moment of contact
   slowWidth: .2,    // seconds either side of contact the slow-down spans
   preRoll: 1.6,     // the furthest back into the clip a panel will start
   lit: [-.06, .4],  // a panel is lit from just before its hit to just after
-  dim: .38,         // brightness of the panels not taking their hit
+  dim: .56,         // brightness of the panels not taking their hit
+  desat: .7,        // and how much colour they lose
   rest: .9,         // brightness when nobody is taking a hit
   flash: .42,       // white flash on a panel's own hit
   flashSec: .2,
+  // the hit, per panel
+  punch: .11,       // zoom pulse at contact (1 + punch)
+  punchSec: .34,
+  shake: .011,      // panel shake, fraction of the stage
+  shakeSec: .3,
+  shakeHz: 23,
+  chroma: 9,        // chromatic split at contact, px at the panel rim
+  chromaSec: .32,
+  burstSec: .46,    // speed lines / halftone ring rushing out
+  wordSec: .5,      // the comic impact word
+  // the frame
+  wipeSec: .2,      // white wipe across a panel as it lands
+  seamSec: .26,     // ink seams drawing on
 });
 
 export function panelCount(layout) { return (LAYOUTS[layout] || LAYOUTS.corner).length; }
@@ -82,27 +99,93 @@ export function clipTime(layout, i, t, clip) {
 }
 
 const clamp01 = v => Math.max(0, Math.min(1, v));
-const easeOutBack = t => { const c1 = 1.7, c3 = c1 + 1; return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2; };
+const easeOutBack = (t, c1 = 1.7) => { const c3 = c1 + 1; return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2; };
+const easeInBack = (t, c1 = 1.2) => (c1 + 1) * t ** 3 - c1 * t ** 2;
 const easeIn = t => t * t * t;
+const easeOut = t => 1 - (1 - t) ** 3;
+
+/** How long the panels take to leave: a skip is snappier. */
+export function exitLength(skipped = false) { return skipped ? REPLAY.exitSkip : REPLAY.exit; }
 
 /**
- * Everything a panel needs for one frame: its scale (entering and leaving), how
- * lit it is, and its own flash. `end` is when the exit began, if it was cut short.
+ * Where a panel comes from and goes back to: straight out from the stage centre
+ * through its own centroid, far enough that every corner has left the stage.
+ * Returns { dx, dy } unit direction and `dist` in stage units.
  */
-export function panelState(layout, i, t, end = replayLength(layout) - REPLAY.exit) {
+export function slideOf(pts) {
+  const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length, cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  let dx = cx - .5, dy = cy - .5;
+  const len = Math.hypot(dx, dy) || 1;
+  dx /= len; dy /= len;
+  if (Math.hypot(cx - .5, cy - .5) < 1e-3) { dx = -1; dy = 0; }
+  // the shortest travel that takes every corner off the stage, plus a hair
+  let lo = 0, hi = 3;
+  for (let k = 0; k < 30; k++) {
+    const m = (lo + hi) / 2;
+    if (offStage(pts.map(([x, y]) => [x + dx * m, y + dy * m]))) hi = m; else lo = m;
+  }
+  return { dx, dy, dist: hi + .03, cx, cy };
+}
+
+/** A polygon moved by (dx, dy) and scaled about its centroid. */
+export function placePoly(pts, s = 1, ox = 0, oy = 0) {
+  const { pts: sp, cx, cy } = scalePoly(pts, s);
+  return { pts: sp.map(([x, y]) => [x + ox, y + oy]), cx: cx + ox, cy: cy + oy };
+}
+/** True when no part of the polygon is on the 0..1 stage. */
+export function offStage(pts) {
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  return Math.max(...xs) <= 0 || Math.min(...xs) >= 1 || Math.max(...ys) <= 0 || Math.min(...ys) >= 1;
+}
+
+/**
+ * Everything a panel needs for one frame. `end` is when the exit began (early on
+ * a skip). Motion: `ox, oy` offset of the whole panel (slide + shake, stage
+ * units), `scale` about its centroid. Look: `light`, `desat`, `flash`, `zoom`
+ * (picture punch), `chroma` (px), `burst` 0..1 or -1, `wipe` 0..1 or -1,
+ * `seam` 0..1 (ink drawn), `word` { alpha, scale } for the impact word.
+ */
+export function panelState(layout, i, t, end = replayLength(layout) - REPLAY.exit, { portrait = false, skipped = false } = {}) {
   const n = panelCount(layout);
-  const enter = easeOutBack(clamp01((t - i * REPLAY.enterGap) / REPLAY.enter));
-  const leave = 1 - easeIn(clamp01((t - end - (n - 1 - i) * .04) / (REPLAY.exit - .08)));
-  const litOf = j => { const x = t - hitAt(layout, j); return x >= REPLAY.lit[0] && x <= REPLAY.lit[1]; };
-  let light = REPLAY.rest;
+  const pts = orient((LAYOUTS[layout] || LAYOUTS.corner)[i], portrait);
+  const sl = slideOf(pts);
+  // ENTER: in from its own edge with a swing past the seat
+  const e = clamp01((t - i * REPLAY.enterGap) / REPLAY.enter);
+  let slide = 1 - easeOutBack(e, REPLAY.overshoot);
+  let scale = .9 + .1 * easeOut(e);
+  // EXIT: a little pull back, then out the way it came; a skip goes all at once, fast
+  const exLen = exitLength(skipped);
+  const gap = skipped ? 0 : REPLAY.exitGap;
+  const dur = exLen - (n - 1) * gap;
+  const x = t >= end ? clamp01((t - end - (n - 1 - i) * gap) / dur) : 0;
+  if (x > 0) {
+    slide += skipped ? easeIn(x) : easeInBack(x);
+    scale *= 1 - .12 * easeIn(x);
+  }
+  const litOf = j => { const d = t - hitAt(layout, j); return d >= REPLAY.lit[0] && d <= REPLAY.lit[1] && hitAt(layout, j) < end; };
+  let light = REPLAY.rest, desat = 0;
   if (n > 1) {
     if (litOf(i)) light = 1;
-    else for (let j = 0; j < n; j++) if (j !== i && litOf(j)) { light = REPLAY.dim; break; }
+    else for (let j = 0; j < n; j++) if (j !== i && litOf(j)) { light = REPLAY.dim; desat = REPLAY.desat; break; }
   } else light = 1;
-  const x = t - hitAt(layout, i);
-  const own = x >= 0 ? REPLAY.flash * Math.max(0, 1 - x / REPLAY.flashSec) : 0;
-  const entry = t >= i * REPLAY.enterGap ? .8 * Math.max(0, 1 - (t - i * REPLAY.enterGap) / .18) : 0;
-  return { scale: Math.max(0, enter * leave), light, lit: n > 1 && litOf(i), flash: Math.max(own, entry) };
+  // THE HIT, only if the replay reached it before any skip
+  const h = t - hitAt(layout, i), hit = h >= 0 && hitAt(layout, i) < end;
+  const decay = (sec, pow = 2) => (hit && h < sec ? (1 - h / sec) ** pow : 0);
+  const flash = hit ? REPLAY.flash * Math.max(0, 1 - h / REPLAY.flashSec) : 0;
+  const zoom = 1 + REPLAY.punch * decay(REPLAY.punchSec);
+  const amp = REPLAY.shake * decay(REPLAY.shakeSec), w = h * Math.PI * 2 * REPLAY.shakeHz;
+  const sx = amp * Math.sin(w + i * 1.7), sy = amp * Math.cos(w * 1.31 + i * 2.3);
+  const chroma = REPLAY.chroma * decay(REPLAY.chromaSec, 1.5);
+  const burst = hit && h < REPLAY.burstSec ? h / REPLAY.burstSec : -1;
+  const word = hit && h < REPLAY.wordSec
+    ? { alpha: 1 - clamp01((h - REPLAY.wordSec * .6) / (REPLAY.wordSec * .4)), scale: easeOutBack(clamp01(h / .14), 2.6) * (1 + .06 * (h / REPLAY.wordSec)) }
+    : { alpha: 0, scale: 0 };
+  // THE FRAME: a white wipe as it lands, ink drawing on, and back off on the way out
+  const wt = (t - i * REPLAY.enterGap - REPLAY.enter * .5) / REPLAY.wipeSec;
+  const wipe = wt >= 0 && wt <= 1 ? wt : -1;
+  const seam = easeOut(clamp01((t - i * REPLAY.enterGap - .06) / REPLAY.seamSec)) * (1 - clamp01(x * 1.7));
+  const ox = sl.dx * sl.dist * slide + sx, oy = sl.dy * sl.dist * slide + sy;
+  return { scale, ox, oy, slide, dir: [sl.dx, sl.dy], light, desat, lit: n > 1 && litOf(i), flash, zoom, chroma, burst, wipe, seam, word };
 }
 
 /**
