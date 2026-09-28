@@ -20,6 +20,20 @@ function place(ctx, heat) {
   }
 }
 
+/**
+ * How strong a flash may be at this spot: 1 at the edges, down to centreAlpha
+ * over the middle of the screen (Mort, 2026-09-28: a flash dead over the board
+ * hid what the computer did with its move). `at` is the landing spot in vw/vh.
+ */
+export function centreFade(at, t = {}) {
+  const floor = t.centreAlpha ?? 0.22;
+  const inner = t.centreInner ?? 0.16;
+  const outer = t.centreOuter ?? 0.6;
+  const d = Math.hypot((at.left - 50) / 50, (at.top - 50) / 50);
+  const k = d <= inner ? 0 : d >= outer ? 1 : (d - inner) / Math.max(0.01, outer - inner);
+  return floor + (1 - floor) * (k * k * (3 - 2 * k));
+}
+
 export function createFlash(ctx) {
   const t = (ctx.tuning && ctx.tuning.flash) || { maxLive: 6 };
   let live = 0;
@@ -41,7 +55,7 @@ export function createFlash(ctx) {
     img.style.setProperty('--pbp-dur', dur + 'ms');
     img.style.setProperty('--pbp-rot', ctx.rand(-9, 9).toFixed(2) + 'deg');
     img.style.setProperty('--pbp-size', (16 + heat * 16).toFixed(1) + 'vmin');
-    img.style.setProperty('--pbp-peak', (0.55 + heat * 0.4).toFixed(2));
+    img.style.setProperty('--pbp-peak', ((0.55 + heat * 0.4) * centreFade(at, t)).toFixed(2));
     img.decoding = 'async';
     img.src = url;
 

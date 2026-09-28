@@ -29,21 +29,27 @@ export const RAMP_TUNING = Object.freeze({
   unlock: Object.freeze({ melt: 0.25, blur: 0.40, spiral: 0.55, overlay: 0.70 }),
 
   // --- one-shot cadence bands (ms between spawns, slow at 0 heat) -----------
-  flash: Object.freeze({ slowMs: 4200, fastMs: 520, maxLive: 6 }),
+  // centreAlpha / centreInner / centreOuter (Mort, 2026-09-28): a flash may land
+  // over the board, but the nearer the centre of the screen it lands the more
+  // see-through it is, so the move underneath stays readable. Distance is 0 at
+  // the centre and 1 at the middle of a screen edge.
+  flash: Object.freeze({ slowMs: 4200, fastMs: 520, maxLive: 6, centreAlpha: 0.22, centreInner: 0.16, centreOuter: 0.6 }),
   gifRain: Object.freeze({ slowMs: 3000, fastMs: 620, maxLive: 12, fallMsMin: 2400, fallMsMax: 3900 }),
 
   // --- sustained layer envelopes -------------------------------------------
-  melt: Object.freeze({ minAlpha: 0.10, maxAlpha: 0.52 }),
+  // Mort (2026-09-28): the early stages were right, full tilt was unreadable.
+  // The top of every full-screen layer came down; the bottom barely moved.
+  melt: Object.freeze({ minAlpha: 0.10, maxAlpha: 0.30 }),
   blurMaxPx: 3,
   // THE VEIL BUDGET. The two full-screen gif veils (spiral, overlay) may cover
   // this much between them and no more, and they step back to `cardVeilDamp` of
   // that while a video card is over the board. Without it the top of the ramp
   // is three walls at once and the board stops existing, which is a different
   // game to the one being played.
-  veilBudget: 0.62,
+  veilBudget: 0.40,
   cardVeilDamp: 0.45,          // HARD CAP: a move must always stay physically possible
-  spiral: Object.freeze({ minAlpha: 0.16, maxAlpha: 0.50, minHoldMs: 1400, maxHoldMs: 5200, gapMs: 9000 }),
-  overlay: Object.freeze({ minAlpha: 0.10, maxAlpha: 0.34 }),
+  spiral: Object.freeze({ minAlpha: 0.14, maxAlpha: 0.32, minHoldMs: 1400, maxHoldMs: 5200, gapMs: 9000 }),
+  overlay: Object.freeze({ minAlpha: 0.08, maxAlpha: 0.22 }),
 
   // --- the video card + the drag glitch ------------------------------------
   videoCard: Object.freeze({ minHoldSec: 4, maxHoldSec: 13, riseMs: 620, startJitter: 0.7 }),
