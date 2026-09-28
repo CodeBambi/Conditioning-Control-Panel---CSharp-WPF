@@ -1769,24 +1769,12 @@ namespace ConditioningControlPanel
 
             App.Logger?.Information("SearchAndDisplayProfile: Searching {Count} entries", entries.Count);
 
-            // Find matching entry (case-insensitive)
-            var entry = entries.FirstOrDefault(e =>
-                e.DisplayName?.Equals(searchName, StringComparison.OrdinalIgnoreCase) == true);
+            // Exact match first, then partial (case-insensitive)
+            var entry = TrainerCardText.Find(entries, searchName);
 
             if (entry != null)
             {
-                App.Logger?.Information("SearchAndDisplayProfile: Found exact match '{Name}'", entry.DisplayName);
-                DisplayProfileEntry(entry);
-                return true;
-            }
-
-            // No exact match - try partial match
-            entry = entries.FirstOrDefault(e =>
-                e.DisplayName?.Contains(searchName, StringComparison.OrdinalIgnoreCase) == true);
-
-            if (entry != null)
-            {
-                App.Logger?.Information("SearchAndDisplayProfile: Found partial match '{Name}'", entry.DisplayName);
+                App.Logger?.Information("SearchAndDisplayProfile: Found '{Name}'", entry.DisplayName);
                 DisplayProfileEntry(entry);
                 return true;
             }
@@ -1814,14 +1802,7 @@ namespace ConditioningControlPanel
                 var entries = App.Leaderboard?.Entries;
                 if (entries != null && entries.Count > 0)
                 {
-                    var entry = entries.FirstOrDefault(e =>
-                        e.DisplayName?.Equals(searchName, StringComparison.OrdinalIgnoreCase) == true);
-
-                    if (entry == null)
-                    {
-                        entry = entries.FirstOrDefault(e =>
-                            e.DisplayName?.Contains(searchName, StringComparison.OrdinalIgnoreCase) == true);
-                    }
+                    var entry = TrainerCardText.Find(entries, searchName);
 
                     if (entry != null)
                     {
@@ -1981,15 +1962,14 @@ namespace ConditioningControlPanel
                             e.DisplayName?.Equals(displayName, StringComparison.OrdinalIgnoreCase) == true)
                         : null;
 
-                    DiscordTab.TxtProfileViewerRank.Text = ownEntry?.Rank > 0 ? $"#{ownEntry.Rank}" : "#-";
+                    DiscordTab.TxtProfileViewerRank.Text = TrainerCardText.Rank(ownEntry?.Rank);
                 }
             }
             if (DiscordTab.TxtProfileViewerXp != null) DiscordTab.TxtProfileViewerXp.Text = FormatNumber(xp);
             if (DiscordTab.TxtProfileViewerBubbles != null) DiscordTab.TxtProfileViewerBubbles.Text = FormatNumber(progress?.TotalBubblesPopped ?? 0);
             if (DiscordTab.TxtProfileViewerVideos != null)
             {
-                var minutes = progress?.TotalVideoMinutes ?? 0;
-                DiscordTab.TxtProfileViewerVideos.Text = minutes >= 60 ? $"{minutes / 60:F1}h" : $"{minutes:F0}m";
+                DiscordTab.TxtProfileViewerVideos.Text = TrainerCardText.Video(progress?.TotalVideoMinutes ?? 0);
             }
             if (DiscordTab.TxtProfileViewerGifs != null) DiscordTab.TxtProfileViewerGifs.Text = FormatNumber(progress?.TotalFlashImages ?? 0);
             if (DiscordTab.TxtProfileViewerLockCards != null) DiscordTab.TxtProfileViewerLockCards.Text = FormatNumber(progress?.TotalLockCardsCompleted ?? 0);
@@ -2175,14 +2155,13 @@ namespace ConditioningControlPanel
             // Rank
             if (DiscordTab.TxtProfileViewerRank != null)
             {
-                DiscordTab.TxtProfileViewerRank.Text = entry.Rank > 0 ? $"#{entry.Rank}" : "#-";
+                DiscordTab.TxtProfileViewerRank.Text = TrainerCardText.Rank(entry.Rank);
             }
             if (DiscordTab.TxtProfileViewerXp != null) DiscordTab.TxtProfileViewerXp.Text = entry.XpDisplay;
             if (DiscordTab.TxtProfileViewerBubbles != null) DiscordTab.TxtProfileViewerBubbles.Text = entry.BubblesPoppedDisplay;
             if (DiscordTab.TxtProfileViewerVideos != null)
             {
-                var hours = entry.VideoMinutes / 60.0;
-                DiscordTab.TxtProfileViewerVideos.Text = hours >= 1 ? $"{hours:F1}h" : $"{entry.VideoMinutes:F0}m";
+                DiscordTab.TxtProfileViewerVideos.Text = TrainerCardText.Video(entry.VideoMinutes);
             }
             if (DiscordTab.TxtProfileViewerGifs != null) DiscordTab.TxtProfileViewerGifs.Text = entry.GifsSpawnedDisplay;
             if (DiscordTab.TxtProfileViewerLockCards != null) DiscordTab.TxtProfileViewerLockCards.Text = entry.LockCardsCompleted.ToString();
@@ -2572,12 +2551,7 @@ namespace ConditioningControlPanel
             DiscordTab.ProfileAchievementGrid.ItemsSource = achievementItems;
         }
 
-        private string FormatNumber(double number)
-        {
-            if (number >= 1_000_000) return $"{number / 1_000_000:F1}M";
-            if (number >= 1_000) return $"{number / 1_000:F1}k";
-            return number.ToString("N0");
-        }
+        private string FormatNumber(double number) => TrainerCardText.Number(number);
 
         #endregion
 
