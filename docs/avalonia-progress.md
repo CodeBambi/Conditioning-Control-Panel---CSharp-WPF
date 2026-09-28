@@ -580,3 +580,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: LockCardVoiceTests (WAV-fed: spoken phrase completes, wrong phrase stays open, held mic falls back, no consent
   -> mic never opens, closing mid-listen releases the mic, the hint), each fail-proofed; panel-state frames; capture check.
   No live voice run (would risk the real mic). Review: ACCEPT, follow-ups applied.
+
+## avalonia-port/linux-media-default: +112 (user request)
+- On Linux the default media folder (no custom folder picked) is ~/ccp media, created with images/videos/audio/wallpapers
+  on first use; both pickers open there. A profile with files already in UserData/assets keeps it (logged, nothing moved);
+  sandboxed runs (CCP_USERDATA_DIR) and Windows keep UserData/assets. Decision logged (advisor: user).
+- Evidence: LinuxMediaDefaultTests (7, fail-proofed); live run with a temp HOME created <tmp>/ccp media. Review: FIX -> r1.
