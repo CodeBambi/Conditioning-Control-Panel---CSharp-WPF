@@ -44,7 +44,7 @@ internal sealed class AchievementEngine
     /// </summary>
     private void Write()
     {
-        if (!_store.Write(Progress)) _isDirty = true;
+        if (!_store.Write(() => Progress)) _isDirty = true;
     }
 
     public void Save()

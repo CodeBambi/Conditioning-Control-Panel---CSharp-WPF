@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Models;
@@ -96,6 +97,66 @@ public sealed class AchievementEngineTests : IDisposable
         {
             CoreEntitlement.HasPremiumProvider = previous;
         }
+    }
+
+    [Fact]
+    public void StoreResolvesTheProgressInsideItsLock()
+    {
+        var store = new AchievementStore(MainPath);
+        var held = false;
+
+        Assert.True(store.Write(() => { held = Monitor.IsEntered(store._saveLock); return new AchievementProgress(); }));
+
+        Assert.True(held);
+    }
+
+    [Fact]
+    public async Task AutosaveQueuedBeforeResetDoesNotResurrectTheOldProgress()
+    {
+        var store = new AchievementStore(MainPath);
+        var engine = new AchievementEngine(store);
+        Assert.True(engine.TryUnlock(FreeId));
+        engine.IsDirty = true;
+
+        Task autosave;
+        lock (store._saveLock)
+        {
+            autosave = engine.SaveIfDirtyAsync(); // blocks on the lock we hold
+            // ponytail: a sleep, not a hook - a slow scheduler can only make this pass vacuously, never fail spuriously.
+            Thread.Sleep(200);
+            engine.Reset(); // re-entrant on this thread: writes the empty progress now
+        }
+        await autosave;
+
+        Assert.False(OnDisk(MainPath, FreeId));
+    }
+
+    [Fact]
+    public void ResetSavesAnEmptyFileAndIsClean()
+    {
+        var engine = new AchievementEngine(new AchievementStore(MainPath));
+        Assert.True(engine.TryUnlock(FreeId));
+        engine.IsDirty = true;
+
+        engine.Reset();
+
+        Assert.False(engine.IsDirty);
+        Assert.Empty(engine.Progress.UnlockedAchievements);
+        Assert.Empty(new AchievementStore(MainPath).Load().UnlockedAchievements);
+    }
+
+    [Fact]
+    public void UnknownIdIsRefusedWithoutWriteOrEvent()
+    {
+        var engine = new AchievementEngine(new AchievementStore(MainPath));
+        var raised = 0;
+        engine.Unlocked += (_, _) => raised++;
+
+        Assert.False(engine.TryUnlock("no_such_achievement_" + Guid.NewGuid().ToString("N")));
+
+        Assert.Equal(0, raised);
+        Assert.False(File.Exists(MainPath));
+        Assert.False(engine.IsDirty);
     }
 
     [Fact]
