@@ -339,8 +339,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // Can't uninstall built-in mods or active mod
             _btnUninstall.IsVisible = !mod.IsBuiltIn && !isActive;
 
-            // Only user-installed mods can be shared to the catalogue.
-            _btnShare.IsVisible = !mod.IsBuiltIn && !string.IsNullOrEmpty(mod.InstalledPath);
+            // ponytail: Share needs the catalogue client (not ported); hidden rather than a dead button.
+            _btnShare.IsVisible = false;
 
             // Built-in mods whose media still has to come down off the release.
             UpdatePackPanel(mod);
@@ -553,6 +553,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             {
                 Title = Loc.Get("title_export_config_as_mod"),
                 SuggestedFileName = $"{active.Name.Replace(" ", "-").ToLowerInvariant()}-export.ccpmod",
+                DefaultExtension = "ccpmod",
                 FileTypeChoices = new[]
                 {
                     new FilePickerFileType("CCP Mod Files") { Patterns = new[] { "*.ccpmod" } },
