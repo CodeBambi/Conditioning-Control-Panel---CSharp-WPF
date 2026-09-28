@@ -705,7 +705,7 @@
             </Border>
 
             <Grid Grid.Row="1">
-                <ListBox x:Name="LstLeaderboard" Background="Transparent"
+                <ListBox x:Name="LstLeaderboard" Background="Transparent" DoubleTapped="LstLeaderboard_DoubleTapped"
                          BorderThickness="0" Margin="0,1,0,2" Padding="0"
                          MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
                          FontSize="13"

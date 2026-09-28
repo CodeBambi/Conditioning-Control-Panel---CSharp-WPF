@@ -32,8 +32,8 @@
 //     BtnReloadBrowser carry no Click=. A Click= there can only name a method on
 //     SettingsTabView's OWN code-behind, so the forward goes in SettingsTabView.axaml.cs:
 //     `(TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BrowserSiteToggle_Click(sender, e)`.
-//   * CCP.Avalonia/Views/Tabs/DiscordTabView.axaml.cs:BtnClearProfile_Click is an empty stub;
-//     `Host?.BtnClearProfile_Click(sender, e)` is the WPF forward, and what finally wires
+//   * CCP.Avalonia/Views/Tabs/DiscordTabView.axaml.cs:BtnClearProfile_Click now forwards
+//     (`Host?.BtnClearProfile_Click`), which wires
 //     ClearProfileViewer -> SetProfileViewingSelf. NavigateToUrlInBrowser stays public for
 //     AvatarTubeWindow's speech-bubble links and the remote controller, neither on this head.
 // STILL BLOCKED, grouped by what is actually missing (60 members):
@@ -49,19 +49,11 @@
 //     ExitBrowserFullscreenForTeardown, the four _browserFs* fields); the remote video pair
 //     (PlayHypnotubeFromRemote, StopBrowserVideoFromRemote, _remoteBrowserVideoActive); the
 //     refused mute pair above.
-//   * the account / leaderboard / achievements services (23): BtnDiscordTabLogin_Click,
-//     UpdateDiscordTabUI, TxtProfileSearch_KeyDown, BtnProfileSearch_Click, BtnViewMyProfile_Click,
-//     SearchAndDisplayProfile, RefreshAndSearchAsync, DisplayOwnProfile, DisplayProfileEntry,
-//     ApplyProfileIdentityBadges, RefreshProfileViewerAsync, ResolveProfilePictureUnavailable,
-//     LoadPatreonBadgeImage, LoadProfileAchievementImages, FormatNumber, ProfileDiscordHandle_Click,
-//     BtnProfileDiscord_Click, BtnChangeDisplayName_Click, BtnDeleteProfile_Click.
-//     THIS IS WHY MainShellWindow.ProfileCard.cs:UpdateProfileShowcase IS STILL UNCALLED. Its two
-//     WPF call sites are DisplayOwnProfile and DisplayProfileEntry; the first needs
-//     Models.Achievement.All plus the achievement service's GetUnlockedCount/GetTotalCount, the
-//     second Services.LeaderboardEntry - none of the three in CCP.Core (grepped, not assumed). A
-//     caller written here would print a count it cannot compute: "0 / 0" on a card that reads as
-//     "you have unlocked nothing". Its sibling SetProfileViewingSelf IS now wired, by
-//     ClearProfileViewer below.
+//   * the Trainer Card read (search, own card, lookup, badges, achievements, FormatNumber) is
+//     PORTED onto CCP.Avalonia/Views/Tabs/DiscordTabView.axaml.cs, text rules in Core
+//     TrainerCardText. Still missing: BtnDiscordTabLogin_Click, UpdateDiscordTabUI,
+//     ResolveProfilePictureUnavailable, LoadPatreonBadgeImage, ProfileDiscordHandle_Click,
+//     BtnProfileDiscord_Click, BtnChangeDisplayName_Click, BtnDeleteProfile_Click (writes/art).
 //   * CoreMods (1): SyncSiteRadiosToActiveMod needs ShowBambiCloudOption() and
 //     GetDefaultBrowserUrl(); CCP.Core/CoreMods.cs carries neither yet. Its IsBrowserShowingKnownSite
 //     helper is NOT restored either, and not because it cannot be: WebHost exposes only the Source

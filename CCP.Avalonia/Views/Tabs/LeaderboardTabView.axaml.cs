@@ -347,6 +347,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private LeaderboardPage<LeaderboardRow>? _page;
 
+        /// <summary>The last fetched board in rank order (the Trainer Card's offline search, as WPF's shared cache).</summary>
+        internal LeaderboardPage<LeaderboardRow>? RankedPage => _page == null ? null
+            : new() { Entries = _ranked.ToList(), YourRank = _page.YourRank, YourTotal = _page.YourTotal };
+
         /// <summary>
         /// MainWindow.Leaderboard.cs:953 RefreshLeaderboardAsync + RankLeaderboardEntries. Offline or a failed fetch leaves
         /// the board empty and says so in the status line, as WPF does. Never throws.
@@ -398,6 +402,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         private bool _fetching;
+
+        /// <summary>MainWindow.Leaderboard.cs:930: double-clicking a row opens that trainer's card on the Profile tab.</summary>
+        private void LstLeaderboard_DoubleTapped(object? sender, global::Avalonia.Input.TappedEventArgs e)
+        {
+            // The tapped row's own item, not SelectedItem (WPF's read): a band header or empty space opens nothing.
+            if ((e.Source as Control)?.DataContext is not LeaderboardRow { DisplayName.Length: > 0 } row) return;
+            if (TopLevel.GetTopLevel(this) is not Windows.MainShellWindow shell) return;
+            Log.Information("Leaderboard double-click: opening profile for rank {Rank}", row.Rank);
+            shell.ShowTab("discord");
+            _ = shell.ProfilePage?.OpenProfileAsync(row.DisplayName);
+        }
 
         /// <summary>MainWindow.Leaderboard.cs:749 UpdateYourRankDisplay: the server rank only, never a row's Rank (#693).</summary>
         private void UpdateYourRankDisplay()

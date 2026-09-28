@@ -192,9 +192,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // is the head's home for per-tab entry side effects, and "the Profile tab
                     // became visible" is exactly the event WPF is reacting to.
                     // ponytail: the rest of OnProfileTabVisibilityChanged (the OG border loop, the
-                    // vat poll, RefreshProfileShareButton, EnsureProfileMeFirst, StaggerProfileCards)
-                    // needs MainShellWindow.ProfileFx.cs / .ProfileVat.cs / .Browser.cs.
-                    case "discord": UpdateProfileSharingSummary(); break;
+                    // vat poll, RefreshProfileShareButton, StaggerProfileCards) needs
+                    // MainShellWindow.ProfileFx.cs / .ProfileVat.cs. EnsureProfileMeFirst is here.
+                    case "discord": UpdateProfileSharingSummary(); ProfilePage?.EnsureProfileMeFirst(); break;
 
                     // WPF MainWindow.TabNavigation.cs:429: every show re-fetches the board (read-only).
                     case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;
