@@ -91,6 +91,14 @@ namespace ConditioningControlPanel.Avalonia
                         phrase, s.LockCardRepeats, s.LockCardStrict, isTest, s.LockCardVoiceMode);
                 });
 
+                // The ambient flash surface. CoreFlash owns the rhythm; a burst needs any attached
+                // visual to reach Screens, and the main window is the one that always is.
+                CoreFlash.IsBusyProvider = () => Views.Overlays.FlashOverlay.IsBusy;
+                CoreFlash.ShowProvider = () =>
+                {
+                    if (desktop.MainWindow is { } host) Views.Overlays.FlashOverlay.TriggerOnce(host);
+                };
+
                 // No CoreMods seeding here, deliberately. ModService is still in the WPF head, so
                 // this head has nothing to seed the mod seam with and leaves every provider null.
                 // Unseeded is the supported state: CoreMods answers from the built-in manifests,

@@ -869,14 +869,8 @@ namespace ConditioningControlPanel.Services
                 return;
             }
             
-            // flash_freq = flashes per HOUR (1-180)
-            var baseFreq = Math.Max(1, settings.FlashFrequency);
-            var baseInterval = 3600.0 / baseFreq; // seconds between flashes
-            
-            // Add ±30% variance
-            var variance = baseInterval * 0.3;
-            var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-            interval = Math.Max(3, interval); // Minimum 3 seconds
+            // flash_freq = flashes per HOUR (1-180); the rule is shared with every head.
+            var interval = CoreFlash.NextIntervalSeconds(settings.FlashFrequency, _random.NextDouble());
             
             if (_schedulerTimer == null)
             {
