@@ -430,3 +430,12 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   dispatcher priority: Render priority on the overlay RunOnce calls was measured and reverted. The suspect is the card's first
   frame arriving late (SubliminalOverlayWindow.Run starts its clock in RequestAnimationFrame). This fails "at least as fast";
   a perf branch follows. Evidence ~/ccp-port/evidence/avalonia-port/session-runner-wire/p2-*.txt.
+
+## avalonia-port/session-runner-wire: +295
+- Session runner U3b: the head owns one Core SessionRunner (App.Sessions), started from the Presets session rack with
+  WPF's confirm. WPF clock labels on the Start and session buttons, WPF's stop-session confirms, the recap opens by itself
+  (Completed / Ended Early), each flash shown is logged, the feature lock greys cards during a session. Tray Stop and
+  panic end a session early (pause is U4). SessionClockLabel moved to Core unchanged. Decision: runs only the ported subset.
+- Evidence: SessionRunWireTests (fail-proofed); live sandbox 2-minute session: overlays on time, bouncing text at 1:00,
+  recap "Completed, 02:00, 5 images" == 5 flash windows and the log on disk, settings.json unchanged except TotalSessions
+  and the ledger; early Stop -> Ended Early. Review: ACCEPT.
