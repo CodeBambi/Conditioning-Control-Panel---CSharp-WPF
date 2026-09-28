@@ -41,7 +41,7 @@
 
         <!-- Third, independent counter: wardrobe items earned through achievements.
              Never folded into the free or patron achievement counts. -->
-        <TextBlock x:Name="TxtRewardCount" Text="{Binding LocRewardCount}"
+        <TextBlock x:Name="TxtRewardCount" Text="{Binding LocRewardCount}" IsVisible="{Binding RewardCountVisible}"
                    Foreground="#8079A3" FontSize="12"
                    HorizontalAlignment="Center" Margin="0,4,0,0"/>
 

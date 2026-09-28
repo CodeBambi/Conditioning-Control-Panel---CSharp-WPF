@@ -177,4 +177,41 @@ public sealed class AchievementEngineTests : IDisposable
         Assert.False(engine.IsDirty);
         Assert.True(OnDisk(path, FreeId));
     }
+
+    [Fact]
+    public void BubbleCountStreakUnlocksAtTheRuleAndAWrongAnswerResetsIt()
+    {
+        var engine = new AchievementEngine(new AchievementStore(MainPath));
+        for (var i = 1; i < AchievementRules.MathematiciansNightmareStreak; i++) engine.TrackBubbleCountResult(true);
+        engine.TrackBubbleCountResult(false);
+        Assert.Equal(0, engine.Progress.BubbleCountCorrectStreak);
+        for (var i = 1; i < AchievementRules.MathematiciansNightmareStreak; i++) engine.TrackBubbleCountResult(true);
+        Assert.False(engine.Progress.IsUnlocked("mathematicians_nightmare"));
+
+        engine.TrackBubbleCountResult(true);
+
+        Assert.True(OnDisk(MainPath, "mathematicians_nightmare"));
+        Assert.Equal(2 * AchievementRules.MathematiciansNightmareStreak - 1, engine.Progress.TotalBubbleCountCorrect);
+        Assert.Equal(1, engine.Progress.TotalBubbleCountFailed);
+    }
+
+    [Fact]
+    public void FreeAndPatronCountsAreSeparateAndLockedPremiumBadgesLeaveTheFreeTotal()
+    {
+        var previous = CoreEntitlement.HasPremiumProvider;
+        try
+        {
+            CoreEntitlement.HasPremiumProvider = () => false;
+            var engine = new AchievementEngine(new AchievementStore(MainPath));
+            engine.TryUnlock(FreeId);
+
+            Assert.Equal(1, engine.GetUnlockedCount(exclusive: false));
+            Assert.Equal(0, engine.GetUnlockedCount(exclusive: true));
+            Assert.Equal(Achievement.All.Values.Count(a => !a.IsHidden && !a.IsExclusive && (!a.IsPremiumFeature || a.Id == FreeId)),
+                engine.GetTotalCount(exclusive: false));
+            Assert.Equal((1, Achievement.All.Values.Count(a => !a.IsHidden && !a.IsExclusive && !a.IsPremiumFeature || a.Id == FreeId)),
+                engine.GetReachableCounts());
+        }
+        finally { CoreEntitlement.HasPremiumProvider = previous; }
+    }
 }

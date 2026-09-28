@@ -16,7 +16,8 @@
 //
 // So the honest blocker list for the achievements page is short and specific, and all of it is
 // AchievementsTabView's rather than this file's:
-//   - the counts are placeholders in AchievementsTabViewModel (Unlocked/Total, RewardsEarned/
+//   - (resolved: the free/patron counts now read App.Achievements, the Core AchievementEngine.)
+//     Original note: the counts were placeholders in AchievementsTabViewModel (Unlocked/Total, RewardsEarned/
 //     RewardsTotal, PatronUnlocked/PatronTotal). Real values need AchievementService, which is
 //     head-side; CoreProgression deliberately does NOT carry it - the seam is AddXP and
 //     TrackBubbleCountResult, the two calls ported views actually make, not the whole service.
