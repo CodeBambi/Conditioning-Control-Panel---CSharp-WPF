@@ -122,6 +122,26 @@ namespace ConditioningControlPanel.Avalonia
         }
 
         [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+        [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
+        [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr dc);
+        [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);
+        [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleBitmap(IntPtr dc, int w, int h);
+        [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr dc, IntPtr obj);
+        [DllImport("gdi32.dll")] private static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, uint rop);
+        [DllImport("gdi32.dll")] private static extern uint GetPixel(IntPtr dc, int x, int y);
+        [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
+        [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr dc);
+
+        /// <summary>One composed screen pixel (0x00BBGGRR). CAPTUREBLT, or layered windows are left out.</summary>
+        private static uint ScreenPixel(int x, int y)
+        {
+            IntPtr screen = GetDC(IntPtr.Zero), mem = CreateCompatibleDC(screen), bmp = CreateCompatibleBitmap(screen, 1, 1);
+            var old = SelectObject(mem, bmp);
+            BitBlt(mem, 0, 0, 1, 1, screen, x, y, 0x00CC0020 /* SRCCOPY */ | 0x40000000 /* CAPTUREBLT */);
+            var c = GetPixel(mem, 0, 0);
+            SelectObject(mem, old); DeleteObject(bmp); DeleteDC(mem); ReleaseDC(IntPtr.Zero, screen);
+            return c;
+        }
         [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
         private record struct Rect(int Left, int Top, int Right, int Bottom);
 
@@ -142,7 +162,7 @@ namespace ConditioningControlPanel.Avalonia
                 {
                     WindowDecorations = WindowDecorations.None,
                     TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent },
-                    Background = Brushes.Transparent,
+                    Background = Brushes.Magenta,   // solid, so the pixel read-back proves the layered window draws
                     ShowInTaskbar = false,
                     ShowActivated = false,
                     CanResize = false,
@@ -161,7 +181,7 @@ namespace ConditioningControlPanel.Avalonia
             {
                 try
                 {
-                    const uint want = Win32Overlay.OverlayBits | Win32Overlay.WsExTransparent | Win32Overlay.WsExTopmost;
+                    const uint want = Win32Overlay.OverlayBits | Win32Overlay.WsExTransparent | Win32Overlay.WsExNoActivate | Win32Overlay.WsExTopmost;
                     foreach (var (w, b, hwnd) in overlays)
                     {
                         var ex = Win32Overlay.GetWindowLong(hwnd, -20);
@@ -169,10 +189,13 @@ namespace ConditioningControlPanel.Avalonia
                         Console.WriteLine($"overlay 0x{hwnd.ToInt64():x} on {b}: exstyle=0x{ex:x8} visible={IsWindowVisible(hwnd)} rect={r}");
                         Check((ex & want) == want, "WS_EX_LAYERED|TRANSPARENT|NOACTIVATE|TOOLWINDOW|TOPMOST after an Avalonia style rebuild");
                         Check(IsWindowVisible(hwnd), "IsWindowVisible");
+                        var px = ScreenPixel(b.X + b.Width / 2, b.Y + b.Height / 2);
+                        Check(px == 0x00FF00FF, $"screen pixel at the centre is magenta (0x{px:x6}): the layered window draws at SetOpacity(1)");
                         Check(r.Left == b.X && r.Top == b.Y && r.Right - r.Left == b.Width && r.Bottom - r.Top == b.Height, $"rect matches screen {b}");
                         X11Overlay.SetClickThrough(w, false);
                         ex = Win32Overlay.GetWindowLong(hwnd, -20);
-                        Check((ex & Win32Overlay.WsExTransparent) == 0 && (ex & Win32Overlay.WsExLayered) != 0, "SetClickThrough(false) clears only WS_EX_TRANSPARENT");
+                        Check((ex & (Win32Overlay.WsExTransparent | Win32Overlay.WsExNoActivate)) == 0 && (ex & Win32Overlay.OverlayBits) == Win32Overlay.OverlayBits,
+                            "SetClickThrough(false) clears TRANSPARENT|NOACTIVATE, keeps LAYERED|TOOLWINDOW");
                     }
                 }
                 catch (Exception e) { Console.Error.WriteLine("overlay-check threw: " + e); fails++; }

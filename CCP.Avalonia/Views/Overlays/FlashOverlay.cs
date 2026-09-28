@@ -144,7 +144,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var w = new FlashOverlayWindow(bmp);
             if (!X11Overlay.SetClickThrough(w, true) || !X11Overlay.SetOpacity(w, 0) || !X11Overlay.SetOverrideRedirect(w, rect))
             {
-                if (!_warnedUnavailable) Log.Warning("Flash: the X server refused an override-redirect click-through window; flashes skipped");
+                if (!_warnedUnavailable) Log.Warning("Flash: the platform refused a click-through topmost overlay window; flashes skipped");
                 _warnedUnavailable = true;
                 w.Close();
                 return false;

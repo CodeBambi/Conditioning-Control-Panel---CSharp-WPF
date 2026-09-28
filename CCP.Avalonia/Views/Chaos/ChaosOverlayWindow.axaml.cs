@@ -1278,8 +1278,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// <c>ShowInTaskbar="False"</c> / <c>ShowActivated="False"</c> in the XAML, where they are
         /// fixed for the window's life rather than toggled per mode.
         ///
-        /// <para>Called unconditionally, on every head: the shim returns false when there is no X11
-        /// display (Windows, Wayland, the headless render) rather than throwing.</para>
+        /// <para>Called unconditionally, on every head: on Windows the shim routes to Win32Overlay
+        /// (TRANSPARENT|NOACTIVATE toggled together, as WPF did); with no X11 display and no HWND
+        /// (native Wayland, the headless render) it returns false rather than throwing.</para>
         /// </summary>
         private void ApplyExStyles() => X11Overlay.SetClickThrough(this, _clickThrough);
 

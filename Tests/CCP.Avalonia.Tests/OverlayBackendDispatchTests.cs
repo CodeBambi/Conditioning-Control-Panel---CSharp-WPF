@@ -25,11 +25,12 @@ public sealed class OverlayBackendDispatchTests
     public void NoHandle_IsNoBackend() => Assert.Equal(OverlayBackend.None, X11Overlay.BackendOf(null));
 
     [Fact]
-    public void Win32Style_AddsOverlayBits_AndTogglesOnlyTransparent()
+    public void Win32Style_AddsOverlayBits_AndTogglesTransparentWithNoActivate()
     {
         const uint avaloniaRebuild = 0x00000100 | 0x00200000;  // WS_EX_WINDOWEDGE | WS_EX_NOREDIRECTIONBITMAP
         var on = Win32Overlay.Style(avaloniaRebuild, true);
-        Assert.Equal(avaloniaRebuild | 0x00080000u | 0x08000000u | 0x80u | 0x20u, on);  // LAYERED|NOACTIVATE|TOOLWINDOW|TRANSPARENT
-        Assert.Equal(on & ~0x20u, Win32Overlay.Style(on, false));
+        Assert.Equal(avaloniaRebuild | 0x00080000u | 0x80u | 0x08000000u | 0x20u, on);  // LAYERED|TOOLWINDOW + NOACTIVATE|TRANSPARENT
+        // Interactive again (WPF ChaosOverlayWindow): NOACTIVATE goes with TRANSPARENT so it can take focus.
+        Assert.Equal(avaloniaRebuild | 0x00080000u | 0x80u, Win32Overlay.Style(on, false));
     }
 }

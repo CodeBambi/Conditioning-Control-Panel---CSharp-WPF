@@ -10,8 +10,9 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 /// window's platform handle is an "HWND" - callers never see this class. Same bits the WPF head
 /// sets on every desktop overlay (ConditioningControlPanel/Services/Notifications/OverlayService.cs:1415,
 /// Services/Flash/FlashService.cs:4614 ApplyClickability, :4838 ForceTopmost):
-/// WS_EX_LAYERED|WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT toggled for click-through,
-/// HWND_TOPMOST via SetWindowPos.
+/// WS_EX_LAYERED|WS_EX_TOOLWINDOW always, WS_EX_TRANSPARENT|WS_EX_NOACTIVATE toggled together with
+/// click-through (as Chaos/ChaosOverlayWindow.xaml.cs:1073-1076 does, so an interactive mode can
+/// take focus), HWND_TOPMOST via SetWindowPos.
 ///
 /// <para><b>Why a style callback and not just SetWindowLong.</b> Avalonia 12.1.2's Win32
 /// <c>WindowImpl.UpdateWindowProperties</c> rebuilds GWL_EXSTYLE from scratch (EDGE | NOREDIRECTIONBITMAP
@@ -29,12 +30,14 @@ internal static class Win32Overlay
     private const int GwlExStyle = -20;
     internal const uint WsExTopmost = 0x8, WsExTransparent = 0x20, WsExToolWindow = 0x80,
         WsExLayered = 0x80000, WsExNoActivate = 0x08000000;
-    internal const uint OverlayBits = WsExLayered | WsExNoActivate | WsExToolWindow;
+    internal const uint OverlayBits = WsExLayered | WsExToolWindow;
+    private const uint ClickThroughBits = WsExTransparent | WsExNoActivate;
     private const uint LwaAlpha = 2;
     private const uint SwpNoSize = 0x1, SwpNoMove = 0x2, SwpNoActivate = 0x10;
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] internal static extern uint GetWindowLong(IntPtr hwnd, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")] private static extern uint SetWindowLong(IntPtr hwnd, int index, uint value);
+    [DllImport("user32.dll")] private static extern bool GetLayeredWindowAttributes(IntPtr hwnd, out uint colorKey, out byte alpha, out uint flags);
     [DllImport("user32.dll")] private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint colorKey, byte alpha, uint flags);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
@@ -42,7 +45,7 @@ internal static class Win32Overlay
     private static readonly ConditionalWeakTable<TopLevel, StrongBox<bool>> Wanted = new();
 
     internal static uint Style(uint exStyle, bool clickThrough)
-        => (exStyle | OverlayBits) & ~WsExTransparent | (clickThrough ? WsExTransparent : 0);
+        => (exStyle | OverlayBits) & ~ClickThroughBits | (clickThrough ? ClickThroughBits : 0);
 
     internal static bool SetClickThrough(TopLevel window, IntPtr hwnd, bool clickThrough)
     {
@@ -75,8 +78,9 @@ internal static class Win32Overlay
 
     private static bool Apply(IntPtr hwnd, bool clickThrough)
     {
-        var old = GetWindowLong(hwnd, GwlExStyle);
-        SetWindowLong(hwnd, GwlExStyle, Style(old, clickThrough));
-        return (old & WsExLayered) != 0 || SetLayeredWindowAttributes(hwnd, 0, 255, LwaAlpha);
+        SetWindowLong(hwnd, GwlExStyle, Style(GetWindowLong(hwnd, GwlExStyle), clickThrough));
+        // Attributes never set = invisible layered window. Checked by attributes, not by the old
+        // style bit, because the style callback can make a window layered behind our back.
+        return GetLayeredWindowAttributes(hwnd, out _, out _, out _) || SetLayeredWindowAttributes(hwnd, 0, 255, LwaAlpha);
     }
 }
