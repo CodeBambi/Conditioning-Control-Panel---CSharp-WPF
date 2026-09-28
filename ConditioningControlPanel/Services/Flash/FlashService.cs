@@ -1823,14 +1823,24 @@ namespace ConditioningControlPanel.Services
                 var isLucky = multiplier > 1;
                 window.IsLucky = isLucky;
 
-                // Natasha's favourite: about one flash in ten wears red and is 3:00 on the tab
-                // when it shows. Never a hydra copy, a remix mirror, a v2 preview or a picture a
-                // bubble delivered (that bubble had its own roll), and only while the row can charge.
+                // Natasha's favourite: with the dodge setting on (ChasterFlashDodge, off by
+                // default: off means no red flashes at all), about one flash in ten wears red and
+                // shows a 4 s ring; +5:00 only if the ring empties before a click or a fling.
+                // Never a hydra copy, a remix mirror, a v2 preview or a picture a bubble delivered
+                // (that bubble had its own roll), never to someone away from the keyboard, and only
+                // while the row can charge.
                 var natasha = hydraGeneration == 0 && !imageData.RemixMirror && !imageData.PreviewV2
                     && imageData.BubbleOriginPx == null
+                    && Chaster.NatashasFavourite.FlashMayRoll(settings.ChasterFlashDodge, ActivityTracker.GetIdleSeconds())
                     && App.Chaster?.CanBook(Chaster.NatashasFavourite.EventId) == true
                     && Chaster.NatashasFavourite.Roll(_random);
                 window.IsNatasha = natasha;
+                if (natasha)
+                {
+                    // One deadline for the ring on every render path and for the booking.
+                    window.NatashaDodgeUntilMs = Environment.TickCount64 + Chaster.NatashasFavourite.DodgeMs;
+                    window.BoostLifetime(Chaster.NatashasFavourite.DodgeMinLifetimeMs);
+                }
                 var natashaGlow = natasha && PerformanceProfile.AllowGlow(perfTier);
 
                 if (isLucky)
@@ -1979,6 +1989,13 @@ namespace ConditioningControlPanel.Services
                     };
                 }
 
+                if (natasha && !useLayer && content != null)
+                {
+                    var ring = BuildDodgeRing();
+                    content = new Grid { Children = { content, ring } };
+                    window.NatashaDodgeRing = ring;
+                }
+
                 if (useLayer)
                 {
                     // Convert frames + spawn the layer item; the heartbeat drives it from here
@@ -2078,15 +2095,9 @@ namespace ConditioningControlPanel.Services
                     _activeWindows.Add(window);
                 }
 
-                // Natasha's favourite: the red one showed. +3:00 on the tab (inert unless the row is on).
-                // The pop lands on the flash itself (physical px: this rect is in the monitor's DIPs,
-                // the same convention the shared host's Place uses).
-                if (natasha)
-                {
-                    var popDpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
-                    App.Chaster?.NoteAt("natasha", new System.Windows.Point(
-                        (window.Left + window.Width / 2) * popDpi, (window.Top + window.Height / 2) * popDpi));
-                }
+                // Natasha's favourite: the red one showed, and its ring is running. Nothing books
+                // now; the ring's end decides.
+                if (natasha) StartNatashaDodge(window, monitor);
             }
             catch (Exception ex)
             {
@@ -2513,6 +2524,7 @@ namespace ConditioningControlPanel.Services
                             paddingPx, cornerRadiusPx, skGlowColor, glowSigmaPx,
                             glowOpacity, luckyPulse, motionState);
                         window.LayerItem.NatashaCue = window.IsNatasha;
+                        window.LayerItem.DodgeUntilMs = window.NatashaDodged ? 0 : window.NatashaDodgeUntilMs;
                         if (imageData.BubbleOriginPx is { } origin)
                         {
                             window.LayerItem.BubbleOriginPx = origin;
@@ -2710,6 +2722,81 @@ namespace ConditioningControlPanel.Services
             {
                 OnFlashClicked(window, App.Settings.Current);
             }
+            else if (outcome == FlashDragOutcome.Fling && window.IsNatasha && !window.NatashaDodged && !window.IsFadingOut)
+            {
+                // Natasha's red flash flung away in time: dodged. The walls open so it flies off
+                // the screen, and it fades out a moment later. Nothing books.
+                window.NatashaDodged = true;
+                if (window.LayerItem != null) window.LayerItem.DodgeUntilMs = 0;
+                motion.BoundsX -= motion.BoundsW; motion.BoundsY -= motion.BoundsH;
+                motion.BoundsW *= 3; motion.BoundsH *= 3;
+                try { window.LifetimeCts?.CancelAfter(700); } catch (Exception ex) { Diag.Swallowed(ex); }
+            }
+        }
+
+        /// <summary>
+        /// Natasha's red flash: when its ring empties, +5:00 goes on the tab, unless a click, a
+        /// stare or a fling dismissed it first (or the app cleared it: panic, stop). Booked where
+        /// the flash is (physical px: the rect is in the monitor's DIPs, the shared host's
+        /// convention).
+        /// </summary>
+        private void StartNatashaDodge(FlashWindow window, MonitorInfo monitor)
+        {
+            var timer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(Math.Max(1, window.NatashaDodgeUntilMs - Environment.TickCount64)),
+            };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                try
+                {
+                    bool up;
+                    lock (_lockObj) { up = _activeWindows.Contains(window) && !window.IsFadingOut; }
+                    if (window.NatashaDodgeRing != null) window.NatashaDodgeRing.Visibility = Visibility.Collapsed;
+                    if (window.LayerItem != null) window.LayerItem.DodgeUntilMs = 0;
+                    if (!Chaster.NatashasFavourite.DodgeBooks(up, window.NatashaDodged)) return;
+                    var dpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
+                    App.Chaster?.NoteAt("natasha", new System.Windows.Point(
+                        (window.Left + window.Width / 2) * dpi, (window.Top + window.Height / 2) * dpi));
+                }
+                catch (Exception ex) { Diag.Swallowed(ex, "natasha dodge"); }
+            };
+            timer.Start();
+        }
+
+        /// <summary>The per-window and Canvas-host ring: a small red dial in the flash's top-right
+        /// corner that drains over <see cref="Chaster.NatashasFavourite.DodgeMs"/>. The dash
+        /// offset runs one dash length, which takes the visible arc from full to nothing.</summary>
+        private static FrameworkElement BuildDodgeRing()
+        {
+            const double d = 34, t = 4;
+            var red = System.Windows.Media.Color.FromRgb(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B);
+            var dash = Math.PI * (d - t) / t;   // the circumference, in stroke widths
+            var arc = new System.Windows.Shapes.Ellipse
+            {
+                Width = d, Height = d,
+                Stroke = new SolidColorBrush(red),
+                StrokeThickness = t,
+                StrokeDashArray = new DoubleCollection { dash, dash },
+                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+                RenderTransform = new RotateTransform(-90),
+            };
+            arc.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty,
+                new DoubleAnimation(0, dash, TimeSpan.FromMilliseconds(Chaster.NatashasFavourite.DodgeMs)));
+            return new Grid
+            {
+                Width = d, Height = d,
+                Margin = new Thickness(10),
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                VerticalAlignment = System.Windows.VerticalAlignment.Top,
+                IsHitTestVisible = false,
+                Children =
+                {
+                    new System.Windows.Shapes.Ellipse { Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x99, 0x10, 0x06, 0x0C)) },
+                    arc,
+                },
+            };
         }
 
         /// <summary>Point a fling's walls at the work area of the monitor under this point.</summary>
@@ -5360,8 +5447,14 @@ namespace ConditioningControlPanel.Services
         /// Whether this flash triggered a lucky proc (golden glow effect)
         /// </summary>
         public bool IsLucky { get; set; }
-        /// <summary>Natasha's favourite: wears the red cue and booked 3:00 when it showed.</summary>
+        /// <summary>Natasha's favourite: wears the red cue and runs the dodge ring.</summary>
         public bool IsNatasha { get; set; }
+        /// <summary>Environment.TickCount64 when the red flash's ring empties.</summary>
+        public long NatashaDodgeUntilMs { get; set; }
+        /// <summary>A fling threw the red flash away before its ring emptied.</summary>
+        public bool NatashaDodged { get; set; }
+        /// <summary>The WPF ring (per-window and Canvas host), hidden when the ring ends.</summary>
+        public FrameworkElement? NatashaDodgeRing { get; set; }
 
         /// <summary>
         /// Drives a subtle inflate effect on the flash content during Focus

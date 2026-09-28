@@ -875,6 +875,14 @@
                                     <TextBlock Text="{loc:Str chaster_board_costs}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="15"
                                                FontWeight="SemiBold" Foreground="#FF8FA3" Margin="2,0,0,10"/>
                                     <UniformGrid x:Name="CostRows" Columns="2"/>
+                                    <!-- Natasha's favourite on flashes: off = only bubbles are ever red. -->
+                                    <StackPanel x:Name="FlashDodgeRow" Orientation="Horizontal" Margin="2,6,8,6"
+                                                ToolTip="{loc:Str chaster_flash_dodge_hint}">
+                                        <CheckBox x:Name="ChkFlashDodge" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkFlashDodge_Changed" Unchecked="ChkFlashDodge_Changed"/>
+                                        <TextBlock Text="{loc:Str chaster_flash_dodge}" FontSize="12.5" Margin="10,0,0,0"
+                                                   Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                             <Border x:Name="EarnBoard" Grid.Column="2" Style="{StaticResource CirceCard}" Padding="14,12,6,6"
