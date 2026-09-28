@@ -33,6 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             InitializeComponent();
 
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
+            BtnTestFlash.Click += (_, _) => Overlays.FlashOverlay.TriggerOnce(this);
             SliderFrequency.ValueChanged += SliderFrequency_Changed;
             SliderImages.ValueChanged += SliderImages_Changed;
             SliderMaxOnScreen.ValueChanged += SliderMaxOnScreen_Changed;
