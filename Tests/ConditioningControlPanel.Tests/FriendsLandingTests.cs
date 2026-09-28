@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Services.Friends;
 using Xunit;
@@ -334,6 +335,123 @@ public class FriendsLandingTests
         Assert.Equal(new[] { "reqgone:r1" }, sink.Calls);
     }
 
+    // ---------------------------------------------------------------- honesty pass (2026-09-28)
+
+    [Fact]
+    public void ARemoteInviteFromAnOldClientIsShownAsNothing()
+    {
+        var (svc, sink, _) = Rig(() => PanelUp);
+        svc.Deliver(Invite("r", InviteDestination.Remote, code: "ABCD-1234"));
+        Assert.Empty(sink.Calls);
+        Assert.Equal(LandingRoute.Drop, LandingRules.Decide(Invite("r", InviteDestination.Remote), PanelUp, T0));
+        Assert.False(InviteDestination.IsSendable(InviteDestination.Remote));
+        Assert.True(InviteDestination.IsValid(InviteDestination.Remote));   // still parses
+    }
+
+    [Fact]
+    public void ANoticeIsDatedWhenItWasSentClampedToSaneTimes()
+    {
+        Assert.Equal(T0.AddMinutes(-7), LandingRules.NoticeAt(T0.AddMinutes(-7), T0));
+        Assert.Equal(T0, LandingRules.NoticeAt(T0.AddMinutes(3), T0));               // a fast server clock
+        Assert.Equal(T0.AddDays(-1), LandingRules.NoticeAt(T0.AddDays(-9), T0));     // a broken one
+        Assert.Equal(T0, LandingRules.NoticeAt(DateTimeOffset.MinValue, T0));
+    }
+
+    [Fact]
+    public void AnyGameHostCountsEveryHost()
+    {
+        Assert.False(LandingRules.AnyGameHost(new[] { false, false, false, false, false }));
+        Assert.True(LandingRules.AnyGameHost(new[] { false, false, false, false, true }));   // Piece by Piece
+        Assert.True(LandingRules.AnyGameHost(new[] { false, false, false, true, false }));   // the Arcademy
+        Assert.False(LandingRules.AnyGameHost(null!));
+    }
+
+    private static FriendsSnapshot WithIncoming(params FriendRequest[] incoming)
+        => new(Array.Empty<Friend>(), incoming, Array.Empty<FriendRequest>(), "CCP-7K2Q9", FriendPresence.None);
+
+    [Fact]
+    public void RequestsWaitingAtLaunchAreToldOnceAsOneRowAndOneNotice()
+    {
+        var (svc, sink, router) = Rig(() => PanelUp);
+        svc.Push(WithIncoming(Req("r1"), Req("r2")));
+        Assert.True(router.WaitingPending);
+        Assert.Empty(sink.Calls);   // told on the tick, after the service's own arrivals
+
+        router.Release();
+        Assert.Equal(new[] { "waiting:r1,r2:True:False" }, sink.Calls);
+
+        router.Release();
+        svc.Push(WithIncoming(Req("r1"), Req("r2")) with { MyCode = "CCP-22222" });
+        router.Release();
+        Assert.Single(sink.Calls);
+    }
+
+    [Fact]
+    public void AWaitingRequestTheServiceAlsoRaisedIsNotToldTwice()
+    {
+        var (svc, sink, router) = Rig(() => PanelUp);
+        svc.Push(WithIncoming(Req("r1"), Req("r2")));
+        svc.Request(Req("r2"));
+        router.Release();
+        Assert.Equal(new[] { "reqrow:r2", "reqsay:r2:False", "waiting:r1:True:False" }, sink.Calls);
+    }
+
+    [Fact]
+    public void WaitingRequestsWhileHiddenFileTheRowWithoutANotice()
+    {
+        var hidden = PanelUp with { PanelVisible = false };
+        var (svc, sink, router) = Rig(() => hidden);
+        svc.Push(WithIncoming(Req("r1")));
+        router.Release();
+        Assert.Equal(new[] { "waiting:r1:False:False" }, sink.Calls);
+    }
+
+    [Fact]
+    public void WaitingRequestsHoldThroughALockdown()
+    {
+        var world = PanelUp with { Lockdown = true };
+        var (svc, sink, router) = Rig(() => world);
+        svc.Push(WithIncoming(Req("r1")));
+        router.Release();
+        Assert.Empty(sink.Calls);
+        world = PanelUp;
+        router.Release();
+        Assert.Equal(new[] { "waiting:r1:True:False" }, sink.Calls);
+    }
+
+    [Fact]
+    public void AnsweringAWaitingRequestRewordsThenTakesTheRowBack()
+    {
+        var (svc, sink, router) = Rig(() => PanelUp);
+        svc.Push(WithIncoming(Req("r1"), Req("r2")));
+        router.Release();
+        svc.Push(WithIncoming(Req("r2")));
+        svc.Push(WithIncoming());
+        Assert.Equal(new[] { "waiting:r1,r2:True:False", "waiting:r2:False:False", "waiting::False:False" }, sink.Calls);
+    }
+
+    [Fact]
+    public void ANewAccountStartsANewBaseline()
+    {
+        var (svc, sink, router) = Rig(() => PanelUp);
+        svc.Push(WithIncoming(Req("r1")));
+        router.Release();
+        svc.Push(FriendsSnapshot.Empty);   // signed out / account changed
+        svc.Push(WithIncoming(Req("r9")));
+        router.Release();
+        Assert.Equal(new[] { "waiting:r1:True:False", "waiting::False:False", "waiting:r9:True:False" }, sink.Calls);
+    }
+
+    [Fact]
+    public void AnEmptyFirstListHasNothingWaiting()
+    {
+        var (svc, sink, router) = Rig(() => PanelUp);
+        svc.Push(WithIncoming());
+        router.Release();
+        Assert.Empty(sink.Calls);
+        Assert.False(router.WaitingPending);
+    }
+
     private static (FakeFriends, RecordingSink, FriendsLandingRouter) Rig(Func<LandingWorld> world, Func<DateTimeOffset>? now = null)
     {
         var svc = new FakeFriends();
@@ -353,12 +471,15 @@ public class FriendsLandingTests
         public void RequestAnnounce(FriendRequest request, bool inGame) => Calls.Add($"reqsay:{request.Id}:{inGame}");
         public void RequestCue() => Calls.Add("reqcue");
         public void RequestGone(string requestId) => Calls.Add($"reqgone:{requestId}");
+        public void RequestsWaiting(IReadOnlyList<FriendRequest> waiting, bool announce, bool inGame)
+            => Calls.Add($"waiting:{string.Join(",", waiting.Select(r => r.Id))}:{announce}:{inGame}");
     }
 
     private sealed class FakeFriends : IFriendsService
     {
         public bool Available => true;
-        public FriendsSnapshot Snapshot => FriendsSnapshot.Empty;
+        public FriendsSnapshot Snapshot { get; private set; } = FriendsSnapshot.Empty;
+        public void Push(FriendsSnapshot s) { Snapshot = s; SnapshotChanged?.Invoke(s); }
         public bool PresenceShared { get; set; }
         public event Action<FriendsSnapshot>? SnapshotChanged;
         public event Action<InboxItem>? Delivered;
@@ -377,14 +498,14 @@ public class FriendsLandingTests
         public Task<SendResult> InviteAsync(string friendId, string destination, string? code) => Task.FromResult(SendResult.Sent);
         public Task<SendResult> SendWatchAsync(string friendId, WatchRef watch) => Task.FromResult(SendResult.Sent);
         public Task<AddResult> AddByCodeAsync(string code) => Task.FromResult(AddResult.Sent);
-        public Task AcceptAsync(string requesterId) => Task.CompletedTask;
-        public Task DeclineAsync(string requesterId) => Task.CompletedTask;
-        public Task CancelRequestAsync(string targetId) => Task.CompletedTask;
-        public Task RemoveAsync(string friendId) => Task.CompletedTask;
-        public Task BlockAsync(string friendId) => Task.CompletedTask;
-        public Task UnblockAsync(string friendId) => Task.CompletedTask;
-        public Task SetSquelchAsync(string friendId, bool on) => Task.CompletedTask;
-        public Task ReportAsync(string friendId, string reason) => Task.CompletedTask;
+        public Task<ActResult> AcceptAsync(string requesterId) => Task.FromResult(ActResult.Done);
+        public Task<ActResult> DeclineAsync(string requesterId) => Task.FromResult(ActResult.Done);
+        public Task<ActResult> CancelRequestAsync(string targetId) => Task.FromResult(ActResult.Done);
+        public Task<ActResult> RemoveAsync(string friendId) => Task.FromResult(ActResult.Done);
+        public Task<ActResult> BlockAsync(string friendId) => Task.FromResult(ActResult.Done);
+        public Task<ActResult> UnblockAsync(string friendId) => Task.FromResult(ActResult.Done);
+        public Task<ActResult> SetSquelchAsync(string friendId, bool on) => Task.FromResult(ActResult.Done);
+        public Task<ActResult> ReportAsync(string friendId, string reason) => Task.FromResult(ActResult.Done);
         public void SetActivity(PresenceActivity activity) { }
         public void SetDrawerOpen(bool open) { }
     }

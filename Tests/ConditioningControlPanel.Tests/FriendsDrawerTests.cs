@@ -415,14 +415,18 @@ public partial class FriendsDrawerTests
         }
         public Task<SendResult> SendWatchAsync(string friendId, WatchRef watch) { Watches.Add(watch); return Task.FromResult(NextSend); }
         public Task<AddResult> AddByCodeAsync(string code) { Adds.Add(code); return Task.FromResult(NextAdd); }
-        public Task AcceptAsync(string requesterId) => Task.CompletedTask;
-        public Task DeclineAsync(string requesterId) => Task.CompletedTask;
-        public Task CancelRequestAsync(string targetId) => Task.CompletedTask;
-        public Task RemoveAsync(string friendId) => Task.CompletedTask;
-        public Task BlockAsync(string friendId) => Task.CompletedTask;
-        public Task UnblockAsync(string friendId) => Task.CompletedTask;
-        public Task SetSquelchAsync(string friendId, bool on) => Task.CompletedTask;
-        public Task ReportAsync(string friendId, string reason) => Task.CompletedTask;
+        /// <summary>What every list change answers; each call is recorded as "op:id".</summary>
+        public ActResult NextAct { get; set; } = ActResult.Done;
+        public List<string> Acts { get; } = new();
+        private Task<ActResult> Act(string op, string id) { Acts.Add(op + ":" + id); return Task.FromResult(NextAct); }
+        public Task<ActResult> AcceptAsync(string requesterId) => Act("accept", requesterId);
+        public Task<ActResult> DeclineAsync(string requesterId) => Act("decline", requesterId);
+        public Task<ActResult> CancelRequestAsync(string targetId) => Act("cancel", targetId);
+        public Task<ActResult> RemoveAsync(string friendId) => Act("remove", friendId);
+        public Task<ActResult> BlockAsync(string friendId) => Act("block", friendId);
+        public Task<ActResult> UnblockAsync(string friendId) => Act("unblock", friendId);
+        public Task<ActResult> SetSquelchAsync(string friendId, bool on) => Act(on ? "squelch" : "unsquelch", friendId);
+        public Task<ActResult> ReportAsync(string friendId, string reason) => Act("report_" + reason, friendId);
         public void SetActivity(PresenceActivity activity) { }
         public void SetDrawerOpen(bool open) { }
     }

@@ -124,6 +124,20 @@ internal static class FriendsDrawerRules
 
     public static bool IsGood(AddResult r) => r is AddResult.Sent or AddResult.Accepted;
 
+    /// <summary>The words for a list change that did not go through. Done has none of its own:
+    /// each surface says what was done.</summary>
+    public static string ActResultKey(ActResult r) => r switch
+    {
+        ActResult.NotFound => "friends_act_not_found",
+        ActResult.Full => "friends_add_full",
+        ActResult.TooFast => "friends_result_too_fast",
+        ActResult.Refused => "friends_result_refused",
+        _ => "friends_result_try_later",
+    };
+
+    /// <summary>How long a worded result stays in a friend's row. Long enough to read twice.</summary>
+    public const double ResultHoldSeconds = 5;
+
     /// <summary>Digits only, at most eight: the HT box's whole grammar.</summary>
     public static string NormaliseHtId(string? typed)
     {

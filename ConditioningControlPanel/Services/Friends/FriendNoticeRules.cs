@@ -69,7 +69,8 @@ public static class FriendNoticeRules
         var s = (now - at).TotalSeconds;
         if (s < 5) return ("friends_notice_now", 0);
         if (s < 60) return ("friends_notice_seconds", (int)s);
-        return ("friends_notice_minutes", (int)(s / 60));
+        if (s < 3600) return ("friends_notice_minutes", (int)(s / 60));
+        return ("friends_notice_hours", (int)(s / 3600));
     }
 
     /// <summary>The count suffix: empty for one, "x3" for three.</summary>
@@ -91,6 +92,7 @@ public static class FriendNoticeRules
 public sealed class FriendNoticeStack
 {
     private readonly List<FriendNotice> _all = new();
+    private readonly List<FriendNotice> _evicted = new();
 
     /// <summary>Every live notice, newest first.</summary>
     public IReadOnlyList<FriendNotice> All => _all;
@@ -126,8 +128,21 @@ public sealed class FriendNoticeStack
             return (n, true);
         }
         _all.Insert(0, notice);
-        while (_all.Count > FriendNoticeRules.Cap) _all.RemoveAt(_all.Count - 1);
+        while (_all.Count > FriendNoticeRules.Cap)
+        {
+            _evicted.Add(_all[_all.Count - 1]);
+            _all.RemoveAt(_all.Count - 1);
+        }
         return (notice, false);
+    }
+
+    /// <summary>The notices a full stack pushed off since the last call, oldest last. They left
+    /// unseen, so the window treats them like one that ran out.</summary>
+    public List<FriendNotice> TakeEvicted()
+    {
+        var list = new List<FriendNotice>(_evicted);
+        _evicted.Clear();
+        return list;
     }
 
     /// <summary>Runs the visible timers by <paramref name="elapsedMs"/> unless paused. Hidden
