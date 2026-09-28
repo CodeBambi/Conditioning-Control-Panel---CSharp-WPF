@@ -27,8 +27,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>PromptValidator</c> IS in Core, so <see cref="RunPromptValidation"/> runs for real, and
     ///    its flags go to the app's moderation log through <see cref="CoreModerationLog"/>.
     ///  - The <c>MessageBox.Show</c> calls are this head's <see cref="MessageDialog"/>, which is
-    ///    async, so Save and Delete are <c>async void</c> handlers. Only the name-collision warning
-    ///    is missing, because the check behind it needs QuizStore (Core) wired.
+    ///    async, so Save and Delete are <c>async void</c> handlers.
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>.
     ///  - The public ctor loses its <c>= null</c> default: with a parameterless render ctor beside
     ///    it, <c>new QuizCategoryEditorWindow()</c> would be ambiguous (CS0121).
