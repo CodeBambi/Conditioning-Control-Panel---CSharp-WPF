@@ -42,5 +42,21 @@ namespace ConditioningControlPanel.Models
             if (s >= cost || s >= local) return null;
             return s;
         }
+
+        /// <summary>
+        /// What a balance refusal does next (ccp-bugs #1300). The server credits our pending
+        /// level-ups and bubble milestones only when a sync reaches it, and for a Back Room account
+        /// the purchase route will not take our number either, so a tree that reads 10 can be
+        /// refused at 9 on the first click. Before lowering the wallet we sync once and ask again:
+        /// the point we show is usually one the server is about to credit. Only a refusal that
+        /// survives that sync adopts the server's number.
+        /// </summary>
+        public static RefusalStep AfterBalanceRefusal(int local, int? server, int cost, bool alreadySynced)
+        {
+            if (!AdoptAfterRefusal(local, server, cost).HasValue) return RefusalStep.Keep;
+            return alreadySynced ? RefusalStep.Adopt : RefusalStep.SyncAndRetry;
+        }
+
+        public enum RefusalStep { Keep, SyncAndRetry, Adopt }
     }
 }
