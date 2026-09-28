@@ -2,9 +2,6 @@ using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Media;
-using ConditioningControlPanel.Services;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -128,89 +125,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             quizWindow.Show();
         }
 
-        /// <summary>WPF MainWindow.Lab.cs:468, including its early return while BtnStartQuiz is hidden.</summary>
+        /// <summary>WPF MainWindow.Lab.cs:468. ponytail: WPF hides this list with BtnStartQuiz,
+        /// pending removal; port the body (trend rows + QuizReportWindow rows) if it's ever unhidden.</summary>
         internal void RefreshPastQuizzes()
         {
-            try
-            {
-                if (!BtnStartQuiz.IsVisible) return;
-
-                var history = QuizStore.LoadHistory();
-                PastQuizzesList.Children.Clear();
-                TxtPastQuizzesHeader.IsVisible = PastQuizzesPanel.IsVisible = history.Count > 0;
-                if (history.Count == 0) return;
-
-                foreach (var cat in history.Select(QuizStore.TrendKey).Distinct(StringComparer.OrdinalIgnoreCase))
-                {
-                    var trend = QuizStore.GetScoreTrend(history, cat);
-                    if (trend == null) continue;
-
-                    var latestEntry = history.FirstOrDefault(h =>
-                        string.Equals(QuizStore.TrendKey(h), cat, StringComparison.OrdinalIgnoreCase));
-                    var archetype = "";
-                    if (latestEntry != null)
-                    {
-                        var match = System.Text.RegularExpressions.Regex.Match(latestEntry.ProfileText, @"You are a (.+?)\.");
-                        if (match.Success) archetype = match.Groups[1].Value;
-                    }
-
-                    var arrow = trend.Direction switch
-                    {
-                        TrendDirection.Up => "\u2191",
-                        TrendDirection.Down => "\u2193",
-                        TrendDirection.Flat => "\u2192",
-                        _ => ""
-                    };
-                    var catDisplay = latestEntry != null ? QuizStore.DisplayName(latestEntry) : cat;
-                    var trendLabel = trend.Direction == TrendDirection.FirstQuiz
-                        ? $"{catDisplay}: {trend.LatestPercent}%"
-                        : $"{catDisplay}: {trend.LatestPercent}% {arrow}{Math.Abs(trend.DeltaPercent)}%";
-                    if (!string.IsNullOrEmpty(archetype))
-                        trendLabel += $" · {archetype}";
-
-                    PastQuizzesList.Children.Add(new TextBlock
-                    {
-                        Text = trendLabel,
-                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
-                        FontSize = 11,
-                        FontWeight = FontWeight.SemiBold,
-                        Margin = new Thickness(8, 3, 8, 3)
-                    });
-                }
-
-                foreach (var entry in history)
-                {
-                    var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
-                    var row = new Border
-                    {
-                        Cursor = new Cursor(StandardCursorType.Hand),
-                        Padding = new Thickness(8, 5, 8, 5),
-                        Background = Brushes.Transparent,
-                        Child = new TextBlock
-                        {
-                            Text = $"{entry.TakenAt:MMM d}  ·  {QuizStore.DisplayName(entry)}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)",
-                            Foreground = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xB8)),
-                            FontSize = 11.5
-                        }
-                    };
-                    var captured = entry;
-                    row.PointerPressed += (_, _) =>
-                    {
-                        var lifetime = Application.Current?.ApplicationLifetime as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-                        foreach (var w in lifetime?.Windows.OfType<Windows.QuizReportWindow>().ToList() ?? new())
-                            w.Close();
-                        var report = new Windows.QuizReportWindow(captured);
-                        if (TopLevel.GetTopLevel(this) is Window owner) report.Show(owner); else report.Show();
-                    };
-                    row.PointerEntered += (s, _) => { if (s is Border b) b.Background = new SolidColorBrush(Color.FromArgb(0x15, 0xFF, 0xFF, 0xFF)); };
-                    row.PointerExited += (s, _) => { if (s is Border b) b.Background = Brushes.Transparent; };
-                    PastQuizzesList.Children.Add(row);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "MainWindow: Failed to refresh past quizzes");
-            }
+            if (!BtnStartQuiz.IsVisible) return;
         }
 
         // WPF MainWindow.Lab.cs:600 → PopQuizService.TestPopQuiz.

@@ -409,9 +409,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(null);
             if (await editor.ShowDialog<bool>(this) && editor.Result != null)
             {
-                // ponytail: needs QuizStore.SaveCustomCategory (Core) wired - quiz unit 5/6 - to
-                // write the new category into custom_quiz_categories.json. The rebuild below still runs, so the list
-                // refreshes (from the stub).
+                // ponytail: QuizStore.SaveCustomCategory exists in Core; calling it here is quiz
+                // unit 6 (category editor). Until then the new category is not persisted.
                 BuildCategoryButtons();
             }
         }
@@ -424,7 +423,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(catDef);
             if (await editor.ShowDialog<bool>(this))
             {
-                // ponytail: needs QuizStore.SaveCustomCategory (Core) wired - quiz unit 5/6 - when
+                // ponytail: QuizStore.SaveCustomCategory (Core) is quiz unit 6's to call here when
                 // editor.Result is non-null. If Result is null, it was deleted (handled inside editor)
                 BuildCategoryButtons();
             }
@@ -1140,9 +1139,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// ponytail: the AI round trip (QuizService.CallAiAsync: proxy or Ollama, SafetyComposer,
-        /// moderation) is not on this head. Every turn therefore takes WPF's "reply unusable" branch:
-        /// a QuizStore fallback question (QuizService.cs:116/140/177) and the deterministic fallback
-        /// profile (QuizService.cs:223). The window is only reachable behind the CoreAi gate, as in WPF.
+        /// moderation) is not on this head. WPF with no AI never gets here (the CoreAi gate, or the
+        /// error screen on a null reply); this head serves WPF's "reply unusable" branch instead - a
+        /// QuizStore fallback question (QuizService.cs:116/140/177) and the fallback profile
+        /// (QuizService.cs:223) - which only the fake-AI test reaches while the button stays hidden.
         /// The bookkeeping (score, question counter) is QuizService's, verbatim.
         /// </summary>
         internal Task<QuizQuestion?> StartQuizAsync(QuizCategoryDefinition catDef)
