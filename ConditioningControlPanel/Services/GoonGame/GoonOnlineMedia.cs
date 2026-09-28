@@ -209,12 +209,27 @@ namespace ConditioningControlPanel.Services.GoonGame
         private readonly IReadOnlyList<string>? _fixedChannels;
         private readonly int _stillTarget = GoonOnlineMediaRules.StillTarget;
         private readonly int _clipTarget = GoonOnlineMediaRules.ClipTarget;
-        private string StillTenant => _noiseSet != null ? "goon-noise-" + _noiseSet : _peer ? PeerStillTenant : OwnStillTenant;
-        private string ClipTenant => _noiseSet != null ? "goon-noise-clips-" + _noiseSet : _peer ? PeerClipTenant : OwnClipTenant;
+        // ANOTHER GAME'S OWN DECK (ForGame, 2026-09-28): same fetch, validation and temp-file
+        // ownership, on "<prefix>-stills" / "<prefix>-clips". Its channel list lives in a static
+        // map keyed by prefix, for the same first-provider-wins reason as _ownChannels.
+        private readonly string? _prefix;
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<string>> _namedChannels
+            = new(StringComparer.Ordinal);
+        private string StillTenant => _prefix != null ? _prefix + "-stills" : _noiseSet != null ? "goon-noise-" + _noiseSet : _peer ? PeerStillTenant : OwnStillTenant;
+        private string ClipTenant => _prefix != null ? _prefix + "-clips" : _noiseSet != null ? "goon-noise-clips-" + _noiseSet : _peer ? PeerClipTenant : OwnClipTenant;
         private IReadOnlyList<string> _channels
         {
-            get => _fixedChannels ?? (_peer ? _peerChannels : _ownChannels);
-            set { if (_fixedChannels != null) return; if (_peer) _peerChannels = value; else _ownChannels = value; }
+            get => _fixedChannels
+                ?? (_prefix != null
+                    ? (_namedChannels.TryGetValue(_prefix, out var named) ? named : Array.Empty<string>())
+                    : (_peer ? _peerChannels : _ownChannels));
+            set
+            {
+                if (_fixedChannels != null) return;
+                if (_prefix != null) _namedChannels[_prefix] = value;
+                else if (_peer) _peerChannels = value;
+                else _ownChannels = value;
+            }
         }
         private IReadOnlyList<string> Channels() => _channels;
 
@@ -224,6 +239,15 @@ namespace ConditioningControlPanel.Services.GoonGame
         public static GoonOnlineMedia ForPeer(Action<Snapshot> onSnapshot) => new(onSnapshot, peer: true);
 
         private GoonOnlineMedia(Action<Snapshot> onSnapshot, bool peer) : this(onSnapshot) => _peer = peer;
+
+        /// <summary>Another game's own deck (Piece by Piece: "pbp"): the same stills + clips
+        /// waves, refills and temp-file ownership as the Goon Game's, on its own tenants, so the
+        /// two games never steer or reset each other's channels.</summary>
+        public static GoonOnlineMedia ForGame(string tenantPrefix, Action<Snapshot> onSnapshot)
+            => new(onSnapshot, tenantPrefix);
+
+        private GoonOnlineMedia(Action<Snapshot> onSnapshot, string tenantPrefix) : this(onSnapshot)
+            => _prefix = string.IsNullOrWhiteSpace(tenantPrefix) ? "game" : tenantPrefix.Trim();
 
         /// <summary>A Sort duel's NOISE board: one known board (<see cref="GoonNoiseSets"/>),
         /// <see cref="GoonNoiseSets.Stills"/> stills and no clips, on its own tenant. The same

@@ -1,5 +1,6 @@
 import { identity, onIdentity } from './bridge.js';
 import { presentation, setPresentation, onPresentation } from './game/preferences.js';
+import { attachPictures } from './ui/pictures.js';
 
 /* ============================================================================
  * hud.js - the screen furniture: two clocks, one status line, the tally, and
@@ -412,8 +413,11 @@ export function createHud(opts = {}) {
   undom.push(() => document.removeEventListener('keydown', optionKey));
   document.addEventListener('pointerdown', outside);
   undom.push(() => document.removeEventListener('pointerdown', outside));
+  const pictures = attachPictures(pick('game-pictures'));
+  undom.push(() => pictures?.dispose?.());
   const preferenceOff = onPresentation(p => {
     if (el.intensity) el.intensity.hidden = p.experience !== 'distraction';
+    pictures?.setVisible?.(p.experience === 'distraction');
     for (const button of root.querySelectorAll('[data-experience]')) button.setAttribute('aria-pressed', String(button.dataset.experience === p.experience));
     const copy = pick('experience-description');
     if (copy) copy.textContent = p.experience === 'classic' ? 'The board, animated captures and sound.' : 'Media and effects build as the match progresses.';

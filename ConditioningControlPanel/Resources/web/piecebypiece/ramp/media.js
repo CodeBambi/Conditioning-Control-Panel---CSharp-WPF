@@ -70,16 +70,23 @@ function createPool(entries, { rnd, label, lowWater = 0, onLow } = {}) {
         else if (/\.gif(\?|$)/i.test(url)) kind = 'gif';
         else kind = 'image';
       }
-      out.push({ kind, url, name: (typeof raw === 'object' && raw.name) || url.split('/').pop() });
+      // a CLIP is a gif that arrives as video (an online GifClip): it rides the gif
+      // surfaces and the video card, never an image slot (a background-image cannot play it)
+      const clip = kind === 'gif' && /\.(mp4|webm|m4v)(\?|#|$)/i.test(url);
+      out.push({ kind, url, clip, name: (typeof raw === 'object' && raw.name) || url.split('/').pop() });
     }
   }
   ingest(entries);
 
-  /** Indices of every entry usable as `kind` (a gif is also a fine image). */
+  /** Indices of every entry usable as `kind` (a gif is also a fine image, a clip a fine video). */
+  function usable(e, kind) {
+    if (kind === 'gif') return e.kind === 'gif';
+    if (kind === 'video') return e.kind === 'video' || !!e.clip;
+    return (e.kind === 'image' || e.kind === 'gif') && !e.clip;
+  }
   function poolFor(kind) {
-    const want = kind === 'gif' ? ['gif'] : (kind === 'video' ? ['video'] : ['image', 'gif']);
     const out = [];
-    for (let i = 0; i < all.length; i++) if (want.includes(all[i].kind)) out.push(i);
+    for (let i = 0; i < all.length; i++) if (usable(all[i], kind)) out.push(i);
     return out;
   }
 
@@ -126,6 +133,10 @@ function createPool(entries, { rnd, label, lowWater = 0, onLow } = {}) {
   return {
     has, draw, drawTile, stats, adopt: ingest, extend,
     get size() { return all.length; },
+    /** Every url held, in no order that matters. */
+    urls() { return all.map((e) => e.url); },
+    /** How many entries can answer `kind` at all. */
+    count(kind) { return poolFor(KINDS.includes(kind) ? kind : 'image').length; },
     /** How many entries of a kind are still unused in the current deck. */
     unused(kind) {
       const k = KINDS.includes(kind) ? kind : 'image';
@@ -153,7 +164,28 @@ export const HOST_MSG = Object.freeze({
   request: 'pbp:media-request',   // page -> host
   media: 'pbp:media',             // host -> page
   settings: 'pbp:settings',       // host -> page
+  online: 'pbp:online-media',     // host -> page, the whole online set (2026-09-28)
+  more: 'pbp:media-more',         // page -> host, most of the online set was shown
 });
+
+/** An online set this small takes a smaller share, so one fresh picture does not repeat. */
+export const ONLINE_WARM = 6;
+/** Share of the online set shown before the page asks the host for the next wave. */
+export const ONLINE_LOW_SHARE = 0.7;
+
+/**
+ * The chance a draw comes from the online set: all of it when the local deck
+ * cannot answer, none when the online set has nothing, else the host's share,
+ * scaled down while the online set is still smaller than ONLINE_WARM (a cold
+ * first wave of one or two pictures must not wear every tile).
+ */
+export function onlineChance(share, onlineCount, localHas) {
+  if (!(onlineCount > 0)) return 0;
+  if (!localHas) return 1;
+  const s = Math.max(0, Math.min(1, Number.isFinite(share) ? share : 0));
+  return s * Math.min(1, onlineCount / ONLINE_WARM);
+}
+
 const REQUEST_COUNT = 24;         // how many entries we ask for at a time
 const LOW_WATER = 4;              // ask again once a deck is down to this
 const REQUEST_GAP_MS = 4000;      // and never more often than this
@@ -190,6 +222,12 @@ function entriesFromFrame(frame) {
  *   host -> page  { type:'pbp:settings', videoHoldSec, reducedMotion }
  *                 once after boot. videoHoldSec becomes the base hold for the
  *                 video card; reducedMotion turns the moving layers off.
+ *   host -> page  { type:'pbp:online-media', state, subs, share, images:[...], clips:[...], have, want }
+ *                 the WHOLE online set (Scrolller stills and gif clips under
+ *                 https://ccp.assets/.temp/), every time it changes. Kept
+ *                 beside the local deck and mixed in at share percent.
+ *   page -> host  { type:'pbp:media-more' } once ONLINE_LOW_SHARE of the online
+ *                 set has been on screen; re-armed when the set grows.
  *
  * Outside WebView2 (the dev harness in a plain browser) there is no bridge, so
  * this degrades to exactly what createFixtureMedia([]) does: an empty pool, a
@@ -237,6 +275,7 @@ export function createHostMedia(entries, opts = {}) {
       if (!added && !pool.size) warnEmpty();
       return;
     }
+    if (data.type === HOST_MSG.online) { setOnline(data); return; }
     if (data.type === HOST_MSG.settings) {
       if (Number.isFinite(data.videoHoldSec) && data.videoHoldSec > 0) settings.videoHoldSec = data.videoHoldSec;
       settings.reducedMotion = !!data.reducedMotion;
@@ -255,6 +294,62 @@ export function createHostMedia(entries, opts = {}) {
   } else {
     warnEmpty();
   }
+
+  /* ---- the online set (2026-09-28) ----------------------------------------
+   * Scrolller pictures the host fetched for the player's flavour (or the app's
+   * own online source), kept BESIDE the local deck, replaced whole by every
+   * `pbp:online-media` frame, and mixed in at the host's `share`. A draw falls
+   * back to whichever side can answer, so an empty or failed online set is the
+   * local deck exactly as before, and an empty library is the online set. */
+  const rnd = typeof opts.rnd === 'function' ? opts.rnd : Math.random;
+  const online = createPool([], { rnd, label: 'online' });
+  const shown = new Set();
+  const last = {};
+  let share = 0.7;
+  let asked = false;
+  const local = { draw: pool.draw, has: pool.has, unused: pool.unused, stats: pool.stats, count: pool.count };
+  const localSize = () => local.stats().total;
+
+  function setOnline(frame) {
+    const list = [];
+    for (const url of Array.isArray(frame.images) ? frame.images : []) if (typeof url === 'string' && url) list.push({ kind: 'image', url });
+    // clips are gifs that play as video: kind gif, the .webm/.mp4 url marks them
+    for (const url of Array.isArray(frame.clips) ? frame.clips : []) if (typeof url === 'string' && url) list.push({ kind: 'gif', url });
+    const next = new Set(list.map((e) => e.url));
+    const before = online.size;
+    // a set that only grew keeps its deck; anything retired means a fresh deal
+    if (online.urls().every((u) => next.has(u))) online.extend(list); else online.adopt(list);
+    if (Number.isFinite(frame.share)) share = Math.max(0, Math.min(1, frame.share / 100));
+    for (const u of [...shown]) if (!next.has(u)) shown.delete(u);
+    if (online.size > before || !online.size) asked = false;
+  }
+
+  function noteShown(url) {
+    shown.add(url);
+    if (asked || !online.size || shown.size < Math.ceil(online.size * ONLINE_LOW_SHARE)) return;
+    asked = true;
+    try { if (bridge && typeof bridge.postMessage === 'function') bridge.postMessage({ type: HOST_MSG.more }); } catch { /* host gone */ }
+  }
+
+  pool.draw = (kind) => {
+    const k = KINDS.includes(kind) ? kind : 'image';
+    const fromOnline = rnd() < onlineChance(share, online.count(k), local.has(k));
+    let url = fromOnline ? online.draw(k) : local.draw(k);
+    // the same picture twice in a row takes the other side when it can
+    if (url && url === last[k]) {
+      const alt = fromOnline ? (local.has(k) ? local.draw(k) : null) : (online.count(k) ? online.draw(k) : null);
+      if (alt && alt !== url) { url = alt; if (!fromOnline) noteShown(alt); }
+    } else if (url && fromOnline) noteShown(url);
+    last[k] = url;
+    return url;
+  };
+  pool.has = (kind) => local.has(kind) || online.has(kind);
+  pool.unused = (kind) => local.unused(kind) + online.unused(kind);
+  pool.count = (kind) => local.count(kind) + online.count(kind);
+  pool.drawTile = () => pool.draw('gif') || pool.draw('image') || noiseTileUrl(2 + ((Math.random() * 3) | 0));
+  pool.stats = () => ({ ...local.stats(), label: 'host', online: online.stats().total, share });
+  Object.defineProperty(pool, 'size', { get: () => localSize() + online.size, configurable: true });
+  pool.online = online;
 
   pool.settings = settings;
   /** Subscribe to host settings. Fires immediately if they already arrived. */

@@ -314,6 +314,21 @@ html, body {
 .experience-pick { display: flex; gap: 6px; }
 .experience-pick .hud-btn { flex: 1; }
 .experience-pick [aria-pressed="true"] { border-color: #ff91c9; background: #58334e; color: #ffe1f0; }
+/* Distraction's pictures: flavour tiles, niches behind a small expander. */
+.pictures { display: grid; gap: 8px; }
+.pictures[hidden], .niche-box[hidden] { display: none; }
+.flavour-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.flavour-tile { display: grid; gap: 2px; padding: 7px 8px; text-align: left; border-left: 3px solid var(--tint, #8a7a9c); }
+.flavour-tile small { font-size: 11px; color: #bfb0d0; }
+.flavour-tile[aria-pressed="true"] { border-color: var(--tint, #ff91c9); background: #58334e; color: #ffe1f0; }
+.niche-box summary { cursor: pointer; font-size: 13px; color: #d0c2de; }
+.niche-pills { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+.niche-pill { font: inherit; font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid #665474;
+  background: transparent; color: #8f809f; cursor: pointer; }
+.niche-pill.is-on { background: #3d2c4d; color: #ffe1f0; border-color: #ff91c9; }
+.niche-add { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #bfb0d0; }
+.game-options-panel .niche-add input { flex: 1; width: auto; height: 26px; min-width: 0; padding: 0 7px; border-radius: 7px;
+  border: 1px solid #665474; background: #171428; color: #ffe1f0; font: inherit; font-size: 13px; }
 .intensity { margin-top: 12px; max-width: 214px; padding: 9px 11px; border-radius: 10px; background: #211d38; }
 .intensity > div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #cdbddd; }
 .intensity meter { display: block; width: 100%; height: 13px; margin-top: 5px; accent-color: #ff91c9; }
