@@ -481,6 +481,9 @@
                             <TextBlock Text="{loc:Str btn_escape}"/>
                         </Button>
                     </Grid>
+                    <!-- Avalonia-only: policy C, docs/avalonia-decisions.md (panic key row). -->
+                    <TextBlock Text="{loc:Str panic_key_wayland_hint}" FontSize="11" Opacity="0.7"
+                               TextWrapping="Wrap" Margin="0,0,0,6"/>
 
                     <!-- v6.8.5: what ONE panic press means. On (default) = stop everything at
                          once. Off = the pre-6.8.5 hand-off ladder. -->

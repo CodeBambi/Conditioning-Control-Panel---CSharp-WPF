@@ -595,16 +595,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// #875: is there a panic escape from this card RIGHT NOW? On WPF the panic key rides a
         /// <c>WH_KEYBOARD_LL</c> hook that can be absent while the setting says yes, so the answer
         /// was <c>PanicKeyEnabled &amp;&amp; PanicHook.IsInstalled</c>.
-        /// The settings half is live now (<c>PanicKeyEnabled</c> is in Core); the hook half is not.
-        /// ponytail: needs a panic-hook seam. There is no global-hook equivalent in this head at
-        /// all (<c>SetWindowsHookEx</c> has no X11 twin here), so no panic escape can be live — and
-        /// this falls OPEN, exactly as the WPF version does when the hook is gone. Written as the
-        /// real conjunction so wiring the hook is a one-symbol change.
+        /// Here the hook half is the X11 panic listener (Platform/X11PanicKey); when it is down (no X
+        /// display, native Wayland only) this falls OPEN, exactly as WPF does when the hook is gone.
         /// </summary>
         private static bool PanicEscapeIsLive => CoreSettings.Current.PanicKeyEnabled && PanicHookIsInstalled;
 
-        /// <summary>ponytail: no global keyboard hook on this head — see <see cref="PanicEscapeIsLive"/>.</summary>
-        private const bool PanicHookIsInstalled = false;
+        /// <summary>Also false for a key name X cannot resolve: a strict card must not lose Esc to a
+        /// panic key that can never fire.</summary>
+        private static bool PanicHookIsInstalled =>
+            Platform.X11PanicKey.IsListening && Platform.X11PanicKey.KeysymOf(CoreSettings.Current.PanicKey) != 0;
 
         /// <summary>
         /// #875: does Esc close THIS card? Non-strict cards: yes. Strict cards: only while a panic
@@ -621,8 +620,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (_txtEscHint == null) return;
             if (EscClosesCard) SetLocalized(_txtEscHint, "label_press_esc_to_close");
-            // Unreachable while PanicEscapeIsLive is false, kept — with the real key name now that
-            // settings are in Core — so the branch cannot rot while the hook half is missing.
+            // A strict card with the panic listener live: only the panic key gets out.
             else _txtEscHint.Text = Loc.GetF("label_strict_only_panic_key_closes", CoreSettings.Current.PanicKey);
         }
 

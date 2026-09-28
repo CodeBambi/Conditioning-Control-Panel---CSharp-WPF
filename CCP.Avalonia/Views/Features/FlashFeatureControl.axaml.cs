@@ -206,7 +206,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // no engine yet (CoreSession.IsEngineRunningProvider unseeded), so the toggle itself
             // arms and disarms the ambient schedule.
             // ponytail: no engine gate; gate on CoreSession.IsEngineRunning once Start/Stop is ported.
-            if (ChkEnable.IsChecked == true) CoreFlash.Start();
+            if (ChkEnable.IsChecked == true) Windows.MainShellWindow.StartEffect(() => { if (CoreSettings.Current.FlashEnabled) CoreFlash.Start(); });
             else CoreFlash.Stop();
         }
 

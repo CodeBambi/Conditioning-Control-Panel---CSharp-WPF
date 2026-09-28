@@ -195,7 +195,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var on = ChkEnable.IsChecked ?? false;
             CoreSubliminal.SetEnabled(on);
             // ponytail: no engine gate; drop these two lines once CoreSession.IsEngineRunning is seeded.
-            if (on) CoreSubliminal.Start();
+            if (on) Windows.MainShellWindow.StartEffect(() => { if (CoreSettings.Current.SubliminalEnabled) CoreSubliminal.Start(); });
             else CoreSubliminal.Stop();
         }
 

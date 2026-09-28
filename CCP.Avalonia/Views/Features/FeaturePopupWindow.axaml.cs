@@ -71,12 +71,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             };
             this.FindControl<Button>("BtnClose")!.Click += (_, _) => Close();
 
-            // Escape closes the popup.
-            // ponytail: needs MainWindow.IsCapturingPanicKey (don't eat Esc while the panic-key
-            // picker waits for a key), wired when that host exists on this head
+            // Escape closes the popup - except while the panic-key picker waits for a key.
             KeyDown += (_, e) =>
             {
-                if (e.Key != Key.Escape) return;
+                if (e.Key != Key.Escape || Windows.MainShellWindow.CapturingPanicKey) return;
                 Close();
                 e.Handled = true;
             };
