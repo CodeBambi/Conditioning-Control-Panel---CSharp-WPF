@@ -46,13 +46,36 @@ internal static class AccountSeed
         return true;
     }
 
-    /// <summary>WPF App.xaml.cs:2267 restore: the unified id persisted from the previous session.</summary>
+    /// <summary>WPF App.xaml.cs:2267 restore: the unified id persisted from the previous session. Unlike WPF,
+    /// only when something can still prove it (an auth token, or a signed-in provider): with no Secret Service
+    /// the token is gone after a restart, and showing "signed in" with nothing behind it is worse than signed out.</summary>
     internal static void RestoreSession()
     {
         var id = CoreSettings.Current.UnifiedId;
         if (string.IsNullOrEmpty(id)) return;
+        if (string.IsNullOrEmpty(CoreSettings.Current.AuthToken)
+            && Patreon?.IsAuthenticated != true && Discord?.IsAuthenticated != true && SubscribeStar?.IsAuthenticated != true)
+        {
+            Log.Information("Stored UnifiedUserId not restored: no auth token and no signed-in provider");
+            return;
+        }
         CoreAccount.UnifiedUserId = id;
         Log.Information("Restored UnifiedUserId from settings: {Id}", id);
+    }
+
+    /// <summary>WPF App.ValidateRestoredSessionAsync's check half (Core <see cref="V2AuthService.ValidateRestoredSessionAsync"/>),
+    /// run after the providers validated. No profile load / heartbeat (unit 6).</summary>
+    /// <param name="v2">Tests only.</param>
+    internal static async Task ValidateRestoredSessionAsync(V2AuthService? v2 = null)
+    {
+        var id = CoreAccount.UnifiedUserId;
+        if (string.IsNullOrEmpty(id)) return;
+        // If a provider already authenticated, it validated the session; offline trusts the cache.
+        if (Patreon?.IsAuthenticated == true || Discord?.IsAuthenticated == true) return;
+        if (CoreSettings.Current.OfflineMode) return;
+        Log.Information("Validating restored session for {Id}...", id);
+        if (await (v2 ?? new V2AuthService()).ValidateRestoredSessionAsync(id) == V2AuthService.RestoreOutcome.Cleared)
+            CoreAccount.UnifiedUserId = null;
     }
 
     /// <summary>Signs a provider out (WPF AccountService.LogoutProvider).</summary>
@@ -73,6 +96,7 @@ internal static class AccountSeed
     /// </summary>
     internal static void Logout()
     {
+        SecretStore.ClearFailed = false;
         Patreon?.Logout();
         Discord?.Logout();
         SubscribeStar?.Logout();

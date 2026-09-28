@@ -31,7 +31,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 var s = CoreSettings.Current;
-                var isLoggedIn = !string.IsNullOrEmpty(s.UnifiedId) || CoreAccount.IsLoggedIn;
+                // Not WPF's `s.UnifiedId ||`: a stored id with nothing to prove it is not restored (AccountSeed.RestoreSession).
+                var isLoggedIn = CoreAccount.IsLoggedIn;
                 var displayName = s.UserDisplayName ?? AccountSeed.Patreon?.DisplayName ?? AccountSeed.Discord?.DisplayName
                                   ?? AccountSeed.SubscribeStar?.DisplayName ?? "User";
 
@@ -70,10 +71,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF BtnQuickLogout_Click minus the pre-logout sync (unit 7).</summary>
-        internal void Logout()
+        internal async void Logout()
         {
             AccountSeed.Logout();
             UpdateQuickLoginUI();
+            if (SecretStore.ClearFailed)
+                await MessageDialog.ShowAsync(this, Loc.Get("title_error"), Loc.Get("logout_not_complete_body"));
         }
 
         private static void SetVisible(Control? control, bool visible)

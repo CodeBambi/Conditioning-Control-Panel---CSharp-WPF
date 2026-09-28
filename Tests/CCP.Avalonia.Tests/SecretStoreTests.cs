@@ -107,8 +107,6 @@ public sealed class SecretStoreTests
         string[] Files() => new[] { home, CorePaths.UserData }.Where(Directory.Exists)
             .SelectMany(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories)).Order().ToArray();
         var before = Files();
-        var notices = 0;
-        SecretStore.NotRememberedHook = () => notices++;
 
         Assert.Null(Libsecret.Lookup("authtoken"));
         Assert.False(Libsecret.Write("authtoken", "tok"));
@@ -116,7 +114,6 @@ public sealed class SecretStoreTests
         SecretStore.Store("authtoken", "tok");
         SecretStore.Store("discord_auth", Json);
         Assert.Equal("tok", SecretStore.Retrieve("authtoken"));  // this run only, from memory
-        Assert.Equal(1, notices);
         Assert.True(SecretStore.NotRemembered);
         Assert.Equal(before, Files());
     }

@@ -6862,5 +6862,6 @@
   "friends_copy": "Copy your code",
   "friends_copied": "copied",
   "login_not_remembered_title": "Sign-in not remembered",
-  "login_not_remembered_body": "This device has no secret store (Secret Service), so your sign-in is kept only until the app closes. You will need to sign in again next time."
+  "login_not_remembered_body": "This device has no secret store (Secret Service), so your sign-in is kept only until the app closes. You will need to sign in again next time.",
+  "logout_not_complete_body": "You are signed out in the app, but your sign-in could not be removed from this device's secret store (it may be locked). Unlock it and sign out again, or remove the ConditioningControlPanel items from your keyring."
 }

@@ -174,7 +174,12 @@ namespace ConditioningControlPanel.Avalonia
                 if (Platform.AccountSeed.Seed())
                 {
                     Platform.AccountSeed.RestoreSession();
-                    Dispatcher.UIThread.Post(async () => await Platform.AccountSeed.InitializeAsync());
+                    Dispatcher.UIThread.Post(async () =>
+                    {
+                        await Platform.AccountSeed.InitializeAsync();
+                        await Platform.AccountSeed.ValidateRestoredSessionAsync();
+                        (desktop.MainWindow as Views.Windows.MainShellWindow)?.UpdateQuickLoginUI();
+                    });
                 }
                 // After the version seed: installing / loading a mod checks its MinAppVersion.
                 StartMods();
