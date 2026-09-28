@@ -13,8 +13,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             DataContext = new AchievementsTabViewModel(Engine);
             // WPF MainWindow.xaml.cs:420: the counters refresh on every unlock.
             if (App.Achievements is { } live)
-                live.Unlocked += (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(
+            {
+                void Refresh(object? _, Models.Achievement __) => global::Avalonia.Threading.Dispatcher.UIThread.Post(
                     () => DataContext = new AchievementsTabViewModel(live));
+                AttachedToVisualTree += (_, _) => { live.Unlocked -= Refresh; live.Unlocked += Refresh; };
+                DetachedFromVisualTree += (_, _) => live.Unlocked -= Refresh;
+            }
         }
 
         /// <summary>The live engine; on the headless render path a read-only load of the same file

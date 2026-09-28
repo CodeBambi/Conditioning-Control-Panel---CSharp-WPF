@@ -195,22 +195,25 @@ public sealed class AchievementEngineTests : IDisposable
         Assert.Equal(1, engine.Progress.TotalBubbleCountFailed);
     }
 
-    [Fact]
-    public void FreeAndPatronCountsAreSeparateAndLockedPremiumBadgesLeaveTheFreeTotal()
+    // Literal catalogue numbers (Achievement.All): 69 ids = 56 free (2 parked, 4 premium-program) + 13 exclusive.
+    // A catalogue change must update these on purpose.
+    [Theory]
+    [InlineData(false, 50, 13, 50)]
+    [InlineData(true, 54, 13, 67)]
+    public void FreeAndPatronCountsAreSeparateAndFollowPremium(bool premium, int freeTotal, int patronTotal, int reachableTotal)
     {
         var previous = CoreEntitlement.HasPremiumProvider;
         try
         {
-            CoreEntitlement.HasPremiumProvider = () => false;
+            CoreEntitlement.HasPremiumProvider = () => premium;
             var engine = new AchievementEngine(new AchievementStore(MainPath));
             engine.TryUnlock(FreeId);
 
             Assert.Equal(1, engine.GetUnlockedCount(exclusive: false));
             Assert.Equal(0, engine.GetUnlockedCount(exclusive: true));
-            Assert.Equal(Achievement.All.Values.Count(a => !a.IsHidden && !a.IsExclusive && (!a.IsPremiumFeature || a.Id == FreeId)),
-                engine.GetTotalCount(exclusive: false));
-            Assert.Equal((1, Achievement.All.Values.Count(a => !a.IsHidden && !a.IsExclusive && !a.IsPremiumFeature || a.Id == FreeId)),
-                engine.GetReachableCounts());
+            Assert.Equal(freeTotal, engine.GetTotalCount(exclusive: false));
+            Assert.Equal(patronTotal, engine.GetTotalCount(exclusive: true));
+            Assert.Equal((1, reachableTotal), engine.GetReachableCounts());
         }
         finally { CoreEntitlement.HasPremiumProvider = previous; }
     }

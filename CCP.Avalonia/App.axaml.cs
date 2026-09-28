@@ -32,6 +32,9 @@ namespace ConditioningControlPanel.Avalonia
         /// </summary>
         protected virtual SessionManager CreateSessionManager() => new();
 
+        /// <summary>achievements.json. Tests that run the desktop path override it with a sandbox path.</summary>
+        protected virtual string AchievementsPath => AchievementStore.DefaultPath;
+
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
@@ -171,7 +174,7 @@ namespace ConditioningControlPanel.Avalonia
                 // Achievements: the Core engine over the same achievements.json WPF uses, seeded the
                 // way WPF App.xaml.cs:384/:394 seeds the two unlock seams. Unlocked is raised on the
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
-                Achievements = new AchievementEngine(new AchievementStore(AchievementStore.DefaultPath));
+                Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
                 Achievements.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
@@ -295,8 +298,9 @@ namespace ConditioningControlPanel.Avalonia
             try { Settings?.SaveImmediate(); }
             catch { /* SettingsService logs save failures; exit must continue */ }
 
-            // WPF AchievementService.Dispose: synchronous, so it waits out any in-flight write.
-            try { Achievements?.Save(); } catch { /* the store logs write failures */ }
+            // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
+            // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
+            try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never
             // opened the quest page.

@@ -55,6 +55,9 @@ public sealed class LanguageSelectorTests
             _builtInFolder = builtInFolder;
         }
 
+        protected override string AchievementsPath =>
+            System.IO.Path.Combine(TestProfile.DirectoryPath, "achievements.json");
+
         protected override SessionManager CreateSessionManager() =>
             new(new SessionFileService(_customFolder, _builtInFolder));
     }
@@ -313,6 +316,8 @@ public sealed class LanguageSelectorTests
                 Thread.Sleep(650); // Beyond the production 500ms due time, without pumping the UI queue.
                 Assert.Equal(diskBeforeExit, File.ReadAllText(settingsPath));
                 lifetime.Shutdown();
+                // Nothing earned this run: the exit handler must not rewrite achievements.json.
+                Assert.False(File.Exists(Path.Combine(TestProfile.DirectoryPath, "achievements.json")));
                 var reloaded = new SettingsService();
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal(0, Volatile.Read(ref queuedBeforeExit));
