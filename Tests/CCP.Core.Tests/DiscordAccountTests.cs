@@ -37,6 +37,7 @@ public sealed class DiscordAccountTests : IDisposable
         CoreSecrets.RetrieveProvider = _oldGet;
         CoreSecrets.StoreProvider = _oldSet;
         CoreAccount.UnifiedUserId = null;
+        V2AuthService.MergedRecovery = null;
         _patreon.Dispose();
     }
 
@@ -45,12 +46,14 @@ public sealed class DiscordAccountTests : IDisposable
         public readonly Dictionary<string, (HttpStatusCode, string)> Routes = new();
         public readonly List<string> Seen = new();
         public Exception? Throw;
+        public Action<string>? OnSend;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
             var body = r.Content == null ? "" : await r.Content.ReadAsStringAsync(ct);
             Seen.Add($"{r.Method} {r.RequestUri!.AbsolutePath} bearer={r.Headers.Authorization?.Parameter} {body}");
             if (Throw != null) throw Throw;
             var (status, json) = Routes.TryGetValue(r.RequestUri.AbsolutePath, out var hit) ? hit : (HttpStatusCode.NotFound, "{}");
+            OnSend?.Invoke(r.RequestUri.AbsolutePath);
             return new HttpResponseMessage(status) { Content = new StringContent(json) };
         }
     }
@@ -147,7 +150,7 @@ public sealed class DiscordAccountTests : IDisposable
     [InlineData("throw")]
     [InlineData("garbage")]
     [InlineData("500")]
-    [InlineData("storethrows")]
+    [InlineData("unreadable")]
     public async Task AnyFailure_GrantsNothing(string how)
     {
         Tokens(DateTime.UtcNow.AddDays(5));
@@ -158,9 +161,55 @@ public sealed class DiscordAccountTests : IDisposable
             _ => (HttpStatusCode.OK, User),
         };
         if (how == "throw") _proxy.Throw = new InvalidOperationException("boom");
-        if (how == "storethrows") CoreSecrets.RetrieveProvider = _ => throw new InvalidOperationException("keyring");
+        if (how == "unreadable") CoreSecrets.RetrieveProvider = _ => throw new InvalidOperationException("keyring");
         using var d = Make();
         await d.ValidateAndRefreshUserAsync(forceRefresh: true);
+        AssertNothingGranted(d);
+    }
+
+    /// <summary>The server-healed auth token is adopted only for this session's own unified record.</summary>
+    [Theory]
+    [InlineData("u_2", "ccp-tok")]
+    [InlineData("u_1", "new")]
+    public async Task AuthTokenHeal_OnlyForTheSameUnifiedRecord(string serverId, string expected)
+    {
+        Tokens(DateTime.UtcNow.AddDays(5));
+        _proxy.Routes["/discord/validate"] = (HttpStatusCode.OK,
+            User.Replace("\"unified_id\":\"u_1\"", $"\"unified_id\":\"{serverId}\",\"auth_token\":\"new\""));
+        using var d = Make();
+        await d.ValidateAndRefreshUserAsync(forceRefresh: true);
+        Assert.Equal("4242", d.UserId);
+        Assert.Equal(expected, _settings.AuthToken);
+    }
+
+    [Fact]
+    public async Task Unauthorized_RefreshSucceeds_RevalidatesWithTheNewToken()
+    {
+        Tokens(DateTime.UtcNow.AddDays(5));
+        var calls = 0;
+        _proxy.Routes["/discord/refresh"] = (HttpStatusCode.OK, Refreshed);
+        _proxy.Routes["/discord/validate"] = (HttpStatusCode.Unauthorized, "{}");
+        _proxy.OnSend = path => { if (path == "/discord/validate" && ++calls == 1) _proxy.Routes[path] = (HttpStatusCode.OK, User); };
+        using var d = Make();
+        await d.ValidateAndRefreshUserAsync(forceRefresh: true);
+        Assert.Equal(new[]
+        {
+            "GET /discord/validate bearer=access-1 ",
+            "POST /discord/refresh bearer= {\"refresh_token\":\"refresh-1\"}",
+            "GET /discord/validate bearer=access-2 ",
+        }, _proxy.Seen);
+        Assert.Equal("4242", d.UserId);
+    }
+
+    [Fact]
+    public async Task AMergedAccountResponse_StopsTheValidate_GrantsNothing()
+    {
+        Tokens(DateTime.UtcNow.AddDays(5));
+        _proxy.Routes["/discord/validate"] = (HttpStatusCode.OK, User);
+        V2AuthService.MergedRecovery = (_, _) => Task.FromResult(true);
+        using var d = Make();
+        await d.ValidateAndRefreshUserAsync(forceRefresh: true);
+        Assert.False(_secrets.ContainsKey("discord_cache"));
         AssertNothingGranted(d);
     }
 
