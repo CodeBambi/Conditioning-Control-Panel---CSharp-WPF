@@ -67,12 +67,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// applied by the compositor through <see cref="X11Overlay.SetOpacity"/>.</summary>
         private void Fade(double from, double to, TimeSpan fade, Action? done = null)
         {
+            // WPF moves alpha by dt/fadeSeconds per frame, so a ramp takes |to-from| x fade:
+            // at Opacity 50% the fade is half as long, not a slower full-length one.
+            var span = fade * Math.Abs(to - from);
             var steps = Math.Max(1, (int)Math.Ceiling(Math.Abs(to - from) * 32));
             for (var i = 1; i <= steps; i++)
             {
                 var v = from + (to - from) * i / steps;
                 var last = i == steps;
-                DispatcherTimer.RunOnce(() => { X11Overlay.SetOpacity(this, v); if (last) done?.Invoke(); }, fade * i / steps + TimeSpan.FromMilliseconds(1));
+                DispatcherTimer.RunOnce(() => { X11Overlay.SetOpacity(this, v); if (last) done?.Invoke(); }, span * i / steps + TimeSpan.FromMilliseconds(1));
             }
         }
     }

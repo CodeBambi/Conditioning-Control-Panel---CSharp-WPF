@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Features;   // ScreenList
@@ -43,7 +44,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static bool _busy, _warnedUnavailable, _warnedEmpty;
 
         /// <summary>Fire one burst. Any attached visual works as <paramref name="host"/>; it only
-        /// reaches <c>Screens</c>. Skipped while the previous burst is still loading, like WPF.</summary>
+        /// reaches <c>Screens</c>. Like WPF's _isBusy, a second press is ignored from the click
+        /// until the burst's last flash has spawned.</summary>
         public static async void TriggerOnce(Visual host)
         {
             if (_busy) return;
@@ -57,19 +59,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var screens = ScreenList.Enumerate(host);
             if (screens.Count == 0) return;
             _busy = true;
+            var scheduled = false;
             try
             {
                 var s = CoreSettings.Current;
-                var pictures = await Task.Run(() => LoadPictures(s.SimultaneousImages));
-                if (pictures.Count == 0)
+                var primary = Math.Max(0, screens.ToList().FindIndex(x => x.IsPrimary));
+                var targets = PinkFilterOverlay.ResolveScreenIndices(s.GlobalTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
+                var occupied = Active.Select(a => a.Rect).ToList();
+                var flashes = await Task.Run(() => LoadPictures(s.SimultaneousImages, screens, targets, s, occupied));
+                if (flashes.Count == 0)
                 {
                     if (!_warnedEmpty) Log.Warning("Flash: no images found in {Path}", ImagesPath());
                     _warnedEmpty = true;
                     return;
                 }
 
-                var primary = Math.Max(0, screens.ToList().FindIndex(x => x.IsPrimary));
-                var targets = PinkFilterOverlay.ResolveScreenIndices(s.GlobalTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
                 var lifetime = TimeSpan.FromMilliseconds(s.FlashDuration * 1000 + 1000);
                 var fade = TimeSpan.FromSeconds(s.FadeDuration * FlashPlacement.FadeSecondsPerPercent);
                 var alpha = Math.Clamp(s.FlashOpacity / 100.0, 0, 1);
@@ -79,22 +83,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 // head, a Task.Delay(300) continuation intermittently landed 1.7 s late (thread-pool
                 // timer), while dispatcher timers stayed on time.
                 var refused = false;
-                for (var i = 0; i < pictures.Count; i++)
+                for (var i = 0; i < flashes.Count; i++)
                 {
-                    var bmp = pictures[i];
+                    var (bmp, rect) = flashes[i];
+                    var last = i == flashes.Count - 1;
                     DispatcherTimer.RunOnce(() =>
                     {
-                        if (refused || Active.Count >= MaxConcurrent) { bmp.Dispose(); return; }
-                        var screen = screens[targets[Rng.Next(targets.Length)]];
-                        var rect = Place(screen.Bounds, screen.Scaling, bmp.PixelSize.Width, bmp.PixelSize.Height, s, Rng,
-                            Active.Select(a => a.Rect));
-                        try { refused = !Spawn(bmp, rect, alpha, fade, lifetime); }
+                        try
+                        {
+                            if (refused || Active.Count >= MaxConcurrent) { bmp.Dispose(); return; }
+                            refused = !Spawn(bmp, rect, alpha, fade, lifetime);
+                        }
                         catch (Exception ex) { refused = true; Log.Error(ex, "Flash: spawn failed"); }
+                        finally { if (last) _busy = false; }
                     }, TimeSpan.FromMilliseconds(1000 + i * StaggerMs));
                 }
+                scheduled = true;
             }
             catch (Exception ex) { Log.Error(ex, "Flash: burst failed"); }
-            finally { _busy = false; }
+            finally { if (!scheduled) _busy = false; }
         }
 
         /// <summary>
@@ -127,16 +134,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             return rect;
         }
 
-        /// <summary>The pre-map recipe proved by --overlay-check: override-redirect with geometry,
-        /// then click-through, then Show. False (window closed) when the platform refuses.</summary>
+        /// <summary>The pre-map recipe proved by --overlay-check, with every attribute requested
+        /// BEFORE SetOverrideRedirect so its XSync covers them: the window maps already
+        /// click-through and at alpha 0, never as one opaque or clickable frame. False (window
+        /// closed) when the platform refuses.</summary>
         private static bool Spawn(Bitmap bmp, PixelRect rect, double alpha, TimeSpan fade, TimeSpan lifetime)
         {
-            // Resample once to the display size, as WPF decodes at display size: the window then
-            // holds a picture its own size, not a full-resolution source.
-            var fitted = bmp.CreateScaledBitmap(rect.Size);
-            bmp.Dispose();
-            var w = new FlashOverlayWindow(fitted);
-            if (!X11Overlay.SetOverrideRedirect(w, rect) || !X11Overlay.SetClickThrough(w, true) || !X11Overlay.SetOpacity(w, 0))
+            var w = new FlashOverlayWindow(bmp);
+            if (!X11Overlay.SetClickThrough(w, true) || !X11Overlay.SetOpacity(w, 0) || !X11Overlay.SetOverrideRedirect(w, rect))
             {
                 if (!_warnedUnavailable) Log.Warning("Flash: the X server refused an override-redirect click-through window; flashes skipped");
                 _warnedUnavailable = true;
@@ -154,27 +159,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static string ImagesPath() => Path.Combine(CorePaths.EffectiveAssets, "images");
 
         /// <summary>
-        /// Up to <paramref name="count"/> decoded pictures, drawn with replacement from the enabled
+        /// Up to <paramref name="count"/> placed pictures, drawn with replacement from the enabled
         /// images (FlashService.GetNextImages / GetMediaFiles), re-drawing past unreadable files the
-        /// way LoadImagesUntilAsync does (at most max(count*5, 20) tries).
+        /// way LoadImagesUntilAsync does (at most max(count*5, 20) tries). Placement happens first,
+        /// from the header size alone, so each picture is decoded AT its display size like WPF's
+        /// decode-at-display-size - never a full-resolution source held per window.
         /// </summary>
-        private static List<Bitmap> LoadPictures(int count)
+        private static List<(Bitmap Bitmap, PixelRect Rect)> LoadPictures(int count, IReadOnlyList<Screen> screens,
+            int[] targets, AppSettings s, List<PixelRect> occupied)
         {
             var root = CorePaths.EffectiveAssets;
             var dir = Path.Combine(root, "images");
-            var result = new List<Bitmap>(count);
-            if (!Directory.Exists(dir)) return result;
+            var result = new List<(Bitmap, PixelRect)>(count);
+            if (!Directory.Exists(dir) || targets.Length == 0) return result;
 
             var files = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
                 .Where(f => FlashPlacement.ImageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
                 .ToList();
-            files = AssetFolderExclusion.Enabled(files, root, CoreSettings.Current);
+            files = AssetFolderExclusion.Enabled(files, root, s);
             if (files.Count == 0) return result;
 
             for (var tries = Math.Max(count * 5, 20); result.Count < count && tries > 0; tries--)
             {
                 var path = files[Rng.Next(files.Count)];
-                try { result.Add(new Bitmap(path)); }
+                try
+                {
+                    SkiaSharp.SKImageInfo info;
+                    using (var codec = SkiaSharp.SKCodec.Create(path))
+                    {
+                        if (codec is null) continue;
+                        info = codec.Info;
+                    }
+                    var screen = screens[targets[Rng.Next(targets.Length)]];
+                    var rect = Place(screen.Bounds, screen.Scaling, info.Width, info.Height, s, Rng, occupied);
+                    using var stream = File.OpenRead(path);
+                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect));
+                    occupied.Add(rect);
+                }
                 catch (Exception ex) { Log.Debug("Flash: could not decode {Path}: {E}", path, ex.Message); }
             }
             return result;
