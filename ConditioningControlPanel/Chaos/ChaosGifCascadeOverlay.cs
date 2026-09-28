@@ -360,18 +360,13 @@ public sealed class ChaosGifCascadeOverlay : Window
             if (animate)
             {
                 _animatedAlive++;
-                if (isGif)
-                {
-                    AnimationBehavior.SetRepeatBehavior(img, System.Windows.Media.Animation.RepeatBehavior.Forever);
-                    AnimationBehavior.SetAutoStart(img, true);
-                    AnimationBehavior.SetSourceUri(img, new Uri(path, UriKind.Absolute));
-                }
-                else
-                {
-                    // XamlAnimatedGif is GIF-only — webp loops via a pre-decoded (off-thread,
-                    // display-size) frame animation instead. Detached with the faller.
-                    Services.AnimatedWebp.AttachAnimation(img, path, (int)_gifSize);
-                }
+                // GIFs AND animated webps loop via AnimatedWebp's pre-decoded (off-thread,
+                // display-size, frozen) frame animation. Was XamlAnimatedGif for GIFs, whose frame
+                // loop writes a WriteableBitmap under Lock(), an UNBOUNDED wait on the render
+                // thread: with the render thread busy the UI thread hung inside
+                // Animator.RenderFrameAsync (ccp-bugs #1295 / #1310 stacks). A keyframe swap of
+                // frozen bitmaps never waits on the render thread. Detached with the faller.
+                Services.AnimatedWebp.AttachAnimation(img, path, (int)_gifSize);
             }
             else
             {
