@@ -34,12 +34,13 @@
 //   wherever they land: IntakePassService and App.Patreon.HasPremiumAccess are the gate.
 //
 //   THE ACTIVITY LAUNCHERS are all "new SomeWindow(...).Show()" over a service: quiz, intake,
-//   bureau, goon, chaos, arcademy, the FYP feed. Windows and services both, so both blocked.
+//   bureau, goon, chaos, arcademy, the FYP feed. Windows and services both, so both blocked -
+//   except the quiz: BtnStartQuiz_Click and RefreshPastQuizzes live in GradedIntakeTabView.
 //
 // Members dropped (47 - the one now restored is marked RESTORED):
 //   private void InitializeLockdown(…)
 //   internal void BtnActivateLockdown_Click(…)
-//   internal void BtnStartQuiz_Click(…)
+//   internal void BtnStartQuiz_Click(…)          -> GradedIntakeTabView
 //   internal void BtnStartIntake_Click(…)
 //   internal void BtnStartBureau_Click(…)
 //   internal void BtnStartGoon_Click(…)
@@ -52,7 +53,7 @@
 //   private void SetGradedIntakeGateCopy(…)
 //   private void EnsureIntakePassHooked(…)
 //   private void OnIntakePassStateChanged(…)
-//   private void RefreshPastQuizzes(…)
+//   private void RefreshPastQuizzes(…)          -> GradedIntakeTabView
 //   internal void ChkPopQuizEnabled_Changed(…)
 //   internal void SliderPopQuizFrequency_ValueChanged(…)
 //   internal void BtnTestPopQuiz_Click(…)

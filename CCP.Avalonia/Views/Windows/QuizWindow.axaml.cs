@@ -37,12 +37,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    sting and the surrender duck/unduck) and <c>App.Logger</c> is Serilog's static
     ///    <c>Log</c>. The question flow, scoring, timers, formatting and visual state are the WPF
     ///    original's.
-    ///  - <c>QuizService</c> (<c>ConditioningControlPanel/Services/Quiz/QuizService.cs</c>),
-    ///    is still in the WPF head, so
-    ///    the AI round trip, the category store and the history file are what
-    ///    remains stubbed; each stub names its exact symbol.
-    ///    The quiz model types come from Core (CCP.Core/Services/Quiz/QuizStore.cs); wiring
-    ///    QuizStore's categories, history and fallback content in here is quiz unit 5.
+    ///  - Categories, history, trend and fallback content are Core's <see cref="QuizStore"/>; only
+    ///    the AI round trip of <c>QuizService</c> stays head-side (see StartQuizAsync).
     ///  - NAudio's drone loop, <c>App.Flash</c>/<c>Bubbles</c>/<c>Subliminal</c>/<c>MindWipe</c> and
     ///    <c>App.AvatarWindow</c> stay head-only; the <c>LoopStream</c> wrapper and the WaveOutEvent
     ///    pool went with them. There is no XP call to port: WPF awards quiz XP through
@@ -82,6 +78,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly List<QuizAnswerRecord> _answerHistory = new();
         private int _totalScore;
         private int _questionNumber;
+        private QuizCategory _currentCategory;
+        private const int TotalQuestions = 10;
 
         private static string[] LoadingFlavors => new[]
         {
@@ -97,7 +95,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Loc.Get("quiz_loading_10")
         };
 
-        private static readonly Random _random = new();
+        internal static Random _random = new();   // settable: the headless run seeds it past the easter eggs
 
         private static readonly string[] GiggleFiles = new[]
         {
@@ -411,9 +409,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(null);
             if (await editor.ShowDialog<bool>(this) && editor.Result != null)
             {
-                // ponytail: needs QuizStore.SaveCustomCategory (Core) wired - quiz unit 5/6 - to
-                // write the new category into custom_quiz_categories.json. The rebuild below still runs, so the list
-                // refreshes (from the stub).
+                // ponytail: QuizStore.SaveCustomCategory exists in Core; calling it here is quiz
+                // unit 6 (category editor). Until then the new category is not persisted.
                 BuildCategoryButtons();
             }
         }
@@ -426,7 +423,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(catDef);
             if (await editor.ShowDialog<bool>(this))
             {
-                // ponytail: needs QuizStore.SaveCustomCategory (Core) wired - quiz unit 5/6 - when
+                // ponytail: QuizStore.SaveCustomCategory (Core) is quiz unit 6's to call here when
                 // editor.Result is non-null. If Result is null, it was deleted (handled inside editor)
                 BuildCategoryButtons();
             }
@@ -474,7 +471,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Frame(1.0, (ScaleTransform.ScaleXProperty, 1.0), (ScaleTransform.ScaleYProperty, 1.0)),
                 }
             };
-            _ = pulse.RunAsync(scale);
+            _ = pulse.RunAsync(_scoreText);   // Avalonia animates a transform through its Visual; RunAsync(scale) throws
         }
 
         /// <summary>One Avalonia KeyFrame at <paramref name="cue"/>, with the given setters.</summary>
@@ -548,10 +545,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             var catDef = _currentCategoryDefinition;
 
-            // ponytail: needs QuizStore.SaveEntry (Core) wired - quiz unit 5/6 - to append this
-            // run to quiz_history.json. Until then nothing is recorded and savedEntry stays null -
-            // which is also what gates BuildTrendDisplay and the session generation below, exactly
-            // as it does in WPF on a save failure.
+            // Save to quiz history
+            QuizHistoryEntry? savedEntry = null;
+            try
+            {
+                savedEntry = new QuizHistoryEntry
+                {
+                    TakenAt = DateTime.Now,
+                    Category = result.Category,
+                    CategoryId = catDef?.Id ?? result.Category.ToString(),
+                    CategoryName = catDef?.Name ?? result.Category.ToString(),
+                    TotalScore = result.TotalScore,
+                    MaxScore = result.MaxScore,
+                    ProfileText = result.ProfileText,
+                    Answers = new List<QuizAnswerRecord>(_answerHistory)
+                };
+                QuizStore.SaveEntry(savedEntry);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "QuizWindow: Failed to save quiz history");
+            }
 
             // Latest quiz result for the companion hand-off. WPF mutates settings here and lets
             // the next debounced save carry it; mirrored, so no extra write is introduced.
@@ -599,8 +613,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // from here instead would be a second, divergent copy of the bridge's award rules.
             _ = PerfectScorePercent;
 
-            BuildTrendDisplay();
-            GenerateSession(result);
+            if (savedEntry != null)
+            {
+                BuildTrendDisplay(savedEntry);
+                GenerateSession(result);
+            }
 
             ShowPanel(_resultPanel);
             PlayResultSound();
@@ -611,8 +628,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF's GenerateSessionInBackgroundAsync, over Core's QuizSessionGenerator.
         /// WPF tried QuizService.GenerateSessionContentAsync (the AI text) first and fell back to
         /// GetFallbackContent; QuizService is head-side, so this head always takes the fallback.
-        /// WPF also gated this on the history entry QuizService.SaveEntry returned; with no history
-        /// store here the session is built for every result.</summary>
+        /// Gated on the saved history entry, as in WPF.</summary>
         private void GenerateSession(QuizResult result)
         {
             try
@@ -668,17 +684,62 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        /// <summary>
-        /// The "your journey" line under the result. ponytail: needs QuizStore.LoadHistory /
-        /// GetScoreTrend / TrendKey / DisplayName (Core) wired - quiz unit 5/6 - plus the
-        /// QuizHistoryEntry this run would have been saved as. The header and panel stay hidden until
-        /// then, exactly as they do on a first quiz, so nothing draws half-built - a trend line
-        /// over one invented number would be a control that lies about the user's history.
-        /// </summary>
-        private void BuildTrendDisplay()
+        /// <summary>The "your journey" line under the result - WPF QuizWindow.xaml.cs:659.</summary>
+        private void BuildTrendDisplay(QuizHistoryEntry entry)
         {
-            _trendPanel.Children.Clear();
-            _txtTrendHeader.IsVisible = false;
+            try
+            {
+                _trendPanel.Children.Clear();
+                var trend = QuizStore.GetScoreTrend(QuizStore.LoadHistory(), QuizStore.TrendKey(entry));
+                if (trend == null) return;
+
+                _txtTrendHeader.IsVisible = true;
+
+                var arrow = trend.Direction switch
+                {
+                    TrendDirection.Up => "\u2191",
+                    TrendDirection.Down => "\u2193",
+                    TrendDirection.Flat => "\u2192",
+                    _ => ""
+                };
+                var arrowColor = trend.Direction switch
+                {
+                    TrendDirection.Up => Color.FromRgb(0x2E, 0xCC, 0x71),
+                    TrendDirection.Down => Color.FromRgb(0xE7, 0x4C, 0x3C),
+                    _ => Color.FromRgb(0x80, 0x80, 0x90)
+                };
+                var muted = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xC8));
+
+                var trendBlock = new TextBlock
+                {
+                    FontSize = 14,
+                    Foreground = muted,
+                    TextWrapping = TextWrapping.Wrap,
+                    TextAlignment = TextAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+
+                if (trend.Direction != TrendDirection.FirstQuiz)
+                {
+                    trendBlock.Inlines = new global::Avalonia.Controls.Documents.InlineCollection
+                    {
+                        new global::Avalonia.Controls.Documents.Run($"Score: {trend.LatestPercent}% (") { Foreground = muted },
+                        new global::Avalonia.Controls.Documents.Run($"{arrow}{Math.Abs(trend.DeltaPercent)}%")
+                            { Foreground = new SolidColorBrush(arrowColor), FontWeight = FontWeight.SemiBold },
+                        new global::Avalonia.Controls.Documents.Run($" from last time) \u00B7 Average: {trend.AveragePercent}% across {trend.QuizCount} quizzes") { Foreground = muted },
+                    };
+                }
+                else
+                {
+                    trendBlock.Text = $"Score: {trend.LatestPercent}% \u2014 Your first {QuizStore.DisplayName(entry)} quiz!";
+                }
+
+                _trendPanel.Children.Add(trendBlock);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "QuizWindow: Failed to build trend display");
+            }
         }
 
         private void ShowError(string message)
@@ -767,7 +828,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ============ EVENT HANDLERS ============
 
-        private async void DynamicCategoryButton_Click(object? sender, PointerPressedEventArgs e)
+        internal async void DynamicCategoryButton_Click(object? sender, PointerPressedEventArgs e)
         {
             if (_isProcessing) return;
 
@@ -800,7 +861,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        private async void Answer_Click(object? sender, PointerPressedEventArgs e)
+        internal async void Answer_Click(object? sender, PointerPressedEventArgs e)
         {
             if (_isProcessing || _currentQuestion == null) return;
 
@@ -1074,62 +1135,46 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ============ QUIZ SERVICE STUBS ============
 
-        /// <summary>
-        /// ponytail: needs QuizStore.GetAllCategories() (Core) wired - quiz unit 5/6 -
-        /// GetBuiltInCategories() (five definitions carrying ~600 lines of system prompt) plus
-        /// LoadCustomCategories() over custom_quiz_categories.json. The placeholder below keeps the same shape;
-        /// the last entry is deliberately NOT built-in so the "Edit" affordance is exercised too.
-        /// </summary>
-        private static List<QuizCategoryDefinition> GetAllCategories() => new()
-        {
-            new() { Id = "sissy", Name = "Sissy", Description = "How far down the pink road are you?", Color = "#FF69B4", IsBuiltIn = true },
-            new() { Id = "bambi", Name = "Bambi", Description = "Wide eyes, empty head, happy girl.", Color = "#E91E63", IsBuiltIn = true },
-            new() { Id = "obedience", Name = "Obedience", Description = "How quickly do you stop asking why?", Color = "#9B59B6", IsBuiltIn = true },
-            new() { Id = "mindlessness", Name = "Mindlessness", Description = "What is left when the thinking stops?", Color = "#3498DB", IsBuiltIn = true },
-            new() { Id = "submission", Name = "Submission", Description = "Who is holding the leash today?", Color = "#E67E22", IsBuiltIn = true },
-            new() { Id = "custom_sample", Name = "Velvet Fog", Description = "A slow, warm slide into agreeable emptiness.", Color = "#2ECC71", IsBuiltIn = false },
-        };
+        private static List<QuizCategoryDefinition> GetAllCategories() => QuizStore.GetAllCategories();
 
         /// <summary>
-        /// ponytail: needs QuizService.StartQuizAsync(catDef) from
-        /// ConditioningControlPanel/Services/Quiz/QuizService.cs - the AI round trip (proxy or
-        /// Ollama, wrapped by SafetyComposer and screened by the moderation layer) that returns
-        /// question 1. Head-side, so this returns null, which is the WPF "couldn't generate" path:
-        /// the error panel and its provider-aware copy stay exercised.
-        ///
-        /// <para>The bookkeeping AROUND the round trip is the service's own and is restored here,
-        /// so the flow is right the moment a real question arrives: StartQuizAsync zeroes TotalScore
-        /// and sets QuestionNumber to 1 as it hands back question 1. Leaving QuestionNumber at 0,
-        /// as the first cut did, puts the "last question" test one answer late.</para>
+        /// ponytail: the AI round trip (QuizService.CallAiAsync: proxy or Ollama, SafetyComposer,
+        /// moderation) is not on this head. WPF with no AI never gets here (the CoreAi gate, or the
+        /// error screen on a null reply); this head serves WPF's "reply unusable" branch instead - a
+        /// QuizStore fallback question (QuizService.cs:116/140/177) and the fallback profile
+        /// (QuizService.cs:223) - which only the fake-AI test reaches while the button stays hidden.
+        /// The bookkeeping (score, question counter) is QuizService's, verbatim.
         /// </summary>
-        private Task<QuizQuestion?> StartQuizAsync(QuizCategoryDefinition catDef)
+        internal Task<QuizQuestion?> StartQuizAsync(QuizCategoryDefinition catDef)
         {
             _currentCategoryDefinition = catDef;
+            _currentCategory = catDef.EnumCategory ?? QuizCategory.Sissy;
             _totalScore = 0;
             _questionNumber = 1;
-            return Task.FromResult<QuizQuestion?>(null);
+            return Task.FromResult<QuizQuestion?>(QuizStore.GetFallbackQuestion(_currentCategory, 1));
         }
 
-        /// <summary>ponytail: needs QuizService.SubmitAnswerAndGetNextAsync from
-        /// ConditioningControlPanel/Services/Quiz/QuizService.cs. The scoring and the question
-        /// counter below are the service's, verbatim.</summary>
-        private Task<QuizQuestion?> SubmitAnswerAndGetNextAsync(int answerIndex, int points)
+        internal Task<QuizQuestion?> SubmitAnswerAndGetNextAsync(int answerIndex, int points)
         {
             _ = answerIndex;
-            if (_questionNumber >= 10) return Task.FromResult<QuizQuestion?>(null);
+            if (_questionNumber >= TotalQuestions) return Task.FromResult<QuizQuestion?>(null);
             _totalScore += points;
             _questionNumber++;
-            return Task.FromResult<QuizQuestion?>(null);
+            return Task.FromResult<QuizQuestion?>(QuizStore.GetFallbackQuestion(_currentCategory, _questionNumber));
         }
 
-        /// <summary>ponytail: needs QuizService.SubmitFinalAnswerAndGetResultAsync from
-        /// ConditioningControlPanel/Services/Quiz/QuizService.cs - the second AI round trip that
-        /// writes the archetype profile.</summary>
-        private Task<QuizResult?> SubmitFinalAnswerAndGetResultAsync(int answerIndex, int points)
+        internal Task<QuizResult?> SubmitFinalAnswerAndGetResultAsync(int answerIndex, int points)
         {
             _ = answerIndex;
             _totalScore += points;
-            return Task.FromResult<QuizResult?>(null);
+            const int max = TotalQuestions * 4;
+            return Task.FromResult<QuizResult?>(new QuizResult
+            {
+                TotalScore = _totalScore,
+                MaxScore = max,
+                Category = _currentCategory,
+                ProfileText = QuizStore.GetFallbackProfile(_currentCategory, _currentCategoryDefinition, _totalScore, max)
+            });
         }
 
         private static QuizQuestion CreateTrickQuestion(int number)
@@ -1217,7 +1262,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Frame(1.0, (TranslateTransform.XProperty, 0.0)),
                 }
             };
-            _ = shake.RunAsync(transform);
+            _ = shake.RunAsync(_questionPanel);
             await Task.Delay(300);
 
             // Create "I KNOW" overlay
