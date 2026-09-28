@@ -34,8 +34,8 @@
 //   DisarmVoiceMic               (ConditioningControlPanel/Services/AutonomyService.cs),
 //                                App.Speech.StopListening
 //                                (ConditioningControlPanel/Services/Speech/SpeechService.cs) and
-//                                LockCardWindow.DisableVoiceForAll
-//                                (ConditioningControlPanel/Windows/LockCardWindow.xaml.cs).
+//                                (LockCardWindow.DisableVoiceForAll is on this head now:
+//                                CCP.Avalonia/Views/Windows/LockCardWindow.axaml.cs).
 //                                The settings half of both is trivial; shipping it WITHOUT the
 //                                stop calls would leave a mic open behind a switch that says off,
 //                                which is the one failure this file must not have. Blocked whole.

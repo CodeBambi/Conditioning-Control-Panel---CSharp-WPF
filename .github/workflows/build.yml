@@ -68,6 +68,8 @@ jobs:
         run: dotnet test Tests/CCP.Avalonia.CatalogueStartup.Tests/CCP.Avalonia.CatalogueStartup.Tests.csproj -c Release
       - name: Test Avalonia notification suite
         run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
+        env:
+          CCP_REQUIRE_VOSK: "1"
       - name: Test Avalonia scheduler gesture
         run: dotnet test Tests/CCP.Avalonia.Scheduler.Tests/CCP.Avalonia.Scheduler.Tests.csproj -c Release
       - name: Test Avalonia report workflow

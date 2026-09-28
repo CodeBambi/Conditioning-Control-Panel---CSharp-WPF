@@ -121,8 +121,8 @@ namespace ConditioningControlPanel.Avalonia
                 // The lock-card surface seam. The schedule and the no-repeat phrase rotation are in
                 // Core now (LockCardScheduler); this is the half that draws, and on this head that
                 // is LockCardWindow.ShowOnAllMonitors - which already refuses to stack a second
-                // card and already falls a voice-mode card back to typing, honestly, because there
-                // is no recognition seam here yet.
+                // card and solves a voice-mode card by speech when the seeded engine, a model and
+                // mic consent allow it (typing otherwise).
                 //
                 // The hop is explicit because CoreDispatch is unseeded on this head, so the
                 // scheduler's tick arrives on a thread-pool thread. Everything after the hop -
