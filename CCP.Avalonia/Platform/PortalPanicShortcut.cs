@@ -43,7 +43,7 @@ internal static class PortalPanicShortcut
             var bus = _bus = new DBusConnection(DBusAddress.Session!);
             await bus.ConnectAsync();
 
-            var (code, results) = await RequestAsync(bus, "CreateSession", "a{sv}", (w, token) =>
+            var (code, results) = await RequestAsync(bus, "CreateSession", "a{sv}", (ref MessageWriter w, string token) =>
                 w.WriteDictionary(new Dictionary<string, VariantValue>
                 {
                     ["handle_token"] = token,
@@ -63,7 +63,7 @@ internal static class PortalPanicShortcut
                 },
                 null, null, false, ObserverFlags.None);
 
-            (code, results) = await RequestAsync(bus, "BindShortcuts", "oa(sa{sv})sa{sv}", (w, token) =>
+            (code, results) = await RequestAsync(bus, "BindShortcuts", "oa(sa{sv})sa{sv}", (ref MessageWriter w, string token) =>
             {
                 w.WriteObjectPath(session);
                 var shortcuts = w.WriteArrayStart(DBusType.Struct);
@@ -94,6 +94,29 @@ internal static class PortalPanicShortcut
             Log.Warning("Panic key: GlobalShortcuts portal unavailable ({Why}); native Wayland windows rely on the tray", why);
             return null;
         }
+    }
+
+    /// <summary>`--portal-check`: CreateSession, expect Response 0 with a session_handle, then
+    /// Session.Close - the round trip BindAsync depends on, without binding anything.</summary>
+    internal static async Task<int> CheckAsync()
+    {
+        using var bus = new DBusConnection(DBusAddress.Session!);
+        await bus.ConnectAsync();
+        Console.WriteLine($"connected as {bus.UniqueName}");
+        var (code, results) = await RequestAsync(bus, "CreateSession", "a{sv}", (ref MessageWriter w, string token) =>
+            w.WriteDictionary(new Dictionary<string, VariantValue>
+            {
+                ["handle_token"] = token,
+                ["session_handle_token"] = "ccp_check",
+            }));
+        var ok = code == 0 && results.TryGetValue("session_handle", out var handle);
+        Console.WriteLine($"CreateSession response {code}, session_handle {(ok ? results["session_handle"].ToString() : "(none)")}");
+        if (!ok) return 1;
+        var h = results["session_handle"];
+        var session = h.Type == VariantValueType.ObjectPath ? h.GetObjectPathAsString() : h.GetString();
+        await bus.CallMethodAsync(CallHeader(bus, session, "org.freedesktop.portal.Session", "Close", null));
+        Console.WriteLine("Session.Close ok");
+        return 0;
     }
 
     /// <summary>trigger_description of our shortcut in a BindShortcuts result (a(sa{sv})).</summary>
@@ -139,7 +162,7 @@ internal static class PortalPanicShortcut
     /// <summary>One portal Request round trip: subscribe to the Response on the predicted request
     /// path BEFORE calling (the portal may answer before the call returns), then call and await.</summary>
     private static async Task<(uint Code, Dictionary<string, VariantValue> Results)> RequestAsync(
-        DBusConnection bus, string member, string signature, Action<MessageWriter, string> writeBody)
+        DBusConnection bus, string member, string signature, BodyWriter writeBody)
     {
         var token = "ccp" + Guid.NewGuid().ToString("N");
         var sender = bus.UniqueName!.TrimStart(':').Replace('.', '_');
@@ -154,17 +177,24 @@ internal static class PortalPanicShortcut
             },
             null, null, false, ObserverFlags.None);
 
-        await bus.CallMethodAsync(CallHeader(bus, DesktopPath, Iface, member, signature, w => writeBody(w, token)));
+        await bus.CallMethodAsync(CallHeader(bus, DesktopPath, Iface, member, signature, (ref MessageWriter w) => writeBody(ref w, token)));
         // KDE may show the user a dialog for BindShortcuts; effects wait at most this long for it.
         return await answer.Task.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
+    // MessageWriter is a STRUCT: handing it to an Action<MessageWriter> writes the body into a copy,
+    // and the original then serialises a header whose body length/offset do not match what was
+    // written. dbus-broker answers "invalid body" by disconnecting ("Connection closed by peer").
+    // By-ref delegates keep one writer.
+    private delegate void BodyWriter(ref MessageWriter w, string token);
+    private delegate void BodyWriterNoToken(ref MessageWriter w);
+
     private static MessageBuffer CallHeader(DBusConnection bus, string path, string iface, string member, string? signature,
-        Action<MessageWriter>? body = null)
+        BodyWriterNoToken? body = null)
     {
         var w = bus.GetMessageWriter();
         w.WriteMethodCallHeader(destination: Portal, path: path, @interface: iface, member: member, signature: signature);
-        body?.Invoke(w);
+        body?.Invoke(ref w);
         return w.CreateMessage();
     }
 }
