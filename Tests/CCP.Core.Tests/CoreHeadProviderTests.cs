@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
 using Xunit;
 
@@ -18,10 +19,17 @@ public sealed class CoreHeadProviderTests
             EnhancementResolver.LibraryMatchProvider = null;
             Assert.Equal(EnhancementDiscoverySource.None, EnhancementResolver.ResolveForLocalMedia(media).Source);
 
-            EnhancementResolver.LibraryMatchProvider = (_, _) => new EnhancementLibraryEntry { FilePath = "lib.json" };
+            string? seenPath = null; string? seenType = null;
+            EnhancementResolver.LibraryMatchProvider = (path, type) =>
+            {
+                seenPath = path; seenType = type;
+                return new EnhancementLibraryEntry { FilePath = "lib.json" };
+            };
             var hit = EnhancementResolver.ResolveForLocalMedia(media);
             Assert.Equal(EnhancementDiscoverySource.Library, hit.Source);
             Assert.Equal("lib.json", hit.FilePath);
+            Assert.Equal(media, seenPath);
+            Assert.Equal(MediaTypes.Audio, seenType);
         }
         finally { EnhancementResolver.LibraryMatchProvider = null; }
     }
