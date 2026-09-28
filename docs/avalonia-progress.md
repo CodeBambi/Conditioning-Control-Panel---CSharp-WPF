@@ -615,3 +615,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: TubeDockMathTests, AvatarTubeWindowingTests (fail-proofed); live KWin/XWayland: docks at 767,746 / follows to
   967,946, detach topmost, restore after restart, input region ends at the shell edge. A real WM drag and a real click
   through the margin weren't possible (Keincheck can't drag; the screen was locked). Review: FIX -> r1 applied.
+
+## avalonia-port/play-spiral-bleed: +218 (user-reported: Play's spiral kept showing on other pages)
+- Root cause: Avalonia's IsVisible covers only the control itself, so Play's tier rims (drawn in the window's adorner layer),
+  ember canvas and badges never saw their tab hide; the rims bled over other tabs and the loops kept burning CPU. New
+  EffectiveVisibility.Watch parks/resumes them with their tab; the same fix for Vat glass, the takeover orb and the spiral glyph.
+- Evidence: PlaySpiralBleedTests (fail-proofed); live Play -> Home clean x3 (before/after screenshots). Review: ACCEPT.

@@ -317,6 +317,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         // No AdornerLayer field: TierFxBorder owns adding and removing this from the layer, so an
         // adorner holding its own layer reference would be a second owner of the same lifetime.
         private Control? _visibilityHost;
+        private IDisposable? _visibilityWatch;
 
         private DispatcherTimer? _timer;
         private readonly Stopwatch _lapClock = new Stopwatch();
@@ -381,13 +382,14 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 bool ambient = TierFxBorder.AmbientAllowed;
 
                 HookVisibility();
+                IsVisible = _adorned.IsEffectivelyVisible;
 
                 if (!ambient)
                 {
                     StopClock();
                     return;
                 }
-                if (_visibilityHost != null && !_visibilityHost.IsVisible)
+                if (!IsVisible)
                 {
                     StopClock();
                     return;
@@ -474,35 +476,30 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             if (_visibilityHost != null) return;
             _visibilityHost = _adorned;
-            _adorned.PropertyChanged += OnAdornedPropertyChanged;
+            _visibilityWatch = EffectiveVisibility.Watch(_adorned, OnAdornedVisibilityChanged);
         }
 
         private void UnhookVisibility()
         {
-            var fe = _visibilityHost;
             _visibilityHost = null;
-            if (fe != null) fe.PropertyChanged -= OnAdornedPropertyChanged;
+            _visibilityWatch?.Dispose();
+            _visibilityWatch = null;
         }
 
         /// <summary>
-        /// ponytail: this watches the card's OWN IsVisible. WPF's IsVisibleChanged also fired when
-        /// an ancestor hid; Avalonia raises IsVisibleProperty only on the element that changed. Tab
-        /// switches detach the content, so Unloaded already covers the parking case - an ancestor
-        /// hidden WITHOUT detaching would leave the clock running. Swap in an IsEffectivelyVisible
-        /// observable if a surface ever hides that way.
+        /// The band lives on the WINDOW's AdornerLayer, not under the card, so hiding the card's
+        /// tab does not hide it: it follows the card's EFFECTIVE visibility (the card or any
+        /// ancestor - WPF's IsVisibleChanged semantics), or it laps on over the next page.
         /// </summary>
-        private void OnAdornedPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+        private void OnAdornedVisibilityChanged()
         {
-            if (e.Property != Visual.IsVisibleProperty) return;
             try
             {
-                if (e.GetNewValue<bool>())
-                {
-                    // Re-read the gate on the way in: this is what makes the motion kill-switch
-                    // reach a card that was already built when the setting changed.
-                    if (TierFxBorder.AmbientAllowed) StartClock();
-                    else StopClock();
-                }
+                bool shown = _adorned.IsEffectivelyVisible;
+                IsVisible = shown;
+                // Re-read the gate on the way in: this is what makes the motion kill-switch
+                // reach a card that was already built when the setting changed.
+                if (shown && TierFxBorder.AmbientAllowed) StartClock();
                 else StopClock();
             }
             catch { }
