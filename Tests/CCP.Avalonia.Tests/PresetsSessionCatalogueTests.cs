@@ -339,8 +339,8 @@ public sealed class PresetsSessionCatalogueTests
                     view.FindControl<TextBlock>("TxtSessionXP")!.Text);
                 Assert.Equal(custom.GetDifficultyText(),
                     view.FindControl<TextBlock>("TxtSessionDifficulty")!.Text);
-                Assert.False(view.FindControl<Button>("BtnStartSession")!.IsEnabled);
-                Assert.False(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
+                Assert.True(view.FindControl<Button>("BtnStartSession")!.IsEnabled);   // a selected session can start (WPF SessionIO.cs:923/:971)
+                Assert.True(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
                 Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
                 Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);
                 Assert.True(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
@@ -576,9 +576,9 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
                 Assert.Equal(fallbackSource, CoreSettings.Current.SessionRackSourceFilter);
 
-                // Search and sort are live views; drop/CRUD and all row actions remain deliberately unavailable.
-                Assert.False(view.FindControl<Button>("BtnStartSession")!.IsEnabled);
-                Assert.False(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
+                // Search and sort are live views; drop/CRUD and the other row actions remain deliberately unavailable.
+                Assert.True(view.FindControl<Button>("BtnStartSession")!.IsEnabled);   // a selected session can start (WPF SessionIO.cs:923/:971)
+                Assert.True(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
                 Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
                 Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);
                 Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);

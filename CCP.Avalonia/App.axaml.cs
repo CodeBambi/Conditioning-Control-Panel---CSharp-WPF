@@ -22,6 +22,9 @@ namespace ConditioningControlPanel.Avalonia
         /// Local-only: no sync, no streak writes, no ResetProgress on this head (oracle-achievements.md).</summary>
         internal static AchievementEngine? Achievements { get; private set; }
 
+        /// <summary>The one session runner (WPF MainWindow._sessionEngine), or null on the headless render path.</summary>
+        internal static SessionRunner? Sessions { get; set; }
+
         /// <summary>The mod service (WPF App.Mods), or null on the headless render path.</summary>
         internal static ModService? Mods { get; private set; }
 
@@ -185,9 +188,10 @@ namespace ConditioningControlPanel.Avalonia
                 // exactly that: every action is a no-op, IsLooping is false and ClipCount is 0, so
                 // nothing reports a loop that is not running.
                 //
-                // The plain engine (Start/Stop) is CoreEngine; IsSessionRunningProvider stays
-                // unseeded until the session runner lands, so the feature lock never fires on Start.
+                // The plain engine (Start/Stop) is CoreEngine; the one SessionRunner seeds
+                // IsSessionRunningProvider, so the feature lock fires for a session, not a plain Start.
                 CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;
+                Sessions = new SessionRunner(new SessionLogService());
                 //
                 // CoreModerationLog stays unseeded too, and NOT because a log is unavailable here
                 // - ModerationLog is in Core and would construct fine. It hardcodes
@@ -259,6 +263,8 @@ namespace ConditioningControlPanel.Avalonia
                 // Also dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
                 var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
                 CoreEngine.StoppedHook = shell.OnEngineStopped;
+                Sessions.Ticked += shell.OnSessionTick;
+                Sessions.SessionLog.LogReady += shell.OnSessionLogReady;
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
                         Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
@@ -269,6 +275,9 @@ namespace ConditioningControlPanel.Avalonia
                 desktop.MainWindow.Closed += (_, _) =>
                 {
                     CoreEngine.StoppedHook = null;   // the shell is gone; do not repaint it
+                    Sessions.Ticked -= shell.OnSessionTick;
+                    Sessions.SessionLog.LogReady -= shell.OnSessionLogReady;
+                    Sessions.Stop();   // restores the pre-session settings before exit
                     CoreEngine.Stop();
                     StopDesktopOverlays();
                     Views.Windows.LockCardWindow.ForceCloseAll();
