@@ -476,3 +476,13 @@ review FIX->r1 applied; one earlier live run was unsandboxed: real settings.json
 - Evidence: 4 Core tests + SessionRunWireTests (fail-proofed); panic-check.sh session phase PASS, FAIL when broken; live
   sandbox: tray Stop froze the clock, Resume brought back only started features, recap XP +0 (banking not ported; log
   line shows "paused 2x, penalty -200"). Review: ACCEPT, file sink added.
+
+## avalonia-port/art-debt: +372
+- Look parity from the ponytail-debt ledger (7 cheap + 23 stale items): shell door medallions, mod-aware hero/side plates
+  for five feature cards, Blink Trainer, Graded Intake (side plate bound to the hero like WPF) and the AI permissions hero
+  (one helper, ModArt.BindFeaturePlates, painted on attach, decoded once at 800 px), vault backdrop, dashboard card icons,
+  first-run pass cards, achievements images (embedded like WPF), EmiBook placement via Core, memory-folder link.
+- Evidence: renders of every touched view (all viewed), live sandbox shots of doors and a feature card, 0 binding errors;
+  startup-to-shell 2.39-2.44 s before vs 2.42-2.47 s after (noise). FeaturePlateArtTests (fail-proofed).
+- Skipped with notes: Remote Control grid art, rail chips, intake pass card, exclusives rim (hue shift not in Core),
+  programs sigil (ProgramArt naming not in Core); doors don't follow the mod yet. Review: FIX -> r1 applied.
