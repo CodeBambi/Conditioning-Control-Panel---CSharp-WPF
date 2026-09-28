@@ -1,0 +1,10 @@
+<Project>
+  <!-- The app version, ONE place for every head and for Core. Imported by
+       ConditioningControlPanel.csproj, CCP.Avalonia.csproj and CCP.Core.csproj, so the Avalonia
+       head stops reporting 1.0.0 and Core stops saying 6.9.0 while the app ships 6.10.3 -
+       CoreReleaseContent.AppVersion and every mod's MinAppVersion check then agree on every head.
+       A release bumps this and UpdateService.AppVersion (see ConditioningControlPanel/CLAUDE.md). -->
+  <PropertyGroup>
+    <Version>6.10.3</Version>
+  </PropertyGroup>
+</Project>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel
@@ -27,5 +28,32 @@ namespace ConditioningControlPanel
 
         /// <summary>Switch to a companion the new mod supports.</summary>
         public static volatile Action<CompanionId>? SwitchCompanion;
+
+        // Head caches and hosts the mod service touches around a switch or a pack landing. One
+        // delegate per WPF call site, deliberately not one "invalidate everything": the service
+        // calls each at its own point, inside its own try/catch, exactly as the WPF code does, so
+        // these stay raw (a throw reaches that try/catch). Unseeded = the head has no such cache.
+
+        /// <summary>Close DTRH if it is open (it snapshots the mod at launch).</summary>
+        public static volatile Action? CloseDtrhHost;
+
+        /// <summary>Close the Arcademy if it is open (same snapshot as DTRH).</summary>
+        public static volatile Action? CloseArcademyHost;
+
+        /// <summary><c>ModResourceResolver.ClearCache</c>: resolved mod art/audio paths.</summary>
+        public static volatile Action? ClearModResourceCache;
+
+        /// <summary><c>AvatarPortraitLoader.InvalidateAvailabilityCache</c>.</summary>
+        public static volatile Action? InvalidatePortraitAvailability;
+
+        /// <summary><c>CompanionPhraseService.RefreshVoiceLineIndex</c>.</summary>
+        public static volatile Action? RefreshVoiceLineIndex;
+
+        /// <summary><c>BambiSprite.InvalidateStablePrompt</c>: the companion's cached prompt prefix.</summary>
+        public static volatile Action? InvalidateStablePrompt;
+
+        /// <summary>The avatar tube's known video titles (title -> URL), for naming migrated links.
+        /// Unseeded = none known, so every name is derived from the URL slug.</summary>
+        public static volatile Func<IReadOnlyDictionary<string, string>?>? KnownVideoLinksProvider;
     }
 }
