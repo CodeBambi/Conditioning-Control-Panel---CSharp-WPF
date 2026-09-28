@@ -378,7 +378,7 @@ public class LeashUiTests
         foreach (var p in LeashUiRules.Praise) keys.Add("leash_praise_" + p);
         Assert.True(keys.Count > 120, "found only " + keys.Count);
 
-        var dir = Path.Combine(root, "ConditioningControlPanel", "Localization", "Languages");
+        var dir = Path.GetDirectoryName(SourceRoots.FindProductFile("Localization", "Languages", "en.json"))!;
         foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
             var raw = File.ReadAllBytes(Path.Combine(dir, lang + ".json"));

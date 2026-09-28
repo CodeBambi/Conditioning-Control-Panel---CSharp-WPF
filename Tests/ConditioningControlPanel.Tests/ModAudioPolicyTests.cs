@@ -93,7 +93,7 @@ public class ModAudioPolicyTests
     public void ThemedPresetIds_MatchTheShippedFiles()
     {
         // The policy keys on preset ids; a renamed id in the JSON would silently show it everywhere.
-        var dir = Path.Combine(ProjectRoot(), "Resources", "AwarenessPresets");
+        var dir = Path.Combine(SourceRoots.RepoRoot, "Assets", "AwarenessPresets");
         foreach (var (file, id) in new[] { ("bimbo.json", "builtin.bimbo"), ("puppy.json", "builtin.puppy"), ("chastity.json", "builtin.chastity") })
             Assert.Contains($"\"id\": \"{id}\"", File.ReadAllText(Path.Combine(dir, file)));
     }
@@ -101,25 +101,13 @@ public class ModAudioPolicyTests
     [Fact]
     public void OrphanedBambiClips_AreGoneFromTheSoundsRoot_ButQuizClipsStay()
     {
-        var sounds = Path.Combine(ProjectRoot(), "Resources", "sounds");
+        var sounds = Path.Combine(SourceRoots.RepoRoot, "Assets", "sounds");
         foreach (var gone in new[] { "BAMBI FREEZE.mp3", "BAMBI SLEEP.mp3", "SNAP AND FORGET.MP3", "DROP FOR COCK.mp3", "GIGGLETIME.mp3" })
             Assert.False(File.Exists(Path.Combine(sounds, gone)), gone);
         // QuizWindow plays these two by name (Bambi praise sting, fallback drone hum).
         Assert.True(File.Exists(Path.Combine(sounds, "GOOD GIRL.mp3")));
         Assert.True(File.Exists(Path.Combine(sounds, "00 Bimbo Drone.mp3")));
         // Bambi Sleep and Sissy Hypno (no InstalledPath) still read their trigger clips from here.
-        Assert.True(Directory.Exists(Path.Combine(ProjectRoot(), "Resources", "sub_audio")));
-    }
-
-    private static string ProjectRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        for (int i = 0; i < 10 && dir != null; i++)
-        {
-            var candidate = Path.Combine(dir, "ConditioningControlPanel");
-            if (Directory.Exists(Path.Combine(candidate, "Resources"))) return candidate;
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new DirectoryNotFoundException("project root not found from " + AppContext.BaseDirectory);
+        Assert.True(Directory.Exists(Path.Combine(SourceRoots.RepoRoot, "Assets", "sub_audio")));
     }
 }

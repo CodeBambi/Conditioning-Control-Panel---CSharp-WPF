@@ -43,8 +43,10 @@ namespace ConditioningControlPanel.Services
             CoreSession.UserPhrasePoolsWhileOverriding = () => Active?.UserPoolsWhileOverriding();
         }
 
-        /// <summary>Publish, snapshot, override in place, prescribe - WPF StartSessionAsync order.</summary>
-        public static PhrasePoolCustody Begin(AppSettings current, SessionSettings settings, string? modId)
+        /// <summary>Publish, snapshot, override in place, prescribe - WPF StartSessionAsync order.
+        /// With the running <paramref name="session"/>, built-ins override with PresetNaming's mod-aware
+        /// words (neutral under CCP Default; WPF SessionEngine.cs:1381-1383, 1447-1449).</summary>
+        public static PhrasePoolCustody Begin(AppSettings current, SessionSettings settings, string? modId, Session? session = null)
         {
             var custody = new PhrasePoolCustody(current, modId);
             // Published first: not overriding until the prescribed copies exist below.
@@ -54,10 +56,13 @@ namespace ConditioningControlPanel.Services
             custody._savedBouncingTextPool = new Dictionary<string, bool>(current.BouncingTextPool);
             custody._savedLockCardPool = new Dictionary<string, bool>(current.LockCardPhrases);
 
-            if (settings.SubliminalEnabled && settings.SubliminalPhrases.Count > 0)
-                Override(current.SubliminalPool, settings.SubliminalPhrases, CoreMods.MakeModAware);
-            if (settings.BouncingTextEnabled && settings.BouncingTextPhrases.Count > 0)
-                Override(current.BouncingTextPool, settings.BouncingTextPhrases, p => p);
+            var own = session != null && ReferenceEquals(settings, session.Settings);
+            var subliminalWords = own ? PresetNaming.SubliminalWords(session!, modId) : settings.SubliminalPhrases;
+            var bouncingWords = own ? PresetNaming.BouncingWords(session!, modId) : settings.BouncingTextPhrases;
+            if (settings.SubliminalEnabled && subliminalWords.Count > 0)
+                Override(current.SubliminalPool, subliminalWords, CoreMods.MakeModAware);
+            if (settings.BouncingTextEnabled && bouncingWords.Count > 0)
+                Override(current.BouncingTextPool, bouncingWords, p => p);
             if (settings.LockCardEnabled && settings.LockCardPhrases.Count > 0)
                 Override(current.LockCardPhrases, settings.LockCardPhrases, CoreMods.MakeModAware);
 

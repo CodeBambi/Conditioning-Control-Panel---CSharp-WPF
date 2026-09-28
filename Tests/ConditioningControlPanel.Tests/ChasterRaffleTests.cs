@@ -170,12 +170,6 @@ public class ChasterRaffleTests
         }
     }
 
-    private static string LocDir()
-    {
-        var d = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-        while (d != null && !System.IO.Directory.Exists(System.IO.Path.Combine(d.FullName, "ConditioningControlPanel", "Localization", "Languages")))
-            d = d.Parent;
-        Assert.NotNull(d);
-        return System.IO.Path.Combine(d!.FullName, "ConditioningControlPanel", "Localization", "Languages");
-    }
+    private static string LocDir() =>
+        System.IO.Path.GetDirectoryName(SourceRoots.FindProductFile("Localization", "Languages", "en.json"))!;
 }
