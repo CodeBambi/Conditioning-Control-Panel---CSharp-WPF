@@ -74,6 +74,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void OnEngineStopped()
         {
             App.StopDesktopOverlays(final: false);
+            PopQuizHost.Instance.CloseAll();   // first: drops a queued quiz before cards close; WPF StartStop.cs:521
             LockCardWindow.ForceCloseAll();
             PinkFilterOverlay.Refresh(this);
             UpdateStartButton();

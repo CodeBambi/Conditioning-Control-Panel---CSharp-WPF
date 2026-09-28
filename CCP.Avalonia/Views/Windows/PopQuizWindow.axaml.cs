@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -33,8 +32,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>PopQuizQuestion</c> and the question bank come from Core's <c>PopQuizScheduler</c>.
     ///  - <c>MouseLeftButtonDown</c>/<c>MouseEnter</c>/<c>MouseLeave</c>/<c>KeyDown</c> are wired
     ///    in the constructor as PointerPressed / PointerEntered / PointerExited / KeyDown.
-    ///  - <c>Application.Current.Windows</c> becomes the desktop lifetime's window list; that
-    ///    lifetime is null under a headless render, which the existing try/catch already covers.
+    ///  - <c>Application.Current.Windows</c> becomes the static <c>_shown</c> list.
     /// </summary>
     public partial class PopQuizWindow : Window
     {
@@ -103,7 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             KeyDown += Window_KeyDown;
             // No focusable child, and Avalonia only routes KeyDown to the focused element, so
             // without this ESC does nothing on a real desktop.
-            Opened += (_, _) => Focus();
+            Opened += (_, _) => { _shown.Add(this); Focus(); };
 
             var texts = new[] { "TxtAnswerA", "TxtAnswerB", "TxtAnswerC", "TxtAnswerD" };
             for (int slot = 0; slot < 4; slot++)
@@ -164,14 +162,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void CleanupAndClose()
         {
+            _closeReason = _answered ? "answered, auto-dismiss" : "ESC";
             // Mark answered BEFORE completing: OnClosed re-Completes when !_answered as a
             // safety net, and the ESC path (still unanswered) would otherwise double-Complete —
             // the second call hits the mismatch branch and clears whatever interaction the
             // first Complete just dequeued (same #462 class as the lock-card fix).
             _answered = true;
-            // ponytail: needs InteractionQueueService.Complete(InteractionType.PopQuiz) from
-            // ConditioningControlPanel/Services/UI/InteractionQueueService.cs — still head-side,
-            // and no Core seam names an interaction queue.
+            // No InteractionQueue.Complete: PopQuizHost holds no queue slot on this head.
             Close();
         }
 
@@ -248,29 +245,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 foreach (var window in DesktopWindows().ToList())
                 {
+                    window._closeReason = "ForceCloseAll (engine stop / panic)";
                     try { window.Close(); } catch { }
                 }
             }
             catch { }
         }
 
-        private static System.Collections.Generic.IEnumerable<PopQuizWindow> DesktopWindows() =>
-            (global::Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
-                ?.Windows.OfType<PopQuizWindow>()
-            ?? Enumerable.Empty<PopQuizWindow>();
+        /// <summary>Shown quizzes. Own list rather than the desktop lifetime's, which is null under a
+        /// headless host (same shape as LockCardWindow._allWindows).</summary>
+        private static readonly System.Collections.Generic.List<PopQuizWindow> _shown = new();
+
+        private static System.Collections.Generic.IEnumerable<PopQuizWindow> DesktopWindows() => _shown;
+
+        /// <summary>The last shown quiz left the screen: a lock card held behind it replays (#763).</summary>
+        public static event Action? AllClosed;
+
+        private string _closeReason = "window closed externally";
+
+        protected override void OnClosing(WindowClosingEventArgs e)
+        {
+            if (_closeReason == "window closed externally") _closeReason = $"close request ({e.CloseReason}, programmatic: {e.IsProgrammatic})";
+            base.OnClosing(e);
+        }
 
         protected override void OnClosed(EventArgs e)
         {
             IsOpen = false;
+            _shown.Remove(this);
+            Log.Information("PopQuizWindow closed (answered: {Answered}, reason: {Reason})", _answered, _closeReason);
 
             // ponytail: restoring the avatar mute state needs App.AvatarWindow (AvatarTubeWindow,
-            // ConditioningControlPanel/AvatarTube/) and the safety net
-            // `if (!_answered) InteractionQueue.Complete(...)` needs
-            // ConditioningControlPanel/Services/UI/InteractionQueueService.cs. Both head-side.
-            // _answered is deliberately NOT set here — that flag is what tells the safety net an
-            // unanswered quiz still owes a Complete.
+            // ConditioningControlPanel/AvatarTube/), head-side. The WPF
+            // queue safety net has nothing to release here (PopQuizHost holds no slot).
 
             base.OnClosed(e);
+            if (_shown.Count == 0) AllClosed?.Invoke();
         }
     }
 }

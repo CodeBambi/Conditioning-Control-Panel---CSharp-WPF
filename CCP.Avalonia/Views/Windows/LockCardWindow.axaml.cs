@@ -327,6 +327,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _closeTimer = null;
             _allWindows.Remove(this);
             base.OnClosed(e);
+            if (_allWindows.Count == 0) AllClosed?.Invoke();
         }
 
         // ── Anti-cheat ─────────────────────────────────────────────────────────
@@ -878,6 +879,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // is also why the WPF original deferred a second show rather than reusing the set.
             if (_allWindows.Count > 0) return;
 
+            // #763 (WPF LockCardService.cs:157): a visible pop quiz blocks the card. Hold one
+            // replay until the last quiz closes, as PopQuizHost does the other way round.
+            if (PopQuizWindow.IsAnyOpen())
+            {
+                Log.Warning("LockCard: a pop quiz is on screen. Holding this card until it closes.");
+                _heldForQuiz = () => ShowOnAllMonitors(phrase, repeats, strictMode, isTest, voiceMode);
+                return;
+            }
+
             try
             {
                 var primary = Build(phrase, repeats, strictMode, voiceMode, isTest, isPrimary: true);
@@ -933,10 +943,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// this every 500 ms to learn when the card has been solved.</summary>
         public static bool IsAnyOpen() => _allWindows.Count > 0;
 
+        /// <summary>The last card left the screen: a pop quiz deferred behind it replays (#763).</summary>
+        public static event Action? AllClosed;
+
+        private static Action? _heldForQuiz;
+
+        static LockCardWindow() =>
+            PopQuizWindow.AllClosed += () => { var r = _heldForQuiz; _heldForQuiz = null; r?.Invoke(); };
+
         /// <summary>Drop every card, solved or not - the panic exit. Strict mode does not survive
         /// this: <c>_isCompleted</c> is set first on each window so OnClosing cannot refuse.</summary>
         public static void ForceCloseAll()
         {
+            _heldForQuiz = null;
             var windows = _allWindows.ToList();
             _allWindows.Clear();
             foreach (var window in windows)
