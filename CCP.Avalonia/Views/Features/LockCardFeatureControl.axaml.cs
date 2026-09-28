@@ -120,10 +120,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreSettings.Save();
 
             // Live-apply, the same shape and the same gate as WPF: start or stop the schedule only
-            // while the engine is running. LockCardScheduler is in Core now, so this is a real call
-            // on both heads - but CoreSession is unseeded here (no session engine on this head yet),
-            // so IsEngineRunning is false and this branch never arms. That is the truth, not a stub:
-            // the Test button below is what shows a card on this head today.
+            // while the engine is running (CoreSession seeded from CoreEngine on this head).
             if (CoreSession.IsEngineRunning)
             {
                 if (on) LockCardScheduler.Instance.Start();

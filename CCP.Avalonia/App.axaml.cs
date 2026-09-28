@@ -183,8 +183,9 @@ namespace ConditioningControlPanel.Avalonia
                 // exactly that: every action is a no-op, IsLooping is false and ClipCount is 0, so
                 // nothing reports a loop that is not running.
                 //
-                // CoreSession stays unseeded: this head has no session engine yet, so "not
-                // running" is the truth, and the feature cards fall to their save-only branch.
+                // The plain engine (Start/Stop) is CoreEngine; IsSessionRunningProvider stays
+                // unseeded until the session runner lands, so the feature lock never fires on Start.
+                CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;
                 //
                 // CoreModerationLog stays unseeded too, and NOT because a log is unavailable here
                 // - ModerationLog is in Core and would construct fine. It hardcodes
@@ -256,6 +257,7 @@ namespace ConditioningControlPanel.Avalonia
                 // this head has no Patreon sign-in to repair, so every refusal takes the "See tiers" branch.
                 // Also dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
                 var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
+                CoreEngine.StoppedHook = shell.OnEngineStopped;
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
                         Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));

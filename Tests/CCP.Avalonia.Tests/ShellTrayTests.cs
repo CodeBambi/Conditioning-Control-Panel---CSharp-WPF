@@ -39,26 +39,35 @@ public sealed class ShellTrayTests
                 items.Select(i => i.Header));
             Assert.IsType<NativeMenuItemSeparator>(shell.Tray.Menu.Items[2]);
 
-            // Stop everything: the three features untick, their schedules stop, queued flashes
-            // are dropped, and the shell stays open.
+            // Stop everything is StopEngine: schedules stop, queued flashes are dropped, the saved
+            // flags stay On (the card stays ticked), and the shell stays open. A plain Start never
+            // raises the session feature lock.
+            CoreEngine.StoppedHook = shell.OnEngineStopped;
+            CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;   // as App seeds it
             CoreSettings.Current.FlashEnabled = CoreSettings.Current.SubliminalEnabled = CoreSettings.Current.BouncingTextEnabled = true;
-            CoreFlash.Start();
-            CoreSubliminal.Start();
-            Assert.True(CoreFlash.IsRunning && CoreSubliminal.IsRunning);
+            shell.StartEngine();
+            Assert.True(CoreEngine.IsRunning && CoreFlash.IsRunning && CoreSubliminal.IsRunning);
+            Assert.False(shell.IsSessionFeatureLockActive);
+            Assert.Equal(Loc.Get("label_stop"), shell.Named<TextBlock>("TxtStartLabel")!.Text);
             var card = new BouncingTextFeatureControl();   // a shown card repaints from the flag
             var cardWindow = new Window { Content = card };
             cardWindow.Show();
             var cardEnable = card.GetVisualDescendants().OfType<CheckBox>().First(c => c.Name == "ChkEnable");
             Assert.True(cardEnable.IsChecked);
+            Assert.True(cardEnable.IsEnabled);
             var generation = FlashOverlay.Generation;
             items[2].Command!.Execute(null);
+            Assert.False(CoreEngine.IsRunning);
             Assert.False(CoreFlash.IsRunning);
             Assert.False(CoreSubliminal.IsRunning);
             Assert.Equal(generation + 1, FlashOverlay.Generation);
-            Assert.False(CoreSettings.Current.FlashEnabled || CoreSettings.Current.SubliminalEnabled || CoreSettings.Current.BouncingTextEnabled);
+            Assert.True(CoreSettings.Current.FlashEnabled && CoreSettings.Current.SubliminalEnabled && CoreSettings.Current.BouncingTextEnabled);
+            Assert.Equal(Loc.Get("label_start"), shell.Named<TextBlock>("TxtStartLabel")!.Text);
             Assert.True(shell.IsVisible);
             Dispatcher.UIThread.RunJobs();
-            Assert.False(cardEnable.IsChecked);
+            Assert.True(cardEnable.IsChecked);
+            CoreEngine.StoppedHook = null;
+            CoreSession.IsEngineRunningProvider = null;
             cardWindow.Close();
 
             // X goes to the tray; Show brings it back; Exit really closes.

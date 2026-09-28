@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -13,9 +14,9 @@ namespace ConditioningControlPanel.Avalonia
 {
     /// <summary>
     /// `--panic-check [Key]`: boots the real desktop path (so App's own StartPanicKey wiring is what
-    /// runs) on a throwaway profile, starts bouncing text, then presses the panic key through the X
+    /// runs) on a throwaway profile, starts the engine with flash/subliminal/bouncing text saved On, then presses the panic key through the X
     /// SERVER - XTestFakeKeyEvent on a second connection, exactly the path a physical key takes -
-    /// and asserts the overlay stopped, the app stayed up, and a double press exits. Default key
+    /// and asserts the engine and overlays stopped within 800 ms, the flags stayed On, the app stayed up, and a double press exits. Default key
     /// Pause, which nothing else on a desktop reacts to. Non-zero on any failure. Run it through
     /// scripts/panic-check.sh: on a live KWin session XTest never comes back into Xwayland.
     /// </summary>
@@ -58,16 +59,22 @@ namespace ConditioningControlPanel.Avalonia
                 var s = CoreSettings.Current;
                 s.PanicKey = key;
                 s.PanicKeyEnabled = true;
-                s.BouncingTextEnabled = true;
-                BouncingTextOverlay.Start(shell);
+                s.FlashEnabled = s.SubliminalEnabled = s.BouncingTextEnabled = true;
+                shell.StartEngine();
                 Check(X11PanicKey.IsListening, "App started the X11 panic listener");
-                Check(BouncingTextOverlay.IsRunning, "bouncing text is on screen before the press");
+                Check(CoreEngine.IsRunning && BouncingTextOverlay.IsRunning, "engine started, bouncing text on screen before the press");
+                int Overlays() => lifetime.Windows.Count(w => w.IsVisible && w.GetType().Namespace!.EndsWith(".Overlays"));
+                Check(Overlays() > 0, $"{Overlays()} overlay windows before the press");
                 Press();
 
                 DispatcherTimer.RunOnce(() =>
                 {
-                    Check(!BouncingTextOverlay.IsRunning, "one press: bouncing text stopped");
-                    Check(!CoreSettings.Current.BouncingTextEnabled, "one press: the feature is unticked");
+                    Check(!CoreEngine.IsRunning && !CoreFlash.IsRunning && !CoreSubliminal.IsRunning && !BouncingTextOverlay.IsRunning,
+                        "one press: engine and every effect stopped");
+                    // Overlay windows only: the first-run wizard and avatar tube are the app's own.
+                    var overlays = Overlays();
+                    Check(overlays == 0, $"one press: {overlays} overlay windows left");
+                    Check(s.FlashEnabled && s.SubliminalEnabled && s.BouncingTextEnabled, "one press: saved flags still On");
                     Check(!closed, "one press: the app is still up");
                     // The first press was > 2 s ago by now, so these are presses 1 and 2 of a new ladder.
                     DispatcherTimer.RunOnce(() => { Press(); Press(); }, TimeSpan.FromMilliseconds(1500));

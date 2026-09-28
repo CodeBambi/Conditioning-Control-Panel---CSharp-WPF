@@ -887,8 +887,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         ///   <item><c>Application.Current.MainWindow is MainWindow</c> resolves: the desktop
         ///         lifetime's MainWindow is what <c>App.MainWindowRef</c> was, the resolution
         ///         <c>EmiDeskWindow.AppMainWindow</c> already uses.</item>
-        ///   <item><c>SessionEngine.Active?.IsRunning</c> is <c>CoreSession.IsEngineRunning</c>,
-        ///         in Core. Unseeded on this head, and "no session is running" is the truth here,
+        ///   <item><c>SessionEngine.Active?.IsRunning</c> is <c>CoreSession.IsSessionRunning</c>
+        ///         (a session, not the plain engine), in Core. Unseeded on this head, and "no session is running" is the truth here,
         ///         not a placebo.</item>
         ///   <item><c>App.Tutorial?.IsActive</c> is <c>CoreTutorial.IsActive</c>, in Core since the
         ///         tutorial seam landed. Also unseeded here - CCP.Avalonia/App.axaml.cs says why:

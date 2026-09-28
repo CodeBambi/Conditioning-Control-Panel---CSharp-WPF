@@ -32,10 +32,10 @@ public sealed class PanicKeyTests
             s.PanicKeyEnabled = true;
             s.PanicKey = "F8";
             var t0 = new DateTime(2026, 1, 1, 12, 0, 0);
-            void Arm() { s.FlashEnabled = s.BouncingTextEnabled = true; CoreFlash.Start(); }
-
             var shell = new MainShellWindow();
             shell.Show();
+            CoreEngine.StoppedHook = shell.OnEngineStopped;
+            void Arm() { s.FlashEnabled = s.BouncingTextEnabled = true; shell.StartEngine(); }
             var closed = false;
             shell.Closed += (_, _) => closed = true;
 
@@ -53,8 +53,8 @@ public sealed class PanicKeyTests
             // Press 1 stops everything and the app stays up; press 2 three seconds later is a new
             // first press, not an exit.
             shell.HandlePanicKeyPress(t0);
-            Assert.False(CoreFlash.IsRunning);
-            Assert.False(s.FlashEnabled || s.BouncingTextEnabled);
+            Assert.False(CoreFlash.IsRunning || CoreEngine.IsRunning);
+            Assert.True(s.FlashEnabled && s.BouncingTextEnabled);   // panic never unticks saved flags
             Arm();
             shell.HandlePanicKeyPress(t0.AddSeconds(3));
             Assert.False(CoreFlash.IsRunning);
@@ -71,6 +71,7 @@ public sealed class PanicKeyTests
             // A second counted press inside 2 s exits.
             shell.HandlePanicKeyPress(t0.AddSeconds(11));
             Assert.True(closed);
+            CoreEngine.StoppedHook = null;
             return Task.CompletedTask;
         });
     }

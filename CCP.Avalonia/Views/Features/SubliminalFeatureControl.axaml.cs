@@ -184,19 +184,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// flag, and while the engine is running it also arms or disarms the scheduler. The card
         /// does not repeat any of that: two copies of "compare, write, gate, save" is exactly how
         /// the heads drift apart.
-        ///
-        /// <para>Core only arms the scheduler behind <c>CoreSession.IsEngineRunning</c>, and this head
-        /// has no engine yet, so - the same decision as the Flash card - the toggle itself arms
-        /// and disarms it. The show surface is <c>Views/Overlays/SubliminalOverlay</c>, seeded in App.</para>
+        /// Core arms the scheduler only behind <c>CoreSession.IsEngineRunning</c> (seeded from
+        /// <see cref="CoreEngine"/>), so while stopped the toggle only saves.
         /// </summary>
         private void ChkEnable_Changed(object? sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             var on = ChkEnable.IsChecked ?? false;
             CoreSubliminal.SetEnabled(on);
-            // ponytail: no engine gate; drop these two lines once CoreSession.IsEngineRunning is seeded.
-            if (on) Windows.MainShellWindow.StartEffect(() => { if (CoreSettings.Current.SubliminalEnabled) CoreSubliminal.Start(); });
-            else CoreSubliminal.Stop();
         }
 
         private void SliderPerMin_Changed(object? sender, RangeBaseValueChangedEventArgs e)

@@ -174,10 +174,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // The eleven mosaic card toggles. Restored because every dependency answers: the flags are
         // AppSettings fields (Core), the save is CoreSettings.Save, the refusal is
         // MainShellWindow.SessionFeatureLock.cs, and the "also start or stop the live service"
-        // half is gated on App.IsEngineRunning - which is CoreSession.IsEngineRunning here, and
-        // FALSE on this head. So that branch is not dropped or faked: it is taken correctly, and
-        // with no engine running the persisted flag IS the whole truth of the feature's state.
-        // Nothing here can lie about a service that is running, because none can be.
+        // half is gated on App.IsEngineRunning (MainWindow.Presets.cs:1353) - the plain engine, not
+        // a session - which is CoreEngine.ApplyLive here: flash, subliminal, lock card and bouncing
+        // text apply live while running; the others have no service on this head, so the flag is
+        // the whole truth until Start.
         // Two of the eleven are not gated that way: WPF's spiral and pinkfilter cases call
         // App.Overlay.RefreshOverlays() UNCONDITIONALLY (MainWindow.Presets.cs:1329-1330), because
         // the overlays repaint from settings rather than being started and stopped. There is no
@@ -243,6 +243,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     default: return;   // unknown key: no write, no save
                 }
                 CoreSettings.Save();
+                CoreEngine.ApplyLive(key, on);
             }
             catch (Exception ex)
             {
