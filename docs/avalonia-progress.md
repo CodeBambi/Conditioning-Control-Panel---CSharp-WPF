@@ -637,3 +637,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   board). The sample card is gone; the card's text rules moved to Core TrainerCardText (WPF calls them). Board cached 60 s.
 - Evidence: TrainerCardTests (fail-proofed); live sandbox: own card real values, a public trainer looked up without signing
   in, offline states, 0 binding errors. Missing: avatar picture, Patreon art, cosmetics, writes (unit 7). Review: ACCEPT.
+
+## avalonia-port/session-runner-popquiz: +74 (quiz unit 4)
+- Core SessionRunner drives pop quiz like WPF SessionEngine: starts with the session when the user toggle is on (else stops
+  an engine-armed one), stops and closes on pause/panic, restarts on Resume, stops at the end, toggle and rate restored.
+  The per-session PopQuiz* minute range is dead in WPF too (BuiltInPrograms.cs:430), so it isn't ported (decision via
+  supervisor: WPF parity).
+- Evidence: SessionRunnerTests (fail-proofed 4 ways); live 3-minute session: quiz at +46 s, tray panic closed it and paused,
+  none while paused, back 43 s after Resume, closed at the end. Review: ACCEPT.

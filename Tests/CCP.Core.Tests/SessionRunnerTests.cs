@@ -219,6 +219,62 @@ public sealed class SessionRunnerTests : IDisposable
         finally { CoreProgression.AddXPProvider = old; }
     }
 
+    private sealed class QuizHost : IPopQuizHost
+    {
+        public int Closes;
+        public bool IsQuizOpen => false;
+        public bool IsLockCardOpen => false;
+        public bool IsInteractionBusy => false;
+        public bool Defer(Action replay) => false;
+        public void DropDeferred() { }
+        public void Open(bool isTest) { }
+        public void CloseAll() => Closes++;
+    }
+
+    /// <summary>WPF SessionEngine pop quiz: start at session start (:1628), stop + close on pause (:527),
+    /// back on resume only while enabled (:574), stop at the end (:372), toggle and rate restored (:1771).</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PopQuiz_FollowsTheUserToggle_ThroughPauseResumeAndStop(bool enabled)
+    {
+        var s = CoreSettings.Current;
+        var (oldEnabled, oldFreq, oldQuiz) = (s.PopQuizEnabled, s.PopQuizFrequency, CoreEngine.PopQuiz);
+        var host = new QuizHost();
+        using var quiz = new PopQuizScheduler(host);
+        CoreEngine.PopQuiz = quiz;
+        s.PopQuizFrequency = 5;
+        try
+        {
+            // Engine already up with the opposite toggle: the session start itself must start/stop it.
+            s.PopQuizEnabled = !enabled;
+            CoreEngine.Start();
+            s.PopQuizEnabled = enabled;
+            _runner.Start(OneMinute());
+            Assert.Equal(enabled, quiz.IsRunning);
+            host.Closes = 0;
+
+            _runner.Pause();
+            Assert.False(quiz.IsRunning);
+            Assert.Equal(enabled ? 1 : 0, host.Closes);
+
+            _runner.Resume();
+            Assert.Equal(enabled, quiz.IsRunning);
+
+            s.PopQuizEnabled = !enabled;   // mid-session edits are session-scoped
+            s.PopQuizFrequency = 99;
+            _runner.Stop();
+            Assert.False(quiz.IsRunning);
+            Assert.Equal((enabled, 5), (s.PopQuizEnabled, s.PopQuizFrequency));
+        }
+        finally
+        {
+            _runner.Stop();
+            CoreEngine.PopQuiz = oldQuiz;
+            (s.PopQuizEnabled, s.PopQuizFrequency) = (oldEnabled, oldFreq);
+        }
+    }
+
     [Fact]
     public void Resume_RestartsOnlyFeaturesWhoseStartMinuteHasPassed()
     {
