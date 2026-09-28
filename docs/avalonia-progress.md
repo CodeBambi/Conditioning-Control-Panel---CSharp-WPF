@@ -354,3 +354,11 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Real Linux defect found and fixed: Windows-zipped .ccpmod entries with backslashes installed as flat files. The
   custom extraction runs off Windows only; WPF keeps .NET's ExtractToDirectory exactly. Each test fail-proofed.
   Same defect remains in ContentPackService, ReleaseContentService and the Avalonia ModCreatorWindow (follow-up).
+
+## avalonia-port/mod-art-core-resolution: +199
+- ModService unit 6: mod-art path resolution (event skin -> active mod, '..' and rooted paths rejected, .wav/.mp3
+  twin) moved from WPF ModResourceResolver into CoreModArt; WPF calls it with caches and public API unchanged.
+  Off Windows, lookups ignore case and find backslash-named files from .ccpmod extraction; Windows keeps File.Exists.
+- Avalonia seeds CoreModArt in the desktop lifetime (effective once unit 5 creates ModService).
+- Evidence: CoreModArtResolutionTests (case, backslash files, traversal incl. rooted skin paths, order), fail-proofed;
+  test sandbox asserted. Review: ACCEPT. Follow-ups: cache the Linux probe when mods go live; case-variant folder clashes.
