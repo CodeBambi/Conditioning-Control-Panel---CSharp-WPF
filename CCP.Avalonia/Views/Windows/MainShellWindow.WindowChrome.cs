@@ -79,7 +79,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnClose_Click(object? sender, RoutedEventArgs e)
         {
             CoreBark.NotifyUiAction("close");
-            // Close() goes to the tray via OnClosing (MainShellWindow.Tray.cs), as WPF does.
+            // Close() goes to the tray via OnClosing (MainShellWindow.Tray.cs) when a tray host exists.
             // ponytail: the WPF handler also runs EnsureSessionRestoredForExit (session service).
             Close();
         }

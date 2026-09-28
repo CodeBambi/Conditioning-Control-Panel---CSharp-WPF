@@ -8,6 +8,9 @@ using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.Overlays;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using ConditioningControlPanel.Avalonia.Views.Features;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -28,6 +31,7 @@ public sealed class ShellTrayTests
             var shell = new MainShellWindow();
             shell.Show();
             shell.CreateTray();   // also proves the avares app.ico resource loads
+            shell.TrayHostPresent = () => true;
             var items = shell.Tray!.Menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator).ToList();
             Assert.Equal(
                 new[] { "tray_show", CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", "tray_stop_everything", "tray_exit" }
@@ -35,15 +39,27 @@ public sealed class ShellTrayTests
                 items.Select(i => i.Header));
             Assert.IsType<NativeMenuItemSeparator>(shell.Tray.Menu.Items[2]);
 
-            // Stop everything: overlays and their schedules go down, the shell stays open.
+            // Stop everything: the three features untick, their schedules stop, queued flashes
+            // are dropped, and the shell stays open.
+            CoreSettings.Current.FlashEnabled = CoreSettings.Current.SubliminalEnabled = CoreSettings.Current.BouncingTextEnabled = true;
             CoreFlash.Start();
             CoreSubliminal.Start();
             Assert.True(CoreFlash.IsRunning && CoreSubliminal.IsRunning);
+            var card = new BouncingTextFeatureControl();   // a shown card repaints from the flag
+            var cardWindow = new Window { Content = card };
+            cardWindow.Show();
+            var cardEnable = card.GetVisualDescendants().OfType<CheckBox>().First(c => c.Name == "ChkEnable");
+            Assert.True(cardEnable.IsChecked);
+            var generation = FlashOverlay.Generation;
             items[2].Command!.Execute(null);
             Assert.False(CoreFlash.IsRunning);
             Assert.False(CoreSubliminal.IsRunning);
-            Assert.False(BouncingTextOverlay.IsRunning);   // headless never starts it (no X11); the live check does
+            Assert.Equal(generation + 1, FlashOverlay.Generation);
+            Assert.False(CoreSettings.Current.FlashEnabled || CoreSettings.Current.SubliminalEnabled || CoreSettings.Current.BouncingTextEnabled);
             Assert.True(shell.IsVisible);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(cardEnable.IsChecked);
+            cardWindow.Close();
 
             // X goes to the tray; Show brings it back; Exit really closes.
             var closed = false;
@@ -56,6 +72,30 @@ public sealed class ShellTrayTests
             items[3].Command!.Execute(null);
             Assert.True(closed);
             shell.Tray.Dispose();
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
+    public async Task CloseWithoutATrayHostReallyCloses()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+
+            var shell = new MainShellWindow();
+            shell.Show();
+            shell.CreateTray();
+            shell.TrayHostPresent = () => false;   // Avalonia's tray fell back silently: nothing to hide behind
+            var closed = false;
+            shell.Closed += (_, _) => closed = true;
+            shell.Close();
+            Assert.True(closed);
+            shell.ShowFromTray();                  // WPF _windowClosed: a late Show is a no-op, not a throw
+            shell.Tray!.Dispose();
             return Task.CompletedTask;
         });
     }

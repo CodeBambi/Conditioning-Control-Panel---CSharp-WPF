@@ -225,9 +225,10 @@ namespace ConditioningControlPanel.Avalonia
                 {
                     shell.CreateTray();
                     // WPF MainWindow.xaml.cs:3594: StartMinimized sends the shown window to the tray.
-                    if (Settings.Current.StartMinimized)
+                    // Only with a tray host to come back through; without one the window stays up.
+                    if (Settings.Current.StartMinimized && shell.TrayHostPresent())
                     {
-                        void ToTray(object? s, EventArgs e) { shell.Opened -= ToTray; shell.MinimizeToTray(); }
+                        void ToTray(object? s, EventArgs e) { shell.Opened -= ToTray; shell.Hide(); }
                         shell.Opened += ToTray;
                     }
                 }
@@ -236,12 +237,13 @@ namespace ConditioningControlPanel.Avalonia
             base.OnFrameworkInitializationCompleted();
         }
 
-        /// <summary>Stops every desktop overlay and its schedule; the app stays up.</summary>
-        internal static void StopDesktopOverlays()
+        /// <summary>Stops every desktop overlay and its schedule. <paramref name="final"/> is the shell
+        /// closing; the tray's Stop everything passes false so the overlays can be started again.</summary>
+        internal static void StopDesktopOverlays(bool final = true)
         {
             CoreFlash.Stop();
             CoreSubliminal.Stop();
-            Views.Overlays.FlashOverlay.CloseAll();
+            Views.Overlays.FlashOverlay.CloseAll(final);
             Views.Overlays.SubliminalOverlay.CloseAll();
             Views.Overlays.BouncingTextOverlay.Stop();
         }
