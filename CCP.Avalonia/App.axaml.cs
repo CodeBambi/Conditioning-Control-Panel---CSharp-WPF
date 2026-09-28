@@ -28,15 +28,20 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>
         /// WPF App.OnStartup's mod block (App.xaml.cs, "Initialize mod system"): one service, seeded
         /// into CoreMods, initialised from the saved ActiveModId. Desktop lifetime only, so a headless
-        /// render never reads or writes a profile. Initialize restores the per-mod pools and runs
-        /// the Hypnotube migration on CoreSettings.Current, exactly the write WPF does at launch.
-        /// CoreModsHooks stay unseeded: every hook targets a WPF service this head does not have
-        /// yet (Brain, Bark, Companion, DTRH/Arcademy hosts, ModResourceResolver's cache, the
-        /// portrait loader, the voice-line index, BambiSprite, AvatarTubeWindow's link list), and
-        /// unseeded means "nothing to invalidate". Seed each when its counterpart lands here.
+        /// render never reads or writes a profile. Initialize restores the per-mod pools and runs the
+        /// one-shot Hypnotube migration on CoreSettings.Current; with KnownVideoLinksProvider seeded
+        /// below from the same Core title table WPF's AvatarTubeWindow.KnownVideoLinks starts from,
+        /// that is the write WPF makes at launch (StartModsTests pins it against the Core golden).
+        /// The other CoreModsHooks stay unseeded: each targets a WPF service this head does not have
+        /// yet (Brain, Bark, Companion, DTRH/Arcademy hosts, ModResourceResolver's cache, the portrait
+        /// loader, the voice-line index, BambiSprite), and unseeded means "nothing to invalidate".
+        /// Seed each when its counterpart lands here.
         /// </summary>
         internal static void StartMods()
         {
+            // WPF seeds this with AvatarTubeWindow.KnownVideoLinks, which at startup is a copy of
+            // the same Core table; this head has no per-mod link reload, so the table itself.
+            CoreModsHooks.KnownVideoLinksProvider = () => HypnotubeDefaultLinks.KnownVideoTitles;
             Mods = new ModService();
             CoreMods.Attach(Mods);
             Mods.Initialize(CoreSettings.Current.ActiveModId);

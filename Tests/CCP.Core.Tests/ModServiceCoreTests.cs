@@ -91,6 +91,45 @@ public sealed class ModServiceCoreTests
                      JToken.Parse(actual).ToString(Formatting.Indented));
     }
 
+    /// <summary>The one-shot Hypnotube migration names a known URL by its canonical title whether or
+    /// not a head seeds KnownVideoLinksProvider (WPF seeds a copy of the same Core table), so no
+    /// head can save the slug-derived name permanently.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LegacyHypnotubeLinkMigratesToTheCanonicalTitle(bool wpfProvider)
+    {
+        const string url = "https://hypnotube.com/video/bambis-naughty-tiktok-collection-117314.html";
+        ResetProfile();
+        File.WriteAllText(Path.Combine(Root, "settings.json"), new JObject
+        {
+            ["ActiveModId"] = BuiltInMods.BambiSleepId,
+            ["hypnotube_links_bambi_sleep"] = url,
+        }.ToString());
+        var oldProvider = CoreSettings.ServiceProvider;
+        var oldLinks = CoreModsHooks.KnownVideoLinksProvider;
+        try
+        {
+            var svc = new SettingsService();
+            CoreSettings.ServiceProvider = () => svc;
+            var wpfList = new System.Collections.Generic.Dictionary<string, string>(
+                HypnotubeDefaultLinks.KnownVideoTitles, StringComparer.OrdinalIgnoreCase);
+            CoreModsHooks.KnownVideoLinksProvider = wpfProvider ? () => wpfList : null;
+
+            new ModService().Initialize(svc.Current.ActiveModId);
+
+            var pool = svc.Current.VideoLinksByMod![BuiltInMods.BambiSleepId];
+            Assert.Equal(url, Assert.Single(pool, kv => kv.Key == "Bambi's Naughty TikTok Collection").Value);
+            Assert.Single(pool);
+        }
+        finally
+        {
+            CoreModsHooks.KnownVideoLinksProvider = oldLinks;
+            CoreSettings.ServiceProvider = oldProvider;
+            ResetProfile();
+        }
+    }
+
     /// <summary>pack.json (builtin_mods/&lt;id&gt;/pack.json) is written through a private type, so the
     /// round trip reaches it by name.</summary>
     [Fact]

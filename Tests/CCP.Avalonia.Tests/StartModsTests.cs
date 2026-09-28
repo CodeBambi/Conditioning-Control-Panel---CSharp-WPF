@@ -34,6 +34,7 @@ public sealed class StartModsTests
         File.WriteAllText(Path.Combine(root, "settings.json"), File.ReadAllText(CoreFixture("settings_mods_premove.json")));
         var saved = Providers.Select(f => f.GetValue(null)).ToArray();
         var oldSettings = CoreSettings.ServiceProvider;
+        var oldLinks = CoreModsHooks.KnownVideoLinksProvider;
         var runStart = DateTime.UtcNow;
         SettingsService? svc = null;
         try
@@ -69,8 +70,10 @@ public sealed class StartModsTests
         finally
         {
             // ActivateMod queues a debounced save; a late write would land in a later test's file.
+            svc?.SaveImmediate();
             svc?.SealForReset();
             CoreSettings.ServiceProvider = oldSettings;
+            CoreModsHooks.KnownVideoLinksProvider = oldLinks;
             for (var i = 0; i < Providers.Length; i++) Providers[i].SetValue(null, saved[i]);
             foreach (var f in Directory.GetFiles(root, "settings*")) File.Delete(f);
             foreach (var dir in new[] { "mods", "builtin_mods" })

@@ -285,7 +285,7 @@ namespace ConditioningControlPanel.Services
             var pool = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (string.IsNullOrWhiteSpace(list)) return pool;
 
-            var urlToName = (CoreModsHooks.KnownVideoLinksProvider?.Invoke() ?? Enumerable.Empty<KeyValuePair<string, string>>())
+            var urlToName = (CoreModsHooks.KnownVideoLinksProvider?.Invoke() ?? HypnotubeDefaultLinks.KnownVideoTitles)
                 .GroupBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First().Key, StringComparer.OrdinalIgnoreCase);
 
