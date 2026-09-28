@@ -109,7 +109,7 @@ namespace ConditioningControlPanel.Tests
         [Fact]
         public void SurvivesAMissingLoggerAndANullException()
         {
-            Diag.LoggerOverride = null; // App.Logger is null in the test host
+            Diag.LoggerOverride = null; // falls back to Serilog's Log.Logger (SilentLogger in the test host)
             Diag.Swallowed(null!);
             Assert.Equal(1, Diag.SwallowCount);
         }

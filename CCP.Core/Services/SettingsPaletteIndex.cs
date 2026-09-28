@@ -113,6 +113,15 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public static class SettingsPaletteIndex
     {
+        /// <summary>Seeded by the head with JustDropService.DoorAvailable. Fail-closed: unset or throwing hides the door.</summary>
+        public static volatile Func<bool>? JustDropDoorAvailableProvider;
+
+        internal static bool JustDropDoorAvailable()
+        {
+            try { return JustDropDoorAvailableProvider?.Invoke() ?? false; }
+            catch { return false; }
+        }
+
         // Group captions (also used as the first breadcrumb crumb).
         private const string GroupNav = "set2_palette_group_go_to";
         private const string GroupDoors = "set2_palette_group_doors";
@@ -238,7 +247,7 @@ namespace ConditioningControlPanel.Services
                 TabKey = "justdrop",
                 ContextKeys = new[] { GroupNav, "nav_door_studio" },
                 Aliases = "just drop shop session order drop express",
-                IsAvailable = () => JustDrop.JustDropService.DoorAvailable,
+                IsAvailable = JustDropDoorAvailable,
             });
             Door("settings", "nav_door_settings", "⚙️", "appsettings", "settings options preferences config");
 

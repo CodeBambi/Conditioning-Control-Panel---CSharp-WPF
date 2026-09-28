@@ -297,6 +297,8 @@ namespace ConditioningControlPanel
             CoreMods.SecondaryColorHexProvider = () => Mods?.GetSecondaryColorHex();
             CoreMods.AffirmationProvider = () => Mods?.GetAffirmation();
             CoreMods.PhrasesProvider = category => Mods?.GetPhrases(category);
+            Services.Deeper.EnhancementResolver.LibraryMatchProvider = (path, type) => EnhancementLibrary?.FindMatch(path, type);
+            Services.SettingsPaletteIndex.JustDropDoorAvailableProvider = () => Services.JustDrop.JustDropService.DoorAvailable;
             CoreMods.PinkRushNameProvider = () => Mods?.GetPinkRushName();
             CoreMods.PinkRushDescriptionProvider = () => Mods?.GetPinkRushDescription();
             CoreMods.FilterColorRgbProvider = () => Mods?.GetFilterColorRgb();

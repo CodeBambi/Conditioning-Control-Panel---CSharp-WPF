@@ -10,8 +10,8 @@
 //
 // The rest of the file is the catalogue share path, and it is head-side. What each member needs:
 //   BtnExportPreset_Click     - Services.PresetFileService
-//                               (ConditioningControlPanel/Services/PresetFileService.cs) is still in
-//                               the head, and the _selectedPreset it exports lives in
+//                               (CCP.Core/Services/PresetFileService.cs) is in Core now, but
+//                               the _selectedPreset it exports lives in
 //                               MainShellWindow.Presets.cs, another stub this layer does not own.
 //                               The save picker itself maps to StorageProvider.SaveFilePickerAsync,
 //                               exactly as the phrase export above already does, and the two result

@@ -1032,12 +1032,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // ponytail: the picker is NOT the blocker - StorageProvider.OpenFilePickerAsync is on
             // this head (ModCreatorWindow uses it). The blocker is the file FORMAT. A .session.json
             // is Session/SessionSettings shaped, written by
-            // ConditioningControlPanel/Services/Session/SessionFileService.cs and mapped in through
-            // ConditioningControlPanel/Models/TimelineSession.cs; both are head-side, and the
+            // CCP.Core/Services/Session/SessionFileService.cs and mapped in through
+            // CCP.Core/Models/TimelineSession.cs; both are in Core now, but the
             // _session field below is EditorSession, a local stand-in whose JSON is a DIFFERENT
             // shape. Reading a real .session.json into it would silently drop every per-feature
             // setting the editor does not model, and the author would then save that loss back.
-            // Blocked until TimelineSession + SessionFileService reach Core, not until a picker does.
+            // Blocked on mapping EditorSession onto TimelineSession, not on a picker.
             // WPF reported with msg_invalid_session_file / msg_failed_to_import_session /
             // msg_imported_session.
             Log.Information("session editor: import is not wired on this head yet");

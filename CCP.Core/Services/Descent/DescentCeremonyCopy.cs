@@ -72,7 +72,7 @@ namespace ConditioningControlPanel.Services.Descent
             "This is the dramatic one. It is for people who want the fall itself.";
 
         public static string CycleBonusLine() =>
-            $"+{(DescentMigration.CycleXpBonus - 1.0) * 100:0.#}% XP, permanently";
+            $"+{(DescentCycleXp.CycleXpBonus - 1.0) * 100:0.#}% XP, permanently";
 
         public const string BothDoorsFooter =
             "Either way: the veteran badge and your keepsake archive are yours — every recap card " +
@@ -126,13 +126,13 @@ namespace ConditioningControlPanel.Services.Descent
         /// surface that keeps it, and the profile card grew the chip this line is promising
         /// (MainWindow.ProfileCard.RefreshProfileDescentReceipt).</para>
         ///
-        /// <para>The percent comes off <see cref="DescentMigration.CycleXpBonus"/> and never a
+        /// <para>The percent comes off <see cref="DescentCycleXp.CycleXpBonus"/> and never a
         /// literal: the constant is explicitly tunable, and copy that has to be remembered
         /// alongside it is copy that will one day be wrong.</para>
         /// </summary>
         public static string DoneReceiptLine(string choice) =>
             choice == DescentMigrationChoices.Cycle
-                ? $"+{(DescentMigration.CycleXpBonus - 1.0) * 100:0.#}% XP on everything you earn, " +
+                ? $"+{(DescentCycleXp.CycleXpBonus - 1.0) * 100:0.#}% XP on everything you earn, " +
                   "permanently. You can see it on your Profile card, under the XP bar."
                 : "Your Profile card keeps the record of tonight, under the XP bar.";
 

@@ -38,3 +38,15 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: Core/Avalonia/WPF-tests builds, core-guards, Core + 6 Avalonia test projects,
   LinuxSmoke, --smoke all green. Reviewer: ACCEPT (no P0-P2).
 - Not run: WPF tests (Windows-only).
+
+## avalonia-port/core-pure-moves-2: +165
+- Moves the five files the previous branch skipped: SettingsPaletteIndex, EnhancementImportRules,
+  MandatoryVideoEnhancementScanner (with EnhancementResolver and Diag), DescentCeremonyCopy,
+  DescentFuseCopy (with DescentMigrationChoices, DescentCycleXp and DescentFusePhase).
+- Two fail-safe Core hooks seeded by the WPF App static ctor: EnhancementResolver.LibraryMatchProvider
+  (unset = no library match) and SettingsPaletteIndex.JustDropDoorAvailableProvider (unset/throwing = false).
+- Evidence: CoreHeadProviderTests (unset/live/fail-closed, plus provider arguments); Core 62/62,
+  6 Avalonia test projects, core-guards, LinuxSmoke, --smoke green. Reviewer: ACCEPT (P3 notes only).
+- Follow-up (next branch): Avalonia still uses local stand-ins for these types
+  (SettingsPaletteWindow, DescentFuse/CeremonyWindow, SpiralTabView, EnhancementPlayerWindow).
+- Not run: WPF tests (Windows-only).
