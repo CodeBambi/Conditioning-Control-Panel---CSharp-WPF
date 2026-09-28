@@ -486,3 +486,10 @@ review FIX->r1 applied; one earlier live run was unsandboxed: real settings.json
   startup-to-shell 2.39-2.44 s before vs 2.42-2.47 s after (noise). FeaturePlateArtTests (fail-proofed).
 - Skipped with notes: Remote Control grid art, rail chips, intake pass card, exclusives rim (hue shift not in Core),
   programs sigil (ProgramArt naming not in Core); doors don't follow the mod yet. Review: FIX -> r1 applied.
+
+## avalonia-port/provider-discord: +648
+- Auth unit 4b: Discord's token lifecycle (exchange, refresh, validate/identity, auth-token heal, whitelist grant, 24 h
+  cache, logout) moved to Core DiscordAccount; WPF DiscordService delegates; token files/entropy/JSON unchanged. The
+  Avalonia head seeds it fail-closed beside Patreon/SubscribeStar, all three started in parallel like WPF.
+- Evidence: 14 Core tests + seed tests (fake proxy), each fail-proofed; sandboxed live check: Settings > Account signed
+  out, 0 binding errors. No real Discord account (not provable here). Review: ACCEPT, follow-up tests added.

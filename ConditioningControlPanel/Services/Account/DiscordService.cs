@@ -1,11 +1,7 @@
 using System;
-using System.Diagnostics;
-using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
@@ -13,96 +9,41 @@ using ConditioningControlPanel.Models;
 namespace ConditioningControlPanel.Services
 {
     /// <summary>
-    /// Handles Discord OAuth authentication and webhook announcements
+    /// Discord for the WPF head: the OAuth browser flow, display-name calls and webhook announcements.
+    /// The token lifecycle (exchange, refresh, validate/identity, whitelist grant, cache) is Core's
+    /// <see cref="DiscordAccount"/>, shared with every head; tokens stay in WPF's own DiscordTokenStorage
+    /// files, reached through CoreSecrets.
     /// </summary>
     public class DiscordService : IDisposable
     {
-        private readonly DiscordTokenStorage _tokenStorage;
-        private readonly HttpClient _httpClient;
+        private readonly DiscordAccount _core = new(() => App.Patreon?.Core);
         private LoopbackOAuth? _callbackListener;
         private CancellationTokenSource? _oauthCts;
         private bool _disposed;
 
         // Configuration
-        private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
+        private const string ProxyBaseUrl = ProviderSubscription.ProxyBaseUrl;
 
         /// <summary>Our Discord server's guild id — used to build per-guild avatar CDN URLs.</summary>
-        public const string GuildId = "1456573221489999934";
+        public const string GuildId = DiscordAccount.GuildId;
         private const int LocalCallbackPort = 47833; // Different port than Patreon (47832)
-        private const int CacheHours = 24;
         private const int OAuthTimeoutMinutes = 5;
 
-        /// <summary>
-        /// Fired when Discord authentication state changes
-        /// </summary>
         public event EventHandler<bool>? AuthenticationChanged;
-
-        /// <summary>
-        /// Fired when authentication fails
-        /// </summary>
         public event EventHandler<string>? AuthenticationFailed;
 
-        /// <summary>
-        /// Discord user ID
-        /// </summary>
-        public string? UserId { get; private set; }
-
-        /// <summary>
-        /// Discord username
-        /// </summary>
-        public string? Username { get; private set; }
-
-        /// <summary>
-        /// Discord display name (global_name or username)
-        /// </summary>
-        public string? DisplayName { get; private set; }
-
-        /// <summary>
-        /// Discord avatar hash
-        /// </summary>
-        public string? Avatar { get; private set; }
-
-        /// <summary>
-        /// Per-guild avatar hash for our Discord server (null when the user is not
-        /// in the guild or has no server-specific avatar). Preferred over the global
-        /// <see cref="Avatar"/> when building avatar URLs.
-        /// </summary>
-        public string? GuildAvatar { get; private set; }
-
-        /// <summary>
-        /// True when the user holds a staff role on our Discord server (server-computed
-        /// from the bot's guild-member fetch; drives the profile STAFF badge).
-        /// </summary>
-        public bool IsStaff { get; private set; }
-
-        /// <summary>Highest staff tier: "owner" | "admin" | "support", or null (badge border color).</summary>
-        public string? StaffRole { get; private set; }
-
-        /// <summary>
-        /// Whether the user is authenticated with Discord
-        /// </summary>
-        public bool IsAuthenticated => _tokenStorage.HasValidTokens();
-
-        /// <summary>
-        /// Whether verification is currently in progress
-        /// </summary>
-        public bool IsVerifying { get; private set; }
-
-        /// <summary>
-        /// Custom display name chosen by the user (for leaderboards/community)
-        /// </summary>
-        public string? CustomDisplayName { get; set; }
-
-        /// <summary>
-        /// Unified user ID from the server (links Patreon and Discord accounts)
-        /// </summary>
-        public string? UnifiedUserId { get; set; }
-
-        /// <summary>
-        /// True if user needs to complete registration (choose display name).
-        /// Set by the server when display_name is null/empty.
-        /// </summary>
-        public bool NeedsRegistration { get; private set; }
+        public string? UserId => _core.UserId;
+        public string? Username => _core.Username;
+        public string? DisplayName => _core.DisplayName;
+        public string? Avatar => _core.Avatar;
+        public string? GuildAvatar => _core.GuildAvatar;
+        public bool IsStaff => _core.IsStaff;
+        public string? StaffRole => _core.StaffRole;
+        public bool IsAuthenticated => _core.IsAuthenticated;
+        public bool IsVerifying => _core.IsVerifying;
+        public string? CustomDisplayName { get => _core.CustomDisplayName; set => _core.CustomDisplayName = value; }
+        public string? UnifiedUserId { get => _core.UnifiedUserId; set => _core.UnifiedUserId = value; }
+        public bool NeedsRegistration => _core.NeedsRegistration;
 
         /// <summary>
         /// Whether this is the user's first login (no display name set yet on ANY provider).
@@ -112,67 +53,11 @@ namespace ConditioningControlPanel.Services
             && string.IsNullOrEmpty(CustomDisplayName)
             && string.IsNullOrEmpty(App.Patreon?.DisplayName);
 
-        /// <summary>
-        /// Get the user's avatar URL
-        /// </summary>
-        public string? GetAvatarUrl(int size = 128)
-        {
-            if (string.IsNullOrEmpty(UserId))
-                return null;
+        public string? GetAvatarUrl(int size = 128) => _core.GetAvatarUrl(size);
 
-            if (!string.IsNullOrEmpty(GuildAvatar))
-            {
-                var guildExt = GuildAvatar.StartsWith("a_") ? "gif" : "png";
-                return $"https://cdn.discordapp.com/guilds/{GuildId}/users/{UserId}/avatars/{GuildAvatar}.{guildExt}?size={size}";
-            }
+        public Task InitializeAsync() => _core.InitializeAsync();
 
-            if (string.IsNullOrEmpty(Avatar))
-                return null;
-
-            var extension = Avatar.StartsWith("a_") ? "gif" : "png";
-            return $"https://cdn.discordapp.com/avatars/{UserId}/{Avatar}.{extension}?size={size}";
-        }
-
-        public DiscordService()
-        {
-            _tokenStorage = new DiscordTokenStorage();
-            _httpClient = new HttpClient
-            {
-                BaseAddress = new Uri(ProxyBaseUrl),
-                Timeout = TimeSpan.FromSeconds(30)
-            };
-            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
-
-            // Load cached state on startup
-            LoadCachedState();
-        }
-
-        /// <summary>
-        /// Initialize and validate Discord session on startup
-        /// </summary>
-        public async Task InitializeAsync()
-        {
-            try
-            {
-                // Skip online validation if offline mode is enabled
-                if (App.Settings?.Current?.OfflineMode == true)
-                {
-                    App.Logger?.Information("Offline mode enabled, using cached Discord state only");
-                    LoadCachedState();
-                    return;
-                }
-
-                if (_tokenStorage.HasValidTokens())
-                {
-                    await ValidateAndRefreshUserAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Failed to validate Discord session on startup");
-            }
-        }
+        public Task ValidateAndRefreshUserAsync(bool forceRefresh = false) => _core.ValidateAndRefreshUserAsync(forceRefresh);
 
         /// <summary>
         /// Start OAuth2 browser flow
@@ -183,7 +68,7 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                IsVerifying = true;
+                _core.IsVerifying = true;
                 _oauthCts = new CancellationTokenSource();
 
                 // Local callback listener + CSRF state (Core LoopbackOAuth, shared with every head)
@@ -220,7 +105,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Exchange code for tokens
-                await ExchangeCodeForTokensAsync(code, callbackUrl);
+                await _core.ExchangeCodeAsync(code, callbackUrl);
 
                 // Get user info
                 await ValidateAndRefreshUserAsync(forceRefresh: true);
@@ -244,7 +129,7 @@ namespace ConditioningControlPanel.Services
             }
             finally
             {
-                IsVerifying = false;
+                _core.IsVerifying = false;
                 StopCallbackListener();
             }
         }
@@ -266,314 +151,6 @@ namespace ConditioningControlPanel.Services
                 _callbackListener = null;
             }
             catch { }
-        }
-
-        private async Task ExchangeCodeForTokensAsync(string code, string redirectUri)
-        {
-            var tokenResponse = await LoopbackOAuth.ExchangeAsync(_httpClient, "/discord/token", new
-            {
-                code,
-                redirect_uri = redirectUri
-            });
-
-            // Store tokens securely
-            _tokenStorage.StoreTokens(
-                tokenResponse.AccessToken,
-                tokenResponse.RefreshToken,
-                DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn));
-
-            App.Logger?.Information("Discord tokens stored successfully");
-        }
-
-        /// <summary>
-        /// Validate user and refresh if needed
-        /// </summary>
-        public async Task ValidateAndRefreshUserAsync(bool forceRefresh = false)
-        {
-            if (IsVerifying && !forceRefresh) return;
-
-            // Skip online validation if offline mode is enabled
-            if (App.Settings?.Current?.OfflineMode == true)
-            {
-                App.Logger?.Debug("Offline mode enabled, skipping Discord validation");
-                return;
-            }
-
-            try
-            {
-                // Check cache first (unless forcing refresh)
-                if (!forceRefresh)
-                {
-                    var cachedState = _tokenStorage.RetrieveCachedState();
-                    if (cachedState != null && !cachedState.IsExpired)
-                    {
-                        UpdateUserInfo(cachedState);
-                        return;
-                    }
-                }
-
-                // Get tokens
-                var tokens = _tokenStorage.RetrieveTokens();
-                if (tokens == null)
-                {
-                    ClearUserInfo();
-                    return;
-                }
-
-                // Check if token expired and needs refresh
-                if (tokens.IsExpired)
-                {
-                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken);
-                    if (!refreshed)
-                    {
-                        ClearUserInfo();
-                        return;
-                    }
-                    tokens = _tokenStorage.RetrieveTokens();
-                    if (tokens == null)
-                    {
-                        ClearUserInfo();
-                        return;
-                    }
-                }
-
-                IsVerifying = true;
-
-                // Validate via proxy. Per-request message so the CCP auth token
-                // rides along without polluting DefaultRequestHeaders; the server
-                // uses it to heal a divergent/mismatched token (BUG-7DCJHDP3JZ).
-                using var validateRequest = new HttpRequestMessage(HttpMethod.Get, "/discord/validate");
-                var prizesFor = App.Settings?.Current?.UnifiedId;
-                validateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
-                var currentAuthToken = App.Settings?.Current?.AuthToken;
-                if (!string.IsNullOrEmpty(currentAuthToken))
-                {
-                    validateRequest.Headers.Add("X-Auth-Token", currentAuthToken);
-                }
-
-                var response = await _httpClient.SendAsync(validateRequest);
-
-                // Contract D: the account this token belongs to is a merge tombstone. The swap
-                // re-signs in on the canonical (detached); this validate is moot.
-                if (await MergedAccountRecovery.TryHandleAsync(response)) return;
-
-                if (response.StatusCode == HttpStatusCode.Unauthorized)
-                {
-                    // Token may be invalid, try refresh
-                    var refreshed = await RefreshTokensAsync(tokens.RefreshToken);
-                    if (refreshed)
-                    {
-                        await ValidateAndRefreshUserAsync(forceRefresh: true);
-                        return;
-                    }
-                    else
-                    {
-                        _tokenStorage.ClearTokens();
-                        ClearUserInfo();
-                        return;
-                    }
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    App.Logger?.Warning("Discord validation failed with status {Status}", response.StatusCode);
-                    return;
-                }
-
-                var user = await response.Content.ReadFromJsonAsync<DiscordUserResponse>();
-
-                if (user == null || !string.IsNullOrEmpty(user.Error))
-                {
-                    App.Logger?.Warning("Discord validation error: {Error}", user?.Error);
-                    return;
-                }
-
-                ProfileSyncService.ApplyValidatePrizes(prizesFor, user.UnifiedId, user.Prizes, "Discord validate");
-
-                // Server healed a divergent auth token — store immediately. Only
-                // present on mismatch; not cached, so no stale replay (BUG-7DCJHDP3JZ).
-                //
-                // BUT only when the server resolved this Discord account to the SAME unified
-                // record this client is operating as. The heal is keyed to the discord_index
-                // record; on a duplicate-identity account (one record per provider, never
-                // merged) that is a DIFFERENT record than Settings.UnifiedId. Adopting its
-                // token here silently swaps out a token that matched our record for one that
-                // doesn't — from then on every request that sends unified_id in the body
-                // (sync, heartbeat, export-data, delete-account) 401s "Invalid or missing
-                // auth token", restore-session can never recover (it authenticates with the
-                // now-wrong token against our record), and a provider re-validate just
-                // repeats this same cross-adoption. A full relog only helps until the next
-                // validate of the OTHER provider breaks the pair again. Refusing the
-                // mismatched token keeps this session's credential consistent; the duplicate
-                // records themselves still need an account merge server-side.
-                if (!string.IsNullOrEmpty(user.AuthToken) && App.Settings?.Current != null)
-                {
-                    var localUnifiedId = App.Settings.Current.UnifiedId;
-                    if (!string.IsNullOrEmpty(localUnifiedId) &&
-                        !string.IsNullOrEmpty(user.UnifiedId) &&
-                        !string.Equals(user.UnifiedId, localUnifiedId, StringComparison.Ordinal))
-                    {
-                        App.Logger?.Warning(
-                            "[Auth] Discord validate resolved to unified account {ServerId} but this session is {LocalId} — " +
-                            "REFUSING the re-issued auth token (it belongs to the other record). " +
-                            "This account pair likely needs a server-side merge.",
-                            user.UnifiedId, localUnifiedId);
-                    }
-                    else
-                    {
-                        App.Settings.Current.AuthToken = user.AuthToken;
-                        App.Settings.Save();
-                        App.Logger?.Information("[Auth] Stored re-issued auth token from Discord validate (token recovery)");
-                    }
-                }
-
-                // Update state and cache
-                UserId = user.Id;
-                Username = user.Username;
-                DisplayName = user.DisplayName;
-                Avatar = user.Avatar;
-                GuildAvatar = user.GuildAvatar;
-                IsStaff = user.IsStaff;
-                StaffRole = user.StaffRole;
-                NeedsRegistration = user.NeedsRegistration;
-
-                // Apply server-side whitelist so whitelisted Discord-only users get
-                // premium access without depending on a successful profile sync.
-                if (user.IsWhitelisted)
-                {
-                    App.Logger?.Information("Discord validate: whitelisted user — granting premium access (server tier {Tier})", user.PatreonTier);
-                }
-                ApplyWhitelistAccess(user.IsWhitelisted);
-
-                // Cache result for 24 hours
-                _tokenStorage.StoreCachedState(new DiscordCachedState
-                {
-                    UserId = user.Id,
-                    Username = user.Username,
-                    GlobalName = user.GlobalName,
-                    Avatar = user.Avatar,
-                    GuildAvatar = user.GuildAvatar,
-                    IsStaff = user.IsStaff,
-                    StaffRole = user.StaffRole,
-                    IsWhitelisted = user.IsWhitelisted,
-                    LastVerified = DateTime.UtcNow,
-                    CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours)
-                });
-
-                App.Logger?.Information("Discord user validated: {Id}, NeedsRegistration={NeedsReg}, Whitelisted={Whitelisted}", UserId, user.NeedsRegistration, user.IsWhitelisted);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Failed to validate Discord user");
-            }
-            finally
-            {
-                IsVerifying = false;
-            }
-        }
-
-        private async Task<bool> RefreshTokensAsync(string refreshToken)
-        {
-            try
-            {
-                var response = await _httpClient.PostAsJsonAsync("/discord/refresh", new
-                {
-                    refresh_token = refreshToken
-                });
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    App.Logger?.Warning("Discord token refresh failed with status {Status}", response.StatusCode);
-                    return false;
-                }
-
-                var tokenResponse = await response.Content.ReadFromJsonAsync<DiscordTokenResponse>();
-
-                if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
-                {
-                    App.Logger?.Warning("Discord token refresh error: {Error}", tokenResponse?.ErrorDescription);
-                    return false;
-                }
-
-                _tokenStorage.StoreTokens(
-                    tokenResponse.AccessToken,
-                    tokenResponse.RefreshToken,
-                    DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn));
-
-                App.Logger?.Information("Discord tokens refreshed successfully");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Failed to refresh Discord tokens");
-                return false;
-            }
-        }
-
-        private void UpdateUserInfo(DiscordCachedState cachedState)
-        {
-            UserId = cachedState.UserId;
-            Username = cachedState.Username;
-            DisplayName = cachedState.DisplayName;
-            Avatar = cachedState.Avatar;
-            GuildAvatar = cachedState.GuildAvatar;
-            IsStaff = cachedState.IsStaff;
-            StaffRole = cachedState.StaffRole;
-            CustomDisplayName = cachedState.CustomDisplayName;
-
-            // Re-apply whitelist on a cache-hit so access survives across restarts
-            // without waiting for the next network validate.
-            ApplyWhitelistAccess(cachedState.IsWhitelisted);
-        }
-
-        /// <summary>
-        /// Grant premium/whitelist access for a whitelisted Discord-only user. Applied
-        /// from both the network-validate path and the cache-hit path so Lab access
-        /// does not depend on a successful profile sync (which the boot defaults-guard
-        /// can block after a season reset — see #293 / ProfileSyncService).
-        /// Sticky-true: only ever promote, never demote on a transient false — mirrors
-        /// the server and ProfileSyncService. Removal is admin-only server-side.
-        /// </summary>
-        private static void ApplyWhitelistAccess(bool isWhitelisted)
-        {
-            if (!isWhitelisted) return;
-
-            // Refresh the cached-premium window (25h > the 24h validate cache, so it
-            // self-renews on each network re-validate and survives restarts).
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddHours(25);
-                App.Settings.Save();
-            }
-            App.Patreon?.SetWhitelistStatus(true);
-        }
-
-        private void ClearUserInfo()
-        {
-            UserId = null;
-            Username = null;
-            DisplayName = null;
-            Avatar = null;
-            GuildAvatar = null;
-            IsStaff = false;
-            StaffRole = null;
-            CustomDisplayName = null;
-        }
-
-        private void LoadCachedState()
-        {
-            try
-            {
-                var cachedState = _tokenStorage.RetrieveCachedState();
-                if (cachedState != null && !cachedState.IsExpired && _tokenStorage.HasValidTokens())
-                {
-                    UpdateUserInfo(cachedState);
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Failed to load cached Discord state");
-            }
         }
 
         /// <summary>
@@ -640,7 +217,7 @@ namespace ConditioningControlPanel.Services
                 if (!string.IsNullOrEmpty(authToken))
                     request.Headers.Add("X-Auth-Token", authToken);
 
-                var response = await _httpClient.SendAsync(request);
+                var response = await _core.Http.SendAsync(request);
                 var responseText = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
@@ -706,7 +283,7 @@ namespace ConditioningControlPanel.Services
                 if (!string.IsNullOrEmpty(authToken))
                     request.Headers.Add("X-Auth-Token", authToken);
 
-                var response = await _httpClient.SendAsync(request);
+                var response = await _core.Http.SendAsync(request);
                 var responseText = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
@@ -759,11 +336,11 @@ namespace ConditioningControlPanel.Services
             CustomDisplayName = trimmedName;
 
             // Update the cached state with the new display name
-            var cachedState = _tokenStorage.RetrieveCachedState();
+            var cachedState = _core.RetrieveCachedState();
             if (cachedState != null)
             {
                 cachedState.CustomDisplayName = CustomDisplayName;
-                _tokenStorage.StoreCachedState(cachedState);
+                _core.StoreCachedState(cachedState);
             }
 
             App.Logger?.Information("Custom display name set ({Chars} chars, claimed: {Claimed})", CustomDisplayName?.Length ?? 0, claimExisting);
@@ -777,16 +354,16 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var tokens = _tokenStorage.RetrieveTokens();
+                var tokens = _core.RetrieveTokens();
                 if (tokens == null)
                 {
                     return (true, null, false); // Can't check, allow optimistically
                 }
 
-                _httpClient.DefaultRequestHeaders.Authorization =
+                _core.Http.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
 
-                var response = await _httpClient.GetAsync($"/user/check-display-name-discord?name={Uri.EscapeDataString(displayName)}");
+                var response = await _core.Http.GetAsync($"/user/check-display-name-discord?name={Uri.EscapeDataString(displayName)}");
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -826,17 +403,17 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var tokens = _tokenStorage.RetrieveTokens();
+                var tokens = _core.RetrieveTokens();
                 if (tokens == null)
                 {
                     App.Logger?.Warning("Cannot save display name: no tokens available");
                     return (false, "Not authenticated", false);
                 }
 
-                _httpClient.DefaultRequestHeaders.Authorization =
+                _core.Http.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
 
-                var response = await _httpClient.PostAsJsonAsync("/user/set-display-name-discord", new
+                var response = await _core.Http.PostAsJsonAsync("/user/set-display-name-discord", new
                 {
                     display_name = displayName,
                     claim_existing = claimExisting
@@ -874,24 +451,24 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var tokens = _tokenStorage.RetrieveTokens();
+                var tokens = _core.RetrieveTokens();
                 if (tokens == null) return;
 
-                _httpClient.DefaultRequestHeaders.Authorization =
+                _core.Http.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
 
-                var response = await _httpClient.GetAsync("/user/profile-discord");
+                var response = await _core.Http.GetAsync("/user/profile-discord");
                 if (response.IsSuccessStatusCode)
                 {
                     var profile = await response.Content.ReadFromJsonAsync<DiscordUserProfile>();
                     if (!string.IsNullOrEmpty(profile?.DisplayName))
                     {
                         CustomDisplayName = profile.DisplayName;
-                        var cachedState = _tokenStorage.RetrieveCachedState();
+                        var cachedState = _core.RetrieveCachedState();
                         if (cachedState != null)
                         {
                             cachedState.CustomDisplayName = CustomDisplayName;
-                            _tokenStorage.StoreCachedState(cachedState);
+                            _core.StoreCachedState(cachedState);
                         }
                         App.Logger?.Information("Loaded display name from server ({Chars} chars)", CustomDisplayName?.Length ?? 0);
                         return;
@@ -903,11 +480,11 @@ namespace ConditioningControlPanel.Services
                 if (string.IsNullOrEmpty(CustomDisplayName) && !string.IsNullOrEmpty(App.Patreon?.DisplayName))
                 {
                     CustomDisplayName = App.Patreon.DisplayName;
-                    var cachedState = _tokenStorage.RetrieveCachedState();
+                    var cachedState = _core.RetrieveCachedState();
                     if (cachedState != null)
                     {
                         cachedState.CustomDisplayName = CustomDisplayName;
-                        _tokenStorage.StoreCachedState(cachedState);
+                        _core.StoreCachedState(cachedState);
                     }
                     App.Logger?.Information("Adopted display name from Patreon ({Chars} chars)", CustomDisplayName?.Length ?? 0);
                 }
@@ -928,22 +505,14 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void Logout()
         {
-            _tokenStorage.ClearTokens();
-            _tokenStorage.ClearCachedState();
-            ClearUserInfo();
-            CustomDisplayName = null;
-            App.Logger?.Information("Discord logout completed");
+            _core.Logout();
             AuthenticationChanged?.Invoke(this, false);
         }
 
         /// <summary>
         /// Get access token for API calls
         /// </summary>
-        public string? GetAccessToken()
-        {
-            var tokens = _tokenStorage.RetrieveTokens();
-            return tokens?.AccessToken;
-        }
+        public string? GetAccessToken() => _core.GetAccessToken();
 
         public void Dispose()
         {
@@ -953,7 +522,7 @@ namespace ConditioningControlPanel.Services
             _oauthCts?.Cancel();
             _oauthCts?.Dispose();
             StopCallbackListener();
-            _httpClient.Dispose();
+            _core.Dispose();
         }
     }
 }

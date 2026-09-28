@@ -64,9 +64,26 @@ public sealed class AccountSeedTests : IDisposable
     }
 
     [Fact]
+    public void AStoredWhitelistedDiscordUser_IsLoggedInAndEntitled()
+    {
+        // Parallel to Patreon, as WPF: Discord's cached whitelist promotes the Patreon gate (DiscordService.ApplyWhitelistAccess).
+        _secrets["discord_auth"] = JsonConvert.SerializeObject(new DiscordTokenData
+        { AccessToken = "a", RefreshToken = "r", ExpiresAt = DateTime.UtcNow.AddDays(5) });
+        _secrets["discord_cache"] = JsonConvert.SerializeObject(new DiscordCachedState
+        { UserId = "4242", Username = "bambi", IsWhitelisted = true, CacheExpiresAt = DateTime.UtcNow.AddHours(1) });
+        Assert.True(AccountSeed.Seed(Make, p => new DiscordAccount(() => p, () => new AppSettings())));
+        Assert.True(CoreAccount.IsLoggedIn);
+        Assert.True(CoreAccount.IsWhitelisted);
+        Assert.True(CoreAccount.HasLabAccess);
+        Assert.Equal("bambi", CoreAccount.DisplayName);
+    }
+
+    [Fact]
     public void AProviderThatCannotBeBuilt_SeedsNothing()
     {
         Assert.False(AccountSeed.Seed(_ => throw new InvalidOperationException("boom")));
+        AssertNothing();
+        Assert.False(AccountSeed.Seed(Make, _ => throw new InvalidOperationException("boom")));
         AssertNothing();
     }
 
