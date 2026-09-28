@@ -21,8 +21,8 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 /// the 34 <c>HWND_TOPMOST</c> sites port to that property and need nothing here. Wrapping it
 /// would add an indirection that only obscures where the behaviour comes from. The one case it
 /// does NOT cover — sitting above ANOTHER app's focused fullscreen window, which KWin promotes
-/// above the keep-above layer — needs an override-redirect or KDE window-type flip applied
-/// before the window maps, so it belongs in its own change rather than bolted on here.</para>
+/// above the keep-above layer — is what <see cref="SetOverrideRedirect"/> is for: an
+/// override-redirect window is never managed by the WM at all, so no WM layer policy applies.</para>
 ///
 /// <para><b>Everything in here fails silently if written carelessly</b>, which is why each guard
 /// below is explicit rather than defensive habit:</para>
@@ -48,6 +48,8 @@ internal static class X11Overlay
     private const long SubstructureMask = 1572864;  // SubstructureRedirect|SubstructureNotify
     private const long SourcePager = 2;      // netwm_def.h RequestSource::FromTool
     private const int XEventSize = 192;      // sizeof(XEvent), from the compiler
+    private const int XSetWindowAttributesSize = 112;  // sizeof(XSetWindowAttributes), from the compiler
+    private const nuint CWOverrideRedirect = 1 << 9;   // X11/X.h
 
     private const string LibX11 = "libX11.so.6";
     private const string LibXfixes = "libXfixes.so.3";
@@ -56,6 +58,8 @@ internal static class X11Overlay
 
     [DllImport(LibX11)] private static extern IntPtr XOpenDisplay(IntPtr name);
     [DllImport(LibX11)] private static extern int XFlush(IntPtr display);
+    [DllImport(LibX11)] private static extern int XSync(IntPtr display, bool discard);
+    [DllImport(LibX11)] private static extern int XChangeWindowAttributes(IntPtr display, IntPtr window, nuint valueMask, IntPtr attributes);
     [DllImport(LibX11)] private static extern IntPtr XSetErrorHandler(XErrorHandler handler);
     [DllImport(LibX11)] private static extern IntPtr XDefaultRootWindow(IntPtr display);
     [DllImport(LibX11)] private static extern IntPtr XInternAtom(IntPtr display, string name, bool onlyIfExists);
@@ -112,6 +116,41 @@ internal static class X11Overlay
 
             XFlush(_display);
             return true;
+        }
+    }
+
+    /// <summary>Takes <paramref name="window"/> out of the window manager's hands: no frame, no
+    /// focus, no taskbar entry, no WM layer policy - the X11 form of a Win32 tool/topmost overlay.
+    ///
+    /// <para><b>Must run before <c>Show()</c>.</b> The WM decides whether to manage a window when
+    /// it maps, so setting this on a mapped window changes nothing until the next map. Avalonia's
+    /// X11 backend creates the XID in the <c>Window</c> constructor and maps only in <c>Show()</c>
+    /// (proved by <c>--overlay-check</c>, which reads map_state before showing).</para>
+    ///
+    /// <para><b>XSync, not XFlush.</b> This display is a different connection from Avalonia's, and
+    /// the server orders requests per connection only. A flushed-but-unprocessed request could
+    /// land after Avalonia's XMapWindow; XSync returns once the server has applied it.</para></summary>
+    /// <returns>False when the platform cannot do this (no XID, no display).</returns>
+    internal static bool SetOverrideRedirect(TopLevel window)
+    {
+        if (!TryGetXid(window, out var xid)) return false;
+
+        lock (Gate)
+        {
+            if (!EnsureDisplay()) return false;
+
+            // XSetWindowAttributes: 112 bytes, override_redirect (Bool = int) at 88 - offsetof()
+            // against the real headers on x86_64. Only the field named in the mask is read.
+            var attrs = Marshal.AllocHGlobal(XSetWindowAttributesSize);
+            try
+            {
+                for (var i = 0; i < XSetWindowAttributesSize; i += IntPtr.Size) Marshal.WriteIntPtr(attrs, i, IntPtr.Zero);
+                Marshal.WriteInt32(attrs, 88, 1);
+                XChangeWindowAttributes(_display, xid, CWOverrideRedirect, attrs);
+                XSync(_display, false);
+                return true;
+            }
+            finally { Marshal.FreeHGlobal(attrs); }
         }
     }
 
