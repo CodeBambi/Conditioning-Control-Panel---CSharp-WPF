@@ -20,7 +20,7 @@ public sealed class AvatarTubeWindowingTests
     /// <summary>WPF's left dock: tube's right art edge (353*s in, less 3 px daylight) on main's left edge.</summary>
     private static PixelPoint Docked(Window main, AvatarTubeWindow tube)
     {
-        double s = tube.Width / 780;
+        double s = tube.Width / 780;   // art px scale (headless DesktopScaling is 1)
         int w = (int)Math.Round(tube.Width), h = (int)Math.Round(tube.Height);
         int mainH = (int)Math.Round(main.ClientSize.Height);
         return new PixelPoint(main.Position.X - w + (int)Math.Round(353 * s - 3),
@@ -45,6 +45,8 @@ public sealed class AvatarTubeWindowingTests
 
         tube.Position = new PixelPoint(50, 60);      // what the WM drag ends in
         Dispatcher.UIThread.RunJobs();
+        Assert.True(double.IsNaN(CoreSettings.Current.AvatarTubeLeft) || CoreSettings.Current.AvatarTubeLeft == 123);   // not on every move
+        tube.PersistTubePlacement();                 // the pointer release after it
         Assert.Equal(50, CoreSettings.Current.AvatarTubeLeft, 3);
         Assert.Equal(60, CoreSettings.Current.AvatarTubeTop, 3);
 
@@ -52,6 +54,16 @@ public sealed class AvatarTubeWindowingTests
         Assert.False(tube.IsDetached);
         Assert.False(tube.Topmost);
         Assert.False(CoreSettings.Current.AvatarTubeDetached);
+        Assert.Equal(Docked(main, tube), tube.Position);
+    });
+
+    [Fact]
+    public Task AttachFromMenu_RestoresTheShellFirst() => Run(detached: true, (main, tube) =>
+    {
+        main.WindowState = WindowState.Minimized;
+        tube.FindControl<MenuItem>("MenuItemAttach")!.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(WindowState.Normal, main.WindowState);
+        Assert.False(tube.IsDetached);
         Assert.Equal(Docked(main, tube), tube.Position);
     });
 

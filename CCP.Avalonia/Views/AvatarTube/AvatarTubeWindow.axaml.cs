@@ -291,6 +291,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             FitToScreen();
             UpdatePosition();
             RestoreSavedPlacement();
+            // Fallback when ScalingChanged never comes (or never agrees): restore once anyway.
+            DispatcherTimer.RunOnce(() => { if (IsVisible) RestoreSavedPlacement(force: true); }, TimeSpan.FromSeconds(1));
             ToggleDetachedSink = ToggleDetached;
 
             // The z-order pairing the WPF head got from native (GWL_HWNDPARENT) ownership. Safe to

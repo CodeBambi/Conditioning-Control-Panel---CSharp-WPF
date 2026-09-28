@@ -10,6 +10,7 @@
 // neither applied nor written) and the floating bob. Add each when a user misses it.
 
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -20,7 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 {
     public partial class AvatarTubeWindow
     {
-        private const double DesignHeight = 1080;
+        private const double DesignHeight = 1020;   // WPF Windowing.cs:42 (the 780x1080 canvas is fitted into it)
         private const double TubeArtLeftPadding = 239;   // WPF Windowing.cs:88
         private const double VerticalOffset = 20;        // WPF Windowing.cs:91
         private const double DockDaylight = 3;           // WPF Windowing.cs:1079
@@ -42,14 +43,15 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
         private void InitWindowing()
         {
-            foreach (var name in new[] { "MenuItemDetach", "MenuItemAttach" })
-            {
-                var item = this.FindControl<MenuItem>(name);
-                if (item != null) item.Click += (_, _) => ToggleDetached();
-                else Log.Warning("AvatarTubeWindow: {Name} not found", name);
-            }
+            if (this.FindControl<MenuItem>("MenuItemDetach") is { } detach) detach.Click += (_, _) => Detach();
+            else Log.Warning("AvatarTubeWindow: MenuItemDetach not found");
+            if (this.FindControl<MenuItem>("MenuItemAttach") is { } attach) attach.Click += (_, _) => AttachFromMenu();
+            else Log.Warning("AvatarTubeWindow: MenuItemAttach not found");
             foreach (var c in DragSurfaces()) c.PointerPressed += OnDragPointerPressed;
-            PositionChanged += OnTubePositionChanged;
+            // The WM owns the drag, so the release may never reach us: the first pointer event
+            // after it (release, or the next enter/move) saves where she ended up.
+            PointerReleased += (_, _) => PersistTubePlacement();
+            PointerEntered += (_, _) => PersistTubePlacement();
             // A window mapped on a scaled screen first reports DesktopScaling 1 (seen live on KWin);
             // the placement is redone once the real scaling arrives.
             ScalingChanged += (_, _) => { FitToScreen(); UpdatePosition(); RestoreSavedPlacement(); };
@@ -78,6 +80,18 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
         public void ToggleDetached() { if (_isAttached) Detach(); else Attach(); }
 
+        /// <summary>WPF MenuItemAttach_Click (ChatInput.cs:999-1016): bring main back first.</summary>
+        internal void AttachFromMenu()
+        {
+            if (_parentWindow is { } p)
+            {
+                p.Show();
+                p.WindowState = WindowState.Normal;
+                p.Activate();
+            }
+            Attach();
+        }
+
         public void Detach() => RunOnAvatar(() => SetAttached(false));
 
         public void Attach() => RunOnAvatar(() => SetAttached(true));
@@ -94,6 +108,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             ApplyModeChrome();
             UpdatePosition();
             if (attached && _parentWindow != null) Platform.X11Overlay.RestackAbove(this, _parentWindow);
+            if (!attached) Platform.X11Overlay.SetInputRect(this, null);
             Log.Information("Avatar tube {Mode}", attached ? "attached" : "detached");
             if (_restoringPlacement) return;
             CoreSettings.Current.AvatarTubeDetached = !attached;
@@ -116,17 +131,21 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         private void OnDragPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             if (_isAttached || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+            _restorePending = false;   // she is being moved by hand now; the saved spot is stale
             BeginMoveDrag(e);
         }
 
-        /// <summary>WPF saved on mouse-up; the WM owns this drag, so save on every move and let
-        /// CoreSettings' debounce land the last one.</summary>
-        private void OnTubePositionChanged(object? sender, PixelPointEventArgs e)
+        /// <summary>WPF PersistTubePlacement (on mouse-up). DIPs of the screen she is on, so a
+        /// WPF-written file and a mixed-DPI desk both read back right.</summary>
+        internal void PersistTubePlacement()
         {
             if (_isAttached || _restoringPlacement || _restorePending || !IsVisible) return;
+            var k = Screens.ScreenFromWindow(this)?.Scaling ?? DesktopScaling;
             var s = CoreSettings.Current;
-            s.AvatarTubeLeft = e.Point.X / DesktopScaling;
-            s.AvatarTubeTop = e.Point.Y / DesktopScaling;
+            double left = Position.X / k, top = Position.Y / k;
+            if (Math.Abs(left - s.AvatarTubeLeft) < 0.5 && Math.Abs(top - s.AvatarTubeTop) < 0.5) return;
+            s.AvatarTubeLeft = left;
+            s.AvatarTubeTop = top;
             CoreSettings.Save();
         }
 
@@ -154,31 +173,33 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             var work = p.Screens.ScreenFromWindow(p)?.WorkingArea ?? new PixelRect(-100000, -100000, 200000, 200000);
             double art = _scaleFactor * DesktopScaling, day = DockDaylight * DesktopScaling;
             var size = TubePixelSize;
+            int rightInset = (int)Math.Round(Math.Max(0, (TubeArtRightPadding - SeamOverlapOverMain) * art - day));
             var plan = TubeDockPlacement.Place(ToBox(pr), size.Width, size.Height,
-                (int)Math.Round(Math.Max(0, TubeArtLeftPadding * art - day)),
-                (int)Math.Round(Math.Max(0, (TubeArtRightPadding - SeamOverlapOverMain) * art - day)),
+                (int)Math.Round(Math.Max(0, TubeArtLeftPadding * art - day)), rightInset,
                 (int)Math.Round(VerticalOffset * art), ToBox(work));
             Position = new PixelPoint(plan.Left, plan.Top);
+            // WPF's transparent margin was click-through (layered window); an X11 window takes
+            // clicks on every pixel, so cut her input down to everything left of the seam or the
+            // shell's rail under that margin goes dead. Detach gives the whole window back.
+            Platform.X11Overlay.SetInputRect(this, new PixelRect(0, 0, size.Width - rightInset, size.Height));
         }
 
         /// <summary>WPF RestoreSavedPlacement: a detached tube comes back where it was left, with at
         /// least half of it on a connected screen.</summary>
-        private void RestoreSavedPlacement()
+        private void RestoreSavedPlacement(bool force = false)
         {
             var s = CoreSettings.Current;
             var here = Screens.ScreenFromWindow(this);
-            if (!_restorePending || (here != null && Math.Abs(here.Scaling - DesktopScaling) > 0.01)) return;
+            if (!_restorePending || (!force && here != null && Math.Abs(here.Scaling - DesktopScaling) > 0.01)) return;
             _restorePending = false;   // once per open: a later monitor change must not yank her back
             if (_isAttached || double.IsNaN(s.AvatarTubeLeft) || double.IsNaN(s.AvatarTubeTop)) return;
             _restoringPlacement = true;
             try
             {
-                double k = DesktopScaling, x = s.AvatarTubeLeft * k, y = s.AvatarTubeTop * k;
+                var screens = Screens.All.Select(sc => (ToBox(sc.Bounds), sc.Scaling, ToBox(sc.WorkingArea))).ToList();
                 var size = TubePixelSize;
-                var screen = Screens.ScreenFromPoint(new PixelPoint((int)(x + size.Width / 2.0), (int)(y + size.Height / 2.0)))
-                             ?? Screens.Primary;
-                if (screen == null) return;
-                var (cx, cy) = TubeWindowMath.ClampDetached(x, y, size.Width, size.Height, ToBox(screen.WorkingArea));
+                var (cx, cy) = TubeWindowMath.RestoreDetached(s.AvatarTubeLeft, s.AvatarTubeTop,
+                    size.Width, size.Height, screens, DesktopScaling);
                 Position = new PixelPoint(cx, cy);
             }
             finally { _restoringPlacement = false; }

@@ -129,6 +129,33 @@ internal static class X11Overlay
         }
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XRectangle { public short X, Y; public ushort W, H; }
+
+    /// <summary>Partial click-through: only <paramref name="rect"/> (window-relative px) takes input,
+    /// null gives the whole window back. X11 has no per-pixel alpha hit-test, so this is how the
+    /// attached avatar tube's transparent margin stops swallowing the shell's clicks.</summary>
+    internal static bool SetInputRect(TopLevel window, PixelRect? rect)
+    {
+        if (!TryGetXid(window, out var xid)) return false;
+        lock (Gate)
+        {
+            if (!EnsureDisplay()) return false;
+            var region = IntPtr.Zero;
+            if (rect is PixelRect r)
+            {
+                var xr = new XRectangle { X = (short)r.X, Y = (short)r.Y, W = (ushort)Math.Max(0, r.Width), H = (ushort)Math.Max(0, r.Height) };
+                var buf = Marshal.AllocHGlobal(Marshal.SizeOf<XRectangle>());
+                try { Marshal.StructureToPtr(xr, buf, false); region = XFixesCreateRegion(_display, buf, 1); }
+                finally { Marshal.FreeHGlobal(buf); }
+            }
+            XFixesSetWindowShapeRegion(_display, xid, ShapeInput, 0, 0, region);
+            if (region != IntPtr.Zero) XFixesDestroyRegion(_display, region);
+            XFlush(_display);
+            return true;
+        }
+    }
+
     /// <summary>Takes <paramref name="window"/> out of the window manager's hands: no frame, no
     /// focus, no taskbar entry, no WM layer policy - the X11 form of a Win32 tool/topmost overlay.
     ///
