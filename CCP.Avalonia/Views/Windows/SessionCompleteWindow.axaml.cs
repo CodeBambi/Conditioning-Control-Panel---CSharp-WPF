@@ -156,10 +156,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// The WPF body verbatim, against the seams: <c>App.Settings.Current</c> is
         /// <see cref="CoreSettings.Current"/> and <c>App.Audio</c> is <see cref="CoreAudio"/>.
-        /// Silent on this head for two reasons that are both the WPF no-op branch: the sound files
-        /// are Content in the WPF head and are not laid down beside CCP.Avalonia, so every probe
-        /// misses; and nothing seeds <c>CoreAudio.PlayOneShotProvider</c> here, so the seam fires
-        /// its finished callback and returns.
+        /// Silent on this head for the WPF no-op branch: the sound files are Content in the WPF
+        /// head and are not laid down beside CCP.Avalonia, so every probe misses.
         /// </summary>
         private void PlayCompletionSound()
         {

@@ -25,6 +25,7 @@ namespace ConditioningControlPanel.Avalonia
                 d => { Console.WriteLine($"started at {sw.ElapsedMilliseconds} ms, clip {d.TotalMilliseconds} ms"); started.Set(); },
                 () => { Console.WriteLine($"finished at {sw.ElapsedMilliseconds} ms"); finished.Set(); });
             started.Wait(2000);
+            Thread.Sleep(50); // the volume is applied just after Playing, off libvlc's thread
             Console.WriteLine($"-- sink-inputs while playing (own pid {Environment.ProcessId}):\n{SinkInputs()}");
             var played = started.IsSet && finished.Wait(3000);
 

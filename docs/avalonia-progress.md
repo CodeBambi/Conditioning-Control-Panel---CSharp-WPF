@@ -90,3 +90,8 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Ledger: shell-audio-playback-devices stays stub (notes updated). UI sound callers remain silent:
   the head does not link `Assets/sounds` yet (blocker, separate branch); no reachable UI calls Duck.
 - Evidence: ~/ccp-port/evidence/audio-libvlc/.
+- Review fixes: volume mapped linear->cubic (0.5 plays at ~-6 dB like WPF); exit force-unducks
+  other apps; a vanished stream no longer aborts a duck sweep; streams named CCP in pactl; no
+  duck at master volume 0. `CoreAudioTests` now cover ref count, generation, force-unduck and
+  Shutdown with pactl stubbed. ModCreator's audio preview and AwarenessPresetDetailDialog's
+  keyword preview now play user-picked files.

@@ -20,16 +20,25 @@ namespace ConditioningControlPanel.Avalonia.Platform
     internal sealed class LibVlcAudio
     {
         private readonly LibVLC _vlc;
+        private readonly Func<string, string> _pactl = Pactl;
+
+        /// <summary>The seeded instance, so App can restore ducked apps on exit.</summary>
+        internal static LibVlcAudio? Instance { get; private set; }
 
         /// <summary>Throws when libvlc is not installed; the caller then leaves CoreAudio unseeded.</summary>
         public LibVlcAudio(params string[] options)
         {
             Core.Initialize();
             _vlc = new LibVLC(options.Append("--no-video").Append("--quiet").ToArray());
+            _vlc.SetUserAgent("Conditioning Control Panel", "CCP"); // the name pactl shows for our streams
         }
+
+        /// <summary>Ducking only, with pactl stubbed: for the state-machine test.</summary>
+        internal LibVlcAudio(Func<string, string> pactl) { _vlc = null!; _pactl = pactl; }
 
         public void Seed()
         {
+            Instance = this;
             CoreAudio.PlayOneShotProvider = PlayOneShot;
             // ponytail: Windows ducking stays unseeded (no-op) until AudioService's WASAPI sweep is ported.
             if (!OperatingSystem.IsLinux()) return;
@@ -39,14 +48,16 @@ namespace ConditioningControlPanel.Avalonia.Platform
         }
 
         /// <summary>Same contract as WPF's AudioService.PlayOneShot: onStarted gets the clip length
-        /// once playing; onFinished fires exactly once, off the UI thread, on end, error or refusal.</summary>
+        /// once playing; onFinished fires exactly once - off the UI thread when the clip ends or
+        /// errors, synchronously on the caller's thread when it is refused (muted, missing file).</summary>
         public void PlayOneShot(string path, float volume, string tag, Action<TimeSpan>? onStarted, Action? onFinished)
         {
             if (volume <= 0f || string.IsNullOrWhiteSpace(path) || !File.Exists(path)) { Fire(onFinished); return; }
 
             var media = new Media(_vlc, path, FromType.FromPath);
             var player = new MediaPlayer(media);
-            var vol = (int)(Math.Clamp(volume, 0f, 1f) * 100);
+            // WPF's volume is linear sample gain; LibVLC's is cubic, so 0.5 must land at ~-6 dB, not -18.
+            var vol = (int)Math.Round(Math.Cbrt(Math.Clamp(volume, 0f, 1f)) * 100);
             var done = 0;
             void Finish()
             {
@@ -88,6 +99,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         public void Duck(int strength)
         {
+            if (CoreSettings.Current?.MasterVolume == 0) return; // as WPF: nothing of ours will play
             lock (_duckLock)
             {
                 _duckCount++;
@@ -113,7 +125,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         }
 
         /// <summary>As WPF: advancing the generation turns every pending Unduck into a stale no-op.</summary>
-        private void ForceUnduck()
+        internal void ForceUnduck()
         {
             lock (_duckLock)
             {
@@ -122,6 +134,17 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 Unduck(_duckGeneration);
             }
         }
+
+        /// <summary>App exit: never leave other apps ducked behind us.</summary>
+        internal void Shutdown()
+        {
+            lock (_duckLock) { if (_isDucked) ForceUnduck(); }
+            Drain();
+        }
+
+        internal void Drain() => _duckWork.Wait(2000);
+
+        internal bool IsDucked { get { lock (_duckLock) return _isDucked; } }
 
         private void Enqueue(Action work) => _duckWork = _duckWork.ContinueWith(_ =>
         {
@@ -136,7 +159,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         private void DuckSweep(double keep)
         {
-            using var doc = JsonDocument.Parse(Pactl("-f json list sink-inputs"));
+            using var doc = JsonDocument.Parse(_pactl("-f json list sink-inputs"));
             foreach (var si in doc.RootElement.EnumerateArray())
             {
                 var props = si.GetProperty("properties");
@@ -149,7 +172,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     if (!_isDucked) return;
                     if (!_originalVolumes.TryAdd(index, raw.Select(v => v.ToString()).ToArray())) continue;
                 }
-                Pactl($"set-sink-input-volume {index} {string.Join(' ', raw.Select(v => (int)(v * keep)))}");
+                try { _pactl($"set-sink-input-volume {index} {string.Join(' ', raw.Select(v => (int)(v * keep)))}"); }
+                catch { lock (_duckLock) _originalVolumes.Remove(index); } // the stream ended mid-sweep
             }
         }
 
@@ -159,7 +183,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             lock (_duckLock) { saved = _originalVolumes.ToArray(); _originalVolumes.Clear(); }
             foreach (var (index, raw) in saved)
             {
-                try { Pactl($"set-sink-input-volume {index} {string.Join(' ', raw)}"); }
+                try { _pactl($"set-sink-input-volume {index} {string.Join(' ', raw)}"); }
                 catch { } // the stream ended while ducked - nothing to restore
             }
         }
