@@ -541,3 +541,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   covers its screen (primary card on the primary screen); 52 px glyph.
 - Evidence: LockCardTypingTests (fail-proofed); live sandbox typed card: 3 repeats in 5.1 s, 0 errors. Voice solve
   follows (speech units). Review: FIX -> r1 applied.
+
+## avalonia-port/speech-core-engine: +890 (voice unlock unit 1; user-reported: speak-to-unlock doesn't work)
+- The Vosk engine moved into Core (SpeechEngine) behind a mic-source seam; WPF SpeechService derives from it with its NAudio
+  mic (API unchanged). Same model, grammar and scoring as WPF (decisions D1-D4, oracle-deep).
+- Evidence: SpeechEngineVoskTests with the real model and Vosk's test.wav replayed through the real session path: match,
+  reject a wrong phrase (heard text, not a timeout), silence times out; CI fetches the model and requires it. Review: ACCEPT.
