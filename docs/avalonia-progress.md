@@ -331,3 +331,10 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   CountMediaFiles and the Hypnotube default links moved to Core with identical behaviour; seven CoreModsHooks and
   the CoreSession phrase-pool delegates added and seeded lazily in WPF (callers switch over in unit 3).
 - Evidence: companion-content tests now run on Linux; new seam test fail-proofed; version before/after. Review: ACCEPT.
+
+## avalonia-port/mods-golden-fixtures: +625
+- ModService unit 2: golden fixtures pin the mod persistence formats BEFORE ModService moves to Core. Core tests
+  round-trip every mod key in settings.json through SettingsService and a full mod.json; the WPF suite pins pack.json
+  and a behaviour golden for Initialize(bambi) -> Activate(sissy) -> Activate(bambi), incl. pool order.
+- The WPF suite now always runs in its own temp profile (never a developer's exported one). Each test fail-proofed.
+- Not run: the behaviour golden against the real WPF build (Windows CI is its first real run). Review: ACCEPT + P2 fixed.

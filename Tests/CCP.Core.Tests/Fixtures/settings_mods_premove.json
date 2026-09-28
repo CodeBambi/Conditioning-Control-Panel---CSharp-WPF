@@ -1,0 +1,90 @@
+{
+  "ActiveModId": "builtin-bambisleep",
+  "SubliminalPool": {
+    "BAMBI SLEEP": true,
+    "GOOD GIRL": false,
+    "MY OWN PHRASE": true,
+    "SISSY IS LEARNING": true
+  },
+  "AttentionPool": {
+    "FOCUS ON ME": true
+  },
+  "LockCardPhrases": {
+    "GOOD GIRLS OBEY": true,
+    "BAMBI SLEEP": false,
+    "MY LOCK LINE": true
+  },
+  "CustomTriggers": [
+    "GOOD GIRL",
+    "BAMBI FREEZE",
+    "MY TRIGGER"
+  ],
+  "BouncingTextPool": {
+    "BOUNCE ME": true
+  },
+  "SubliminalPoolByMod": {
+    "builtin-bambisleep": {
+      "BAMBI SLEEP": true,
+      "GOOD GIRL": false,
+      "MY OWN PHRASE": true
+    },
+    "drone-mode": {
+      "COMPLY": true
+    }
+  },
+  "AttentionPoolByMod": {
+    "builtin-bambisleep": {
+      "FOCUS ON ME": true
+    }
+  },
+  "LockCardPhrasesByMod": {
+    "builtin-bambisleep": {
+      "GOOD GIRLS OBEY": true,
+      "BAMBI SLEEP": false,
+      "MY LOCK LINE": true
+    }
+  },
+  "CustomTriggersByMod": {
+    "builtin-bambisleep": [
+      "GOOD GIRL",
+      "BAMBI FREEZE",
+      "MY TRIGGER"
+    ],
+    "drone-mode": [
+      "UNIT FREEZE"
+    ]
+  },
+  "BouncingTextPoolByMod": {
+    "builtin-bambisleep": {
+      "BOUNCE ME": true
+    }
+  },
+  "VideoLinksByMod": {
+    "drone-mode": {
+      "Unit Loop": "https://example.com/video/unit-loop"
+    }
+  },
+  "TubeLayoutOverridesByMod": {
+    "builtin-bambisleep": {
+      "avatarOffsetX": 12,
+      "avatarDetachedOffsetX": -4,
+      "avatarScale": 1.1,
+      "avatarOffsetY": 3,
+      "avatarDetachedOffsetY": 0
+    }
+  },
+  "RemovedDefaultSubliminals": [
+    "BAMBI RESET"
+  ],
+  "UserAddedSubliminals": [
+    "MY OWN PHRASE"
+  ],
+  "UserAddedCustomTriggers": [
+    "MY TRIGGER"
+  ],
+  "sissy_bambi_trigger_migration_done": false,
+  "PersonaVoiceFenceUtc": "2026-01-02T03:04:05Z",
+  "PersonaIdentityFenceUtc": null,
+  "hypnotube_links_bambi_sleep": "https://hypnotube.com/video/my-own-loop-123.html",
+  "hypnotube_links_sissy_hypno": ""
+}
