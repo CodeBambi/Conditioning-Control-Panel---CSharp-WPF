@@ -101,14 +101,23 @@ internal static class CompanionLocMasters
 /// </summary>
 internal static class TestLocalizationBootstrap
 {
+    /// <summary>This process's own fresh profile. Always set, never inherited from the environment,
+    /// so a test that deletes under it can never reach a developer's exported CCP_USERDATA_DIR.</summary>
+    internal static string? SandboxDir { get; private set; }
+
     [ModuleInitializer]
     internal static void UseEnglish()
     {
         // Sandbox the profile first: CorePaths.UserData is cached on first read, and the
         // localization call below is the first reader. ModActivationGoldenTests depends on it.
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")))
-            Environment.SetEnvironmentVariable("CCP_USERDATA_DIR",
-                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ccp-wpf-tests-" + Guid.NewGuid().ToString("N")));
+        var sandbox = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ccp-wpf-tests-" + Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", sandbox);
+        SandboxDir = sandbox;
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try { if (System.IO.Directory.Exists(sandbox)) System.IO.Directory.Delete(sandbox, recursive: true); }
+            catch { /* best effort: a locked file must not fail the host */ }
+        };
 
         try
         {

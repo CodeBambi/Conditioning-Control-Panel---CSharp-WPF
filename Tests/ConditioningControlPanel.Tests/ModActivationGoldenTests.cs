@@ -15,8 +15,8 @@ namespace ConditioningControlPanel.Tests;
 /// ActivateMod(bambi), and the resulting mod keys must equal the committed golden. The Core test
 /// after the move reuses the same fixture and golden (Tests/CCP.Core.Tests/Fixtures).
 ///
-/// <para>Runs against the temp profile TestLocalizationBootstrap sets through CCP_USERDATA_DIR, and
-/// refuses to run if CorePaths resolved anywhere else. Set CCP_UPDATE_GOLDEN=1 to rewrite the golden.</para>
+/// <para>Runs only in TestLocalizationBootstrap.SandboxDir, the fresh profile that module initializer
+/// always creates, and refuses to run if CorePaths resolved anywhere else. Set CCP_UPDATE_GOLDEN=1 to rewrite the golden.</para>
 /// </summary>
 [Collection(ModActivationGoldenCollection.Name)]
 public sealed class ModActivationGoldenTests
@@ -39,17 +39,18 @@ public sealed class ModActivationGoldenTests
     [Fact]
     public void BambiToSissyToBambiMatchesTheGolden()
     {
-        var sandbox = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR");
-        Assert.True(!string.IsNullOrEmpty(sandbox) &&
-                    string.Equals(Path.GetFullPath(sandbox), Path.GetFullPath(CorePaths.UserData), StringComparison.OrdinalIgnoreCase),
-            $"refusing to run ModService against a non-sandbox profile: {CorePaths.UserData}");
+        // Capture deletes under the profile: only ever this process's own fresh sandbox.
+        Assert.NotNull(TestLocalizationBootstrap.SandboxDir);
+        Assert.Equal(TestLocalizationBootstrap.SandboxDir, CorePaths.UserData);
 
         var actual = Capture(File.ReadAllText(Fixture("settings_mods_premove.json")));
         var goldenPath = Fixture("mod_activation_golden.json");
         if (Environment.GetEnvironmentVariable("CCP_UPDATE_GOLDEN") == "1")
             File.WriteAllText(goldenPath, actual);
 
-        Assert.True(JToken.DeepEquals(JToken.Parse(File.ReadAllText(goldenPath)), JToken.Parse(actual)), actual);
+        // Text, not DeepEquals: pool order (dictionary key order) is part of what is pinned.
+        Assert.Equal(JToken.Parse(File.ReadAllText(goldenPath)).ToString(Formatting.Indented),
+                     JToken.Parse(actual).ToString(Formatting.Indented));
     }
 
     /// <summary>pack.json (builtin_mods/&lt;id&gt;/pack.json) is written by ModService.WritePackStamp through a
@@ -70,7 +71,8 @@ public sealed class ModActivationGoldenTests
         var root = CorePaths.UserData;
         Directory.CreateDirectory(root);
         foreach (var f in Directory.GetFiles(root, "settings*")) File.Delete(f);
-        if (Directory.Exists(Path.Combine(root, "mods"))) Directory.Delete(Path.Combine(root, "mods"), recursive: true);
+        foreach (var dir in new[] { "mods", "builtin_mods", "content" })
+            if (Directory.Exists(Path.Combine(root, dir))) Directory.Delete(Path.Combine(root, dir), recursive: true);
         File.WriteAllText(Path.Combine(root, "settings.json"), settingsJson);
 
         // ModService.Initialize subscribes App.Settings.CurrentReplaced once CoreSettings has a
