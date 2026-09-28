@@ -60,6 +60,9 @@ public sealed class AssetImportAndSessionLogCoreTests
     public void RecordMedia_AppendsOnlyWhileSessionActive()
     {
         using var service = new SessionLogService();
+        // CorePaths.UserData points at a temp dir via RoadmapTestProfile's [ModuleInitializer];
+        // refuse to run (and prune) against a real session_logs folder if that ever moves.
+        Assert.StartsWith(Path.GetTempPath(), service.LogsFolder);
         var id = "core-test-" + Guid.NewGuid().ToString("N");
         SessionLog? ready = null;
         service.LogReady += (_, e) => ready = e.Log;

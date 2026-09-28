@@ -66,7 +66,7 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Finalize the active session log: stop subscribing, populate completion
+        /// Finalize the active session log: populate completion
         /// fields, persist to disk (with prune), and raise LogReady. Safe to call
         /// even if BeginSession was never called - it becomes a no-op.
         /// </summary>

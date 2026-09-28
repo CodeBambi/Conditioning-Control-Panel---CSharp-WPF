@@ -1611,7 +1611,7 @@ namespace ConditioningControlPanel.Services
             _lastDisplayedPaths = pathSnapshot;
 
             FlashDisplayed?.Invoke(this, EventArgs.Empty);
-            App.SessionLog?.RecordImages(_lastDisplayedPaths);
+            App.SessionLog?.RecordImages(pathSnapshot);
 
             if (!isMultiplication)
             {
