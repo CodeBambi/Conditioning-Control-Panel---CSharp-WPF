@@ -103,6 +103,9 @@ public sealed class RealCatalogueFailureFallbackTests
 
                     var firstAssets = Directory.CreateDirectory(Path.Combine(profile, "assets-first")).FullName;
                     var secondAssets = Directory.CreateDirectory(Path.Combine(profile, "assets-second")).FullName;
+                    // Media already in UserData/assets: the default stays there on Linux too (no
+                    // switch to ~/ccp media, and the test never touches the real home folder).
+                    File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(profile, "assets")).FullName, "keep.png"), "x");
                     var settings = new SettingsService();
                     settings.Current.CustomAssetsPath = firstAssets;
                     settings.Current.Language = "en";

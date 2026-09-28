@@ -154,7 +154,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// fail-closed default (an unreadable path is treated as personal). Delete this and call
         /// the shared one the day SecurityHelper moves to Core.
         /// </summary>
-        private static bool IsPersonalFolderRoot(string? directory)
+        internal static bool IsPersonalFolderRoot(string? directory)
         {
             if (string.IsNullOrWhiteSpace(directory)) return true;
             try
