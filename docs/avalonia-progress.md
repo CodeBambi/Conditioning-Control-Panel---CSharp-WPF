@@ -571,3 +571,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   endpoint anywhere on this head (tested on the startup and login paths).
 - Evidence: CloudReadOnlyTests (8 goldens incl. ceremony pending, hand-transcribed from WPF rules; 3 verified by the reviewer
   by hand), no-write assertions fail-proofed. Part 2 (leaderboard, profile card, heartbeat) is a separate branch. Review: ACCEPT.
+
+## avalonia-port/lockcard-voice: +379 (voice unlock unit 3; user-reported)
+- Speak-to-unlock on the Avalonia head: voice only when requested + CoreSpeech available + mic consent (WPF :338-342);
+  WPF's listen loop on the Core engine (10 s listens, retry, typing after 6 unavailable, states/level/partial on the UI
+  thread, stop on close/panic/fallback); DisableVoiceForAll. The Lock Card card's hint names the Linux model folder when no
+  Vosk model is installed (none ships yet: ledger row linux-package-vosk-model).
+- Evidence: LockCardVoiceTests (WAV-fed: spoken phrase completes, wrong phrase stays open, held mic falls back, no consent
+  -> mic never opens, closing mid-listen releases the mic, the hint), each fail-proofed; panel-state frames; capture check.
+  No live voice run (would risk the real mic). Review: ACCEPT, follow-ups applied.
