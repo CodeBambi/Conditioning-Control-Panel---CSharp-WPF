@@ -40,7 +40,8 @@ public sealed class FriendsSfxGate
 /// <summary>
 /// Which incoming friend requests are new. The first list after a start (or after the account
 /// changes) is taken as the baseline and reports nothing, so requests that were already waiting do
-/// not all announce themselves at launch. Nothing is persisted.
+/// not all announce themselves at launch one by one; the landing router tells them once, as a group
+/// (<see cref="WaitingRequests"/>). Nothing is persisted.
 /// </summary>
 public sealed class FriendRequestWatch
 {

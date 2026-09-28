@@ -37,6 +37,11 @@ public interface IFriendsApi
 
     /// <summary>accept, decline, cancel, remove, block, unblock, squelch, report. True only on <c>ok</c>.</summary>
     Task<bool> ActAsync(string op, string id, JObject? extra = null, CancellationToken ct = default);
+
+    /// <summary>The same op with the refusal worded. Default: <see cref="ActAsync"/> read as
+    /// Done or TryLater (fakes that know nothing of the reasons).</summary>
+    async Task<ActResult> ActForResultAsync(string op, string id, JObject? extra = null, CancellationToken ct = default)
+        => await ActAsync(op, id, extra, ct).ConfigureAwait(true) ? ActResult.Done : ActResult.TryLater;
 }
 
 /// <summary>
@@ -204,12 +209,25 @@ public sealed class FriendsApi : IFriendsApi
     }
 
     public async Task<bool> ActAsync(string op, string id, JObject? extra = null, CancellationToken ct = default)
+        => await ActForResultAsync(op, id, extra, ct) == ActResult.Done;
+
+    public async Task<ActResult> ActForResultAsync(string op, string id, JObject? extra = null, CancellationToken ct = default)
     {
         var body = extra != null ? (JObject)extra.DeepClone() : new JObject();
         body["id"] = id;
         var o = await CallAsync(op, body, ct);
-        return o != null && Ok(o);
+        if (o == null) return ActResult.TryLater;
+        return Ok(o) ? ActResult.Done : ActFromWire(o.Value<string?>("reason"));
     }
+
+    internal static ActResult ActFromWire(string? reason) => reason switch
+    {
+        "not_found" => ActResult.NotFound,
+        "full" => ActResult.Full,
+        "too_fast" => ActResult.TooFast,
+        "bad_input" or "refused" or "blocked" => ActResult.Refused,
+        _ => ActResult.TryLater,
+    };
 
     private static bool Ok(JObject o) => o.Value<bool?>("ok") == true;
 

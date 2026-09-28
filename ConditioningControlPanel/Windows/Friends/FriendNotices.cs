@@ -31,6 +31,9 @@ internal sealed class NoticeLook
     /// <summary>The notice left without its action (ran out, closed, clicked). Knocks fold into
     /// the Inbox here, so an invite still answers after its toast is gone.</summary>
     public Action<object?>? Left;
+    /// <summary>The notice went unseen: it ran out, was pushed off a full stack, or a hold
+    /// folded it. Not called for a close or a click. Pokes file an Inbox row here.</summary>
+    public Action<object?>? Missed;
 }
 
 /// <summary>
@@ -93,6 +96,7 @@ internal sealed class FriendNotices : Window
             }
             if (anchor != null) w._anchor = anchor;
             var (up, folded) = w._stack.Add(notice);
+            foreach (var n in w._stack.TakeEvicted()) w.Leave(n, acted: false, missed: true);
             foreach (var n in new List<FriendNotice>(w._looks.Keys))
                 if (!Contains(w._stack.All, n)) w._looks.Remove(n);
             w._looks[up] = look;
@@ -115,7 +119,7 @@ internal sealed class FriendNotices : Window
         try
         {
             w._tick.Stop();
-            if (fold) foreach (var n in new System.Collections.Generic.List<FriendNotice>(w._stack.All)) w.Leave(n, acted: false);
+            if (fold) foreach (var n in new System.Collections.Generic.List<FriendNotice>(w._stack.All)) w.Leave(n, acted: false, missed: true);
             w._stack.Clear();
             w.Close();
         }
@@ -147,17 +151,20 @@ internal sealed class FriendNotices : Window
                 if (_drawn.TryGetValue(n, out var d)) d.Ago.Text = AgoText(n);
         }
         if (gone.Count == 0) return;
-        foreach (var n in gone) Leave(n, acted: false);
+        foreach (var n in gone) Leave(n, acted: false, missed: true);
         AfterRemoval();
     }
 
-    private void Leave(FriendNotice n, bool acted)
+    private void Leave(FriendNotice n, bool acted, bool missed = false)
     {
         if (!_looks.TryGetValue(n, out var look)) return;
         _looks.Remove(n);
         if (acted) return;
         try { look.Left?.Invoke(n.Payload); }
         catch (Exception ex) { App.Logger?.Debug("[Friends] notice left: {E}", ex.Message); }
+        if (!missed) return;
+        try { look.Missed?.Invoke(n.Payload); }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] notice missed: {E}", ex.Message); }
     }
 
     /// <summary>Takes one notice down after a press, with a quick fade where motion allows.</summary>

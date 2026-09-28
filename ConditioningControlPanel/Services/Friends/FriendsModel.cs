@@ -102,10 +102,17 @@ public static class InviteDestination
 
     public static readonly IReadOnlyList<string> All = new[] { Goon, BackRoom, Remote, Ramp };
 
+    /// <summary>What the drawer offers and the service sends. Remote was dropped (owner,
+    /// 2026-09-28): its PIN never travelled, so an invite was a dead end. It stays in
+    /// <see cref="All"/> only so an old client's invite still parses, and the landing drops it.</summary>
+    public static readonly IReadOnlyList<string> Sendable = new[] { Goon, BackRoom, Ramp };
+
     /// <summary>Seconds an invite stays answerable. Mirrored server-side.</summary>
     public const int LifetimeSeconds = 90;
 
     public static bool IsValid(string? id) => id != null && All.Contains(id);
+
+    public static bool IsSendable(string? id) => id != null && Sendable.Contains(id);
 }
 
 /// <summary>A watch is a REFERENCE the receiver resolves, never a URL. Catalogue = an
@@ -162,6 +169,10 @@ public enum SendResult { Sent, Squelched, TooFast, NotFriends, Offline, Refused,
 
 /// <summary>What adding by code came back with.</summary>
 public enum AddResult { Sent, Accepted, Already, NotFound, Blocked, Self, Full, TryLater }
+
+/// <summary>What a list change (accept, decline, cancel, remove, block, unblock, squelch, report)
+/// came back with. Only <see cref="Done"/> changed anything; the rest are worded to the player.</summary>
+public enum ActResult { Done, NotFound, Full, TooFast, Refused, TryLater }
 
 /// <summary>Report reasons. A fixed list, no text box, mirrored server-side.</summary>
 public static class ReportReason

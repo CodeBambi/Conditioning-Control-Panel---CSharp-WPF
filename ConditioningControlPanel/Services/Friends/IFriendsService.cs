@@ -30,7 +30,8 @@ public interface IFriendsService
     event Action<SendKind, Friend>? Sent;
 
     /// <summary>Raised on the UI thread once per incoming friend request that was not there on
-    /// the last refresh. The first list after a start or a sign-in is a silent baseline.</summary>
+    /// the last refresh. The first list after a start or a sign-in is a baseline (the landing router
+    /// tells those as one group, see <c>WaitingRequests</c>).</summary>
     event Action<FriendRequest>? RequestArrived;
 
     /// <summary>Raised on the UI thread with the id of an incoming request that left the list
@@ -49,14 +50,15 @@ public interface IFriendsService
     Task<SendResult> SendWatchAsync(string friendId, WatchRef watch);
 
     Task<AddResult> AddByCodeAsync(string code);
-    Task AcceptAsync(string requesterId);
-    Task DeclineAsync(string requesterId);
-    Task CancelRequestAsync(string targetId);
-    Task RemoveAsync(string friendId);
-    Task BlockAsync(string friendId);
-    Task UnblockAsync(string friendId);
-    Task SetSquelchAsync(string friendId, bool on);
-    Task ReportAsync(string friendId, string reason);
+    // The list changes. Each answers what the server said, so a surface only cheers on Done.
+    Task<ActResult> AcceptAsync(string requesterId);
+    Task<ActResult> DeclineAsync(string requesterId);
+    Task<ActResult> CancelRequestAsync(string targetId);
+    Task<ActResult> RemoveAsync(string friendId);
+    Task<ActResult> BlockAsync(string friendId);
+    Task<ActResult> UnblockAsync(string friendId);
+    Task<ActResult> SetSquelchAsync(string friendId, bool on);
+    Task<ActResult> ReportAsync(string friendId, string reason);
 
     /// <summary>Hosts call this when the player enters or leaves a surface. Published to the
     /// server only while <see cref="PresenceShared"/>; the poll cadence reads it regardless.</summary>
