@@ -357,7 +357,7 @@ namespace ConditioningControlPanel.Services
 
                 try
                 {
-                    await Task.Run(() => ZipFile.ExtractToDirectory(ccpmodPath, tempDir));
+                    await Task.Run(() => ExtractCcpmod(ccpmodPath, tempDir));
 
                     // Find and validate manifest
                     var manifestPath = Path.Combine(tempDir, "mod.json");
@@ -2115,7 +2115,7 @@ namespace ConditioningControlPanel.Services
                 TryDeleteTree(retiredDir);
 
                 Directory.CreateDirectory(stagingDir);
-                ZipFile.ExtractToDirectory(source.Path, stagingDir);
+                ExtractCcpmod(source.Path, stagingDir);
                 WritePackStamp(stagingDir, source);
             }
             catch (Exception ex)
@@ -2983,6 +2983,26 @@ namespace ConditioningControlPanel.Services
             id = id.Trim('-');
             if (string.IsNullOrEmpty(id)) id = "custom-mod";
             return id;
+        }
+
+        /// <summary>
+        /// ZipFile.ExtractToDirectory, except a Windows-zipped "resources\x.png" entry lands in a
+        /// folder on every OS (Linux keeps the backslash as a file-name character). Entries that
+        /// resolve outside <paramref name="dir"/> throw, as ExtractToDirectory does.
+        /// </summary>
+        private static void ExtractCcpmod(string zipPath, string dir)
+        {
+            var root = Path.GetFullPath(dir) + Path.DirectorySeparatorChar;
+            using var zip = ZipFile.OpenRead(zipPath);
+            foreach (var entry in zip.Entries)
+            {
+                var dest = Path.GetFullPath(Path.Combine(root, entry.FullName.Replace('\\', '/')));
+                if (!dest.StartsWith(root, StringComparison.Ordinal))
+                    throw new IOException($"Zip entry '{entry.FullName}' would extract outside {dir}.");
+                if (dest.EndsWith(Path.DirectorySeparatorChar)) { Directory.CreateDirectory(dest); continue; }
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                entry.ExtractToFile(dest, overwrite: false);
+            }
         }
 
         private static void CopyDirectory(string sourceDir, string destinationDir)

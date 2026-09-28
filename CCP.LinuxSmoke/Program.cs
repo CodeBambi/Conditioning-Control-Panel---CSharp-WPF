@@ -395,6 +395,8 @@ namespace ConditioningControlPanel.LinuxSmoke
 
             }
 
+            Mods();
+
             // Re-tested AFTER the seam block, not inside it: the block used to return 0 on its
             // last line, so a seam Check that failed printed [FAIL], incremented _failures and
             // still exited 0 - the ubuntu job stayed green on a broken seam.
@@ -405,6 +407,34 @@ namespace ConditioningControlPanel.LinuxSmoke
             }
             Console.WriteLine($"{_failures} assertion(s) failed - Core behaves differently here than intended.");
             return 1;
+        }
+
+        /// <summary>
+        /// ModService lives in Core: it builds its folders under the sandboxed CorePaths.UserData,
+        /// takes the persisted id, and switches to a built-in, with no head seeded. Runs after the
+        /// seam block because activation writes pools into the settings it is given.
+        /// </summary>
+        private static void Mods()
+        {
+            Console.WriteLine("\nMod service");
+            var settings = new ConditioningControlPanel.Services.SettingsService();
+            CoreSettings.ServiceProvider = () => settings;
+            try
+            {
+                var mods = new ModService();
+                Check("the mods folder is created under the sandboxed user data",
+                      Directory.Exists(Path.Combine(CorePaths.UserData, "mods")), CorePaths.UserData);
+                mods.Initialize(Models.BuiltInMods.BambiSleepId);
+                Check("Initialize takes the persisted mod id", mods.ActiveModId == Models.BuiltInMods.BambiSleepId, mods.ActiveModId);
+                mods.ActivateMod(Models.BuiltInMods.SissyHypnoId);
+                // Persisting ActiveModId is the caller's job (ModManagerDialog.xaml.cs:582), not ActivateMod's.
+                Check("ActivateMod switches the active mod", mods.ActiveModId == Models.BuiltInMods.SissyHypnoId, mods.ActiveModId);
+            }
+            finally
+            {
+                CoreSettings.ServiceProvider = null;
+                try { Directory.Delete(Path.GetDirectoryName(CorePaths.UserData)!, recursive: true); } catch { }
+            }
         }
 
         /// <summary>Path resolution is the single most platform-divergent thing Core does.</summary>
