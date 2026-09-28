@@ -49,8 +49,9 @@ Ids on the wire are unified ids (`u_...`). The client never shows one.
 
 - `kind`: `poke` `invite` `watch`
 - `poke`: `hi wp tut gl oops thanks drop peek deeper still more sleepy`
-- `destination`: `goon backroom remote ramp`
+- `destination`: `goon backroom remote ramp chess`
 - `code` (only with `goon` or `remote`): `^[A-Z0-9-]{4,12}$`, system-generated join codes
+- `code` with `chess`: a Piece by Piece challenge id `^c_[0-9a-f]{16}$` minted by `POST /v2/pbp/challenge` (target = the friend's unified id, allowed only between friends both ways with no block). `send` answers `refused` unless that challenge is the sender's own, still pending, and pointed at `to`. The receiver accepts it with `/v2/pbp/challenge/:id/accept`.
 - `watch`: `{ kind, id, title? }`, `kind` in `catalogue` (`id` `^[A-Za-z0-9_-]{1,64}$`), `flavour`
   (`id` in `trance pink frills shiny censored`), `ht` (`id` `^[0-9]{1,8}$`); `title` <= 40 chars,
   letters, digits, spaces and `.,'-` only, stored but never trusted (the receiver resolves the id)
