@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="..\ContentPackSounds.props" />
+
   <!--
     The cross-platform head. This replaces WPF, it does not sit beside it: the owner's decision is
     one UI codebase for Windows and Linux, so a feature is written once and both platforms get it.
@@ -47,9 +49,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The ~230 ms clip the smoke run plays through LibVlcAudio to prove started/finished fire. -->
-    <Content Include="..\Assets\sounds\faucet_charge_drop.wav" Link="assets\sounds\faucet_charge_drop.wav">
+    <!-- The shared sounds at the same logical path as the WPF head (Resources\sounds), minus the
+         content-pack audio in ..\ContentPackSounds.props, which both heads import. WPF's temporary
+         $(CirceNeutralInBoxOverride) (builtin-locked clips re-added in-box until the rebuilt
+         packs ship) is deliberately NOT mirrored: this head has no pack downloader and no bark path
+         that plays them. -->
+    <Content Include="..\Assets\sounds\**\*" Link="Resources\sounds\%(RecursiveDir)%(Filename)%(Extension)"
+             Exclude="$(ContentPackSoundsExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
 

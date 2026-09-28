@@ -1,0 +1,27 @@
+<Project>
+  <!-- The audio that ships as a downloadable content pack, not in-box (docs/CONTENT_PACKS_PLAN.md).
+       Imported by BOTH heads (ConditioningControlPanel.csproj and CCP.Avalonia.csproj) so neither
+       ships more than the other. Relative to the importing project, which sits one level below the
+       repo root in both cases. Drift check: ConditioningControlPanel/Scripts/build-content-packs.ps1
+       mirrors this list in $CsprojStripPatterns and hard-fails the pack build if they disagree -
+       edit both in the same commit. -->
+  <PropertyGroup>
+    <ContentPackSoundsExclude>
+      ..\Assets\sounds\flashes_audio\**\*.mp3;
+      ..\Assets\sounds\flashes_audio\**\*.wav;
+      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;
+      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;
+      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;
+      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;
+      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.mp3;
+      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.wav;
+      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.ogg;
+      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.m4a;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
+    </ContentPackSoundsExclude>
+  </PropertyGroup>
+</Project>
