@@ -99,6 +99,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // (MainWindow.xaml.cs:555) and opens the wizard once the window is up. Same here -
             // see MainShellWindow.FirstRun.cs, which owns both halves.
             HookFirstRun();
+
+            // The rail's setup pass. Here, not in OnAttachedToVisualTree: a Window IS the visual
+            // root, so that override never fires on it and the rail never opened.
+            InitializeNavRail();
         }
 
         /// <summary>Uses an already-loaded catalogue without making the parameterless shell open
