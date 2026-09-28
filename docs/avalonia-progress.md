@@ -241,3 +241,12 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Evidence: AchievementProgressShapeTests pins every persisted property (name, type, order, loads back, no
   converter, double.MaxValue default), fail-proofed. Review: ACCEPT after the test hardening.
 - Not run: WPF tests (Windows CI). No Avalonia surface yet.
+
+## avalonia-port/notifications: +254
+- In-app corner toasts ported from WPF NotificationService (look, 5 s default, 180/220 ms fades, stacking,
+  replay before the host exists, action button, dismiss) into the shell's existing NotificationHost.
+- Seeds CoreProgram.NotifyProvider and CoreEntitlement.ShowDeniedHandler like WPF: tier refusals show a toast
+  whose "See tiers" opens Settings > Account; the browser's offline block toast is wired too.
+- Evidence: NotificationServiceTests (fail-proofed three ways); live: Play > Gaze Minigame Open shows the
+  refusal toast, "See tiers" opens Account, x and expiry dismiss; 0 binding errors. Review: FIX -> fixed.
+- Gaps: tray balloons (OS notifications, later unit), sticky toasts, Patreon reconnect branch.

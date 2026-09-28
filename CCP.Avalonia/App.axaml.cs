@@ -15,6 +15,9 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The settings service, or null on the headless render path.</summary>
         public static SettingsService? Settings { get; private set; }
 
+        /// <summary>In-app corner toasts (WPF App.Notifications). Queues until the shell attaches it.</summary>
+        public static Helpers.NotificationService Notifications { get; } = new();
+
         private AvaloniaCoreDispatch? _desktopDispatch;
         private int _exitHandled;
         private int _warnedMissingCustomAssetsPath;
@@ -161,12 +164,11 @@ namespace ConditioningControlPanel.Avalonia
                 // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
                 // open. Seeding it with anything would put a tour on screen that nothing drives.
 
-                // CoreProgram stays unseeded, and every one of its five providers is a service
-                // this head does not have: no PatreonService, no NotificationService, no
-                // AchievementService, no ContentPackService, no RoadmapService instance. Unseeded
-                // it answers "no premium, no toast, no badge, no pack videos, no roadmap" - which
-                // is the truth here, and the safe direction on the only one that gates anything:
-                // HasPremium false refuses a premium enrolment rather than granting one.
+                // CoreProgram: four of its five providers stay unseeded - this head has no
+                // PatreonService, AchievementService, ContentPackService or RoadmapService, so it
+                // answers "no premium, no badge, no pack videos, no roadmap". NotifyProvider is
+                // seeded below, once the shell's toast host exists. HasPremium false still refuses
+                // a premium enrolment rather than granting one.
 
                 // CoreAccount is deliberately left unseeded, and this one is a constraint rather
                 // than a gap. PatreonService owns an HttpListener OAuth callback and a
@@ -200,6 +202,21 @@ namespace ConditioningControlPanel.Avalonia
                 desktop.MainWindow = sessions is null
                     ? new Views.Windows.MainShellWindow()
                     : new Views.Windows.MainShellWindow(sessions);
+                if (global::Avalonia.Controls.ControlExtensions.FindControl<global::Avalonia.Controls.Panel>(desktop.MainWindow, "NotificationHost") is { } toastHost)
+                    Notifications.AttachHost(toastHost);
+
+                // The two toast seams, as WPF App.xaml.cs:390 and :453 seed them.
+                CoreProgram.NotifyProvider = (message, kind, duration) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    Notifications.Show(message,
+                        Enum.TryParse<Helpers.NotificationType>(kind, out var t) ? t : Helpers.NotificationType.Info,
+                        duration));
+                // ponytail: WPF's Reconnect-Patreon branch (PatreonReconnectRule, head-only) is absent -
+                // this head has no Patreon sign-in to repair, so every refusal takes the "See tiers" branch.
+                // Also dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
+                var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
+                CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
+                        Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
                 desktop.MainWindow.Closed += (_, _) =>
