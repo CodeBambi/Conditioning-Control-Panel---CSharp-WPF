@@ -185,15 +185,20 @@ public sealed class ModServiceCoreTests
     }
 
     [Fact]
-    public void BackslashEntryNamesLandInFolders() => WithModService((mods, scratch) =>
+    public void BackslashEntryNamesLandInFolders()
     {
         // Archives zipped by Windows tools can store "resources\sounds\a.mp3"; on Linux that must still be a folder.
-        var r = mods.InstallModAsync(BuildCcpmod(scratch, Manifest("slash-mod"), @"resources\sounds\a.mp3"))
-            .GetAwaiter().GetResult();
-        Assert.True(r.Success, r.ErrorMessage);
-        Assert.True(File.Exists(Path.Combine(Root, "mods", "slash-mod", "resources", "sounds", "a.mp3")),
-            string.Join(", ", Directory.GetFileSystemEntries(Path.Combine(Root, "mods", "slash-mod"), "*", SearchOption.AllDirectories)));
-    });
+        // Every .ccpmod caller (ModService, ContentPackService, ReleaseContentService, both ModCreatorWindows) uses this.
+        var scratch = Directory.CreateTempSubdirectory("ccp-ccpmod-").FullName;
+        try
+        {
+            var dir = Path.Combine(scratch, "out");
+            CcpmodArchive.Extract(BuildCcpmod(scratch, Manifest("slash-mod"), @"resources\sounds\a.mp3"), dir);
+            Assert.True(File.Exists(Path.Combine(dir, "resources", "sounds", "a.mp3")),
+                string.Join(", ", Directory.GetFileSystemEntries(dir, "*", SearchOption.AllDirectories)));
+        }
+        finally { Directory.Delete(scratch, recursive: true); }
+    }
 
     [Fact]
     public void TraversalEntryIsRejected() => WithModService((mods, scratch) =>

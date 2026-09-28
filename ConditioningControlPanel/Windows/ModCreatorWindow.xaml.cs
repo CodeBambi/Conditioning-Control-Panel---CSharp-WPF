@@ -2596,7 +2596,7 @@ namespace ConditioningControlPanel
             {
                 CleanupTempDir();
                 _loadedTempDir = Path.Combine(Path.GetTempPath(), $"ccpmod_load_{Guid.NewGuid():N}");
-                ZipFile.ExtractToDirectory(ofd.FileName, _loadedTempDir);
+                CcpmodArchive.Extract(ofd.FileName, _loadedTempDir);
 
                 var manifestPath = Path.Combine(_loadedTempDir, "mod.json");
                 if (!File.Exists(manifestPath))

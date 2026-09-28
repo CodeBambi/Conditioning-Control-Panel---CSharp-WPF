@@ -720,7 +720,7 @@ namespace ConditioningControlPanel.Services
                     try
                     {
                         TryDeleteDirectory(extractPath);
-                        await Task.Run(() => ZipFile.ExtractToDirectory(partialPath, extractPath, overwriteFiles: true), ct)
+                        await Task.Run(() => CcpmodArchive.Extract(partialPath, extractPath, overwriteFiles: true), ct)
                             .ConfigureAwait(false);
                         await Task.Run(() => MergeDirectory(extractPath, target, journal), ct).ConfigureAwait(false);
                         break;
