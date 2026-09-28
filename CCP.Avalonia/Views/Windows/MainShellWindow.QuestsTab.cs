@@ -11,8 +11,9 @@
 //   BtnRerollWeekly_Click     (ConditioningControlPanel/Services/Progression/QuestService.cs).
 //   RefreshQuestUI          - the same service for the three daily seats, the weekly card, the
 //   BuildDailyCardModel       stats tiles and the streak, plus Models.QuestDefinition /
-//   _dailyCardQuestIds        Models.ActiveQuest (ConditioningControlPanel/Models/Quest.cs) and
-//                             QuestDefinitionService for the roster. Neither model is in Core.
+//   _dailyCardQuestIds        Models.ActiveQuest (CCP.Core/Models/Quest.cs) and
+//                             QuestDefinitionService for the roster. Both are in Core now; this
+//                             head just does not construct the service yet.
 //   ComputeQuestXpDisplay   - ProgressionService.QuestLevelScale
 //                             (ConditioningControlPanel/Services/Progression/ProgressionService.cs)
 //                             and App.SkillTree.GetRerollBonusMultiplier
