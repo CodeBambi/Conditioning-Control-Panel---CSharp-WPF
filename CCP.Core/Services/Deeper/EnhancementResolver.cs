@@ -62,6 +62,12 @@ namespace ConditioningControlPanel.Services.Deeper
     public static class EnhancementResolver
     {
         /// <summary>
+        /// Library catalogue lookup (media path, media type) seeded by the head. Unset means no
+        /// library, so step 2 is skipped.
+        /// </summary>
+        public static volatile Func<string, string?, EnhancementLibraryEntry?>? LibraryMatchProvider;
+
+        /// <summary>
         /// Canonical "is this a local video file" check (by extension). Shared
         /// so the library media_type used for matching stays consistent across
         /// the player and the video bridge.
@@ -97,7 +103,7 @@ namespace ConditioningControlPanel.Services.Deeper
 
             // 2) Library catalogue match by media_source pattern.
             var mediaType = IsLocalVideoFile(mediaPath) ? MediaTypes.Video : MediaTypes.Audio;
-            var match = App.EnhancementLibrary?.FindMatch(mediaPath, mediaType);
+            var match = LibraryMatchProvider?.Invoke(mediaPath, mediaType);
             if (match != null)
                 return new ResolvedEnhancement(null, match.FilePath, EnhancementDiscoverySource.Library);
 

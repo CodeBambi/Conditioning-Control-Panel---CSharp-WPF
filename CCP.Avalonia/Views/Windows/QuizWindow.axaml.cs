@@ -36,7 +36,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    <c>Log</c>. The question flow, scoring, timers, formatting and visual state are the WPF
     ///    original's.
     ///  - <c>QuizService</c> (<c>ConditioningControlPanel/Services/Quiz/QuizService.cs</c>),
-    ///    <c>QuizSessionGenerator</c> and <c>SessionFileService</c> are still in the WPF head, so
+    ///    is still in the WPF head (<c>QuizSessionGenerator</c> and <c>SessionFileService</c> are in
+    ///    Core but not wired here), so
     ///    the AI round trip, the category store, the history file and the session export are what
     ///    remains stubbed; each stub names its exact symbol.
     ///    <c>QuizQuestion</c> and <c>QuizResult</c> are copied below, trimmed to what this view

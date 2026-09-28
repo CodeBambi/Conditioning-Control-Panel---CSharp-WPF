@@ -19,7 +19,7 @@ namespace ConditioningControlPanel
     /// only the counter moves. That bounds even per-frame and timer-tick call sites.
     ///
     /// This type must never throw and never allocate much: it is called from catch blocks, some of
-    /// them inside shutdown paths where <see cref="App.Logger"/> is already gone.
+    /// them inside shutdown paths where the app logger is already gone.
     /// </summary>
     public static class Diag
     {
@@ -32,8 +32,8 @@ namespace ConditioningControlPanel
         private static int _total;
 
         /// <summary>
-        /// Test seam. When set, events go here instead of <see cref="App.Logger"/> so the unit tests
-        /// can observe the real message templates without standing up a WPF <see cref="App"/>.
+        /// Test seam. When set, events go here instead of Serilog's <see cref="Log.Logger"/> so the unit tests
+        /// can observe the real message templates.
         /// </summary>
         internal static ILogger? LoggerOverride { get; set; }
 
@@ -66,7 +66,7 @@ namespace ConditioningControlPanel
                 var hits = Sites.AddOrUpdate(site, 1, static (_, prev) => prev == int.MaxValue ? prev : prev + 1);
                 if (hits > MaxLogsPerSite) return;
 
-                var logger = LoggerOverride ?? App.Logger;
+                var logger = LoggerOverride ?? Log.Logger;
                 if (logger == null) return;
 
                 var exType = ex?.GetType().Name ?? "null";

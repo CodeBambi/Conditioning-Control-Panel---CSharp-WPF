@@ -22,9 +22,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <c>App.SkillTree</c> and <c>Models.SkillDefinition.All</c>, neither of which is on this head.
     /// This file paints a SAMPLE of each instead, with the real loc keys, so the 460dip board and
     /// the 90dip rail do not render as two unexplained blanks in the render proof.
-    /// ponytail: needs ConditioningControlPanel/Services/SkillTreeService.cs and
-    /// ConditioningControlPanel/Models/SkillTree.cs (SkillDefinition.All), both still in the WPF
-    /// head. The one number that IS live is the sparkle-point count, which is a plain setting.</para>
+    /// ponytail: needs ConditioningControlPanel/Services/SkillTreeService.cs, still in the WPF
+    /// head (CCP.Core/Models/SkillTree.cs, SkillDefinition.All, is in Core). The one number that IS live is the sparkle-point count, which is a plain setting.</para>
     /// </summary>
     public partial class EnhancementsTabView : UserControl
     {
