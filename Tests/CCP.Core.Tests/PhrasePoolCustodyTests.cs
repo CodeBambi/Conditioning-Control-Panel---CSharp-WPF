@@ -12,6 +12,7 @@ using Xunit;
 namespace CCP.Core.Tests;
 
 /// <summary>PhrasePoolCustody lifecycle and its contract with the real Core ModService (#906, D1).</summary>
+[Collection(SessionStatics.Name)]
 public sealed class PhrasePoolCustodyTests : IDisposable
 {
     private static readonly string[] PoolNames =
