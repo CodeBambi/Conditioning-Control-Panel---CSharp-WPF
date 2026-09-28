@@ -402,3 +402,9 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   when broken. Review: FIX -> round 1 applied (audio-only, shell close, test cleanup).
 - Not run live: a physical panic key on KWin; closing the shell with lock cards up. Stubbed: session stop dialog, Jump
   right in, audio-only audio bed, ramp and scheduler.
+
+## avalonia-port/session-core-pure: +985
+- Session runner U2: Core ports (not moves) WPF SessionEngine's pure parts: SessionClock, SessionXp, phase index,
+  deferred starts, SessionSettingsSnapshot (WPF's 36 fields), PhrasePoolCustody (FoldUserPoolEdit verbatim). D1/D1a fix
+  WPF mod-switch-mid-session pool leaks (D1a in Core ModService, so WPF too, only while a session runs). 50 Core tests
+  (fail-proofed); --smoke checks the pool delegates are seeded. Review: FIX -> D1a (oracle-deep) -> ACCEPT. No user path yet.
