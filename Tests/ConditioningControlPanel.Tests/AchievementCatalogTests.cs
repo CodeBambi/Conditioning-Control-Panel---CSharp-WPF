@@ -153,24 +153,24 @@ public class AchievementCatalogTests
     public void ThresholdsMatchTheRequirementText()
     {
         // 10 cumulative hours, expressed in minutes by both trackers.
-        Assert.Equal(600, AchievementService.ScreenTimeVideoMinutes);
-        Assert.Equal(10, AchievementService.ScreenTimeVideoMinutes / 60);
+        Assert.Equal(600, AchievementRules.ScreenTimeVideoMinutes);
+        Assert.Equal(10, AchievementRules.ScreenTimeVideoMinutes / 60);
         Assert.Contains("10 cumulative hours", Achievement.All["screen_time"].Requirement);
 
-        Assert.Equal(600, AchievementService.ThreadbareSpiralMinutes);
-        Assert.Equal(10, AchievementService.ThreadbareSpiralMinutes / 60);
+        Assert.Equal(600, AchievementRules.ThreadbareSpiralMinutes);
+        Assert.Equal(10, AchievementRules.ThreadbareSpiralMinutes / 60);
         Assert.Contains("10 cumulative hours", Achievement.All["threadbare"].Requirement);
 
-        Assert.Equal(100, AchievementService.EyesFrontAttentionChecks);
+        Assert.Equal(100, AchievementRules.EyesFrontAttentionChecks);
         Assert.Contains("100", Achievement.All["eyes_front"].Requirement);
 
-        Assert.Equal(50, AchievementService.WordPerfectLockCards);
+        Assert.Equal(50, AchievementRules.WordPerfectLockCards);
         Assert.Contains("50", Achievement.All["word_perfect"].Requirement);
 
-        Assert.Equal(30, AchievementService.ThirtyDayDollConsecutiveDays);
+        Assert.Equal(30, AchievementRules.ThirtyDayDollConsecutiveDays);
         Assert.Contains("30 days", Achievement.All["thirty_day_doll"].Requirement);
 
-        Assert.Equal(100, AchievementService.WindowShoppingPointsSpent);
+        Assert.Equal(100, AchievementRules.WindowShoppingPointsSpent);
         Assert.Contains("100", Achievement.All["window_shopping"].Requirement);
     }
 
@@ -181,7 +181,7 @@ public class AchievementCatalogTests
     [Fact]
     public void StreakThresholdsAreOrdered()
     {
-        Assert.True(AchievementService.ThirtyDayDollConsecutiveDays > 7);
+        Assert.True(AchievementRules.ThirtyDayDollConsecutiveDays > 7);
     }
 
     /// <summary>
