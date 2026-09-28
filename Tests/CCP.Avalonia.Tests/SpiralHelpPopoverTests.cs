@@ -66,8 +66,7 @@ public sealed class SpiralHelpPopoverTests
                 Assert.True(button!.IsVisible);
 
                 Move(host, button);
-                await Task.Delay(150);
-                Dispatcher.UIThread.RunJobs();
+                await WaitForOpen(button);
                 Assert.True(HelpPopover.IsOpen(button));
                 var firstPopup = HelpPopover.PopupContent(button);
                 Assert.NotNull(firstPopup);
@@ -100,8 +99,7 @@ public sealed class SpiralHelpPopoverTests
                 host.MouseMove(new Point(1, 1), RawInputModifiers.None);
                 Dispatcher.UIThread.RunJobs();
                 Move(host, button);
-                await Task.Delay(150);
-                Dispatcher.UIThread.RunJobs();
+                await WaitForOpen(button);
                 Assert.True(HelpPopover.IsOpen(button));
                 Assert.NotSame(firstPopup, HelpPopover.PopupContent(button));
 
@@ -113,9 +111,11 @@ public sealed class SpiralHelpPopoverTests
                 Assert.Null(HelpPopover.PopupContent(button));
                 view.IsVisible = true;
                 Dispatcher.UIThread.RunJobs();
-                Move(host, button);
-                await Task.Delay(150);
+                // Leave first: a stationary pointer raises no PointerEntered, and the card opens on enter.
+                host.MouseMove(new Point(1, 1), RawInputModifiers.None);
                 Dispatcher.UIThread.RunJobs();
+                Move(host, button);
+                await WaitForOpen(button);
                 Assert.True(HelpPopover.IsOpen(button));
 
                 // Unload/reload must close the old popup and reattach a fresh localized one.
@@ -126,9 +126,11 @@ public sealed class SpiralHelpPopoverTests
                 host.Content = view;
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(button.IsVisible);
-                Move(host, button);
-                await Task.Delay(150);
+                // Leave first: a stationary pointer raises no PointerEntered, and the card opens on enter.
+                host.MouseMove(new Point(1, 1), RawInputModifiers.None);
                 Dispatcher.UIThread.RunJobs();
+                Move(host, button);
+                await WaitForOpen(button);
                 Assert.True(HelpPopover.IsOpen(button));
                 var reloadedPopup = HelpPopover.PopupContent(button);
                 Assert.NotNull(reloadedPopup);
@@ -192,6 +194,18 @@ public sealed class SpiralHelpPopoverTests
                 .SetupWithoutStarting();
         }
         LocalizationManager.Instance.SetLanguage("en");
+    }
+
+    // The card opens on a 100 ms DispatcherTimer; a fixed 150 ms sleep raced it on a loaded Windows
+    // runner (CI #1781). Poll instead, bounded; the Assert after it reports a miss.
+    private static async Task WaitForOpen(Button button)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        do
+        {
+            await Task.Delay(50);
+            Dispatcher.UIThread.RunJobs();
+        } while (!HelpPopover.IsOpen(button) && DateTime.UtcNow < deadline);
     }
 
     private static void Move(TopLevel host, Control target)
