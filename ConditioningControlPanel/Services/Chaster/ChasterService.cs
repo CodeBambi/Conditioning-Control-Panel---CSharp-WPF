@@ -275,14 +275,19 @@ public sealed partial class ChasterService : IDisposable
     private void ForgiveMisses()
     {
         TabBooking booking;
+        CircesMood moodBefore, moodAfter;
         lock (_gate)
         {
             if (_tab.ForgivableSeconds <= 0) return;
+            moodBefore = MoodNow();
             booking = CircesTab.Book(_tab, CircesMisses.ForgivenEventId, -_tab.ForgivableSeconds, _utcNow(), _localNow(), _runStartUtc, safetyExit: false);
             _tab.ForgivableSeconds = 0;
+            if (booking.AppliedSeconds < 0) NoteCool();
+            moodAfter = MoodNow();
             SaveTab();
         }
         if (booking.Booked) RaiseBooked(CircesMisses.ForgivenEventId, booking, null);
+        RaiseMood(moodBefore, moodAfter);
     }
 
     /// <summary>An event that names its own price (an Awareness trigger carries its minutes in
@@ -300,12 +305,17 @@ public sealed partial class ChasterService : IDisposable
     {
         if (!Active(out _)) return new(0, TabRefusal.Nothing);
         TabBooking booking;
+        CircesMood moodBefore, moodAfter;
         lock (_gate)
         {
+            moodBefore = MoodNow();
             booking = CircesTab.Wipe(_tab, _utcNow(), _runStartUtc);
+            if (booking.AppliedSeconds < 0) NoteCool();
+            moodAfter = MoodNow();
             if (booking.Booked) SaveTab();
         }
         if (booking.Booked) RaiseBooked(CircesTab.JackpotEventId, booking, null);
+        RaiseMood(moodBefore, moodAfter);
         return booking;
     }
 
@@ -336,8 +346,10 @@ public sealed partial class ChasterService : IDisposable
     {
         if (seconds == 0) return new(0, TabRefusal.Nothing);
         TabBooking booking;
+        CircesMood moodBefore, moodAfter;
         lock (_gate)
         {
+            moodBefore = MoodNow();
             var now = _utcNow();
             var options = _options() ?? ChasterOptions.Off;
             if (seconds > 0 && !CircesTab.UseLeft(_tab, eventId, _localNow())) return new(0, TabRefusal.RowCap);
@@ -350,6 +362,7 @@ public sealed partial class ChasterService : IDisposable
             }
             booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps);
             if (booking.AppliedSeconds > 0) { CircesTab.NoteUse(_tab, eventId, _localNow()); NoteHeat(eventId); }
+            else if (booking.AppliedSeconds < 0) NoteCool();
             if (remote && booking.AppliedSeconds > 0)
             {
                 var today = CircesTab.DayKey(_localNow());
@@ -359,8 +372,10 @@ public sealed partial class ChasterService : IDisposable
                     booking = booking with { Refusal = TabRefusal.Remote };
             }
             if (booking.Booked) SaveTab();
+            moodAfter = MoodNow();
         }
         if (booking.Booked) RaiseBooked(eventId, booking, originPx);
+        RaiseMood(moodBefore, moodAfter);
         if (booking.AppliedSeconds > 0) SchedulePush();
         return booking;
     }
