@@ -227,7 +227,7 @@ namespace ConditioningControlPanel
             else if (isLocked)
             {
                 // Lock icon
-                var lockIcon = new TextBlock
+                var lockIcon = new ConditioningControlPanel.Helpers.EmojiTextBlock
                 {
                     Text = "🔒",
                     FontSize = 28,
@@ -239,7 +239,7 @@ namespace ConditioningControlPanel
             else // Active
             {
                 // Camera icon
-                var cameraIcon = new TextBlock
+                var cameraIcon = new ConditioningControlPanel.Helpers.EmojiTextBlock
                 {
                     Text = "📷",
                     FontSize = 28,

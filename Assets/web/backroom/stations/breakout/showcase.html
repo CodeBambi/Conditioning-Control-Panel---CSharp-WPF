@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Endless | Gameplay</title>
+<link rel="icon" href="data:,">
+<style>
+:root{color-scheme:dark;font-family:Segoe UI,Arial,sans-serif;background:#100e19;color:#f3e9f7}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% 0,#2d1d3a,transparent 60%)}
+main{max-width:1400px;margin:auto;padding:22px 28px 18px}.top{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px}
+.eyebrow{font-size:11px;letter-spacing:3px;color:#b6a0c3;font-weight:700}h1{font-size:25px;font-weight:550;margin:5px 0 0;letter-spacing:-.6px}.badge{font-size:11px;color:#b4ddcf;border:1px solid #90c3b438;padding:7px 11px;border-radius:20px;white-space:nowrap}
+.stage{position:relative;border:1px solid #c6a0e22b;border-radius:17px;overflow:hidden;box-shadow:0 20px 80px #0006;background:#1a1a2e;aspect-ratio:16/9;max-height:calc(100vh - 258px);margin:auto}
+canvas{width:100%;height:100%;display:block}.overlay{position:absolute;left:20px;top:17px;right:20px;display:flex;justify-content:space-between;gap:12px;pointer-events:none}.label{font-size:11px;letter-spacing:1.7px;color:#fce4fbba}.count{font-size:11px;color:#dccde3a8;font-variant-numeric:tabular-nums}.caption{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);font-size:14px;text-align:center;max-width:80%;padding:10px 18px;background:#171121e8;border:1px solid #cfb4e13b;border-radius:30px;pointer-events:none;transition:opacity .25s;opacity:0}.caption.visible{opacity:1}.progress{height:2px;position:absolute;bottom:0;left:0;width:0;background:#d6a9ed;box-shadow:0 0 12px #e1b0fa}
+.controls{display:flex;justify-content:space-between;align-items:center;gap:15px;margin:13px 0 18px}.transport{display:flex;gap:8px}button,a{font:inherit}button{cursor:pointer;color:#e9ddee;border:1px solid #d6b0e32b;background:#292034;border-radius:9px;padding:8px 13px;font-size:12px}button:hover{background:#3b2b49}button:focus-visible,a:focus-visible{outline:2px solid #e3b1ff;outline-offset:3px}a{color:#d8b5ed;text-decoration:none;font-size:12px}a:hover{text-decoration:underline}.note{font-size:11px;color:#a692b2;margin:0}
+.scenes{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.scene{text-align:left;padding:13px 16px;background:#201928;border-radius:12px;border:1px solid #b798c42a}.scene[aria-pressed=true]{border-color:#cfa2e9;background:linear-gradient(120deg,#3b294b,#261f36)}.scene strong{display:block;font-weight:550;font-size:15px;margin:4px 0 6px}.scene small{display:block;font-size:11px;color:#c0aace;line-height:1.45}.number{font-size:10px;letter-spacing:1px;color:#c2a0d6}.scene[aria-pressed=true] .number{color:#f2d5ff}
+@media(max-width:700px){main{padding:14px 12px}.stage{max-height:none;border-radius:10px}.scenes{gap:6px}.scene{padding:10px}.scene strong{font-size:13px}.scene small{font-size:10px}.top{margin-bottom:12px}h1{font-size:21px}.badge{font-size:9px}.controls{align-items:flex-start}.note{max-width:160px;text-align:right;line-height:1.5}.caption{font-size:11px;bottom:18px;padding:6px 12px}.overlay{top:10px;left:12px;right:12px}.label,.count{font-size:9px}}
+</style>
+</head>
+<body>
+<main>
+ <header class="top"><div><div class="eyebrow">BREAKOUT / ENDLESS</div><h1>A shortcut with consequences.</h1></div><span class="badge">LIVE GAMEPLAY / AUTO PADDLE</span></header>
+ <div class="stage"><canvas aria-label="Live Endless gameplay"></canvas><div class="overlay"><span class="label" id="label">DEMOLITION EXPRESS</span><span class="count" id="stats"></span></div><div class="caption" id="caption" role="status"></div><div class="progress" id="progress"></div></div>
+ <div class="controls"><div class="transport"><button id="pause">Pause</button><button id="replay">Replay</button><button id="sound" aria-pressed="false">Sound off</button><a id="play" style="align-self:center;margin-left:8px" target="_blank" rel="noopener">Play this board</a></div><p class="note">Three looping highlights. Your saved run stays untouched.</p></div>
+ <nav class="scenes" aria-label="Gameplay examples"><button class="scene" data-scene="0" aria-pressed="true"><span class="number">01 / WEIGHT + PORTAL + SPIRAL</span><strong>Demolition Express</strong><small>A released weight crosses the portal, enters the spiral and launches into the board.</small></button><button class="scene" data-scene="1" aria-pressed="false"><span class="number">02 / PORTAL + PAYLOADS</span><strong>Spiral Delivery</strong><small>Falling pictures, spiral seeds and power-ups take the same portal route.</small></button><button class="scene" data-scene="2" aria-pressed="false"><span class="number">03 / PORTAL + ARMOUR</span><strong>Backdoor</strong><small>The ball travels behind a guarded island and breaks it from the other side.</small></button></nav>
+</main>
+<script type="module" src="./showcase.js"></script>
+</body>
+</html>

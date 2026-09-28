@@ -216,7 +216,7 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="🎤 Solve by voice" FontSize="13" FontWeight="SemiBold"
+                                    <helpers:EmojiTextBlock Grid.Column="0" Text="🎤 Solve by voice" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                     <CheckBox Grid.Column="1" x:Name="ChkVoiceMode"
                                               Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"

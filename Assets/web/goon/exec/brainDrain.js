@@ -71,6 +71,8 @@
 
 import { perfLite } from './perfTier.js';
 import { drawStillImage, XFER_TAG_PREFIX } from './media.js';
+// The veil is a gif surface: it plays the gif CLIP when the deck has one.
+import { drawClipHandle, prepareClip, stopClip } from './clip.js';
 import { governorBusy } from './loadGovernor.js';
 
 const WASH_MIN_MS = 7000;    // how long one washed image holds before a re-pick
@@ -119,6 +121,8 @@ export function createBrainDrain({ layers, media, audio, logger } = {}) {
 
   let veilEl = null;
   let washHandle = null;         // media handle behind the current wash image
+  let washClip = null;           // the <video> playing the wash, when it is a gif clip
+  let washTok = 0;               // bumps on every re-pick: a clip still loading for an older one is stale
   let washTimer = 0;             // the slow re-pick
   let elementIntensity = null;   // null = element not running
   let payloadIntensity = null;   // null = no payload running
@@ -137,6 +141,7 @@ export function createBrainDrain({ layers, media, audio, logger } = {}) {
   const layer = () => (layers && typeof layers.get === 'function' ? layers.get('drain') : null);
 
   function releaseWash() {
+    if (washClip) { stopClip(washClip); washClip = null; }
     try { if (washHandle && washHandle.release) washHandle.release(); } catch (_e) { /* ignore */ }
     washHandle = null;
   }
@@ -152,7 +157,7 @@ export function createBrainDrain({ layers, media, audio, logger } = {}) {
    * showOne() (the `wantPeer && provenance !== 'peer'` re-draw included), because two
    * peer-first ladders that read differently are two ladders that drift apart.
    */
-  function repickWash() {
+  function repickWash(noClip) {
     if (!veilEl || !media || typeof media.drawKind !== 'function') return;
     const run = payloadRun;
     const wantPeer = !!run;
@@ -160,6 +165,32 @@ export function createBrainDrain({ layers, media, audio, logger } = {}) {
     // cost this veil has left on a phone (see the banner). Full tier: the
     // exact draw it has always made. The preference now rides BOTH sources.
     const lite = perfLite();
+    const tok = ++washTok;
+
+    // 0. OUR OWN bed, full tier: a gif clip when the deck has one (owner, 2026-09-23:
+    //    the online stills are posters, the motion lives in the GifClip lane). The
+    //    current wash stays up until the clip has a frame; a dud re-picks a still.
+    if (!wantPeer && !lite && !noClip) {
+      const clip = drawClipHandle(media);
+      if (clip) {
+        const el = veilEl;
+        prepareClip(clip, { className: 'gg-clip gg-clip--wash gg-clip--veil' }, (v) => {
+          const current = tok === washTok && veilEl === el && el && el.isConnected !== false;
+          if (!v || !current) {
+            if (v) stopClip(v);
+            try { if (clip.release) clip.release(); } catch (_e) { /* ignore */ }
+            if (!v && current) repickWash(true);
+            return;
+          }
+          releaseWash();
+          washHandle = clip;
+          washClip = v;
+          try { el.insertBefore(v, el.firstChild || null); } catch (_e) { releaseWash(); return; }
+          try { el.style.setProperty('--gg-drain-img', 'none'); } catch (_e) { /* ignore */ }
+        });
+        return;
+      }
+    }
 
     // 1. the exact artifact this payload named, one tag spent per re-pick (a 45s
     //    drain re-picks four to six times; flashes.js spends its tags the same way).

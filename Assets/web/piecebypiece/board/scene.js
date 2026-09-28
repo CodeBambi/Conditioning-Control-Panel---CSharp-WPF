@@ -14,7 +14,7 @@ export const SQUARE = 1.0;
 export const FILES = 'abcdefgh';
 
 const CREAM = 0xF5E6C8;
-const PINK = 0xFF69B4;
+const PINK = 0xC886AC;
 const BACKDROP = 0x1A1A3E;
 
 /** Every number the lighting rig is made of. One place, on purpose. */

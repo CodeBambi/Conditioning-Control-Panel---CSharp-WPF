@@ -35,7 +35,8 @@ namespace ConditioningControlPanel.Services
         {
             var modPresets = GetActiveModPersonalities();
             fromMod = modPresets != null && modPresets.Count > 0;
-            return fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
+            var presets = fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
+            return presets;
         }
 
         /// <summary>
@@ -98,6 +99,7 @@ namespace ConditioningControlPanel.Services
                     Id = d.Id,
                     Name = d.Name,
                     Description = d.Description ?? "",
+                    SampleLines = d.SampleLines,
                     IsBuiltIn = true,
                     RequiresPremium = false,
                     PromptSettings = cps
@@ -113,8 +115,15 @@ namespace ConditioningControlPanel.Services
         {
             var presets = new List<PersonalityPreset>();
 
-            // Built-in presets first (mod-supplied if the active mod defines personalities)
-            presets.AddRange(GetBuiltInPresetsForActiveMod());
+            // Built-in presets first (mod-supplied if the active mod defines personalities).
+            // On the stock set in the neutral context the niche personas stay off the list; the
+            // one the user already has selected, if any, stays so nothing vanishes under them.
+            // GetActivePreset / GetPresetById still resolve every id, so a hidden pick keeps working.
+            var builtIn = GetBuiltInPresetsForActiveMod(out var fromMod);
+            presets.AddRange(fromMod
+                ? builtIn
+                : PersonalityPresets.ForPicker(builtIn, IsNeutralContext(),
+                    App.Settings?.Current?.ActivePersonalityPresetId));
 
             // Add user-created presets
             var userPresets = App.Settings?.Current?.UserPersonalityPresets;
@@ -198,7 +207,7 @@ namespace ConditioningControlPanel.Services
 
                 if (cleared)
                     App.Logger?.Information("PersonalityService: Preset {Id} took over from the active custom prompt", presetId);
-                App.Logger?.Information("PersonalityService: Switched to preset: {Name} ({Id})", preset.Name, presetId);
+                App.Logger?.Information("PersonalityService: Changed active preset");
                 PersonalityChanged?.Invoke(this, preset);
                 return true;
             }

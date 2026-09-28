@@ -66,6 +66,19 @@ internal static class FriendsDrawerRules
         return (online, offline);
     }
 
+    /// <summary>Open tables (2026-09-23): a friend with a listed Goon table floats to the top of
+    /// the online group, whatever their presence says (the listing already told us they are
+    /// here). Order inside each group is kept.</summary>
+    public static (IReadOnlyList<Friend> Online, IReadOnlyList<Friend> Offline) HostingFirst(
+        IReadOnlyList<Friend> online, IReadOnlyList<Friend> offline, Func<Friend, bool> hosting)
+    {
+        var top = online.Where(hosting).Concat(offline.Where(hosting)).ToList();
+        if (top.Count == 0) return (online, offline);
+        var on = top.Concat(online.Where(f => !hosting(f))).ToList();
+        var off = offline.Where(f => !hosting(f)).ToList();
+        return (on, off);
+    }
+
     /// <summary>The loc key for what an online friend is doing.</summary>
     public static string ActivityKey(PresenceActivity a) => "friends_activity_" + a.ToString().ToLowerInvariant();
 

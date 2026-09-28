@@ -36,6 +36,7 @@ namespace ConditioningControlPanel
         private readonly string? _fullTutorialUrl;
         private readonly string? _whatItDoes;
         private bool _captionShown;
+        private readonly bool _hasLoop;
 
         private VideoView? _videoView;
         private MediaPlayer? _mediaPlayer;
@@ -67,7 +68,10 @@ namespace ConditioningControlPanel
             // show the topic's "what it does" blurb. (Also used if a configured clip
             // fails soft at runtime - see StartClip.)
             _whatItDoes = content.WhatItDoes;
-            if (!content.HasClip) ShowWhatItDoesFallback();
+
+            // A drawn help loop wins over a clip: native, theme-aware, no LibVLC.
+            _hasLoop = TryShowLoop(content);
+            if (!content.HasClip && !_hasLoop) ShowWhatItDoesFallback();
 
             _fullTutorialUrl = content.FullTutorialUrl;
             if (!string.IsNullOrWhiteSpace(_fullTutorialUrl))
@@ -75,7 +79,7 @@ namespace ConditioningControlPanel
                 BtnFullTutorial.Visibility = Visibility.Visible;
             }
 
-            if (content.HasClip)
+            if (content.HasClip && !_hasLoop)
             {
                 _clipPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
                     "Resources", "tutorial_videos", content.ClipFile!);
@@ -133,6 +137,34 @@ namespace ConditioningControlPanel
             TxtCaption.Text = _whatItDoes;
             TxtCaption.Visibility = Visibility.Visible;
             _captionShown = true;
+        }
+
+        /// <summary>
+        /// Hosts the topic's drawn help loop (and its step chips) in the video slot when the
+        /// registry has one. The loop replaces the caption too: its steps say the same thing.
+        /// </summary>
+        private bool TryShowLoop(HelpContent content)
+        {
+            try
+            {
+                if (!Controls.HelpLoops.HelpLoopRegistry.TryGet(content.SectionId, out var scene)) return false;
+                var view = new Controls.HelpLoops.HelpLoopView(scene);
+                var panel = new StackPanel();
+                panel.Children.Add(view);
+                panel.Children.Add(new Controls.HelpLoops.HelpLoopSteps(view) { Margin = new Thickness(12, 10, 12, 4) });
+                VideoContainer.Height = double.NaN;
+                VideoContainer.Background = System.Windows.Media.Brushes.Transparent;
+                VideoContainer.Child = panel;
+                VideoContainer.Visibility = Visibility.Visible;
+                TxtCaption.Visibility = Visibility.Collapsed;
+                _captionShown = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "HelpVideoWindow: failed to build help loop");
+                return false;
+            }
         }
 
         private void StartClip()

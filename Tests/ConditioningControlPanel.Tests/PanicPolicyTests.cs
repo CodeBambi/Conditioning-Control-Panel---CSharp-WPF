@@ -496,7 +496,9 @@ public class PanicPolicyTests
     [InlineData("chaos", "App.Chaos?.IsDescending == true")]
     [InlineData("dtrh", "Chaos.DtrhHostService.IsActive")]
     [InlineData("arcademy", "Arcademy.ArcademyHostService.IsActive")]
-    [InlineData("backroom", "BackRoom.BackRoomHostService.IsActive")]
+    [InlineData("backroom", "BackRoom.BackRoomHostService.IsRoomActive")]
+    [InlineData("breakoutdemo", "BackRoom.BackRoomHostService.IsBreakoutDemoActive")]
+    [InlineData("breakout", "BackRoom.BackRoomHostService.IsBreakoutFullActive")]
     [InlineData("fyp", "Fyp.FypHostService.IsActive")]
     [InlineData("justdrop", "JustDrop.JustDropHostService.IsActive")]
     // Sep 19 2026: the four the two hand-written copies of this list had missed, which is how
@@ -563,4 +565,30 @@ public class PanicPolicyTests
         var end = source.IndexOf("#735", start, StringComparison.Ordinal);
         return end > start ? source[start..end] : source[start..];
     }
+
+    // ---- Racing Thoughts pauses on Escape (owner, 2026-09-25) ----
+
+    private static readonly DateTime T0 = new(2026, 9, 25, 18, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void RaceInFront_FirstEscape_IsThePause()
+        => Assert.True(GameClaimsEscapeAsPause("Escape", gameInFront: true, engineRunning: false,
+            lockCardOpen: false, lastClaimUtc: null, nowUtc: T0));
+
+    [Fact]
+    public void SecondEscapeWithinTwoSeconds_IsAFullPanic()
+        => Assert.False(GameClaimsEscapeAsPause("Escape", true, false, false, T0, T0.AddSeconds(1.5)));
+
+    [Fact]
+    public void EscapeAfterTheWindow_IsThePauseAgain()
+        => Assert.True(GameClaimsEscapeAsPause("Escape", true, false, false, T0, T0.AddSeconds(5)));
+
+    [Theory]
+    [InlineData("F8", true, false, false)]      // a rebound panic key is always a panic
+    [InlineData("Escape", false, false, false)] // the race is not the window in front
+    [InlineData("Escape", true, true, false)]   // a session is running: its effects must stop
+    [InlineData("Escape", true, false, true)]   // a Lock Card outranks everything
+    [InlineData(null, true, false, false)]
+    public void EverythingElse_StaysAPanic(string? key, bool inFront, bool engineRunning, bool lockCard)
+        => Assert.False(GameClaimsEscapeAsPause(key, inFront, engineRunning, lockCard, null, T0));
 }

@@ -145,8 +145,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public MemoryDiaryRuntimeVm(CompanionRuntimeContext ctx)
         {
             _ctx = ctx;
+            App.Brain?.EnsureCurrentAccount();
             _store = App.Brain?.Memory;
-            _inner = new CompanionMemoryViewModel(_store, () => App.Brain?.Forget());
+            _inner = new CompanionMemoryViewModel(_store, App.Brain?.CaptureForgetAction(_store));
 
             foreach (var key in FactOrdering.FilterKeys)
             {
@@ -188,10 +189,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// <summary>True when nothing but the dormant promise card is on the wall.</summary>
         public bool IsEmpty => _all.All(f => f.IsDormant);
 
-        public string EmptyCopy => Loc.Get("companion_memory_empty_copy");
-        public string StorageNote => Loc.Get("companion_memory_storage_note");
+        public string EmptyCopy => Loc.Get(Services.Companion.CompanionExperience.IsV2Enabled ? "companion_v2_memory_empty" : "companion_memory_empty_copy");
+        public string StorageNote => Loc.Get(Services.Companion.CompanionExperience.IsV2Enabled ? "companion_v2_memory_storage" : "companion_memory_storage_note");
         public string StorageLinkLabel => Loc.Get("companion_memory_storage_link");
-        public string ForgetEverythingLabel => Loc.Get("companion_memory_forget_everything");
+        public string ForgetEverythingLabel => Loc.Get(Services.Companion.CompanionExperience.IsV2Enabled ? "companion_v2_memory_clear" : "companion_memory_forget_everything");
 
         public ICommand OpenStorageFolderCommand { get; }
         public ICommand ForgetEverythingCommand { get; }
@@ -209,11 +210,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         {
             CompanionRuntimeContext.Guarded(() =>
             {
+                App.Brain?.EnsureCurrentAccount();
                 var live = App.Brain?.Memory;
                 if (!ReferenceEquals(live, _store))
                 {
                     _store = live;
-                    _inner = new CompanionMemoryViewModel(_store, () => App.Brain?.Forget());
+                    _inner = new CompanionMemoryViewModel(_store, App.Brain?.CaptureForgetAction(_store));
                 }
                 else
                 {
@@ -245,7 +247,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
             // The Train 4 promise card always closes the wall (FactOrdering sorts it last and
             // exempts it from the kind filter), so an empty diary is a promise, not a void.
-            _all.Add(new CompanionMemoryFact
+            if (!Services.Companion.CompanionExperience.IsV2Enabled) _all.Add(new CompanionMemoryFact
             {
                 Text = Loc.Get("companion_memory_dormant_promise"),
                 KindKey = "dormant",

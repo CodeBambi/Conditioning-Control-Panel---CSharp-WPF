@@ -1,3 +1,4 @@
+import { registerBubble } from './flashCollision.js';
 /* ============================================================================
  * exec/bubbles.js — GoonElement.Bubbles (3) + GoonPayloadKind.BubbleSwarm (2).
  *
@@ -70,6 +71,14 @@ import { pickSpiralImage } from './spiralGen.js';
 import { perfLite } from './perfTier.js';
 // The lite tier's still-preferred image draw — see drawImage() below.
 import { drawStillImage } from './media.js';
+// A gif surface plays the gif CLIP when the deck has one (online stills are posters).
+import { drawClipHandle, prepareClip, stopClip } from './clip.js';
+// The juice pass (2026-09-23): every pop's wash grows out of the pop point and is
+// sucked back into it, pop flashes land from the bubble, big pops shake a little.
+import {
+  growPane, shrinkPane, pulsePane, sliceShimmer, landFlash, scheduleFlashExit,
+  burst, ring, shake, shakeForStrength, tintFor, cancelMotion, canAnimate,
+} from './motion.js';
 
 export const MAX_LIVE = 26;   // hard ceiling on bubble nodes, swarm included
 /* The LITE ceiling (exec/perfTier.js — phones). Bites in refresh(), on top of
@@ -323,12 +332,13 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
 
   /** Drop bookkeeping for nodes the layer tore out from under us (layers.stopAll). */
   function prune() {
-    for (const rec of Array.from(live)) if (!rec.wrap || !rec.wrap.isConnected) live.delete(rec);
+    for (const rec of Array.from(live)) if (!rec.wrap || !rec.wrap.isConnected) { rec.unbindHit?.(); live.delete(rec); }
   }
 
   function recycle(rec) {
     if (!live.has(rec)) return;
     live.delete(rec);
+    rec.unbindHit?.();
     try { rec.wrap.remove(); } catch (_e) { /* ignore */ }
     if (targetCount > 0 && live.size < targetCount) spawn(false);
   }
@@ -387,8 +397,8 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     return n;
   }
 
-  /** One bubble. `seed` scatters it mid-rise so a (re)fill does not march in. */
-  function spawn(seed) {
+  /** Every bubble enters from below the field, including the opening wave. */
+  function spawn() {
     prune();
     if (targetCount <= 0) return;
     const host = layer();
@@ -411,7 +421,6 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     wrap.className = 'gg-bubble-wrap';
     wrap.style.setProperty('left', `${spawnPct.toFixed(1)}%`);
     wrap.style.setProperty('--gg-rise', `${rise.toFixed(2)}s`);
-    if (seed) wrap.style.setProperty('animation-delay', `${(-rand(0, rise)).toFixed(2)}s`);
 
     const bubble = document.createElement('div');
     bubble.className = `gg-bubble gg-bubble--${kind}`;
@@ -425,6 +434,7 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
 
     const rec = { wrap, bubble, kind, popped: false, size, fromPayload };
     live.add(rec);
+    rec.unbindHit = registerBubble(bubble, (x, y) => { if (!rec.popped) pop(rec, x, y); });
 
     // e.target guard: the bubble's own pop animation bubbles up through the wrap.
     wrap.addEventListener('animationend', (e) => {
@@ -471,9 +481,9 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     if (topupTimer && typeof topupTimer.unref === 'function') topupTimer.unref();
     if (!seeded) {
       seeded = true;
-      // Seed the first few mid-rise so the field does not fade in one at a time.
+      // Stagger the opening wave. Each bubble rises from below the viewport.
       const seedN = Math.min(3, targetCount);
-      for (let i = 0; i < seedN; i++) soon(() => { if (targetCount > 0) spawn(true); }, i * 180);
+      for (let i = 0; i < seedN; i++) soon(() => { if (targetCount > 0) spawn(); }, i * 300);
     }
   }
 
@@ -505,15 +515,19 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
   /* --------------------------------------------------------------- pop + fx */
 
   /** Sparkle burst, ported from DtRH (which ported it from the WPF BubbleService). */
-  function sparkleBurst(x, y) {
+  function sparkleBurst(x, y, kind) {
     const host = layer();
     if (!host || typeof document === 'undefined') return;
     // 9 shards is DtRH's number; the lite tier throws 5 — each shard is a
     // box-shadowed node minted mid-pop, exactly when the phone is busiest.
     const n = perfLite() ? 5 : 9;
+    // DtRH's pop exactly (owner, 2026-09-25): soft pink shards for every bubble,
+    // gold for a lucky one. The kind's own colour lives in its sustained pane.
+    const tint = kind === 'lucky' ? '#ffe27a' : '';
     for (let i = 0; i < n; i++) {
       const p = document.createElement('div');
       p.className = 'gg-spark';
+      if (tint) p.style.setProperty('color', tint);
       const ang = (Math.PI * 2 * i) / n + rand(-0.35, 0.35);
       const dist = rand(42, 112);
       p.style.setProperty('left', `${x}px`);
@@ -545,6 +559,9 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     if (!host || typeof document === 'undefined') return null;
     const el = document.createElement('div');
     el.className = cls;
+    // Motion owns this pane's in and out now (holdOn): the CSS opacity
+    // transition would fight the Web Animation on a re-shown pane.
+    if (canAnimate(el)) el.style.setProperty('transition', 'none');
     host.appendChild(el);
     h = holds[kind] = { el, cls, gen: 0, hideTimer: 0, glitchTimer: 0, handle: (h && h.handle) || null };
     return h;
@@ -557,20 +574,40 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
    * compositor pass. `gen` is what keeps a fresh pop from being torn down by the
    * previous pop's removal timer.
    */
-  function holdOn(kind, cls, opacity, durMs) {
+  function holdOn(kind, cls, opacity, durMs, origin) {
     const h = ensureHold(kind, cls);
     if (!h) return null;
     if (h.hideTimer) { try { clearTimeout(h.hideTimer); } catch (_e) { /* ignore */ } h.hideTimer = 0; }
     const gen = ++h.gen;
+    // THE ENTRANCE (juice pass 2026-09-23). This pane used to snap to full
+    // opacity on the pop's own frame ("I pop a glitch bubble and we instantly
+    // see the fullscreen gif"). Now a fresh pane GROWS OUT OF THE POP POINT
+    // (motion.growPane, 340 ms, overshoot) and a pane already up takes a small
+    // swell instead of re-growing. The spiral bed spins on its own transform,
+    // so it grows on the `scale` property and keeps spinning underneath.
+    const spinning = kind === 'spiral';
+    const pane = { spinning, restScale: spinning ? 1.6 : 1 };
+    const fresh = !h.shown;
+    h.shown = true;
+    h.op = opacity;
+    cancelMotion(h.el);
     h.el.style.setProperty('opacity', String(opacity));
+    const o = origin || {};
+    if (fresh) growPane(h.el, Object.assign({ x: o.x, y: o.y, opacity }, pane));
+    else pulsePane(h.el, pane);
     h.hideTimer = soon(() => {
       if (h.gen !== gen) return;
       h.hideTimer = 0;
+      h.shown = false;
+      // ...and THE EXIT: sucked back into where it came from, fast. The inline
+      // opacity 0 below is still the truth (the removal timer keys off it).
+      if (h.el) shrinkPane(h.el, Object.assign({ opacity: h.op }, pane));
       if (h.el) h.el.style.setProperty('opacity', '0');
       releaseHold(h);
       soon(() => {
         if (h.gen !== gen) return;               // a newer pop took the pane over
         if (h.glitchTimer) { try { clearTimeout(h.glitchTimer); } catch (_e) { /* ignore */ } h.glitchTimer = 0; }
+        dropClip(h);
         try { h.el.remove(); } catch (_e) { /* ignore */ }
         if (holds[kind] === h) delete holds[kind];
       }, 1000);
@@ -578,9 +615,19 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     return h;
   }
 
+  /** Stop the clip a pane is playing (the pane goes away, or a new picture takes it). */
+  function dropClip(h) {
+    if (!h) return;
+    h.clipGen = (h.clipGen | 0) + 1;       // a clip still loading for this pane is now stale
+    if (h.clip) { stopClip(h.clip); h.clip = null; }
+    try { if (h.clipHandle && h.clipHandle.release) h.clipHandle.release(); } catch (_e) { /* ignore */ }
+    h.clipHandle = null;
+  }
+
   const popFlashes = new Set();
   function pruneFlashes() {
     for (const rec of Array.from(popFlashes)) {
+      if (rec.pending) continue;              // a clip still loading owns its slot
       if (!rec.node || !rec.node.isConnected) {
         popFlashes.delete(rec);
         try { if (rec.handle && rec.handle.release) rec.handle.release(); } catch (_e) { /* ignore */ }
@@ -621,8 +668,31 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     return (handle && handle.url) ? handle : null;
   }
 
-  /** The scattered flash a popped flash-bubble throws (payloadFx.flash, bounded). */
-  function popFlash(strength, peer) {
+  /** Land a pop flash FROM the pop point: the offset is (pop point - its own
+   *  spot) in px, read off the vw/vh it was placed at. No origin (a headless
+   *  caller, a pop with no coordinates) = a short drop from above. */
+  function landFromPop(img, origin, opacity) {
+    let dx = 0;
+    let dy = -40;
+    const w = viewportWidth();
+    const vh = (typeof window !== 'undefined' && window && Number(window.innerHeight) > 0) ? Number(window.innerHeight) : 0;
+    if (origin && typeof origin.x === 'number' && typeof origin.y === 'number' && w > 0 && vh > 0) {
+      const tx = (parseFloat(img.style.getPropertyValue('left')) || 50) * w / 100;
+      const ty = (parseFloat(img.style.getPropertyValue('top')) || 50) * vh / 100;
+      dx = origin.x - tx;
+      dy = origin.y - ty;
+    }
+    const rot = parseFloat(img.style.getPropertyValue('--gg-flash-rot')) || 0;
+    landFlash(img, { dx, dy, rot, opacity });
+  }
+
+  /** The scattered flash a popped flash-bubble throws (payloadFx.flash, bounded).
+   *
+   *  A flash is a gif surface: when the deck holds gif clips (the online flavour's
+   *  GifClip lane) it plays one as a muted looping <video>, same class, same land and
+   *  exit. A PEER pop keeps the peer's picture (their attack is the point) and lite
+   *  keeps its still; a clip that shows no frame in time falls back to the still. */
+  function popFlash(strength, peer, origin) {
     pruneFlashes();
     const host = layer();
     if (!host || typeof document === 'undefined') return;
@@ -630,45 +700,110 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     const dur = scale(900, 1600, strength);
     for (let i = 0; i < amount; i++) {
       if (popFlashes.size >= MAX_POP_FLASH) break;
+      const clip = (!peer && !perfLite()) ? drawClipHandle(media) : null;
+      if (clip) { popClipFlash(clip, dur, peer, origin); continue; }
       const handle = drawImage(peer);
       if (!handle) break;
-      const img = document.createElement('img');
-      img.className = 'gg-flash';
-      img.decoding = 'async';
-      img.alt = '';
-      img.style.setProperty('--gg-flash-dur', `${dur}ms`);
-      img.style.setProperty('--gg-flash-op', '0.95');
-      img.style.setProperty('left', `${(14 + Math.random() * 72).toFixed(1)}vw`);
-      img.style.setProperty('top', `${(16 + Math.random() * 64).toFixed(1)}vh`);
-      img.style.setProperty('--gg-flash-rot', `${(Math.random() * 16 - 8).toFixed(1)}deg`);
-      const rec = { node: img, handle };
-      popFlashes.add(rec);
-      let killed = false;
-      const kill = () => {
-        if (killed) return;
-        killed = true;
-        popFlashes.delete(rec);
-        try { img.remove(); } catch (_e) { /* ignore */ }
-        try { img.removeAttribute('src'); } catch (_e) { /* ignore */ }
-        try { if (handle.release) handle.release(); } catch (_e) { /* ignore */ }
-      };
-      img.addEventListener('animationend', kill, { once: true });
-      img.onerror = kill;
-      img.src = handle.url;
-      host.appendChild(img);
-      soon(kill, dur + 600);
+      placePopFlash(null, handle, dur, origin);
     }
   }
 
+  /** Load a clip for a pop flash; on a dud, the still it would have been. */
+  function popClipFlash(clip, dur, peer, origin) {
+    const slot = { pending: true, node: null, handle: clip };
+    popFlashes.add(slot);
+    prepareClip(clip, { className: 'gg-flash gg-clip' }, (v) => {
+      popFlashes.delete(slot);
+      const host = layer();
+      if (!v || !host) {
+        if (v) stopClip(v);
+        try { if (clip.release) clip.release(); } catch (_e) { /* ignore */ }
+        if (!host) return;
+        const still = drawImage(peer);
+        if (still) placePopFlash(null, still, dur, origin);
+        return;
+      }
+      placePopFlash(v, clip, dur, origin);
+    });
+  }
+
+  /** Place one pop flash: an <img> for `handle` when `node` is null, else the
+   *  ready clip. Lands from the pop point, exits inside its hold, always retires. */
+  function placePopFlash(node, handle, dur, origin) {
+    const host = layer();
+    if (!host || typeof document === 'undefined') {
+      if (node) stopClip(node);
+      try { if (handle.release) handle.release(); } catch (_e) { /* ignore */ }
+      return;
+    }
+    const isClip = !!node;
+    const img = node || document.createElement('img');
+    if (!isClip) {
+      img.className = 'gg-flash';
+      img.decoding = 'async';
+      img.alt = '';
+    }
+    img.style.setProperty('--gg-flash-dur', `${dur}ms`);
+    img.style.setProperty('--gg-flash-op', '0.95');
+    img.style.setProperty('left', `${(14 + Math.random() * 72).toFixed(1)}vw`);
+    img.style.setProperty('top', `${(16 + Math.random() * 64).toFixed(1)}vh`);
+    img.style.setProperty('--gg-flash-rot', `${(Math.random() * 16 - 8).toFixed(1)}deg`);
+    const rec = { node: img, handle };
+    popFlashes.add(rec);
+    let killed = false;
+    const kill = () => {
+      if (killed) return;
+      killed = true;
+      popFlashes.delete(rec);
+      if (isClip) stopClip(img);
+      try { img.remove(); } catch (_e) { /* ignore */ }
+      if (!isClip) { try { img.removeAttribute('src'); } catch (_e) { /* ignore */ } }
+      try { if (handle.release) handle.release(); } catch (_e) { /* ignore */ }
+    };
+    img.addEventListener('animationend', kill, { once: true });
+    if (isClip) {
+      img.addEventListener('error', kill, { once: true });
+    } else {
+      img.onerror = kill;
+      img.src = handle.url;
+    }
+    host.appendChild(img);
+    // It LANDS from the bubble that threw it (juice pass): travel from the
+    // pop point to its spot, overshoot, settle; exits inside its own hold.
+    landFromPop(img, origin, 0.95);
+    scheduleFlashExit(img, dur, { opacity: 0.95, rot: parseFloat(img.style.getPropertyValue('--gg-flash-rot')) || 0 });
+    soon(kill, dur + 600);
+  }
+
   /** The drain wash: dim + blur-behind with a faint image over it (showBraindrain). */
-  function popDrain(strength, peer) {
-    const h = holdOn('drain', 'gg-drain', scaleD(0.35, 0.62, strength), scale(1500, 4500, strength));
+  function popDrain(strength, peer, origin) {
+    const h = holdOn('drain', 'gg-drain', scaleD(0.35, 0.62, strength), scale(1500, 4500, strength), origin);
     if (!h) return h;
+    // THE FULLSCREEN GIF MOVES (owner, 2026-09-23: "glitch bubbles fullscreen gifs do
+    // not animate"). A gif clip plays over the pane as a muted looping <video>; the
+    // still stays underneath until its first frame, and is what a dud leaves behind.
+    const clip = (!peer && !perfLite()) ? drawClipHandle(media) : null;
     const handle = drawImage(peer);
     if (handle) {
       releaseHold(h);
       h.handle = handle;
       try { h.el.style.setProperty('background-image', `url("${handle.url}")`); } catch (_e) { /* ignore */ }
+    }
+    if (clip) {
+      dropClip(h);
+      const want = h.clipGen;
+      prepareClip(clip, { className: 'gg-clip gg-clip--wash' }, (v) => {
+        if (!v || h.clipGen !== want || !h.el || !h.el.isConnected) {
+          if (v) stopClip(v);
+          try { if (clip.release) clip.release(); } catch (_e) { /* ignore */ }
+          return;
+        }
+        h.clip = v;
+        h.clipHandle = clip;
+        try { h.el.insertBefore(v, h.el.firstChild || null); } catch (_e) { dropClip(h); }
+      });
+    } else if (handle) {
+      dropClip(h);          // a fresh still replaces the last pop's clip
     }
     return h;
   }
@@ -687,10 +822,10 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
    *
    * @param {boolean} [peer] the bubble was minted by an inbound swarm — see drawImage
    */
-  function popFx(kind, strength, peer) {
+  function popFx(kind, strength, peer, origin) {
     switch (kind) {
       case 'flash':
-        popFlash(strength, peer);
+        popFlash(strength, peer, origin);
         break;
       case 'spiral': {
         // The wash wears exec/spiral.js's own class, so it inherits that bed's
@@ -699,7 +834,7 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
         // 1.5-4.5s spin of a baked still, and a pop landing while the stack was
         // hot showed a photograph fading in and out — which is not a spiral,
         // it is a slide.
-        const h = holdOn('spiral', 'gg-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength));
+        const h = holdOn('spiral', 'gg-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength), origin);
         if (h) {
           // '' means the host could not bake one; the wash still reads without a
           // picture, and `url('')` would be worse than nothing.
@@ -709,17 +844,20 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
         break;
       }
       case 'pinkfilter':
-        holdOn('pink', 'gg-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength));
+        holdOn('pink', 'gg-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength), origin);
         break;
       case 'braindrain':
-        popDrain(strength, peer);
+        popDrain(strength, peer, origin);
         break;
       case 'glitch': {
         // RGB-split shudder OVER the drain wash — DtRH's showGlitch, hard-capped
         // so a fat bubble can never strobe forever.
-        const h = popDrain(strength, peer);
+        const h = popDrain(strength, peer, origin);
         if (!h) break;
         h.el.classList.add('is-glitching');
+        // The broken-signal read on arrival: bands of the picture knocked
+        // sideways ONCE (motion.sliceShimmer), not a strobe.
+        sliceShimmer(h.el, { tint: tintFor('glitch') });
         const ms = Math.min(4000, scale(1200, 3000, strength));
         try { clearTimeout(h.glitchTimer); } catch (_e) { /* ignore */ }
         h.glitchTimer = soon(() => { if (h.el) h.el.classList.remove('is-glitching'); }, ms);
@@ -774,16 +912,25 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
   }
 
   function pop(rec, x, y) {
+    rec.unbindHit?.();
     rec.popped = true;
     rec.bubble.classList.add('is-pop');
-    sparkleBurst(x, y);
+    sparkleBurst(x, y, rec.kind);
     sfx(popCue(rec));
     announcePop(rec, x, y);
     // Bubble size IS the strength dial in the Fall; same here.
     const strength = Math.round(clamp01((rec.size - BUB_MIN_PX) / (BUB_MAX_PX - BUB_MIN_PX)) * 100);
+    // IMPACT, several small channels at once (juice pass 2026-09-23, Breakout's
+    // rule): the squash is the CSS pop keyframe, the sparks above, a shockwave
+    // ring every pop, and for an EFFECT bubble a second tinted burst plus a
+    // small real-pixel shake of the fx tier sized by the bubble (2..7 px). A
+    // swarm's clutter and a plain pop stay light: juice is earned.
+    // The pop itself is DtRH's (owner, 2026-09-25): swell to 2x and fade, nine
+    // shards. No ring, no second burst, no shake: the bubble is the whole event.
     // `fromPayload` rides along: a bubble the opponent's swarm minted bursts into
     // THEIR media when they have landed some (drawImage), a field bubble into ours.
-    try { popFx(rec.kind, strength, rec.fromPayload); }
+    // The pop point rides too: every wash grows out of it.
+    try { popFx(rec.kind, strength, rec.fromPayload, { x, y }); }
     catch (e) { warn(`popFx ${rec.kind} threw: ${e && e.message}`); }
     rec.bubble.addEventListener('animationend', () => recycle(rec), { once: true });
     soon(() => recycle(rec), 600);

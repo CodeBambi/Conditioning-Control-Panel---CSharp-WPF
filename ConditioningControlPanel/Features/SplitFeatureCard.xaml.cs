@@ -67,7 +67,10 @@ namespace ConditioningControlPanel.Features
         /// which defeats the recognise-the-art point of the peek.</summary>
         private const double PeekScrimOpacity = 0.20;
         private const double TitleExpandedScale = 1.35;
-        private const double RingInset = 2.0;
+        /// <summary>Half the ring's 3px stroke, so its OUTER edge lands on the card edge.</summary>
+        private const double RingInset = 1.5;
+        /// <summary>ContentRoot's clip radius (RootBorder 12 minus its 1px border).</summary>
+        private const double ContentCornerRadius = 11;
         /// <summary>Pill margin + padding, taken off before capping the grown title's width.</summary>
         private const double TitlePillChrome = 34;
         private const int SplitExpandMs = 260;
@@ -112,6 +115,28 @@ namespace ConditioningControlPanel.Features
             DependencyProperty.Register(nameof(IconB), typeof(ImageSource), typeof(SplitFeatureCard),
                 new PropertyMetadata(null, (d, e) => ((SplitFeatureCard)d).ApplyIcon(((SplitFeatureCard)d).HalfHostB, ((SplitFeatureCard)d).HalfMuteB, e.NewValue as ImageSource)));
 
+        public static readonly DependencyProperty HelpSectionIdAProperty =
+            DependencyProperty.Register(nameof(HelpSectionIdA), typeof(string), typeof(SplitFeatureCard),
+                new PropertyMetadata(null, (d, _) => ((SplitFeatureCard)d).RefreshHelp()));
+
+        public static readonly DependencyProperty HelpSectionIdBProperty =
+            DependencyProperty.Register(nameof(HelpSectionIdB), typeof(string), typeof(SplitFeatureCard),
+                new PropertyMetadata(null, (d, _) => ((SplitFeatureCard)d).RefreshHelp()));
+
+        /// <summary>HelpContentService section for half A's "?"; no button when it has no content.</summary>
+        public string? HelpSectionIdA
+        {
+            get => (string?)GetValue(HelpSectionIdAProperty);
+            set => SetValue(HelpSectionIdAProperty, value);
+        }
+
+        /// <summary>HelpContentService section for half B's "?"; no button when it has no content.</summary>
+        public string? HelpSectionIdB
+        {
+            get => (string?)GetValue(HelpSectionIdBProperty);
+            set => SetValue(HelpSectionIdBProperty, value);
+        }
+
         public static readonly DependencyProperty IsActiveAProperty =
             DependencyProperty.Register(nameof(IsActiveA), typeof(bool), typeof(SplitFeatureCard),
                 new PropertyMetadata(false, (d, _) => ((SplitFeatureCard)d).ApplyActiveState()));
@@ -148,14 +173,24 @@ namespace ConditioningControlPanel.Features
         public event RoutedEventHandler ToggleA { add => AddHandler(ToggleAEvent, value); remove => RemoveHandler(ToggleAEvent, value); }
         public event RoutedEventHandler ToggleB { add => AddHandler(ToggleBEvent, value); remove => RemoveHandler(ToggleBEvent, value); }
 
+        private DashboardCardDepth? _depthA, _depthB;
+        public bool DashboardDepth { get; set; }
+
         public SplitFeatureCard()
         {
             InitializeComponent();
+            _depthA = new DashboardCardDepth(this, HalfFaceA, DepthBevelA,
+                () => DashboardDepth, () => IsActiveA, e => ResolveHalfA(e.GetPosition(ContentRoot)));
+            _depthB = new DashboardCardDepth(this, HalfFaceB, DepthBevelB,
+                () => DashboardDepth, () => IsActiveB, e => !ResolveHalfA(e.GetPosition(ContentRoot)));
+            Loaded += (_, _) => HalfSocketA.Visibility = HalfSocketB.Visibility =
+                DashboardDepth ? Visibility.Visible : Visibility.Collapsed;
             // Both halves start OFF and their DP callbacks only fire on a CHANGE, so a card whose
             // features are off at startup would never be handed its resting dim without this.
             ApplyHalfRestOpacity();
             ApplyHalfMute(0);
             Loaded += OnCardLoaded;
+            Loaded += (_, _) => RefreshHelp();
             Unloaded += OnCardUnloaded;
             // A tile hidden mid-hover (tab switch out of the dashboard) can be denied its
             // MouseLeave, and would come back still filled - so drop the fill on the way out.
@@ -271,8 +306,10 @@ namespace ConditioningControlPanel.Features
             var regionA = RegionGeometry(true, k, w, h, 0);
             var regionB = RegionGeometry(false, k, w, h, 0);
 
-            HalfHostA.Clip = regionA;
-            HalfHostB.Clip = regionB;
+            HalfRegionA.Clip = regionA;
+            DepthBevelA.Data = RegionGeometry(true, k, w, h, 1);
+            HalfRegionB.Clip = regionB;
+            DepthBevelB.Data = RegionGeometry(false, k, w, h, 1);
             HoverWashA.Data = regionA;
             HoverWashB.Data = regionB;
 
@@ -280,9 +317,9 @@ namespace ConditioningControlPanel.Features
             // in half by ContentRoot's bounds. ApplyActiveState re-enters here after flipping the
             // Visibility, so a ring that just came on still gets its geometry.
             if (ActiveRingA.Visibility == Visibility.Visible)
-                ActiveRingA.Data = RegionGeometry(true, k, w, h, RingInset);
+                ActiveRingA.Data = RingGeometry(true, k, w, h);
             if (ActiveRingB.Visibility == Visibility.Visible)
-                ActiveRingB.Data = RegionGeometry(false, k, w, h, RingInset);
+                ActiveRingB.Data = RingGeometry(false, k, w, h);
 
             var (s1, s2) = SeamPoints(k, w, h);
             var seam = new LineGeometry(s1, s2);
@@ -366,6 +403,23 @@ namespace ConditioningControlPanel.Features
             return geo;
         }
 
+        /// <summary>
+        /// One half's active ring: the region inset by half the stroke, with its card corners
+        /// rounded to the content clip's arc (radius minus the inset). A square-cornered polygon
+        /// under the rounded clip loses its corner to the arc and bares the dark card body there,
+        /// and a stroke centred any deeper than half its width leaves a sliver along each edge.
+        /// </summary>
+        private static Geometry RingGeometry(bool halfA, double k, double w, double h)
+        {
+            var region = RegionGeometry(halfA, k, w, h, RingInset);
+            if (region.IsEmpty() || w <= 2 * RingInset || h <= 2 * RingInset) return EmptyGeometry;
+            double r = ContentCornerRadius - RingInset;
+            var rounded = new RectangleGeometry(new Rect(RingInset, RingInset, w - 2 * RingInset, h - 2 * RingInset), r, r);
+            var geo = Geometry.Combine(rounded, region, GeometryCombineMode.Intersect, null);
+            geo.Freeze();
+            return geo;
+        }
+
         private static void AddVertex(List<Point> poly, Point p)
         {
             if (poly.Count > 0 && Near(poly[^1], p)) return;
@@ -383,16 +437,66 @@ namespace ConditioningControlPanel.Features
 
         // ============================== input ==============================
 
-        private void OnLeftClick(object sender, MouseButtonEventArgs e)
+        private void OnLeftClick(object sender, MouseButtonEventArgs e) => RouteClick(e, right: false);
+
+        private void OnRightClick(object sender, MouseButtonEventArgs e) => RouteClick(e, right: true);
+
+        // Same carve-out FeatureCard keeps for its "?": a press on a help button never opens or
+        // toggles the half under it.
+        private bool FromHelpButton(RoutedEventArgs e) =>
+            e.OriginalSource is DependencyObject src && (IsWithin(src, BtnHelpA) || IsWithin(src, BtnHelpB));
+
+        private static bool IsWithin(DependencyObject? node, DependencyObject target)
         {
-            var evt = ResolveHalfA(e.GetPosition(ContentRoot)) ? ClickAEvent : ClickBEvent;
-            RaiseEvent(new RoutedEventArgs(evt, this));
+            while (node != null)
+            {
+                if (ReferenceEquals(node, target)) return true;
+                node = node is Visual or System.Windows.Media.Media3D.Visual3D
+                    ? VisualTreeHelper.GetParent(node)
+                    : LogicalTreeHelper.GetParent(node);
+            }
+            return false;
         }
 
-        private void OnRightClick(object sender, MouseButtonEventArgs e)
+        private void RefreshHelp()
         {
-            e.Handled = true;
-            var evt = ResolveHalfA(e.GetPosition(ContentRoot)) ? ToggleAEvent : ToggleBEvent;
+            ApplyHelp(BtnHelpA, HelpSectionIdA);
+            ApplyHelp(BtnHelpB, HelpSectionIdB);
+            ApplyHelpForHover();
+        }
+
+        private void ApplyHelp(Button button, string? id)
+        {
+            if (string.IsNullOrWhiteSpace(id) || !Services.HelpContentService.HasContent(id))
+            {
+                button.Visibility = Visibility.Collapsed;
+                Controls.HelpPopover.Clear(button);
+                return;
+            }
+            button.Visibility = Visibility.Visible;
+            // Resource lookups fail before the card is in the tree; Loaded runs this again.
+            if (!IsLoaded) return;
+            button.ToolTip = null;
+            Controls.HelpPopover.Attach(button, Services.HelpContentService.GetContent(id));
+        }
+
+        /// <summary>While one half fills the tile, the other half's "?" steps aside with its title.</summary>
+        private void ApplyHelpForHover()
+        {
+            BtnHelpA.Opacity = _halfHover == false ? 0 : 1;
+            BtnHelpA.IsHitTestVisible = _halfHover != false;
+            BtnHelpB.Opacity = _halfHover == true ? 0 : 1;
+            BtnHelpB.IsHitTestVisible = _halfHover != true;
+        }
+
+        private void RouteClick(MouseButtonEventArgs e, bool right)
+        {
+            if (FromHelpButton(e)) return;
+            bool invert = DashboardDepth && App.Settings?.Current?.DashboardInvertClicks == true;
+            bool toggle = right != invert;
+            bool halfA = ResolveHalfA(e.GetPosition(ContentRoot));
+            if (right || toggle) e.Handled = true;
+            var evt = toggle ? (halfA ? ToggleAEvent : ToggleBEvent) : (halfA ? ClickAEvent : ClickBEvent);
             RaiseEvent(new RoutedEventArgs(evt, this));
         }
 
@@ -415,6 +519,7 @@ namespace ConditioningControlPanel.Features
         {
             if (_halfHover == halfA) return;
             _halfHover = halfA;
+            ApplyHelpForHover();
 
             // The committed half is about to fill the tile, so it gets its full art back - colour
             // and all - even while its feature is off; the reveal is the point of the sweep.
@@ -575,6 +680,8 @@ namespace ConditioningControlPanel.Features
 
         private void ApplyActiveState()
         {
+            _depthA?.Refresh();
+            _depthB?.Refresh();
             ActiveRingA.Visibility = IsActiveA ? Visibility.Visible : Visibility.Collapsed;
             ActiveRingB.Visibility = IsActiveB ? Visibility.Visible : Visibility.Collapsed;
             ApplyHalfRestOpacity();
@@ -636,8 +743,8 @@ namespace ConditioningControlPanel.Features
         private void ApplyHalfRestOpacity()
         {
             if (HalfHostA == null || HalfHostB == null) return;
-            HalfHostA.Opacity = IsActiveA || _halfHover == true ? 1.0 : InactiveHalfOpacity;
-            HalfHostB.Opacity = IsActiveB || _halfHover == false ? 1.0 : InactiveHalfOpacity;
+            HalfHostA.Opacity = IsActiveA || (!DashboardDepth && _halfHover == true) ? 1.0 : InactiveHalfOpacity;
+            HalfHostB.Opacity = IsActiveB || (!DashboardDepth && _halfHover == false) ? 1.0 : InactiveHalfOpacity;
         }
 
         /// <summary>
@@ -652,8 +759,8 @@ namespace ConditioningControlPanel.Features
             try
             {
                 if (HalfMuteA == null || HalfMuteB == null) return;
-                FadeMute(HalfMuteA, CardMuteRule.ShouldMuteHalf(IsActiveA, _halfHover == true), ms);
-                FadeMute(HalfMuteB, CardMuteRule.ShouldMuteHalf(IsActiveB, _halfHover == false), ms);
+                FadeMute(HalfMuteA, CardMuteRule.ShouldMuteHalf(IsActiveA, !DashboardDepth && _halfHover == true), ms);
+                FadeMute(HalfMuteB, CardMuteRule.ShouldMuteHalf(IsActiveB, !DashboardDepth && _halfHover == false), ms);
             }
             catch (Exception ex) { App.Logger?.Debug("SplitFeatureCard.ApplyHalfMute: {E}", ex.Message); }
         }
@@ -754,7 +861,7 @@ namespace ConditioningControlPanel.Features
             _hovered = on;
             try
             {
-                MotionFx.HoverLift(RootBorder, on);
+                if (!DashboardDepth) MotionFx.HoverLift(RootBorder, on);
                 if (RimLight == null) return;
                 double to = on ? RimLightOpacity : 0;
                 if (!MotionFx.AllowTransitions)

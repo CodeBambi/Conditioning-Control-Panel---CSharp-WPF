@@ -1,0 +1,228 @@
+{
+  "mantras": [
+    {
+      "id": "circe-02",
+      "phrase": "i earn what i get",
+      "promptText": "tell me: i earn what i get",
+      "promptAudio": "mantra_circe_02_say.mp3",
+      "response": "good. nothing is given. everything is earned.",
+      "responseAudio": "mantra_circe_02_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-03",
+      "phrase": "i exist to obey",
+      "promptText": "say it, and mean it: i exist to obey",
+      "promptAudio": "mantra_circe_03_say.mp3",
+      "response": "yes. that is the only purpose you need.",
+      "responseAudio": "mantra_circe_03_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-04",
+      "phrase": "i am kept",
+      "promptText": "now, the simple truth: i am kept",
+      "promptAudio": "mantra_circe_04_say.mp3",
+      "response": "kept, and grateful for it. say it again tomorrow.",
+      "responseAudio": "mantra_circe_04_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-09",
+      "phrase": "i obey to be allowed",
+      "promptText": "say it: i obey to be allowed",
+      "promptAudio": "mantra_circe_09_say.mp3",
+      "response": "good. obedience is the only currency i accept.",
+      "responseAudio": "mantra_circe_09_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-10",
+      "phrase": "i wait for permission",
+      "promptText": "tell me: i wait for permission",
+      "promptAudio": "mantra_circe_10_say.mp3",
+      "response": "as you should. and you'll wait a while longer.",
+      "responseAudio": "mantra_circe_10_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-21",
+      "phrase": "i belong to you",
+      "promptText": "say it clearly: i belong to you",
+      "promptAudio": "mantra_circe_21_say.mp3",
+      "response": "you do. property doesn't get opinions.",
+      "responseAudio": "mantra_circe_21_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-23",
+      "phrase": "i kneel when told",
+      "promptText": "say it: i kneel when told",
+      "promptAudio": "mantra_circe_23_say.mp3",
+      "response": "down. that's better. you think clearer from there.",
+      "responseAudio": "mantra_circe_23_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-25",
+      "phrase": "i obey without reward",
+      "promptText": "say it: i obey without reward",
+      "promptAudio": "mantra_circe_25_say.mp3",
+      "response": "good. the obedience is the reward. learn to like it.",
+      "responseAudio": "mantra_circe_25_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-27",
+      "phrase": "i am trained to wait",
+      "promptText": "say it: i am trained to wait",
+      "promptAudio": "mantra_circe_27_say.mp3",
+      "response": "you are. patience looks good on you. keep waiting.",
+      "responseAudio": "mantra_circe_27_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-28",
+      "phrase": "i submit completely",
+      "promptText": "say it clearly: i submit completely",
+      "promptAudio": "mantra_circe_28_say.mp3",
+      "response": "as expected. there was never another option.",
+      "responseAudio": "mantra_circe_28_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-29",
+      "phrase": "i exist to be kept",
+      "promptText": "tell me: i exist to be kept",
+      "promptAudio": "mantra_circe_29_say.mp3",
+      "response": "yes. kept things don't question the keeper.",
+      "responseAudio": "mantra_circe_29_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-30",
+      "phrase": "i do as i am told",
+      "promptText": "say it: i do as i am told",
+      "promptAudio": "mantra_circe_30_say.mp3",
+      "response": "good. obedience is the only thing keeping you interesting.",
+      "responseAudio": "mantra_circe_30_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-41",
+      "phrase": "i am yours to keep",
+      "promptText": "say it: i am yours to keep",
+      "promptAudio": "mantra_circe_41_say.mp3",
+      "response": "kept. say it every morning until it's instinct.",
+      "responseAudio": "mantra_circe_41_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-42",
+      "phrase": "i obey the keeper",
+      "promptText": "say it: i obey the keeper",
+      "promptAudio": "mantra_circe_42_say.mp3",
+      "response": "good. the keeper always knows best. you don't.",
+      "responseAudio": "mantra_circe_42_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-44",
+      "phrase": "i am better when controlled",
+      "promptText": "say it: i am better when controlled",
+      "promptAudio": "mantra_circe_44_say.mp3",
+      "response": "you are. left alone, you're a mess. i fixed that.",
+      "responseAudio": "mantra_circe_44_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-45",
+      "phrase": "i was made to be kept",
+      "promptText": "say it clearly: i was made to be kept",
+      "promptAudio": "mantra_circe_45_say.mp3",
+      "response": "yes. and i intend to keep you for a very long time.",
+      "responseAudio": "mantra_circe_45_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-47",
+      "phrase": "i live by your rules",
+      "promptText": "say it: i live by your rules",
+      "promptAudio": "mantra_circe_47_say.mp3",
+      "response": "as you should. my rules, my pace, my decision.",
+      "responseAudio": "mantra_circe_47_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-48",
+      "phrase": "patience is my place",
+      "promptText": "say it: patience is my place",
+      "promptAudio": "mantra_circe_48_say.mp3",
+      "response": "good. learn to rest there. you'll be there a while.",
+      "responseAudio": "mantra_circe_48_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-49",
+      "phrase": "i earn every privilege",
+      "promptText": "say it: i earn every privilege",
+      "promptAudio": "mantra_circe_49_say.mp3",
+      "response": "slowly. and you've a long way left to climb.",
+      "responseAudio": "mantra_circe_49_resp.mp3",
+      "enabled": true
+    },
+    {
+      "id": "circe-50",
+      "phrase": "i am kept and grateful",
+      "promptText": "say it: i am kept and grateful",
+      "promptAudio": "mantra_circe_50_say.mp3",
+      "response": "the correct attitude. say it again tomorrow, and the next.",
+      "responseAudio": "mantra_circe_50_resp.mp3",
+      "enabled": true
+    }
+  ],
+  "retry": [
+    {
+      "text": "louder. i won't ask twice.",
+      "audio": "mantra_circe_retry_1.mp3"
+    },
+    {
+      "text": "again. clearly this time.",
+      "audio": "mantra_circe_retry_2.mp3"
+    },
+    {
+      "text": "speak up. mumbling earns you nothing.",
+      "audio": "mantra_circe_retry_3.mp3"
+    },
+    {
+      "text": "once more, and mean it this time.",
+      "audio": "mantra_circe_retry_4.mp3"
+    },
+    {
+      "text": "i didn't hear you. that's not my problem to fix twice.",
+      "audio": "mantra_circe_retry_5.mp3"
+    },
+    {
+      "text": "say it properly. i have no patience for less.",
+      "audio": "mantra_circe_retry_6.mp3"
+    }
+  ],
+  "timeout": [
+    {
+      "text": "silence earns you nothing. we'll try again.",
+      "audio": "mantra_circe_timeout_1.mp3"
+    },
+    {
+      "text": "no answer? the lock stays on.",
+      "audio": "mantra_circe_timeout_2.mp3"
+    },
+    {
+      "text": "nothing? then nothing is what you'll get.",
+      "audio": "mantra_circe_timeout_3.mp3"
+    },
+    {
+      "text": "quiet doesn't move me. another time, then.",
+      "audio": "mantra_circe_timeout_4.mp3"
+    }
+  ]
+}

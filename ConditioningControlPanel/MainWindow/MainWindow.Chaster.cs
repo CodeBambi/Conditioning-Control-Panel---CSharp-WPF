@@ -93,7 +93,7 @@ namespace ConditioningControlPanel
                     // reads as one number settling rather than as a stutter.
                     if (look is { } merged)
                     {
-                        _chasterPop?.Retitle(merged.Text, merged.Colour);
+                        _chasterPop?.Retitle(merged.Text, merged.Colour, merged.Source);
                         _chasterFlash?.Retitle(merged.Text, merged.Colour);
                     }
                     else

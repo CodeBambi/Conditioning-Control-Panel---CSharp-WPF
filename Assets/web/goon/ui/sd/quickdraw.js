@@ -15,6 +15,8 @@
  * is an explicit, visible control instead of a keypress that could concede.
  * ==========================================================================*/
 
+import { S } from '../strings.js';
+
 export function createQuickDraw(ctx) {
   const { el, add, cls, text, sfx } = ctx;
   let node = null;
@@ -29,7 +31,7 @@ export function createQuickDraw(ctx) {
     if (!node) return null;
     node._slot = add(node, el('div', 'gg-sd-card-slot'));
     node._dots = add(node, el('div', 'gg-sd-card-dots'));
-    node._slips = add(node, el('div', 'gg-sd-card-slips', 'slips 0'));
+    node._slips = add(node, el('div', 'gg-sd-card-slips', S.sd.slips(0)));
     ctx.mountStage(node);
     return node;
   }
@@ -42,14 +44,14 @@ export function createQuickDraw(ctx) {
       const dot = add(host, el('i', 'gg-sd-dot'));
       cls(dot, 'is-on', i < done);
     }
-    const label = add(host, el('span', 'gg-sd-dot-label', done + ' of ' + repeats));
+    const label = add(host, el('span', 'gg-sd-dot-label', S.sd.dots(done, repeats)));
     if (!label) return;
   }
 
   /** exec/lockCards.js passes the running count; the inline card passes nothing. */
   function onMistake(count) {
     mistakes = (typeof count === 'number' && count > mistakes) ? count : mistakes + 1;
-    text(node && node._slips, 'slips ' + mistakes);
+    text(node && node._slips, S.sd.slips(mistakes));
     cls(node, 'is-slip', true);
     setTimeout(() => cls(node, 'is-slip', false), 160);
   }
@@ -61,7 +63,7 @@ export function createQuickDraw(ctx) {
     done = 0;
     const repeats = Math.max(1, (spec && spec.repeats) | 0);
     paintDots(repeats);
-    text(n._slips, 'slips 0');
+    text(n._slips, S.sd.slips(0));
     n.hidden = false;
     cls(n, 'is-in', true);
 
@@ -96,17 +98,17 @@ export function createQuickDraw(ctx) {
     try { slot.replaceChildren(); } catch (_e) { slot.textContent = ''; }
     const phrase = (spec && spec.phrase) || '';
 
-    add(slot, el('div', 'gg-lc-kicker', 'type it'));
+    add(slot, el('div', 'gg-lc-kicker', S.sd.typeIt));
     add(slot, el('div', 'gg-lc-phrase', phrase));
     const input = add(slot, el('input', 'gg-lc-input'));
-    const hint = add(slot, el('div', 'gg-lc-hint', 'press enter for each line'));
-    const give = add(slot, el('button', 'gg-lc-give', 'give up on this card'));
+    const hint = add(slot, el('div', 'gg-lc-hint', S.sd.enterEachLine));
+    const give = add(slot, el('button', 'gg-lc-give', S.sd.giveUp));
     if (give) give.type = 'button';
     if (input) {
       input.type = 'text';
       input.autocomplete = 'off';
       input.spellcheck = false;
-      input.setAttribute && input.setAttribute('aria-label', 'type the phrase');
+      input.setAttribute && input.setAttribute('aria-label', S.lockCard.typePhrase);
       const onKey = (e) => {
         if (!e || e.key !== 'Enter') return;
         const typed = String(input.value || '').trim().toLowerCase();

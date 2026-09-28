@@ -88,7 +88,8 @@ export function createMoveList(opts = {}) {
   }
 
   function cell(move, ply) {
-    const span = document.createElement('span');
+    const span = document.createElement(move ? 'button' : 'span');
+    if (move) { span.type = 'button'; span.title = 'Show ' + move.from + ' to ' + move.to; }
     span.className = 'm';
     if (!move) { span.className = 'm gap'; span.textContent = ''; return span; }
     span.textContent = move.san || (move.from + move.to);
@@ -211,7 +212,7 @@ export function createMoveList(opts = {}) {
   let open;
   if (stored === 'open') open = true;
   else if (stored === 'closed') open = false;
-  else open = (typeof window !== 'undefined' ? window.innerWidth : 0) > T.wideAt;
+  else open = false;
   root.hidden = false;
   setOpen(open, false);
   draw();

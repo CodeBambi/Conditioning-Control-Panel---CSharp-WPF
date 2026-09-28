@@ -591,7 +591,7 @@
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
-                                                        <TextBlock Text="🎤 Surprise me with mantras" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"/>
+                                                        <helpers:EmojiTextBlock Text="🎤 Surprise me with mantras" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"/>
                                                         <TextBlock x:Name="TxtAutonomyVoiceHint" x:FieldModifier="internal" Text="{loc:Str takeover_voice_hint_off}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}"/>
                                                         <!-- Only up while the hint is about a MISSING or unloadable model
                                                              (MainWindow.Autonomy.cs owns that). The instruction used to be a
@@ -745,7 +745,7 @@
                                          premium rail, /remember and MainWindow.Settings all read and flip; the
                                          hero's Start/Stop button is the visible face of it, so it stays here,
                                          collapsed and named, exactly as before. -->
-                                    <TextBlock x:Name="TxtTakeoverUnlocked" x:FieldModifier="internal" Visibility="Collapsed"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtTakeoverUnlocked" x:FieldModifier="internal" Visibility="Collapsed"/>
                                     <CheckBox x:Name="ChkAutonomySpiral" x:FieldModifier="internal" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
                                     <CheckBox x:Name="ChkAutonomyBubbleCount" x:FieldModifier="internal" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
                                     <Button x:Name="BtnForceStartAutonomy" Visibility="Collapsed" Click="BtnForceStartAutonomy_Click"/>

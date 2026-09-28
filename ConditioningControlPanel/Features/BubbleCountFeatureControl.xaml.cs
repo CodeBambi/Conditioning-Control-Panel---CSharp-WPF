@@ -130,6 +130,19 @@ namespace ConditioningControlPanel.Features
             if (s == null) return;
 
             var on = ChkStrict.IsChecked ?? false;
+
+            // A Lockdown forcing Strict Lock holds this toggle too (#1282): put the tick back.
+            if (Services.LockdownStrictHold.RefusesNow(on))
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _isLoading = true;
+                    ChkStrict.IsChecked = s.BubbleCountStrictLock;
+                    _isLoading = false;
+                }));
+                return;
+            }
+
             if (on)
             {
                 var owner = Application.Current.MainWindow;

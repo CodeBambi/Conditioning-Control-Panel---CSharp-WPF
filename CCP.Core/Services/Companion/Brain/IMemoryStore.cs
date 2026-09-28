@@ -34,7 +34,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         DateTime? LastUsed,
         int Uses,
         bool Pinned,
-        string Source)
+        string Source, string? SourceTurnId = null)
     {
         public const string SourceChat = "chat";
         public const string SourceApp = "app";

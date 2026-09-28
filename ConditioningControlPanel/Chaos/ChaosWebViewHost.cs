@@ -299,6 +299,11 @@ internal sealed class ChaosWebViewHost : IDisposable
         ApplyWindowMode(_opts.StartFullscreen);   // sets style / bounds / resize mode
         if (!_opts.InputEnabled)
             _window.SourceInitialized += (_, _) => ApplyPassiveExStyles(_window);
+        else if (_opts.OwnedByMainWindow)
+            // An OWNED window gets no taskbar button, and with the launcher up the owner is
+            // hidden too, so a game glued to MainWindow could only be found through the tray
+            // (owner, 2026-09-25). WS_EX_APPWINDOW forces the button and keeps the owner link.
+            _window.SourceInitialized += (_, _) => ApplyAppWindowExStyle(_window);
         _window.Show();
         _countedActive = true;
         System.Threading.Interlocked.Increment(ref _activeHostCount);
@@ -306,7 +311,15 @@ internal sealed class ChaosWebViewHost : IDisposable
         try
         {
             if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
-            if (_opts.InputEnabled) { try { _window.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); } }
+            if (_opts.InputEnabled)
+            {
+                // Raise, do not just Activate: the window that opened us (the launcher, the tray-hidden
+                // panel) is about to go away, and a plain Activate from a process whose foreground
+                // window is leaving can land under everything. Again once the first frame is up.
+                BringToFront();
+                _window.ContentRendered += OnFirstRender;
+                if (_opts.IsGame) _frontGame = new WeakReference<ChaosWebViewHost>(this);
+            }
 
             _ = InitWebAsync();
             App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Host}",
@@ -793,7 +806,82 @@ internal sealed class ChaosWebViewHost : IDisposable
         catch (Exception ex) { App.Logger?.Debug("{Tag}.Post: {E}", _opts.LogTag, ex.Message); }
     }
 
+    private void OnFirstRender(object? sender, EventArgs e)
+    {
+        if (_window != null) _window.ContentRendered -= OnFirstRender;
+        BringToFront();
+    }
+
+    // The newest input-taking GAME host, so the launcher can hand the foreground back to it once
+    // its own hide has run (a hide can pass activation on to whatever sits next in the z-order).
+    private static WeakReference<ChaosWebViewHost>? _frontGame;
+
+    /// <summary>Raise the newest live game window to the foreground. Safe to call with none up.</summary>
+    internal static void BringActiveGameToFront()
+    {
+        if (_frontGame != null && _frontGame.TryGetTarget(out var host) && !host._disposed)
+            host.BringToFront();
+    }
+
+    /// <summary>
+    /// Bring the window to the front and give it keyboard focus: show it, restore it from a
+    /// minimize, pulse it topmost (natively, without touching the owner) so it lands above every
+    /// other window, then take the foreground. The launcher and the tray-hidden panel are the
+    /// usual callers' parents, and neither is on screen by the time the page wants the player.
+    /// </summary>
+    public void BringToFront()
+    {
+        if (_window == null || _disposed) return;
+        try
+        {
+            if (!_window.IsVisible) _window.Show();
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            if (hwnd == IntPtr.Zero) { _window.Activate(); return; }
+            if (_window.WindowState == WindowState.Minimized) ShowWindow(hwnd, SW_RESTORE);
+            if (!_opts.InputEnabled) return;
+
+            // A window that is legitimately topmost (host-owned fullscreen) keeps its claim.
+            const uint flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags);
+            if (!_window.Topmost) SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+
+            if (!SetForegroundWindow(hwnd) && GetForegroundWindow() != hwnd)
+            {
+                // Foreground lock: borrow the current foreground thread's input state for one call.
+                uint fgThread = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);
+                uint ourThread = GetCurrentThreadId();
+                if (fgThread != 0 && fgThread != ourThread && AttachThreadInput(ourThread, fgThread, true))
+                {
+                    try { SetForegroundWindow(hwnd); }
+                    finally { AttachThreadInput(ourThread, fgThread, false); }
+                }
+            }
+            _window.Activate();
+            _web?.Focus();
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+    }
+
     /// <summary>Return Win32 focus to the game surface (e.g. after a payload window closed).</summary>
+    // Own name: the taskbar fix (#1690) declares GetForegroundWindow in this class too.
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetForegroundWindow")]
+    private static extern IntPtr ForegroundWindowForPanic();
+
+    /// <summary>True while this game window is the foreground window (the player is looking at it).</summary>
+    public bool IsForeground
+    {
+        get
+        {
+            try
+            {
+                if (_window == null || !_window.IsVisible) return false;
+                var own = new WindowInteropHelper(_window).Handle;
+                return own != IntPtr.Zero && ForegroundWindowForPanic() == own;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); return false; }
+        }
+    }
+
     public void FocusWeb()
     {
         try
@@ -910,6 +998,10 @@ internal sealed class ChaosWebViewHost : IDisposable
             var hwnd = new WindowInteropHelper(_window).Handle;
             if (hwnd == IntPtr.Zero) return;
             SetWindowLongPtr(hwnd, GWL_HWNDPARENT, owned ? _glueOwnerHandle : IntPtr.Zero);
+            // Re-owning a SHOWN window drops its taskbar button even with WS_EX_APPWINDOW set at
+            // creation (desk run 2026-09-25: the Goon window had none). Re-assert the style and
+            // hand the shell the button explicitly after every owner change.
+            if (_opts.InputEnabled && _opts.OwnedByMainWindow) EnsureTaskbarButton(_window);
             // Owner changes are cached — flush the frame so the z-order link takes effect now.
             SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -1710,7 +1802,53 @@ internal sealed class ChaosWebViewHost : IDisposable
         catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
+    /// <summary>WS_EX_APPWINDOW plus ITaskbarList.AddTab: the shell only evaluates the style when a
+    /// window is shown, so a window owned AFTER showing needs the button added by hand.</summary>
+    private static void EnsureTaskbarButton(Window w)
+    {
+        ApplyAppWindowExStyle(w);
+        try
+        {
+            var hwnd = new WindowInteropHelper(w).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            var list = (ITaskbarList)new TaskbarListCoClass();
+            list.HrInit();
+            list.AddTab(hwnd);
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+    }
+
+    [System.Runtime.InteropServices.ComImport]
+    [System.Runtime.InteropServices.Guid("56FDF342-FD6D-11d0-958A-006097C9A090")]
+    [System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
+    private interface ITaskbarList
+    {
+        void HrInit();
+        void AddTab(IntPtr hwnd);
+        void DeleteTab(IntPtr hwnd);
+        void ActivateTab(IntPtr hwnd);
+        void SetActiveAlt(IntPtr hwnd);
+    }
+
+    [System.Runtime.InteropServices.ComImport]
+    [System.Runtime.InteropServices.Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
+    private class TaskbarListCoClass { }
+
+    // A game window keeps its own taskbar button even while owned by (a possibly hidden) MainWindow.
+    private static void ApplyAppWindowExStyle(Window w)
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(w).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            int ex = GetWindowLong(hwnd, GWL_EXSTYLE);
+            SetWindowLong(hwnd, GWL_EXSTYLE, (ex | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW);
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+    }
+
     private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_APPWINDOW = 0x00040000;
     private const int WM_SHOWWINDOW = 0x0018;
     private const int SW_PARENTCLOSING = 1;   // lParam of the owner-minimize cascade's WM_SHOWWINDOW
     private const int SW_SHOWNA = 8;          // show at current size/pos WITHOUT activating
@@ -1732,4 +1870,11 @@ internal sealed class ChaosWebViewHost : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_RESTORE = 9;
+    private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lpdwProcessId);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
 }

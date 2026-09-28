@@ -224,9 +224,9 @@
                            Source="{Binding Source='📖', Converter={StaticResource CmpEmojiToImage}}"/>
                     <TextBlock Text="{loc:Str companion_memory_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{loc:Str companion_memory_hint}"
+                <TextBlock x:Name="DiaryHint" Grid.Column="1" Text="{loc:Str companion_memory_hint}"
                            Style="{StaticResource CmpSectionHintStyle}"/>
-                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagLiveStyle}">
+                <Border x:Name="TrainTag" Grid.Column="2" Style="{StaticResource CmpTrainTagLiveStyle}">
                     <TextBlock Text="{loc:Str companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
                 </Border>
             </Grid>
@@ -319,15 +319,15 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" VerticalAlignment="Center" TextWrapping="Wrap"
+                        <TextBlock x:Name="ForgetQuestion" Grid.Column="0" VerticalAlignment="Center" TextWrapping="Wrap"
                                    Margin="0,0,10,0" FontSize="11.5" FontStyle="Italic"
                                    Foreground="#FFF2DEED"
                                    Text="{loc:Str companion_memory_forget_confirm}"/>
-                        <Button Grid.Column="1" Style="{StaticResource CmpDangerButtonStyle}"
+                        <Button x:Name="ForgetYes" Grid.Column="1" Style="{StaticResource CmpDangerButtonStyle}"
                                 Content="{loc:Str companion_memory_forget_yes}"
                                 Command="{Binding ForgetConfirm.ConfirmCommand,
                                                   RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                        <Button Grid.Column="2" Margin="8,0,0,0" Style="{StaticResource CmpGrayButtonStyle}"
+                        <Button x:Name="ForgetNo" Grid.Column="2" Margin="8,0,0,0" Style="{StaticResource CmpGrayButtonStyle}"
                                 Content="{loc:Str companion_memory_forget_no}"
                                 Command="{Binding ForgetConfirm.CancelCommand,
                                                   RelativeSource={RelativeSource AncestorType=UserControl}}"/>

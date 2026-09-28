@@ -102,7 +102,9 @@ namespace ConditioningControlPanel.Views.Tabs
             HeroCard.SizeChanged += (_, _) => HeroTitle.FitWidth = Math.Max(0, HeroCard.ActualWidth - 52);
             // No runtime, dead process, bad page: the still picture under the browser is the trailer.
             TrailerWeb.Failed += (_, _) => TrailerWeb.Visibility = Visibility.Collapsed;
+            TrailerWeb.Ready += (_, _) => TrailerWeb.Visibility = _trailerShown ? Visibility.Visible : Visibility.Hidden;
             FxInit();
+            LadderInit();
         }
 
         private static Brush Frozen(Color c)
@@ -117,10 +119,12 @@ namespace ConditioningControlPanel.Views.Tabs
         public void OnTabShown()
         {
             Refresh();
+            if (ChasterTrailerView.BrowserEnabled) TrailerWeb.Start();
             _ = LoadLocksAsync();
             _ = App.Chaster?.RefreshLockAsync();
             _leadHeldUntilUtc = DateTime.UtcNow.AddSeconds(1.2); // the count-up owns the lead number
             FxOnShown();
+            LadderOnShown();
         }
 
         private void Subscribe(bool on)
@@ -209,6 +213,7 @@ namespace ConditioningControlPanel.Views.Tabs
             if (chaster.IsLinked) PaintHeroEnds(chaster.Lock, balance);
             RefreshDay(animate);
             RefreshRun();
+            RefreshAdded();
             if (_billOpen) BuildBill();
         }
 
@@ -223,12 +228,13 @@ namespace ConditioningControlPanel.Views.Tabs
             var snapshot = chaster?.Lock;
             var lookup = chaster?.LockLookup ?? LockLookup.Unlinked;
             var linked = chaster?.IsLinked == true;
-            TxtAccountLock.Text = AccountLockLine(chaster);
+            PaintChasterChip(chaster);
 
             if (!linked)
             {
                 // The hero is the ask: nothing about a lock it cannot know.
                 HeroTitle.Visibility = Visibility.Collapsed;
+                SetupHint.Visibility = Visibility.Collapsed;
                 HeroClockRow.Visibility = Visibility.Collapsed;
                 TxtHeroEnds.Visibility = Visibility.Collapsed;
                 HeroPills.Children.Clear();
@@ -241,8 +247,9 @@ namespace ConditioningControlPanel.Views.Tabs
             // The hero's big title is the season, not the lock's own name (owner, 2026-09-23):
             // a default self lock is called "Self-lock", which is a poor thing to set in 88px
             // candy. The real name rides a pill under the clock.
-            HeroTitle.Text = snapshot == null ? "" : Loc.Get("chaster_hero_title");
-            HeroTitle.Visibility = snapshot == null ? Visibility.Collapsed : Visibility.Visible;
+            HeroTitle.Text = Loc.Get("chaster_hero_title");
+            HeroTitle.Visibility = Visibility.Visible;
+            RefreshSetupHint();
 
             PaintHeroClock();
 
@@ -250,6 +257,16 @@ namespace ConditioningControlPanel.Views.Tabs
 
             RefreshPills(lookup, snapshot, chaster!.SafetyHoldRemaining);
             BuildCalendar(snapshot);
+        }
+
+        private void RefreshSetupHint()
+        {
+            var chaster = App.Chaster;
+            var key = TabPageText.SetupHint(chaster?.IsLinked == true,
+                chaster?.LockLookup ?? LockLookup.Unlinked, chaster?.Lock != null,
+                App.Settings?.Current?.ChasterTabEnabled == true);
+            SetupHint.Text = key == null ? "" : Loc.Get(key);
+            SetupHint.Visibility = key == null ? Visibility.Collapsed : Visibility.Visible;
         }
 
         /// <summary>The "Ends" line counts to the same end the live clock does: Chaster's own end
@@ -846,6 +863,25 @@ namespace ConditioningControlPanel.Views.Tabs
             await ConfirmAndUnlinkAsync(Window.GetWindow(this));
 
         /// <summary>The account line in the strip and in Settings: the lock's name, or that there is none.</summary>
+        /// <summary>The little Chaster in the account strip: the lock as Chaster itself counts it
+        /// (no pending tab added), and a click through to it on chaster.app.</summary>
+        private void PaintChasterChip(ChasterService? chaster)
+        {
+            TxtAccountLock.Text = AccountLockLine(chaster);
+            var snapshot = chaster?.IsLinked == true ? chaster.Lock : null;
+            var left = snapshot?.Remaining(DateTime.UtcNow);
+            TxtAccountLeft.Text = left is { } l ? (snapshot!.IsFrozen ? "❄ " : "") + ChasterWebLinks.Short(l) : "";
+            TxtAccountLeft.Visibility = left is null ? Visibility.Collapsed : Visibility.Visible;
+            BtnChasterSite.ToolTip = Loc.Get(snapshot == null ? "chaster_site_make_tip" : "chaster_site_open_tip");
+        }
+
+        private void BtnChasterSite_Click(object sender, RoutedEventArgs e)
+        {
+            var chaster = App.Chaster;
+            var url = ChasterWebLinks.For(chaster?.IsLinked == true ? chaster.Lock : null);
+            Helpers.BrowserLauncher.OpenUrlOrPrompt(url, "Chaster");
+        }
+
         internal static string AccountLockLine(ChasterService? chaster)
         {
             var snapshot = chaster?.Lock;
@@ -899,6 +935,7 @@ namespace ConditioningControlPanel.Views.Tabs
             ConsentCard.Visibility = Visibility.Collapsed;
             settings.ChasterTabEnabled = wanted;
             App.Settings?.Save();
+            RefreshSetupHint();
             FxSwitch(wanted);
         }
 
@@ -912,6 +949,7 @@ namespace ConditioningControlPanel.Views.Tabs
             try { ChkTab.IsChecked = true; }
             finally { _loading = false; }
             PaintSwitch(true);
+            RefreshSetupHint();
             FxConsentOk();
             ConsentCard.Visibility = Visibility.Collapsed;
         }
@@ -925,6 +963,7 @@ namespace ConditioningControlPanel.Views.Tabs
             try
             {
                 var locks = await chaster.GetLocksAsync();
+                if (App.Chaster != chaster || !chaster.IsLinked) return;
                 // Chaster is away, or the link just died (LinkChanged repaints for that). None: the
                 // pill says so. Otherwise the pick shows whenever it is not made: nothing is ever
                 // pushed to a lock the player did not pick, not even the only one.
@@ -966,9 +1005,9 @@ namespace ConditioningControlPanel.Views.Tabs
                 CmbLock.Items.Clear();
                 // With two locks and none chosen nothing is ever pushed, so say what to do.
                 if (locks.All(l => l.Id != chosen))
-                    CmbLock.Items.Add(new ComboBoxItem { Content = Loc.Get("chaster_lock_pick"), Tag = null, IsSelected = true });
+                    CmbLock.Items.Add(new ComboBoxItem { Foreground = Brushes.Black, Content = Loc.Get("chaster_lock_pick"), Tag = null, IsSelected = true });
                 foreach (var l in locks)
-                    CmbLock.Items.Add(new ComboBoxItem { Content = TitleOf(l), Tag = l.Id, IsSelected = l.Id == chosen });
+                    CmbLock.Items.Add(new ComboBoxItem { Foreground = Brushes.Black, Content = TitleOf(l), Tag = l.Id, IsSelected = l.Id == chosen });
             }
             finally { _loading = false; }
         }
@@ -1013,6 +1052,8 @@ namespace ConditioningControlPanel.Views.Tabs
         private void PaintPause(bool paused)
         {
             TxtPause.Text = Loc.Get(paused ? "chaster_paused" : "chaster_pause");
+            PauseBarA.Visibility = PauseBarB.Visibility = paused ? Visibility.Collapsed : Visibility.Visible;
+            PlayArrow.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
             TxtPause.Foreground = paused ? Frozen(Color.FromRgb(0xE0, 0xB0, 0x52)) : (Brush)FindResource("TextLightBrush");
             PausePill.BorderBrush = paused ? Frozen(Color.FromRgb(0xE0, 0xB0, 0x52)) : (Brush)FindResource("GlassBorderBrush");
             PausePill.ToolTip = Loc.Get(paused ? "chaster_paused_tip" : "chaster_pause_tip");
@@ -1044,9 +1085,15 @@ namespace ConditioningControlPanel.Views.Tabs
             var ids = TabPresets.Apply(id);
             if (ids.Count == 0) return;
             settings.ChasterPrices = new List<string>(ids);
+            // The preset sets the stakes too: a lower limit now, a higher one after its day.
+            if (TabPresets.Find(id) is { } preset)
+                (settings.ChasterDayLimit, settings.ChasterBacklogLimit) =
+                    TabPresets.RequestLimits(preset, settings.ChasterDayLimit, settings.ChasterBacklogLimit, DateTime.UtcNow);
             App.Settings?.Save();
             ApplyPriceToggles();
             RefreshPresets();
+            RefreshLimits();
+            RefreshDay(animate: true);
             FxPreset(tile, PresetColour(id));
             FxKeyTurned(LitRows());
         }
@@ -1067,6 +1114,17 @@ namespace ConditioningControlPanel.Views.Tabs
             BtnPresetStrict.IsChecked = match == TabPresets.Strict;
             BtnPresetCirce.IsChecked = match == TabPresets.Circe;
             BtnPresetCustom.IsChecked = match == TabPresets.Custom;
+            Stakes(TxtStakesGentle, TabPresets.Gentle);
+            Stakes(TxtStakesStrict, TabPresets.Strict);
+            Stakes(TxtStakesCirce, TabPresets.Circe);
+        }
+
+        /// <summary>"Worst month +4 days": what the preset can cost past the lock end.</summary>
+        private static void Stakes(TextBlock line, string presetId)
+        {
+            if (TabPresets.Find(presetId) is not { } preset) return;
+            var (value, days) = TabPresets.WorstMonth(preset);
+            line.Text = Loc.GetF(days ? "chaster_preset_stakes_days" : "chaster_preset_stakes_hours", value);
         }
 
         /// <summary>Push the saved set onto the rows. Never the other way round: the settings
@@ -1258,6 +1316,11 @@ namespace ConditioningControlPanel.Views.Tabs
             _trailerRow = row;
             try
             {
+                if (TrailerWeb.Parent == TrailerWarmHost)
+                {
+                    TrailerWarmHost.Children.Remove(TrailerWeb);
+                    TrailerPlate.Children.Add(TrailerWeb);
+                }
                 var art = TabMenuCopy.ArtFor(id);
                 TrailerArt.Source = art == null ? null : new BitmapImage(new Uri("pack://application:,,,/Resources/" + art));
                 TxtTrailerFlavour.Text = Loc.Get(TabMenuCopy.FlavourKey(id));
@@ -1268,7 +1331,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 // loading frame and takes over if the browser cannot.
                 if (ChasterTrailerView.BrowserEnabled && !TrailerWeb.HasFailed)
                 {
-                    TrailerWeb.Visibility = Visibility.Visible;
+                    TrailerWeb.Visibility = TrailerWeb.IsReady ? Visibility.Visible : Visibility.Hidden;
                     TrailerWeb.Show(TabMenuCopy.VignetteFor(id));
                 }
                 else TrailerWeb.Visibility = Visibility.Collapsed;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -2607,6 +2607,7 @@ internal class Bubble
     private bool _isDrainBubble;      // Bubbles v2 Brain Drain bubble: breathes, glows violet
     private bool _isMagnetBubble;     // Bubbles v2 Magnet bubble: homes on the cursor, pulses steel blue
     private bool _isNatasha;          // Natasha's favourite: faint red halo, blinks red now and then, +3:00 on pop
+    private System.Windows.Shapes.Ellipse? _natashaWash;
     private DropShadowEffect? _natashaGlow;   // per-window path only: the halo, flared on the blink
     private double _magnetLifeMs;     // its full treat life, the denominator of the early window
     private Chaos.MagnetBubble.Velocity _magnetV;   // its free velocity, DIPs per frame
@@ -2753,7 +2754,25 @@ internal class Bubble
     /// Never replaces a glow the bubble already wears (a lucky gold, a magnet blue).</summary>
     internal void MarkNatasha()
     {
+        if (_isNatasha) return;
         _isNatasha = true;
+        // The price cue is functional, so it must survive performance and motion settings.
+        if (_layerItem != null)
+            _layerItem.RedWash = (float)Chaster.NatashasFavourite.BubbleWashBase;
+        else
+        {
+            _natashaWash = new System.Windows.Shapes.Ellipse
+            {
+                Width = _size * 0.97, Height = _size * 0.97,
+                Fill = new SolidColorBrush(Color.FromRgb(Chaster.NatashasFavourite.R,
+                    Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B)),
+                Opacity = Chaster.NatashasFavourite.BubbleWashBase,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false,
+                RenderTransform = _bubbleImage.RenderTransform, RenderTransformOrigin = new Point(0.5, 0.5),
+            };
+            _grid.Children.Insert(_grid.Children.IndexOf(_bubbleImage) + 1, _natashaWash);
+        }
         if (!PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier)) return;
         try
         {
@@ -2953,7 +2972,7 @@ internal class Bubble
         it.Scale = (float)currentScale;
         it.Angle = (float)_angle;
         it.Opacity = (float)opacity;
-        it.RedWash = _isNatasha && !_isPopping ? (float)Chaster.NatashasFavourite.WashAlphaAt(_timeAlive) : 0f;
+        it.RedWash = _isNatasha && !_isPopping ? (float)Chaster.NatashasFavourite.BubbleWashAt(_timeAlive, MotionFx.AllowAmbientLoops) : 0f;
 
         if (_fuseRing != null)
         {
@@ -4191,8 +4210,10 @@ internal class Bubble
                 opacity *= Chaos.MagnetBubble.RingPulseAt(_timeAlive);
             // Natasha's favourite, per-window path: the halo itself flares on the blink (the
             // compositor path draws a wash over the body instead; same clock, same envelope).
+            if (_natashaWash != null)
+                _natashaWash.Opacity = _isPopping ? 0 : Chaster.NatashasFavourite.BubbleWashAt(_timeAlive, MotionFx.AllowAmbientLoops);
             if (_natashaGlow != null && !_isPopping)
-                _natashaGlow.Opacity = Chaster.NatashasFavourite.HaloOpacity + 2.0 * Chaster.NatashasFavourite.WashAlphaAt(_timeAlive);
+                _natashaGlow.Opacity = Chaster.NatashasFavourite.HaloOpacity + 2.0 * (MotionFx.AllowAmbientLoops ? Chaster.NatashasFavourite.WashAlphaAt(_timeAlive) : 0);
             _fxTarget.Opacity = opacity;
             if (_useLayer)
             {

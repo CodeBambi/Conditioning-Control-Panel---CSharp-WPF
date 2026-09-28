@@ -959,6 +959,21 @@ namespace ConditioningControlPanel
         public static Services.Friends.IFriendsService? Friends { get; private set; }
         private static Services.Friends.FriendsService? _friendsService;
 
+        /// <summary>THE LEASH (2026-09-26): rides the friends poll. Null until startup builds it
+        /// and after exit; every caller guards with <c>App.Leash?.</c>. The UI reaches it through
+        /// <c>Controls.Leash.LeashLocator</c>, which this wiring sets once both lanes merge.</summary>
+        public static Services.Leash.ILeashService? Leash { get; private set; }
+        private static Services.Leash.LeashService? _leashService;
+
+        /// <summary>Starts and tracks the leash gate's tasks (lock cards, sessions, bubbles, a watch).</summary>
+        public static Services.Leash.LeashTaskRunner? LeashRunner { get; private set; }
+        private static Services.Leash.AppLeashTaskHost? _leashTaskHost;
+
+        /// <summary>The account went on or off a leash (true = leashed). Raised on the UI thread.
+        /// MainWindow keeps the tray icon, and with it the tray "Cut leash", up off this:
+        /// <c>App.LeashedChanged += _ => _trayIcon?.SyncLeashIcon();</c> (cutsafety lane).</summary>
+        public static event Action<bool>? LeashedChanged;
+
         /// <summary>
         /// THE DESCENT — reader for the server's `descent` block (the vat, the stage
         /// ladder, the relapse bonus). Nullable and normally EMPTY: the server ships
@@ -1126,7 +1141,21 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Unified user ID that links Patreon and Discord accounts together
         /// </summary>
-        public static string? UnifiedUserId { get => CoreAccount.UnifiedUserId; set => CoreAccount.UnifiedUserId = value; }
+        public static event EventHandler? UnifiedIdentityChanged;
+        public static string? UnifiedUserId
+        {
+            get => CoreAccount.UnifiedUserId;
+            set
+            {
+                if (string.Equals(CoreAccount.UnifiedUserId, value, StringComparison.Ordinal)) return;
+                CoreAccount.UnifiedUserId = value;
+                foreach (EventHandler handler in UnifiedIdentityChanged?.GetInvocationList() ?? Array.Empty<Delegate>())
+                {
+                    try { handler(null, EventArgs.Empty); }
+                    catch (Exception ex) { Logger?.Debug("Identity observer failed ({Kind})", ex.GetType().Name); }
+                }
+            }
+        }
 
         /// <summary>
         /// Snapshot of the UnifiedUserId as restored from settings at startup, captured
@@ -1720,8 +1749,22 @@ namespace ConditioningControlPanel
             _hangStressTimer = timer;   // root it so it isn't collected
         }
 
+#if DEBUG
+        private bool _firstShowPreview;
+#endif
         protected override void OnStartup(StartupEventArgs e)
         {
+#if DEBUG
+            if (e.Args.Contains("--first-show-preview"))
+            {
+                _firstShowPreview = true;
+                base.OnStartup(e);
+                IsUnattendedRig = true;
+                EmiDesk = new Services.EmiDesk.EmiDeskService();
+                Services.FirstShow.FirstShowService.Open(preview: true);
+                return;
+            }
+#endif
             // Dump-writer mode: spawned by UiHangWatchdog in a WEDGED sibling CCP process
             // (`--write-hang-dump <pid> <path>`). Write the minidump from this healthy process
             // and exit before touching the splash, the single-instance mutex, or any service.
@@ -2578,6 +2621,7 @@ namespace ConditioningControlPanel
             {
                 Brain = new Services.Companion.Brain.CompanionBrain(Ai);
                 Brain.AttachBarkSource(Bark);
+                Services.Companion.Asks.CompanionAskService.Instance.Start();
                 Logger?.Information("CompanionBrain initialized (enabled={Enabled}, restored={Restored} turns)",
                     Services.Companion.Brain.CompanionBrain.IsEnabled, Brain.RestoredTurnCount);
             }
@@ -2734,6 +2778,37 @@ namespace ConditioningControlPanel
                 _friendsService.Start();
             }
             catch (Exception ex) { Logger?.Warning("Friends service failed to start: {E}", ex.Message); }
+            // THE LEASH: no timer of its own. The friends poll carries its report out and its
+            // block back, and runs every 20 s while leashed or holding anyone.
+            try
+            {
+                if (_friendsService != null)
+                {
+                    var friends = _friendsService;
+                    _leashService = Services.Leash.LeashService.CreateForApp(() => friends.Kick());
+                    Leash = _leashService;
+                    friends.LeashReportProvider = _leashService.BuildReportJson;
+                    friends.LeashActive = () => _leashService?.Active == true;
+                    friends.LeashBlockArrived += _leashService.ApplyBlock;
+                    Services.Leash.LeashGuard.IsLeashed = () => App.Leash?.Snapshot.Me != null;
+                    _leashService.LeashedChanged += on =>
+                    {
+                        try { LeashedChanged?.Invoke(on); }
+                        catch (Exception exLc) { Logger?.Debug(exLc, "Leash tray sync failed"); }
+                    };
+
+                    _leashTaskHost = new Services.Leash.AppLeashTaskHost();
+                    LeashRunner = new Services.Leash.LeashTaskRunner(_leashTaskHost);
+                    LeashRunner.AssignmentWatched += aid => _leashService?.NoteAssignmentWatched(aid);
+                    Controls.Leash.LeashLocator.Service = () => App.Leash;
+                    Controls.Leash.LeashLocator.Runner = () => App.LeashRunner;
+                    Controls.Leash.LeashLocator.LocalReport = () => _leashService?.LastReport;
+                    Controls.Leash.LeashExplainHost.Presenter = role =>
+                        Controls.Leash.Explain.LeashExplainer.Show(null,
+                            Controls.Leash.Explain.LeashExplainer.SideFor(role.ToString()));
+                }
+            }
+            catch (Exception ex) { Logger?.Warning("Leash service failed to start: {E}", ex.Message); }
             // Constructing it costs nothing and issues no request: it fetches only when a
             // surface asks. The ungated 60s background poll that used to start here was
             // retired in the Redis bandwidth pass (2026-09-15) - the cross-device XP adopt
@@ -5890,6 +5965,13 @@ Application State:
 
         protected override void OnExit(ExitEventArgs e)
         {
+#if DEBUG
+            if (_firstShowPreview)
+            {
+                base.OnExit(e);
+                return;
+            }
+#endif
             Logger?.Information("Application shutting down...");
 
             // EMI Desk (MOMENTS 4.B / 3.8): the wordless flinch. appClosing is a HOLD with no pool
@@ -6041,6 +6123,10 @@ Application State:
             Patreon?.Dispose();
             Update?.Dispose();
             ProfileSync?.Dispose();
+            try { LeashRunner?.Cancel(); _leashTaskHost?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "Leash dispose failed"); }
+            LeashRunner = null;
+            Leash = null;
+            _leashService = null;
             _friendsService?.Dispose();
             Friends = null;
             Leaderboard?.Dispose();

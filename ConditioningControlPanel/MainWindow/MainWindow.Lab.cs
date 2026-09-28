@@ -643,6 +643,18 @@ namespace ConditioningControlPanel
                             strictChk.Opacity = 0.4;
                             strictChk.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                         }
+
+                        // Bubble Count's strict toggle is held by the same rule (#1282,
+                        // LockdownStrictHold). Lockdown does not force it on, so it is greyed only
+                        // when it is ticked: an unticked one may still be switched on, and its own
+                        // handler refuses the switch back off.
+                        var bubbleStrict = StudioTab?.PanelBubbleCount?.ChkStrict;
+                        if (bubbleStrict != null && App.Settings?.Current?.BubbleCountStrictLock == true)
+                        {
+                            bubbleStrict.IsEnabled = false;
+                            bubbleStrict.Opacity = 0.4;
+                            bubbleStrict.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
+                        }
                     }
                     if (App.Settings?.Current?.LockdownDisablePanicKey == true && AppSettingsTab.ChkNoPanic != null)
                     {
@@ -718,6 +730,13 @@ namespace ConditioningControlPanel
                         strictChk.IsEnabled = true;
                         strictChk.Opacity = 1.0;
                         strictChk.ToolTip = null;
+                    }
+                    var bubbleStrict = StudioTab?.PanelBubbleCount?.ChkStrict;
+                    if (bubbleStrict != null)
+                    {
+                        bubbleStrict.IsEnabled = true;
+                        bubbleStrict.Opacity = 1.0;
+                        bubbleStrict.ToolTip = null;
                     }
                     if (AppSettingsTab.ChkNoPanic != null)
                     {

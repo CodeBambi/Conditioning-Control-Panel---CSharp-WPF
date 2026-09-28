@@ -1,4 +1,102 @@
+## Expanded repertoire
+
+Rook alternates its charged fling with a compact heavy squash (contact 840 ms).
+Knight alternates its backflip with a rear kick (920 ms): turn away, load the
+front, kick with the broad rear base, recoil and hop home. Bishop alternates
+its double slap with a low sweep (1040 ms), tipping the victim from its base.
+Each two-choice bag starts randomly, then alternates without adjacent repeats.
+Queen keeps its five-choice shuffle. Timings exclude the approach hops.
+New contacts use existing collision envelopes, immediate victim deformation,
+dissolve, dust and audio settings. No sculpt or game-rule changes.
+
+The pawn/plug has a firmer response: capture bend is 45% of the shared amount,
+stretch is 55%, and landing oscillation decays faster. Ordinary hop, drag and
+idle flex are also reduced. Its deliberate capture squash is preserved.
+
+## Contact weight
+
+Heavy contacts briefly ease the actors to a near-stop 18 ms after impact,
+then resume, adding 24-48 ms to the action. Game input and clocks keep running.
+The first visible landing compression is immediate, and the queen's first two
+bashes retain their quick rhythm. Victims dent locally on the struck side,
+followed by a height-weighted travelling bend. CPU contact checks, skin,
+outlines and shadows share the dent deformation.
+
+Squashes add a low dust ring; flung victims leave a short pooled trail.
+Impact sounds vary slightly in pitch with lower voices for heavier attackers.
+An occasional small stretch or crown twist finishes the existing settle.
+Reduced motion skips the extra motion, and mute follows the existing mix.
+
+## Queen replacement and compact rook recoil
+
+The queen now draws from a five-attack shuffle bag: triple bash, double slap,
+backflip, charged fling and spring stomp. Each appears once per bag with no
+adjacent repeat across bags. The breakdance motion is retired. The first two
+bashes briefly compress the planted victim; the final bash squashes it before
+the queen hops onto its square. Only the final contact commits the visual
+capture event. Each attack uses its matching contact sound and particles.
+
+The rook keeps the long tense charge, but its recoil now reverses in about
+0.12 seconds and settles by 0.32 seconds with very little axial stretch.
+Queen fling uses the same compact rebound. Approved models are unchanged.
+
 # Piece by Piece - the captures
+
+## Current implementation, 2026-09-27
+
+`board/choreography.js` owns the six signature captures approved in the owner's second pass.
+This replaces the shuffled reaction deck and its 300/440 ms capture deadline.
+
+| Attacker | Action | Contact | Settled |
+| --- | --- | --- | --- |
+| Pawn | Squat, jump with the flat base, squash the victim | 720 ms | 2180 ms |
+| Knight | Hoofbeats, whinny, backflip, base-first landing | 900 ms | 2360 ms |
+| Bishop | Flexible tentacle whips left-to-right, then right-to-left | 700 / 1200 ms | 3200 ms |
+| King | Lean back, swollen-head smash, floor squash, retract and hop | 900 ms | 2950 ms |
+| Queen | Flowing bend and forward base swing, trembling backswing, whip, recoil and hop | 2300 ms | 4650 ms |
+| Rook | Catapult windup, trembling hold, fast swing, recoil and launch | 1300 ms | 3300 ms |
+
+Timings above start after the distance-dependent approach hops.
+
+Ordinary moves travel in short hops, with a compressed takeoff and landing flex; nearby moves take two small hops and longer moves cross one square per hop. Each bound has a grounded landing beat and immediate rebound, including the intermediate steps. Capture approaches and moves onto freed squares hop too. Takeoff pops, soft landing taps and queen stretch/tension cues follow the action through the existing sound volume and mute controls. Reduced motion keeps travel flat.
+
+All six acts finish with elastic spine settling: the middle and tip lag each other while
+the base stays planted. Pawn and knight start their main flex at stomp contact, before the victim dissolves. King and queen hop into their final square and rebound on arrival. Landing sound fires at final touchdown, before the quiet tail. Knight and bishop anticipate with a short compressed windup. `board/silicone.js` shares the curved spine across skin, jewellery,
+outline, depth, contact bounds and dissolve particles. The curve rotates each cross section
+along its tangent, stretches axially, twists and carries a delayed mid-body bend.
+Bishop, rook and queen visibly reverse their swing after contact, with an immediate impact ripple before stepping forward.
+The queen approaches her head-pivot setup directly, arches in place, then sweeps the middle of her base into the victim at body height. The pivot distance follows the approach length and her reach. Bishop and queen transfer momentum sideways at contact: the first bishop slap bends the target with its base planted and a quick snap back, the reverse slap knocks it down. Both victims fall at full size before dissolving. The rook coils sideways, strikes low, launches sideways and
+recoils without following its victim into the air.
+Transition curves have zero acceleration at their endpoints; clearance height releases gradually.
+The queen and king use the approved sculpted GLBs from ce4c208d3, for both colours.
+`build_pieces.py` produces procedural alternatives and must not overwrite the shipping sculpts.
+
+Moves, legality and clocks commit immediately. Tap or Space/Enter settles any act.
+Reduced motion dissolves in place before a short slide, settling in 460 ms.
+Capture ownership transfers on promotion; undo, recapture and rematch cancel cleanly.
+Clearance uses 24 body sections derived from loaded meshes, with live bend/rotation/scale.
+Side strikes separate horizontally from the victim, while overhead strikes use vertical clearance; neighbouring pieces are never displaced.
+All victims except the rook's launch break into a surface dissolve with 210 pooled motes.
+The silhouette and shadow share the dissolve mask. Reduced motion uses 18 quiet motes.
+Sounds use the existing volume/mute path and Web Audio, including a stylised horse whinny.
+No voice synthesis, external recordings or paid services are used.
+
+`dev/captures.html` is the interactive showcase. `smoke/capture-browser.js` runs via
+the existing shot tool's `--eval` input and checks contact, clearance and interruption.
+The older deck in `captures.js` and optional `?whip=1` path are retained for compatibility.
+
+Impact polish borrows Breakout's short, weighted camera impulses and layered contact feedback.
+`board/juice.js` applies a capped translation, roll and tiny push only while rendering, then restores
+all camera transforms so orbit controls and picking do not drift. Reduced motion disables shake.
+The bishop's first slap emits `contact`; capture strikes emit `hit`; intermediate hop touchdowns
+emit `hopLand`; the final touchdown remains the single `land` event. Directional pink/cream/gold
+motes, small board ripples and quiet recoil sounds follow those beats. Particles reuse the existing
+fixed pool. Skipped captures do not fake a landing impact. Queen windup uses more axial stretch,
+a delayed S bend and damped waves at the raised pose, maximum charge and recoil.
+## Historical choreography proposals
+
+The older timings and proposed routines below are retained for reference. The implementation above wins.
+
 
 Twelve ways to take a man, two per piece. One is built (the bishop's whip, `board/whip.js`);
 the rest are specified to the same envelope so any of them can be built next without

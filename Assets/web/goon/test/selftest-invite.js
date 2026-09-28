@@ -435,13 +435,13 @@ let routerMod = null;
   ok(routerMod.SCREEN_IDS.mediaSetup === 'scr-media-setup', 'the router maps mediaSetup -> #scr-media-setup');
   ok(/mediaSetup: mediaSetupScreen/.test(boot), 'boot.js registers the screen module');
   ok(/needsMediaSetup\(media\)/.test(boot), 'boot.js decides the branch off the DECK, not off the picker');
-  ok(/mediaPrepPending = needsMediaSetup/.test(boot), 'and only on the join that landed');
+  ok(/mediaPrepPending = (?:mediaFlavour\.available\(\) \? mediaFlavour\.firstRun\(\) : )?needsMediaSetup/.test(boot), 'and only on the join that landed');
   {
     // The decision is made in joinStart and NOWHERE else — one join, one answer.
     const js = boot.slice(boot.indexOf('async joinStart('));
     const body = js.slice(0, js.indexOf('\n  },'));
     ok(/syncLocalDeck\(true\)/.test(body), 'joinStart re-feeds the deck before asking whether it is empty');
-    ok(/mediaPrepPending = needsMediaSetup\(media\)/.test(body), 'joinStart is where the branch is decided');
+    ok(/mediaPrepPending = (?:mediaFlavour\.available\(\) \? mediaFlavour\.firstRun\(\) : )?needsMediaSetup\(media\)/.test(body), 'joinStart is where the branch is decided (flavour card first when a host fetches pictures)');
   }
   ok(!/hostStart[\s\S]{0,400}needsMediaSetup/.test(boot), 'hosting never triggers the media step');
 

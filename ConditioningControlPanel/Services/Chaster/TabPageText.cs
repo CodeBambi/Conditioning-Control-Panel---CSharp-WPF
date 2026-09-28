@@ -28,6 +28,15 @@ public static class TabPageText
                 all.Where(p => p.Seconds < 0).OrderBy(p => p.Seconds).ToList());
     }
 
+    /// <summary>The next setup step stays visible until the tab can run.</summary>
+    internal static string? SetupHint(bool linked, LockLookup lookup, bool hasLock, bool enabled) =>
+        !linked ? null
+        : lookup == LockLookup.Away ? "chaster_state_away"
+        : lookup == LockLookup.None ? "chaster_setup_none"
+        : !hasLock ? "chaster_setup_pick"
+        : !enabled ? "chaster_setup_run"
+        : null;
+
     // ============================== the hero: the lock, in words ==============================
 
     /// <summary>One piece of the hero countdown: a loc key that reads "{0} days" or "{0} hour",

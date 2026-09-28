@@ -1,3 +1,6 @@
+import { createCrowdVoices } from './crowd-voices.js';
+import { createCrowd } from './crowd.js';
+
 /* ============================================================================
  * audio/sfx.js - the board makes sounds.
  *
@@ -77,10 +80,12 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   let ctx = null;
   let master = null;
   let noise = null;
+  let crowdVoices = null;
   let disposed = false;
   let wet = null;            // the delay's return, beside the master
   let meter = 0;
   let wetLevel = 0;          // what the wet gain was last asked for
+  let cuePitch = 1;
   let drift = 0;             // cents, applied to every new voice
   let lowClock = false;      // the mover is under lowClockMs
   const log = [];
@@ -127,6 +132,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     if (c && c.state === 'suspended' && c.resume) { try { c.resume(); } catch { /* not yet */ } }
   }
   function onVisibility() {
+    if (doc?.hidden) crowd.cancel();
     if (!master || !ctx) return;
     const to = doc && doc.hidden ? 0 : volume();
     try { master.gain.setTargetAtTime(to, ctx.currentTime, 0.02); } catch { master.gain.value = to; }
@@ -155,8 +161,8 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     const env = ctx.createGain();
     osc.type = type;
     tune(osc);
-    osc.frequency.setValueAtTime(hz, t0);
-    if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), t0 + sec);
+    osc.frequency.setValueAtTime(hz * cuePitch, t0);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo * cuePitch), t0 + sec);
     env.gain.setValueAtTime(0.0001, t0);
     env.gain.exponentialRampToValueAtTime(gain, t0 + 0.005);
     env.gain.exponentialRampToValueAtTime(0.0001, t0 + sec);
@@ -181,8 +187,8 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     tune(src);
     const f = ctx.createBiquadFilter();
     f.type = type;
-    f.frequency.setValueAtTime(from, t0);
-    if (to !== from) f.frequency.exponentialRampToValueAtTime(to, t0 + sec);
+    f.frequency.setValueAtTime(from * cuePitch, t0);
+    if (to !== from) f.frequency.exponentialRampToValueAtTime(to * cuePitch, t0 + sec);
     const env = ctx.createGain();
     env.gain.setValueAtTime(0.0001, t0);
     env.gain.exponentialRampToValueAtTime(gain, t0 + (attack != null ? Math.min(attack, sec * 0.5) : Math.min(0.03, sec * 0.3)));
@@ -197,7 +203,53 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     return T.pawnHz + (T.kingHz - T.pawnHz) * k;
   };
 
+  function audience(kind) {
+    if (!crowdVoices) crowdVoices = createCrowdVoices({ ctx, master, noise });
+    crowdVoices.play(kind);
+  }
   const cues = {
+    crowdApplause() { audience('crowdApplause'); },
+    crowdCheer() { audience('crowdCheer'); },
+    crowdBoo() { audience('crowdBoo'); },
+    hooves() {
+      for (const at of [0, .085, .21, .295]) {
+        tone('triangle', at < .2 ? 680 : 510, .045, .12, { at, slideTo: 290 });
+        hiss(.025, .07, { at, from: 1900, to: 700, attack: .002 });
+      }
+    },
+    // A short stylised horse whinny, not speech or a voice service.
+    neigh() {
+      const t = ctx.currentTime, osc = ctx.createOscillator(), env = ctx.createGain();
+      const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 2300;
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(470, t);
+      osc.frequency.exponentialRampToValueAtTime(1020, t + .11);
+      for (let i = 1; i <= 14; i++) osc.frequency.linearRampToValueAtTime(850 - i * 29 + Math.sin(i * 2.4) * 115, t + .11 + i * .035);
+      env.gain.setValueAtTime(.0001, t); env.gain.exponentialRampToValueAtTime(.055, t + .065);
+      env.gain.exponentialRampToValueAtTime(.0001, t + .64);
+      osc.connect(filter); filter.connect(env); env.connect(master); osc.start(t); osc.stop(t + .66);
+    },
+    hop() { tone('sine', 160, .10, .09, { slideTo: 340 }); hiss(.035, .035, { from: 700, to: 1600 }); },
+    hopland() { tone('sine', 150, .12, .14, { slideTo: 65 }); hiss(.035, .055, { from: 1800, to: 400 }); },
+    kick() {
+      tone('triangle', 155, .14, .34, { slideTo: 52 });
+      hiss(.055, .16, { from: 1800, to: 380 });
+    },
+    rebound() {
+      tone('sine', 220, .16, .065, { at: .045, slideTo: 380 });
+      tone('triangle', 380, .12, .035, { at: .13, slideTo: 190, filterHz: 1000 });
+    },
+    stretch() { tone('triangle', 145, .30, .065, { slideTo: 310, filterHz: 900 }); },
+    tension() {
+      for (let i = 0; i < 5; i++) tone('triangle', 210 + i * 14, .065, .04 + i * .004, { at: i * .06, slideTo: 170 + i * 12, filterHz: 950 });
+    },
+    stomp() { cues.land({ height: .8 }); tone('sine', 95, .22, .22, { slideTo: 40 }); hiss(.11, .09, { from: 1700, to: 300 }); },
+    headbutt() { tone('sine', 125, .26, .42, { slideTo: 38 }); tone('triangle', 620, .055, .13, { slideTo: 180 }); },
+    sweep() { hiss(.16, .10, { from: 450, to: 4800, attack: .06 }); },
+    spin() { hiss(.38, .11, { from: 350, to: 2400, attack: .15 }); tone('triangle', 240, .22, .055, { slideTo: 490 }); },
+    breakdance() { cues.whip(); tone('triangle', 190, .20, .16, { slideTo: 65 }); },
+    charge() { tone('triangle', 75, .45, .12, { slideTo: 190 }); hiss(.40, .055, { from: 200, to: 1600, attack: .17 }); },
+    launch() { tone('sine', 80, .28, .45, { slideTo: 30 }); hiss(.055, .20, { from: 3500, to: 500, attack: .002 }); hiss(.40, .09, { from: 2200, to: 250, at: .06 }); },
     grab() { const P = TUNING.pop; tone('sine', P.from, P.sec, P.gain, { slideTo: P.to }); },
     tick() { const P = TUNING.tick; tone('triangle', P.hz, P.sec, P.gain); },
     land({ height = 1 } = {}) {
@@ -252,8 +304,11 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     const v = volume();
     if (v <= 0) return false;
     if (master.gain.value !== v) master.gain.value = v;
+    const varied = ['hop', 'hopland', 'land', 'stomp', 'headbutt', 'whip', 'launch', 'rebound', 'kick'].includes(name);
+    const mass = { p: 1.08, n: 1, b: 1.04, r: .89, q: .96, k: .86 }[opts.piece] || 1;
+    cuePitch = varied ? mass * (.97 + Math.random() * .06) : 1;
     try { cues[name](opts); } catch (e) { console.warn('[pbp] cue failed ' + name, e); return false; }
-    log.push({ name, opts, at: ctx.currentTime, state: ctx.state });
+    log.push({ name, opts, pitch: cuePitch, at: ctx.currentTime, state: ctx.state });
     if (log.length > TUNING.logSize) log.shift();
     return true;
   }
@@ -294,10 +349,12 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     if (!p || !p.ok) play('boing');
   });
   on('land', (p) => {
-    if (!p || p.refused) return;
-    play(p.capture && p.manner !== 'whip' ? 'capture' : 'land', { height: p.height });
+    if (!p || p.refused || p.skipped) return;
+    play(p.capture && !['whip', 'signature'].includes(p.manner) ? 'capture' : 'land', { height: p.height });
   });
-  on('hit', () => { play('whip'); });
+  on('hit', p => { if (['q', 'r', 'b'].includes(p?.piece) || p?.sound === 'kick') play('rebound'); });
+  on('captureCue', p => { if (p?.name) play(p.name); });
+  on('hit', p => { play(p?.sound || (p?.manner === 'signature' ? ({ p: 'stomp', n: 'stomp', b: 'whip', k: 'headbutt', q: 'breakdance', r: 'launch' }[p.piece] || 'capture') : 'whip'), { piece: p?.piece, height: p?.height }); });
   on('check', () => { checkArmed = true; startPulse(); });
   on('turn', () => {
     lastSecond = -1;
@@ -326,6 +383,13 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     lastSecond = second;
     play('clock', { sharp: ms < TUNING.clock.sharpMs });
   });
+
+  const crowd = createCrowd({ bus, game, play, settled: () => !win?.PBP?.board?.anim?.busy?.(), cancel: () => crowdVoices?.cancel(), canPlay: () => {
+    const door = win?.PBP?.door;
+    return !disposed && ctx?.state === 'running' && !doc?.hidden && volume() > 0
+      && (!door?.isUp?.() || door?.screen?.() === 'end');
+  } });
+  on('local', () => { over = false; stopPulse(); lastSecond = -1; });
 
   // --- the video card, seen not heard from -----------------------------------
   let observer = null;
@@ -356,6 +420,8 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   return {
     play,
     wake,
+    crowd,
+    update: crowd.update,
     log: () => log.slice(),
     ready: () => !!ctx,
     state: () => ({
@@ -363,9 +429,10 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       meter, wet: +wetLevel.toFixed(3), drift: Math.round(drift), lowClock, room: !!wet,
     }),
     setMeter,
-    setVolume(v) { settings().sfxVolume = clamp01(v); if (master) master.gain.value = doc && doc.hidden ? 0 : clamp01(v); },
+    setVolume(v) { if (v <= 0) crowd.cancel(); settings().sfxVolume = clamp01(v); if (master) master.gain.value = doc && doc.hidden ? 0 : clamp01(v); },
     dispose() {
       disposed = true;
+      crowd.dispose();
       stopPulse();
       for (const off of offs) { try { off(); } catch { /* gone */ } }
       if (observer) observer.disconnect();

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -49,6 +49,7 @@ namespace ConditioningControlPanel.Services
 
         // Circuit breaker tracking (client-side)
         private int _dailyRequestCount;
+        private readonly CompanionQuota _previewQuota = new();
         private DateTime _lastResetDate;
         private const int FreeDailyLimit = 100;     // Free users (logged in, no Patreon)
         private const int Tier1DailyLimit = 1000;   // Tier 1 supporters
@@ -113,7 +114,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Daily requests remaining (client-side tracking)
         /// </summary>
-        public int DailyRequestsRemaining => Math.Max(0, DailyLimit - _dailyRequestCount);
+        public int DailyRequestsRemaining => Companion.CompanionExperience.IsV2Enabled
+            ? _previewQuota.Remaining(App.UnifiedUserId, DateTimeOffset.UtcNow)
+            : Math.Max(0, DailyLimit - _dailyRequestCount);
 
         public AiService()
         {
@@ -407,7 +410,9 @@ namespace ConditioningControlPanel.Services
         /// chars/4 of what we sent and reads identically whether cached_in was 0 or 2,000.
         /// </param>
         private sealed record ProxyPostResult(ProxyOutcome Outcome, string? Content,
-            int? CachedInputTokens = null, int? TokensRemainingToday = null);
+            int? CachedInputTokens = null, int? TokensRemainingToday = null,
+            AiFailureKind? Failure = null, bool Retryable = false, string? FinishReason = null, string? RequestId = null,
+            ModerationRefusalInfo? Refusal = null);
 
         /// <summary>
         /// The whole proxy round trip: entitlement gate, daily circuit breaker, V2 auth with the
@@ -421,7 +426,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private async Task<ProxyPostResult> PostToProxyAsync(ProxyChatMessage[] messages, int maxTokens,
             double temperature, string? purposeWire,
-            System.Threading.CancellationToken cancellationToken = default)
+            System.Threading.CancellationToken cancellationToken = default, AiCallOptions? options = null)
         {
             // Check access (cloud identity or Patreon)
             if (!IsAvailable)
@@ -440,7 +445,7 @@ namespace ConditioningControlPanel.Services
             }
 
             // Circuit breaker check (client-side backup)
-            if (_dailyRequestCount >= DailyLimit)
+            if (options?.CompanionV2 != true && _dailyRequestCount >= DailyLimit)
             {
                 App.Logger?.Debug("AiService: Daily limit reached ({Limit} requests)", DailyLimit);
                 return new ProxyPostResult(ProxyOutcome.Skipped, null);
@@ -448,7 +453,7 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                _dailyRequestCount++;
+                if (options?.CompanionV2 != true) _dailyRequestCount++;
 
                 HttpResponseMessage? response;
 
@@ -463,10 +468,13 @@ namespace ConditioningControlPanel.Services
                         Messages = messages,
                         MaxTokens = maxTokens,
                         Temperature = temperature,
-                        Purpose = purposeWire
+                        Purpose = purposeWire,
+                        CompanionProtocol = options?.CompanionV2 == true ? 2 : null,
+                        RequestId = options?.CompanionV2 == true ? options.RequestId : null
                     };
 
-                    using var v2Msg = new HttpRequestMessage(HttpMethod.Post, "/v2/ai/chat");
+                    using var v2Msg = new HttpRequestMessage(HttpMethod.Post,
+                        options?.CompanionV2 == true ? "/v2/companion/chat" : "/v2/ai/chat");
                     if (!string.IsNullOrEmpty(authToken))
                         v2Msg.Headers.TryAddWithoutValidation("X-Auth-Token", authToken);
                     v2Msg.Content = JsonContent.Create(v2Request);
@@ -475,7 +483,7 @@ namespace ConditioningControlPanel.Services
                     await MergedAccountRecovery.TryHandleAsync(response);   // contract D
 
                     // If V2 endpoint not deployed yet (404), fall back to legacy Patreon auth
-                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound && options?.CompanionV2 != true)
                     {
                         App.Logger?.Debug("AiService: V2 endpoint not available, trying legacy auth");
                         response.Dispose();
@@ -485,6 +493,8 @@ namespace ConditioningControlPanel.Services
                 }
                 else
                 {
+                    if (options?.CompanionV2 == true)
+                        return new ProxyPostResult(ProxyOutcome.Skipped, null, Failure: AiFailureKind.SignInRequired);
                     response = await SendLegacyRequestAsync(messages, maxTokens, temperature, purposeWire, cancellationToken);
                     if (response == null) return new ProxyPostResult(ProxyOutcome.Error, null);
                 }
@@ -492,8 +502,17 @@ namespace ConditioningControlPanel.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorText = await response.Content.ReadAsStringAsync(cancellationToken);
-                    App.Logger?.Warning("AiService: Proxy returned {Status}: {Error}",
-                        response.StatusCode, errorText);
+                    App.Logger?.Warning("AiService: Proxy returned {Status} ({Bytes} bytes)",
+                        response.StatusCode, errorText.Length);
+                    if (options?.CompanionV2 == true)
+                    {
+                        var failure = CompanionProxyContract.ReadFailure((int)response.StatusCode, errorText);
+                        var quota = CompanionProxyContract.ReadQuota(errorText, options.RequestId);
+                        if (quota != null) _previewQuota.Update(unifiedId, App.UnifiedUserId, quota.RequestsRemaining, quota.ResetsAt);
+                        response.Dispose();
+                        return new ProxyPostResult(ProxyOutcome.Error, null, Failure: failure.Failure,
+                            Retryable: failure.Retryable, RequestId: options.RequestId, Refusal: failure.Refusal);
+                    }
                     // The proxy rejects a >10,000-char message (or >50 messages) with a
                     // machine-readable code so a client can compact and retry. Without this branch
                     // every such call is an indistinguishable "Error" and the user just sees the
@@ -503,7 +522,9 @@ namespace ConditioningControlPanel.Services
                         : new ProxyPostResult(ProxyOutcome.Error, null);
                 }
 
-                var result = await response.Content.ReadFromJsonAsync<ProxyChatResponse>(cancellationToken);
+                ProxyChatResponse? result;
+                using (response)
+                    result = await response.Content.ReadFromJsonAsync<ProxyChatResponse>(cancellationToken);
 
                 if (result == null || !string.IsNullOrEmpty(result.Error))
                 {
@@ -511,10 +532,18 @@ namespace ConditioningControlPanel.Services
                     return new ProxyPostResult(ProxyOutcome.Error, null);
                 }
 
+                if (options?.CompanionV2 == true && !CompanionProxyContract.IsExpectedResponse(result, options.RequestId))
+                    return new ProxyPostResult(ProxyOutcome.Error, null, Failure: AiFailureKind.InvalidResponse, Retryable: false);
+
                 if (string.IsNullOrEmpty(result.Content))
                 {
                     App.Logger?.Warning("AiService: Empty response from proxy");
                     return new ProxyPostResult(ProxyOutcome.Empty, null);
+                }
+
+                if (options?.CompanionV2 == true)
+                {
+                    _previewQuota.Update(unifiedId, App.UnifiedUserId, result.RequestsRemaining, result.ResetsAt);
                 }
 
                 // Update remaining count if provided by server (server is authoritative)
@@ -542,12 +571,15 @@ namespace ConditioningControlPanel.Services
                     result.Content?.Length ?? 0, CountGarbledChars(result.Content), CountLines(result.Content));
 
                 return new ProxyPostResult(ProxyOutcome.Ok, result.Content,
-                    result.TokensUsed?.CachedIn, result.TokensRemainingToday);
+                    result.TokensUsed?.CachedIn, result.TokensRemainingToday,
+                    FinishReason: result.FinishReason, RequestId: result.RequestId);
             }
             catch (TaskCanceledException)
             {
-                App.Logger?.Warning("AiService: Request timed out");
-                return new ProxyPostResult(ProxyOutcome.Error, null);
+                App.Logger?.Warning("AiService: Request cancelled or timed out");
+                return new ProxyPostResult(ProxyOutcome.Error, null,
+                    Failure: cancellationToken.IsCancellationRequested ? AiFailureKind.Cancelled : AiFailureKind.Unavailable,
+                    Retryable: true);
             }
             catch (HttpRequestException ex)
             {
@@ -730,12 +762,14 @@ namespace ConditioningControlPanel.Services
                 AiMeter.Record(AiMeter.ProviderCloud, options.MeterPurpose, meterInputChars, outputChars,
                     meterStopwatch.ElapsedMilliseconds, outcome, meterCachedIn, meterTokensLeft);
 
-            AiReplyResult Canned() => new(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+            AiReplyResult Canned(AiFailureKind failure = AiFailureKind.Unavailable, bool retryable = true) =>
+                options.CompanionV2 ? AiReplyResult.Failed(failure, retryable)
+                    : new(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             if (App.Settings?.Current?.OfflineMode == true)
             {
                 App.Logger?.Debug("AiService.SendAsync: offline mode, skipping AI request");
-                return Canned();
+                return Canned(AiFailureKind.Offline, false);
             }
 
             // INPUT MODERATION (Layer 1). Only the newest user-role message is user-authored input
@@ -766,18 +800,19 @@ namespace ConditioningControlPanel.Services
             if (!IsAvailable)
             {
                 App.Logger?.Debug("AiService.SendAsync: AI not available — user needs to log in for AI chat");
-                return new AiReplyResult(Loc.Get("ai_login_required_hint"), IsAiGenerated: false, Refusal: null);
+                return options.CompanionV2 ? AiReplyResult.Failed(AiFailureKind.SignInRequired)
+                    : new AiReplyResult(Loc.Get("ai_login_required_hint"), IsAiGenerated: false, Refusal: null);
             }
 
             // MaxTokensHardCap is the client's cost ceiling; the server clamps again per purpose.
-            var maxTokens = Math.Clamp(options.MaxTokens, 1, MaxTokensHardCap);
-            var post = await PostToProxyAsync(wire, maxTokens, options.Temperature, options.PurposeWire, cancellationToken);
+            var maxTokens = Math.Clamp(options.MaxTokens, 1, options.CompanionV2 ? AiCallOptions.PreviewTokenLimit(options.Purpose) : MaxTokensHardCap);
+            var post = await PostToProxyAsync(wire, maxTokens, options.Temperature, options.PurposeWire, cancellationToken, options);
 
             // input_too_large: shed the oldest history and try once more. Train 1 is the first thing
             // that ever sent a long messages[] from this client, so this is a live failure mode, not
             // a theoretical one — and without the retry it presents as "the companion stopped using
             // AI" with nothing in the log but a 400.
-            if (post.Outcome == ProxyOutcome.TooLarge)
+            if (!options.CompanionV2 && post.Outcome == ProxyOutcome.TooLarge)
             {
                 var compacted = CompactForRetry(wire, RetryHistoryTurns);
                 if (compacted != null)
@@ -786,7 +821,7 @@ namespace ConditioningControlPanel.Services
                         "AiService.SendAsync: proxy rejected the request as input_too_large — retrying with {Before}→{After} message(s)",
                         wire.Length, compacted.Length);
                     meterInputChars = compacted.Sum(m => m.Content?.Length ?? 0);
-                    post = await PostToProxyAsync(compacted, maxTokens, options.Temperature, options.PurposeWire, cancellationToken);
+                    post = await PostToProxyAsync(compacted, maxTokens, options.Temperature, options.PurposeWire, cancellationToken, options);
                 }
                 else
                 {
@@ -800,7 +835,7 @@ namespace ConditioningControlPanel.Services
                 // failure is guaranteed. Cut the system message from the middle, safety preamble and
                 // safety floor untouched, and spend one last attempt. A companion answering with less
                 // context beats a companion permanently stuck on canned phrases.
-                if (post.Outcome == ProxyOutcome.TooLarge)
+                if (!options.CompanionV2 && post.Outcome == ProxyOutcome.TooLarge)
                 {
                     var salvaged = SalvageOversizeSystemMessage(
                         compacted ?? wire, Companion.Brain.PromptAssembler.ProxyHardRejectCap);
@@ -812,22 +847,29 @@ namespace ConditioningControlPanel.Services
                             "the companion is answering with reduced context until the knowledge base or personality is trimmed",
                             (compacted ?? wire)[0].Content?.Length ?? 0, salvaged[0].Content?.Length ?? 0);
                         meterInputChars = salvaged.Sum(m => m.Content?.Length ?? 0);
-                        post = await PostToProxyAsync(salvaged, maxTokens, options.Temperature, options.PurposeWire, cancellationToken);
+                        post = await PostToProxyAsync(salvaged, maxTokens, options.Temperature, options.PurposeWire, cancellationToken, options);
                     }
                 }
             }
 
-            if (post.Outcome == ProxyOutcome.Skipped) return Canned();
+            if (post.Refusal != null) return new AiReplyResult(string.Empty, false, post.Refusal);
+            if (post.Outcome == ProxyOutcome.Skipped) return Canned(post.Failure ?? AiFailureKind.Unavailable, false);
             meterCachedIn = post.CachedInputTokens;
             meterTokensLeft = post.TokensRemainingToday;
             if (post.Outcome != ProxyOutcome.Ok)
             {
                 Meter(post.Outcome == ProxyOutcome.Empty ? AiMeter.OutcomeEmpty : AiMeter.OutcomeError);
-                return Canned();
+                return Canned(post.Failure ?? (post.Outcome == ProxyOutcome.Empty
+                    ? AiFailureKind.InvalidResponse : AiFailureKind.Unavailable), post.Retryable);
             }
 
             var raw = post.Content!;
-            var sanitized = SanitizeResponse(raw, maxTokens);
+            var sanitized = options.CompanionV2
+                ? options.IsStructuredUtility ? CompanionProxyContract.CleanUtilityReply(raw, post.FinishReason)
+                    : CompanionProxyContract.CleanReply(raw, post.FinishReason)
+                : SanitizeResponse(raw, maxTokens);
+            if (options.CompanionV2 && string.IsNullOrWhiteSpace(sanitized))
+                return Canned(AiFailureKind.InvalidResponse, true);
 
             // OUTPUT MODERATION (Layer 1). Prohibited model output is discarded before display;
             // the caller (CompanionBrain) rolls the turn back so it never reaches disk (P2/H5).
@@ -850,7 +892,8 @@ namespace ConditioningControlPanel.Services
             }
 
             Meter(AiMeter.OutcomeOk, raw.Length);
-            return new AiReplyResult(sanitized, IsAiGenerated: true, Refusal: null);
+            return new AiReplyResult(sanitized, IsAiGenerated: true, Refusal: null,
+                FinishReason: post.FinishReason, RequestId: post.RequestId);
         }
 
         /// <summary>

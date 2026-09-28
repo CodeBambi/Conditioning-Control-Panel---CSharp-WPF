@@ -388,10 +388,20 @@ function markReady(node) {
  * @param {string}  [o.cls]       class for the element
  * @returns {{node:Element, destroy:Function, exact:boolean, provenance:string, mediaKind:string}|null}
  */
-export function createPreview({ kind, payload = null, cls = 'gg-throw-live' } = {}) {
+export function createPreview({ kind, payload = null, cls = 'gg-throw-live', gifClip = false, sampleMs = 0 } = {}) {
   const d = doc();
   if (!d || typeof d.createElement !== 'function') return null;
-  const res = resolvePreview(kind, payload);
+  let res = null;
+  if (gifClip && pool && typeof pool.peekClip === 'function') {
+    const entry = pool.peekClip();
+    if (entry) {
+      const h = typeof entry.acquire === 'function' ? entry.acquire() : null;
+      const url = h?.url || entry.url;
+      if (url) res = { url, mediaKind: 'video', exact: false, provenance: 'local', release: () => releaseHandle(h) };
+      else releaseHandle(h);
+    }
+  }
+  res ||= resolvePreview(kind, payload);
   if (!res) return null;
 
   const isVideo = res.mediaKind === 'video';
@@ -406,7 +416,7 @@ export function createPreview({ kind, payload = null, cls = 'gg-throw-live' } = 
     // the ATTRIBUTE on a node that has not been inserted yet.
     try {
       node.muted = true;
-      node.autoplay = true;
+      node.autoplay = !sampleMs;
       node.loop = true;
       node.playsInline = true;
       node.preload = 'auto';
@@ -427,14 +437,23 @@ export function createPreview({ kind, payload = null, cls = 'gg-throw-live' } = 
   else { on('load', () => markReady(node)); }
 
   try { node.src = res.url; } catch (_e) { /* stub DOM */ }
-  if (isVideo && typeof node.play === 'function') {
+  if (isVideo && !sampleMs && typeof node.play === 'function') {
     try { const p = node.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (_e) { /* blocked: sticker stays */ }
   }
 
+  let sampleTimer = 0;
+  if (isVideo && sampleMs) {
+    sampleTimer = setInterval(() => {
+      if (d.hidden || !node.isConnected || node.seeking || !(node.duration > 0) || !Number.isFinite(node.duration)) return;
+      try { node.currentTime = (node.currentTime + 2) % node.duration; } catch (_e) { /* metadata not ready */ }
+    }, Math.max(1000, sampleMs));
+    sampleTimer?.unref?.();
+  }
   let dead = false;
   function destroy() {
     if (dead) return;
     dead = true;
+    clearInterval(sampleTimer);
     if (isVideo) {
       // exec/videos.js's teardown, verbatim: a <video> that keeps its src keeps
       // its decoder, and the node being gone does not release either.

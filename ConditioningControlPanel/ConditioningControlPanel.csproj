@@ -269,6 +269,7 @@
     <Resource Include="..\Assets\february_drone.png" Link="Resources\february_drone.png" />
     <Resource Include="..\Assets\logo.png" Link="Resources\logo.png" />
     <Resource Include="..\Assets\logo2.png" Link="Resources\logo2.png" />
+    <Resource Include="..\Assets\branding\ccp-logo.jpg" Link="Resources\branding\ccp-logo.jpg" />
     <!-- Weekly Intake Pass card art, one per niche (see Services\Quiz\IntakeNiche.cs).
          These must stay listed explicitly: there is no Resources\**\*.png glob, and a missing
          entry makes the pack:// URI fail at RUNTIME while the build still succeeds. -->
@@ -551,9 +552,8 @@
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
          which re-globs Resources\web independently - miss the second one and the
          harness pages come straight back into the publish tree (and so the installer). -->
-    <!-- Breakout (stations\breakout) is web first and not in this release: its row is out of
-         stations.json and its folder rides this exclude, so neither the room nor the installer
-         carries it. Restore both when the cabinet ships. -->
+    <!-- Breakout ships in the desktop. Exclude only its tests, notes and browser showcases;
+         the direct play page, engine and ending assets must reach both output and publish. -->
     <ArcademyHarnessExclude>
       ..\Assets\web\arcademy\annex\demo.html;
       ..\Assets\web\arcademy\vn\demo.html;
@@ -563,7 +563,10 @@
       ..\Assets\web\backroom\smoke\**\*;
       ..\Assets\web\backroom\**\tests\**\*;
       ..\Assets\web\backroom\shared\hypno\tests\**\*;
-      ..\Assets\web\backroom\stations\breakout\**\*;
+      ..\Assets\web\backroom\stations\breakout\**\*.test.js;
+      ..\Assets\web\backroom\stations\breakout\**\*.md;
+      ..\Assets\web\backroom\stations\breakout\dev.html;
+      ..\Assets\web\backroom\stations\breakout\showcase*;
       ..\Assets\web\dtrh\tests\**\*
     </ArcademyHarnessExclude>
     <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
@@ -584,7 +587,10 @@
       $(MSBuildProjectDirectory)\..\Assets\web\backroom\smoke\**\*;
       $(MSBuildProjectDirectory)\..\Assets\web\backroom\**\tests\**\*;
       $(MSBuildProjectDirectory)\..\Assets\web\backroom\shared\hypno\tests\**\*;
-      $(MSBuildProjectDirectory)\..\Assets\web\backroom\stations\breakout\**\*;
+      $(MSBuildProjectDirectory)\..\Assets\web\backroom\stations\breakout\**\*.test.js;
+      $(MSBuildProjectDirectory)\..\Assets\web\backroom\stations\breakout\**\*.md;
+      $(MSBuildProjectDirectory)\..\Assets\web\backroom\stations\breakout\dev.html;
+      $(MSBuildProjectDirectory)\..\Assets\web\backroom\stations\breakout\showcase*;
       $(MSBuildProjectDirectory)\..\Assets\web\dtrh\tests\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>

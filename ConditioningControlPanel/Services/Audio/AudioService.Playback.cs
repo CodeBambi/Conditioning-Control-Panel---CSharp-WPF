@@ -43,7 +43,9 @@ namespace ConditioningControlPanel.Services
         {
             WaveOutEvent? o;
             lock (_sync) { _stopRequested = true; o = _output; }
-            if (o != null) { try { o.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); } }
+            // Off the caller's thread: Stop is waveOutReset, and callers include the UI thread's
+            // engine stop (#1295). PlaybackStopped then releases the device as usual.
+            WaveOutTeardown.StopOffThread(o);
         }
 
         public void Pause()
@@ -319,40 +321,14 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Free a finished clip's device + reader on the serialized worker, after a short grace
-        /// period. The grace exists because disposing straight out of PlaybackStopped races
-        /// NAudio's own unwind ("Handle is not initialized"); the worker exists because
-        /// waveOutReset/waveOutClose block exactly as hard as waveOutOpen on a dead endpoint.
+        /// Free a finished clip's device + reader. Goes through <see cref="WaveOutTeardown"/>, NOT
+        /// the open worker: the #1295 dump had that worker parked in <c>WaveOutBuffer.Dispose</c>
+        /// behind a playback thread still inside the driver (the safety-timer path disposes a
+        /// device that never reported out). The teardown waits for the device to report out and
+        /// abandons it if it does not, so a stuck driver no longer wedges every later clip.
         /// </summary>
         private void ScheduleTeardown(WaveOutEvent? output, AudioFileReader? reader)
-        {
-            if (output == null && reader == null) return;
-
-            void Teardown()
-            {
-                // teardown: true — never dropped by the queue cap, or the cap itself would leak.
-                EnqueuePlaybackWork(() =>
-                {
-                    try { output?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
-                    try { output?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
-                    try { reader?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
-                }, teardown: true);
-            }
-
-            try
-            {
-                System.Threading.Timer? t = null;
-                t = new System.Threading.Timer(_ =>
-                {
-                    try { t?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
-                    Teardown();
-                }, null, 50, Timeout.Infinite);
-            }
-            catch
-            {
-                Teardown();   // timer creation failed — free it now rather than never
-            }
-        }
+            => WaveOutTeardown.Release(output, reader, "one-shot");
 
         private static void FireFinished(Action? onFinished)
         {

@@ -7,7 +7,7 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// Every game needs an account (Sep 18 2026 owner decision). The rule lives in one hook,
+/// Games need an account, except the explicitly free Breakout demo. The rule lives in one hook,
 /// <see cref="LauncherCatalogue.SignedIn"/>, and every way into a game (a tile, a shortcut, the
 /// <c>--game</c> argument) funnels through <see cref="LauncherHost.LaunchGame"/> and
 /// <see cref="LauncherCatalogue.TryLaunch(LauncherEntry)"/>, so these rows are the whole fence.
@@ -24,11 +24,13 @@ public class LauncherSignInTests : IDisposable
         () => true, () => locked, launch, () => false);
 
     [Fact]
-    public void Signed_out_every_catalogue_entry_needs_an_account()
+    public void Signed_out_only_the_Breakout_demo_and_chess_skip_the_account_gate()
     {
+        // Chess solo is free with no account (owner, 2026-09-27); its lobby asks for a sign-in.
         LauncherCatalogue.SignedIn = () => false;
         Assert.True(LauncherCatalogue.NeedsAccount);
-        Assert.All(LauncherCatalogue.Games, g => Assert.True(g.NeedsAccount));
+        Assert.All(LauncherCatalogue.Games, g =>
+            Assert.Equal(g.Id is not ("breakoutdemo" or "piecebypiece"), g.NeedsAccount));
     }
 
     [Fact]
@@ -57,6 +59,18 @@ public class LauncherSignInTests : IDisposable
     }
 
     [Fact]
+    public void TryLaunch_allows_an_explicit_free_demo_while_signed_out()
+    {
+        LauncherCatalogue.SignedIn = () => false;
+        int launched = 0;
+        var demo = Fake(() => launched++) with { RequiresAccount = false };
+        Assert.True(LauncherCatalogue.TryLaunch(demo));
+        Assert.Equal(1, launched);
+        Assert.False(LauncherCatalogue.TryLaunch(demo with { IsAvailable = () => false }));
+        Assert.Equal(1, launched);
+    }
+
+    [Fact]
     public void TryLaunch_calls_Launch_once_signed_in()
     {
         LauncherCatalogue.SignedIn = () => true;
@@ -74,7 +88,7 @@ public class LauncherSignInTests : IDisposable
         LauncherHost.RequestSignIn = () => asked++;
         try
         {
-            foreach (var id in LauncherCatalogue.Games.Select(g => g.Id))
+            foreach (var id in LauncherCatalogue.Games.Where(g => g.RequiresAccount).Select(g => g.Id))
                 Assert.False(LauncherHost.LaunchGame(id));
             Assert.Null(LauncherHost.AwaitingGame);
             // No launcher window in a test, so the refusal is silent: the caller shows the

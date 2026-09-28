@@ -1833,7 +1833,9 @@ export default {
       S.armed = true;
       setVar(S.nodes.stage, '--sort-rung', String(S.rung));
       setAttr(S.nodes.stage, 'data-chase', S.rung >= 6 ? '1' : '0');
-      if (top.ring) top.ring.set(1, 'fresh');
+      /* the ring arms in its QUICK window (#1291): the mint flash says "now
+       * pays too", and ringTick hands it back to 'fresh' when it shuts */
+      if (top.ring) top.ring.set(1, 'quick');
       if (S.swipe) S.swipe.enabled(true);
       /* W3 P1-15: the GO of every beat in this class. The ring lights, the hand
        * comes up, and it happened in silence; `tell` is the house's "look at
@@ -1855,13 +1857,15 @@ export default {
       bus.emit('deal', { card: top.card, node: top.node, rung: S.rung, ringMs: S.ringMs, chain: S.chain });
       /* THE SWIPE THAT CAME EARLY plays now (phone, 2026-09-11): the player's
        * own gesture on THIS card, made in the spring before the ring was up,
-       * read at elapsed 0 - never PERFECT, always honoured. A gesture made on a
-       * card that was set aside since (quietPass) is dropped, not moved. */
+       * read at elapsed 0 - never PERFECT, always honoured (and never QUICK:
+       * the gesture beat the ring, it did not read the card inside it). A
+       * gesture made on a card that was set aside since (quietPass) is
+       * dropped, not moved. */
       const pendingDir = S.pendingDir;
       const pendingLive = S.pendingLive;
       S.pendingDir = '';
       S.pendingLive = null;
-      if (pendingDir && pendingLive === top) onCommit(pendingDir);
+      if (pendingDir && pendingLive === top) onCommit(pendingDir, { pre: true });
     }
     function ringTick() {
       if (!S || !S.armed || halted() || S.over) return;
@@ -1869,7 +1873,7 @@ export default {
       if (!top) return;
       const elapsed = now() - S.ringStart;
       const v = verdictFor(elapsed, S.ringMs);
-      if (top.ring) top.ring.set(1 - Math.min(1, elapsed / S.ringMs), v.just ? 'just' : v.perfect ? 'ripe' : 'fresh');
+      if (top.ring) top.ring.set(1 - Math.min(1, elapsed / S.ringMs), v.just ? 'just' : v.quick ? 'quick' : v.perfect ? 'ripe' : 'fresh');
       countdown(S.ringMs - elapsed, S.ringMs);   // W3 P0-2, on the second, not the tick
       if (elapsed >= S.ringMs) onPass();
     }
@@ -1902,7 +1906,7 @@ export default {
       if (!S || !S.swipe || !handLive()) return;
       S.swipe.enabled(true);
     }
-    function onCommit(dir) {
+    function onCommit(dir, opts) {
       if (!S || halted() || S.over) return false;
       const top = S.live[0];
       if (!top) return false;
@@ -1916,7 +1920,7 @@ export default {
         return false;
       }
       const elapsed = now() - S.ringStart;
-      const v = verdictFor(elapsed, S.ringMs);
+      const v = verdictFor(elapsed, S.ringMs, opts && opts.pre ? { quick: false } : undefined);
       const correct = judge(top.card, dir, S.quick);
       const rungBefore = S.rung;
       disarm();
@@ -2500,7 +2504,12 @@ export default {
         /* No door ran (a shell with no setup hook) - claim the floor ourselves
          * and open when it lands. The ring never starts before a card does. */
         note(t('sort_dealing', 'Dealing your deck'));
-        claimPool({ sources: [], quick: true }).then((got) => {
+        /* ADDITIVE (Goon duel, 2026-09-25): a host that skips the door may name the piles in the
+         * class spec (`sources`), and the tagged claim runs as if the door had resolved them. No
+         * shell passes it, so the Arcademy's own start is untouched: no sources, QUICK SORT floor. */
+        const specSources = Array.isArray(spec.sources)
+          ? spec.sources.filter((s) => typeof s === 'string' && s).slice(0, 8) : [];
+        claimPool(specSources.length ? { sources: specSources, quick: false } : { sources: [], quick: true }).then((got) => {
           if (!S || destroyed) return;
           S.pool = got.pool;
           S.quick = !!got.quick;

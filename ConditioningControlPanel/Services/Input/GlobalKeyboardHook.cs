@@ -13,6 +13,8 @@ public class GlobalKeyboardHook : IDisposable
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
+    private const int WM_KEYUP = 0x0101;
+    private const int WM_SYSKEYUP = 0x0105;
 
     private IntPtr _hookId = IntPtr.Zero;
     private readonly LowLevelKeyboardProc _proc;
@@ -20,6 +22,9 @@ public class GlobalKeyboardHook : IDisposable
 
     public event Action<Key>? KeyPressed;
     public event Action<Key, int>? KeyPressedWithVkCode;
+
+    /// <summary>A key came up. Only the leash's hold-to-cut listens (a held key is one press).</summary>
+    public event Action<Key>? KeyReleased;
 
     /// <summary>True while the WH_KEYBOARD_LL hook is actually installed. Lockdown
     /// checks this after arming suppression — SetWindowsHookEx can fail (hook quota,
@@ -100,6 +105,10 @@ public class GlobalKeyboardHook : IDisposable
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        if (nCode >= 0 && (wParam == (IntPtr)WM_KEYUP || wParam == (IntPtr)WM_SYSKEYUP))
+        {
+            try { KeyReleased?.Invoke(KeyInterop.KeyFromVirtualKey(Marshal.ReadInt32(lParam))); } catch { }
+        }
         if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
         {
             int vkCode = Marshal.ReadInt32(lParam);

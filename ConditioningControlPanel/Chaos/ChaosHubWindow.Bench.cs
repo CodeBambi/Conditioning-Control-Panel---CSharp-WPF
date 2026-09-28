@@ -177,7 +177,7 @@ public partial class ChaosHubWindow
         }
         else if (rankShort)
         {
-            right = new TextBlock
+            right = new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "🔒",
                 FontSize = 13, Opacity = 0.7,
