@@ -71,7 +71,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// The 14-day grace stamps for a server-confirmed tier. Premium at tier 1+, the Lab stamp
         /// only at tier 2. Never shortens an existing longer window. The ONE copy of this rule:
-        /// <see cref="V2AuthService.ApplyUserDataToSettings"/> calls it too.
+        /// <see cref="ProfileAdopt.ApplyUserData"/> calls it too.
         /// </summary>
         public static void ExtendGrace(AppSettings settings, int tier, DateTime nowUtc)
         {
@@ -81,6 +81,15 @@ namespace ConditioningControlPanel.Services
                 settings.PatreonPremiumValidUntil = until;
             if (tier >= 2 && (settings.PatreonLabValidUntil == null || settings.PatreonLabValidUntil < until))
                 settings.PatreonLabValidUntil = until;
+        }
+
+        /// <summary>The settings half of a live rise (EntitlementTierSync): store the tier, stamp grace. True on a rise.</summary>
+        public static bool ApplyRise(AppSettings settings, int? serverTier, DateTime nowUtc)
+        {
+            if (Decide(settings.PatreonTier, serverTier) != EntitlementVerdict.Rise) return false;
+            settings.PatreonTier = serverTier!.Value;
+            ExtendGrace(settings, serverTier.Value, nowUtc);
+            return true;
         }
     }
 

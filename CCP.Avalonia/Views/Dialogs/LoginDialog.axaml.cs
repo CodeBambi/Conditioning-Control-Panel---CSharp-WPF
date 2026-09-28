@@ -41,8 +41,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - <c>ShowUsernamePanel</c>'s two title assignments are dropped: they set exactly the keys
     ///    the markup already binds.
     ///  - The OAuth flow is Core's (<c>ProviderSubscription/DiscordAccount.SignInAsync</c>); the browser
-    ///    opens through <c>Launcher</c>. Success applies identity only (<c>V2AuthService.ApplyIdentity</c>):
-    ///    the XP take-higher adopt and linked-tier grace arrive with the cloud load (unit 6).
+    ///    opens through <c>Launcher</c>. Success applies WPF's ApplyUserDataToSettings
+    ///    (Core <c>ProfileAdopt.ApplyUserData</c>: identity, linked-tier grace, XP take-higher), then the read-only load.
     ///
     /// ponytail: Sign in via Web still shows a fixed sample code with no polling (V2DeviceCodeService is
     /// WPF-head; not in this unit).
@@ -704,12 +704,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             ShowProviderSelection();
         }
 
-        /// <summary>The success tail every WPF path shares: identity to settings (Core, identity only
-        /// until unit 6), the session's unified id, the provider's copy of it, the result.</summary>
-        private void Succeed(V2AuthService.V2User user, string? authToken, string? provider, bool legacy)
+        /// <summary>The success tail every WPF path shares: the WPF ApplyUserDataToSettings adopt (Core), the read-only
+        /// profile load, the session's unified id, the provider's copy of it, the result.</summary>
+        /// <summary>The read-only profile load Succeed started (tests await it).</summary>
+        internal Task ProfileLoad { get; private set; } = Task.CompletedTask;
+
+        internal void Succeed(V2AuthService.V2User user, string? authToken, string? provider, bool legacy)
         {
-            V2AuthService.ApplyIdentity(CoreSettings.Current, user, authToken);
+            ProfileAdopt.ApplyUserData(CoreSettings.Current, user, authToken, DateTime.UtcNow);
             CoreSettings.Save();
+            ProfileLoad = AccountSeed.LoadProfileAsync(); // WPF MainWindow.Login.cs:170
             CoreAccount.UnifiedUserId = user.UnifiedId;
 
             // WPF UpdateServiceProperties

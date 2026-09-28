@@ -69,10 +69,7 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>True if the string is a "yyyy-MM" month key (so it's safe to compare/order with our keys).</summary>
-        internal static bool LooksLikeMonthKey(string k) =>
-            k.Length == 7 && k[4] == '-'
-            && int.TryParse(k.Substring(0, 4), out _)
-            && int.TryParse(k.Substring(5, 2), out _);
+        internal static bool LooksLikeMonthKey(string k) => ProfileAdopt.LooksLikeMonthKey(k);
 
         /// <summary>
         /// Whether a season key just handed to us by the server should replace the local
@@ -89,14 +86,8 @@ namespace ConditioningControlPanel.Services
         /// stale read, and taking it would let the recap fire a second time for a season already
         /// recapped, or roll the live stats bucket backwards.
         /// </summary>
-        internal static bool ShouldAdoptServerSeason(string? serverSeason, string? localSeason)
-        {
-            if (string.IsNullOrWhiteSpace(serverSeason) || !LooksLikeMonthKey(serverSeason!))
-                return false;
-            if (string.IsNullOrWhiteSpace(localSeason) || !LooksLikeMonthKey(localSeason!))
-                return true;
-            return string.CompareOrdinal(serverSeason!, localSeason!) > 0;
-        }
+        internal static bool ShouldAdoptServerSeason(string? serverSeason, string? localSeason) =>
+            ProfileAdopt.ShouldAdoptServerSeason(serverSeason, localSeason);
 
         /// <summary>
         /// Whether this install should take the server's season key QUIETLY: write it down, roll

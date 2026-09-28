@@ -15,7 +15,7 @@ namespace CCP.Avalonia.Tests;
 
 /// <summary>The head's CoreAccount seed (Platform/AccountSeed.cs): entitled only on a real answer,
 /// FAIL CLOSED on any exception.</summary>
-public sealed class AccountSeedTests : IDisposable
+public sealed partial class AccountSeedTests : IDisposable
 {
     private readonly Func<string, string?>? _oldGet = CoreSecrets.RetrieveProvider;
     private readonly Action<string, string?>? _oldSet = CoreSecrets.StoreProvider;
