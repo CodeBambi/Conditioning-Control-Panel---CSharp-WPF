@@ -37,6 +37,20 @@
          12.1.2 as Avalonia itself - a control package built against a different Avalonia minor
          throws at attach, which no compiler catches. -->
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.2" />
+    <!-- Audio (and later video) on both OSes; see docs/avalonia-decisions.md. Linux loads the
+         system libvlc (libvlc.so.5); only Windows needs the bundled natives. -->
+    <PackageReference Include="LibVLCSharp" Version="3.10.1" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('win')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Windows')))">
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The ~230 ms clip the smoke run plays through LibVlcAudio to prove started/finished fire. -->
+    <Content Include="..\Assets\sounds\faucet_charge_drop.wav" Link="assets\sounds\faucet_charge_drop.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <!-- Keincheck: an MCP server inside the running app so an AI agent can inspect and drive the

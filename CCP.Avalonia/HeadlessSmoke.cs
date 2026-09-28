@@ -45,6 +45,26 @@ namespace ConditioningControlPanel.Avalonia
             var url = new Views.Dialogs.UrlPromptViewModel();
             Check("UrlPromptDialog strings resolve",
                   url.LocCancel != "btn_cancel", url.LocCancel);
+
+            // Audio: a real clip through LibVLC (dummy output, no sound card needed) must report
+            // started, then finished, within 2 s. Unseeded CoreAudio would fire finished only.
+            var clip = System.IO.Path.Combine(AppContext.BaseDirectory, "assets", "sounds", "faucet_charge_drop.wav");
+            try
+            {
+                new Platform.LibVlcAudio("--aout=dummy").Seed();
+                var started = new System.Threading.ManualResetEventSlim();
+                var finished = new System.Threading.ManualResetEventSlim();
+                var startedFirst = false;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                long startMs = -1;
+                CoreAudio.PlayOneShot(clip, 0.5f, "smoke",
+                    _ => { startMs = sw.ElapsedMilliseconds; started.Set(); },
+                    () => { startedFirst = started.IsSet; finished.Set(); });
+                var ok = finished.Wait(2000) && startedFirst;
+                var audio = $"start {startMs} ms, finished {(finished.IsSet ? sw.ElapsedMilliseconds + " ms" : "never")}";
+                Check("LibVLC plays a clip: started then finished within 2 s", ok, audio);
+            }
+            catch (Exception ex) { Check("LibVLC plays a clip: started then finished within 2 s", false, ex.Message); }
             Console.WriteLine();
             Console.WriteLine(failures == 0
                 ? "Linux head can produce every value it renders."
