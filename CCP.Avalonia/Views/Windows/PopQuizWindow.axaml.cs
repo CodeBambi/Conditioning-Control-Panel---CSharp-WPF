@@ -162,6 +162,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void CleanupAndClose()
         {
+            _closeReason = _answered ? "answered, auto-dismiss" : "ESC";
             // Mark answered BEFORE completing: OnClosed re-Completes when !_answered as a
             // safety net, and the ESC path (still unanswered) would otherwise double-Complete —
             // the second call hits the mismatch branch and clears whatever interaction the
@@ -244,6 +245,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 foreach (var window in DesktopWindows().ToList())
                 {
+                    window._closeReason = "ForceCloseAll (engine stop / panic)";
                     try { window.Close(); } catch { }
                 }
             }
@@ -256,16 +258,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private static System.Collections.Generic.IEnumerable<PopQuizWindow> DesktopWindows() => _shown;
 
+        /// <summary>The last shown quiz left the screen: a lock card held behind it replays (#763).</summary>
+        public static event Action? AllClosed;
+
+        private string _closeReason = "window closed externally";
+
+        protected override void OnClosing(WindowClosingEventArgs e)
+        {
+            if (_closeReason == "window closed externally") _closeReason = $"close request ({e.CloseReason}, programmatic: {e.IsProgrammatic})";
+            base.OnClosing(e);
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             IsOpen = false;
             _shown.Remove(this);
+            Log.Information("PopQuizWindow closed (answered: {Answered}, reason: {Reason})", _answered, _closeReason);
 
             // ponytail: restoring the avatar mute state needs App.AvatarWindow (AvatarTubeWindow,
             // ConditioningControlPanel/AvatarTube/), head-side. The WPF
             // queue safety net has nothing to release here (PopQuizHost holds no slot).
 
             base.OnClosed(e);
+            if (_shown.Count == 0) AllClosed?.Invoke();
         }
     }
 }

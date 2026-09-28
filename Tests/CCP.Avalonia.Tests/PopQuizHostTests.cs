@@ -21,6 +21,7 @@ public sealed class PopQuizHostTests
                 .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                 .SetupWithoutStarting();
         var scheduler = PopQuizHost.Instance.Scheduler;
+        var wasEnabled = CoreSettings.Current.PopQuizEnabled;
         CoreEngine.PopQuiz = scheduler;
         try
         {
@@ -37,12 +38,19 @@ public sealed class PopQuizHostTests
             LockCardWindow.ForceCloseAll();
             Dispatcher.UIThread.RunJobs();
             Assert.True(PopQuizWindow.IsAnyOpen());    // replayed once the card left
+
+            // #763 the other way: a card waits behind an open quiz and replays when it closes.
+            LockCardWindow.ShowOnAllMonitors("good girl", 1, strictMode: false, isTest: true);
+            Assert.False(LockCardWindow.IsAnyOpen());
+            PopQuizWindow.ForceCloseAll();
+            Assert.True(LockCardWindow.IsAnyOpen());
         }
         finally
         {
             PopQuizWindow.ForceCloseAll();
             LockCardWindow.ForceCloseAll();
             CoreEngine.PopQuiz = null;
+            CoreSettings.Current.PopQuizEnabled = wasEnabled;
         }
         return Task.CompletedTask;
     });

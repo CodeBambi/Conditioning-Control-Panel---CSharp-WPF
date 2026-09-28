@@ -7,8 +7,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     /// <summary>
     /// The Avalonia <see cref="IPopQuizHost"/>, after WPF <c>PopQuizService</c>
-    /// (ConditioningControlPanel/Services/Quiz/PopQuizService.cs). The scheduler ticks on a
-    /// thread-pool thread here (CoreDispatch is unseeded), so every member hops to the UI thread.
+    /// (ConditioningControlPanel/Services/Quiz/PopQuizService.cs). Every member goes through
+    /// Dispatcher.UIThread.Invoke, which runs inline on the UI thread, so it is safe from any caller.
     ///
     /// <para>ponytail: this head has no InteractionQueueService. The queue is one pending replay,
     /// run when the last lock card closes - the only defer the policy needs on a head where the
