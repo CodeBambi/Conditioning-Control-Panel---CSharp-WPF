@@ -417,3 +417,10 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   SubliminalDuration no longer leaks after a session (WPF bug, logged). No user path yet (U3b).
 - Evidence: SessionRunnerTests (1-minute run, settings + log goldens, early stop, <30 s no file, deferred starts, ledger
   on disk before overrides), each fail-proofed. Review: ACCEPT, follow-ups applied.
+
+## avalonia-port/secrets-linux: +348
+- Auth unit 1: CoreSecrets provider for the Avalonia head: libsecret (*v_sync P/Invoke) on Linux, WPF's exact DPAPI files and
+  entropy on Windows, memory-only + a one-time "not remembered" flag without a Secret Service (never plaintext). Seeded
+  before SettingsService. Nothing reads secrets yet (login is a later unit).
+- Evidence: scripts/secrets-roundtrip.sh runs a throwaway gnome-keyring in Docker: round trip + no-bus/no-file, both
+  fail-proofed (and an empty test filter fails). DPAPI WPF-bytes test runs on Windows CI. The real KWallet was never touched.
