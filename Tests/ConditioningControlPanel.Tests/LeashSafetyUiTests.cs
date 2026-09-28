@@ -10,8 +10,8 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// The leash safety pass (2026-09-28): a stopped task frees the gate button, and the runner
-/// says why it stopped.
+/// The leash safety pass (2026-09-28): the gate can say a video will not play, a stopped
+/// task frees the gate button, the runner's stop lines and the orphan guard.
 /// </summary>
 [Collection(CompanionWpfRenderCollection.Name)]
 public class LeashSafetyUiTests
@@ -39,6 +39,30 @@ public class LeashSafetyUiTests
     // ---- the gate ----------------------------------------------------------------------
 
     [Fact]
+    public void The_gate_says_a_video_will_not_play_and_keeps_pardon_and_cut()
+    {
+        Run(() =>
+        {
+            var gate = new LeashGateCard();
+            var later = 0;
+            gate.LaterRequested += () => later++;
+            gate.Present(Pun("p1", PunishKind.Video), pardons: 1, unplayable: true);
+            Assert.True(gate.ShowsUnplayable);
+            Assert.NotNull(Find(gate, t => t == "leash-gate-unplayable"));
+            Assert.Null(Find(gate, t => t == "leash-gate-go"));
+            Assert.NotNull(Find(gate, t => t == "leash-gate-pardon"));
+            Assert.NotNull(Find(gate, t => t == "leash-gate-cut"));
+            Assert.NotNull(Find(gate, t => t == "leash-gate-panic"));
+            ((Button)Find(gate, t => t == "leash-gate-later")!).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.Equal(1, later);
+
+            gate.Present(Pun("p2"), pardons: 0);
+            Assert.False(gate.ShowsUnplayable);
+            Assert.NotNull(Find(gate, t => t == "leash-gate-go"));
+        });
+    }
+
+    [Fact]
     public void A_stopped_task_frees_the_gate_button_and_keeps_the_pips()
     {
         Run(() =>
@@ -52,6 +76,23 @@ public class LeashSafetyUiTests
             Assert.True(((Button)Find(gate, t => t == "leash-gate-go")!).IsEnabled);
             Assert.Equal((2, 3), gate.ProgressShown);
         });
+    }
+
+    // ---- pure rules --------------------------------------------------------------------
+
+    [Fact]
+    public void A_task_that_left_the_queue_is_orphaned()
+    {
+        var me = FakeLeashService.SampleMine() with { Pending = new[] { Pun("p1") } };
+        Assert.False(LeashGateRule.Orphaned(null, null, me));
+        Assert.False(LeashGateRule.Orphaned("p1", null, me));
+        Assert.True(LeashGateRule.Orphaned("p2", null, me));              // dropped, pardoned, expired
+        Assert.True(LeashGateRule.Orphaned("p1", null, null));            // the leash is gone
+        Assert.True(LeashGateRule.Orphaned(null, "a1", null));
+        var a = new Assignment("a1", AssignKind.Video, 1, new LeashWatch("ht", "1", null), "d", AssignStatus.Open, T0);
+        Assert.False(LeashGateRule.Orphaned(null, "a1", me with { Assignment = a }));
+        Assert.True(LeashGateRule.Orphaned(null, "a1", me with { Assignment = a with { Aid = "a2" } }));
+        Assert.True(LeashGateRule.Orphaned(null, "a1", me with { Assignment = a with { Status = AssignStatus.Missed } }));
     }
 
     [Fact]
@@ -73,7 +114,7 @@ public class LeashSafetyUiTests
     {
         var keys = new[]
         {
-            "leash_stop_session", "leash_stop_bubbles", "leash_stop_video",
+            "leash_gate_unplayable", "leash_gate_later", "leash_stop_session", "leash_stop_bubbles", "leash_stop_video",
             "leash_stop_no_phrases", "leash_stop_unplayable_skipped", "leash_stop_unplayable_marked",
             "leash_assign_stop_closed", "leash_assign_stop_unplayable",
         };

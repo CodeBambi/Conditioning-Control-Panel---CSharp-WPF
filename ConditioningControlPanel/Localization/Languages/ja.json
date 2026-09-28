@@ -6855,6 +6855,8 @@
   "leash_evt_answered_yes": "{0} put the leash on",
   "leash_evt_answered_no": "{0} said not now",
   "leash_evt_ended": "The leash came off",
+  "leash_gate_unplayable": "This video would not play here, and {0} could not be told yet. It stays off your gate for a day.",
+  "leash_gate_later": "Not now",
   "leash_stop_session": "The session stopped early. The punishment still waits at your gate.",
   "leash_stop_bubbles": "The bubbles went off. The punishment still waits at your gate.",
   "leash_stop_video": "The video closed. The punishment still waits at your gate.",

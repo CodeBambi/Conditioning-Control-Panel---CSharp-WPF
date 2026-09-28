@@ -44,4 +44,12 @@ public interface ILeashService
     Task SetVideoMaxAsync(int minutes);
     Task CompleteAsync(string pid);
     Task<bool> PardonAsync(string pid);
+
+    /// <summary>A punishment video that will not play: ask the server to drop it (<c>punish_skip</c>,
+    /// reason <c>unplayable</c>). When it cannot, the punishment stays pending but this client
+    /// leaves it off the gate for a day and says so.</summary>
+    Task<LeashSkipResult> SkipUnplayableAsync(string pid) => Task.FromResult(LeashSkipResult.Marked);
+
+    /// <summary>True while this client holds a "will not play" mark on the punishment.</summary>
+    bool IsUnplayable(string pid) => false;
 }
