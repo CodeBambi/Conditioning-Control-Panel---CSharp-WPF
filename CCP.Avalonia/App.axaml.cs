@@ -82,6 +82,12 @@ namespace ConditioningControlPanel.Avalonia
                 CorePaths.EffectiveAssetsProvider = ResolveEffectiveAssetsPath;
                 LocalizationManager.Instance.SetLanguage(Settings.Current.Language);
 
+                // Mod art: the same Core chain WPF's ModResourceResolver walks. Inert until a mod
+                // service seeds CoreMods (ActiveModPackage is null, so every answer is "no override").
+                // No event skin on this head yet (nothing arms LiveEventService on either head).
+                CoreModArt.OverridePathProvider = p => CoreModArt.ResolveOverride(p, null, CoreMods.ActiveModPackage?.InstalledPath);
+                CoreModArt.AudioOverridePathProvider = p => CoreModArt.ModAudioFile(p, CoreMods.ActiveModPackage?.InstalledPath);
+
                 // The lock-card surface seam. The schedule and the no-repeat phrase rotation are in
                 // Core now (LockCardScheduler); this is the half that draws, and on this head that
                 // is LockCardWindow.ShowOnAllMonitors - which already refuses to stack a second

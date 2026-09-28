@@ -105,6 +105,90 @@ namespace ConditioningControlPanel
         public static string? SpiralOverridePath()
             => OverridePath("spirals/spiral.gif") ?? OverridePath("spiral.gif");
 
+        // ---- Resolution: the file-path half of WPF's ModResourceResolver, shared by every head. ----
+        // Uncached on purpose, exactly like the WPF probes it replaces (ResolveUri/HasModOverride);
+        // the WPF head keeps its decoded-image caches, which are a decode concern, not a path one.
+
+        /// <summary>Folder under <see cref="CorePaths.UserData"/> holding event skins, one dir per id.</summary>
+        public const string EventSkinRoot = "event_skins";
+
+        /// <summary>
+        /// The override chain: active event skin first, then the active mod's <c>resources/</c>.
+        /// Absolute path of the first file that exists, or null. Traversal is rejected.
+        /// </summary>
+        public static string? ResolveOverride(string? resourcePath, string? eventSkinId, string? modInstalledPath)
+            => EventSkinFile(resourcePath, eventSkinId) ?? ModFile(resourcePath, modInstalledPath);
+
+        /// <summary>The file inside the active event skin, or null. The id is server-supplied, so it
+        /// must be one safe path segment.</summary>
+        public static string? EventSkinFile(string? resourcePath, string? eventSkinId)
+        {
+            var path = SafeRelative(resourcePath);
+            if (path is null || string.IsNullOrEmpty(eventSkinId)) return null;
+            if (eventSkinId!.Contains("..") || eventSkinId.Contains('/') || eventSkinId.Contains('\\')
+                || Path.IsPathRooted(eventSkinId)) return null;
+            return Probe(Path.Combine(CorePaths.UserData, EventSkinRoot, eventSkinId), path);
+        }
+
+        /// <summary>The active mod's <c>resources/&lt;path&gt;</c>, or null.</summary>
+        public static string? ModFile(string? resourcePath, string? modInstalledPath)
+        {
+            var path = SafeRelative(resourcePath);
+            return path is null || modInstalledPath is null ? null : Probe(modInstalledPath, "resources/" + path);
+        }
+
+        /// <summary>The active mod's <c>resources/sounds/&lt;path&gt;</c>, falling back to the
+        /// .wav/.mp3 twin so a mod may ship either format. Null for none.</summary>
+        public static string? ModAudioFile(string? soundRelativePath, string? modInstalledPath)
+        {
+            var path = SafeRelative(soundRelativePath);
+            if (path is null || modInstalledPath is null) return null;
+            var rel = "resources/sounds/" + path;
+            var altExt = Path.GetExtension(rel).ToLowerInvariant() == ".mp3" ? ".wav" : ".mp3";
+            return Probe(modInstalledPath, rel) ?? Probe(modInstalledPath, Path.ChangeExtension(rel, altExt));
+        }
+
+        /// <summary>Forward-slash form, or null when empty, rooted or carrying <c>..</c>.</summary>
+        private static string? SafeRelative(string? raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return null;
+            var path = raw!.Replace('\\', '/');
+            return path.Contains("..") || Path.IsPathRooted(raw) || Path.IsPathRooted(path) ? null : path;
+        }
+
+        /// <summary>
+        /// <paramref name="root"/>/<paramref name="rel"/> if it exists. Windows: exact probe only,
+        /// as it always was (the file system is already case-blind). Elsewhere the probe also
+        /// matches each segment case-insensitively (a mod shipping <c>Cards/</c> for <c>cards/</c>),
+        /// and finally a single file literally named with backslashes at the root - what
+        /// <c>ZipFile.ExtractToDirectory</c> makes on Unix of a .ccpmod written with <c>\</c> entries.
+        /// </summary>
+        internal static string? Probe(string root, string rel)
+        {
+            var exact = Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(exact)) return exact;
+            if (OperatingSystem.IsWindows()) return null;
+
+            try
+            {
+                var segs = rel.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                string? dir = root;
+                for (var i = 0; i < segs.Length - 1 && dir != null; i++)
+                    dir = Match(Directory.EnumerateDirectories(dir), segs[i]);
+                return (dir != null ? Match(Directory.EnumerateFiles(dir), segs[^1]) : null)
+                    ?? Match(Directory.EnumerateFiles(root), string.Join('\\', segs));
+            }
+            catch (IOException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
+        }
+
+        private static string? Match(System.Collections.Generic.IEnumerable<string> entries, string name)
+        {
+            foreach (var e in entries)
+                if (string.Equals(Path.GetFileName(e), name, StringComparison.OrdinalIgnoreCase)) return e;
+            return null;
+        }
+
         /// <summary>Portrait-mode gate; false with no mod layer up. Faults are swallowed.</summary>
         public static bool HasAvatarPortraits
         {
