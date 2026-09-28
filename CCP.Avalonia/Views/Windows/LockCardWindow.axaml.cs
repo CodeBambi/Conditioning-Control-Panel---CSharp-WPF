@@ -164,7 +164,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _sawTextInput = true;
             }, RoutingStrategies.Tunnel);
 
-            _txtInput.TextChanged += (_, _) => TxtInput_TextChanged();
+            // Judged at the moment of change, as WPF: TextBox.TextChanged is deferred on Avalonia, so
+            // fast typing could land "phrase"+"G" in one judgement (lost repeat + an error).
+            _txtInput.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty) TxtInput_TextChanged(); };
             KeyDown += (_, e) => Window_KeyDown(e);
             Loaded += (_, _) => OnShown();
             Opened += (_, _) => CoverScreen(Screens.ScreenFromWindow(this) ?? Screens.Primary);
@@ -453,13 +455,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // credited as typing and never judged as a match.
             if (_isCompleted || !_isPrimary) return;
 
-            var input = _txtInput.Text ?? "";
+            var full = _txtInput.Text ?? "";
+            // Letters before _consumed belong to a repeat already scored, waiting for ClearTyped.
+            var input = full.Substring(Math.Min(_consumed, full.Length));
 
             // Fail-safe keystroke accounting: the tunnelling TextInput handler is the counter of
             // record, but if an input method delivers text without raising it, credit the growth.
-            _keystrokes += CreditFailSafeGrowth(_sawTextInput, _lastInputLength, input.Length);
+            _keystrokes += CreditFailSafeGrowth(_sawTextInput, _lastInputLength, full.Length);
             _sawTextInput = false;
-            _lastInputLength = input.Length;
+            _lastInputLength = full.Length;
 
             _totalCharsTyped++;
 
@@ -468,7 +472,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (input.Length > 0 && !LockCardText.IsPrefixOf(input, _phrase))
                 _totalErrors++;
 
-            SyncInputToAllWindows(input);
+            SyncInputToAllWindows(full);
 
             if (LockCardText.Matches(input, _phrase))
             {
@@ -477,7 +481,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // the shorter length, as WPF: an IME's single "…" for three dots is not a cheat.
                 if (HasTypedEnough(_keystrokes, Math.Min(_phrase.Length, input.Length)))
                 {
-                    RegisterSuccessfulRepeat();
+                    RegisterSuccessfulRepeat(full.Length);
                 }
                 else
                 {
@@ -486,24 +490,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Log.Information(
                         "Lock Card: rejected an untyped match ({Keys} keystroke(s) for a {Len}-char phrase) (#734)",
                         _keystrokes, _phrase.Length);
-                    _txtInput.Clear();
-                    SyncInputToAllWindows("");
+                    ClearTyped(full.Length);
                     ResetKeystrokeGate();
                     RejectCheat("untyped match");
                 }
             }
         }
 
+        private int _consumed;
+
+        /// <summary>Drop the first <paramref name="upTo"/> characters of the box, keeping whatever
+        /// was typed after them (the next repeat's first letter in a fast burst). Deferred at Send
+        /// priority, ahead of the next input: a write from inside the Text change notification is
+        /// pushed back by the template's presenter binding, re-scoring the same repeat.</summary>
+        private void ClearTyped(int upTo)
+        {
+            _consumed = upTo;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_consumed == 0) return;
+                var t = _txtInput.Text ?? "";
+                var rest = t.Length > _consumed ? t.Substring(_consumed) : "";
+                _consumed = 0;
+                _lastInputLength = rest.Length;   // what survives was already credited
+                _txtInput.Text = rest;
+                _txtInput.CaretIndex = rest.Length;
+                if (_isCompleted) foreach (var w in Fanout()) w._txtInput.Text = rest;   // the handler skips completed cards
+            }, DispatcherPriority.Send);
+        }
+
         /// <summary>Shared completion step for one correct repeat. UI thread only.</summary>
-        private void RegisterSuccessfulRepeat()
+        private void RegisterSuccessfulRepeat(int consumedTo = -1)
         {
             if (_isCompleted) return;
 
             _completedRepeats++;
 
             // Clear input for next repeat (no-op/harmless in voice mode).
-            _txtInput.Clear();
-            SyncInputToAllWindows("");
+            ClearTyped(consumedTo < 0 ? (_txtInput.Text ?? "").Length : consumedTo);
             // The next repeat has to be earned from scratch — the clear Ctrl+Z used to undo.
             ResetKeystrokeGate();
 
@@ -641,7 +665,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_txtEscHint == null) return;
             if (EscClosesCard) SetLocalized(_txtEscHint, "label_press_esc_to_close");
             // A strict card with the panic listener live: only the panic key gets out.
-            else _txtEscHint.Text = Loc.GetF("label_strict_only_panic_key_closes", CoreSettings.Current.PanicKey);
+            else SetPlain(_txtEscHint, Loc.GetF("label_strict_only_panic_key_closes", CoreSettings.Current.PanicKey));
         }
 
         private void Window_KeyDown(KeyEventArgs e)
@@ -788,7 +812,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 },
             };
             _ = anim.RunAsync(_cardBorder).ContinueWith(_ =>
-                Dispatcher.UIThread.Post(() => _cardBorder.RenderTransform = null));
+                Dispatcher.UIThread.Post(() =>
+                {
+                    // A pulse that started meanwhile owns the transform now; leave it running.
+                    if (_cardBorder.RenderTransform == transform) _cardBorder.RenderTransform = null;
+                }));
         }
 
         private static KeyFrame Frame(double cue, AvaloniaProperty p, object v) => new()
@@ -918,6 +946,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     var all = Features.ScreenList.Enumerate(primary);
                     var primaryScreen = all.FirstOrDefault(s => s.IsPrimary) ?? all.FirstOrDefault();
+                    primary.CoverScreen(primaryScreen);   // the keyboard card sits on the primary (WPF :1635)
                     foreach (var screen in all.Where(s => s != primaryScreen))
                     {
                         var mirror = Build(phrase, repeats, strictMode, voiceMode, isTest, isPrimary: false);
@@ -964,7 +993,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (screen is null) return;
             var b = screen.Bounds;
-            if (ClientSize.Width * screen.Scaling >= b.Width - 1 && ClientSize.Height * screen.Scaling >= b.Height - 1) return;
+            if (Position == b.Position && ClientSize.Width * RenderScaling >= b.Width - 1
+                && ClientSize.Height * RenderScaling >= b.Height - 1) return;
             WindowState = WindowState.Normal;
             Position = b.Position;
             Width = b.Width / screen.Scaling;
@@ -974,6 +1004,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>The card that owns the keyboard, and what it has counted. Tests read these.</summary>
         internal static LockCardWindow? Primary => _allWindows.FirstOrDefault(w => w._isPrimary);
         internal int TotalErrors => _totalErrors;
+        internal int CompletedRepeats => _completedRepeats;
         internal bool IsCompleted => _isCompleted;
         internal string PhraseShown => _txtPhrase.Text ?? "";
 
