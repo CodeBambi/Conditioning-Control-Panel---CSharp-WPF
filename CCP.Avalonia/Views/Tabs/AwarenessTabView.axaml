@@ -198,9 +198,8 @@
                         <!-- ==================== PRESETS ====================
                              Deliberately NOT compressed: a preset wall is rich content, it only
                              gets the kicker recolor. Cards are built imperatively in
-                             MainWindow.RefreshAwarenessPresetCards so the trailing "+ New Preset"
-                             card can share the wrap flow - AwarenessPresetItems keeps its name
-                             AND its WrapPanel type, and is empty on this head. -->
+                             AwarenessTabView.Presets.cs (RefreshAwarenessPresetCards) so the
+                             trailing "+ New Preset" card can share the wrap flow. -->
                         <StackPanel Margin="0,4,0,14">
                             <Grid Margin="4,0,4,10">
                                 <TextBlock Text="PRESETS" Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"

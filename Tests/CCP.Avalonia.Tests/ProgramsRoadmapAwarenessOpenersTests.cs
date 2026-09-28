@@ -69,6 +69,21 @@ public sealed class ProgramsRoadmapAwarenessOpenersTests
         Assert.Single(opened.OfType<RoadmapStepPopup>());
     });
 
+    /// <summary>The head ships Assets/AwarenessPresets like WPF, so the settings merge finds the built-ins.</summary>
+    [Fact]
+    public void BuiltInAwarenessPresetsLoadFromTheOutput()
+    {
+        var settings = new AppSettings();
+        settings.KeywordTriggerPresets.Clear();
+        var service = (ConditioningControlPanel.Services.SettingsService)
+            System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(ConditioningControlPanel.Services.SettingsService));
+        typeof(ConditioningControlPanel.Services.SettingsService)
+            .GetMethod("MergeBuiltInAwarenessPresets", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(service, new object[] { settings });
+        Assert.Contains(settings.KeywordTriggerPresets, p => p.Id == "builtin.puppy");
+        Assert.True(settings.KeywordTriggerPresets.Count >= 4);
+    }
+
     [Fact]
     public Task AwarenessGridListsPresetsAndAdvancedLinkOpensTheInstalledOne() => Run(opened =>
     {

@@ -199,6 +199,11 @@ public sealed class LanguageSelectorTests
             Assert.False(RoadmapExists());
 
             var roadmap = ExistingRoadmap();
+            // The shell's one roadmap must pop RoadmapStepPopup on completion (WPF MainWindow.xaml.cs:507).
+            var stepCompleted = (Delegate?)typeof(RoadmapService)
+                .GetField("StepCompleted", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(roadmap);
+            Assert.Contains(stepCompleted?.GetInvocationList() ?? Array.Empty<Delegate>(),
+                d => d.Method.Name == "OnRoadmapStepCompleted" && d.Method.DeclaringType == typeof(MainShellWindow));
             roadmap.StartStep("t1_step1");
             Assert.NotNull(roadmap.GetStepProgress("t1_step1")?.StartedAt);
 

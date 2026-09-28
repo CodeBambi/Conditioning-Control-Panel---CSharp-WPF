@@ -403,11 +403,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         private void BtnAwarenessTutorial_Click(object? sender, RoutedEventArgs e)
         {
+            CoreTutorial.Start("Awareness");
+            if (!CoreTutorial.IsActive || CoreTutorial.CurrentTourName != "Awareness") return;
+
             EventHandler<bool>? onFinished = null;
             onFinished = async (_, completed) =>
             {
                 CoreTutorial.Finished -= onFinished;
-                if (!completed) return;
+                // WPF Settings.cs:681-682: only the Awareness tour, and only when finished, not skipped.
+                if (!completed || CoreTutorial.CurrentTourName != "Awareness") return;
                 try
                 {
                     if (Presets.GetPreset("builtin.puppy") is { } puppy) await OpenPresetDetail(puppy);
@@ -415,7 +419,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 catch (Exception ex) { Log.Debug("Awareness tutorial editor-open failed: {Error}", ex.Message); }
             };
             CoreTutorial.Finished += onFinished;
-            CoreTutorial.Start("Awareness");
         }
 
         private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e)

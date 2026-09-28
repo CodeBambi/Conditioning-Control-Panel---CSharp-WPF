@@ -158,8 +158,13 @@ namespace ConditioningControlPanel
         public static void Start(string tourName)
         {
             if (string.IsNullOrWhiteSpace(tourName)) return;
+            CurrentTourName = tourName;
             try { StartAction?.Invoke(tourName); } catch { /* see Next */ }
         }
+
+        /// <summary>The name last passed to <see cref="Start"/>: which tour a Finished belongs to,
+        /// as WPF reads <c>App.Tutorial.CurrentTutorialType</c>. Tours do not nest.</summary>
+        public static string? CurrentTourName { get; private set; }
 
         // ---- Events the head forwards ---------------------------------------------------
 

@@ -62,14 +62,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
         }
 
-        /// <summary>
-        /// Points the sigil rail at the featured program, or collapses it.
-        ///
-        /// Same null contract as ProgramArt: no art means the rail goes away and the copy takes the
-        /// whole card. The sigil is preferred over the program's dashboard banner on purpose - the
-        /// banner is a 2800x113 texture strip authored to wash behind a one-line card, and at this
-        /// size it would read as a smear rather than as the program's emblem.
-        /// </summary>
         /// <summary>Set between queueing the popup and opening it, so a double-click queues one card.</summary>
         private static bool _opening;
 
@@ -119,6 +111,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                    ?? library[0];
         }
 
+        /// <summary>
+        /// Points the sigil rail at the featured program, or collapses it.
+        ///
+        /// Same null contract as ProgramArt: no art means the rail goes away and the copy takes the
+        /// whole card. The sigil is preferred over the program's dashboard banner on purpose - the
+        /// banner is a 2800x113 texture strip authored to wash behind a one-line card, and at this
+        /// size it would read as a smear rather than as the program's emblem.
+        /// </summary>
         private void ApplyFeaturedProgram(ProgramDefinition? program)
         {
             var artPanel = this.FindControl<Border>("ArtPanel")!;
