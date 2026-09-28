@@ -1,0 +1,24 @@
+[
+  {
+    "Id": "custom_velvet",
+    "Name": "Velvet Édition",
+    "Description": "How soft?",
+    "SystemPromptTemplate": "Ask about {topic}.\nBe \"kind\".",
+    "Color": "#AA33CC",
+    "IsBuiltIn": false,
+    "Archetypes": [
+      {
+        "Name": "Silk",
+        "MinPercentage": 0,
+        "MaxPercentage": 50,
+        "Description": "Barely."
+      },
+      {
+        "Name": "Velvet",
+        "MinPercentage": 51,
+        "MaxPercentage": 100,
+        "Description": "Nothing left to argue with."
+      }
+    ]
+  }
+]

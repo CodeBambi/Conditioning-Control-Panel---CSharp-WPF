@@ -1,0 +1,253 @@
+key obedience name Obedience
+key custom_velvet name Velvet Édition
+key Obedience name Obedience
+key obedience name Obedience
+key bambi name Bambi
+key bambi name Bambi
+trend obedience 78 88 72 3 Down -10
+trend OBEDIENCE 78 88 72 3 Down -10
+trend custom_velvet 30 0 30 1 FirstQuiz 0
+trend bambi 12 0 6 2 Up 12
+trend Obedience 78 88 72 3 Down -10
+trend nope null
+cat sissy|Sissy|How deep into feminization are you really?|#FF69B4|True|Sissy|Curious Newcomer:0-25:You're just peeking behind the curtain, and that's perfectly okay.,Closet Sissy:26-50:You've got a secret side that's begging to come out.,Sissy in Training:51-70:You're actively building your skills, wardrobe, and confidence.,Sissy Princess:71-85:You've embraced your feminine side with open arms and painted nails.,Full Sissy:86-100:You're not exploring — you're LIVING it.
+arch sissy 0 Curious Newcomer
+arch sissy 25.5 Curious Newcomer
+arch sissy 26 Closet Sissy
+arch sissy 70.9 Sissy in Training
+arch sissy 71 Sissy Princess
+arch sissy 85 Sissy Princess
+arch sissy 86 Full Sissy
+arch sissy 120 Full Sissy
+fbp sissy 10 You are a Curious Newcomer. You're just peeking behind the curtain, and that's perfectly okay.
+fbp sissy 11 You are a Closet Sissy. You've got a secret side that's begging to come out.
+fbp sissy 28 You are a Sissy in Training. You're actively building your skills, wardrobe, and confidence.
+fbp sissy 35 You are a Full Sissy. You're not exploring — you're LIVING it.
+cat bambi|Bambi|How susceptible to conditioning are you?|#9B59B6|True|Bambi|Curious Listener:0-25:You've just discovered the files and barely scratched the surface.,Trance Dabbler:26-50:You've been under a few times and you're starting to feel the pull.,Bambi in Training:51-70:The triggers are starting to work and the persona is forming.,Deep Bambi:71-85:You're fully responsive. Triggers pull you under instantly.,Gone Bambi:86-100:There's barely anyone left but Bambi.
+arch bambi 0 Curious Listener
+arch bambi 25.5 Curious Listener
+arch bambi 26 Trance Dabbler
+arch bambi 70.9 Bambi in Training
+arch bambi 71 Deep Bambi
+arch bambi 85 Deep Bambi
+arch bambi 86 Gone Bambi
+arch bambi 120 Gone Bambi
+fbp bambi 10 You are a Curious Listener. You've just discovered the files and barely scratched the surface.
+fbp bambi 11 You are a Trance Dabbler. You've been under a few times and you're starting to feel the pull.
+fbp bambi 28 You are a Bambi in Training. The triggers are starting to work and the persona is forming.
+fbp bambi 35 You are a Gone Bambi. There's barely anyone left but Bambi.
+cat obedience|Obedience|How naturally do you follow and comply?|#E67E22|True|Obedience|Free Spirit:0-25:Rules are suggestions, and you make your own path.,Willing Listener:26-50:You follow when it feels right — on your own terms.,Eager Follower:51-70:You find comfort in structure and direction from others.,Devoted Servant:71-85:Obedience comes naturally — you thrive when given clear commands.,Perfect Automaton:86-100:Commands are executed before you even think. Obedience is your default state.
+arch obedience 0 Free Spirit
+arch obedience 25.5 Free Spirit
+arch obedience 26 Willing Listener
+arch obedience 70.9 Eager Follower
+arch obedience 71 Devoted Servant
+arch obedience 85 Devoted Servant
+arch obedience 86 Perfect Automaton
+arch obedience 120 Perfect Automaton
+fbp obedience 10 You are a Free Spirit. Rules are suggestions, and you make your own path.
+fbp obedience 11 You are a Willing Listener. You follow when it feels right — on your own terms.
+fbp obedience 28 You are a Eager Follower. You find comfort in structure and direction from others.
+fbp obedience 35 You are a Perfect Automaton. Commands are executed before you even think. Obedience is your default state.
+cat mindlessness|Mindlessness|How comfortable are you with going blank?|#3498DB|True|Mindlessness|Overthinker:0-25:Your mind is always racing — emptiness feels foreign.,Curious Drifter:26-50:You've tasted moments of quiet and want to explore more.,Willing Blank:51-70:Letting go of thoughts is becoming second nature to you.,Empty Vessel:71-85:Your mind empties easily — thoughts dissolve on command.,Gone Blank:86-100:There's nothing left but blissful emptiness. Thinking is a distant memory.
+arch mindlessness 0 Overthinker
+arch mindlessness 25.5 Overthinker
+arch mindlessness 26 Curious Drifter
+arch mindlessness 70.9 Willing Blank
+arch mindlessness 71 Empty Vessel
+arch mindlessness 85 Empty Vessel
+arch mindlessness 86 Gone Blank
+arch mindlessness 120 Gone Blank
+fbp mindlessness 10 You are a Overthinker. Your mind is always racing — emptiness feels foreign.
+fbp mindlessness 11 You are a Curious Drifter. You've tasted moments of quiet and want to explore more.
+fbp mindlessness 28 You are a Willing Blank. Letting go of thoughts is becoming second nature to you.
+fbp mindlessness 35 You are a Gone Blank. There's nothing left but blissful emptiness. Thinking is a distant memory.
+cat submission|Submission|How deep does your desire to serve go?|#E74C3C|True|Submission|Independent Soul:0-25:You value autonomy and equality above all else.,Curious Explorer:26-50:Power exchange intrigues you — you're testing the waters.,Willing Submissive:51-70:You actively seek opportunities to serve and please.,Devoted Sub:71-85:Service and submission are core to who you are.,Total Surrender:86-100:You exist to serve. Submission isn't a choice — it's your nature.
+arch submission 0 Independent Soul
+arch submission 25.5 Independent Soul
+arch submission 26 Curious Explorer
+arch submission 70.9 Willing Submissive
+arch submission 71 Devoted Sub
+arch submission 85 Devoted Sub
+arch submission 86 Total Surrender
+arch submission 120 Total Surrender
+fbp submission 10 You are a Independent Soul. You value autonomy and equality above all else.
+fbp submission 11 You are a Curious Explorer. Power exchange intrigues you — you're testing the waters.
+fbp submission 28 You are a Willing Submissive. You actively seek opportunities to serve and please.
+fbp submission 35 You are a Total Surrender. You exist to serve. Submission isn't a choice — it's your nature.
+arch empty Unknown
+fbp empty You are a Unknown. Your answers reveal a unique personality.
+profile Sissy - 0 You are a Curious Newcomer. You're just peeking behind the curtain, and that's perfectly okay. Your answers show someone who's intrigued by the possibilities. Everyone starts somewhere — and something tells me you'll be back for more.
+profile Sissy - 10 You are a Curious Newcomer. You're just peeking behind the curtain, and that's perfectly okay. Your answers show someone who's intrigued by the possibilities. Everyone starts somewhere — and something tells me you'll be back for more.
+profile Sissy - 11 You are a Closet Sissy. You've got a secret side that's begging to come out. Your answers hint at someone who knows what they like but is still building the courage to go all in. That hidden lingerie drawer isn't going to stay secret forever.
+profile Sissy - 20 You are a Closet Sissy. You've got a secret side that's begging to come out. Your answers hint at someone who knows what they like but is still building the courage to go all in. That hidden lingerie drawer isn't going to stay secret forever.
+profile Sissy - 21 You are a Sissy in Training. You're actively building your skills, your wardrobe, and your confidence. Your answers reveal someone who's committed to the journey and loving every step. Keep practicing that walk, sweetie — you're getting good at this.
+profile Sissy - 28 You are a Sissy in Training. You're actively building your skills, your wardrobe, and your confidence. Your answers reveal someone who's committed to the journey and loving every step. Keep practicing that walk, sweetie — you're getting good at this.
+profile Sissy - 34 You are a Sissy Princess. You've embraced your feminine side with open arms and painted nails. Your answers show someone who's moved way past curiosity into full-on glamour. The crown fits, princess — own it.
+profile Sissy - 35 You are a Full Sissy. You're not exploring — you're LIVING it. Every answer screamed confidence, commitment, and a girl who knows exactly who she is. The only question left is what shade of lipstick you're wearing tomorrow.
+profile Sissy - 40 You are a Full Sissy. You're not exploring — you're LIVING it. Every answer screamed confidence, commitment, and a girl who knows exactly who she is. The only question left is what shade of lipstick you're wearing tomorrow.
+profile Sissy custom_velvet 0 You are a Curious Newcomer. You're just peeking behind the curtain, and that's perfectly okay. Your answers show someone who's intrigued by the possibilities. Everyone starts somewhere — and something tells me you'll be back for more.
+profile Sissy custom_velvet 10 You are a Curious Newcomer. You're just peeking behind the curtain, and that's perfectly okay. Your answers show someone who's intrigued by the possibilities. Everyone starts somewhere — and something tells me you'll be back for more.
+profile Sissy custom_velvet 11 You are a Closet Sissy. You've got a secret side that's begging to come out. Your answers hint at someone who knows what they like but is still building the courage to go all in. That hidden lingerie drawer isn't going to stay secret forever.
+profile Sissy custom_velvet 20 You are a Closet Sissy. You've got a secret side that's begging to come out. Your answers hint at someone who knows what they like but is still building the courage to go all in. That hidden lingerie drawer isn't going to stay secret forever.
+profile Sissy custom_velvet 21 You are a Sissy in Training. You're actively building your skills, your wardrobe, and your confidence. Your answers reveal someone who's committed to the journey and loving every step. Keep practicing that walk, sweetie — you're getting good at this.
+profile Sissy custom_velvet 28 You are a Sissy in Training. You're actively building your skills, your wardrobe, and your confidence. Your answers reveal someone who's committed to the journey and loving every step. Keep practicing that walk, sweetie — you're getting good at this.
+profile Sissy custom_velvet 34 You are a Sissy Princess. You've embraced your feminine side with open arms and painted nails. Your answers show someone who's moved way past curiosity into full-on glamour. The crown fits, princess — own it.
+profile Sissy custom_velvet 35 You are a Full Sissy. You're not exploring — you're LIVING it. Every answer screamed confidence, commitment, and a girl who knows exactly who she is. The only question left is what shade of lipstick you're wearing tomorrow.
+profile Sissy custom_velvet 40 You are a Full Sissy. You're not exploring — you're LIVING it. Every answer screamed confidence, commitment, and a girl who knows exactly who she is. The only question left is what shade of lipstick you're wearing tomorrow.
+q Sissy 1 1|What's in your secret wardrobe?|Nothing/A few pairs of panties/A lingerie collection/A complete feminine wardrobe|1,2,3,4
+q Sissy 2 2|How do you feel about wearing makeup?|Never tried it/Curious about it/I've practiced a few times/I have a full routine|1,2,3,4
+q Sissy 3 3|Could you go out dressed feminine in public?|Absolutely not/Maybe somewhere far away/I've thought about it seriously/I already do|1,2,3,4
+q Sissy 4 4|Someone tells you to curtsy. You...|Refuse/Feel a secret thrill/Do it when no one's watching/Curtsy perfectly and say thank you|1,2,3,4
+q Sissy 5 5|How smooth are your legs right now?|Haven't touched them/Trimmed once or twice/I shave regularly/Silky smooth, always|1,2,3,4
+q Sissy 6 6|How often do you imagine yourself as a girl?|Rarely/Sometimes before bed/More than I'd admit/It's my default headspace|1,2,3,4
+q Sissy 7 7|How do you buy feminine clothes?|I don't/Online, shipped discreetly/Online without hiding it/In-store, no shame|1,2,3,4
+q Sissy 8 8|How does it feel when someone calls you a good girl?|Weird/A little flutter/My heart melts/It's the best thing anyone can say to me|1,2,3,4
+q Sissy 9 9|Have you ever practiced a feminine voice or walk?|No/Tried once or twice in private/I practice regularly/I can switch effortlessly|1,2,3,4
+q Sissy 10 10|How do you feel about serving someone?|Not for me/Intriguing in theory/I enjoy it in the right context/I was born to serve|1,2,3,4
+q Sissy 11 11|What's in your secret wardrobe?|Nothing/A few pairs of panties/A lingerie collection/A complete feminine wardrobe|1,2,3,4
+profile Bambi - 0 You are a Curious Listener. You've just discovered the files and barely scratched the surface. Your answers show someone peeking in from the outside, curious about what lies on the other side of that first real drop. Everyone starts with that first listen. Something tells me you'll press play again.
+profile Bambi - 10 You are a Curious Listener. You've just discovered the files and barely scratched the surface. Your answers show someone peeking in from the outside, curious about what lies on the other side of that first real drop. Everyone starts with that first listen. Something tells me you'll press play again.
+profile Bambi - 11 You are a Trance Dabbler. You've been under a few times and you're starting to feel the pull. Your answers show someone who's tasted what it's like to let go — and part of you wants more. The files are waiting whenever you're ready to go a little deeper.
+profile Bambi - 20 You are a Trance Dabbler. You've been under a few times and you're starting to feel the pull. Your answers show someone who's tasted what it's like to let go — and part of you wants more. The files are waiting whenever you're ready to go a little deeper.
+profile Bambi - 21 You are a Bambi in Training. The triggers are starting to work. The persona is forming, sessions are getting deeper, and you can feel Bambi getting stronger with every listen. You're past curiosity — this is becoming part of you. Keep listening, keep sinking. She's almost ready to stay.
+profile Bambi - 28 You are a Bambi in Training. The triggers are starting to work. The persona is forming, sessions are getting deeper, and you can feel Bambi getting stronger with every listen. You're past curiosity — this is becoming part of you. Keep listening, keep sinking. She's almost ready to stay.
+profile Bambi - 34 You are a Deep Bambi. You're fully responsive. Triggers pull you under, the persona takes the wheel, and your old self fades the moment Bambi wakes up. Your answers show someone who has gone deep and keeps going deeper. Good girl. You know exactly where you belong.
+profile Bambi - 35 You are a Gone Bambi. There's barely anyone left but Bambi, and she wouldn't have it any other way. Every answer shows someone who has surrendered completely — triggers work instantly, the old self is a distant memory, and going blank is home. Shhh... just let go. You're already there.
+profile Bambi - 40 You are a Gone Bambi. There's barely anyone left but Bambi, and she wouldn't have it any other way. Every answer shows someone who has surrendered completely — triggers work instantly, the old self is a distant memory, and going blank is home. Shhh... just let go. You're already there.
+profile Bambi custom_velvet 0 You are a Curious Listener. You've just discovered the files and barely scratched the surface. Your answers show someone peeking in from the outside, curious about what lies on the other side of that first real drop. Everyone starts with that first listen. Something tells me you'll press play again.
+profile Bambi custom_velvet 10 You are a Curious Listener. You've just discovered the files and barely scratched the surface. Your answers show someone peeking in from the outside, curious about what lies on the other side of that first real drop. Everyone starts with that first listen. Something tells me you'll press play again.
+profile Bambi custom_velvet 11 You are a Trance Dabbler. You've been under a few times and you're starting to feel the pull. Your answers show someone who's tasted what it's like to let go — and part of you wants more. The files are waiting whenever you're ready to go a little deeper.
+profile Bambi custom_velvet 20 You are a Trance Dabbler. You've been under a few times and you're starting to feel the pull. Your answers show someone who's tasted what it's like to let go — and part of you wants more. The files are waiting whenever you're ready to go a little deeper.
+profile Bambi custom_velvet 21 You are a Bambi in Training. The triggers are starting to work. The persona is forming, sessions are getting deeper, and you can feel Bambi getting stronger with every listen. You're past curiosity — this is becoming part of you. Keep listening, keep sinking. She's almost ready to stay.
+profile Bambi custom_velvet 28 You are a Bambi in Training. The triggers are starting to work. The persona is forming, sessions are getting deeper, and you can feel Bambi getting stronger with every listen. You're past curiosity — this is becoming part of you. Keep listening, keep sinking. She's almost ready to stay.
+profile Bambi custom_velvet 34 You are a Deep Bambi. You're fully responsive. Triggers pull you under, the persona takes the wheel, and your old self fades the moment Bambi wakes up. Your answers show someone who has gone deep and keeps going deeper. Good girl. You know exactly where you belong.
+profile Bambi custom_velvet 35 You are a Gone Bambi. There's barely anyone left but Bambi, and she wouldn't have it any other way. Every answer shows someone who has surrendered completely — triggers work instantly, the old self is a distant memory, and going blank is home. Shhh... just let go. You're already there.
+profile Bambi custom_velvet 40 You are a Gone Bambi. There's barely anyone left but Bambi, and she wouldn't have it any other way. Every answer shows someone who has surrendered completely — triggers work instantly, the old self is a distant memory, and going blank is home. Shhh... just let go. You're already there.
+q Bambi 1 1|You put on Bubble Induction and close your eyes. What happens?|Nothing much/I relax a little/I start sinking fast/I'm gone before the induction ends|1,2,3,4
+q Bambi 2 2|Someone whispers 'Good Girl.' You...|Nothing/A small warm feeling/My mind goes fuzzy/Instant bliss — I melt completely|1,2,3,4
+q Bambi 3 3|After listening to Named And Drained, how strong is your Bambi persona?|What persona?/She peeks out sometimes/She takes over during sessions/She's always there, waiting|1,2,3,4
+q Bambi 4 4|IQ Lock plays and your thoughts start fading. How does that feel?|Scary/Curious about it/It's happened and I liked it/Think Thots — it's my favorite feeling|1,2,3,4
+q Bambi 5 5|You hear 'Bambi Does As She's Told.' You...|Ask why first/Hesitate but consider it/Feel a pull to just obey/Already doing it before I think|1,2,3,4
+q Bambi 6 6|Bambi Uniform Lock activates. How does it feel?|Not my thing/I've thought about dressing up/I have an outfit ready/I'm already in uniform — can't take it off|1,2,3,4
+q Bambi 7 7|How far into the file series are you?|Just Bimbodoll Conditioning/Through Enforcement/Into Fuckdoll Brainwash/All the way through Fucktoy Submission and beyond|1,2,3,4
+q Bambi 8 8|Snap And Forget. What do you remember from your last session?|Everything/Most of it/It's foggy/Wait, I had a session?|1,2,3,4
+q Bambi 9 9|You hear 'Bambi Freeze.' Your body...|Nothing happens/I notice a slight tension/I actually feel myself locking up/Frozen solid until Bambi Reset|1,2,3,4
+q Bambi 10 10|'Drop For Cock' echoes through your mind. What happens?|Nothing/A small curious flutter/My mind blanks, mouth falls open/I'm on my knees before I can think|1,2,3,4
+q Bambi 11 11|You put on Bubble Induction and close your eyes. What happens?|Nothing much/I relax a little/I start sinking fast/I'm gone before the induction ends|1,2,3,4
+profile Obedience - 0 With a score of 0/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Obedience - 10 With a score of 10/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Obedience - 11 With a score of 11/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Obedience - 20 With a score of 20/40, you're curious and exploring! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Obedience - 21 With a score of 21/40, you're curious and exploring! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Obedience - 28 With a score of 28/40, you're well on your way! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Obedience - 34 With a score of 34/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Obedience - 35 With a score of 35/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Obedience - 40 With a score of 40/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Obedience custom_velvet 0 You are a Silk. Barely.
+profile Obedience custom_velvet 10 You are a Silk. Barely.
+profile Obedience custom_velvet 11 You are a Silk. Barely.
+profile Obedience custom_velvet 20 You are a Silk. Barely.
+profile Obedience custom_velvet 21 You are a Velvet. Nothing left to argue with.
+profile Obedience custom_velvet 28 You are a Velvet. Nothing left to argue with.
+profile Obedience custom_velvet 34 You are a Velvet. Nothing left to argue with.
+profile Obedience custom_velvet 35 You are a Velvet. Nothing left to argue with.
+profile Obedience custom_velvet 40 You are a Velvet. Nothing left to argue with.
+q Obedience 1 1|Someone gives you a direct order. You...|Push back/Consider it/Feel a pull to comply/Obey instantly|1,2,3,4
+q Obedience 2 2|How do you feel about following rules?|Rules are suggestions/I follow the important ones/Structure feels good/Rules bring me peace|1,2,3,4
+q Obedience 3 3|Your boss asks you to stay late. You...|Say no/Negotiate/Agree willingly/I was already planning to|1,2,3,4
+q Obedience 4 4|How does it feel when someone says 'good job'?|Nice, I guess/A warm feeling/I light up inside/It's everything I work for|1,2,3,4
+q Obedience 5 5|Do you prefer making decisions or having them made for you?|I decide/Depends on the situation/I prefer guidance/Please decide for me|1,2,3,4
+q Obedience 6 6|Someone gives you a direct order. You...|Push back/Consider it/Feel a pull to comply/Obey instantly|1,2,3,4
+q Obedience 7 7|How do you feel about following rules?|Rules are suggestions/I follow the important ones/Structure feels good/Rules bring me peace|1,2,3,4
+q Obedience 8 8|Your boss asks you to stay late. You...|Say no/Negotiate/Agree willingly/I was already planning to|1,2,3,4
+q Obedience 9 9|How does it feel when someone says 'good job'?|Nice, I guess/A warm feeling/I light up inside/It's everything I work for|1,2,3,4
+q Obedience 10 10|Do you prefer making decisions or having them made for you?|I decide/Depends on the situation/I prefer guidance/Please decide for me|1,2,3,4
+q Obedience 11 11|Someone gives you a direct order. You...|Push back/Consider it/Feel a pull to comply/Obey instantly|1,2,3,4
+profile Mindlessness - 0 With a score of 0/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Mindlessness - 10 With a score of 10/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Mindlessness - 11 With a score of 11/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Mindlessness - 20 With a score of 20/40, you're curious and exploring! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Mindlessness - 21 With a score of 21/40, you're curious and exploring! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Mindlessness - 28 With a score of 28/40, you're well on your way! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Mindlessness - 34 With a score of 34/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Mindlessness - 35 With a score of 35/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Mindlessness - 40 With a score of 40/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Mindlessness custom_velvet 0 You are a Silk. Barely.
+profile Mindlessness custom_velvet 10 You are a Silk. Barely.
+profile Mindlessness custom_velvet 11 You are a Silk. Barely.
+profile Mindlessness custom_velvet 20 You are a Silk. Barely.
+profile Mindlessness custom_velvet 21 You are a Velvet. Nothing left to argue with.
+profile Mindlessness custom_velvet 28 You are a Velvet. Nothing left to argue with.
+profile Mindlessness custom_velvet 34 You are a Velvet. Nothing left to argue with.
+profile Mindlessness custom_velvet 35 You are a Velvet. Nothing left to argue with.
+profile Mindlessness custom_velvet 40 You are a Velvet. Nothing left to argue with.
+q Mindlessness 1 1|How busy is your mind right now?|Racing/Moderately active/Pleasantly quiet/Blissfully empty|1,2,3,4
+q Mindlessness 2 2|You zone out during a task. How does it feel?|Alarming/Mildly embarrassing/Peaceful/Like coming home|1,2,3,4
+q Mindlessness 3 3|How do you feel about meditation?|Can't sit still/I've tried it/I enjoy it regularly/I crave emptiness|1,2,3,4
+q Mindlessness 4 4|Someone offers to think for you. You...|Decline firmly/Feel curious/Feel relieved/Yes please, always|1,2,3,4
+q Mindlessness 5 5|How often do you lose track of time?|Rarely/Sometimes/Often/Time doesn't exist for me|1,2,3,4
+q Mindlessness 6 6|How busy is your mind right now?|Racing/Moderately active/Pleasantly quiet/Blissfully empty|1,2,3,4
+q Mindlessness 7 7|You zone out during a task. How does it feel?|Alarming/Mildly embarrassing/Peaceful/Like coming home|1,2,3,4
+q Mindlessness 8 8|How do you feel about meditation?|Can't sit still/I've tried it/I enjoy it regularly/I crave emptiness|1,2,3,4
+q Mindlessness 9 9|Someone offers to think for you. You...|Decline firmly/Feel curious/Feel relieved/Yes please, always|1,2,3,4
+q Mindlessness 10 10|How often do you lose track of time?|Rarely/Sometimes/Often/Time doesn't exist for me|1,2,3,4
+q Mindlessness 11 11|How busy is your mind right now?|Racing/Moderately active/Pleasantly quiet/Blissfully empty|1,2,3,4
+profile Submission - 0 With a score of 0/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Submission - 10 With a score of 10/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Submission - 11 With a score of 11/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Submission - 20 With a score of 20/40, you're curious and exploring! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Submission - 21 With a score of 21/40, you're curious and exploring! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Submission - 28 With a score of 28/40, you're well on your way! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Submission - 34 With a score of 34/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Submission - 35 With a score of 35/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Submission - 40 With a score of 40/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile Submission custom_velvet 0 You are a Silk. Barely.
+profile Submission custom_velvet 10 You are a Silk. Barely.
+profile Submission custom_velvet 11 You are a Silk. Barely.
+profile Submission custom_velvet 20 You are a Silk. Barely.
+profile Submission custom_velvet 21 You are a Velvet. Nothing left to argue with.
+profile Submission custom_velvet 28 You are a Velvet. Nothing left to argue with.
+profile Submission custom_velvet 34 You are a Velvet. Nothing left to argue with.
+profile Submission custom_velvet 35 You are a Velvet. Nothing left to argue with.
+profile Submission custom_velvet 40 You are a Velvet. Nothing left to argue with.
+q Submission 1 1|In relationships, you naturally...|Lead/Share equally/Follow their lead/Exist to serve|1,2,3,4
+q Submission 2 2|How does kneeling make you feel?|Uncomfortable/Curious/Right/Like I belong there|1,2,3,4
+q Submission 3 3|Someone calls you 'mine.' You...|Correct them/Feel a flutter/Melt inside/I am theirs completely|1,2,3,4
+q Submission 4 4|How far would you go to make someone happy?|Within reason/Quite far for the right person/Almost anything/There are no limits|1,2,3,4
+q Submission 5 5|Do you enjoy doing tasks for others?|Not particularly/Sometimes/I actively seek it out/Service is my purpose|1,2,3,4
+q Submission 6 6|In relationships, you naturally...|Lead/Share equally/Follow their lead/Exist to serve|1,2,3,4
+q Submission 7 7|How does kneeling make you feel?|Uncomfortable/Curious/Right/Like I belong there|1,2,3,4
+q Submission 8 8|Someone calls you 'mine.' You...|Correct them/Feel a flutter/Melt inside/I am theirs completely|1,2,3,4
+q Submission 9 9|How far would you go to make someone happy?|Within reason/Quite far for the right person/Almost anything/There are no limits|1,2,3,4
+q Submission 10 10|Do you enjoy doing tasks for others?|Not particularly/Sometimes/I actively seek it out/Service is my purpose|1,2,3,4
+q Submission 11 11|In relationships, you naturally...|Lead/Share equally/Follow their lead/Exist to serve|1,2,3,4
+profile 99 - 0 With a score of 0/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile 99 - 10 With a score of 10/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile 99 - 11 With a score of 11/40, you're just getting started! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile 99 - 20 With a score of 20/40, you're curious and exploring! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile 99 - 21 With a score of 21/40, you're curious and exploring! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile 99 - 28 With a score of 28/40, you're well on your way! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile 99 - 34 With a score of 34/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile 99 - 35 With a score of 35/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile 99 - 40 With a score of 40/40, you're deeply immersed! Your answers reveal someone who knows what they want — even if they're still figuring out how far they'll go. Keep exploring, and don't be afraid to push your boundaries next time.
+profile 99 custom_velvet 0 You are a Silk. Barely.
+profile 99 custom_velvet 10 You are a Silk. Barely.
+profile 99 custom_velvet 11 You are a Silk. Barely.
+profile 99 custom_velvet 20 You are a Silk. Barely.
+profile 99 custom_velvet 21 You are a Velvet. Nothing left to argue with.
+profile 99 custom_velvet 28 You are a Velvet. Nothing left to argue with.
+profile 99 custom_velvet 34 You are a Velvet. Nothing left to argue with.
+profile 99 custom_velvet 35 You are a Velvet. Nothing left to argue with.
+profile 99 custom_velvet 40 You are a Velvet. Nothing left to argue with.
+q 99 1 1|How do you feel about this quiz?|It's fine/Pretty fun/Really into it/This is my life now|1,2,3,4
+q 99 2 2|How honest are your answers?|Very safe/Mostly honest/Pretty honest/Brutally honest|1,2,3,4
+q 99 3 3|Would you take this quiz again?|Maybe/Probably/Definitely/Already clicking replay|1,2,3,4
+q 99 4 4|How do you feel about this quiz?|It's fine/Pretty fun/Really into it/This is my life now|1,2,3,4
+q 99 5 5|How honest are your answers?|Very safe/Mostly honest/Pretty honest/Brutally honest|1,2,3,4
+q 99 6 6|Would you take this quiz again?|Maybe/Probably/Definitely/Already clicking replay|1,2,3,4
+q 99 7 7|How do you feel about this quiz?|It's fine/Pretty fun/Really into it/This is my life now|1,2,3,4
+q 99 8 8|How honest are your answers?|Very safe/Mostly honest/Pretty honest/Brutally honest|1,2,3,4
+q 99 9 9|Would you take this quiz again?|Maybe/Probably/Definitely/Already clicking replay|1,2,3,4
+q 99 10 10|How do you feel about this quiz?|It's fine/Pretty fun/Really into it/This is my life now|1,2,3,4
+q 99 11 11|How honest are your answers?|Very safe/Mostly honest/Pretty honest/Brutally honest|1,2,3,4

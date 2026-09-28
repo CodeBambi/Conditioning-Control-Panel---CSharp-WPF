@@ -18,6 +18,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using Serilog;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -40,10 +41,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    is still in the WPF head, so
     ///    the AI round trip, the category store and the history file are what
     ///    remains stubbed; each stub names its exact symbol.
-    ///    <c>QuizQuestion</c> and <c>QuizResult</c> are copied below, trimmed to what this view
-    ///    reads (the TextEditorDialog / QuizReportWindow / QuizCategoryEditorWindow precedent);
-    ///    <c>QuizCategoryDefinition</c>, <c>QuizAnswerRecord</c> and <c>QuizCategory</c> are already
-    ///    declared beside this class by those two ports and are REUSED, not re-declared.
+    ///    The quiz model types come from Core (CCP.Core/Services/Quiz/QuizStore.cs); wiring
+    ///    QuizStore's categories, history and fallback content in here is quiz unit 5.
     ///  - NAudio's drone loop, <c>App.Flash</c>/<c>Bubbles</c>/<c>Subliminal</c>/<c>MindWipe</c> and
     ///    <c>App.AvatarWindow</c> stay head-only; the <c>LoopStream</c> wrapper and the WaveOutEvent
     ///    pool went with them. There is no XP call to port: WPF awards quiz XP through
@@ -1366,28 +1365,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             base.OnClosed(e);
         }
-    }
-
-    /// <summary>
-    /// One generated question. Copied from ConditioningControlPanel/Services/Quiz/QuizService.cs:
-    /// the type lives in the WPF head, not in CCP.Core, and neither may be touched by this port.
-    /// ponytail: delete when the quiz types move to Core.
-    /// </summary>
-    public class QuizQuestion
-    {
-        public int Number { get; set; }
-        public string QuestionText { get; set; } = string.Empty;
-        public string[] Answers { get; set; } = new string[4];
-        public int[] Points { get; set; } = new int[4];
-    }
-
-    /// <inheritdoc cref="QuizQuestion"/>
-    /// <remarks>Trimmed to the fields the result panel reads.</remarks>
-    public class QuizResult
-    {
-        public QuizCategory Category { get; set; }
-        public int TotalScore { get; set; }
-        public int MaxScore { get; set; }
-        public string ProfileText { get; set; } = string.Empty;
     }
 }

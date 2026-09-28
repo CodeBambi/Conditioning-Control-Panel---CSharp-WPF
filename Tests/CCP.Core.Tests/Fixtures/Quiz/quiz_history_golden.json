@@ -1,0 +1,51 @@
+[
+  {
+    "TakenAt": "2025-03-14T12:00:00.1234567+01:00",
+    "Category": 2,
+    "TotalScore": 31,
+    "MaxScore": 40,
+    "ProfileText": "You are a Devoted Servant. \"Quoted\" line\nsecond line.",
+    "Answers": [
+      {
+        "QuestionNumber": 1,
+        "QuestionText": "Someone gives you a direct order. You...",
+        "AllAnswers": [
+          "Push back",
+          "Consider it",
+          "Feel a pull to comply",
+          "Obey instantly"
+        ],
+        "AllPoints": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ChosenIndex": 3,
+        "PointsEarned": 4
+      }
+    ],
+    "CategoryId": "obedience",
+    "CategoryName": "Obedience"
+  },
+  {
+    "TakenAt": "2025-03-12T12:00:00.1234567+01:00",
+    "Category": 0,
+    "TotalScore": 12,
+    "MaxScore": 40,
+    "ProfileText": "Velvet — séance ビ",
+    "Answers": [],
+    "CategoryId": "custom_velvet",
+    "CategoryName": "Velvet Édition"
+  },
+  {
+    "TakenAt": "2024-12-01T08:30:00Z",
+    "Category": 2,
+    "TotalScore": 20,
+    "MaxScore": 40,
+    "ProfileText": "legacy",
+    "Answers": [],
+    "CategoryId": "",
+    "CategoryName": ""
+  }
+]

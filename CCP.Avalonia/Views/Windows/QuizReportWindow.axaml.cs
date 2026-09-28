@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -14,9 +15,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// they picked, what each was worth, and the archetype card underneath.
     ///
     /// PORTED from ConditioningControlPanel/Windows/QuizReportWindow.xaml.cs. Deviations:
-    ///  - <c>QuizHistoryEntry</c> / <c>QuizAnswerRecord</c> / <c>QuizCategory</c> live in the WPF
-    ///    head's Services/Quiz/QuizService.cs, not in CCP.Core, and neither may be touched by this
-    ///    port - so they are copied verbatim below (the TextEditorDialog/TextItem precedent).
+    ///  - <c>QuizHistoryEntry</c> / <c>QuizAnswerRecord</c> / <c>QuizCategory</c> come from Core
+    ///    (CCP.Core/Services/Quiz/QuizStore.cs).
     ///  - <c>FontWeights.Bold</c> -> <c>FontWeight.Bold</c>; the alignment enums come from
     ///    Avalonia.Layout.
     ///  - The two-colour <c>LinearGradientBrush</c> constructor does not exist in Avalonia, so the
@@ -221,49 +221,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 },
             },
         };
-    }
-
-    /// <summary>
-    /// Copied from ConditioningControlPanel/Services/Quiz/QuizService.cs: the report's payload
-    /// types live in the WPF head, not in CCP.Core, and neither may be touched by this port.
-    /// ponytail: delete these three when the quiz payload types move out of
-    /// ConditioningControlPanel/Services/Quiz/QuizService.cs into Core. QuizService itself is not
-    /// what is needed here - only its nested QuizCategory / QuizDifficulty / QuizReport shapes are.
-    /// </summary>
-    public enum QuizCategory
-    {
-        Sissy,
-        Bambi,
-        Obedience,
-        Mindlessness,
-        Submission
-    }
-
-    /// <inheritdoc cref="QuizCategory"/>
-    public class QuizAnswerRecord
-    {
-        public int QuestionNumber { get; set; }
-        public string QuestionText { get; set; } = string.Empty;
-        public string[] AllAnswers { get; set; } = new string[4];
-        public int[] AllPoints { get; set; } = new int[4];
-        public int ChosenIndex { get; set; }
-        public int PointsEarned { get; set; }
-    }
-
-    /// <inheritdoc cref="QuizCategory"/>
-    public class QuizHistoryEntry
-    {
-        public DateTime TakenAt { get; set; }
-        public QuizCategory Category { get; set; }
-        public int TotalScore { get; set; }
-        public int MaxScore { get; set; }
-        public string ProfileText { get; set; } = string.Empty;
-        public List<QuizAnswerRecord> Answers { get; set; } = new();
-
-        /// <summary>String category ID for custom categories. Falls back to Category enum name for built-in.</summary>
-        public string CategoryId { get; set; } = string.Empty;
-
-        /// <summary>Display name for the category (useful for custom categories where enum doesn't apply).</summary>
-        public string CategoryName { get; set; } = string.Empty;
     }
 }
