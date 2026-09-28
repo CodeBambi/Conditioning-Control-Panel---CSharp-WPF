@@ -217,8 +217,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
             };
             Children.Add(_stampSign);
 
-            Loaded += (_, _) => { ApplyState(); StartMotion(); };
-            Unloaded += (_, _) => StopMotion();
+            Loaded += (_, _) =>
+            {
+                ApplyState(); StartMotion();
+                _visibilityWatch?.Dispose();
+                _visibilityWatch = EffectiveVisibility.Watch(this, OnEffectiveVisibilityChanged);
+            };
+            Unloaded += (_, _) => { StopMotion(); _visibilityWatch?.Dispose(); _visibilityWatch = null; };
         }
 
         // =====================================================================================
@@ -307,6 +312,15 @@ namespace ConditioningControlPanel.Avalonia.Controls
         // =====================================================================================
         //  state
         // =====================================================================================
+
+        // A badge on a hidden tab (nine on Play) must park like WPF's IsVisibleChanged parked it.
+        private IDisposable? _visibilityWatch;
+
+        private void OnEffectiveVisibilityChanged()
+        {
+            if (!IsEffectivelyVisible) StopMotion();
+            else if (!_motionRunning) StartMotion();
+        }
 
         /// <summary>
         /// The WPF original hangs on three <c>PropertyChangedCallback</c>s plus

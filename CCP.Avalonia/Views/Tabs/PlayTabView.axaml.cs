@@ -223,8 +223,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 // ponytail: needs RegisterTabFx(TabKey, RabbitHoleFx) - the park/resume hook and
                 // the motion kill-switch's reach. It is one of the four members stubbed out of
                 // CCP.Avalonia/Views/Windows/MainShellWindow.AmbientFx.cs. Until it exists the
-                // canvas parks itself on detach (AmbientFxCanvas.Evaluate), which is why running
-                // it here is safe.
+                // canvas parks itself whenever the tab is hidden (AmbientFxCanvas.ShouldRun reads
+                // IsEffectivelyVisible), which is why running it here is safe.
             }
             catch (Exception ex)
             {
