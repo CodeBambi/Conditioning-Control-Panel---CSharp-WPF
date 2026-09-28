@@ -34,6 +34,7 @@ public sealed class CoreModArtResolutionTests : IDisposable
     public void EventSkin_OutranksMod_AndUnsafeIdIsIgnored()
     {
         var modHit = Put("resources/bubble.png");
+        Assert.StartsWith(Path.GetTempPath(), CorePaths.UserData);   // sandboxed by RoadmapTestProfile's module initializer
         var skinId = "ccp-test-" + Guid.NewGuid().ToString("N");
         var skinDir = Path.Combine(CorePaths.UserData, CoreModArt.EventSkinRoot, skinId);
         try
@@ -60,6 +61,7 @@ public sealed class CoreModArtResolutionTests : IDisposable
         Assert.Null(CoreModArt.ModFile(path, Path.Combine(_mod, "resources", "x")));
         Assert.Null(CoreModArt.ResolveOverride(path, null, _mod));
         Assert.Null(CoreModArt.ModAudioFile(path, _mod));
+        Assert.Null(CoreModArt.EventSkinFile(path, "skin"));   // a rooted path must not escape the skin root
     }
 
     [Fact]
