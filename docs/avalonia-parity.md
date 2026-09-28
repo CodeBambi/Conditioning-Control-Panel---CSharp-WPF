@@ -24,7 +24,7 @@ Starting totals (2026-09-28): 362 rows: 59 missing, 247 stub, 56 wired, 0 verifi
 Notes carry what is stubbed or missing, platform-specific parts, existing evidence and, where it
 matters, a performance note (startup, tab switch, list scroll, overlays, media).
 
-## shell-platform (106 rows)
+## shell-platform (107 rows)
 
 | id | WPF reference | Avalonia counterpart | status | notes / evidence |
 |---|---|---|---|---|
@@ -73,6 +73,7 @@ matters, a performance note (startup, tab switch, list scroll, overlays, media).
 | shell-leaderboard | `ConditioningControlPanel/MainWindow/MainWindow.Leaderboard.cs` | `CCP.Avalonia/Views/Windows/MainShellWindow.Leaderboard.cs`; `CCP.Avalonia/Views/Tabs/LeaderboardTabView.axaml.cs` | stub | View exists, but live leaderboard/profile data, season recap and action handlers remain unavailable. |
 | shell-leaderboard-fx | `ConditioningControlPanel/MainWindow/MainWindow.LeaderboardFx.cs` | `CCP.Avalonia/Views/Windows/MainShellWindow.LeaderboardFx.cs`; `CCP.Avalonia/Views/Tabs/LeaderboardTabView.axaml` | stub | Tab FX note has no complete callers/ambient decoration; season-recap action is hidden. |
 | shell-login | `ConditioningControlPanel/MainWindow/MainWindow.Login.cs` | `CCP.Avalonia/Views/Windows/MainShellWindow.Login.cs`; `CCP.Avalonia/Views/Tabs/SettingsTabView.axaml.cs`; `CCP.Avalonia/Views/Dialogs/LoginDialog.axaml.cs` | stub | Signed-in state paints from settings, but login/logout/account cleanup and profile-sync paths are absent. |
+| shell-secret-store | `ConditioningControlPanel/Services/Auth/SecureAuthTokenStore.cs`; `ConditioningControlPanel/Services/Auth/SecureApiKeyStore.cs`; `ConditioningControlPanel/Services/Auth/SecureTokenStorage.cs`; `ConditioningControlPanel/Services/Auth/DiscordTokenStorage.cs` | `CCP.Avalonia/Platform/SecretStore.cs`; `CCP.Avalonia/App.axaml.cs` | stub | CoreSecrets provider seeded at startup: libsecret on Linux, WPF's DPAPI files/entropy on Windows, memory-only + one-time `NotRememberedHook` when no Secret Service (never plaintext). No user path yet (sign-in units follow), and the notice hook has no UI. `SecretStoreTests` (round trip + no-bus run only in `scripts/secrets-roundtrip.sh`'s container; DPAPI read of WPF-written bytes on Windows CI only); ~/ccp-port/evidence/avalonia-port/secrets-linux/roundtrip-green.txt, failproof-*.txt. |
 | shell-marquee | `ConditioningControlPanel/MainWindow/MainWindow.Marquee.cs` | `CCP.Avalonia/Views/Windows/MainShellWindow.Marquee.cs`; `CCP.Avalonia/Views/Windows/MainShellWindow.axaml` | stub | Ticker is partial; provider identity/link fallback and associated FX paths are missing. |
 | shell-marquee-reads | `ConditioningControlPanel/MainWindow/MainWindow.MarqueeReads.cs` | - | missing | Base marquee exists, but Barnum interludes, read cadence and read-effect playback have no Avalonia counterpart. |
 | shell-mod-catalogue | `ConditioningControlPanel/MainWindow/MainWindow.ModCatalogue.cs` | `CCP.Avalonia/Views/Windows/MainShellWindow.ModCatalogue.cs`; `CCP.Avalonia/Views/Dialogs/ModManagerDialog.axaml.cs` | stub | Online catalogue handlers and result notifications remain absent; local mod manager is not the catalogue. |

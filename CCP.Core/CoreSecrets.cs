@@ -11,9 +11,9 @@ namespace ConditioningControlPanel
     ///
     /// <para><b>Unseeded means "no store", never "store in the clear".</b> A head that has not
     /// attached a provider gets null from <see cref="Retrieve"/> and a silent no-op from
-    /// <see cref="Store"/>. The Linux head is in that state today: it has no secure store yet,
-    /// so on Linux these two values are not persisted at all. That is the honest behaviour until
-    /// a keyring-backed provider exists; writing them to disk unencrypted is not a fallback.</para>
+    /// <see cref="Store"/>. The Avalonia head seeds CCP.Avalonia/Platform/SecretStore.cs
+    /// (libsecret on Linux, WPF's DPAPI files on Windows, memory-only when neither is usable);
+    /// writing them to disk unencrypted is never a fallback.</para>
     ///
     /// <para>Two delegates, no interface, matching <see cref="CoreMods"/>. Volatile for the same
     /// reason as there.</para>
@@ -27,9 +27,10 @@ namespace ConditioningControlPanel
         public static volatile Func<string, string?>? RetrieveProvider;
         public static volatile Action<string, string?>? StoreProvider;
 
-        /// <summary>True when a head has attached a store. The plaintext-to-encrypted migration in
-        /// SettingsService runs only then: with no store there is nothing to migrate INTO, and
-        /// stripping the plaintext anyway would lose the value.</summary>
+        /// <summary>True when a head has attached a provider - including one that falls back to
+        /// memory for this run, so "has a store" does not mean "persists". SettingsService's
+        /// auth-token migration runs only then. Note any settings save strips the legacy
+        /// plaintext regardless (the model never writes it back).</summary>
         public static bool HasStore => StoreProvider is not null;
 
         /// <summary>The stored value, or null when there is none or no store is attached.

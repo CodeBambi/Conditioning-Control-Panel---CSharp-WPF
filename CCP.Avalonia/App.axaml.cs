@@ -102,6 +102,8 @@ namespace ConditioningControlPanel.Avalonia
                 // not in Initialize() on purpose: the headless render path never reaches this
                 // callback, so a CI render cannot touch a user's profile. Unseeded, Core hands
                 // out one default instance, which is what the renders bind against.
+                // Secrets first: SettingsService's auth-token migration asks CoreSecrets.HasStore on load.
+                Platform.SecretStore.Seed();
                 Settings = new SettingsService();
                 CoreSettings.ServiceProvider = () => Settings;
                 CorePaths.EffectiveAssetsProvider = ResolveEffectiveAssetsPath;
@@ -214,10 +216,9 @@ namespace ConditioningControlPanel.Avalonia
                 // shell's toast host exists. HasPremium false still refuses a premium enrolment.
 
                 // CoreAccount is deliberately left unseeded, and this one is a constraint rather
-                // than a gap. PatreonService owns an HttpListener OAuth callback and a
-                // SecureTokenStorage; this head seeds no CoreSecrets store, so by that seam's rule
-                // ("unseeded means NO store, never store in the clear") there is nowhere to keep a
-                // token even if the flow existed. Signed out and NOT entitled is therefore the
+                // than a gap. PatreonService owns an HttpListener OAuth callback; the token store
+                // (Platform/SecretStore, seeded above) exists, but no sign-in flow uses it yet.
+                // Signed out and NOT entitled is therefore the
                 // literal truth here, not a placeholder - and it is the only safe unseeded answer,
                 // because an entitlement seam that failed open would hand every Linux user the
                 // paid tier.
