@@ -49,6 +49,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         public static bool IsRunning => _running;
 
+        /// <summary>Is a logo (engine DIPs) close enough to this screen to draw on it? Padded the way
+        /// WPF pads its OCR rects, (w+h)/2 + 80, which covers the scale/rotate effects; plus the
+        /// 156-DIP half-width of a full-grown corner-burst ring.</summary>
+        internal static bool IsNear(double x, double y, double w, double h, PixelRect screen, double k)
+        {
+            var pad = (w + h) / 2 + 80 + 156;
+            return x + w + pad > screen.X / k && x - pad < screen.Right / k
+                && y + h + pad > screen.Y / k && y - pad < screen.Bottom / k;
+        }
+
         /// <summary>Virtual-desktop bounds of the targeted screens in engine DIPs (WPF CalculateScreenBounds).</summary>
         internal static (double MinX, double MinY, double MaxX, double MaxY) Bounds(IEnumerable<PixelRect> screens, double k)
         {
@@ -80,7 +90,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             foreach (var screen in targets)
             {
                 var w = new BouncingTextOverlayWindow(screen.Bounds, k, Engine.FontSize, s.BouncingTextOpacity, Engine.Logos.Count, s.BouncingTextOutline);
-                if (!X11Overlay.SetClickThrough(w, true) || !X11Overlay.SetOverrideRedirect(w, screen.Bounds))
+                if (!X11Overlay.SetClickThrough(w, true) || !X11Overlay.SetOpacity(w, 0) || !X11Overlay.SetOverrideRedirect(w, screen.Bounds))
                 {
                     Log.Warning("Bouncing text: the platform refused a click-through topmost overlay window; skipped");
                     w.Close();
@@ -96,7 +106,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _host = host;
             _running = true;
             _last = null;
-            for (var i = 0; i < Engine.Logos.Count; i++) UpdateText(i);
+            for (var i = 0; i < Engine.Logos.Count; i++)
+            {
+                UpdateText(i);
+                var l = Engine.Logos[i];
+                foreach (var w in Windows) w.Move(i, l.PosX, l.PosY, 1, 1, 0);   // placed before the first paint
+            }
             NextFrame();
             if (Stats) { FrameMs.Clear(); Cpu.Restart(); _cpuAtStart = Process.GetCurrentProcess().TotalProcessorTime; }
             Log.Information("Bouncing text started - Logos: {Count}", Engine.Logos.Count);
@@ -166,7 +181,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
             // WPF Animate: baseline on the first frame, skip duplicates, clamp a stall at 0.1 s,
             // and freeze while a display change settles.
-            if (_last is not { } last) { _last = now; return; }
+            // Mapped at alpha 0 (the flash ordering); visible from the first painted frame on.
+            if (_last is not { } last) { _last = now; foreach (var w in Windows) X11Overlay.SetOpacity(w, 1); return; }
             var dt = (now - last).TotalSeconds;
             _last = now;
             if (dt <= 0 || DisplayChangeCoordinator.SpawnsSuppressed) return;
@@ -191,7 +207,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             {
                 var l = logos[i];
                 var (sx, sy, angle) = Engine.ComputeEffectTransform(l, s);
-                foreach (var w in Windows) w.Move(i, l.PosX, l.PosY, sx, sy, angle);
+                foreach (var w in Windows) w.Move(i, l.PosX, l.PosY, sx, sy, angle, l.TextWidth, l.TextHeight);
             }
             foreach (var w in Windows) w.AgeBursts(dt);
         }
@@ -305,10 +321,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
         }
 
-        public void Move(int i, double x, double y, double sx, double sy, double angle)
+        private readonly HashSet<int> _near = new();
+
+        /// <summary>Only a screen the logo is on, or just left, is touched: writing a position
+        /// into every screen's canvas each frame re-renders every full-screen window.
+        /// <paramref name="w"/>/<paramref name="h"/> 0 = always move (placement before the first frame).</summary>
+        public void Move(int i, double x, double y, double sx, double sy, double angle, double w = 0, double h = 0)
         {
             if (i < 0 || i >= _logos.Count) return;
             var l = _logos[i];
+            if (w > 0)
+            {
+                var near = BouncingTextOverlay.IsNear(x, y, w, h, _screen, _k);
+                if (!near && !_near.Contains(i)) return;
+                if (near) _near.Add(i); else _near.Remove(i);
+            }
             var p = BouncingTextOverlay.ToLocal(x, y, _screen, _k);
             // OutlinedText's glyphs are inset by its padding; shift so they land where the engine measured.
             var pad = l.Ot?.Pad ?? 0;

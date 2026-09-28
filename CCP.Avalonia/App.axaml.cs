@@ -200,6 +200,16 @@ namespace ConditioningControlPanel.Avalonia
                 desktop.MainWindow = sessions is null
                     ? new Views.Windows.MainShellWindow()
                     : new Views.Windows.MainShellWindow(sessions);
+                // OnLastWindowClose counts overlay windows too: closing the shell must take the
+                // desktop overlays and their schedules down, or the process lives on UI-less.
+                desktop.MainWindow.Closed += (_, _) =>
+                {
+                    CoreFlash.Stop();
+                    CoreSubliminal.Stop();
+                    Views.Overlays.FlashOverlay.CloseAll();
+                    Views.Overlays.SubliminalOverlay.CloseAll();
+                    Views.Overlays.BouncingTextOverlay.Stop();
+                };
             }
             base.OnFrameworkInitializationCompleted();
         }

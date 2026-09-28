@@ -149,11 +149,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public void Run(double alpha, TimeSpan hold)
         {
             var fade = TimeSpan.FromMilliseconds(SubliminalOverlay.FadeMs);
-            Ramp(0, alpha, TimeSpan.Zero, fade);
-            Ramp(alpha, 0, fade + hold, fade);
             var closed = false;
             Closed += (_, _) => closed = true;   // a newer card may have closed this one already
-            DispatcherTimer.RunOnce(() => { if (!closed) Close(); }, fade + hold + fade + TimeSpan.FromMilliseconds(1));
+            // The envelope starts at the card's first frame, not at Show(): mapping and the first
+            // full-screen paint take time a 100 ms hold cannot spare.
+            RequestAnimationFrame(_ =>
+            {
+                if (closed) return;
+                Ramp(0, alpha, TimeSpan.Zero, fade);
+                Ramp(alpha, 0, fade + hold, fade);
+                DispatcherTimer.RunOnce(() => { if (!closed) Close(); }, fade + hold + fade + TimeSpan.FromMilliseconds(1));
+            });
         }
 
         private void Ramp(double from, double to, TimeSpan start, TimeSpan span)

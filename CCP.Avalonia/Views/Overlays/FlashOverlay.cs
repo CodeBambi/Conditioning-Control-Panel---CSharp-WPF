@@ -43,7 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         private static readonly List<(FlashOverlayWindow Window, PixelRect Rect)> Active = new();
         private static readonly Random Rng = new();
-        private static bool _busy, _warnedUnavailable, _warnedEmpty;
+        private static bool _busy, _warnedUnavailable, _warnedEmpty, _closed;
 
         /// <summary>A burst is still spawning (WPF <c>_isBusy</c>); the ambient tick skips.</summary>
         public static bool IsBusy => _busy;
@@ -96,7 +96,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     {
                         try
                         {
-                            if (refused || Active.Count >= MaxConcurrent) { bmp.Dispose(); return; }
+                            if (refused || _closed || Active.Count >= MaxConcurrent) { bmp.Dispose(); return; }
                             refused = !Spawn(bmp, rect, alpha, fade, lifetime);
                         }
                         catch (Exception ex) { refused = true; Log.Error(ex, "Flash: spawn failed"); }
@@ -159,6 +159,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             w.Show();
             w.Run(alpha, fade, lifetime);
             return true;
+        }
+
+        /// <summary>Close every flash on screen and drop the spawns still queued (shell closing).</summary>
+        public static void CloseAll()
+        {
+            _closed = true;
+            foreach (var (w, _) in Active.ToList()) w.Close();
         }
 
         private static string ImagesPath() => Path.Combine(CorePaths.EffectiveAssets, "images");

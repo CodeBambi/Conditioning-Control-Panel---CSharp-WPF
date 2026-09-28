@@ -80,6 +80,17 @@ public sealed class TextOverlayTests
         Assert.Equal(new Point(2100, 300), BouncingTextOverlay.ToLocal(2100, 300, primary, k));
     }
 
+    [Fact]
+    public void BouncingText_OnlyScreensNearTheLogoAreRepainted()
+    {
+        var second = new PixelRect(2560, 200, 1920, 1080);   // engine DIPs 2048..3584 x 160..1024 at k=1.25
+        // 400x100 logo: pad = 250 + 80 + 156 = 486 DIPs.
+        Assert.True(BouncingTextOverlay.IsNear(2100, 300, 400, 100, second, 1.25));        // on it
+        Assert.True(BouncingTextOverlay.IsNear(2048 - 400 - 480, 300, 400, 100, second, 1.25)); // 480 short: rotated/burst reach
+        Assert.False(BouncingTextOverlay.IsNear(2048 - 400 - 490, 300, 400, 100, second, 1.25));
+        Assert.False(BouncingTextOverlay.IsNear(2100, 1024 + 490, 400, 100, second, 1.25));
+    }
+
     private static void EnsureAvalonia()
     {
         Assert.True(AvaloniaTestDispatcher.IsDispatcherThread);
