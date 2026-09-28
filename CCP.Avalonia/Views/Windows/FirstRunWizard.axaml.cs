@@ -514,7 +514,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// (FirstRunGate.MustShutDown) lets the launch continue; otherwise hand the first run back
         /// and shut down, which is what WPF's decline does.
         /// </summary>
-        private static void AbortUngatedLaunch(MainShellWindow owner, string reason)
+        internal static void AbortUngatedLaunch(MainShellWindow owner, string reason)
         {
             try
             {
