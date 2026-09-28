@@ -214,6 +214,7 @@ namespace ConditioningControlPanel.Views.Tabs
             RefreshDay(animate);
             RefreshRun();
             RefreshAdded();
+            RefreshMood();
             if (_billOpen) BuildBill();
         }
 
@@ -229,6 +230,7 @@ namespace ConditioningControlPanel.Views.Tabs
             var lookup = chaster?.LockLookup ?? LockLookup.Unlinked;
             var linked = chaster?.IsLinked == true;
             PaintChasterChip(chaster);
+            RefreshMood(); // a new local day cools her to calm with no booking to say so
 
             if (!linked)
             {
@@ -1117,6 +1119,7 @@ namespace ConditioningControlPanel.Views.Tabs
             Stakes(TxtStakesGentle, TabPresets.Gentle);
             Stakes(TxtStakesStrict, TabPresets.Strict);
             Stakes(TxtStakesCirce, TabPresets.Circe);
+            RefreshMood(); // the heat row may have just gone on or off
         }
 
         /// <summary>"Worst month +4 days": what the preset can cost past the lock end.</summary>
