@@ -257,6 +257,25 @@ namespace ConditioningControlPanel.AvatarTubeLayout
         public void Rearm() => Suppressed = false;
     }
 
+    /// <summary>
+    /// The tube's size and the detached clamp, lifted from WPF's CalculateScaleFactor and
+    /// ClampAvatarPosition (AvatarTubeWindow.Windowing.cs:632-677, 2566-2616) so every head shares them.
+    /// </summary>
+    public static class TubeWindowMath
+    {
+        /// <summary>Art scale for a work area in DIPs: 85% of its height, 30% of its width, 0.4..1.</summary>
+        public static double FitScale(double workW, double workH, double designW = 780, double designH = 1080)
+            => Math.Max(0.4, Math.Min(1.0, Math.Min(workH * 0.85 / designH, workW * 0.3 / designW)));
+
+        /// <summary>Keep at least half the detached tube on the work area; only the bottom edge bounds Top.</summary>
+        public static (int X, int Y) ClampDetached(double left, double top, double w, double h, Box work)
+        {
+            double x = Math.Clamp(left, work.X - w / 2, Math.Max(work.X - w / 2, work.Right - w / 2));
+            double y = Math.Min(top, work.Bottom - h / 2);
+            return ((int)Math.Round(x), (int)Math.Round(y));
+        }
+    }
+
     /// <summary>When the speech bubble's own window may be on screen.</summary>
     public static class SpeechBubbleVisibility
     {

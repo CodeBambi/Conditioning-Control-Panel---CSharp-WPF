@@ -328,7 +328,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             ChatCommand = new RelayCommand(() => { });
             SwitchCommand = new RelayCommand(() => { });
-            DetachCommand = new RelayCommand(() => { });
+            DetachCommand = new RelayCommand(() =>
+            {
+                CoreBark.NotifyUiAction("detach_companion");   // WPF MainWindow.Patreon.cs:1278
+                AvatarTube.AvatarTubeWindow.ToggleDetachedSink?.Invoke();
+            });
             ToggleMuteCommand = new RelayCommand(() => IsMuted = !IsMuted);
             ToggleShownCommand = new RelayCommand(() => IsCompanionShown = !IsCompanionShown);
             OpenEngineRoomCommand = new RelayCommand(() => { });
