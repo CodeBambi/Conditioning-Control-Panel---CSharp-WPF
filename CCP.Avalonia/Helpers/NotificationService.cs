@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -71,7 +72,7 @@ namespace ConditioningControlPanel.Avalonia.Helpers
                 BoxShadow = BoxShadows.Parse("0 2 16 0 #66000000"),
                 Transitions = new Transitions
                 {
-                    new DoubleTransition { Property = Visual.OpacityProperty, Duration = TimeSpan.FromMilliseconds(200) },
+                    new DoubleTransition { Property = Visual.OpacityProperty, Duration = TimeSpan.FromMilliseconds(180), Easing = new QuadraticEaseOut() },
                 },
             };
 
@@ -137,6 +138,11 @@ namespace ConditioningControlPanel.Avalonia.Helpers
         {
             (border.Tag as DispatcherTimer)?.Stop();
             border.IsHitTestVisible = false;
+            // WPF FadeOutAndRemove: 220 ms ease-in (the fade-in transition is 180 ms ease-out).
+            border.Transitions = new Transitions
+            {
+                new DoubleTransition { Property = Visual.OpacityProperty, Duration = TimeSpan.FromMilliseconds(220), Easing = new QuadraticEaseIn() },
+            };
             border.Opacity = 0;
             DispatcherTimer.RunOnce(() => _host?.Children.Remove(border), TimeSpan.FromMilliseconds(220));
         }

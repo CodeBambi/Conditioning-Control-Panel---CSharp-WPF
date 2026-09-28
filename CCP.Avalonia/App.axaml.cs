@@ -164,12 +164,11 @@ namespace ConditioningControlPanel.Avalonia
                 // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
                 // open. Seeding it with anything would put a tour on screen that nothing drives.
 
-                // CoreProgram stays unseeded, and every one of its five providers is a service
-                // this head does not have: no PatreonService, no NotificationService, no
-                // AchievementService, no ContentPackService, no RoadmapService instance. Unseeded
-                // it answers "no premium, no toast, no badge, no pack videos, no roadmap" - which
-                // is the truth here, and the safe direction on the only one that gates anything:
-                // HasPremium false refuses a premium enrolment rather than granting one.
+                // CoreProgram: four of its five providers stay unseeded - this head has no
+                // PatreonService, AchievementService, ContentPackService or RoadmapService, so it
+                // answers "no premium, no badge, no pack videos, no roadmap". NotifyProvider is
+                // seeded below, once the shell's toast host exists. HasPremium false still refuses
+                // a premium enrolment rather than granting one.
 
                 // CoreAccount is deliberately left unseeded, and this one is a constraint rather
                 // than a gap. PatreonService owns an HttpListener OAuth callback and a
@@ -213,6 +212,7 @@ namespace ConditioningControlPanel.Avalonia
                         duration));
                 // ponytail: WPF's Reconnect-Patreon branch (PatreonReconnectRule, head-only) is absent -
                 // this head has no Patreon sign-in to repair, so every refusal takes the "See tiers" branch.
+                // Also dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
                 var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),

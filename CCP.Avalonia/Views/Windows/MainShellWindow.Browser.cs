@@ -17,8 +17,8 @@
 //   1. autoPlayFullscreen is ACCEPTED AND IGNORED by NavigateToUrlInBrowser, and logged. The WPF
 //      path injects JS from a NavigationCompleted hook; returning false for that flag alone would
 //      break the plain-navigation half of the same call for every caller.
-//   2. NotifyBrowserBlockedOffline logs only. App.Notifications has no seam in Core and this head
-//      ships no toast host.
+//   2. (Resolved) the offline-block toast now shows through App.Notifications, as WPF
+//      NotifyBrowserBlockedOffline does (MainWindow.Browser.cs:489-494).
 //
 // REFUSED, not "not done yet": the mute pair. BtnMuteBrowser_Click flips
 // AppSettings.BrowserVideoMuted and applies it live through CoreWebView2.IsMuted;
@@ -74,6 +74,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using Serilog;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -103,12 +104,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>The offline gate, checked FIRST by every entry point below - #867 moved it
         /// above the lazy-init branch on WPF because underneath it the first click still built a
         /// browser and loaded a page, the one thing the block exists to prevent.</summary>
-        /// <param name="userInitiated">WPF toasts only for navigation the user asked for; with no
-        /// toast host here (see the header) this only picks the log level.</param>
+        /// <param name="userInitiated">WPF toasts only for navigation the user asked for; so does
+        /// this, and it picks the log level.</param>
         private static bool BrowserBlockedOffline(bool userInitiated = true)
         {
             if (!CoreSettings.Current.OfflineMode) return false;
-            if (userInitiated) Log.Information("Browser action blocked by offline mode");
+            if (userInitiated)
+            {
+                Log.Information("Browser action blocked by offline mode");
+                App.Notifications.Show(Loc.Get("browser_toast_offline_blocked"),
+                    Helpers.NotificationType.Warning, TimeSpan.FromSeconds(6));
+            }
             else Log.Debug("Browser navigation blocked by offline mode");
             return true;
         }

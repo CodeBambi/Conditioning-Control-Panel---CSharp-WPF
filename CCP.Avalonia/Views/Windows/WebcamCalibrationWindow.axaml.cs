@@ -48,8 +48,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// rather than left to mislead: <c>App.Settings</c> is <see cref="CoreSettings"/>,
     /// <c>App.Logger</c> is Serilog's static <c>Log</c>, and the HelpContentService/HelpVideoWindow
     /// popup is RESTORED and live (see BtnHelp below - the service is in Core and the window sits
-    /// in this same folder). <c>App.Notifications</c> is the one head service left in that group:
-    /// ConditioningControlPanel/Services/NotificationService.cs.</para>
+    /// in this same folder). <c>App.Notifications</c> exists here too now
+    /// (CCP.Avalonia/Helpers/NotificationService.cs), but WPF only calls its sticky
+    /// <c>Dismiss("recalibrate-multimonitor")</c>, which that port does not carry.</para>
     ///
     /// Other deviations:
     ///  - WPF's <c>DialogResult</c> becomes <c>Close(bool)</c>, as in TextEditorDialog.
