@@ -15,7 +15,10 @@ namespace ConditioningControlPanel.Services
     ///
     /// Also pause/resume (100 XP per pause), the flash ramp and the pink tint (ramp + ±3 min random start).
     ///
-    /// ponytail: not driven here - video, bubbles, bubble count, pop quiz, mind wipe, brain drain, spiral,
+    /// Pop quiz follows WPF: the user-level AppSettings toggle, not the per-session PopQuiz* fields
+    /// (dead in WPF too, BuiltInPrograms.cs:430).
+    ///
+    /// ponytail: not driven here - video, bubbles, bubble count, mind wipe, brain drain, spiral,
     /// corner GIF, ducking, phase events,
     /// EMI Desk, Discord, friends, season recap and achievement tracking. No settings are written for them,
     /// so the snapshot restore writes their own values back; each arrives with its Core service.
@@ -162,6 +165,10 @@ namespace ConditioningControlPanel.Services
             }
             else LockCardScheduler.Instance.Stop();
 
+            // SessionEngine.cs:1627: pop quiz is a user-level toggle (AppSettings), not per-session.
+            if (s.PopQuizEnabled) CoreEngine.PopQuiz?.Start();
+            else CoreEngine.PopQuiz?.Stop();
+
             // SessionEngine.cs:1479: a delayed tint stays off until its randomised minute (Tick).
             s.PinkFilterEnabled = ss.PinkFilterEnabled && ss.PinkFilterStartMinute == 0;
             if (s.PinkFilterEnabled) s.PinkFilterOpacity = ss.PinkFilterStartOpacity;
@@ -186,6 +193,7 @@ namespace ConditioningControlPanel.Services
             CoreFlash.Stop();
             CoreSubliminal.Stop();
             LockCardScheduler.Instance.Stop();
+            CoreEngine.PopQuiz?.Stop();   // SessionEngine.cs:527, closes an open quiz
             CoreBouncingText.Stop();
             Log.Information("Session paused (pause #{Count}, -100 XP penalty)", PauseCount);
         }
@@ -204,6 +212,7 @@ namespace ConditioningControlPanel.Services
             if (ss.SubliminalEnabled && !_deferred.IsPending("subliminal")) CoreSubliminal.Start();
             if (ss.LockCardEnabled && !_deferred.IsPending("lock cards")) LockCardScheduler.Instance.Start(Remaining.TotalMinutes);
             if (ss.BouncingTextEnabled && !_deferred.IsPending("bouncing text")) CoreBouncingText.Start();
+            if (CoreSettings.Current.PopQuizEnabled) CoreEngine.PopQuiz?.Start();   // SessionEngine.cs:574
             Log.Information("Session resumed");
         }
 
@@ -282,6 +291,7 @@ namespace ConditioningControlPanel.Services
             _timer?.Dispose();
             _timer = null;
             _deferred.Clear();
+            CoreEngine.PopQuiz?.Stop();   // SessionEngine.cs:372
 
             var s = CoreSettings.Current;
             s.ClearSessionFlashRamp();   // SessionEngine.cs:390, ahead of the restore
