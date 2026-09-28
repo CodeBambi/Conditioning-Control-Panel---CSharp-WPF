@@ -37,11 +37,12 @@ namespace ConditioningControlPanel.Services
         private static Task<bool> TryHandleMergedAsync(HttpResponseMessage response, string? body = null) =>
             MergedRecovery?.Invoke(response, body) ?? Task.FromResult(false);
 
-        /// <param name="settings">Where the auth token and unified id are read. Default: <see cref="CoreSettings.Current"/>.</param>
+        /// <param name="settings">Where the auth token and unified id are read. Default: the head's settings service, or
+        /// null before it exists (as WPF's <c>App.Settings?.Current</c> was; never the fallback's stored token).</param>
         /// <param name="handler">Test seam; null uses the shared production client.</param>
         public V2AuthService(Func<AppSettings?>? settings = null, HttpMessageHandler? handler = null)
         {
-            _settings = settings ?? (() => CoreSettings.Current);
+            _settings = settings ?? (() => CoreSettings.HasProvider ? CoreSettings.Service?.Current : null);
             _http = handler == null ? Shared.Value : Configure(new HttpClient(handler));
         }
 
