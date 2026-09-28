@@ -224,6 +224,8 @@ export function pickShots(layout, info, random = Math.random) {
     for (const k of Object.keys(SHOT_BANK)) {
       const sz = SHOT_BANK[k].size;
       if (used.has(sz)) continue;
+      // one far shot per replay at most: two wides leave two panels with the blow tiny
+      if (sz >= 3 && names.some(k => SHOT_BANK[k].size >= 3)) continue;
       let w = 1 + Math.abs(sz - last);                               // contrast with the panel before
       if (tall && k === 'top') w *= .2;                              // a backflip reads badly from above
       if (travels && (k === 'wide' || k === 'top')) w *= 2;
@@ -237,7 +239,9 @@ export function pickShots(layout, info, random = Math.random) {
   // The same size can come back from the fix-ups above; settle it by walking the last panel.
   for (let guard = 0; guard < 4 && new Set(names.map(k => SHOT_BANK[k].size)).size < names.length; guard++) {
     const used = new Set(names.slice(0, -1).map(k => SHOT_BANK[k].size));
-    names[n - 1] = Object.keys(SHOT_BANK).find(k => !used.has(SHOT_BANK[k].size) && (SHOT_BANK[k].size >= 2));
+    const far = names.slice(0, -1).some(k => SHOT_BANK[k].size >= 3);
+    names[n - 1] = Object.keys(SHOT_BANK).find(k => !used.has(SHOT_BANK[k].size) && SHOT_BANK[k].size >= 2 && !(far && SHOT_BANK[k].size >= 3))
+      || Object.keys(SHOT_BANK).find(k => !used.has(SHOT_BANK[k].size));
   }
   // Panel 0 is square on from the player's side (the eye came from there); the
   // others may cross the line for contrast.

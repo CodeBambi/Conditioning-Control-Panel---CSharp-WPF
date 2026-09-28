@@ -54,7 +54,8 @@ export const REPLAY_FRAG = `uniform sampler2D map; uniform vec2 res; uniform vec
         float ring = exp(-pow((r - burst * 1.3) / .24, 2.0));
         float dr = cell * .56 * ring;
         float dotm = 1.0 - smoothstep(dr - 1.0, dr, length(g));
-        c = mix(c, vec3(1.0, .36, .66), dotm * fade * .85);
+        // the dots ring the blow, never cover it: clear inside the middle of the panel
+        c = mix(c, vec3(1.0, .36, .66), dotm * fade * .7 * smoothstep(.3, .55, r));
       }
     }
     if (wipe >= 0.0) {
@@ -62,7 +63,9 @@ export const REPLAY_FRAG = `uniform sampler2D map; uniform vec2 res; uniform vec
       float band = 1.0 - smoothstep(0.0, .24, abs(u - mix(-1.4, 1.4, wipe)));
       c = mix(c, vec3(1.0), band * .92);
     }
-    c = mix(c, vec3(1.0), flash);
+    // The hit is an exposure punch with a pink lift, not a white wash: mixing toward
+    // white before the tonemap turned the whole panel milky (Breakout paid for this too).
+    c = c * (1.0 + flash * 1.8) + flash * vec3(.09, .03, .06);
     c += (hash(p + fract(time) * vec2(91.7, 37.3)) - .5) * grain;
     gl_FragColor = vec4(c, 1.0);
     #include <tonemapping_fragment>
