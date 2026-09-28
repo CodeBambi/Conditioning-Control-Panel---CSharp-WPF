@@ -746,10 +746,9 @@
                                         BorderThickness="1" BorderBrush="Transparent"/>
                                 <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <!-- x:Name = the handle ApplyDoorArt (MainWindow.NavRail.cs) uses to
-                                         re-point the art at the active mod's override. The literal
-                                         Source stays: it is what renders before that call, and what
-                                         stays on screen if the resolver comes back empty. -->
+                                    <!-- x:Name = WPF's ApplyDoorArt handle (MainWindow.NavRail.cs), which re-points
+                                         the art at the active mod's override. Not ported: the doors
+                                         show the shipped Source and do not follow the mod yet. -->
                                         <Image x:Name="ImgDoorHome" Width="64" Height="64" RenderOptions.BitmapInterpolationMode="HighQuality"
                                                Source="/Resources/nav/door_home.png">
                                             <Image.Clip>

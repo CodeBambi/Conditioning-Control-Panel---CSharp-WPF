@@ -94,7 +94,7 @@
           Avalonia  avares://CCP.Avalonia/Resources/features/awareness.png
 
       Scoped to what the views actually name, measured from the 113 pack:// URIs in the WPF
-      source - about 33 MB. Deliberately NOT the whole 1.3 GB Resources tree:
+      source; about 104 MB with achievements/ and exclusives/ (du -cb over the Include globs below). Deliberately NOT the whole 1.3 GB Resources tree:
 
         - Twemoji (4,009 files, 19 MB) is not needed at all. Avalonia renders COLR/CPAL colour
           emoji natively, which is why the ported views draw a plain TextBlock where WPF needed

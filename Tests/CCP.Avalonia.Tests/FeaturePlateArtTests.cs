@@ -44,11 +44,12 @@ public sealed class FeaturePlateArtTests
             Assert.Equal(0.9, hero.Opacity);
             Assert.Equal(AlignmentX.Right, hero.AlignmentX);
             Assert.Equal(Stretch.UniformToFill, side.Stretch);
-            Assert.NotEqual(3, Width(hero));
+            Assert.Equal(800, Width(hero)); // decoded to WPF's 800px cap
+            Assert.NotEqual(400, Height(hero));
 
             var dir = Directory.CreateTempSubdirectory();
             var png = Path.Combine(dir.FullName, "mod.png");
-            using (var bmp = new WriteableBitmap(new PixelSize(3, 3), new Vector(96, 96)))
+            using (var bmp = new WriteableBitmap(new PixelSize(6, 3), new Vector(96, 96)))
                 bmp.Save(png);
             var previous = CoreModArt.OverridePathProvider;
             CoreModArt.OverridePathProvider = p => p == "features/Phrase_Lock.png" ? png : null;
@@ -56,8 +57,8 @@ public sealed class FeaturePlateArtTests
             {
                 CoreMods.RaiseModChanged(null, new ModPackage(new ModManifest(), null, false));
                 Dispatcher.UIThread.RunJobs();
-                Assert.Equal(3, Width((ImageBrush)card.FindControl<Border>("HeroArt")!.Background!));
-                Assert.Equal(3, Width((ImageBrush)card.FindControl<Border>("SideArt")!.Background!));
+                Assert.Equal(400, Height((ImageBrush)card.FindControl<Border>("HeroArt")!.Background!));
+                Assert.Equal(400, Height((ImageBrush)card.FindControl<Border>("SideArt")!.Background!));
 
                 window.Content = null; // off screen: unsubscribed
                 Assert.Equal(before, ModChangedCount());
@@ -73,6 +74,7 @@ public sealed class FeaturePlateArtTests
     }
 
     private static int Width(ImageBrush brush) => ((Bitmap)brush.Source!).PixelSize.Width;
+    private static int Height(ImageBrush brush) => ((Bitmap)brush.Source!).PixelSize.Height;
 
     private static int ModChangedCount()
         => (typeof(CoreMods).GetField(nameof(CoreMods.ModChanged), BindingFlags.Static | BindingFlags.NonPublic)!

@@ -58,10 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///     the reader's language), never a raw key.</item>
     ///   <item><b>The emphasis parser is the real one.</b> <c>EmiBookText.Parse</c> is already in
     ///     Core, so the <c>*asterisk*</c> runs are ported rather than approximated.
-    ///     <c>EmiBookLayout</c> is NOT: it is <c>internal</c> to CCP.Core and this assembly is not
-    ///     in Core's <c>InternalsVisibleTo</c>, so the side/width decision is stubbed rather than
-    ///     copied - a second copy of that arithmetic is the exact thing it was extracted to
-    ///     prevent.</item>
+    ///     <c>EmiBookLayout.Place</c> makes the side/width decision.</item>
     ///   <item><c>Left</c>/<c>Top</c> (DIPs) -&gt; <c>Position</c>, which is PHYSICAL pixels: the
     ///     conversion the original does in one direction now runs in both.
     ///     <c>PresentationSource...TransformToDevice.M11</c> -&gt; <c>RenderScaling</c>;

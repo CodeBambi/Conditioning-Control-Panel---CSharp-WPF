@@ -30,8 +30,7 @@
                                              Borders are named and ModArt.BindFeaturePlates paints
                                              features/lab_quiz_hero.png into both, mod override
                                              first (WPF: MainWindow.xaml.cs labHeroMap).
-       side art Background={Binding ...  ->  painted by the same call rather than bound
-         ElementName=GradedIntakeHeroArtHost}  through the hero host.
+       side art Background={Binding ...  ->  {Binding #GradedIntakeHeroArtHost.Background}
 
      HorizontalAlignment on the capped column: WPF authors the StackPanel Center. WPF's Grid
      reports the FULL proportional width of its star columns, so a Center-aligned StackPanel
@@ -325,9 +324,9 @@
                     <!-- SIDE ART. On WPF the art is the Border's BACKGROUND (an ImageBrush), not a
                          child Image: a Border clips its Background to CornerRadius but does NOT clip
                          child content, so a child Image would square off the rounded corners
-                         (round-2 lesson). Painted from code with the hero.
+                         (round-2 lesson). Bound to the hero's brush, as WPF (GradedIntakeTabView.xaml:318).
                          The scrim is kept verbatim. -->
-                    <Border x:Name="GradedIntakeSideArt" Grid.Column="1" Margin="10,0,0,10" CornerRadius="14"
+                    <Border x:Name="GradedIntakeSideArt" Grid.Column="1" Background="{Binding #GradedIntakeHeroArtHost.Background}" Margin="10,0,0,10" CornerRadius="14"
                             BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                             VerticalAlignment="Stretch" MinHeight="200" MaxHeight="560">
                         <!-- Scrim so the plate sits under the page instead of fighting it. -->
