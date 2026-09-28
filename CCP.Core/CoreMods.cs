@@ -209,6 +209,41 @@ namespace ConditioningControlPanel
             catch { return false; }
         }
 
+        /// <summary>
+        /// Seeds every provider above from <paramref name="mods"/> and forwards its two events. The
+        /// one seeding block both heads share (WPF App.OnStartup, Avalonia desktop lifetime), so a
+        /// provider added here reaches every head at once. Call once, right after constructing the
+        /// service; a second call would forward each event twice.
+        /// </summary>
+        public static void Attach(Services.ModService mods)
+        {
+            ActiveModTokenProvider = () => mods.ActiveMod?.Manifest;
+            ActiveModPackageProvider = () => mods.ActiveMod;
+            PetNameOverrideProvider = mods.GetPetNameOverride;
+            CollectiveOverrideProvider = mods.GetCollectiveOverride;
+            ModeDisplayNameProvider = mods.GetModeDisplayName;
+            MakeModAwareProvider = mods.MakeModAware;
+            ActiveModIdProvider = () => mods.ActiveModId;
+            InstalledModsProvider = () => mods.InstalledMods;
+            AccentColorHexProvider = mods.GetAccentColorHex;
+            SecondaryColorHexProvider = mods.GetSecondaryColorHex;
+            AffirmationProvider = mods.GetAffirmation;
+            PhrasesProvider = category => mods.GetPhrases(category);
+            PinkRushNameProvider = mods.GetPinkRushName;
+            PinkRushDescriptionProvider = mods.GetPinkRushDescription;
+            FilterColorRgbProvider = () => mods.GetFilterColorRgb();
+            DefaultSubliminalPoolProvider = () => mods.GetDefaultSubliminalPool();
+            mods.ModChanged += RaiseModChanged;
+            mods.ModAvailabilityChanged += (sender, id) =>
+            {
+                try { ModAvailabilityChanged?.Invoke(sender, id); } catch { /* same rule as ModChanged */ }
+            };
+        }
+
+        /// <summary>A mod or content pack became available (installed / extracted), keyed by mod or
+        /// pack id. Forwarded from the head's service by <see cref="Attach"/>.</summary>
+        public static event EventHandler<string>? ModAvailabilityChanged;
+
         /// <summary>The active mod changed. The head forwards its service's event here so a view
         /// subscribes once, to Core, on every head.</summary>
         public static event EventHandler<ModPackage>? ModChanged;

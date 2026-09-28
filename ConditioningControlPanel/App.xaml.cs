@@ -285,24 +285,8 @@ namespace ConditioningControlPanel
                 return (false, null);
             };
 
-            CoreMods.ActiveModTokenProvider = () => Mods?.ActiveMod?.Manifest;
-            CoreMods.ActiveModPackageProvider = () => Mods?.ActiveMod;
-            CoreMods.PetNameOverrideProvider = () => Mods?.GetPetNameOverride();
-            CoreMods.CollectiveOverrideProvider = () => Mods?.GetCollectiveOverride();
-            CoreMods.ModeDisplayNameProvider = () => Mods?.GetModeDisplayName();
-            CoreMods.MakeModAwareProvider = text => Mods?.MakeModAware(text);
-            CoreMods.ActiveModIdProvider = () => Mods?.ActiveModId;
-            CoreMods.InstalledModsProvider = () => Mods?.InstalledMods;
-            CoreMods.AccentColorHexProvider = () => Mods?.GetAccentColorHex();
-            CoreMods.SecondaryColorHexProvider = () => Mods?.GetSecondaryColorHex();
-            CoreMods.AffirmationProvider = () => Mods?.GetAffirmation();
-            CoreMods.PhrasesProvider = category => Mods?.GetPhrases(category);
             Services.Deeper.EnhancementResolver.LibraryMatchProvider = (path, type) => EnhancementLibrary?.FindMatch(path, type);
             Services.SettingsPaletteIndex.JustDropDoorAvailableProvider = () => Services.JustDrop.JustDropService.DoorAvailable;
-            CoreMods.PinkRushNameProvider = () => Mods?.GetPinkRushName();
-            CoreMods.PinkRushDescriptionProvider = () => Mods?.GetPinkRushDescription();
-            CoreMods.FilterColorRgbProvider = () => Mods?.GetFilterColorRgb();
-            CoreMods.DefaultSubliminalPoolProvider = () => Mods?.GetDefaultSubliminalPool();
             // Mod art. ResolveUri already walks event skin -> active mod -> embedded and hands
             // back a file:// URI for the first two and a pack:// one for the third, so "is there
             // an override" is "did it come back as a file", answered in ONE pass of the chain.
@@ -2307,8 +2291,9 @@ namespace ConditioningControlPanel
 
             // Initialize mod system (must be after settings, before services that use content config)
             Mods = new ModService();
-            // Views subscribe to the mod switch through Core, on every head.
-            Mods.ModChanged += (sender, package) => CoreMods.RaiseModChanged(sender, package);
+            // Seeds the CoreMods providers and forwards ModChanged / ModAvailabilityChanged, so
+            // views subscribe through Core on every head. Shared with the Avalonia head.
+            CoreMods.Attach(Mods);
             Mods.Initialize(Settings?.Current?.ActiveModId);
 
             // Mod-coded title bars: tint every window's OS caption with the active mod accent.
