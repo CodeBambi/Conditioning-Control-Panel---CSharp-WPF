@@ -49,6 +49,7 @@ namespace ConditioningControlPanel.Avalonia
 
             var lifetime = new ClassicDesktopStyleApplicationLifetime { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             Program.BuildAvaloniaApp().SetupWithLifetime(lifetime);
+            if (OperatingSystem.IsWindows()) return RunWin32(lifetime);
 
             var display = XOpenDisplay(IntPtr.Zero);
             if (display == IntPtr.Zero) { Console.Error.WriteLine("FAIL: no X display"); return 1; }
@@ -116,6 +117,69 @@ namespace ConditioningControlPanel.Avalonia
 
             lifetime.Start(Array.Empty<string>());
             XCloseDisplay(display);
+            Console.WriteLine(fails == 0 ? "PASS" : $"FAIL ({fails} mismatch(es))");
+            return fails == 0 ? 0 : 1;
+        }
+
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+        [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
+        private record struct Rect(int Left, int Top, int Right, int Bottom);
+
+        /// <summary>The Windows twin: same recipe through the same X11Overlay entry points, read back
+        /// from user32 (ex-style bits, visibility, rect vs the screen). No desktop session (no screens,
+        /// no HWND) prints SKIP and exits 0 - that is the runner, not the shim.</summary>
+        private static int RunWin32(ClassicDesktopStyleApplicationLifetime lifetime)
+        {
+            var screens = new Window().Screens.All;
+            if (screens.Count == 0) { Console.WriteLine("SKIP: no desktop session (0 screens)"); return 0; }
+
+            var fails = 0;
+            void Check(bool ok, string what) { Console.WriteLine($"  [{(ok ? "ok" : "FAIL")}] {what}"); if (!ok) fails++; }
+            var overlays = new List<(Window Window, PixelRect Bounds, IntPtr Hwnd)>();
+            foreach (var screen in screens)
+            {
+                var w = new Window
+                {
+                    WindowDecorations = WindowDecorations.None,
+                    TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent },
+                    Background = Brushes.Transparent,
+                    ShowInTaskbar = false,
+                    ShowActivated = false,
+                    CanResize = false,
+                };
+                var handle = w.TryGetPlatformHandle();
+                if (X11Overlay.BackendOf(handle) != OverlayBackend.Win32) { Console.WriteLine($"SKIP: handle descriptor {handle?.HandleDescriptor ?? "(none)"}, not HWND"); return 0; }
+                Check(X11Overlay.SetClickThrough(w, true), "SetClickThrough(true) returned true");
+                Check(X11Overlay.SetOpacity(w, 1), "SetOpacity(1) returned true");
+                Check(X11Overlay.SetOverrideRedirect(w, screen.Bounds), "SetOverrideRedirect returned true");
+                w.Show();
+                w.CanResize = true;   // makes Avalonia rebuild GWL_EXSTYLE; the style callback must keep our bits
+                overlays.Add((w, screen.Bounds, handle!.Handle));
+            }
+
+            DispatcherTimer.RunOnce(() =>
+            {
+                try
+                {
+                    const uint want = Win32Overlay.OverlayBits | Win32Overlay.WsExTransparent | Win32Overlay.WsExTopmost;
+                    foreach (var (w, b, hwnd) in overlays)
+                    {
+                        var ex = Win32Overlay.GetWindowLong(hwnd, -20);
+                        GetWindowRect(hwnd, out var r);
+                        Console.WriteLine($"overlay 0x{hwnd.ToInt64():x} on {b}: exstyle=0x{ex:x8} visible={IsWindowVisible(hwnd)} rect={r}");
+                        Check((ex & want) == want, "WS_EX_LAYERED|TRANSPARENT|NOACTIVATE|TOOLWINDOW|TOPMOST after an Avalonia style rebuild");
+                        Check(IsWindowVisible(hwnd), "IsWindowVisible");
+                        Check(r.Left == b.X && r.Top == b.Y && r.Right - r.Left == b.Width && r.Bottom - r.Top == b.Height, $"rect matches screen {b}");
+                        X11Overlay.SetClickThrough(w, false);
+                        ex = Win32Overlay.GetWindowLong(hwnd, -20);
+                        Check((ex & Win32Overlay.WsExTransparent) == 0 && (ex & Win32Overlay.WsExLayered) != 0, "SetClickThrough(false) clears only WS_EX_TRANSPARENT");
+                    }
+                }
+                catch (Exception e) { Console.Error.WriteLine("overlay-check threw: " + e); fails++; }
+                finally { lifetime.Shutdown(); }
+            }, TimeSpan.FromMilliseconds(1200));
+
+            lifetime.Start(Array.Empty<string>());
             Console.WriteLine(fails == 0 ? "PASS" : $"FAIL ({fails} mismatch(es))");
             return fails == 0 ? 0 : 1;
         }

@@ -134,6 +134,12 @@ jobs:
         run: dotnet test Tests/CCP.Avalonia.Consent.Tests/CCP.Avalonia.Consent.Tests.csproj -c Release
       - name: Test Avalonia General settings picker (isolated profile)
         run: dotnet test Tests/CCP.Avalonia.GeneralSettings.Tests/CCP.Avalonia.GeneralSettings.Tests.csproj -c Release
+      # The only place the Win32 overlay shim (CCP.Avalonia/Platform/Win32Overlay.cs) runs: opens a
+      # click-through topmost overlay per screen and reads ex-style bits, visibility and rect back
+      # from user32. Prints SKIP and exits 0 when the runner has no desktop session.
+      - name: Avalonia overlay check (Win32 shim)
+        timeout-minutes: 5
+        run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --overlay-check
 
   # Greps the compiler cannot do: APIs that compile fine in a net10.0 library and only fail at
   # runtime, plus the XAML clr-namespace tripwire. See the script for what and why.

@@ -1,0 +1,82 @@
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Avalonia.Controls;
+
+namespace ConditioningControlPanel.Avalonia.Platform;
+
+/// <summary>
+/// The Windows half of <see cref="X11Overlay"/>, reached only through its entry points when the
+/// window's platform handle is an "HWND" - callers never see this class. Same bits the WPF head
+/// sets on every desktop overlay (ConditioningControlPanel/Services/Notifications/OverlayService.cs:1415,
+/// Services/Flash/FlashService.cs:4614 ApplyClickability, :4838 ForceTopmost):
+/// WS_EX_LAYERED|WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT toggled for click-through,
+/// HWND_TOPMOST via SetWindowPos.
+///
+/// <para><b>Why a style callback and not just SetWindowLong.</b> Avalonia 12.1.2's Win32
+/// <c>WindowImpl.UpdateWindowProperties</c> rebuilds GWL_EXSTYLE from scratch (EDGE | NOREDIRECTIONBITMAP
+/// | APPWINDOW) whenever ShowInTaskbar, decorations, resizability or window state change, which would
+/// silently drop our bits. <see cref="Win32Properties.AddWindowStylesCallback"/> is its sanctioned hook
+/// into that rebuild, so the bits survive it.</para>
+///
+/// <para><b>Opacity is the layered alpha</b> (SetLayeredWindowAttributes/LWA_ALPHA), the twin of
+/// X11's _NET_WM_WINDOW_OPACITY: DWM applies it, the app never re-renders. Avalonia never sets
+/// WS_EX_LAYERED itself (it uses DirectComposition + NOREDIRECTIONBITMAP), so nothing competes for it.
+/// A freshly layered window stays invisible until its attributes are set once, hence the 255 below.</para>
+/// </summary>
+internal static class Win32Overlay
+{
+    private const int GwlExStyle = -20;
+    internal const uint WsExTopmost = 0x8, WsExTransparent = 0x20, WsExToolWindow = 0x80,
+        WsExLayered = 0x80000, WsExNoActivate = 0x08000000;
+    internal const uint OverlayBits = WsExLayered | WsExNoActivate | WsExToolWindow;
+    private const uint LwaAlpha = 2;
+    private const uint SwpNoSize = 0x1, SwpNoMove = 0x2, SwpNoActivate = 0x10;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] internal static extern uint GetWindowLong(IntPtr hwnd, int index);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW")] private static extern uint SetWindowLong(IntPtr hwnd, int index, uint value);
+    [DllImport("user32.dll")] private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint colorKey, byte alpha, uint flags);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+    // Per window: whether it should currently be click-through, read by the style callback.
+    private static readonly ConditionalWeakTable<TopLevel, StrongBox<bool>> Wanted = new();
+
+    internal static uint Style(uint exStyle, bool clickThrough)
+        => (exStyle | OverlayBits) & ~WsExTransparent | (clickThrough ? WsExTransparent : 0);
+
+    internal static bool SetClickThrough(TopLevel window, IntPtr hwnd, bool clickThrough)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        Track(window).Value = clickThrough;
+        return Apply(hwnd, clickThrough);
+    }
+
+    /// <summary>Tool/no-activate/layered + HWND_TOPMOST: the Windows form of an override-redirect overlay.</summary>
+    internal static bool SetOverrideRedirect(TopLevel window, IntPtr hwnd)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        return Apply(hwnd, Track(window).Value)
+            && SetWindowPos(hwnd, new IntPtr(-1), 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+    }
+
+    internal static bool SetOpacity(TopLevel window, IntPtr hwnd, double alpha)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        return Apply(hwnd, Track(window).Value)
+            && SetLayeredWindowAttributes(hwnd, 0, (byte)Math.Round(Math.Clamp(alpha, 0, 1) * 255), LwaAlpha);
+    }
+
+    private static StrongBox<bool> Track(TopLevel window) => Wanted.GetValue(window, w =>
+    {
+        var box = new StrongBox<bool>();
+        Win32Properties.AddWindowStylesCallback(w, (style, ex) => (style, Style(ex, box.Value)));
+        return box;
+    });
+
+    private static bool Apply(IntPtr hwnd, bool clickThrough)
+    {
+        var old = GetWindowLong(hwnd, GwlExStyle);
+        SetWindowLong(hwnd, GwlExStyle, Style(old, clickThrough));
+        return (old & WsExLayered) != 0 || SetLayeredWindowAttributes(hwnd, 0, 255, LwaAlpha);
+    }
+}

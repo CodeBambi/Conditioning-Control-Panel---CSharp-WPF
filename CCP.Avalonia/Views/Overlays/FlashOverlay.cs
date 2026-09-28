@@ -24,8 +24,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// sized and placed by <see cref="FlashPlacement"/> (the math WPF itself calls), staggered
     /// 300 ms, faded by the Fade/Opacity sliders, living FlashDuration + 1 s.
     ///
-    /// <para>Every window is override-redirect and click-through (X11Overlay). Where that is not
-    /// available - Windows, a native Wayland backend, headless - nothing is shown and it is logged
+    /// <para>Every window is override-redirect and click-through (X11Overlay; on Windows its
+    /// Win32Overlay half). Where that is not available - a native Wayland backend, headless -
+    /// nothing is shown and it is logged
     /// once: a topmost picture that swallows clicks is worse than no picture.</para>
     ///
     /// <para>ponytail: not here yet, each a later branch - the session scheduler (Start/Stop,
