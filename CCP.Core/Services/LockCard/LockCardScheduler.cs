@@ -50,9 +50,13 @@ namespace ConditioningControlPanel.Services
         /// minutes. When supplied, the first card is guaranteed to land inside that window with
         /// room to complete it. Null (dashboard use) means open-ended.
         /// </param>
+        /// <summary>The window the last Start was given (tests: #736).</summary>
+        internal double? LastWindowMinutes { get; private set; }
+
         public void Start(double? windowMinutes = null)
         {
             if (_isRunning) return;
+            LastWindowMinutes = windowMinutes;
 
             if (!CoreSettings.Current.LockCardEnabled)
             {

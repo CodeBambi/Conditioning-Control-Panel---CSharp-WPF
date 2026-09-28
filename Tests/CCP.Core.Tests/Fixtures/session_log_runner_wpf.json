@@ -1,0 +1,20 @@
+{
+  "session_id": "runner-golden",
+  "session_name": "Runner Golden",
+  "session_icon": "🌸",
+  "session_difficulty": 1,
+  "started_at": "2026-01-01T12:00:00",
+  "ended_at": "2026-01-01T12:01:00",
+  "duration_seconds": 60.0,
+  "completed": true,
+  "xp_earned": 0,
+  "media": [
+    {
+      "timestamp": "2026-01-01T12:00:10",
+      "session_time_seconds": 10.0,
+      "type": 1,
+      "file_path": "/pics/a.png",
+      "display_name": "a.png"
+    }
+  ]
+}
