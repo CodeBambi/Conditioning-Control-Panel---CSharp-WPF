@@ -14,21 +14,23 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 /// This head's <see cref="CoreSecrets"/> provider, one item per name (authtoken, apikey,
 /// patreon_auth/_cache, discord_auth/_cache, substar_*). Linux: the Secret Service through
 /// libsecret. Windows: DPAPI files that WPF's own stores read and write
-/// (<see cref="Dpapi"/>). No usable OS store: values live in memory for this run only, and
-/// <see cref="NotRememberedHook"/> fires once. Never a plaintext file (the CoreSecrets rule).
+/// (<see cref="Dpapi"/>). No usable OS store: values live in memory for this run only and
+/// <see cref="NotRemembered"/> is set (the login flow's notice). Never a plaintext file (the CoreSecrets rule).
 /// </summary>
 internal static class SecretStore
 {
     // name -> value for this run (null = known absent). With no OS store this IS the store.
     private static readonly ConcurrentDictionary<string, string?> _cache = new();
-    private static int _notified;
 
-    /// <summary>Invoked once per run, the first time a value could not be kept by the OS store
-    /// ("sign-in not remembered"). The login unit hangs its notice here.</summary>
-    internal static Action? NotRememberedHook;
-
-    /// <summary>True once a value was kept in memory only. Read it when attaching the hook late.</summary>
+    /// <summary>True once a value was kept in memory only ("sign-in not remembered").</summary>
     internal static volatile bool NotRemembered;
+
+    /// <summary>True once a stored value could not be removed from the OS store: a logout did not
+    /// stick. AccountSeed.Logout resets it; the shell tells the user.</summary>
+    internal static volatile bool ClearFailed;
+
+    /// <summary>Tests only: replaces the OS write.</summary>
+    internal static Func<string, string?, bool>? OsWriteOverride;
 
     /// <summary>A CCP_USERDATA_DIR sandbox (tests, kc) does not isolate the keyring, so it never touches it: memory only.</summary>
     internal static bool Sandboxed = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR") != null;
@@ -54,13 +56,14 @@ internal static class SecretStore
         if (OsWrite(name, value)) return;
         if (value is null)
         {
-            // ponytail: logged only; the logout unit owns a "could not sign out fully" notice.
+            // Memory-only runs (sandbox, no Secret Service) wrote nothing to the OS store: the memory clear is the clear.
+            if (Sandboxed || NotRemembered) return;
             Log.Warning("Could not clear {Name} from the secret store", name);
+            ClearFailed = true;
             return;
         }
         Log.Warning("No usable secret store: {Name} is kept in memory for this run only", name);
         NotRemembered = true;
-        if (NotRememberedHook is { } hook && Interlocked.Exchange(ref _notified, 1) == 0) hook();
     }
 
     private static (bool Ok, string? Value) OsRead(string name) =>
@@ -68,7 +71,7 @@ internal static class SecretStore
         : OperatingSystem.IsLinux() ? Libsecret.Read(name) : (true, null);
 
     private static bool OsWrite(string name, string? value) =>
-        !Sandboxed && (OperatingSystem.IsWindows() ? Dpapi.Write(CorePaths.UserData, name, value)
+        OsWriteOverride is { } fake ? fake(name, value) : !Sandboxed && (OperatingSystem.IsWindows() ? Dpapi.Write(CorePaths.UserData, name, value)
         : OperatingSystem.IsLinux() && Libsecret.Write(name, value));
 }
 

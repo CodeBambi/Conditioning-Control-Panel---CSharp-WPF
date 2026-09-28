@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
@@ -89,6 +90,21 @@ namespace ConditioningControlPanel.Services
             var t = await LoopbackOAuth.ExchangeAsync(Http, "/discord/token", new { code, redirect_uri = redirectUri });
             StoreTokens(t.AccessToken, t.RefreshToken, DateTime.UtcNow.AddSeconds(t.ExpiresIn));
             Log.Information("Discord tokens stored successfully");
+        }
+
+        /// <summary>The OAuth sign-in (WPF DiscordService.StartOAuthFlowAsync): browser flow, exchange, forced
+        /// validate. No-op while one is running; throws as WPF did.</summary>
+        public async Task SignInAsync(Action<string> openBrowser, CancellationToken ct = default)
+        {
+            if (IsVerifying) return;
+            try
+            {
+                IsVerifying = true;
+                var cb = await LoopbackOAuth.SignInAsync("discord", openBrowser, ct);
+                await ExchangeCodeAsync(cb.Code, cb.CallbackUrl);
+                await ValidateAndRefreshUserAsync(forceRefresh: true);
+            }
+            finally { IsVerifying = false; }
         }
 
         /// <summary>Validate the user, refreshing if needed. Never throws: a failure leaves what was there.</summary>

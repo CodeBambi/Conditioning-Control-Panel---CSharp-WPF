@@ -174,6 +174,51 @@ public sealed class V2AuthServiceWireTests : IDisposable
         public void Emit(LogEvent e) => Lines.Add(e.RenderMessage() + " " + e.Exception);
     }
 
+    // --- restore-session: the check half of WPF App.ValidateRestoredSessionAsync (App.xaml.cs:4191-4307) ---
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, "{}", V2AuthService.RestoreOutcome.Cleared, null, Tok)]
+    [InlineData(HttpStatusCode.OK, "{\"auth_token\":\"NEW\"}", V2AuthService.RestoreOutcome.Validated, "u_abc123", "NEW")]
+    [InlineData(HttpStatusCode.OK, "not json", V2AuthService.RestoreOutcome.Validated, "u_abc123", Tok)]
+    [InlineData(HttpStatusCode.Unauthorized, "{\"error\":\"bad\"}", V2AuthService.RestoreOutcome.TokenCleared, "u_abc123", null)]
+    [InlineData(HttpStatusCode.Unauthorized, "{\"error\":\"legacy_user_reauth_required\"}", V2AuthService.RestoreOutcome.Cleared, null, null)]
+    [InlineData(HttpStatusCode.InternalServerError, "{}", V2AuthService.RestoreOutcome.Kept, "u_abc123", Tok)]
+    public async Task RestoreSession_OutcomesMatchWpf(HttpStatusCode status, string body, V2AuthService.RestoreOutcome outcome, string? id, string? token)
+    {
+        _fake.Status = status;
+        _fake.Body = body;
+        Assert.Equal(outcome, await Client().ValidateRestoredSessionAsync("u_abc123"));
+        Assert.Equal(id, _settings.UnifiedId);
+        Assert.Equal(token, _settings.AuthToken);
+        Assert.Equal(Post("/v2/auth/restore-session", $"{{\n  \"unified_id\": \"u_abc123\",\n  \"client_version\": \"{Ver}\"\n}}", true), _fake.Seen.Single());
+    }
+
+    [Fact]
+    public async Task RestoreSession_NetworkError_KeepsTheCache()
+    {
+        _fake.Throw = new HttpRequestException("offline");
+        Assert.Equal(V2AuthService.RestoreOutcome.Kept, await Client().ValidateRestoredSessionAsync("u_abc123"));
+        Assert.Equal("u_abc123", _settings.UnifiedId);
+        Assert.Equal(Tok, _settings.AuthToken);
+    }
+
+    [Fact]
+    public void ApplyIdentity_WritesIdentityOnly_NeverProgression()
+    {
+        var s = new AppSettings { PlayerLevel = 12, PlayerXP = 345, UnifiedId = "old" };
+        V2AuthService.ApplyIdentity(s, new V2AuthService.V2User
+        {
+            UnifiedId = "u9", DisplayName = "Bambi", IsSeason0Og = true, CurrentSeason = "2026-09", HighestLevelEver = 40,
+            DiscordId = "d", PatreonId = null, PatreonTier = 2, Level = 50, Xp = 99999,
+        }, "T2");
+        Assert.Equal(("u9", "Bambi", true, "2026-09", 40, true, false, 2, "T2"),
+            (s.UnifiedId, s.UserDisplayName, s.IsSeason0Og, s.CurrentSeason, s.HighestLevelEver, s.HasLinkedDiscord, s.HasLinkedPatreon, s.PatreonTier, s.AuthToken));
+        Assert.Equal(12, s.PlayerLevel);   // XP take-higher is unit 6
+        Assert.Equal(345, s.PlayerXP);
+        V2AuthService.ApplyIdentity(s, new V2AuthService.V2User { UnifiedId = "u9" }, null);
+        Assert.Equal("T2", s.AuthToken);   // no token in the response keeps the stored one
+    }
+
     private static string Post(string path, string body, bool auth) =>
         $"POST {Url}{path}\nContent-Type: application/json; charset=utf-8\n" +
         (auth ? $"User-Agent: ConditioningControlPanel/{Ver}\nX-Auth-Token: {Tok}\n" : $"User-Agent: ConditioningControlPanel/{Ver}\n") +

@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
@@ -129,6 +130,24 @@ namespace ConditioningControlPanel.Services
             // A brand new grant. Whatever the old one did, this is the repair.
             GrantLooksDead = false;
             Log.Information("{Provider} tokens stored successfully", _label);
+        }
+
+        /// <summary>The OAuth sign-in (WPF PatreonService / SubscribeStarService.StartOAuthFlowAsync): browser flow,
+        /// exchange, forced validate. No-op while one is running; throws as WPF did.</summary>
+        public async Task SignInAsync(Action<string> openBrowser, CancellationToken ct = default)
+        {
+            if (IsVerifying) return;
+            try
+            {
+                IsVerifying = true;
+                var cb = await LoopbackOAuth.SignInAsync(_prefix, openBrowser, ct);
+                // The proxy holds the client_secret; SubscribeStar trades the code only against our verifier.
+                await ExchangeCodeAsync(_prefix == "substar"
+                    ? new { code = cb.Code, state = cb.State, code_verifier = cb.Verifier }
+                    : (object)new { code = cb.Code, redirect_uri = cb.CallbackUrl });
+                await ValidateSubscriptionAsync(forceRefresh: true);
+            }
+            finally { IsVerifying = false; }
         }
 
         /// <summary>Patreon: set whitelist status from an external source (the V2 sync response).</summary>

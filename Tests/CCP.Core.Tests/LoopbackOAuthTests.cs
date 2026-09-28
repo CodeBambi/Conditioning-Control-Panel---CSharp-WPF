@@ -231,4 +231,82 @@ public sealed class LoopbackOAuthTests
         var ex = await Assert.ThrowsAsync<Exception>(() => LoopbackOAuth.ExchangeAsync(Proxy(fake), "/substar/token", new { code = "x" }));
         Assert.Equal("Token exchange failed: expired", ex.Message);
     }
+
+    // --- The browser flow moved from WPF Patreon/Discord/SubscribeStarService.StartOAuthFlowAsync (login-ui). ---
+
+    [Theory] // Transcribed from the WPF services before the move (PatreonService.cs:108, DiscordService.cs:82, SubscribeStarService.cs:83).
+    [InlineData("patreon", 47832, "https://codebambi-proxy.vercel.app/patreon/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A47832%2Fcallback%2F&state=ST")]
+    [InlineData("discord", 47833, "https://codebambi-proxy.vercel.app/discord/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A47833%2Fcallback%2F&state=ST")]
+    [InlineData("substar", 47834, "https://codebambi-proxy.vercel.app/substar/authorize?state=ST&code_challenge=CH&code_challenge_method=S256")]
+    public void AuthorizeUrl_And_Port_MatchWpf(string provider, int port, string expected)
+    {
+        Assert.Equal(port, LoopbackOAuth.Port(provider));
+        Assert.Equal(expected, LoopbackOAuth.AuthorizeUrl(provider, $"http://localhost:{port}/callback/", "ST", provider == "substar" ? "CH" : null));
+    }
+
+    [Fact]
+    public void Pkce_IsRfc7636S256_AndStateIs32Hex()
+    {
+        Assert.Equal("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", LoopbackOAuth.Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"));
+        var verifier = LoopbackOAuth.NewVerifier();
+        Assert.Matches("^[A-Za-z0-9_-]{43}$", verifier);
+        Assert.NotEqual(verifier, LoopbackOAuth.NewVerifier());
+        using var oauth = new LoopbackOAuth(FreePort(), useHttpListener: false);
+        Assert.Matches("^[A-F0-9]{32}$", oauth.State);
+    }
+
+    private static async Task<(LoopbackOAuth.Callback? Result, Exception? Error, string Url)> Flow(string provider, string query)
+    {
+        var port = FreePort();
+        var opened = new TaskCompletionSource<string>();
+        var run = LoopbackOAuth.SignInAsync(provider, u => opened.SetResult(u), CancellationToken.None, port, false, TimeSpan.FromSeconds(10));
+        var url = await opened.Task;
+        var state = HttpUtilityState(url, port);
+        await BrowserGet("127.0.0.1", port, query.Replace("{state}", state));
+        try { return (await run, null, url); } catch (Exception ex) { return (null, ex, url); }
+    }
+
+    // The state rides in the authorize URL; the proxy round-trips it to the callback.
+    private static string HttpUtilityState(string url, int port) =>
+        System.Web.HttpUtility.ParseQueryString(new Uri(url).Query)["state"]!;
+
+    [Fact]
+    public async Task SignIn_Substar_CarriesPkce_AndReturnsTheVerifierForTheExchange()
+    {
+        var (cb, err, url) = await Flow("substar", "code=C1&state={state}");
+        Assert.Null(err);
+        var q = System.Web.HttpUtility.ParseQueryString(new Uri(url).Query);
+        Assert.Equal("C1", cb!.Code);
+        Assert.Equal(q["state"], cb.State);
+        Assert.Equal(q["code_challenge"], LoopbackOAuth.Challenge(cb.Verifier!));
+        Assert.StartsWith("https://codebambi-proxy.vercel.app/substar/authorize?state=", url);
+    }
+
+    [Fact]
+    public async Task SignIn_Patreon_RedirectIsTheCallback_NoVerifier()
+    {
+        var (cb, err, url) = await Flow("patreon", "code=C2&state={state}");
+        Assert.Null(err);
+        Assert.Null(cb!.Verifier);
+        Assert.Contains("redirect_uri=" + Uri.EscapeDataString(cb.CallbackUrl), url);
+    }
+
+    [Theory] // WPF's messages, per provider.
+    [InlineData("discord", "error=access_denied&error_description=nah&state={state}", "Discord authorization failed: nah")]
+    [InlineData("patreon", "error=access_denied&state={state}", "Patreon authorization failed: Unknown error")]
+    [InlineData("substar", "error=access_denied&state={state}", "SubscribeStar authorization failed: access_denied")]
+    [InlineData("patreon", "state={state}", "No authorization code received")]
+    [InlineData("substar", "state={state}", "SubscribeStar sign-in returned no code. Please try again.")]
+    public async Task SignIn_ErrorOrNoCode_ThrowsWpfMessage(string provider, string query, string message)
+    {
+        var (_, err, _) = await Flow(provider, query);
+        Assert.Equal(message, err!.Message);
+    }
+
+    [Fact]
+    public async Task SignIn_ForgedState_IsRefused()
+    {
+        var (_, err, _) = await Flow("discord", "code=C3&state=FORGED");
+        Assert.IsType<SecurityException>(err);
+    }
 }
