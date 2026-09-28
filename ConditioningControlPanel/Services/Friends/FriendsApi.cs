@@ -82,6 +82,7 @@ public sealed class FriendsApi : IFriendsApi
         PresenceActivity.Breakout => "breakout",
         PresenceActivity.Deeper => "deeper",
         PresenceActivity.Remote => "remote",
+        PresenceActivity.Chess => "chess",
         _ => null,
     };
 
@@ -98,6 +99,7 @@ public sealed class FriendsApi : IFriendsApi
         "breakout" => PresenceActivity.Breakout,
         "deeper" => PresenceActivity.Deeper,
         "remote" => PresenceActivity.Remote,
+        "chess" => PresenceActivity.Chess,
         _ => PresenceActivity.Offline,
     };
 

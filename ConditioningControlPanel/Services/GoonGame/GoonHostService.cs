@@ -171,6 +171,14 @@ namespace ConditioningControlPanel.Services.GoonGame
         {
             if (code == _roomCode && !again) return;
             _roomCode = code;
+            // Friends: an open room nobody has sat down in reads "hosting a Goon Game"; once a
+            // player sits (or the room closes) the plain "in a Goon Game" underneath shows again.
+            try
+            {
+                if (code != null && _host != null) App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.GoonHosting);
+                else App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.GoonHosting);
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService: friends activity: {E}", ex.Message); }
             try { RoomCodeChanged?.Invoke(); }
             catch (Exception ex) { App.Logger?.Debug("GoonHostService: RoomCodeChanged: {E}", ex.Message); }
         }
@@ -293,6 +301,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 if (_host.Window != null) _host.Window.Closed += (_, _) => DisposeAll();
                 StartHeartbeatWatch();
                 if (duckMainWindow) DuckMainWindow();
+                try { App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Goon); } catch { }
                 App.Logger?.Information("GoonHostService: launched");
             }
             catch (Exception ex)
@@ -2051,6 +2060,12 @@ namespace ConditioningControlPanel.Services.GoonGame
                 _host = null;
                 _pendingAutoHost = false;
                 SetRoomCode(null, again: false);
+                try
+                {
+                    App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.GoonHosting);
+                    App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Goon);
+                }
+                catch { }
                 // The handler dies with the core it was attached to; forgetting the reference is
                 // what lets the NEXT launch (a relaunch, a recovery) hook its own fresh core.
                 _micPermissionCore = null;
