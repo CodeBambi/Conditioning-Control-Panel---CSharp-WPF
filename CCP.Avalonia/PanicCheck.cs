@@ -16,7 +16,8 @@ namespace ConditioningControlPanel.Avalonia
     /// `--panic-check [Key]`: boots the real desktop path (so App's own StartPanicKey wiring is what
     /// runs) on a throwaway profile, starts the engine with flash/subliminal/bouncing text saved On, then presses the panic key through the X
     /// SERVER - XTestFakeKeyEvent on a second connection, exactly the path a physical key takes -
-    /// and asserts the engine and overlays stopped within 800 ms, the flags stayed On, the app stayed up, and a double press exits. Default key
+    /// and asserts the engine and overlays stopped within 800 ms, the flags stayed On, the app stayed up; then that a press pauses a
+    /// running session and Resume restarts only what has reached its start minute; and a double press exits. Default key
     /// Pause, which nothing else on a desktop reacts to. Non-zero on any failure. Run it through
     /// scripts/panic-check.sh: on a live KWin session XTest never comes back into Xwayland.
     /// </summary>
@@ -54,6 +55,7 @@ namespace ConditioningControlPanel.Avalonia
             bool closed = false, forced = false;
             shell.Closed += (_, _) => closed = true;
 
+            int Overlays() => lifetime.Windows.Count(w => w.IsVisible && w.GetType().Namespace!.EndsWith(".Overlays"));
             DispatcherTimer.RunOnce(() =>
             {
                 var s = CoreSettings.Current;
@@ -63,7 +65,6 @@ namespace ConditioningControlPanel.Avalonia
                 shell.StartEngine();
                 Check(X11PanicKey.IsListening, "App started the X11 panic listener");
                 Check(CoreEngine.IsRunning && BouncingTextOverlay.IsRunning, "engine started, bouncing text on screen before the press");
-                int Overlays() => lifetime.Windows.Count(w => w.IsVisible && w.GetType().Namespace!.EndsWith(".Overlays"));
                 Check(Overlays() > 0, $"{Overlays()} overlay windows before the press");
                 Press();
 
@@ -76,11 +77,41 @@ namespace ConditioningControlPanel.Avalonia
                     Check(overlays == 0, $"one press: {overlays} overlay windows left");
                     Check(s.FlashEnabled && s.SubliminalEnabled && s.BouncingTextEnabled, "one press: saved flags still On");
                     Check(!closed, "one press: the app is still up");
-                    // The first press was > 2 s ago by now, so these are presses 1 and 2 of a new ladder.
-                    DispatcherTimer.RunOnce(() => { Press(); Press(); }, TimeSpan.FromMilliseconds(1500));
-                    DispatcherTimer.RunOnce(() => { if (!closed) { forced = true; lifetime.Shutdown(); } }, TimeSpan.FromMilliseconds(4000));
+                    SessionPhase();
                 }, TimeSpan.FromMilliseconds(800));
             }, TimeSpan.FromMilliseconds(1500));
+
+            // A session: the press pauses it (WPF MainWindow.xaml.cs:1726) and Resume restarts only what has
+            // reached its start minute - flash and subliminal at 0, bouncing text deferred to minute 1.
+            void SessionPhase()
+            {
+                var session = new Models.Session { Id = "panic_check", Name = "Panic Check", DurationMinutes = 2 };
+                session.Settings.FlashEnabled = session.Settings.SubliminalEnabled = session.Settings.BouncingTextEnabled = true;
+                session.Settings.FlashPerHour = 600;
+                session.Settings.BouncingTextStartMinute = 1;
+                shell.StartSession(session);
+                var runner = App.Sessions!;
+                Check(runner.IsRunning && CoreFlash.IsRunning && CoreSubliminal.IsRunning && !BouncingTextOverlay.IsRunning,
+                    "session: flash + subliminal running, bouncing text deferred to minute 1");
+                DispatcherTimer.RunOnce(() =>
+                {
+                    Press();   // > 2 s after the last press: a new ladder
+                    DispatcherTimer.RunOnce(() =>
+                    {
+                        Check(runner.IsRunning && runner.IsPaused && runner.PauseCount == 1 && runner.XPPenalty == 100,
+                            "session press: the session is paused, not ended (1 pause, -100 XP)");
+                        Check(!CoreEngine.IsRunning && !CoreFlash.IsRunning && !CoreSubliminal.IsRunning && !BouncingTextOverlay.IsRunning,
+                            "session press: engine and every effect stopped");
+                        Check(Overlays() == 0, $"session press: {Overlays()} overlay windows left");
+                        shell.Named<Button>("BtnPauseSession")!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                        Check(!runner.IsPaused && CoreFlash.IsRunning && CoreSubliminal.IsRunning && !BouncingTextOverlay.IsRunning,
+                            "Resume: flash + subliminal restarted, bouncing text still waits for minute 1");
+                        // Presses 1 and 2 of a new ladder: the first pauses again, the second exits.
+                        DispatcherTimer.RunOnce(() => { Press(); Press(); }, TimeSpan.FromMilliseconds(2500));
+                        DispatcherTimer.RunOnce(() => { if (!closed) { forced = true; lifetime.Shutdown(); } }, TimeSpan.FromMilliseconds(5000));
+                    }, TimeSpan.FromMilliseconds(800));
+                }, TimeSpan.FromMilliseconds(2500));
+            }
 
             lifetime.Start(Array.Empty<string>());
             Check(closed && !forced, "double press: the app exited");

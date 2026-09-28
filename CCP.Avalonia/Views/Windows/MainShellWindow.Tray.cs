@@ -72,8 +72,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static NativeMenuItem Item(string key, Action action) =>
             new(Loc.Get(key)) { Command = new CompanionRelayCommand(action) };
 
-        /// <summary>The panic item: WPF StopEngine. Saved flags stay as the user set them.</summary>
-        internal static void StopEverything() => StopEngine();
+        /// <summary>The panic item: WPF StopEngine (a running session is paused, as the panic key does).
+        /// Saved flags stay as the user set them.</summary>
+        internal static void StopEverything()
+        {
+            Serilog.Log.Information("Tray: Stop everything");
+            StopEngine();
+        }
 
         /// <summary>TrayIconService.ShowWindow + MainWindow's OnShowRequested (ShowAvatarTube).</summary>
         public void ShowFromTray()

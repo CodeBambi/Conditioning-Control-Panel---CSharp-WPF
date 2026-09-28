@@ -97,7 +97,7 @@
 //   private void OnSessionStarted(…)               RESTORED in SessionRun.cs
 //   private void OnSessionStopped(…)               RESTORED in SessionRun.cs
 //   private void BtnStopSession_Click(…)           RESTORED in SessionRun.cs
-//   private void BtnPauseSession_Click(…)
+//   private void BtnPauseSession_Click(…)         RESTORED in SessionRun.cs
 //   public void ApplySessionSettings(…)
 //   public void UpdateSpiralOpacity(…)
 //   public void EnablePinkFilter(…)
@@ -258,13 +258,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         // ---- still blocked -------------------------------------------------------------------
-
-        // Pause needs the session engine itself (_sessionEngine.Pause/ResumeSession and its
-        // PauseCount for the tooltip) plus App.Lockdown.IsActive for the refusal, neither on this
-        // head. The middle third of it - the "costs XP" confirm over AppSettings.SkipPauseXpWarning
-        // and Views/Dialogs/MessageDialog - would port today, but a confirm in front of a pause
-        // that never happens is worse than a button that does nothing.
-        private void BtnPauseSession_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
 
         // Empty, and not because anything is missing: CmbPresets is collapsed on both heads (see
         // item 1 in the header), so this handler cannot fire. Loading a preset for real would also

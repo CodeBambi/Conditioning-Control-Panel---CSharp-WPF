@@ -18,11 +18,12 @@ namespace CCP.Avalonia.Tests;
 
 /// <summary>The head's session run (WPF MainWindow.Presets.cs StartSession / OnSessionStarted /
 /// OnSessionStopped / OnSessionLogReady): a started session locks the dials and shows its clock,
-/// Stop everything ends it early, the dials come back and the Ended Early recap opens by itself.</summary>
+/// Stop everything pauses it (the panic tail), the pause button resumes it, and a stop brings the dials back
+/// and opens the Ended Early recap by itself.</summary>
 public sealed class SessionRunWireTests
 {
     [Fact]
-    public async Task StartLocksAndLabelsTrayStopEndsEarlyAndOpensTheRecap()
+    public async Task StartLocksAndLabelsTrayStopPausesResumeRestartsStopOpensTheRecap()
     {
         await AvaloniaTestDispatcher.RunAsync(() =>
         {
@@ -50,8 +51,23 @@ public sealed class SessionRunWireTests
                 Assert.StartsWith("STOP SESSION (00:", stopLabel);
 
                 MainShellWindow.StopEverything();   // the tray's Stop everything (and the panic tail)
-                Assert.False(runner.IsRunning);
-                Assert.False(CoreEngine.IsRunning);
+                // WPF MainWindow.xaml.cs:1726: the session is paused, not ended; the engine stops.
+                Assert.True(runner.IsRunning && runner.IsPaused);
+                Assert.Equal(1, runner.PauseCount);
+                Assert.False(CoreEngine.IsRunning || CoreFlash.IsRunning);
+                Assert.True(shell.IsSessionFeatureLockActive);
+                var pause = shell.Named<Button>("BtnPauseSession")!;
+                Assert.True(pause.IsVisible);
+                Assert.Equal("\u25B6", shell.Named<TextBlock>("TxtPauseIcon")!.Text);
+                Assert.Equal(Loc.Get("tooltip_resume_session"), ToolTip.GetTip(pause));
+
+                pause.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));   // Resume
+                Assert.False(runner.IsPaused);
+                Assert.Equal("\u23F8", shell.Named<TextBlock>("TxtPauseIcon")!.Text);
+                Assert.Equal(Loc.GetF("tooltip_pause_session_100_xp_penalty_per_pause_npause", 1), ToolTip.GetTip(pause));
+
+                runner.Stop(completed: false);   // the stop-session confirm's OK
+                Assert.False(runner.IsRunning || CoreEngine.IsRunning || pause.IsVisible);
                 Assert.False(shell.IsSessionFeatureLockActive);
                 Assert.Equal(Loc.Get("label_start"), shell.Named<TextBlock>("TxtStartLabel")!.Text);
                 Assert.Equal(Loc.Get("btn_start_session"), Assert.IsType<TextBlock>(presets.BtnStartSession.Content).Text);

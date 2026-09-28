@@ -278,6 +278,7 @@ namespace ConditioningControlPanel.Avalonia
                 // schedule would otherwise keep the process alive.
                 desktop.MainWindow.Closed += (_, _) =>
                 {
+                    Serilog.Log.Information("Shell closed: stopping the session and the engine");
                     CoreEngine.StoppedHook = null;   // the shell is gone; do not repaint it
                     Sessions.Ticked -= shell.OnSessionTick;
                     Sessions.SessionLog.LogReady -= shell.OnSessionLogReady;
