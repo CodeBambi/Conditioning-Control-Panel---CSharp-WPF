@@ -409,8 +409,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(null);
             if (await editor.ShowDialog<bool>(this) && editor.Result != null)
             {
-                // ponytail: QuizStore.SaveCustomCategory exists in Core; calling it here is quiz
-                // unit 6 (category editor). Until then the new category is not persisted.
+                QuizStore.SaveCustomCategory(editor.Result);
                 BuildCategoryButtons();
             }
         }
@@ -423,8 +422,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(catDef);
             if (await editor.ShowDialog<bool>(this))
             {
-                // ponytail: QuizStore.SaveCustomCategory (Core) is quiz unit 6's to call here when
-                // editor.Result is non-null. If Result is null, it was deleted (handled inside editor)
+                if (editor.Result != null)
+                    QuizStore.SaveCustomCategory(editor.Result);
+                // If Result is null, it was deleted (handled inside editor)
                 BuildCategoryButtons();
             }
         }

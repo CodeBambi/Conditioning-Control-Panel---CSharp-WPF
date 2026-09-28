@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -22,8 +23,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// PORTED from ConditioningControlPanel/Windows/QuizCategoryEditorWindow.xaml.cs. Deviations:
     ///  - <c>QuizCategoryDefinition</c> / <c>QuizArchetypeDefinition</c> come from Core
     ///    (CCP.Core/Services/Quiz/QuizStore.cs).
-    ///  - The template dropdown, the built-in name-collision check and Delete need QuizStore.X
-    ///    (Core) wired - quiz unit 5/6; the AI preview is head-side. Each carries a ponytail comment.
+    ///  - The AI preview is head-side and carries a ponytail comment.
     ///  - <c>PromptValidator</c> IS in Core, so <see cref="RunPromptValidation"/> runs for real, and
     ///    its flags go to the app's moderation log through <see cref="CoreModerationLog"/>.
     ///  - The <c>MessageBox.Show</c> calls are this head's <see cref="MessageDialog"/>, which is
@@ -272,14 +272,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var templateId = item.Tag?.ToString();
             if (string.IsNullOrEmpty(templateId)) return;
 
-            // ponytail: needs QuizStore.GetBuiltInCategories() / FindCategory() (Core) wired -
-            // quiz unit 5/6 - for the real category name and its archetype table.
-            // The skeleton below is the WPF original's, minus the RESULT ARCHETYPES block it filled
-            // from the built-in definition.
-            _txtPrompt.Text = GetBuiltInPromptText(templateId);
+            var builtIn = QuizStore.GetBuiltInCategories().FirstOrDefault(c => c.Id == templateId);
+            if (builtIn == null) return;
+
+            // WPF QuizCategoryEditorWindow.xaml.cs:220 - prompt skeleton, then the archetypes.
+            _txtPrompt.Text = GetBuiltInPromptText(builtIn);
+            PopulateArchetypes(builtIn.Archetypes);
         }
 
-        private static string GetBuiltInPromptText(string categoryId) => $@"You are a quiz master for a ""{categoryId}"" personality quiz.
+        private static string GetBuiltInPromptText(QuizCategoryDefinition def) => $@"You are a quiz master for a ""{def.Name}"" personality quiz.
 
 TONE: [Describe the voice and attitude — e.g. warm, teasing, authoritative]
 
@@ -299,6 +300,9 @@ INTENSITY SCALING — Scale with score percentage:
 - LOW (below 50%): [Mild, everyday scenarios]
 - MEDIUM (50-74%): [More intense, specific scenarios]
 - HIGH (75%+): [Deep, extreme scenarios]
+
+RESULT ARCHETYPES (assigned at the end based on score):
+{string.Join("\n", def.Archetypes.Select(a => $"- {a.MinPercentage}-{a.MaxPercentage}%: {a.Name}"))}
 
 FORMAT — You MUST use EXACTLY this format, nothing else:
 Q: [your question here]
@@ -342,7 +346,7 @@ Do NOT include any other text before or after the question format. Just the ques
         /// which makes the handler async — hence <c>async void</c>, which is what an event handler
         /// is allowed to be and what <see cref="WireActionBorder"/> binds to.
         /// </summary>
-        private async void BtnSave_Click(Border _)
+        internal async void BtnSave_Click(Border _)
         {
             var name = (_txtName.Text ?? "").Trim();
             if (string.IsNullOrWhiteSpace(name))
@@ -370,9 +374,14 @@ Do NOT include any other text before or after the question format. Just the ques
                 return;
             }
 
-            // ponytail: the built-in name-collision guard (and its
-            // msg_this_name_conflicts_with_a_built_in_category warning) needs
-            // QuizStore.GetBuiltInCategories() (Core) wired - quiz unit 5/6.
+            // Check for name collision with built-in categories
+            var builtInNames = QuizStore.GetBuiltInCategories().Select(c => c.Name.ToLowerInvariant());
+            if (builtInNames.Contains(name.ToLowerInvariant()) && _existing?.Name.ToLowerInvariant() != name.ToLowerInvariant())
+            {
+                await MessageDialog.ShowAsync(this, "Name Conflict",
+                    Loc.Get("msg_this_name_conflicts_with_a_built_in_category"));
+                return;
+            }
 
             // P1.3 PromptValidator: soft validation, warns but does not block save.
             RunPromptValidation(prompt);
@@ -426,7 +435,7 @@ Do NOT include any other text before or after the question format. Just the ques
             CoreModerationLog.RecordEdit("SystemPromptTemplate", result.MatchedPatterns.Count, "quiz_category");
         }
 
-        private async void BtnDelete_Click(Border _)
+        internal async void BtnDelete_Click(Border _)
         {
             if (_existing == null) return;
 
@@ -435,9 +444,7 @@ Do NOT include any other text before or after the question format. Just the ques
                 $"Delete the \"{_existing.Name}\" category? This cannot be undone.");
             if (!confirmed) return;
 
-            // ponytail: needs QuizStore.DeleteCustomCategory(_existing.Id) (Core) wired - quiz
-            // unit 5/6 - to remove it from the stored custom-category file. The null Result below is already the
-            // "deleted" signal the caller reads, so the dialog contract itself is complete.
+            QuizStore.DeleteCustomCategory(_existing.Id);
             Result = null;
             Close(true);
         }
