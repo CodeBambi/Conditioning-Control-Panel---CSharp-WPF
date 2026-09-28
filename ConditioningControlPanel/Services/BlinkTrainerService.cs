@@ -557,13 +557,11 @@ public class BlinkTrainerService : IDisposable
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
         };
-        if (isGif)
+        if (isGif || isAnimatedWebp)
         {
-            AnimationBehavior.SetRepeatBehavior(img, RepeatBehavior.Forever);
-            AnimationBehavior.SetSourceUri(img, new Uri(path));
-        }
-        else if (isAnimatedWebp)
-        {
+            // GIFs ride the same path as animated webp (ccp-bugs #1295 / #1310): XamlAnimatedGif's
+            // frame loop takes an unbounded WriteableBitmap.Lock() on the UI thread, which hangs
+            // the app whenever the render thread stalls. SKCodec decodes GIFs too.
             // Decodes off-thread and loops via a keyframe animation on Image.Source.
             // TeardownHostChildren's Detach is load-bearing: the Forever clock pins
             // the Image until the animation is cleared.

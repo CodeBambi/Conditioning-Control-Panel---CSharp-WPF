@@ -659,6 +659,29 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // #1310: check the Intiface address before connecting. A fixable one (a dot before the
+            // port, no ws://) is corrected in the box; an unusable one gets a clear message instead
+            // of the generic "make sure it is running".
+            if (HapticCfg.V2.Provider("buttplug").Enabled)
+            {
+                var typed = HapticCfg.ButtplugUrl ?? "";
+                var fixedUrl = Services.Haptics.ButtplugUrl.Normalize(typed, out _);
+                if (fixedUrl == null)
+                {
+                    MessageBox.Show(Loc.GetF("haptics_intiface_url_invalid", typed.Trim()), Loc.Get("tab_haptics"),
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                if (!string.IsNullOrWhiteSpace(typed) && fixedUrl != typed.Trim())
+                {
+                    HapticCfg.ButtplugUrl = fixedUrl;
+                    App.Settings.Save();
+                    _isLoading = true;
+                    try { HapticsTab.TxtHapticIntifaceUrl.Text = fixedUrl; }
+                    finally { _isLoading = false; }
+                }
+            }
+
             HapticsTab.BtnHapticConnect.Content = Loc.Get("login_connecting");
             HapticsTab.BtnHapticConnect.IsEnabled = false;
             try

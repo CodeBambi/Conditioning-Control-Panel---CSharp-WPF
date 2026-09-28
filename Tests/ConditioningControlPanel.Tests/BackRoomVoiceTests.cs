@@ -9,8 +9,9 @@ namespace ConditioningControlPanel.Tests;
 
 /// <summary>
 /// The spoken subliminal word (CONTRACT 10.21): the phrase normaliser the manifest is keyed on, what
-/// <c>words.json</c> is allowed to say, and the order the four sources are tried in. Everything runs on
-/// the class's own seams, so nothing here opens a device or synthesises speech.
+/// <c>words.json</c> is allowed to say, and the order the recorded sources are tried in (no synthetic
+/// speech: a phrase with no recording is <c>none</c>, silent). Everything runs on the class's own seams,
+/// so nothing here opens a device.
 /// </summary>
 public class BackRoomVoiceTests
 {
@@ -132,27 +133,23 @@ public class BackRoomVoiceTests
     [Fact]
     public void Resolve_ThePlayersOwnClipWins()
     {
-        var (source, path) = BackRoomVoice.Resolve("Let Go", Has("clip.mp3"), Has("preset.mp3"), Has("tts.wav"));
+        var (source, path) = BackRoomVoice.Resolve("Let Go", Has("clip.mp3"), Has("preset.mp3"));
         Assert.Equal("clip", source);
         Assert.Equal("clip.mp3", path);
     }
 
     [Fact]
-    public void Resolve_ThenTheBundledPresetThenWindowsSpeech()
+    public void Resolve_ThenTheBundledPreset()
     {
-        var (s1, p1) = BackRoomVoice.Resolve("Let Go", Has(null), Has("preset.mp3"), Has("tts.wav"));
+        var (s1, p1) = BackRoomVoice.Resolve("Let Go", Has(null), Has("preset.mp3"));
         Assert.Equal("preset", s1);
         Assert.Equal("preset.mp3", p1);
-
-        var (s2, p2) = BackRoomVoice.Resolve("Let Go", Has(null), Has(null), Has("tts.wav"));
-        Assert.Equal("tts", s2);
-        Assert.Equal("tts.wav", p2);
     }
 
     [Fact]
-    public void Resolve_NothingAtAllIsNoneSoThePageSpeaksForItself()
+    public void Resolve_NoRecordingIsNoneAndStaysSilent()
     {
-        var (source, path) = BackRoomVoice.Resolve("Let Go", Has(null), Has(null), Has(null));
+        var (source, path) = BackRoomVoice.Resolve("Let Go", Has(null), Has(null));
         Assert.Equal("none", source);
         Assert.Null(path);
     }
@@ -161,7 +158,7 @@ public class BackRoomVoiceTests
     public void Resolve_ThePresetIsLookedUpByTheNormalisedPhrase()
     {
         var asked = new List<string>();
-        BackRoomVoice.Resolve("  Let  GO!  ", Has(null), Has("let-go.mp3", asked), Has(null));
+        BackRoomVoice.Resolve("  Let  GO!  ", Has(null), Has("let-go.mp3", asked));
         Assert.Equal(new[] { "let go" }, asked);
     }
 
@@ -169,7 +166,7 @@ public class BackRoomVoiceTests
     public void Resolve_AnEmptyPhraseNeverReachesASource()
     {
         var asked = new List<string>();
-        var (source, _) = BackRoomVoice.Resolve("!!!", Has("clip.mp3", asked), Has("preset.mp3", asked), Has("tts.wav", asked));
+        var (source, _) = BackRoomVoice.Resolve("!!!", Has("clip.mp3", asked), Has("preset.mp3", asked));
         Assert.Equal("none", source);
         Assert.Empty(asked);
     }
@@ -177,27 +174,27 @@ public class BackRoomVoiceTests
     [Fact]
     public void Resolve_ALookupThatThrowsOrReturnsBlankFallsThroughInsteadOfBreakingTheBeat()
     {
-        var (s1, p1) = BackRoomVoice.Resolve("Drop", _ => throw new IOException("gone"), Has("preset.mp3"), Has("tts.wav"));
+        var (s1, p1) = BackRoomVoice.Resolve("Drop", _ => throw new IOException("gone"), Has("preset.mp3"));
         Assert.Equal("preset", s1);
         Assert.Equal("preset.mp3", p1);
 
-        var (s2, p2) = BackRoomVoice.Resolve("Drop", Has("   "), Has(null), Has("tts.wav"));
-        Assert.Equal("tts", s2);
-        Assert.Equal("tts.wav", p2);
+        var (s2, p2) = BackRoomVoice.Resolve("Drop", Has("   "), Has(null));
+        Assert.Equal("none", s2);
+        Assert.Null(p2);
     }
 
     // ============================ Speak ============================
 
-    private static BackRoomVoice Rig(string? clip, string? preset, string? tts, List<string> played,
+    private static BackRoomVoice Rig(string? clip, string? preset, List<string> played,
         Func<string, string?>? reverse = null, int durationMs = 500, bool play = true)
-        => new(Has(clip), Has(preset), Has(tts), reverse ?? (p => p + ".rev"), _ => durationMs,
+        => new(Has(clip), Has(preset), reverse ?? (p => p + ".rev"), _ => durationMs,
                p => { played.Add(p); return play; }, () => played.Add("<stop>"));
 
     [Fact]
     public void Speak_PlaysTheResolvedClipAndAcksItsSourceAndDuration()
     {
         var played = new List<string>();
-        var ack = Rig("clip.mp3", null, null, played).Speak("Let Go", reversed: false, seed: 7);
+        var ack = Rig("clip.mp3", null, played).Speak("Let Go", reversed: false, seed: 7);
         Assert.Equal("clip", ack.Source);
         Assert.Equal(500, ack.DurationMs);
         Assert.Equal(new[] { "clip.mp3" }, played);
@@ -207,7 +204,7 @@ public class BackRoomVoiceTests
     public void Speak_ReversedPlaysTheReversedRender()
     {
         var played = new List<string>();
-        var ack = Rig(null, "let-go.mp3", null, played).Speak("Let Go", reversed: true, seed: 7);
+        var ack = Rig(null, "let-go.mp3", played).Speak("Let Go", reversed: true, seed: 7);
         Assert.Equal("preset", ack.Source);
         Assert.Equal(new[] { "let-go.mp3.rev" }, played);
     }
@@ -216,16 +213,16 @@ public class BackRoomVoiceTests
     public void Speak_AReversalThatCannotBeRenderedStillPlaysForwards()
     {
         var played = new List<string>();
-        var ack = Rig(null, null, "tts.wav", played, reverse: _ => null).Speak("Drop", reversed: true, seed: 1);
-        Assert.Equal("tts", ack.Source);
-        Assert.Equal(new[] { "tts.wav" }, played);
+        var ack = Rig(null, "drop.mp3", played, reverse: _ => null).Speak("Drop", reversed: true, seed: 1);
+        Assert.Equal("preset", ack.Source);
+        Assert.Equal(new[] { "drop.mp3" }, played);
     }
 
     [Fact]
     public void Speak_AMuteReportsItsSourceWithNoDurationSoThePageStaysQuiet()
     {
         var played = new List<string>();
-        var ack = Rig("clip.mp3", null, null, played, play: false).Speak("Drop", reversed: false, seed: 1);
+        var ack = Rig("clip.mp3", null, played, play: false).Speak("Drop", reversed: false, seed: 1);
         Assert.Equal("clip", ack.Source);
         Assert.Equal(0, ack.DurationMs);
     }
@@ -234,7 +231,7 @@ public class BackRoomVoiceTests
     public void Speak_NothingToSayIsNoneAndPlaysNothing()
     {
         var played = new List<string>();
-        var rig = Rig(null, null, null, played);
+        var rig = Rig(null, null, played);
         Assert.Equal("none", rig.Speak("Drop", false, 1).Source);
         Assert.Equal("none", rig.Speak("   ", false, 1).Source);
         Assert.Equal("none", rig.Speak(new string('x', BackRoomVoice.MaxTextLength + 1), false, 1).Source);
@@ -245,7 +242,7 @@ public class BackRoomVoiceTests
     public void Stop_GoesStraightThrough()
     {
         var played = new List<string>();
-        Rig("clip.mp3", null, null, played).Stop();
+        Rig("clip.mp3", null, played).Stop();
         Assert.Equal(new[] { "<stop>" }, played);
     }
 
