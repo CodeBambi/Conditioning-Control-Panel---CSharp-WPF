@@ -11,16 +11,11 @@ using Serilog;
 namespace ConditioningControlPanel.Services
 {
     /// <summary>
-    /// The Patreon / SubscribeStar token lifecycle every head shares: code exchange, refresh,
-    /// validate, tier, whitelist, the 24h cache, the 14-day offline grace and (Patreon only)
-    /// <see cref="GrantLooksDead"/>. Moved from WPF PatreonService / SubscribeStarService, which now
-    /// delegate here; the two providers differ exactly where those originals did (each branch reads
-    /// <c>_patreon</c>). The OAuth browser flow stays with the caller.
-    ///
-    /// <para>Tokens and cache go through <see cref="CoreSecrets"/> as <c>{prefix}_auth</c> /
-    /// <c>{prefix}_cache</c>, holding the Newtonsoft JSON WPF's SecureTokenStorage encrypts, so each
-    /// head keeps its own store (WPF: its DPAPI .dat files; Avalonia: libsecret or the same .dat
-    /// files). No store attached means no tokens: not signed in, not entitled.</para>
+    /// The Patreon / SubscribeStar token lifecycle every head shares (exchange, refresh, validate, tier,
+    /// whitelist, 24h cache, 14-day grace, Patreon's <see cref="GrantLooksDead"/>), moved from WPF
+    /// PatreonService / SubscribeStarService, which delegate; providers differ where those did (<c>_patreon</c>).
+    /// Tokens/cache go through <see cref="CoreSecrets"/> as <c>{prefix}_auth</c>/<c>_cache</c> (WPF's JSON),
+    /// so each head keeps its own store. No store: no tokens, not entitled. The browser flow stays with the caller.
     /// </summary>
     public sealed class ProviderSubscription : IDisposable
     {
@@ -34,12 +29,10 @@ namespace ConditioningControlPanel.Services
         private readonly bool _patreon;
         private readonly Func<AppSettings?> _settings;
 
-        /// <summary>WPF: <c>ProfileSyncService.ApplyValidatePrizes</c>(prizesFor, unifiedId, prizes, source).
-        /// Unset (Avalonia until sync lands): prizes are ignored.</summary>
+        /// <summary>WPF: <c>ProfileSyncService.ApplyValidatePrizes</c>. Unset: prizes ignored.</summary>
         public static volatile Action<string?, string?, PrizesBlock?, string>? PrizesSink;
 
-        /// <summary>Patreon only: another provider's display name to adopt when Patreon has none
-        /// (WPF: <c>App.Discord.CustomDisplayName</c>). Unset: none.</summary>
+        /// <summary>Patreon only: another provider's name to adopt (WPF: Discord's). Unset: none.</summary>
         public Func<string?>? PeerDisplayName { get; set; }
 
         /// <summary>The proxy client. The head's own proxy calls (display-name check) share it.</summary>
@@ -56,19 +49,15 @@ namespace ConditioningControlPanel.Services
         public bool NeedsRegistration { get; private set; }
         public bool NeedsDisplayNameMigration { get; set; }
 
-        /// <summary>Patreon only. This launch saw the proxy REFUSE to refresh the stored grant
-        /// (<see cref="PatreonGrantHealth"/>): set on a refusal, cleared by any successful refresh,
-        /// validate or exchange, never touched by an outage. Decides whether a repair is OFFERED,
-        /// never what anyone is entitled to. In memory only, by design.</summary>
+        /// <summary>Patreon only: the proxy REFUSED to refresh this grant (<see cref="PatreonGrantHealth"/>). Offers
+        /// a repair, grants nothing; cleared by any good refresh/validate/exchange; in memory only.</summary>
         public bool GrantLooksDead { get; private set; }
 
         /// <summary>False until <see cref="InitializeAsync"/> settled this launch's entitlement
         /// (#1048: a destructive repair must never fire against the pre-validation blank).</summary>
         public bool EntitlementResolved { get; private set; }
 
-        /// <param name="prefix">"patreon" or "substar": the proxy path segment and the secret names.</param>
-        /// <param name="settings">Defaults to the head's settings via <see cref="CoreSettings"/>.</param>
-        /// <param name="handler">Tests only: a fake proxy.</param>
+        /// <param name="prefix">"patreon" or "substar". <paramref name="settings"/> defaults to CoreSettings; <paramref name="handler"/> is for tests.</param>
         public ProviderSubscription(string prefix, Func<AppSettings?>? settings = null, HttpMessageHandler? handler = null)
         {
             _prefix = prefix;
@@ -90,9 +79,8 @@ namespace ConditioningControlPanel.Services
             || settings?.HasCachedPremiumAccess == true
             || substar?.CurrentTier >= PatreonTier.Level1 || substar?.IsWhitelisted == true;
 
-        /// <summary>The Lab (tier 2) gate - the goon-game HOST bar, mirroring the server's
-        /// <c>computeEffectiveTier &gt;= 2</c>; whitelist folds to tier 2. The premium grace is NOT
-        /// OR'd in, only the Lab's own stamp (a tier-1 patron never falls through it).</summary>
+        /// <summary>The Lab (tier 2) HOST bar, as the server's <c>computeEffectiveTier &gt;= 2</c>; whitelist
+        /// folds to tier 2. Only the Lab's own grace stamp counts, never the premium one.</summary>
         public static bool HasLabAccess(ProviderSubscription? patreon, ProviderSubscription? substar, AppSettings? settings) =>
             patreon?.CurrentTier >= PatreonTier.Level2 || patreon?.IsWhitelisted == true
             || substar?.CurrentTier >= PatreonTier.Level2 || substar?.IsWhitelisted == true
@@ -116,10 +104,8 @@ namespace ConditioningControlPanel.Services
                 if (IsAuthenticated) await ValidateSubscriptionAsync();
                 else if (_patreon && _settings() is { } s)
                 {
-                    // No valid tokens - clear the cached tier. The offline grace stamps are NOT
-                    // Patreon-OAuth-shaped: a Discord-linked or SubscribeStar account has no
-                    // Patreon tokens by construction, so they are kept while a unified session
-                    // exists and left to expire on their own; a real logout clears them.
+                    // No tokens: clear the cached tier. Grace stamps are kept while a unified session
+                    // exists (Discord/SubscribeStar accounts have no Patreon tokens); logout clears them.
                     s.PatreonTier = 0;
                     var hasUnifiedSession = !string.IsNullOrWhiteSpace(s.UnifiedId) || !string.IsNullOrWhiteSpace(s.AuthToken);
                     if (!hasUnifiedSession) s.PatreonPremiumValidUntil = s.PatreonLabValidUntil = null;
@@ -129,8 +115,7 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex) { Log.Warning(ex, "Failed to validate {Provider} subscription on startup", _label); }
             finally
             {
-                // Resolved either way: a validation that THREW leaves the cached/grace state as
-                // this launch's answer, which is still an answer (#1048).
+                // Resolved either way: a throw leaves cache/grace as this launch's answer (#1048).
                 EntitlementResolved = true;
             }
         }
@@ -212,9 +197,8 @@ namespace ConditioningControlPanel.Services
                     var refreshed = await RefreshTokensAsync(tokens.RefreshToken, tokens.ExpiresAt);
                     if (!refreshed)
                     {
-                        // Patreon: a refresh failure is usually transient, so DON'T hard-drop a
-                        // paying subscriber (#585) - keep the cached tier; the 24h cache and the
-                        // 14-day grace still time-box it. SubscribeStar drops to None, as it did.
+                        // Patreon keeps the cached tier (#585: usually transient; cache + grace time-box it).
+                        // SubscribeStar drops to None, as it did.
                         if (!_patreon) return Drop();
                         Log.Warning("Patreon token refresh failed (expired access token) - keeping cached tier {Tier}", CurrentTier);
                         return CurrentTier;
@@ -232,8 +216,7 @@ namespace ConditioningControlPanel.Services
 
                 IsVerifying = true;
 
-                // Per-request message so the Bearer and X-Auth-Token never accumulate on the
-                // shared client. The server uses X-Auth-Token to heal a divergent token (BUG-7DCJHDP3JZ).
+                // Per-request headers (never accumulate); X-Auth-Token lets the server heal it (BUG-7DCJHDP3JZ).
                 using var request = new HttpRequestMessage(_patreon ? HttpMethod.Get : HttpMethod.Post, $"/{_prefix}/validate");
                 var prizesFor = settings?.UnifiedId;
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
@@ -283,9 +266,8 @@ namespace ConditioningControlPanel.Services
             GrantLooksDead = false;
             PrizesSink?.Invoke(prizesFor, sub.UnifiedId, sub.Prizes, $"{_label} validate");
 
-            // Server healed a divergent auth token (present only on mismatch; never cached).
-            // Patreon refuses it when the server resolved a DIFFERENT unified record than this
-            // session: adopting it would flip-flop with the other provider forever.
+            // Server-healed auth token (only on mismatch; never cached). Patreon refuses one for a
+            // DIFFERENT unified record: adopting it would flip-flop with the other provider forever.
             if (!string.IsNullOrEmpty(sub.AuthToken) && settings != null)
             {
                 var local = settings.UnifiedId;
@@ -307,8 +289,7 @@ namespace ConditioningControlPanel.Services
             IsWhitelisted = whitelisted;
             if (_patreon) NeedsRegistration = sub.NeedsRegistration;
 
-            // Adopt the server's unified id; never clobber one another provider set
-            // (the account service does conflict detection).
+            // Adopt the server's unified id; never clobber one another provider set.
             if (!string.IsNullOrEmpty(sub.UnifiedId))
             {
                 UnifiedUserId = sub.UnifiedId;
@@ -352,9 +333,8 @@ namespace ConditioningControlPanel.Services
                 UnifiedId = sub.UnifiedId
             });
 
-            // Premium extends the shared 14-day offline grace. The Lab (tier-2) half is stamped
-            // from the tier this validation returned. Patreon: a tier-1 answer kills a stale Lab
-            // window. SubscribeStar: whitelisted also stamps it, and a tier-1 answer leaves it be.
+            // Premium extends the 14-day grace; the Lab half follows this tier. Patreon tier 1 kills a stale
+            // Lab window; SubscribeStar also stamps it when whitelisted and leaves it on tier 1.
             if ((newTier >= PatreonTier.Level1 || whitelisted) && settings != null)
             {
                 settings.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(GraceDays);
@@ -369,8 +349,7 @@ namespace ConditioningControlPanel.Services
             return newTier;
         }
 
-        /// <param name="expiresAtUtc">When the access token being replaced expired: the only thing
-        /// that tells a revoked grant from a proxy outage (see <see cref="PatreonGrantHealth"/>).</param>
+        /// <param name="expiresAtUtc">Tells a revoked grant from a proxy outage (<see cref="PatreonGrantHealth"/>).</param>
         private async Task<bool> RefreshTokensAsync(string refreshToken, DateTime? expiresAtUtc)
         {
             try
@@ -386,8 +365,7 @@ namespace ConditioningControlPanel.Services
                 if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
                 {
                     Log.Warning("{Provider} token refresh error: {Error}", _label, tokenResponse?.ErrorDescription);
-                    // A missing body is a malformed answer, not a verdict; an OAuth error field is
-                    // the refusal wearing a 200.
+                    // A missing body is no verdict; an OAuth error field is a refusal wearing a 200.
                     return NoteRefresh(tokenResponse == null
                         ? PatreonRefreshOutcome.Unavailable
                         : PatreonGrantHealth.Classify(response.StatusCode, tokenResponse.Error, threw: false, expiresAtUtc, DateTime.UtcNow));
@@ -404,8 +382,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        /// <summary>Only a refusal raises <see cref="GrantLooksDead"/>, a success lowers it, an outage
-        /// leaves it be. SubscribeStar never had the flag, so it only reports success.</summary>
+        /// <summary>Refusal raises <see cref="GrantLooksDead"/>, success lowers it, an outage leaves it (Patreon only).</summary>
         private bool NoteRefresh(PatreonRefreshOutcome outcome)
         {
             if (_patreon && outcome == PatreonRefreshOutcome.Refreshed) GrantLooksDead = false;
@@ -452,8 +429,9 @@ namespace ConditioningControlPanel.Services
         public bool IsAuthenticated => !string.IsNullOrEmpty(RetrieveTokens()?.AccessToken);
         public string? GetAccessToken() => RetrieveTokens()?.AccessToken;
 
+        /// <summary>Throws on a store fault, as WPF StoreTokens did (else a failed save reads as Refreshed).</summary>
         public void StoreTokens(string accessToken, string refreshToken, DateTime expiresAt) =>
-            CoreSecrets.Store(_prefix + "_auth", JsonConvert.SerializeObject(new PatreonTokenData
+            CoreSecrets.StoreOrThrow(_prefix + "_auth", JsonConvert.SerializeObject(new PatreonTokenData
             { AccessToken = accessToken, RefreshToken = refreshToken, ExpiresAt = expiresAt }));
 
         public void StoreCachedState(PatreonCachedState state) =>

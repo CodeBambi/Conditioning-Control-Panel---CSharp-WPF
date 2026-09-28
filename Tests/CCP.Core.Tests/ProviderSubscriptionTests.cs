@@ -17,12 +17,8 @@ namespace CCP.Core.Tests;
 [CollectionDefinition(Name)]
 public sealed class CoreSecretsStatics { public const string Name = "CoreSecretsStatics"; }
 
-/// <summary>
-/// The Patreon / SubscribeStar lifecycle (ProviderSubscription) against a fake proxy. Response
-/// bodies are transcribed from the proxy shapes the WPF services read (PatreonModels.cs:
-/// PatreonSubscriptionResponse / PatreonTokenResponse); expected outcomes from the pre-move WPF
-/// PatreonService.cs / SubscribeStarService.cs. Nothing here reached the real proxy.
-/// </summary>
+/// <summary>ProviderSubscription against a fake proxy. Bodies transcribed from the proxy shapes WPF reads
+/// (PatreonModels.cs); outcomes from pre-move WPF PatreonService/SubscribeStarService. No real proxy.</summary>
 [Collection(CoreSecretsStatics.Name)]
 public sealed class ProviderSubscriptionTests : IDisposable
 {
@@ -148,11 +144,8 @@ public sealed class ProviderSubscriptionTests : IDisposable
         Assert.False(p.GrantLooksDead);
     }
 
-    /// <summary>
-    /// WPF #585 + PatreonGrantHealth: an expired token whose refresh fails keeps the cached tier and
-    /// the tokens. Only a refusal (4xx, or a 5xx once the expiry is 3+ days stale) marks the grant
-    /// dead; a young 5xx or a throw says nothing. SubscribeStar drops to None and has no flag.
-    /// </summary>
+    /// <summary>WPF #585 + PatreonGrantHealth: a failed refresh keeps the cached tier and tokens; only a refusal
+    /// (4xx, or 5xx on a 3+ day stale expiry) marks the grant dead. SubscribeStar drops to None, no flag.</summary>
     [Theory]
     [InlineData("patreon", 400, 1, true)]
     [InlineData("patreon", 500, 4, true)]
@@ -237,6 +230,24 @@ public sealed class ProviderSubscriptionTests : IDisposable
         var json = _secrets["patreon_auth"]!;
         Assert.StartsWith("{\"access_token\":\"access-2\",\"refresh_token\":\"refresh-2\",\"expires_at\":\"", json);
         Assert.True(p.IsAuthenticated);
+    }
+
+    /// <summary>WPF's StoreTokens rethrew: a token that was not saved fails the exchange and is no refresh.</summary>
+    [Fact]
+    public async Task ATokenStoreThatThrows_FailsTheExchange_AndIsNotARefresh()
+    {
+        var inner = CoreSecrets.StoreProvider!;
+        CoreSecrets.StoreProvider = (n, v) => { if (n == "patreon_auth" && v != null) throw new System.IO.IOException("disk"); inner(n, v); };
+        _proxy.Routes["/patreon/token"] = _proxy.Routes["/patreon/refresh"] = (HttpStatusCode.OK, Refreshed);
+        using var p = Make("patreon");
+        await Assert.ThrowsAsync<System.IO.IOException>(() => p.ExchangeCodeAsync(new { code = "c1" }));
+        _secrets["patreon_cache"] = JsonConvert.SerializeObject(new PatreonCachedState
+        { Tier = PatreonTier.Level1, IsActive = true, CacheExpiresAt = DateTime.UtcNow.AddHours(1) });
+        Tokens("patreon", "access-1", DateTime.UtcNow.AddDays(-5));
+        using var q = Make("patreon");
+        Assert.Equal(PatreonTier.Level1, await q.ValidateSubscriptionAsync(forceRefresh: true));
+        Assert.False(q.GrantLooksDead);
+        Assert.DoesNotContain(_proxy.Seen, s => s.Contains("/validate"));
     }
 
     [Fact]

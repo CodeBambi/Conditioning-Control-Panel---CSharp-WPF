@@ -5,12 +5,9 @@ using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Platform;
 
-/// <summary>
-/// Seeds <see cref="CoreAccount"/> from Core's <see cref="ProviderSubscription"/> (the lifecycle WPF's
-/// services delegate to), tokens via CoreSecrets (<see cref="SecretStore"/>). FAIL CLOSED: a provider
-/// that cannot be built seeds nothing; CoreAccount turns a throwing provider into "no".
-/// No login UI yet (unit 5), no Discord (unit 4b), no sync (units 6-7).
-/// </summary>
+/// <summary>Seeds <see cref="CoreAccount"/> from Core's <see cref="ProviderSubscription"/>, tokens via CoreSecrets.
+/// FAIL CLOSED: a provider that cannot be built seeds nothing; CoreAccount turns a throw into "no".
+/// No login UI yet (unit 5), no Discord (unit 4b), no sync (units 6-7).</summary>
 internal static class AccountSeed
 {
     internal static ProviderSubscription? Patreon { get; private set; }
@@ -44,10 +41,7 @@ internal static class AccountSeed
         return true;
     }
 
-    /// <summary>WPF's startup order: Patreon validates, then SubscribeStar. Never throws.</summary>
-    internal static async Task InitializeAsync()
-    {
-        if (Patreon is { } p) await p.InitializeAsync();
-        if (SubscribeStar is { } s) await s.InitializeAsync();
-    }
+    /// <summary>Both validate at once, as WPF starts them (App.xaml.cs). Never throws.</summary>
+    internal static Task InitializeAsync() =>
+        Task.WhenAll(Patreon?.InitializeAsync() ?? Task.CompletedTask, SubscribeStar?.InitializeAsync() ?? Task.CompletedTask);
 }

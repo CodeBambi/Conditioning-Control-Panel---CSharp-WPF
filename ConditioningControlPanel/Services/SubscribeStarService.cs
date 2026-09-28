@@ -47,10 +47,6 @@ namespace ConditioningControlPanel.Services
         public string? UnifiedUserId { get => _core.UnifiedUserId; set => _core.UnifiedUserId = value; }
         public bool IsWhitelisted => _core.IsWhitelisted;
 
-        /// <summary>Tier 1+ OR whitelisted. OR'd into the canonical gate (PatreonService.HasPremiumAccess).</summary>
-        public bool HasAiAccess => HasPremiumAccess;
-        public bool HasPremiumAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted;
-
         public Task InitializeAsync() => _core.InitializeAsync();
         public Task<PatreonTier> ValidateSubscriptionAsync(bool forceRefresh = false) => _core.ValidateSubscriptionAsync(forceRefresh);
         public string? GetAccessToken() => _core.GetAccessToken();
