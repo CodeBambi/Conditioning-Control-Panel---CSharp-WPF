@@ -37,6 +37,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private bool _exitRequested;
         // WPF TrayIconService._windowClosed: Show() on a closed window throws.
         private bool _windowClosed;
+        // WPF TrayIconService._hasShownFirstMinimizeNotification.
+        private bool _shownFirstMinimizeNotification;
 
         internal TrayIcon CreateTray()
         {
@@ -123,8 +125,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>Windows always has a tray; Linux has one only while a StatusNotifierWatcher owns its name.</summary>
-        private bool _shownFirstMinimizeNotification;
-
         internal static bool ProbeTrayHost()
         {
             if (OperatingSystem.IsWindows()) return true;

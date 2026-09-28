@@ -25,7 +25,7 @@ internal static class OsNotifications
     internal enum Route { Os, Toast, Drop }
 
     private const string Dest = "org.freedesktop.Notifications", ObjPath = "/org/freedesktop/Notifications";
-    private static DBusConnection? _bus;
+    private static Task<DBusConnection>? _bus;
     private static readonly Dictionary<uint, Action> _clicks = new();
     private static bool _droppedLogged;
 
@@ -63,10 +63,21 @@ internal static class OsNotifications
         });
     }
 
-    private static async Task<DBusConnection> BusAsync()
+    // One cached task: concurrent first calls share one connection; a failed connect is retried next time.
+    private static Task<DBusConnection> BusAsync()
     {
-        if (_bus != null) return _bus;
+        lock (_clicks)
+        {
+            if (_bus is { IsFaulted: false, IsCanceled: false }) return _bus;
+            return _bus = ConnectAsync();
+        }
+    }
+
+    private static async Task<DBusConnection> ConnectAsync()
+    {
         var bus = new DBusConnection(DBusAddress.Session!);
+        try
+        {
         await bus.ConnectAsync();
         await bus.AddMatchAsync(
             new MatchRule { Type = MessageType.Signal, Interface = Dest, Member = "ActionInvoked", Path = ObjPath },
@@ -83,7 +94,9 @@ internal static class OsNotifications
             (Message m, object? _) => m.GetBodyReader().ReadUInt32(),
             (Exception? ex, uint id, object? _, object? _) => { lock (_clicks) _clicks.Remove(id); },
             null, null, false, ObserverFlags.None);
-        return _bus = bus;
+        }
+        catch { bus.Dispose(); throw; }
+        return bus;
     }
 
     /// <summary>Notify; returns the server's id (0 never comes back from a real server).</summary>
@@ -98,22 +111,23 @@ internal static class OsNotifications
         w.WriteString(title);
         w.WriteString(body);
         w.WriteArray(clickable ? new[] { "default", title } : Array.Empty<string>());
-        w.WriteDictionary(new Dictionary<string, VariantValue>());
+        w.WriteDictionary(new Dictionary<string, VariantValue> { ["transient"] = true });   // no history, like a balloon
         w.WriteInt32(-1);
         return await bus.CallMethodAsync(w.CreateMessage(), (Message m, object? _) => m.GetBodyReader().ReadUInt32(), null);
     }
 
     private static string? _icon;
-    /// <summary>app.ico copied out of the avares bundle once, so the server can attribute the
-    /// notification to CCP; "" (server default) if Avalonia's asset loader is not up.</summary>
+    /// <summary>app.ico saved once as a per-user PNG (XDG_RUNTIME_DIR, else temp) so the server can
+    /// attribute the notification to CCP; "" (server default) if Avalonia's asset loader is not up.</summary>
     private static string IconPath()
     {
         if (_icon != null) return _icon;
         try
         {
-            var path = Path.Combine(Path.GetTempPath(), "ccp-notify-icon.ico");
+            var dir = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+            var path = Path.Combine(string.IsNullOrEmpty(dir) ? Path.GetTempPath() : dir, "ccp-notify-icon.png");
             using (var src = AssetLoader.Open(new Uri("avares://CCP.Avalonia/Resources/app.ico")))
-            using (var dst = File.Create(path)) src.CopyTo(dst);
+            using (var bmp = new global::Avalonia.Media.Imaging.Bitmap(src)) bmp.Save(path);
             return _icon = path;
         }
         catch { return _icon = ""; }
