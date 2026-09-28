@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
@@ -14,6 +15,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Speech;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -43,8 +45,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <b>Settings are wired</b>: the five per-user card colours and the panic-key name come
     ///    from <c>CoreSettings.Current</c>, with the mod pack's accent from <c>CoreMods</c>, so a
     ///    recoloured card draws correctly here.
-    ///  - <b>Services still in the WPF head</b>: the speech LISTEN loop (CoreSpeech carries
-    ///    capability only, never a RecognizePhraseAsync), App.Autonomy (mic hand-off),
+    ///  - <b>Voice solve is wired</b> through the Core SpeechEngine the head seeds
+    ///    (PulseMicSource.Speech). <b>Services still in the WPF head</b>: App.Autonomy (mic hand-off),
     ///    App.Progression / App.Achievements / App.LockCard (XP, achievements, completion notify)
     ///    and App.PanicHook (no global keyboard hook exists on this head at all).
     ///
@@ -78,6 +80,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private int _requiredRepeats;
         private bool _strictMode;
         private bool _voiceMode;
+        private bool _voiceListening;
+        private System.Threading.CancellationTokenSource? _voiceCts;
         private int _completedRepeats;
         private bool _isCompleted;
         private DispatcherTimer? _closeTimer;
@@ -204,6 +208,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             _closeTimer?.Stop();
             _closeTimer = null;
+            _voiceMode = false;      // WPF :326: tear any prior voice loop down before reconfiguring
+            StopVoiceSolve();
             _completedRepeats = 0;
             _isCompleted = false;
             ResetKeystrokeGate();
@@ -211,15 +217,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _phrase = phrase;
             _requiredRepeats = repeats;
             _strictMode = strictMode;
-            // The capability half is answerable now (CoreSpeech.IsAvailable, MicConsentGiven) but
-            // the answer would be a lie: CoreSpeech is a capability seam with no listen call, so a
-            // voice card that said yes would trap the user behind a mic that never replies. Voice
-            // stays off until a recognition seam exists, not until settings move.
-            // ponytail: needs a CoreSpeech listen call (RecognizePhraseAsync / LevelChanged /
-            // PartialTranscript) plus App.Autonomy for the mic hand-off.
-            _voiceMode = false;
-            if (voiceMode)
-                Log.Information("LockCardWindow: voice mode requested but no recognition seam on this head — falling back to typing");
+            // WPF :338-342: voice degrades to typing if the offline engine isn't usable, so the
+            // user can never be trapped behind a mic that won't cooperate.
+            _voiceMode = voiceMode && CoreSpeech.IsAvailable && CoreSettings.Current.MicConsentGiven;
+            if (voiceMode && !_voiceMode)
+                Log.Information("LockCardWindow: voice mode requested but unavailable — falling back to typing");
 
             SetPlain(_txtPhrase, phrase);   // the session phrase, never the XAML's loc key
 
@@ -314,6 +316,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             Log.Information("Lock Card shown - Phrase: {Phrase}, Repeats: {Repeats}, Strict: {Strict}, Voice: {Voice}",
                 _phrase, _requiredRepeats, _strictMode, _voiceMode);
+
+            // Begin the spoken-solve listen loop on the primary monitor (WPF :620).
+            if (_isPrimary && _voiceMode) StartVoiceSolve();
         }
 
         /// <summary>
@@ -341,6 +346,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             _closeTimer?.Stop();
             _voiceMode = false;
+            StopVoiceSolve();   // the mic closes with the card, not 10 s later
             base.OnClosing(e);
         }
 
@@ -833,12 +839,117 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ── Voice solve (speak the phrase) ─────────────────────────────────────
         //
-        // ponytail: needs App.Speech (ISpeechService: IsAvailable / IsListening /
-        // RecognizePhraseAsync / LevelChanged / PartialTranscript / StopListening) and App.Autonomy
-        // (UserDrivenVoiceArmed / StopVoiceInput / RefreshVoiceInputModes) — the whole
-        // RunVoiceSolveLoopAsync listen loop, the mic hand-off from the "Hey Bambi" wake/PTT owner
-        // and the mid-session fallback all live with those services. What is ported is the panel's
-        // visuals, so the moment the service lands the display is already correct.
+        // WPF :956-1089, on the Core SpeechEngine. ponytail: no Autonomy mic eviction/restore
+        // (App.Autonomy UserDrivenVoiceArmed / StopVoiceInput / RefreshVoiceInputModes) - no Linux
+        // wake/PTT loop holds the mic yet. A holder that appears later is still covered: its busy
+        // session reads as Unavailable and the card falls back to typing after 6 tries.
+
+        private static SpeechEngine? Speech => Platform.PulseMicSource.Speech;
+
+        private void StartVoiceSolve()
+        {
+            if (_voiceListening || !_voiceMode) return;
+            _voiceListening = true;
+            _voiceCts = new System.Threading.CancellationTokenSource();
+            if (Speech is { } sp)
+            {
+                sp.LevelChanged += OnVoiceLevel;
+                sp.PartialTranscript += OnVoicePartial;
+            }
+            _ = RunVoiceSolveLoopAsync(_voiceCts.Token);
+        }
+
+        private void StopVoiceSolve()
+        {
+            if (!_voiceListening) return;
+            _voiceListening = false;
+            if (Speech is { } sp)
+            {
+                sp.LevelChanged -= OnVoiceLevel;
+                sp.PartialTranscript -= OnVoicePartial;
+            }
+            // Cut any in-flight recognize so the mic closes on close / panic / privacy pill.
+            try { _voiceCts?.Cancel(); } catch { }
+            try { if (Speech?.IsListening == true) Speech.StopListening(); } catch { }
+            try { _voiceCts?.Dispose(); } catch { }
+            _voiceCts = null;
+        }
+
+        private async Task RunVoiceSolveLoopAsync(System.Threading.CancellationToken ct)
+        {
+            int consecutiveUnavailable = 0;
+            try
+            {
+                while (!_isCompleted && _voiceMode && !ct.IsCancellationRequested)
+                {
+                    if (Speech?.IsAvailable != true)
+                    {
+                        // Engine/mic vanished mid-session — degrade to typing so we never trap.
+                        if (++consecutiveUnavailable > 6) { FallBackToTextMidSession(); break; }
+                        await Task.Delay(500, ct);
+                        continue;
+                    }
+
+                    PhraseResult res;
+                    try
+                    {
+                        res = await Speech.RecognizePhraseAsync(
+                            _phrase, new RecognizeOptions { Timeout = TimeSpan.FromSeconds(10) }, ct);
+                    }
+                    catch (OperationCanceledException) { break; }
+                    catch { res = PhraseResult.NotAvailable; }
+
+                    if (_isCompleted || !_voiceMode || ct.IsCancellationRequested) break;
+
+                    if (res.Unavailable)
+                    {
+                        // Mic held by another session: never trap the user on a card unsolvable by voice.
+                        if (++consecutiveUnavailable > 6) { FallBackToTextMidSession(); break; }
+                        await Task.Delay(350, ct);
+                        continue;
+                    }
+                    consecutiveUnavailable = 0;
+                    SetVoiceLevel(0);
+
+                    if (res.Matched)
+                    {
+                        SetVoiceState("✓ Yes~", VoiceGreen);
+                        RegisterSuccessfulRepeat();
+                        if (_isCompleted) break;
+                        await Task.Delay(700, ct);
+                        SetVoiceState("🎤 Listening…", VoicePink);
+                    }
+                    else if (!res.LoudEnough && res.Score >= 0.45)
+                    {
+                        SetVoiceHeard(res.Transcript);
+                        SetVoiceState("🔊 Louder…", VoiceAmber);
+                        await Task.Delay(800, ct);
+                        SetVoiceState("🎤 Listening…", VoicePink);
+                    }
+                    else if (res.TimedOut && string.IsNullOrWhiteSpace(res.Transcript))
+                    {
+                        // Pure silence — keep listening without nagging.
+                    }
+                    else
+                    {
+                        SetVoiceHeard(res.Transcript);
+                        SetVoiceState("✗ Again, slower…", VoiceAmber);
+                        await Task.Delay(800, ct);
+                        SetVoiceState("🎤 Listening…", VoicePink);
+                    }
+                }
+            }
+            catch (OperationCanceledException) { /* cancelled on close / panic / privacy pill */ }
+            catch (Exception ex) { Log.Warning("LockCardWindow: voice solve loop failed: {Error}", ex.Message); }
+            finally { StopVoiceSolve(); }
+        }
+
+        // The engine raises these on the capture thread.
+        private void OnVoiceLevel(object? sender, double level) =>
+            Dispatcher.UIThread.Post(() => SetVoiceLevel(level));
+
+        private void OnVoicePartial(object? sender, string text) =>
+            Dispatcher.UIThread.Post(() => SetVoiceHeard(text));
 
         private static readonly Color VoicePink = Color.FromRgb(0xFF, 0x69, 0xB4);
         private static readonly Color VoiceGreen = Color.FromRgb(0x00, 0xE6, 0x76);
@@ -869,11 +980,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void FallBackToTextMidSession()
         {
             _voiceMode = false;
+            StopVoiceSolve();
             _voicePanel.IsVisible = false;
             _inputBorder.IsVisible = true;
             SetLocalized(_txtTitle, "label_type_to_unlock_2");
+            // Mirrors keep "synced from primary" and must not grab focus (WPF #618).
             ApplyInputAffordance();
-            FocusInput();
+            if (_isPrimary) FocusInput();
             Log.Information("LockCardWindow: fell back to typed solve (speech unavailable mid-card)");
         }
 
@@ -1032,10 +1145,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// The mic privacy pill: drop every voice-mode card to typed solve so the microphone closes
-        /// but the lock still has to be solved. A no-op on purpose — no card on this head is ever
-        /// in voice mode (see <see cref="Configure"/>), so there is nothing to drop. Wire it with
-        /// the CoreSpeech listen call, not before.
+        /// but the lock still has to be solved. Never force-closes: that would escape the lock.
         /// </summary>
-        public static void DisableVoiceForAll() { }
+        public static void DisableVoiceForAll()
+        {
+            foreach (var window in _allWindows.ToList())
+                Dispatcher.UIThread.Post(() => { if (window._voiceMode) window.FallBackToTextMidSession(); });
+        }
+
+        internal bool VoiceMode => _voiceMode;
+        internal string VoiceState => _txtVoiceState.Text ?? "";
     }
 }
