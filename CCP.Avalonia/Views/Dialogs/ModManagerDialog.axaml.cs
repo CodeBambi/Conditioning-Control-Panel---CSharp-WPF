@@ -28,20 +28,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    which is exactly what <c>App.Mods</c> answered before its service came up.
     ///  - <c>ModPackCatalog</c> is a WPF-head type, so the mod-id → pack-id mapping comes from
     ///    <see cref="ModPacks"/>, its twin on this head.
-    ///  - Installing, uninstalling, activating for real, exporting and sharing all need the WRITE
-    ///    half of <c>CCP.Core/Services/ModService.cs</c> (WPF reaches it as
-    ///    <c>App.Mods</c>) or the catalogue client. There is no "ModManagerService" - earlier notes
-    ///    here named a type that exists nowhere in the repo. <see cref="CoreMods"/> is the seam,
-    ///    and it carries read-side providers only, so each write is a stub with a
-    ///    <c>ponytail:</c> marker naming the ModService member it wants. Activation still flips in
-    ///    memory, so the star, the active indicator and the button rules behave.
-    ///  - The release-content event plumbing (<c>SubscribeToPackEvents</c>,
-    ///    <c>OnPackProgressChanged</c>, <c>OnPackInstalled</c>, <c>OnModAvailabilityChanged</c>,
-    ///    <c>RefreshListKeepingSelection</c>, <c>MarshalToUi</c>) is dropped rather than stubbed:
-    ///    every one of them exists only to react to a service that is not in this head, and
-    ///    <c>PackProgressEventArgs</c> does not compile here. The states they paint
-    ///    (downloading / installing / ready) are still reachable through
-    ///    <see cref="UpdatePackPanel"/>.
+    ///  - Install, uninstall, activate and export go through the head's <c>App.Mods</c>
+    ///    (Core ModService), exactly as WPF. Catalogue sharing is still a stub (no catalogue client).
+    ///  - Pack download progress plumbing is dropped; only ModAvailabilityChanged is listened to.
     ///  - <c>Visibility</c> -> <c>IsVisible</c>; <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>;
     ///    <c>ColorConverter.ConvertFromString</c> -> <c>Color.Parse</c>;
     ///    <c>BitmapImage</c> -> <c>Bitmap</c> (<c>DecodePixelWidth</c> becomes
@@ -73,8 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         /// <summary>
         /// Which mod the star, the active indicator and the button rules read as active. Seeded from
-        /// <c>CoreMods.ActiveModId</c>; the Activate button flips it in memory because the real
-        /// switch is head-side (see <see cref="BtnActivate_Click"/>).
+        /// <c>CoreMods.ActiveModId</c>; re-read from <c>App.Mods</c> after each activate/uninstall.
         /// </summary>
         private string _activeModId = CoreMods.ActiveModId;
 
@@ -131,6 +119,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _btnExport.Click += (_, _) => BtnExport_Click();
 
             RefreshModList();
+
+            // WPF OnModAvailabilityChanged: a pack finishing extraction changes what a row can show.
+            if (App.Mods != null)
+            {
+                EventHandler<string> onAvailability = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshModList);
+                App.Mods.ModAvailabilityChanged += onAvailability;
+                Closed += (_, _) => App.Mods.ModAvailabilityChanged -= onAvailability;
+            }
         }
 
         // ------------------------------------------------------------------ content packs
@@ -467,13 +463,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             if (_selectedMod == null) return;
 
-            // ponytail: needs ModService.ActivateMod (ConditioningControlPanel/Services/
-            // ModService.cs) - CoreMods is read-only, it has no write-side provider for this.
-            // CoreSettings.Current.ActiveModId + Save IS reachable here and is deliberately NOT
-            // written: persisting an id no service on this head can load would hand the WPF head a
-            // mod switch this one only mimed. The in-memory switch below is what the rest of the
-            // dialog reads, so the star, the indicator and the button rules all still behave.
-            _activeModId = _selectedMod.Id;
+            if (App.Mods == null) return;
+
+            // WPF ModManagerDialog.xaml.cs:578-582
+            App.Mods.ActivateMod(_selectedMod.Id);
+            CoreSettings.Current.ActiveModId = _selectedMod.Id;
+            CoreSettings.Save();
+            _activeModId = App.Mods.ActiveModId;
 
             ModWasChanged = true;
             RefreshModList();
@@ -485,7 +481,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private async void BtnUninstall_Click()
         {
             if (_selectedMod == null) return;
-            if (_selectedMod.IsBuiltIn) return;
+            if (_selectedMod.IsBuiltIn || App.Mods == null) return;
 
             var confirmed = await MessageDialog.ConfirmAsync(
                 this,
@@ -494,12 +490,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             if (!confirmed) return;
 
-            // ponytail: needs ModService.UninstallMod (it deletes the folder and drops the
-            // mod from InstalledMods) plus the CoreSettings.ActiveModId write WPF does when the
-            // uninstalled mod was the active one. The listing is the service's dictionary now, so
-            // there is nothing local to remove and the row correctly stays until it really goes.
-            // Unreachable with no mod service anyway: the button only shows for a non-built-in,
-            // non-active mod, and the built-in default is the only thing an unseeded seam lists.
+            // WPF ModManagerDialog.xaml.cs:605-614
+            var wasActive = _selectedMod.Id == App.Mods.ActiveModId;
+            App.Mods.UninstallMod(_selectedMod.Id);
+            if (wasActive)
+            {
+                CoreSettings.Current.ActiveModId = App.Mods.ActiveModId;
+                CoreSettings.Save();
+                ModWasChanged = true;
+            }
+            _activeModId = App.Mods.ActiveModId;
+
             _selectedMod = null;
             _detailsPanel.IsVisible = false;
             RefreshModList();
@@ -518,17 +519,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 },
             });
 
-            if (files.Count == 0) return;
+            if (files.Count == 0 || App.Mods == null || files[0].TryGetLocalPath() is not { } path) return;
 
             _btnInstall.IsEnabled = false;
             try
             {
-                // ponytail: needs ModService.InstallModAsync (ConditioningControlPanel/Services/
-                // ModService.cs); CoreMods carries no write-side provider for it.
-                // WPF then refreshed the list and reported msg_mod_installed_successfully /
-                // msg_failed_to_install_mod. Deliberately silent rather than showing either of
-                // those: a real-looking result for work that did not happen is worse than none.
-                await Task.CompletedTask;
+                var result = await App.Mods.InstallModAsync(path);
+                if (result.Success)
+                {
+                    RefreshModList();
+                    await MessageDialog.ShowAsync(this, Loc.Get("title_success"), Loc.Get("msg_mod_installed_successfully"));
+                }
+                else
+                {
+                    await MessageDialog.ShowAsync(this, Loc.Get("title_install_failed"),
+                        result.ErrorMessage ?? Loc.Get("msg_failed_to_install_mod"));
+                }
             }
             finally
             {
@@ -553,16 +559,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 },
             });
 
-            if (file == null) return;
+            if (file == null || App.Mods == null || file.TryGetLocalPath() is not { } path) return;
 
             _btnExport.IsEnabled = false;
             try
             {
-                // ponytail: needs ModService.ExportCurrentAsModAsync (ConditioningControlPanel/
-                // Services/ModService.cs), same missing write half as install.
-                // Silent for the same reason as the install path above; WPF reported
-                // msg_mod_exported_to / msg_export_failed here.
-                await Task.CompletedTask;
+                await App.Mods.ExportCurrentAsModAsync(path, active.Name + " Export", active.Manifest.Author);
+                await MessageDialog.ShowAsync(this, Loc.Get("title_export_complete"), Loc.GetF("msg_mod_exported_to", path));
+            }
+            catch (Exception ex)
+            {
+                await MessageDialog.ShowAsync(this, Loc.Get("title_export_error"), Loc.GetF("msg_export_failed", ex.Message));
             }
             finally
             {
