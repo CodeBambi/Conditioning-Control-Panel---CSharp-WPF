@@ -11,7 +11,10 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -302,8 +305,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 ? null
                 : All.FirstOrDefault(e => string.Equals(e.ModId, modId, StringComparison.OrdinalIgnoreCase));
 
-        /// <summary>Pack id for a built-in mod id, or null (CCP Default and every user mod).</summary>
-        public static string? PackIdForMod(string? modId) => ForMod(modId)?.PackId;
+        /// <summary>
+        /// The pack's bytes are stamped on disk. Unseeded (no pack service on this head) nothing is
+        /// KNOWN to be installed, and nothing is reported missing either - see NeedsDownload.
+        /// </summary>
+        internal static bool IsInstalled(string? packId) =>
+            !string.IsNullOrEmpty(packId)
+            && CoreReleaseContent.StampProvider is not null
+            && CoreReleaseContent.GetStampFor(packId!) != null;
+
+        /// <summary>
+        /// True when this mod's media has to come off the network. False for CCP Default and, as in
+        /// WPF, whenever there is no pack service to fetch it with.
+        /// </summary>
+        internal static bool NeedsDownload(string? modId)
+        {
+            var packId = string.IsNullOrEmpty(modId) ? null : ModService.PackIdForMod(modId);
+            return !string.IsNullOrEmpty(packId)
+                   && CoreReleaseContent.StampProvider is not null
+                   && CoreReleaseContent.GetStampFor(packId!) == null;
+        }
 
         /// <summary>
         /// Best known download size: the manifest's real sizeBytes through
@@ -676,19 +697,64 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             => offlineOffersAfterShowing < MaxOfflineOffers;
 
         /// <summary>
-        /// Shows the picker when this install has never seen it and its mod media has to come off the
-        /// network.
-        ///
-        /// ponytail: the settings half is available now (CoreSettings.Current carries ModPickerShown,
-        /// ModPickerOfflineOffers, OfflineMode and ActiveModId), but the two service reads that decide
-        /// whether to open at all are not: ReleaseContentService.IsFullInstall and .ManifestUnavailable
-        /// (ConditioningControlPanel/Services/Content/ReleaseContentService.cs) have no CoreReleaseContent
-        /// seam. Latching ModPickerShown without them would burn the one-shot offer on a full install or
-        /// an offline launch, which is the exact bug guards 1 and 2 exist to prevent — so this still
-        /// returns false, "nothing was shown". The showing itself also needs an owner: Avalonia's
-        /// ShowDialog is async and needs a non-null Window, so this signature cannot stay synchronous
-        /// when it lands.
+        /// ShowIfNeeded's open/skip guards as one predicate, in WPF's order
+        /// (ConditioningControlPanel/Dialogs/ModPickerDialog.xaml.cs:631-647): already shown, no pack
+        /// service, full install, then guard 1 (known offline, offer not spent).
         /// </summary>
-        public static bool ShowIfNeeded(Window? owner = null, bool preselectActiveMod = false) => false;
+        internal static bool ShouldShow(AppSettings settings, bool hasPackService, bool isFullInstall, bool manifestUnavailable)
+            => !settings.ModPickerShown
+               && hasPackService
+               && !isFullInstall
+               && !ShouldDeferForOffline(settings.OfflineMode, manifestUnavailable, settings.ModPickerOfflineOffers);
+
+        /// <summary>
+        /// This head has no content-pack service: ReleaseContentService is not ported (oracle §5,
+        /// downloads deferred). WPF's <c>App.ReleaseContent == null</c> branch therefore always
+        /// applies and the picker never opens here, exactly as WPF behaves without the service.
+        /// IsFullInstall / ManifestUnavailable are read from that same service, so both are false.
+        /// </summary>
+        internal static bool HasPackService => false;
+
+        /// <summary>
+        /// PORTED from ConditioningControlPanel/Dialogs/ModPickerDialog.xaml.cs:631. Deviation:
+        /// Avalonia's ShowDialog is async and needs a non-null owner, so this is awaited.
+        /// </summary>
+        public static async Task<bool> ShowIfNeeded(Window owner, bool preselectActiveMod = false)
+        {
+            try
+            {
+                if (!CoreSettings.HasProvider) return false;   // render / nav-check: no profile
+                var settings = CoreSettings.Current;
+                if (!ShouldShow(settings, HasPackService, isFullInstall: false, manifestUnavailable: false))
+                    return false;
+
+                var preselect = preselectActiveMod ? settings.ActiveModId : null;
+                if (!string.IsNullOrEmpty(preselect) && ModService.PackIdForMod(preselect) == null)
+                    preselect = null;   // CCP Default or a user mod - nothing on this screen to tick
+
+                // Latch BEFORE showing: a crash inside the dialog must not become an every-launch popup.
+                settings.ModPickerShown = true;
+                CoreSettings.Save();
+                Log.Information("[ModPicker] Showing the mod picker (preselect {Mod})", preselect ?? "(none)");
+
+                var dialog = new ModPickerDialog(preselect);
+                await dialog.ShowDialog(owner);
+
+                // Guard 2: ended offline - count it and re-arm unless the allowance is spent.
+                if (dialog.EndedOffline)
+                {
+                    settings.ModPickerOfflineOffers++;
+                    if (ShouldReArmAfterOfflineShowing(settings.ModPickerOfflineOffers))
+                        settings.ModPickerShown = false;
+                    CoreSettings.Save();
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[ModPicker] ShowIfNeeded failed - skipping the picker this launch");
+                return false;
+            }
+        }
     }
 }

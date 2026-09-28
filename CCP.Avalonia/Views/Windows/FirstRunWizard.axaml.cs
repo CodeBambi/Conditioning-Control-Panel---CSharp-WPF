@@ -17,114 +17,13 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.Styling;
 using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
-    /// <summary>
-    /// The Avalonia twin of the WPF head's <c>ModPackCatalog</c>: THE mapping between built-in mod
-    /// ids and release-content pack ids, plus the sizes and copy that the first-run picker and the
-    /// Mod Manager both draw from.
-    ///
-    /// <para>Every id comes from Core (<see cref="BuiltInMods"/>, <see cref="CoreReleaseContent"/>)
-    /// rather than being retyped. The placeholder table this replaces carried invented ids
-    /// (<c>"bambi_sleep"</c>, <c>"ccp_default"</c>) that match nothing the mod service answers, so
-    /// the wizard's pre-selection could never find the active mod.</para>
-    ///
-    /// <para>Two things the WPF catalogue has that this cannot: the <c>pack://</c> card art (this
-    /// head ships no Resources/) and <c>ReleaseContentService.IsFullInstall</c>, which has no Core
-    /// seam - a full/dev layout therefore reads here as "pack state unknown", not as installed.</para>
-    ///
-    /// <para>ponytail: belongs in its own file beside the dialogs, exactly as ModPackCatalog does.
-    /// It is here because the layer that wrote it owns no third file; moving it is a rename.</para>
-    /// </summary>
-    internal static class ModPacks
-    {
-        private const long Mb = 1024L * 1024L;
-
-        internal sealed record Entry(
-            string ModId,
-            string? PackId,
-            string NameLocKey,
-            string DescriptionLocKey,
-            string AccentHex,
-            long ApproxBytes,
-            bool PremiumProgramNote = false,
-            bool NoVoiceNote = false);
-
-        /// <summary>Display order: the baseline first, then the five optional mods.</summary>
-        internal static readonly Entry[] All =
-        {
-            // PackId null: CCP Default ships in the box, so "skip everything" still gets a mod.
-            new(BuiltInMods.CCPDefaultId, null, "modpicker_name_ccp_default", "modpicker_desc_ccp_default", "#E84393", 0),
-            new(BuiltInMods.BambiSleepId, CoreReleaseContent.PackModBambi, "label_bambi_sleep", "modpicker_desc_bambi", "#FF69B4", 77 * Mb),
-            new(BuiltInMods.SissyHypnoId, CoreReleaseContent.PackModSissy, "label_sissy_hypno", "modpicker_desc_sissy", "#9B59B6", 331 * Mb),
-            // The "kept" program is Premium; the mod itself is free.
-            new(BuiltInMods.LockedId, CoreReleaseContent.PackModLocked, "modpicker_name_circe", "modpicker_desc_circe", "#E81CA8", 329 * Mb, PremiumProgramNote: true),
-            // "firmware_install" is Premium, and drone-mode.ccpmod carries no companion_audio at all.
-            new(BuiltInMods.DronificationId, CoreReleaseContent.PackModDrone, "modpicker_name_drone", "modpicker_desc_drone", "#00FF41", 184 * Mb, PremiumProgramNote: true, NoVoiceNote: true),
-            new(BuiltInMods.InfectionControlId, CoreReleaseContent.PackModInfection, "modpicker_name_infection", "modpicker_desc_infection", "#2855F0", 209 * Mb),
-        };
-
-        internal static Entry? ForMod(string? modId) =>
-            string.IsNullOrEmpty(modId)
-                ? null
-                : All.FirstOrDefault(e => string.Equals(e.ModId, modId, StringComparison.OrdinalIgnoreCase));
-
-        /// <summary>Pack id for a built-in mod id, or null (CCP Default and every user mod).</summary>
-        internal static string? PackIdForMod(string? modId) => ForMod(modId)?.PackId;
-
-        /// <summary>
-        /// Best known download size: the manifest's real number once the head has fetched it,
-        /// otherwise the baked-in approximation so an offline picker still tells the truth.
-        /// </summary>
-        internal static long SizeBytesFor(Entry? entry)
-        {
-            if (entry == null || string.IsNullOrEmpty(entry.PackId)) return 0;
-            var info = CoreReleaseContent.GetPackInfo(entry.PackId!);
-            return info != null && info.SizeBytes > 0 ? info.SizeBytes : entry.ApproxBytes;
-        }
-
-        /// <summary>"331 MB" / "1.2 GB". Empty for a zero size.</summary>
-        internal static string FormatSize(long bytes)
-        {
-            try
-            {
-                if (bytes <= 0) return "";
-                var mb = bytes / (double)Mb;
-                if (mb >= 1024)
-                    return Loc.GetF("modpicker_size_gb", (mb / 1024.0).ToString("0.0"));
-                return Loc.GetF("modpicker_size_mb", Math.Max(1, (int)Math.Round(mb)));
-            }
-            catch { return ""; }
-        }
-
-        /// <summary>
-        /// The pack's bytes are stamped on disk. An unseeded <c>StampProvider</c> is this head's
-        /// version of WPF's <c>svc == null</c>: nothing is KNOWN to be installed, and nothing is
-        /// reported missing either - see <see cref="NeedsDownload"/>. Never guess "missing" from
-        /// the absence of a service, or every built-in wears a download badge it cannot act on.
-        /// </summary>
-        internal static bool IsInstalled(string? packId) =>
-            !string.IsNullOrEmpty(packId)
-            && CoreReleaseContent.StampProvider is not null
-            && CoreReleaseContent.GetStampFor(packId!) != null;
-
-        /// <summary>
-        /// True when this mod's media has to come off the network. False for CCP Default and, as in
-        /// WPF, whenever there is no pack service to fetch it with.
-        /// </summary>
-        internal static bool NeedsDownload(string? modId)
-        {
-            var packId = PackIdForMod(modId);
-            if (string.IsNullOrEmpty(packId)) return false;
-            if (CoreReleaseContent.StampProvider is null) return false;
-            return CoreReleaseContent.GetStampFor(packId!) == null;
-        }
-    }
-
     /// <summary>
     /// One mod row on the wizard's second step. Deliberately a separate view-model from
     /// <c>ModPickerCard</c> even though the two look alike: the picker's card is a multi-select
@@ -292,7 +191,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// (<see cref="ShouldRunAndClaim"/> / <see cref="HandBackFirstRun"/>, on
     /// <c>CoreSettings</c> and <c>CoreReleaseContent.AppVersion</c>), the affirmation in the
     /// welcome heading, the active mod the cards pre-select against, the real pack ids and sizes
-    /// (see <see cref="ModPacks"/>), and the pack-installed signal.</para>
+    /// (see <see cref="ModPickerCatalog"/>), and the pack-installed signal.</para>
     ///
     /// <para><see cref="Run"/> is now real, and <c>MainShellWindow.FirstRun.cs</c> calls it: the
     /// shell claims the gate in its constructor and opens this window once it is on screen. Both
@@ -770,7 +669,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var installedBadge = Loc.Get("modpicker_installed_badge");
             var activeModId = CoreMods.ActiveModId;
 
-            foreach (var entry in ModPacks.All)
+            foreach (var entry in ModPickerCatalog.All)
             {
                 IBrush accent;
                 try { accent = new SolidColorBrush(Color.Parse(entry.AccentHex)); }
@@ -801,8 +700,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 else
                 {
-                    card.SizeText = ModPacks.FormatSize(ModPacks.SizeBytesFor(entry));
-                    if (ModPacks.IsInstalled(entry.PackId)) card.State = FirstRunModCard.CardState.Installed;
+                    card.SizeText = ModPickerCatalog.FormatSize(ModPickerCatalog.SizeBytesFor(entry));
+                    if (ModPickerCatalog.IsInstalled(entry.PackId)) card.State = FirstRunModCard.CardState.Installed;
                 }
 
                 _cards.Add(card);

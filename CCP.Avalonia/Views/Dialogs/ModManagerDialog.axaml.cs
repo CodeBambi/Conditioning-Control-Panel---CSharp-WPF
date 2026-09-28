@@ -14,6 +14,7 @@ using Avalonia.Platform.Storage;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
@@ -27,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    Core. With no mod service seeded (this head today) that is the one built-in CCP Default,
     ///    which is exactly what <c>App.Mods</c> answered before its service came up.
     ///  - <c>ModPackCatalog</c> is a WPF-head type, so the mod-id → pack-id mapping comes from
-    ///    <see cref="ModPacks"/>, its twin on this head.
+    ///    <see cref="ModPickerCatalog"/>, its twin on this head.
     ///  - Installing, uninstalling, activating for real, exporting and sharing all need the WRITE
     ///    half of <c>CCP.Core/Services/ModService.cs</c> (WPF reaches it as
     ///    <c>App.Mods</c>) or the catalogue client. There is no "ModManagerService" - earlier notes
@@ -144,7 +145,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private bool IsPackRowShowing(string packId)
         {
             if (_selectedMod == null) return false;
-            return string.Equals(ModPacks.PackIdForMod(_selectedMod.Id), packId, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(ModService.PackIdForMod(_selectedMod.Id), packId, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -152,14 +153,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// is mapped, there is a pack service to fetch it with, and the pack is not stamped yet.
         ///
         /// <para>The no-pack-service branch is WPF's <c>svc == null</c> collapse, and it has to
-        /// agree with <see cref="ModPacks.NeedsDownload"/>: without it the list row says nothing is
+        /// agree with <see cref="ModPickerCatalog.NeedsDownload"/>: without it the list row says nothing is
         /// missing while this panel says "not downloaded" over a button that cannot download.
         /// <c>IsFullInstall</c> is the one condition with no Core seam, so a full/dev layout still
         /// shows the row here where WPF hid it.</para>
         /// </summary>
         private void UpdatePackPanel(ModPackage mod)
         {
-            var entry = ModPacks.ForMod(mod.Id);
+            var entry = ModPickerCatalog.ForMod(mod.Id);
             var packId = entry?.PackId;
 
             if (string.IsNullOrEmpty(packId) || CoreReleaseContent.StampProvider is null)
@@ -168,7 +169,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 return;
             }
 
-            if (ModPacks.IsInstalled(packId))
+            if (ModPickerCatalog.IsInstalled(packId))
             {
                 // Already on disk: show a confirmation only if it landed during this session,
                 // otherwise the row has no reason to exist.
@@ -205,10 +206,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// The download button's caption. A TextBlock child rather than Content, because Avalonia
         /// parses "_" in Content as an access key (CLAUDE.md trap 1) and this string is formatted.
         /// </summary>
-        private void SetDownloadPackLabel(ModPacks.Entry entry) =>
+        private void SetDownloadPackLabel(ModPickerCatalogEntry entry) =>
             _btnDownloadPack.Content = new TextBlock
             {
-                Text = Loc.GetF("modmgr_btn_download_pack", ModPacks.FormatSize(ModPacks.SizeBytesFor(entry)))
+                Text = Loc.GetF("modmgr_btn_download_pack", ModPickerCatalog.FormatSize(ModPickerCatalog.SizeBytesFor(entry)))
             };
 
         private void BtnDownloadPack_Click()
@@ -264,7 +265,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 // when the catalogue client moves to Core. WPF appended a share-status pill here.
 
                 // "media not downloaded yet" marker for built-ins on a modular install.
-                if (ModPacks.NeedsDownload(mod.Id))
+                if (ModPickerCatalog.NeedsDownload(mod.Id))
                 {
                     row.Children.Add(new TextBlock
                     {
