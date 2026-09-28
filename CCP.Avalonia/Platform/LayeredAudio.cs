@@ -146,6 +146,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             public VlcLayerPlayer(LibVLC vlc, string path)
             {
                 _media = new Media(vlc, path, FromType.FromPath);
+                _media.AddOption(LibVlcAudio.NoVideo);
                 _player = new MediaPlayer(_media);
                 // As in LibVlcAudio: volume set before Playing, or on libvlc's own thread, is lost.
                 _player.Playing += (_, _) => ThreadPool.QueueUserWorkItem(_ =>

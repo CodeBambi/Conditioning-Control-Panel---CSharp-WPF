@@ -25,11 +25,17 @@ namespace ConditioningControlPanel.Avalonia.Platform
         /// <summary>The seeded instance, so App can restore ducked apps on exit.</summary>
         internal static LibVlcAudio? Instance { get; private set; }
 
+        /// <summary>The process's one LibVLC, shared with video (MiniPlayerWindow), as WPF shares
+        /// VideoService.SharedLibVLC. Null when libvlc did not load.</summary>
+        internal static LibVLC? Shared { get; private set; }
+
         /// <summary>Throws when libvlc is not installed; the caller then leaves CoreAudio unseeded.</summary>
         public LibVlcAudio(params string[] options)
         {
             Core.Initialize();
-            _vlc = new LibVLC(options.Append("--no-video").Append("--quiet").ToArray());
+            // No global --no-video: video shares this instance. Audio media opt out per item instead.
+            _vlc = new LibVLC(options.Append("--quiet").ToArray());
+            Shared ??= _vlc;
             _vlc.SetUserAgent("Conditioning Control Panel", "CCP"); // the name pactl shows for our streams
         }
 
@@ -56,6 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             if (volume <= 0f || string.IsNullOrWhiteSpace(path) || !File.Exists(path)) { Fire(onFinished); return; }
 
             var media = new Media(_vlc, path, FromType.FromPath);
+            media.AddOption(NoVideo);
             var player = new MediaPlayer(media);
             // WPF's volume is linear sample gain; LibVLC's is cubic, so 0.5 must land at ~-6 dB, not -18.
             var vol = (int)Math.Round(Math.Cbrt(Math.Clamp(volume, 0f, 1f)) * 100);
@@ -84,6 +91,9 @@ namespace ConditioningControlPanel.Avalonia.Platform
             player.Stopped += (_, _) => Finish();
             if (!player.Play()) Finish();
         }
+
+        /// <summary>Media option for audio players: skip any video track (an mp3's cover art would open a window).</summary>
+        internal const string NoVideo = ":no-video";
 
         private static void Fire(Action? a) { try { a?.Invoke(); } catch { } }
 
