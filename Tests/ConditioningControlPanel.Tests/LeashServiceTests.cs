@@ -468,6 +468,12 @@ public class LeashServiceTests
         Assert.Null(r.Svc.GateDue);
         Assert.Contains(r.Svc.Snapshot.Me!.Pending, p => p.Pid == "p1");
 
+        // A worded refusal rides ok:true on this server (cap, refused): still not a skip.
+        r.Api.Answer("punish_skip", new JObject { ["ok"] = true, ["status"] = "cap" });
+        Assert.Equal(LeashSkipResult.Marked, await r.Svc.SkipUnplayableAsync("p1"));
+        r.Api.Answer("punish_skip", new JObject { ["ok"] = true, ["status"] = "refused" });
+        Assert.Equal(LeashSkipResult.Marked, await r.Svc.SkipUnplayableAsync("p1"));
+
         // Unknown op / offline: the same.
         r.Api.Answer("punish_skip", null);
         Assert.Equal(LeashSkipResult.Marked, await r.Svc.SkipUnplayableAsync("p1"));

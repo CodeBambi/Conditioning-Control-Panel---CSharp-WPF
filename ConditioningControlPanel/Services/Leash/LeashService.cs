@@ -278,7 +278,10 @@ public sealed class LeashService : ILeashService
     {
         if (string.IsNullOrEmpty(pid)) return LeashSkipResult.Marked;
         var o = await CallAsync("punish_skip", new JObject { ["pid"] = pid, ["reason"] = "unplayable" });
-        if (o != null && o.Value<bool?>("ok") == true)
+        // Every worded status answers ok:true (cap, refused, not_found too), so read the status: only
+        // `skipped` dropped it. `not_found` means it is already gone, which the next poll confirms.
+        var skipStatus = o?.Value<bool?>("ok") == true ? LeashParse.Str(o["status"]) : null;
+        if (skipStatus is "skipped" or "not_found")
         {
             // The server dropped it and told the holder; hide it until the next poll agrees.
             _unplayableUntil.Remove(pid);
@@ -290,7 +293,7 @@ public sealed class LeashService : ILeashService
         }
         _unplayableUntil[pid] = _now() + UnplayableHold;
         App.Logger?.Information("[Leash] punishment {Pid} will not play: kept pending, off the gate for {H} h ({Reason})",
-            pid, UnplayableHold.TotalHours, o == null ? "no reply" : LeashParse.Str(o["reason"]) ?? "?");
+            pid, UnplayableHold.TotalHours, o == null ? "no reply" : skipStatus ?? LeashParse.Str(o["reason"]) ?? "?");
         return LeashSkipResult.Marked;
     }
 
