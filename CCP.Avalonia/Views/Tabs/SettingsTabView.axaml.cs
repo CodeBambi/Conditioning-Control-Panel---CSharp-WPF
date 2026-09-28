@@ -395,8 +395,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Home's companion strip. Pure navigation into the Companion door - the strip
         /// owns no portrait and no clock, so there is nothing to start or stop here.</summary>
         private void CompanionStrip_Click(object? sender, PointerPressedEventArgs e) { }     // mw.ShowTab("companion")
-        private void BtnUnifiedLogin_Click(object? sender, RoutedEventArgs e) { }            // mw.BtnUnifiedLogin_Click(...)
-        private void BtnQuickLogout_Click(object? sender, RoutedEventArgs e) { }             // mw.BtnQuickLogout_Click(...)
+        private async void BtnUnifiedLogin_Click(object? sender, RoutedEventArgs e)
+        {
+            if (TopLevel.GetTopLevel(this) is Windows.MainShellWindow mw) await mw.OpenUnifiedLoginDialog();
+        }
+        private void BtnQuickLogout_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.Logout();
         // REFUSED, and not for want of the dialog: LinkPhoneDialog is ported and would open. Its
         // FetchCode is a stub with PLACEHOLDER data (V2AuthService.AuthorizeMobileLinkAsync and
         // QRCoder are both WPF-head), so this button would show a QR and a six-letter code that

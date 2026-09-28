@@ -20,14 +20,7 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            settings.UnifiedId = user.UnifiedId;
-            settings.UserDisplayName = user.DisplayName;
-            settings.IsSeason0Og = user.IsSeason0Og;
-            settings.CurrentSeason = user.CurrentSeason;
-            settings.HighestLevelEver = user.HighestLevelEver;
-            settings.HasLinkedDiscord = !string.IsNullOrEmpty(user.DiscordId);
-            settings.HasLinkedPatreon = !string.IsNullOrEmpty(user.PatreonId);
-            settings.PatreonTier = user.PatreonTier;
+            ApplyIdentity(settings, user, authToken);
 
             // Discord/unified-login users with a LINKED Patreon sub have no local Patreon
             // tokens, so PatreonService.CurrentTier stays None and nothing else refreshes the
@@ -36,12 +29,6 @@ namespace ConditioningControlPanel.Services
             // server-confirmed linked tier keeps premium alive, mirroring the 2-week grace
             // direct Patreon validation writes. Never shorten an existing longer window.
             EntitlementTierRule.ExtendGrace(settings, user.PatreonTier, DateTime.UtcNow);
-
-            // Store auth token if provided
-            if (!string.IsNullOrEmpty(authToken))
-            {
-                settings.AuthToken = authToken;
-            }
 
             // Sync level/XP using "take higher" logic to prevent progress loss
             // Server returns TOTAL accumulated XP, but PlayerXP stores current-level XP

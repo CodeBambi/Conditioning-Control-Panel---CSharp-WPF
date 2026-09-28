@@ -1,5 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Models;
@@ -94,5 +98,97 @@ public sealed class AccountSeedTests : IDisposable
         AssertNothing();
         CoreSecrets.RetrieveProvider = _ => throw new InvalidOperationException("keyring gone");
         AssertNothing();
+    }
+
+    [Fact]
+    public void Logout_ClearsTokensAndIdentity_ButNotProgression_AndRestoreBringsTheIdBack()
+    {
+        var s = CoreSettings.Current;
+        var (oldId, oldName, oldLevel, oldXp) = (s.UnifiedId, s.UserDisplayName, s.PlayerLevel, s.PlayerXP);
+        try
+        {
+            s.UnifiedId = "u-1"; s.UserDisplayName = "Bambi"; s.HasLinkedDiscord = s.HasLinkedPatreon = true;
+            s.AuthToken = "tok"; s.PlayerLevel = 12; s.PlayerXP = 345;
+            foreach (var n in new[] { "patreon_auth", "discord_auth", "substar_auth" })
+                _secrets[n] = JsonConvert.SerializeObject(new PatreonTokenData { AccessToken = "a", RefreshToken = "r", ExpiresAt = DateTime.UtcNow.AddDays(1) });
+            Assert.True(AccountSeed.Seed(Make, p => new DiscordAccount(() => p, () => new AppSettings())));
+
+            AccountSeed.RestoreSession(); // WPF App.xaml.cs:2267
+            Assert.Equal("u-1", CoreAccount.UnifiedUserId);
+
+            AccountSeed.Logout();
+
+            Assert.False(CoreAccount.IsLoggedIn);
+            Assert.Null(CoreAccount.UnifiedUserId);
+            Assert.Null(s.UnifiedId);
+            Assert.Null(s.UserDisplayName);
+            Assert.Null(s.AuthToken);
+            Assert.False(s.HasLinkedDiscord || s.HasLinkedPatreon);
+            Assert.All(new[] { "patreon_auth", "discord_auth", "substar_auth" }, n => Assert.Null(_secrets.GetValueOrDefault(n)));
+            // Progression stays until unit 7 ships the clear with the push.
+            Assert.Equal(12, s.PlayerLevel);
+            Assert.Equal(345, s.PlayerXP);
+        }
+        finally { (s.UnifiedId, s.UserDisplayName, s.PlayerLevel, s.PlayerXP) = (oldId, oldName, oldLevel, oldXp); }
+    }
+
+    [Fact]
+    public void Logout_WhoseKeyringClearFails_IsReported_AndASuccessfulOneResetsIt()
+    {
+        var (sandboxed, notRemembered) = (SecretStore.Sandboxed, SecretStore.NotRemembered);
+        var clearsWork = false;
+        try
+        {
+            SecretStore.Sandboxed = SecretStore.NotRemembered = false;
+            SecretStore.OsWriteOverride = (_, v) => v != null || clearsWork;   // a locked keyring: writes land, removals do not
+            CoreSecrets.RetrieveProvider = SecretStore.Retrieve;
+            CoreSecrets.StoreProvider = SecretStore.Store;
+            Assert.True(AccountSeed.Seed(Make, p => new DiscordAccount(() => p, () => new AppSettings())));
+            SecretStore.Store("patreon_auth", "{}");
+
+            AccountSeed.Logout();
+            Assert.True(SecretStore.ClearFailed);
+
+            clearsWork = true;
+            AccountSeed.Logout();
+            Assert.False(SecretStore.ClearFailed);
+        }
+        finally
+        {
+            SecretStore.OsWriteOverride = null;
+            (SecretStore.Sandboxed, SecretStore.NotRemembered) = (sandboxed, notRemembered);
+            SecretStore.ClearFailed = false;
+        }
+    }
+
+    [Fact]
+    public async Task RestoreSession_NeedsSomethingToProveIt_AndA404SignsOut()
+    {
+        var s = CoreSettings.Current;
+        var oldId = s.UnifiedId;
+        try
+        {
+            Assert.True(AccountSeed.Seed(Make, p => new DiscordAccount(() => p, () => new AppSettings())));
+            s.UnifiedId = "u-1";
+            s.AuthToken = null;
+            AccountSeed.RestoreSession();            // no token, no provider: stays signed out
+            Assert.Null(CoreAccount.UnifiedUserId);
+            Assert.False(CoreAccount.IsLoggedIn);
+
+            s.AuthToken = "tok";
+            AccountSeed.RestoreSession();
+            Assert.Equal("u-1", CoreAccount.UnifiedUserId);
+
+            await AccountSeed.ValidateRestoredSessionAsync(new V2AuthService(() => s, new Answer(HttpStatusCode.NotFound)));
+            Assert.Null(CoreAccount.UnifiedUserId);  // server does not know the id: signed out
+            Assert.Null(s.UnifiedId);
+        }
+        finally { s.UnifiedId = oldId; s.AuthToken = null; }
+    }
+
+    private sealed class Answer(HttpStatusCode status) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct) =>
+            Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent("{}") });
     }
 }
