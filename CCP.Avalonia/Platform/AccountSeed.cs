@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 
 /// <summary>Seeds <see cref="CoreAccount"/> from Core's <see cref="ProviderSubscription"/>s and <see cref="DiscordAccount"/>,
 /// tokens via CoreSecrets. FAIL CLOSED: a provider that cannot be built seeds nothing; CoreAccount turns a throw into "no".
-/// No sync (units 6-7), no Rich Presence.</summary>
+/// Read-only cloud load (unit 6); no sync push (unit 7), no Rich Presence.</summary>
 internal static class AccountSeed
 {
     internal static ProviderSubscription? Patreon { get; private set; }
@@ -63,19 +63,51 @@ internal static class AccountSeed
         Log.Information("Restored UnifiedUserId from settings: {Id}", id);
     }
 
-    /// <summary>WPF App.ValidateRestoredSessionAsync's check half (Core <see cref="V2AuthService.ValidateRestoredSessionAsync"/>),
-    /// run after the providers validated. No profile load / heartbeat (unit 6).</summary>
+    /// <summary>WPF App.ValidateRestoredSessionAsync (Core <see cref="V2AuthService.ValidateRestoredSessionAsync"/>), run after
+    /// the providers validated, then the cloud profile load that follows it. WPF's provider init paths load the profile when
+    /// a provider authenticated, and this path loads it when the session validated; either way it loads here.</summary>
     /// <param name="v2">Tests only.</param>
     internal static async Task ValidateRestoredSessionAsync(V2AuthService? v2 = null)
     {
         var id = CoreAccount.UnifiedUserId;
-        if (string.IsNullOrEmpty(id)) return;
-        // If a provider already authenticated, it validated the session; offline trusts the cache.
-        if (Patreon?.IsAuthenticated == true || Discord?.IsAuthenticated == true) return;
-        if (CoreSettings.Current.OfflineMode) return;
-        Log.Information("Validating restored session for {Id}...", id);
-        if (await (v2 ?? new V2AuthService()).ValidateRestoredSessionAsync(id) == V2AuthService.RestoreOutcome.Cleared)
-            CoreAccount.UnifiedUserId = null;
+        if (string.IsNullOrEmpty(id) || CoreSettings.Current.OfflineMode) return;
+        v2 ??= new V2AuthService();
+        // If a provider already authenticated, it validated the session (and owns the load in WPF).
+        if (Patreon?.IsAuthenticated != true && Discord?.IsAuthenticated != true)
+        {
+            Log.Information("Validating restored session for {Id}...", id);
+            var outcome = await v2.ValidateRestoredSessionAsync(id);
+            if (outcome == V2AuthService.RestoreOutcome.Cleared) CoreAccount.UnifiedUserId = null;
+            if (outcome != V2AuthService.RestoreOutcome.Validated) return;
+        }
+        await LoadProfileAsync(v2);
+    }
+
+    /// <summary>
+    /// WPF ProfileSyncService.LoadProfileAsync's V2 read-before-write (ReadServerProfileBeforePushAsync), READ-ONLY:
+    /// GET /v2/user/profile, follow the curve epoch, offer a tier rise, adopt take-higher (Core <see cref="ProfileAdopt"/>).
+    /// ponytail: no push, heartbeat or season-recap nudge - the push is unit 7, the others the next layer.
+    /// </summary>
+    /// <param name="v2">Tests only.</param>
+    internal static async Task<bool> LoadProfileAsync(V2AuthService? v2 = null)
+    {
+        var s = CoreSettings.Current;
+        var id = s.UnifiedId;
+        if (s.OfflineMode || string.IsNullOrEmpty(id)) return false;
+        var user = await (v2 ?? new V2AuthService()).GetUserProfileAsync(id);
+        if (user == null)
+        {
+            Log.Warning("Profile load: server profile could not be read for {Id}", id);
+            return false;
+        }
+        ProfileAdopt.ApplyCurveEpoch(s, user.CurveEpoch);
+        // EntitlementTierSync.SignedInWithV2: a rise only for a V2 account with a token.
+        if (!string.IsNullOrEmpty(s.AuthToken))
+            EntitlementTierRule.ApplyRise(s, EntitlementTierRule.ParseTier(user.EffectiveTierRaw), DateTime.UtcNow);
+        ProfileAdopt.AdoptReadBeforeWrite(s, user);
+        CoreSettings.Save();
+        Log.Information("Profile load: Level {Level} ({Xp} XP into level) after adopt", s.PlayerLevel, (int)s.PlayerXP);
+        return true;
     }
 
     /// <summary>Signs a provider out (WPF AccountService.LogoutProvider).</summary>

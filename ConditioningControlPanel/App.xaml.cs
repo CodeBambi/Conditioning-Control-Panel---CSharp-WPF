@@ -4272,54 +4272,12 @@ namespace ConditioningControlPanel
 
                 Logger?.Information("Validating restored session for {Id}...", UnifiedUserId);
 
-                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                var storedToken = Settings?.Current?.AuthToken;
-                if (!string.IsNullOrEmpty(storedToken))
-                    http.DefaultRequestHeaders.Add("X-Auth-Token", storedToken);
-                var body = new Newtonsoft.Json.Linq.JObject
+                // The check itself is Core's (404 clears the id, 2xx stores a re-issued token, 401
+                // clears the token and, for a legacy re-auth, the id), shared with the Avalonia head.
+                var outcome = await new Services.V2AuthService().ValidateRestoredSessionAsync(UnifiedUserId!);
+                if (outcome == Services.V2AuthService.RestoreOutcome.Cleared) UnifiedUserId = null;
+                else if (outcome == Services.V2AuthService.RestoreOutcome.Validated)
                 {
-                    ["unified_id"] = UnifiedUserId,
-                    ["client_version"] = UpdateService.AppVersion
-                };
-                var content = new StringContent(body.ToString(), Encoding.UTF8, "application/json");
-                var response = await http.PostAsync("https://codebambi-proxy.vercel.app/v2/auth/restore-session", content);
-
-                // Split-accounts contract D: the restored id is a merge tombstone. The handler
-                // swaps to the canonical and re-runs the provider sign-in (or offers the prompt);
-                // nothing below applies to the old id any more.
-                if (await Services.MergedAccountRecovery.TryHandleAsync(response)) return;
-
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    Logger?.Warning("Restored session invalid (user not found on server). Clearing UnifiedUserId.");
-                    UnifiedUserId = null;
-                    if (Settings?.Current != null)
-                    {
-                        Settings.Current.UnifiedId = null;
-                        Settings.Save();
-                    }
-                }
-                else if (response.IsSuccessStatusCode)
-                {
-                    // Parse and store auth token from restore-session response
-                    try
-                    {
-                        var responseJson = await response.Content.ReadAsStringAsync();
-                        var responseObj = Newtonsoft.Json.Linq.JObject.Parse(responseJson);
-                        var authToken = responseObj["auth_token"]?.ToString();
-                        if (!string.IsNullOrEmpty(authToken) && Settings?.Current != null)
-                        {
-                            Settings.Current.AuthToken = authToken;
-                            Settings.Save();
-                            Logger?.Information("Stored auth token from restore-session.");
-                        }
-                    }
-                    catch (Exception parseEx)
-                    {
-                        Logger?.Debug("Failed to parse restore-session auth token: {Error}", parseEx.Message);
-                    }
-                    Logger?.Information("Restored session validated successfully.");
-
                     // ...and then actually USE the session we just validated. Only two places load
                     // the cloud profile and start the heartbeat: InitializePatreonAndSyncAsync
                     // (gated on Patreon.IsAuthenticated) and InitializeDiscordAsync (gated on
@@ -4339,37 +4297,6 @@ namespace ConditioningControlPanel
                         await ProfileSync.LoadProfileAsync();
                         ProfileSync.StartHeartbeat();
                     }
-                }
-                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                {
-                    // Check if this is a legacy user that needs full re-auth
-                    var errorJson = await response.Content.ReadAsStringAsync();
-                    var isLegacyReauth = errorJson.Contains("legacy_user_reauth_required");
-
-                    if (isLegacyReauth)
-                    {
-                        Logger?.Warning("Restored session rejected (legacy user, no token ever issued). Clearing all auth state — user must re-login via OAuth.");
-                        UnifiedUserId = null;
-                        if (Settings?.Current != null)
-                        {
-                            Settings.Current.UnifiedId = null;
-                            Settings.Current.AuthToken = null;
-                            Settings.Save(suppressCloudBackup: true);
-                        }
-                    }
-                    else
-                    {
-                        Logger?.Warning("Restored session rejected (invalid token). Clearing auth token.");
-                        if (Settings?.Current != null)
-                        {
-                            Settings.Current.AuthToken = null;
-                            Settings.Save(suppressCloudBackup: true);
-                        }
-                    }
-                }
-                else
-                {
-                    Logger?.Warning("Session validation returned {Status} — keeping cached state.", response.StatusCode);
                 }
             }
             catch (Exception ex)

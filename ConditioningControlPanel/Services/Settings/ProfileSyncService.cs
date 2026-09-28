@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Services
         /// Same number the boot defaults-guard in <see cref="SyncProfileAsync"/> uses, so "looks
         /// like defaults" means one thing everywhere.
         /// </summary>
-        public const double MeaningfulProgressXp = 100;
+        public const double MeaningfulProgressXp = ProfileAdopt.MeaningfulProgressXp;
 
         /// <summary>
         /// Does a profile the SERVER handed us look like an empty/uninitialized record rather than
@@ -128,21 +128,7 @@ namespace ConditioningControlPanel.Services
         /// rollover, and is SHARED by every legacy account on the machine. See
         /// <see cref="RecordAgreedServerXp"/> for why arming them was dropped rather than fixed.
         /// </summary>
-        public static double ActiveXpWatermark(Models.AppSettings settings)
-        {
-            if (settings.LastConfirmedServerXp <= 0) return 0;
-
-            var account = settings.UnifiedId ?? string.Empty;
-            if (account.Length == 0) return 0;   // legacy/V1 identity - out of scope entirely
-            if (!string.Equals(settings.LastConfirmedServerXpAccount ?? string.Empty, account, StringComparison.Ordinal))
-                return 0;
-
-            var season = settings.CurrentSeason ?? string.Empty;
-            if (!string.Equals(settings.LastConfirmedServerXpSeason ?? string.Empty, season, StringComparison.Ordinal))
-                return 0;
-
-            return settings.LastConfirmedServerXp;
-        }
+        public static double ActiveXpWatermark(Models.AppSettings settings) => ProfileAdopt.ActiveXpWatermark(settings);
 
         /// <summary>
         /// Record the total this client and the server now AGREE on, for this (account, season).
@@ -169,59 +155,15 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         /// <param name="serverTotalXp">Cumulative XP as the server just reported it.</param>
         /// <param name="clientTotalXp">Cumulative XP this client holds AFTER reconciling.</param>
-        public static void RecordAgreedServerXp(Models.AppSettings settings, double serverTotalXp, double clientTotalXp, string site)
-        {
-            if (serverTotalXp < MeaningfulProgressXp) return;   // nothing worth defending
-
-            // V1/legacy users get no watermark at all - see ActiveXpWatermark. Arming one for them
-            // would create an ("", "") scope with no rollover escape: their seasonal reset has no
-            // season key to notice, so the send-guard would block their pushes with nothing but a
-            // manual logout to clear it.
-            if (string.IsNullOrEmpty(settings.UnifiedId))
-            {
-                App.Logger?.Debug("[XP watermark] {Site}: not arming — legacy identity has no account/season scope", site);
-                return;
-            }
-
-            if (clientTotalXp > serverTotalXp + 0.01)
-            {
-                App.Logger?.Debug("[XP watermark] {Site}: not recording {Sx} — this client kept a higher local total ({Cx}), so there is no agreement to record",
-                    site, (int)serverTotalXp, (int)clientTotalXp);
-                return;
-            }
-
-            var account = settings.UnifiedId!;
-            var season = settings.CurrentSeason ?? string.Empty;
-            var previous = ActiveXpWatermark(settings);
-
-            settings.LastConfirmedServerXpAccount = account;
-            settings.LastConfirmedServerXpSeason = season;
-            settings.LastConfirmedServerXp = serverTotalXp;
-
-            if (previous > 0 && serverTotalXp < previous)
-                App.Logger?.Information("[XP watermark] {Site}: LOWERED {Old} -> {New} — this client adopted the server's figure, so that is what both sides now agree on. The send-guard follows it down.",
-                    site, (int)previous, (int)serverTotalXp);
-            else
-                App.Logger?.Debug("[XP watermark] {Site}: set to {Xp} for account {Account} season {Season}",
-                    site, (int)serverTotalXp, account, season);
-        }
+        public static void RecordAgreedServerXp(Models.AppSettings settings, double serverTotalXp, double clientTotalXp, string site) =>
+            ProfileAdopt.RecordAgreedServerXp(settings, serverTotalXp, clientTotalXp, site);
 
         /// <summary>
         /// Void the watermark. Called when the account's XP is legitimately allowed to fall: a
         /// season rollover or an explicit logout/account switch (MainWindow.ClearProgressionData).
         /// Without this the guard would block the very resets it is supposed to let through.
         /// </summary>
-        public static void ClearXpWatermark(Models.AppSettings? settings, string reason)
-        {
-            if (settings == null) return;
-            if (settings.LastConfirmedServerXp <= 0 && settings.LastConfirmedServerXpAccount == null) return;
-
-            App.Logger?.Information("[XP watermark] cleared ({Reason}) - was {Xp} for season {Season}",
-                reason, (int)settings.LastConfirmedServerXp, settings.LastConfirmedServerXpSeason ?? "(none)");
-            settings.LastConfirmedServerXp = 0;
-            settings.LastConfirmedServerXpAccount = null;
-            settings.LastConfirmedServerXpSeason = null;
-        }
+        public static void ClearXpWatermark(Models.AppSettings? settings, string reason) => ProfileAdopt.ClearXpWatermark(settings, reason);
 
         #endregion
 
@@ -445,12 +387,7 @@ namespace ConditioningControlPanel.Services
         /// <c>user.curve_epoch</c> off a profile or sync response: 0 (curve v1) or 1 (curve v2).
         /// Anything else, including absent (an older server), is null and means "no signal". Pure.
         /// </summary>
-        internal static int? ParseCurveEpoch(JToken? token)
-        {
-            if (token is null || token.Type != JTokenType.Integer) return null;
-            var v = token.Value<long>();
-            return v == ProgressionService.CurveEpochLegacy || v == ProgressionService.CurveEpochDescent ? (int)v : null;
-        }
+        internal static int? ParseCurveEpoch(JToken? token) => ProfileAdopt.ParseCurveEpoch(token);
 
         /// <summary>
         /// The ledger this install should hold once it follows the server's curve, or null when
@@ -459,13 +396,8 @@ namespace ConditioningControlPanel.Services
         /// so the total the watermark and every take-higher compare is unchanged. Pure.
         /// </summary>
         internal static (int Level, double XpIntoLevel)? CurveEpochReprice(
-            int localEpoch, int? serverEpoch, bool ceremonyPending, int level, double xpIntoLevel)
-        {
-            if (serverEpoch is null || ceremonyPending) return null;
-            if (serverEpoch.Value != ProgressionService.CurveEpochLegacy && serverEpoch.Value != ProgressionService.CurveEpochDescent) return null;
-            if (serverEpoch.Value == localEpoch) return null;
-            return ProgressionService.RepriceLedger(level, xpIntoLevel, localEpoch, serverEpoch.Value);
-        }
+            int localEpoch, int? serverEpoch, bool ceremonyPending, int level, double xpIntoLevel) =>
+            ProfileAdopt.CurveEpochReprice(localEpoch, serverEpoch, ceremonyPending, level, xpIntoLevel);
 
         /// <summary>
         /// Follow the server's curve epoch (CCP-Server #210, ccp-bugs #1270 / #1274). A desktop on
@@ -483,18 +415,9 @@ namespace ConditioningControlPanel.Services
                 if (settings == null || serverEpoch is null) return;
 
                 var localEpoch = ProgressionService.ActiveCurveEpoch;
-                var repriced = CurveEpochReprice(localEpoch, serverEpoch,
-                    DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice),
-                    settings.PlayerLevel, settings.PlayerXP);
-                if (repriced is null) return;
-
                 var preLevel = settings.PlayerLevel;
                 var preLevelXp = settings.PlayerXP;
-                settings.DescentEpoch = serverEpoch.Value;
-                settings.PlayerLevel = repriced.Value.Level;
-                settings.PlayerXP = repriced.Value.XpIntoLevel;
-                if (settings.PlayerLevel > settings.HighestLevelEver)
-                    settings.HighestLevelEver = settings.PlayerLevel;
+                if (!ProfileAdopt.ApplyCurveEpoch(settings, serverEpoch)) return;
                 App.Settings?.Save();
 
                 App.Logger?.Information("{Source}: server prices this account on curve epoch {Server} (local was {Local}) - re-priced by total XP, Level {OldLevel} ({OldXp} into level) -> Level {NewLevel} ({NewXp} into level)",
@@ -1193,47 +1116,9 @@ namespace ConditioningControlPanel.Services
                 var preLevelXp = settings.PlayerXP;
                 var localTotalXp = App.Progression?.GetTotalXP(preLevel, preLevelXp) ?? preLevelXp;
 
-                // The season key is the one non-progression field this path DOES touch, and only
-                // forward: a server answering with a stale key would otherwise walk the season
-                // backwards and re-arm the recap every launch.
-                var keepSeason = settings.CurrentSeason;
-                var seasonAdvances = Services.SeasonRecapService.ShouldAdoptServerSeason(user.CurrentSeason, keepSeason);
-
-                // Take-higher on level/XP, and nothing else — see the summary above for why this
-                // no longer routes through V2AuthService.ApplyUserDataToSettings.
-                var serverTotalXp = (double)user.Xp;
-                if (user.Level > 0 && serverTotalXp >= localTotalXp)
-                {
-                    settings.PlayerLevel = user.Level;
-                    settings.PlayerXP = App.Progression?.GetCurrentLevelXP(user.Level, serverTotalXp) ?? 0;
-                }
-
-                if (seasonAdvances)
-                {
-                    App.Logger?.Information("Read-before-write: season key advanced {Old} -> {New}",
-                        string.IsNullOrEmpty(keepSeason) ? "(none)" : keepSeason, user.CurrentSeason);
-                    settings.CurrentSeason = user.CurrentSeason;
-                    ClearXpWatermark(settings, "season rollover (read-before-write)");
-                    NudgeSeasonRecap();
-                }
-
-                // B-7: only record the watermark when the server's season is the one it will later
-                // be CHECKED under. When the server answers with an OLDER key we keep ours (above),
-                // so filing the server's total against our key would scope a foreign season's total
-                // to this one — and the send-guard would then measure this season's XP against last
-                // season's total.
-                var scopedSeason = settings.CurrentSeason ?? string.Empty;
-                if (string.Equals(user.CurrentSeason ?? string.Empty, scopedSeason, StringComparison.Ordinal))
-                {
-                    var clientTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
-                    RecordAgreedServerXp(settings, serverTotalXp, clientTotalXp, "read-before-write");
-                }
-                else
-                {
-                    App.Logger?.Debug("Read-before-write: server season {SS} is not the scope we sync under ({LS}) — not recording a watermark",
-                        string.IsNullOrEmpty(user.CurrentSeason) ? "(none)" : user.CurrentSeason,
-                        string.IsNullOrEmpty(scopedSeason) ? "(none)" : scopedSeason);
-                }
+                // Take-higher on level/XP, the season key forward only, and the watermark only under
+                // the season it will be checked under (B-7) — Core ProfileAdopt, shared with Avalonia.
+                if (ProfileAdopt.AdoptReadBeforeWrite(settings, user)) NudgeSeasonRecap();
 
                 App.Settings?.Save();
 

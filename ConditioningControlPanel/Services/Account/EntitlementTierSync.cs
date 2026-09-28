@@ -58,8 +58,7 @@ namespace ConditioningControlPanel.Services
                         var tier = serverTier!.Value;
                         App.Logger?.Information("[Entitlement] {Source}: server tier {Server} above stored {Local}, unlocking now",
                             source, tier, settings.PatreonTier);
-                        settings.PatreonTier = tier;
-                        EntitlementTierRule.ExtendGrace(settings, tier, DateTime.UtcNow);
+                        EntitlementTierRule.ApplyRise(settings, tier, DateTime.UtcNow);
                         App.Settings?.Save();
                         _lastLowerLogged = null;
                         try { TierRaised?.Invoke(tier); }
