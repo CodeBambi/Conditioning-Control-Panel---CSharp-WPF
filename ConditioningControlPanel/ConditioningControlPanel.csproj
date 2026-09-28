@@ -714,7 +714,7 @@
 
        LockedMod\overrides\ is the other half: 25 flash voice lines and 4 PNGs that live INSIDE the
        extracted locked-resources.ccpmod tree, copied over it at runtime by
-       Services\Migrations\CirceNeutralPackPatch.cs (the .ccpmod itself is not build output).
+       CCP.Core\Services\Migrations\CirceNeutralPackPatch.cs (the .ccpmod itself is not build output).
        Those are copied by the two targets below rather than declared as <Content>: several voice
        line names contain a comma, and VideoLAN.LibVLC.Windows.targets batches %(FullPath) over
        every Content item into a MakeRelative call that a comma breaks (MSB4186).

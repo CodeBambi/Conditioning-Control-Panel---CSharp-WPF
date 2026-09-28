@@ -428,7 +428,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // ponytail: per-pack DOWNLOAD PROGRESS has no seam yet - the WPF original also
             // subscribes ReleaseContentService.PackProgressChanged
             // (ConditioningControlPanel/Services/Content/ReleaseContentService.cs) and
-            // ModService.ModAvailabilityChanged (ConditioningControlPanel/Services/ModService.cs);
+            // ModService.ModAvailabilityChanged (CCP.Core/Services/ModService.cs);
             // neither is on CoreReleaseContent / CoreMods, so the cards' progress bars are driven
             // only by the download loop below once that lands.
 

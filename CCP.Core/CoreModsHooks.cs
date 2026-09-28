@@ -5,7 +5,7 @@ using ConditioningControlPanel.Models;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// What the mod service tells the head, and the two things it asks it, on a mod switch.
+    /// What the mod service tells the head, and what it asks it, on a mod switch or a pack landing.
     /// It used to reach <c>App.Brain</c>, <c>App.Bark</c>, <c>App.Companion</c> and
     /// <c>App.LiveEvent</c> directly; those are head services and each is one delegate here.
     /// Unseeded is the normal state under tests and on a head without that service: the mod
