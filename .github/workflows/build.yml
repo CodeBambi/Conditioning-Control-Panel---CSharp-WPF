@@ -42,6 +42,8 @@ jobs:
       # window renders; --render draws the REAL MainWindow offscreen through headless Skia and
       # writes a PNG, which is the only form of visual proof that survives on a runner with no
       # display server. Both exit non-zero on failure.
+      # --smoke plays a clip through LibVLC (dummy output); Linux uses the system libvlc.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvlc-dev vlc-plugin-base
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --smoke
       # Consent runs in its own testhost: CorePaths is process-global and the headless Avalonia
       # lifetime must not share state with the language/notification/scheduler suites.

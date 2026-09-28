@@ -65,7 +65,7 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Not run: WPF tests (Windows-only); Descent windows and enhancement auto-load have no user path
   Keincheck can drive.
 
-## avalonia-port/wire-core-standins-2: +500
+## avalonia-port/wire-core-standins-2: +593
 - Wires the second batch of #1768 Core types: PresetsTabView lists Core presets and exports /
   drop-imports through PresetFileService; EnhancementsTabView draws SkillDefinition.All (read-only,
   SkillTreeService is head-only); SessionEditorWindow drops its EditorSession stand-in for
@@ -79,3 +79,19 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
 - Not run: WPF tests (Windows-only); preset export/drop and chip clicks live (Keincheck click_at
   hit-tests fall through to the window backdrop Panel); SessionEditorWindow and QuizWindow have no
   user path.
+
+## avalonia-port/audio-libvlc: +403
+- Real one-shot audio: LibVLCSharp 3.10.1 (VideoLAN.LibVLC.Windows 3.0.24 on Windows only; Linux
+  uses system libvlc). `Platform/LibVlcAudio.cs` seeds `CoreAudio` in App.axaml.cs only if LibVLC
+  initialises. Duck/Unduck on Linux via `pactl` on other apps' sink-inputs (ref count + generation
+  as WPF); Windows ducking left unseeded (WASAPI port later).
+- Start latency measured 8-22 ms (dummy and PipeWire), so no warm pool.
+- New `--audio-probe` (real output, pactl view, duck/unduck check); CI installs libvlc for `--smoke`.
+- Ledger: shell-audio-playback-devices stays stub (notes updated). UI sound callers remain silent:
+  the head does not link `Assets/sounds` yet (blocker, separate branch); no reachable UI calls Duck.
+- Evidence: ~/ccp-port/evidence/audio-libvlc/.
+- Review fixes: volume mapped linear->cubic (0.5 plays at ~-6 dB like WPF); exit force-unducks
+  other apps; a vanished stream no longer aborts a duck sweep; streams named CCP in pactl; no
+  duck at master volume 0. `CoreAudioTests` now cover ref count, generation, force-unduck and
+  Shutdown with pactl stubbed. ModCreator's audio preview and AwarenessPresetDetailDialog's
+  keyword preview now play user-picked files.

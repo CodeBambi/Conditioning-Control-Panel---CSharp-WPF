@@ -78,6 +78,12 @@ namespace ConditioningControlPanel.Avalonia
             if (Array.IndexOf(args, "--x11-probe") >= 0)
                 return X11OverlayProbe.Run();
 
+            // --audio-probe plays a clip through the REAL LibVLC output and ducks/unducks other
+            // apps via CoreAudio, printing pactl's view of each step. Run with another stream
+            // playing (e.g. a looping pw-play) to see its volume drop and come back.
+            if (Array.IndexOf(args, "--audio-probe") >= 0)
+                return AudioProbe.Run();
+
             var app = BuildAvaloniaApp();
 #if DEBUG
             // Keincheck MCP server on http://127.0.0.1:3001, Debug builds only. Kept out of

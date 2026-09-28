@@ -102,6 +102,15 @@ namespace ConditioningControlPanel.Avalonia
                 var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 CoreReleaseContent.AppVersionProvider = () =>
                     version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
+                // Real audio through LibVLC, seeded only if libvlc loads. If it is missing,
+                // CoreAudio stays unseeded: every clip "finishes" at once and nothing plays.
+                // Console as well as Serilog: this head configures no Serilog sink yet.
+                try { new Platform.LibVlcAudio().Seed(); Console.WriteLine("[Audio] LibVLC seeded CoreAudio"); }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Audio] LibVLC unavailable, audio disabled: {ex.Message}");
+                    Serilog.Log.Warning(ex, "[Audio] LibVLC unavailable; audio disabled on this head");
+                }
                 // CoreMindWipe stays unseeded, and it is the audio surface that is missing rather
                 // than the feature: MindWipeSchedule (Core) already decides the tick interval, the
                 // per-tick probability, the session escalation and which clips are candidates.
@@ -194,6 +203,9 @@ namespace ConditioningControlPanel.Avalonia
         private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
         {
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
+
+            // Restore any app we ducked; a pending Unduck would otherwise die with the process.
+            try { Platform.LibVlcAudio.Instance?.Shutdown(); } catch { }
 
             // Flush while the dispatcher is still usable. In particular, a serialize retry from a
             // background save must not see the shutdown-safe drop provider below.
