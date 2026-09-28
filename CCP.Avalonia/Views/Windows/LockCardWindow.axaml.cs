@@ -600,10 +600,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         private static bool PanicEscapeIsLive => CoreSettings.Current.PanicKeyEnabled && PanicHookIsInstalled;
 
-        /// <summary>Also false for a key name X cannot resolve: a strict card must not lose Esc to a
-        /// panic key that can never fire.</summary>
+        /// <summary>Also false while the listener's key resolved to no keycode: a strict card must not
+        /// lose Esc to a panic key that can never fire.</summary>
         private static bool PanicHookIsInstalled =>
-            Platform.X11PanicKey.IsListening && Platform.X11PanicKey.KeysymOf(CoreSettings.Current.PanicKey) != 0;
+            Platform.X11PanicKey.IsListening && Platform.X11PanicKey.BoundKeycode != 0;
 
         /// <summary>
         /// #875: does Esc close THIS card? Non-strict cards: yes. Strict cards: only while a panic

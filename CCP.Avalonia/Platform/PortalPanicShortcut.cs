@@ -49,7 +49,7 @@ internal static class PortalPanicShortcut
                     ["handle_token"] = token,
                     ["session_handle_token"] = "ccp_panic",
                 }));
-            if (code != 0 || !results.TryGetValue("session_handle", out var handle)) { _session = null; return Fail($"CreateSession answered {code}"); }
+            if (code != 0 || !results.TryGetValue("session_handle", out var handle)) { await UnbindAsync(); return Fail($"CreateSession answered {code}"); }
             // The spec types session_handle as a string holding an object path; read either.
             var session = handle.Type == VariantValueType.ObjectPath ? handle.GetObjectPathAsString() : handle.GetString();
             _session = session;   // from here on every failure path closes it

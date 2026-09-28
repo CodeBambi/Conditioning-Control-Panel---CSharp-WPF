@@ -26,7 +26,7 @@ internal static class X11PanicKey
     private const string LibX11 = "libX11.so.6";
     private const string LibXi = "libXi.so.6";
     // Values and offsets from the compiler against X11/extensions/XInput2.h on x86_64.
-    private const int GenericEvent = 35, XI_RawKeyPress = 13, XIAllMasterDevices = 1;
+    private const int MappingNotify = 34, GenericEvent = 35, XI_RawKeyPress = 13, XIAllMasterDevices = 1;
     private const int XEventSize = 192, CookieExtension = 32, CookieEvType = 36, CookieData = 48, RawDetail = 56;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -39,6 +39,8 @@ internal static class X11PanicKey
     [DllImport(LibX11)] private static extern bool XGetEventData(IntPtr display, IntPtr cookie);
     [DllImport(LibX11)] private static extern void XFreeEventData(IntPtr display, IntPtr cookie);
     [DllImport(LibX11)] private static extern int XFlush(IntPtr display);
+    [DllImport(LibX11)] private static extern int XCloseDisplay(IntPtr display);
+    [DllImport(LibX11)] private static extern int XRefreshKeyboardMapping(IntPtr mappingEvent);
     [DllImport(LibX11)] internal static extern ulong XStringToKeysym(string name);
     [DllImport(LibX11)] private static extern byte XKeysymToKeycode(IntPtr display, ulong keysym);
     [DllImport(LibXi)] private static extern int XIQueryVersion(IntPtr display, ref int major, ref int minor);
@@ -50,13 +52,19 @@ internal static class X11PanicKey
     /// strict-mode exit question, WPF PanicHook.IsInstalled).</summary>
     internal static bool IsListening => Volatile.Read(ref _started) == 1;
 
+    private static volatile int _boundCode;
+
+    /// <summary>The X keycode the configured key resolved to on the listener thread; 0 = the key
+    /// cannot fire. Re-resolved on the next key event after a rebind or a keyboard layout change.</summary>
+    internal static int BoundKeycode => _boundCode;
+
     /// <summary>Starts the listener once. <paramref name="onPress"/> runs on the listener thread for
     /// every press of <paramref name="currentKey"/>() (read per event, so rebinds apply live).
     /// False when there is no X display or no XInput 2.2 - the caller logs and relies on the tray.</summary>
     internal static bool Start(Func<string?> currentKey, Action onPress)
     {
         if (!OperatingSystem.IsLinux() || Interlocked.Exchange(ref _started, 1) == 1) return false;
-        IntPtr display;
+        IntPtr display = IntPtr.Zero;
         int opcode;
         try
         {
@@ -84,6 +92,7 @@ internal static class X11PanicKey
 
         bool Fail(string why)
         {
+            if (display != IntPtr.Zero) XCloseDisplay(display);
             _started = 0;
             Log.Warning("Panic key: X11 listener unavailable ({Why}); the tray's Stop everything is the panic control", why);
             return false;
@@ -94,12 +103,29 @@ internal static class X11PanicKey
     {
         var ev = Marshal.AllocHGlobal(XEventSize);
         string? boundName = null;
-        int boundCode = 0;
+        void Resolve()
+        {
+            var name = currentKey();
+            if (name == boundName) return;
+            boundName = name;
+            var sym = KeysymOf(name);
+            _boundCode = sym == 0 ? 0 : XKeysymToKeycode(display, sym);
+            if (_boundCode == 0) Log.Warning("Panic key: '{Key}' has no X keycode; only the tray can panic", name);
+        }
+        Resolve();
         while (true)
         {
             try
             {
                 XNextEvent(display, ev);
+                if (Marshal.ReadInt32(ev) == MappingNotify)
+                {
+                    // Layout/keymap change: refresh Xlib's cache and re-resolve the keycode.
+                    XRefreshKeyboardMapping(ev);
+                    boundName = null;
+                    Resolve();
+                    continue;
+                }
                 if (Marshal.ReadInt32(ev) != GenericEvent || Marshal.ReadInt32(ev, CookieExtension) != opcode) continue;
                 if (!XGetEventData(display, ev)) continue;
                 int keycode = -1;
@@ -108,15 +134,8 @@ internal static class X11PanicKey
                 XFreeEventData(display, ev);
                 if (keycode < 0) continue;
 
-                var name = currentKey();
-                if (name != boundName)
-                {
-                    boundName = name;
-                    var sym = KeysymOf(name);
-                    boundCode = sym == 0 ? 0 : XKeysymToKeycode(display, sym);
-                    if (boundCode == 0) Log.Warning("Panic key: '{Key}' has no X keycode; only the tray can panic", name);
-                }
-                if (boundCode != 0 && keycode == boundCode) onPress();
+                Resolve();
+                if (_boundCode != 0 && keycode == _boundCode) onPress();
             }
             catch (Exception ex)
             {

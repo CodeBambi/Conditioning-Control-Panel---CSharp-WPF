@@ -5,6 +5,10 @@
 // ponytail: no game surfaces, video grace pause, bark or session engine on this head yet, so the
 // stop pass is the tray's Stop everything plus the lock card; wire each as its surface arrives. The #919b off-thread watchdog is omitted: the listener is its own thread,
 // so a wedged UI thread cannot drop the hook, but the queued stop still waits for the UI thread.
+// ponytail: Windows has no panic listener on this head yet (WPF's WH_KEYBOARD_LL hook is not ported);
+// X11PanicKey.Start returns false there and the tray's Stop everything is the only panic control.
+// ponytail: a rebind while a portal session is open keeps the OLD trigger until the effects stop and
+// the next effect re-binds; re-bind on PanicKey change if that matters.
 
 using System;
 using System.Threading.Tasks;
@@ -106,8 +110,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     return;
                 }
                 // trigger_description: what the compositor really bound, which the user may have changed.
-                App.Notifications.Show(Loc.GetF("panic_portal_bound", trigger.Length > 0 ? trigger : CoreSettings.Current.PanicKey),
-                    Helpers.NotificationType.Info, TimeSpan.FromSeconds(6));
+                // Empty = the compositor assigned no key, so never claim the configured one.
+                if (trigger.Length > 0)
+                    App.Notifications.Show(Loc.GetF("panic_portal_bound", trigger), Helpers.NotificationType.Info, TimeSpan.FromSeconds(6));
+                else
+                    App.Notifications.Show(Loc.Get("panic_portal_unavailable"), Helpers.NotificationType.Warning, TimeSpan.FromSeconds(10));
                 // ponytail: 2 s poll for "last effect stopped" rather than a hook in every stop path.
                 _portalWatch ??= new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) =>
                 {

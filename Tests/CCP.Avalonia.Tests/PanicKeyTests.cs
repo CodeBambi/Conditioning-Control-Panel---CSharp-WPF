@@ -5,6 +5,11 @@ using Avalonia.Headless;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.Windows;
+using ConditioningControlPanel.Avalonia.Views.Controls.AppSettings;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.VisualTree;
+using System.Linq;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -66,6 +71,46 @@ public sealed class PanicKeyTests
             // A second counted press inside 2 s exits.
             shell.HandlePanicKeyPress(t0.AddSeconds(11));
             Assert.True(closed);
+            return Task.CompletedTask;
+        });
+    }
+    [Fact]
+    public async Task AnAbandonedRebindIsCancelledWhenTheWindowLosesFocus()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var s = CoreSettings.Current;
+            s.PanicKeyEnabled = true;
+            s.PanicKey = "F8";
+            var section = new DevicesSettingsSection();
+            var window = new Window { Content = section };
+            window.Show();
+            window.Activate();
+            var button = section.GetVisualDescendants().OfType<Button>().First(b => b.Name == "BtnPanicKey");
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.True(MainShellWindow.CapturingPanicKey);
+
+            // The user clicks into another window instead of pressing a key. Headless never
+            // deactivates a window, so raise it the way the platform does (WindowBase.HandleDeactivated).
+            typeof(WindowBase).GetMethod("HandleDeactivated",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(window, null);
+            Assert.False(MainShellWindow.CapturingPanicKey);
+            Assert.Equal("🔑 F8", ((TextBlock)button.Content!).Text);
+
+            // ...and the panic key still works.
+            var shell = new MainShellWindow();
+            shell.Show();
+            s.FlashEnabled = true;
+            CoreFlash.Start();
+            shell.HandlePanicKeyPress(new DateTime(2026, 1, 1));
+            Assert.False(CoreFlash.IsRunning);
+            shell.Close();
+            window.Close();
             return Task.CompletedTask;
         });
     }

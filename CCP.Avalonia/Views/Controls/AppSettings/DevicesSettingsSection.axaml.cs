@@ -449,10 +449,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             MainShellWindow.CapturingPanicKey = true;
             SetButtonLabel(BtnPanicKey, "Press any key...");
             top.AddHandler(KeyDownEvent, OnCaptureKey, RoutingStrategies.Tunnel);
+            // WPF's global hook always got the next key; an in-window capture can be abandoned by
+            // clicking away, which would leave the panic key disabled for good. Losing the window cancels.
+            if (top is Window window) window.Deactivated += OnCancel;
+
+            void Detach()
+            {
+                top.RemoveHandler(KeyDownEvent, OnCaptureKey);
+                if (top is Window w) w.Deactivated -= OnCancel;
+            }
+
+            void OnCancel(object? s, EventArgs a)
+            {
+                Detach();
+                MainShellWindow.CapturingPanicKey = false;
+                SetButtonLabel(BtnPanicKey, $"🔑 {CoreSettings.Current.PanicKey}");
+            }
 
             void OnCaptureKey(object? s, KeyEventArgs k)
             {
-                top.RemoveHandler(KeyDownEvent, OnCaptureKey);
+                Detach();
                 k.Handled = true;
                 CoreSettings.Current.PanicKey = k.Key.ToString();
                 CoreSettings.Save();
