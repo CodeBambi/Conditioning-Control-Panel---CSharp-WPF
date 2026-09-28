@@ -39,6 +39,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         public void Seed()
         {
             Instance = this;
+            LayeredAudio.Instance = new LayeredAudio(path => new LayeredAudio.VlcLayerPlayer(_vlc, path));
             CoreAudio.PlayOneShotProvider = PlayOneShot;
             // ponytail: Windows ducking stays unseeded (no-op) until AudioService's WASAPI sweep is ported.
             if (!OperatingSystem.IsLinux()) return;
@@ -107,6 +108,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 _isDucked = true;
                 _duckWatchdog = new Timer(_ => ForceUnduck(), null, 300_000, Timeout.Infinite);
                 var keep = 1 - Math.Clamp(strength, 0, 100) / 100.0;
+                // As WPF: our own layers are in-process, so the sweep skips them - duck them directly.
+                LayeredAudio.Instance?.ApplyDuck((float)(1 - keep));
                 Enqueue(() => DuckSweep(keep));
             }
         }
@@ -120,6 +123,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 if (!_isDucked || _duckCount > 0) return;
                 _isDucked = false;
                 _duckWatchdog?.Dispose();
+                LayeredAudio.Instance?.ReleaseDuck();
                 Enqueue(Restore);
             }
         }

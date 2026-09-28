@@ -89,6 +89,8 @@ namespace ConditioningControlPanel.Avalonia
             // playing (e.g. a looping pw-play) to see its volume drop and come back.
             if (Array.IndexOf(args, "--audio-probe") >= 0)
                 return AudioProbe.Run();
+            if (Array.IndexOf(args, "--layers-probe") >= 0)
+                return AudioProbe.RunLayers();
 
             var app = BuildAvaloniaApp();
 #if DEBUG

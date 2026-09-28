@@ -9,8 +9,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// SETTINGS · AUDIO, ported from the WPF head.
     ///
     /// On WPF every handler is a one-line hop to the identically named <c>MainWindow</c> method
-    /// (audio engine, NAudio device enumeration, ducking) and <see cref="BtnAudioLayers_Click"/>
-    /// opens <c>LayeredAudioWindow</c>. None of that is on this head, so the handlers are stubs.
+    /// (audio engine, NAudio device enumeration, ducking). <see cref="BtnAudioLayers_Click"/> opens the
+    /// ported LayeredAudioWindow; the rest are not on this head yet, so those handlers are stubs.
     /// The value labels beside each slider keep their markup defaults; on WPF the host repaints
     /// them from settings.
     /// </summary>
@@ -41,7 +41,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         private void SliderAudioSyncLatency_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
         private void SliderAudioSyncIntensity_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
 
-        // ponytail: needs LayeredAudioWindow, which is not ported
-        private void BtnAudioLayers_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnAudioLayers_Click(object? sender, RoutedEventArgs e)
+            => Windows.LayeredAudioWindow.Open(this);
     }
 }

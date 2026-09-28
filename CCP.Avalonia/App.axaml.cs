@@ -206,6 +206,7 @@ namespace ConditioningControlPanel.Avalonia
 
             // Restore any app we ducked; a pending Unduck would otherwise die with the process.
             try { Platform.LibVlcAudio.Instance?.Shutdown(); } catch { }
+            try { Platform.LayeredAudio.Instance?.Shutdown(); } catch { }
 
             // Flush while the dispatcher is still usable. In particular, a serialize retry from a
             // background save must not see the shutdown-safe drop provider below.
