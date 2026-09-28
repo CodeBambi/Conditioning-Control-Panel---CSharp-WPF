@@ -75,8 +75,8 @@ public sealed class ModActivationGoldenTests
             if (Directory.Exists(Path.Combine(root, dir))) Directory.Delete(Path.Combine(root, dir), recursive: true);
         File.WriteAllText(Path.Combine(root, "settings.json"), settingsJson);
 
-        // ModService.Initialize subscribes App.Settings.CurrentReplaced once CoreSettings has a
-        // provider, so App.Settings (private setter) must hold the same service.
+        // ModService subscribes CoreSettings.Service.CurrentReplaced. Reading App.Settings runs static App(),
+        // which seeds CoreSettings and the CoreModsHooks the shipped app uses; keep App.Settings on the same service.
         var appSettings = typeof(App).GetProperty(nameof(App.Settings), BindingFlags.Public | BindingFlags.Static)!;
         var oldApp = appSettings.GetValue(null);
         var oldProvider = CoreSettings.ServiceProvider;

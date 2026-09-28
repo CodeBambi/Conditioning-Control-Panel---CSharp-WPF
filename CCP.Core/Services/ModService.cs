@@ -170,8 +170,8 @@ namespace ConditioningControlPanel.Services
             // instance. Without re-binding, we'd stay subscribed to the discarded instance and
             // every pool edit would silently fail to reach the per-mod backup — so the user's
             // subliminal/bouncing-text/lock-card phrases would vanish on the next restart.
-            if (CoreSettings.HasProvider)
-                App.Settings.CurrentReplaced += OnSettingsReplaced;
+            if (CoreSettings.Service is { } settingsService)
+                settingsService.CurrentReplaced += OnSettingsReplaced;
         }
 
         /// <summary>The AppSettings instance our PropertyChanged hook is currently attached to.</summary>
@@ -238,7 +238,7 @@ namespace ConditioningControlPanel.Services
             // Before the backup is taken: a running session restores its start-of-session pool
             // snapshot when it ends, which would revert this edit (and, via the snapshot-preferring
             // backup below, revert it on the next launch too). Teach the snapshot about it first (#906).
-            try { SessionEngine.Active?.NoteUserPhrasePoolEdit(e.PropertyName); }
+            try { CoreSession.NoteUserPhrasePoolEdit?.Invoke(e.PropertyName); }
             catch (Exception ex) { _log?.Debug("ModService: session snapshot update failed: {Error}", ex.Message); }
 
             SaveCurrentPoolsToSettings(_activeMod.Id);
@@ -285,7 +285,7 @@ namespace ConditioningControlPanel.Services
             var pool = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (string.IsNullOrWhiteSpace(list)) return pool;
 
-            var urlToName = AvatarTubeWindow.KnownVideoLinks
+            var urlToName = (CoreModsHooks.KnownVideoLinksProvider?.Invoke() ?? Enumerable.Empty<KeyValuePair<string, string>>())
                 .GroupBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First().Key, StringComparer.OrdinalIgnoreCase);
 
@@ -395,7 +395,7 @@ namespace ConditioningControlPanel.Services
                     if (!string.IsNullOrEmpty(manifest.MinAppVersion))
                     {
                         if (Version.TryParse(manifest.MinAppVersion, out var minVer) &&
-                            Version.TryParse(UpdateService.AppVersion, out var appVer) &&
+                            Version.TryParse(CoreReleaseContent.AppVersion, out var appVer) &&
                             appVer < minVer)
                         {
                             return new ModInstallResult { ErrorMessage = $"This mod requires app version {manifest.MinAppVersion} or later." };
@@ -827,14 +827,14 @@ namespace ConditioningControlPanel.Services
             // init payload) at launch - a mid-session mod switch would leave it
             // serving the OLD mod's descent. Close it; the next launch picks up
             // the new mod cleanly.
-            try { if (Chaos.DtrhHostService.IsActive) Chaos.DtrhHostService.CloseActive(); }
+            try { CoreModsHooks.CloseDtrhHost?.Invoke(); }
             catch (Exception ex) { _log?.Debug("ActivateMod: DTRH close failed: {E}", ex.Message); }
 
             // The Arcademy snapshots the active mod the same way DTRH does - its mod root (the
             // virtual-host mapping for skinned art) and its whole lexicon are resolved once at
             // launch - so a mid-session switch would leave the campus wearing the old mod's name
             // for every room. Same cure, same shape.
-            try { if (Arcademy.ArcademyHostService.IsActive) Arcademy.ArcademyHostService.CloseActive(); }
+            try { CoreModsHooks.CloseArcademyHost?.Invoke(); }
             catch (Exception ex) { _log?.Debug("ActivateMod: Arcademy close failed: {E}", ex.Message); }
 
             // Save current pool customizations before switching
@@ -854,7 +854,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 RestorePoolsFromSettings(modId);
-                try { SessionEngine.Active?.ReapplyPhrasePoolOverrides(); }
+                try { CoreSession.ReapplyPhrasePoolOverrides?.Invoke(); }
                 catch (Exception ex) { _log?.Debug("ActivateMod: session pool re-apply failed: {E}", ex.Message); }
             }
             finally
@@ -863,7 +863,7 @@ namespace ConditioningControlPanel.Services
             }
 
             // Clear resource cache
-            ModResourceResolver.ClearCache();
+            CoreModsHooks.ClearModResourceCache?.Invoke();
 
             // The AI personalities are resolved per mod (personalities.json, else the manifest, else
             // the stock presets) and cached; drop that before anything reads a prompt for the new mod.
@@ -875,7 +875,7 @@ namespace ConditioningControlPanel.Services
             // (GetCompanionName, GetUserTerm, MakeModAware's replacements) is read at build time and
             // hashed by nothing, so a mod whose content changed under the same id would keep serving
             // the stale prefix for the rest of the launch with no log line saying why.
-            try { BambiSprite.InvalidateStablePrompt(); }
+            try { CoreModsHooks.InvalidateStablePrompt?.Invoke(); }
             catch (Exception ex) { _log?.Debug("ActivateMod: prompt cache invalidation failed: {E}", ex.Message); }
 
             // The companion identity changed with the mod, so the chat history's voice did too.
@@ -2217,7 +2217,7 @@ namespace ConditioningControlPanel.Services
                         try
                         {
                             if (!RegisterExtractedBuiltIn(builtInId, extractDir, codeManifest)) return;
-                            ModResourceResolver.ClearCache();
+                            CoreModsHooks.ClearModResourceCache?.Invoke();
 
                             // A .ccpmod carries its own bark_rules.json / mantras.json, so the mod
                             // that just gained one has been running on empty rules all session.
@@ -2343,7 +2343,7 @@ namespace ConditioningControlPanel.Services
             // steps of it that consumers depend on. The pool save/restore is deliberately NOT re-run:
             // the mod id never changed, so the live pools already belong to this mod, and restoring
             // again would throw away edits made earlier in the session.
-            try { ModResourceResolver.ClearCache(); }
+            try { CoreModsHooks.ClearModResourceCache?.Invoke(); }
             catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
 
             // The extraction may have just delivered this mod's personalities.json, so the cached
@@ -2358,7 +2358,7 @@ namespace ConditioningControlPanel.Services
             // Before ModChanged fires: AvatarTubeWindow re-evaluates the portrait gate from that
             // event, and the adopted package may have just delivered the portrait PNGs — a stale
             // cached "absent" would park the avatar on the legacy poses for the whole session.
-            try { AvatarPortraitLoader.InvalidateAvailabilityCache(); }
+            try { CoreModsHooks.InvalidatePortraitAvailability?.Invoke(); }
             catch (Exception ex) { _log?.Debug("ModService: portrait cache clear failed: {Error}", ex.Message); }
 
             // The extracted mod.json can declare a different companion set than the hardcoded
@@ -2488,7 +2488,7 @@ namespace ConditioningControlPanel.Services
 
                     // Null misses are cached per ActiveModId, so a mod whose audio/art just appeared
                     // would keep resolving to nothing for the rest of the session without this.
-                    try { ModResourceResolver.ClearCache(); }
+                    try { CoreModsHooks.ClearModResourceCache?.Invoke(); }
                     catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
 
                     // Same reason: the pack that just landed can carry a personalities.json for a
@@ -2504,7 +2504,7 @@ namespace ConditioningControlPanel.Services
                     // Voice lines are enumerated per call (no list cache), but the §7.2 positional→
                     // filename id migration is deliberately skipped while the folder is empty — this
                     // is the moment it can finally run. Idempotent and cheap on a migrated profile.
-                    try { CompanionPhraseService.RefreshVoiceLineIndex(); }
+                    try { CoreModsHooks.RefreshVoiceLineIndex?.Invoke(); }
                     catch (Exception ex) { _log?.Debug("ModService: voice-line refresh failed: {Error}", ex.Message); }
 
                     RaiseModAvailabilityChanged(ModIdForPack(packId) ?? packId);
@@ -2521,7 +2521,7 @@ namespace ConditioningControlPanel.Services
         {
             // A pack landing can be the moment the avatar portraits finally exist on disk; drop the
             // cached "no portraits" answer so the next mod/avatar-set switch can enter portrait mode.
-            AvatarPortraitLoader.InvalidateAvailabilityCache();
+            CoreModsHooks.InvalidatePortraitAvailability?.Invoke();
             try { ModAvailabilityChanged?.Invoke(this, modOrPackId); }
             catch (Exception ex) { _log?.Debug("ModAvailabilityChanged subscriber error: {Error}", ex.Message); }
         }
@@ -2602,12 +2602,14 @@ namespace ConditioningControlPanel.Services
             // CurrentSettings_PropertyChanged. Nothing is lost by preferring the snapshot: a pool
             // edit made mid-session was already going to be discarded by RestoreSettings at the
             // end, so the only behaviour change is that it no longer corrupts the backup too.
-            var engine = SessionEngine.Active;
-            var sessionOwnsPools = engine?.IsOverridingPhrasePools == true;
+            // ONE read of the session: a StopSession between separate reads could pair "overriding"
+            // with a cleared snapshot (or the reverse) and back up session phrases again (#906).
+            var userPools = CoreSession.UserPhrasePoolsWhileOverriding?.Invoke();
+            var sessionOwnsPools = userPools != null;
 
-            var subPool = (sessionOwnsPools ? engine!.UserSubliminalPool : null) ?? settings.SubliminalPool;
-            var lockPool = (sessionOwnsPools ? engine!.UserLockCardPool : null) ?? settings.LockCardPhrases;
-            var bouncePool = (sessionOwnsPools ? engine!.UserBouncingTextPool : null) ?? settings.BouncingTextPool;
+            var subPool = userPools?.Subliminal ?? settings.SubliminalPool;
+            var lockPool = userPools?.LockCard ?? settings.LockCardPhrases;
+            var bouncePool = userPools?.BouncingText ?? settings.BouncingTextPool;
 
             if (subPool != null)
                 settings.SubliminalPoolByMod[modId] = new Dictionary<string, bool>(subPool);

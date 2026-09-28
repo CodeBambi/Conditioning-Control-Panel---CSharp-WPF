@@ -338,3 +338,11 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   and a behaviour golden for Initialize(bambi) -> Activate(sissy) -> Activate(bambi), incl. pool order.
 - The WPF suite now always runs in its own temp profile (never a developer's exported one). Each test fail-proofed.
 - Not run: the behaviour golden against the real WPF build (Windows CI is its first real run). Review: ACCEPT + P2 fixed.
+
+## avalonia-port/modservice-to-core: +59
+- ModService unit 3: commit A swaps every head-only dependency for Core seams (one hook per call site, same order
+  and try/catch; reviewed call site by call site). The pool backup reads the session through ONE snapshot delegate,
+  so a StopSession between reads can't bring back #906. Commit B: pure git mv of ModService.cs and
+  CirceNeutralPackPatch.cs (a dependency the plan missed) into CCP.Core.
+- Evidence: the mod behaviour golden (#1799, green on Windows CI against the real WPF build) is reproduced by the
+  moved Core ModService in a Linux harness; broken once (mismatch) and restored. Review: ACCEPT.

@@ -29,7 +29,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - <c>ModPackCatalog</c> is a WPF-head type, so the mod-id → pack-id mapping comes from
     ///    <see cref="ModPacks"/>, its twin on this head.
     ///  - Installing, uninstalling, activating for real, exporting and sharing all need the WRITE
-    ///    half of <c>ConditioningControlPanel/Services/ModService.cs</c> (WPF reaches it as
+    ///    half of <c>CCP.Core/Services/ModService.cs</c> (WPF reaches it as
     ///    <c>App.Mods</c>) or the catalogue client. There is no "ModManagerService" - earlier notes
     ///    here named a type that exists nowhere in the repo. <see cref="CoreMods"/> is the seam,
     ///    and it carries read-side providers only, so each write is a stub with a

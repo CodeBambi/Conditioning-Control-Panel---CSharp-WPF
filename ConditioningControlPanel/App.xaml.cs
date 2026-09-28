@@ -339,10 +339,10 @@ namespace ConditioningControlPanel
             // The running session's hold on the phrase pools (#906). Each reads Active afresh.
             CoreSession.NoteUserPhrasePoolEdit = name => Services.SessionEngine.Active?.NoteUserPhrasePoolEdit(name);
             CoreSession.ReapplyPhrasePoolOverrides = () => Services.SessionEngine.Active?.ReapplyPhrasePoolOverrides();
-            CoreSession.IsOverridingPhrasePoolsProvider = () => Services.SessionEngine.Active?.IsOverridingPhrasePools == true;
-            CoreSession.UserSubliminalPoolProvider = () => Services.SessionEngine.Active?.UserSubliminalPool;
-            CoreSession.UserLockCardPoolProvider = () => Services.SessionEngine.Active?.UserLockCardPool;
-            CoreSession.UserBouncingTextPoolProvider = () => Services.SessionEngine.Active?.UserBouncingTextPool;
+            CoreSession.UserPhrasePoolsWhileOverriding = () =>
+                Services.SessionEngine.Active is { IsOverridingPhrasePools: true } engine
+                    ? (engine.UserSubliminalPool, engine.UserLockCardPool, engine.UserBouncingTextPool)
+                    : null;
             // The bark seam (CCP.Core/CoreBark.cs). BarkService stays here - it subscribes to some
             // fifty head services and speaks through the avatar window - so only the doorbell
             // crosses. Every lambda reads the static LAZILY: Bark is constructed in OnStartup,

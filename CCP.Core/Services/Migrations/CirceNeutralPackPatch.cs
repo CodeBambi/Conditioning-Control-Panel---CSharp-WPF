@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Migrations
 {
@@ -84,12 +85,12 @@ namespace ConditioningControlPanel.Services.Migrations
                 DeleteObsolete(extractDir, result);
 
                 if (result.ChangedAnything)
-                    App.Logger?.Information("CirceNeutralPackPatch: patched {Dir}: {Result}", extractDir, result.ToString());
+                    Log.Information("CirceNeutralPackPatch: patched {Dir}: {Result}", extractDir, result.ToString());
             }
             catch (Exception ex)
             {
                 result.Failed++;
-                App.Logger?.Warning("CirceNeutralPackPatch: failed for {Dir}: {Error}", extractDir, ex.Message);
+                Log.Warning("CirceNeutralPackPatch: failed for {Dir}: {Error}", extractDir, ex.Message);
             }
             return result;
         }
@@ -101,7 +102,7 @@ namespace ConditioningControlPanel.Services.Migrations
             catch (Exception ex)
             {
                 result.Failed++;
-                App.Logger?.Warning("CirceNeutralPackPatch: could not enumerate {Dir}: {Error}", overridesRoot, ex.Message);
+                Log.Warning("CirceNeutralPackPatch: could not enumerate {Dir}: {Error}", overridesRoot, ex.Message);
                 return;
             }
 
@@ -124,7 +125,7 @@ namespace ConditioningControlPanel.Services.Migrations
                 catch (Exception ex)
                 {
                     result.Failed++;
-                    App.Logger?.Warning("CirceNeutralPackPatch: could not copy {File}: {Error}", source, ex.Message);
+                    Log.Warning("CirceNeutralPackPatch: could not copy {File}: {Error}", source, ex.Message);
                 }
                 finally
                 {
@@ -158,7 +159,7 @@ namespace ConditioningControlPanel.Services.Migrations
                 catch (Exception ex)
                 {
                     result.Failed++;
-                    App.Logger?.Warning("CirceNeutralPackPatch: could not delete {File}: {Error}", name, ex.Message);
+                    Log.Warning("CirceNeutralPackPatch: could not delete {File}: {Error}", name, ex.Message);
                 }
             }
         }

@@ -18,7 +18,7 @@
 //                              because its parameter type SubmissionResult is head-only. The
 //                              AssetSubmitDialog it opens IS ported (Views/Dialogs/AssetSubmitDialog).
 //   HandleModDropAsync       - App.Mods.ReadManifest / InstallModAsync
-//                              (ConditioningControlPanel/Services/ModService.cs). CoreMods carries
+//                              (CCP.Core/Services/ModService.cs). CoreMods carries
 //                              the READ side of the mod seam (Affirmation, InstalledMods, the
 //                              colours); installing an archive is not on it. The MessageBox confirm
 //                              maps to Views/Dialogs/MessageDialog.ConfirmAsync, which this head
