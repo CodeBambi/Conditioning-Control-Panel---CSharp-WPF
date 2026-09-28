@@ -856,6 +856,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnNext_Click(object? sender, RoutedEventArgs e)
         {
+            if (!_btnPickFolder.IsEnabled) return;   // folder picker still open: finish after it answers
             if (_step == 2) CommitModChoice();
 
             if (_step >= StepCount)
@@ -886,6 +887,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void Window_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key != Key.Escape) return;
+            if (!_btnPickFolder.IsEnabled) { e.Handled = true; return; }   // same: don't close under the picker
             e.Handled = true;
             CloseSafely();
         }
