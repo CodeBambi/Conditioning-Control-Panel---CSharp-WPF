@@ -32,12 +32,12 @@ namespace ConditioningControlPanel.Services
         public bool IsRunning { get; private set; }
         public int CurrentPhaseIndex { get; private set; }
 
-        /// <summary>Seeds the session seams (WPF App.xaml.cs:324-329 and IsSessionRunning): one runner per head.</summary>
+        /// <summary>Seeds IsSessionRunning: one runner per head. The pool delegates are the head's
+        /// (PhrasePoolCustody.Seed at startup, CCP.Avalonia/Program.cs).</summary>
         public SessionRunner(SessionLogService sessionLog)
         {
             SessionLog = sessionLog;
             CoreSession.IsSessionRunningProvider = () => IsRunning && CurrentSession != null;
-            PhrasePoolCustody.Seed();
         }
 
         /// <summary>SessionEngine.ElapsedTime (no pause offset until U4).</summary>
@@ -60,12 +60,16 @@ namespace ConditioningControlPanel.Services
             _startTime = DateTime.Now;
             _stopwatch.Restart();
 
+            // Ledger persisted before any override, so a crash mid-session keeps it (as WPF) without
+            // leaking session values to disk. Immediate: a debounced save would serialise the overrides.
+            try { s.RecordSessionStart(s.ActiveModId); } catch { }
+            CoreSettings.SaveImmediate();
+
             _snapshot = SessionSettingsSnapshot.Capture(s);
             _custody = PhrasePoolCustody.Begin(s, session.Settings, CoreMods.ActiveModId);
             Apply(session.Settings, s);
 
             _timer = new Timer(_ => CoreDispatch.Post(() => Tick(Elapsed)), null, 1000, 1000);
-            try { s.RecordSessionStart(s.ActiveModId); } catch { }
             SessionLog.BeginSession(session);
             Log.Information("Session started: {Name}", session.Name);
         }

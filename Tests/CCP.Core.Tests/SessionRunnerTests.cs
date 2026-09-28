@@ -32,6 +32,7 @@ public sealed class SessionRunnerTests : IDisposable
     {
         Assert.StartsWith(Path.GetTempPath(), _logs.LogsFolder);   // RoadmapTestProfile sandbox
         DeleteLogs();
+        PhrasePoolCustody.Seed();   // the head's job (Program.cs), not the runner's
         _runner = new SessionRunner(_logs);
         _logs.LogReady += (_, e) => _ready = e.Log;
         CoreBouncingText.StartAction = CoreBouncingText.StopAction = null;
@@ -128,6 +129,55 @@ public sealed class SessionRunnerTests : IDisposable
 
         Assert.NotNull(_ready);
         Assert.Empty(Directory.GetFiles(_logs.LogsFolder, "*_" + Id + ".json"));
+    }
+
+    [Fact]
+    public void DeferredStarts_FireAtTheirMinute_LockCardsGetTheRemainingWindow()
+    {
+        int btStarts = 0;
+        CoreBouncingText.StartAction = () => btStarts++;
+        var session = OneMinute();
+        session.DurationMinutes = 2;
+        session.Settings.BouncingTextStartMinute = 1;
+        session.Settings.LockCardStartMinute = 1;
+        _runner.Start(session);
+        btStarts = 0;   // the engine arms by the saved flag first; the session then stops and defers it
+        Assert.False(LockCardScheduler.Instance.IsRunning);
+
+        _runner.Tick(TimeSpan.FromSeconds(59));
+        Assert.Equal(0, btStarts);
+        _runner.Tick(TimeSpan.FromSeconds(60));
+        Assert.Equal(1, btStarts);
+        Assert.True(LockCardScheduler.Instance.IsRunning);
+        Assert.Equal(1.0, LockCardScheduler.Instance.LastWindowMinutes);   // #736: minutes left, not the duration
+    }
+
+    [Fact]
+    public void Ledger_IsPersistedBeforeTheSessionOverrides()
+    {
+        var old = CoreSettings.ServiceProvider;
+        var svc = new SettingsService();
+        CoreSettings.ServiceProvider = () => svc;
+        var path = Path.Combine(CorePaths.UserData, "settings.json");
+        try
+        {
+            svc.Current.FlashFrequency = 20;
+            var starts = svc.Current.RecentSessionStartsUtc.Count;
+            _runner.Start(OneMinute());
+
+            var disk = JObject.Parse(File.ReadAllText(path));
+            Assert.Equal(starts + 1, ((JArray)disk["RecentSessionStartsUtc"]!).Count);
+            Assert.Equal(20, (int)disk["FlashFrequency"]!);   // the user's, not the session's 77
+            Assert.Equal(77, svc.Current.FlashFrequency);
+        }
+        finally
+        {
+            _runner.Stop();
+            svc.SaveImmediate();
+            svc.SealForReset();
+            CoreSettings.ServiceProvider = old;
+            foreach (var f in Directory.GetFiles(CorePaths.UserData, "settings*")) File.Delete(f);
+        }
     }
 
     private static string Fixture([CallerFilePath] string here = "") =>
