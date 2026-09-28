@@ -107,11 +107,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // Both of these write .Text over a control that carries {loc:Str}, which a
                 // language change would otherwise undo - see the header and
                 // MainShellWindow.Login.cs.
-                LocalizationManager.Instance.LanguageChanged += (_, _) =>
+                EventHandler onLanguage = (_, _) =>
                 {
                     UpdateBannerWelcomeMessage();
                     UpdateQuickLoginUI();
                 };
+                LocalizationManager.Instance.LanguageChanged += onLanguage;
+                // A closed shell must not keep answering language changes (it also pinned the window,
+                // and a test shell on another dispatcher thread then threw on the next SetLanguage).
+                Closed += (_, _) => LocalizationManager.Instance.LanguageChanged -= onLanguage;
             }
             catch (Exception ex)
             {
