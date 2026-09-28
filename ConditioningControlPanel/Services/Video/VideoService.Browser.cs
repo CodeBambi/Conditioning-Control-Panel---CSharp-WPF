@@ -534,6 +534,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (!BrowserEventIsCurrent()) return;
                 VideoStarted?.Invoke(this, EventArgs.Empty);
+                App.SessionLog?.RecordVideo(LastVideoPath);
                 _ = App.Haptics?.StartVideoBackgroundVibeAsync();
                 try { App.Haptics?.FunScript?.OnVideoStarted(_browserPath ?? ""); }
                 catch (Exception ex) { App.Logger?.Debug("FunScript start hook failed: {Error}", ex.Message); }

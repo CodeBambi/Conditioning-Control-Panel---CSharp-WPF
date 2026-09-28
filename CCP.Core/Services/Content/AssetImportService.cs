@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -34,7 +35,7 @@ namespace ConditioningControlPanel.Services
             // fall back to the default folder when the custom path's subfolders are missing
             // (e.g. path set after startup, or folder cleaned out). If the custom drive is
             // gone this no-ops with a warning and EffectiveAssetsPath falls back as before. (#391)
-            App.EnsureCustomAssetsDirectories();
+            CorePaths.EnsureCustomAssetsDirectories(CoreSettings.Current.CustomAssetsPath);
 
             // Ensure destination folders exist
             var imagesFolder = Path.Combine(CorePaths.EffectiveAssets, "images");
@@ -65,12 +66,12 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "Failed to import: {Path}", path);
+                    Log.Warning(ex, "Failed to import: {Path}", path);
                     result.Errors.Add($"Failed to import {Path.GetFileName(path)}: {ex.Message}");
                 }
             }
 
-            App.Logger?.Information("Asset import complete: {Images} images, {Videos} videos, {Skipped} skipped",
+            Log.Information("Asset import complete: {Images} images, {Videos} videos, {Skipped} skipped",
                 result.ImagesImported, result.VideosImported, result.Skipped);
 
             return result;
@@ -100,12 +101,12 @@ namespace ConditioningControlPanel.Services
                 if (IsVideo(ext))
                 {
                     result.VideosImported++;
-                    App.Logger?.Debug("Imported video: {File}", fileName);
+                    Log.Debug("Imported video: {File}", fileName);
                 }
                 else if (IsImage(ext))
                 {
                     result.ImagesImported++;
-                    App.Logger?.Debug("Imported image: {File}", fileName);
+                    Log.Debug("Imported image: {File}", fileName);
                 }
             }
             catch (IOException) when (File.Exists(destPath))
@@ -115,7 +116,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to copy file: {File}", fileName);
+                Log.Warning(ex, "Failed to copy file: {File}", fileName);
                 result.Errors.Add($"Failed to copy {fileName}");
             }
         }
@@ -212,12 +213,12 @@ namespace ConditioningControlPanel.Services
                 if (IsVideo(ext))
                 {
                     result.VideosImported++;
-                    App.Logger?.Debug("Imported video: {SubFolder}/{File}", relativeSubfolder, fileName);
+                    Log.Debug("Imported video: {SubFolder}/{File}", relativeSubfolder, fileName);
                 }
                 else if (IsImage(ext))
                 {
                     result.ImagesImported++;
-                    App.Logger?.Debug("Imported image: {SubFolder}/{File}", relativeSubfolder, fileName);
+                    Log.Debug("Imported image: {SubFolder}/{File}", relativeSubfolder, fileName);
                 }
             }
             catch (IOException) when (File.Exists(destPath))
@@ -226,7 +227,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to copy file: {File}", fileName);
+                Log.Warning(ex, "Failed to copy file: {File}", fileName);
                 result.Errors.Add($"Failed to copy {fileName}");
             }
         }
@@ -297,12 +298,12 @@ namespace ConditioningControlPanel.Services
                             if (IsVideo(ext))
                             {
                                 result.VideosImported++;
-                                App.Logger?.Debug("Extracted video from ZIP: {Pack}/{File}", packName, fileName);
+                                Log.Debug("Extracted video from ZIP: {Pack}/{File}", packName, fileName);
                             }
                             else if (IsImage(ext))
                             {
                                 result.ImagesImported++;
-                                App.Logger?.Debug("Extracted image from ZIP: {Pack}/{File}", packName, fileName);
+                                Log.Debug("Extracted image from ZIP: {Pack}/{File}", packName, fileName);
                             }
                         }
                     }
@@ -313,7 +314,7 @@ namespace ConditioningControlPanel.Services
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Warning(ex, "Failed to extract: {Entry}", entry.Name);
+                        Log.Warning(ex, "Failed to extract: {Entry}", entry.Name);
                         result.Skipped++;
                     }
 
@@ -330,7 +331,7 @@ namespace ConditioningControlPanel.Services
             catch (InvalidDataException)
             {
                 result.Errors.Add($"Invalid or corrupted ZIP file: {Path.GetFileName(zipPath)}");
-                App.Logger?.Warning("Invalid ZIP file: {Path}", zipPath);
+                Log.Warning("Invalid ZIP file: {Path}", zipPath);
             }
         }
 

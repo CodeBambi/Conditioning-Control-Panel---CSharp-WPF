@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Helpers;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Content
 {
@@ -82,19 +83,19 @@ namespace ConditioningControlPanel.Services.Content
                     {
                         // Can only happen if CorePaths.EffectiveAssets itself threw — Run is
                         // already total. Swallowed on purpose: the Assets tab is mid-load.
-                        App.Logger?.Warning("AssetExtensionRepair: pass failed: {Error}", ex.Message);
+                        Log.Warning("AssetExtensionRepair: pass failed: {Error}", ex.Message);
                     }
 
                     try { if (renamed > 0) onRepaired?.Invoke(renamed); }
                     catch (Exception ex)
                     {
-                        App.Logger?.Debug("AssetExtensionRepair: completion callback threw: {Error}", ex.Message);
+                        Log.Debug("AssetExtensionRepair: completion callback threw: {Error}", ex.Message);
                     }
                 });
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("AssetExtensionRepair: could not schedule the pass: {Error}", ex.Message);
+                Log.Debug("AssetExtensionRepair: could not schedule the pass: {Error}", ex.Message);
             }
         }
 
@@ -112,7 +113,7 @@ namespace ConditioningControlPanel.Services.Content
             {
                 if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
                 {
-                    App.Logger?.Debug("AssetExtensionRepair: no assets folder at {Root} — nothing to repair", root);
+                    Log.Debug("AssetExtensionRepair: no assets folder at {Root} — nothing to repair", root);
                     WriteMarker();
                     return 0;
                 }
@@ -123,7 +124,7 @@ namespace ConditioningControlPanel.Services.Content
                 {
                     if (++inspected > MaxFilesInspected)
                     {
-                        App.Logger?.Warning("AssetExtensionRepair: stopped after {Max} files — library is larger than the repair budget",
+                        Log.Warning("AssetExtensionRepair: stopped after {Max} files — library is larger than the repair budget",
                             MaxFilesInspected);
                         break;
                     }
@@ -132,7 +133,7 @@ namespace ConditioningControlPanel.Services.Content
                     if (string.IsNullOrEmpty(ext))
                     {
                         skippedUnknown++;
-                        App.Logger?.Debug("AssetExtensionRepair: {File} matches no known media signature — left alone",
+                        Log.Debug("AssetExtensionRepair: {File} matches no known media signature — left alone",
                             Path.GetFileName(file));
                         continue;
                     }
@@ -150,13 +151,13 @@ namespace ConditioningControlPanel.Services.Content
                         // something claimed it in between we would rather fail than clobber.
                         File.Move(file, target);
                         renamed++;
-                        App.Logger?.Information("AssetExtensionRepair: renamed {Old} -> {New}",
+                        Log.Information("AssetExtensionRepair: renamed {Old} -> {New}",
                             Path.GetFileName(file), Path.GetFileName(target));
                     }
                     catch (Exception ex)
                     {
                         failed++;
-                        App.Logger?.Warning("AssetExtensionRepair: could not rename {Old} -> {New}: {Error}",
+                        Log.Warning("AssetExtensionRepair: could not rename {Old} -> {New}: {Error}",
                             Path.GetFileName(file), Path.GetFileName(target), ex.Message);
                     }
                 }
@@ -164,19 +165,19 @@ namespace ConditioningControlPanel.Services.Content
                 var ms = (int)(DateTime.UtcNow - started).TotalMilliseconds;
                 if (renamed > 0 || skippedUnknown > 0 || failed > 0)
                 {
-                    App.Logger?.Information(
+                    Log.Information(
                         "AssetExtensionRepair: {Renamed} file(s) renamed, {Unknown} unrecognised, {Failed} failed, {Inspected} inspected in {Ms} ms",
                         renamed, skippedUnknown, failed, inspected, ms);
                 }
                 else
                 {
-                    App.Logger?.Debug("AssetExtensionRepair: nothing to repair ({Inspected} extensionless file(s) seen in {Ms} ms)",
+                    Log.Debug("AssetExtensionRepair: nothing to repair ({Inspected} extensionless file(s) seen in {Ms} ms)",
                         inspected, ms);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("AssetExtensionRepair: pass aborted: {Error}", ex.Message);
+                Log.Warning("AssetExtensionRepair: pass aborted: {Error}", ex.Message);
             }
 
             WriteMarker();
@@ -201,7 +202,7 @@ namespace ConditioningControlPanel.Services.Content
                 try { files = Directory.GetFiles(dir); }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("AssetExtensionRepair: cannot read {Dir}: {Error}", dir, ex.Message);
+                    Log.Debug("AssetExtensionRepair: cannot read {Dir}: {Error}", dir, ex.Message);
                     continue;
                 }
 
@@ -218,7 +219,7 @@ namespace ConditioningControlPanel.Services.Content
                 try { subs = Directory.GetDirectories(dir); }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("AssetExtensionRepair: cannot list subfolders of {Dir}: {Error}", dir, ex.Message);
+                    Log.Debug("AssetExtensionRepair: cannot list subfolders of {Dir}: {Error}", dir, ex.Message);
                     continue;
                 }
 
@@ -269,12 +270,12 @@ namespace ConditioningControlPanel.Services.Content
                     if (!File.Exists(candidate) && !Directory.Exists(candidate)) return candidate;
                 }
 
-                App.Logger?.Warning("AssetExtensionRepair: no free name for {File} with {Ext} — skipped", name, ext);
+                Log.Warning("AssetExtensionRepair: no free name for {File} with {Ext} — skipped", name, ext);
                 return null;
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("AssetExtensionRepair: target path for {File} failed: {Error}", file, ex.Message);
+                Log.Debug("AssetExtensionRepair: target path for {File} failed: {Error}", file, ex.Message);
                 return null;
             }
         }
@@ -292,7 +293,7 @@ namespace ConditioningControlPanel.Services.Content
             {
                 // Worst case the pass runs again next launch; it is idempotent, so that is a
                 // wasted walk rather than a bug.
-                App.Logger?.Debug("AssetExtensionRepair: could not write the marker: {Error}", ex.Message);
+                Log.Debug("AssetExtensionRepair: could not write the marker: {Error}", ex.Message);
             }
         }
     }

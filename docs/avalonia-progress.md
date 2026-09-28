@@ -96,7 +96,7 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   Shutdown with pactl stubbed. ModCreator's audio preview and AwarenessPresetDetailDialog's
   keyword preview now play user-picked files.
 
-## avalonia-port/head-sounds
+## avalonia-port/head-sounds: +139
 - `CCP.Avalonia.csproj` links `Assets/sounds/**` as Content at WPF's logical path `Resources/sounds`
   with WPF's `$(ContentPackSoundsExclude)` set verbatim (flashes_audio audio and the three builtin-*
   mod payloads ship as content packs). Replaces the lone `assets/sounds/faucet_charge_drop.wav`
@@ -116,3 +116,16 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   (WPF `Resources/sounds` output file list diffed before/after: identical, 254 files); sounds Content
   gets `ExcludeFromSingleFile`. Live UI-sound Keincheck run: not run (no reachable caller); the
   `--audio-probe` run stands in for playback only.
+
+## avalonia-port/core-asset-import: +218
+- Phase 2 units 2+3: AssetImportService, AssetExtensionRepair, AssetPresetService, SessionLogService and
+  Models/SessionLog move to CCP.Core (renames). App.Logger -> Serilog Log.
+- Seams: App.EnsureCustomAssetsDirectories became CorePaths.EnsureCustomAssetsDirectories(customPath)
+  (same body; WPF startup and the import both call it, #391). SessionLogService no longer subscribes to
+  App.Flash/App.Video; FlashService and VideoService (LibVLC + browser) call RecordImages/RecordVideo
+  right after raising FlashDisplayed/VideoStarted, which is where the old handlers ran. Both no-op
+  without an active session, as the unsubscribed handlers did.
+- Evidence: Tests/CCP.Core.Tests/AssetImportAndSessionLogCoreTests.cs (custom dirs before fallback,
+  JSON round-trip against Fixtures/session_log_premove.json generated from the pre-move model,
+  RecordMedia append rules); each failed once when its behaviour was broken.
+- Not run: WPF tests (Windows-only); no Avalonia wiring, so no Keincheck run.
