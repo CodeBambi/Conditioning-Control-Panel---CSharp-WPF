@@ -40,27 +40,12 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static readonly ConcurrentDictionary<string, ImageSource?> _decodedCache = new();
 
-        /// <summary>Folder under UserDataPath holding downloaded event skins, one dir per skin id.</summary>
-        private const string EventSkinRoot = "event_skins";
-
         /// <summary>The active event's skin id, or null. Null = the whole event link is skipped.</summary>
         private static string? EventSkinId => App.LiveEvent?.SkinId;
 
-        /// <summary>
-        /// Absolute path this resource would have inside the active event skin, or null
-        /// when there is no event skin (or the id is not a safe single path segment — an
-        /// id is server-supplied, so it gets the same traversal treatment as the path).
-        /// Does NOT test existence; callers do.
-        /// </summary>
-        private static string? EventSkinPath(string resourcePath)
-        {
-            var id = EventSkinId;
-            if (string.IsNullOrEmpty(id)) return null;
-            if (id!.Contains("..") || id.Contains('/') || id.Contains('\\') || Path.IsPathRooted(id)) return null;
-
-            return Path.Combine(App.UserDataPath, EventSkinRoot, id,
-                resourcePath.Replace('/', Path.DirectorySeparatorChar));
-        }
+        /// <summary>The active mod's install folder, or null. The file probing itself is Core's
+        /// (<see cref="CoreModArt"/>), shared with every other head.</summary>
+        private static string? ModPath => App.Mods?.ActiveMod?.InstalledPath;
 
         /// <summary>
         /// Resolve a resource image path. If the active mod has an override, returns
@@ -90,21 +75,17 @@ namespace ConditioningControlPanel.Services
             ImageSource? result = null;
 
             // Event skin first — it outranks the mod for the duration of the event.
-            var eventPath = EventSkinPath(resourcePath);
-            if (eventPath != null && File.Exists(eventPath))
+            var eventPath = CoreModArt.EventSkinFile(resourcePath, EventSkinId);
+            if (eventPath != null)
             {
                 result = LoadFrozen(eventPath, "event skin");
             }
 
             // Check active mod's resources folder
-            var modPath = App.Mods?.ActiveMod?.InstalledPath;
-            if (result == null && modPath != null)
+            var overridePath = result == null ? CoreModArt.ModFile(resourcePath, ModPath) : null;
+            if (overridePath != null)
             {
-                var overridePath = Path.Combine(modPath, "resources", resourcePath.Replace('/', Path.DirectorySeparatorChar));
-                if (File.Exists(overridePath))
-                {
-                    result = LoadFrozen(overridePath, "mod resource override");
-                }
+                result = LoadFrozen(overridePath, "mod resource override");
             }
 
             // Fallback to embedded resource
@@ -266,21 +247,10 @@ namespace ConditioningControlPanel.Services
             // Event skin first, same precedence as ResolveImage — the two must agree or a
             // surface that asks for a URI (the Intake data-URI sprite, spiral.gif) would
             // draw the mod's art while its neighbour draws the event's.
-            var eventPath = EventSkinPath(resourcePath);
-            if (eventPath != null && File.Exists(eventPath))
+            var hit = CoreModArt.ResolveOverride(resourcePath, EventSkinId, ModPath);
+            if (hit != null)
             {
-                return new Uri(eventPath, UriKind.Absolute).AbsoluteUri;
-            }
-
-            // Check active mod's resources folder
-            var modPath = App.Mods?.ActiveMod?.InstalledPath;
-            if (modPath != null)
-            {
-                var overridePath = Path.Combine(modPath, "resources", resourcePath.Replace('/', Path.DirectorySeparatorChar));
-                if (File.Exists(overridePath))
-                {
-                    return new Uri(overridePath, UriKind.Absolute).AbsoluteUri;
-                }
+                return new Uri(hit, UriKind.Absolute).AbsoluteUri;
             }
 
             return $"pack://application:,,,/Resources/{resourcePath}";
@@ -300,10 +270,8 @@ namespace ConditioningControlPanel.Services
         {
             resourcePath = resourcePath.Replace('\\', '/');
 
-            var eventPath = EventSkinPath(resourcePath);
-            if (eventPath != null && File.Exists(eventPath)) return true;
-
-            return HasActiveModOverride(resourcePath);
+            return CoreModArt.EventSkinFile(resourcePath, EventSkinId) != null
+                || HasActiveModOverride(resourcePath);
         }
 
         /// <summary>
@@ -319,16 +287,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static bool HasActiveModOverride(string resourcePath)
         {
-            if (string.IsNullOrEmpty(resourcePath)) return false;
-            if (resourcePath.Contains("..") || Path.IsPathRooted(resourcePath)) return false;
-
-            resourcePath = resourcePath.Replace('\\', '/');
-
-            var modPath = App.Mods?.ActiveMod?.InstalledPath;
-            if (modPath == null) return false;
-
-            var overridePath = Path.Combine(modPath, "resources", resourcePath.Replace('/', Path.DirectorySeparatorChar));
-            return File.Exists(overridePath);
+            return CoreModArt.ModFile(resourcePath, ModPath) != null;
         }
 
         /// <summary>
@@ -381,22 +340,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static string? ModOverrideAudioPath(string soundRelativePath)
         {
-            if (string.IsNullOrEmpty(soundRelativePath)) return null;
-            if (soundRelativePath.Contains("..") || Path.IsPathRooted(soundRelativePath)) return null;
-
-            var modPath = App.Mods?.ActiveMod?.InstalledPath;
-            if (modPath == null) return null;
-
-            var overridePath = Path.Combine(modPath, "resources", "sounds",
-                soundRelativePath.Replace('\\', '/').Replace('/', Path.DirectorySeparatorChar));
-
-            // Check exact match first
-            if (File.Exists(overridePath)) return overridePath;
-
-            // Check alternate extensions (.wav <-> .mp3) so mods can use either format
-            var altExt = Path.GetExtension(overridePath).ToLowerInvariant() == ".mp3" ? ".wav" : ".mp3";
-            var altPath = Path.ChangeExtension(overridePath, altExt);
-            return File.Exists(altPath) ? altPath : null;
+            return CoreModArt.ModAudioFile(soundRelativePath, ModPath);
         }
 
         /// <summary>
