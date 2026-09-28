@@ -7,6 +7,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel;
@@ -27,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// tab FX clock), wired when those services move to Core. The remaining wiring points, all
     /// named in the XAML, are:
     ///   BtnCreateSession / BtnSessionHistory / BtnStartSession / BtnRevealSpoilers /
-    ///   BtnLoadPreset / BtnSaveOverPreset / BtnDeletePreset / BtnExportPreset / BtnSharePreset /
+    ///   BtnLoadPreset / BtnSaveOverPreset / BtnDeletePreset / BtnSharePreset /
     ///   BtnExportSession / BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
     ///   TxtRackSearch.TextChanged / the "+ New" preset chip / SessionDropZone (catalogue) /
@@ -51,12 +52,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RestoreRackSortSelection();
             CmbRackSort.SelectionChanged += CmbRackSort_SelectionChanged;
             TxtRackSearch.TextChanged += TxtRackSearch_TextChanged;
+            BtnExportPreset.Click += BtnExportPreset_Click;
             TxtDetailTitle.Text = Loc.Get("label_select_a_preset");
             TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_preset_or_session_to_see_details");
             TxtSessionDuration.Text = Loc.Get("label_30_minutes");
             TxtSessionXP.Text = Loc.Get("label_50_xp");
             TxtSessionDifficulty.Text = Loc.Get("label_easy_2");
-            SeedPlaceholders();
+            SeedRailRackAndTakeaway();
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -86,6 +88,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (_selectedSession is Session selected)
             {
                 SelectSession(selected);
+                return;
+            }
+            if (_selectedPreset is Preset preset)
+            {
+                SelectPreset(preset);
                 return;
             }
 
@@ -262,29 +269,152 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- placeholder furniture + Core-backed session rack --------------------
         //
-        // The preset rail, toolbar chrome and Takeaway strip remain render furniture until their
-        // own Core stores move. The session rack is different: the built-in catalogue already
-        // lives in Core, so it must not keep presenting sample rows.
+        // The Takeaway strip remains render furniture until its store moves. The preset rail and
+        // the session rack read Core (Preset, AppSettings.UserPresets, Session).
 
-        private void SeedPlaceholders()
+        private void SeedRailRackAndTakeaway()
         {
-            SeedPresetRail();
+            RefreshPresetsList();
             SeedRackToolbar();
             SeedSessionRack();
             SeedTakeaway();
         }
 
-        /// <summary>Three chips ahead of the fixed "+ New" one, as CreatePresetCard inserts them.</summary>
-        private void SeedPresetRail()
+        private Preset? _selectedPreset;
+        private PresetFileService? _presetFileService;
+
+        /// <summary>WPF's RefreshPresetsList: the built-ins plus AppSettings.UserPresets, inserted
+        /// ahead of the fixed "+ New" chip.</summary>
+        internal void RefreshPresetsList()
         {
+            var presets = Preset.GetDefaultPresets();
+            presets.AddRange(CoreSettings.Current.UserPresets);
+
+            for (int i = PresetCardsPanel.Children.Count - 1; i >= 0; i--)
+                if (PresetCardsPanel.Children[i] is Border { Tag: string })
+                    PresetCardsPanel.Children.RemoveAt(i);
+
             int at = 0;
-            PresetCardsPanel.Children.Insert(at++, PresetChip("Morning Drift", "⚡🌀", isDefault: true, selected: false));
-            PresetCardsPanel.Children.Insert(at++, PresetChip("Deep Soak", "⚡🎬💭🌀", isDefault: false, selected: true));
-            PresetCardsPanel.Children.Insert(at, PresetChip("Quiet Hours", "💭🔒", isDefault: false, selected: false));
+            foreach (var preset in presets)
+                PresetCardsPanel.Children.Insert(at++, PresetChip(preset));
         }
 
-        private Border PresetChip(string name, string glyphs, bool isDefault, bool selected)
+        /// <summary>WPF's SelectPreset. Only Export is enabled: Load / Save / Delete / Share need
+        /// MainWindow's preset CRUD and the catalogue service, which are head-side.</summary>
+        private void SelectPreset(Preset preset)
         {
+            _selectedPreset = preset;
+            _selectedSession = null;
+            RefreshPresetsList();
+
+            PresetDetailScroller.IsVisible = true;
+            PresetButtonsPanel.IsVisible = true;
+            SessionDetailScroller.IsVisible = false;
+            SessionButtonsPanel.IsVisible = false;
+
+            TxtDetailTitle.Text = CoreMods.MakeModAware(preset.Name);
+            TxtDetailSubtitle.Text = CoreMods.MakeModAware(preset.Description);
+            TxtDetailFlash.Text = preset.FlashEnabled
+                ? $"Enabled | {preset.FlashFrequency}/hr | ×{preset.SimultaneousImages} | Opacity: {preset.FlashOpacity}%"
+                : "Disabled";
+            TxtDetailVideo.Text = preset.MandatoryVideosEnabled
+                ? $"Enabled | {preset.VideosPerHour}/hr | Strict: {(preset.StrictLockEnabled ? "Yes" : "No")}"
+                : "Disabled";
+            TxtDetailSubliminal.Text = preset.SubliminalEnabled
+                ? $"Enabled | {preset.SubliminalFrequency}/min | Opacity: {preset.SubliminalOpacity}%"
+                : "Disabled";
+            TxtDetailAudio.Text = $"Whispers: {(preset.SubAudioEnabled ? $"Yes ({preset.SubAudioVolume}%)" : "No")} | Master: {preset.MasterVolume}%";
+            TxtDetailOverlays.Text = $"Spiral: {(preset.SpiralEnabled ? "Yes" : "No")} | Pink: {(preset.PinkFilterEnabled ? "Yes" : "No")}";
+            TxtDetailAdvanced.Text = $"Bubbles: {(preset.BubblesEnabled ? "Yes" : "No")} | Lock Card: {(preset.LockCardEnabled ? "Yes" : "No")}";
+
+            BtnExportPreset.IsEnabled = true;
+            RefreshSessionRackSelection();
+        }
+
+        /// <summary>WPF's BtnExportPreset_Click (MainWindow.PresetIO.cs), save picker via StorageProvider.</summary>
+        private async void BtnExportPreset_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_selectedPreset == null || TopLevel.GetTopLevel(this) is not { } top) return;
+            _presetFileService ??= new PresetFileService();
+
+            var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = Loc.Get("title_export_preset"),
+                SuggestedFileName = PresetFileService.GetExportFileName(_selectedPreset),
+                DefaultExtension = ".preset.json",
+                FileTypeChoices = new[] { new FilePickerFileType("Preset files") { Patterns = new[] { "*.preset.json" } } },
+            });
+            if (file?.TryGetLocalPath() is not { } path) return;
+
+            var owner = top as Window;
+            try
+            {
+                _presetFileService.ExportPreset(_selectedPreset, path);
+                if (owner != null) _ = Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_export_complete"), Loc.GetF("msg_preset_exported_to_0", path));
+                Serilog.Log.Information("Preset exported: {Name} to {Path}", _selectedPreset.Name, path);
+            }
+            catch (Exception ex)
+            {
+                if (owner != null) _ = Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_export_failed"), Loc.GetF("msg_failed_to_export_preset_0", ex.Message));
+                Serilog.Log.Error(ex, "Failed to export preset");
+            }
+        }
+
+        /// <summary>WPF's HandlePresetDrop: validate, import, de-dup the id, add to UserPresets,
+        /// keep a provenance copy, save, repaint. Called from MainShellWindow's Window_Drop.</summary>
+        internal void HandlePresetDrop(string filePath)
+        {
+            _presetFileService ??= new PresetFileService();
+
+            if (!_presetFileService.ValidatePresetFile(filePath, out var errorMessage))
+            {
+                ShowDropZoneStatus($"Invalid: {errorMessage}", isError: true);
+                return;
+            }
+
+            var preset = _presetFileService.ImportPreset(filePath);
+            if (preset == null)
+            {
+                ShowDropZoneStatus("Failed to read preset", isError: true);
+                return;
+            }
+
+            var settings = CoreSettings.Current;
+            var takenIds = Preset.GetDefaultPresets().Select(p => p.Id)
+                .Concat(settings.UserPresets.Select(p => p.Id))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(preset.Id) || takenIds.Contains(preset.Id))
+                preset.Id = Guid.NewGuid().ToString();
+
+            settings.UserPresets.Add(preset);
+            try { _presetFileService.CopyToCustomPresets(filePath, preset); }
+            catch (Exception ex) { Serilog.Log.Debug("[Preset] CopyToCustomPresets failed: {Error}", ex.Message); }
+            CoreSettings.Save();
+
+            RefreshPresetsList();
+            ShowDropZoneStatus($"Preset imported: {preset.Name}", isError: false);
+            Serilog.Log.Information("Preset imported via drag-drop: {Name}", preset.Name);
+        }
+
+        private void ShowDropZoneStatus(string message, bool isError)
+        {
+            DropZoneStatus.Text = message;
+            DropZoneStatus.Foreground = isError
+                ? new SolidColorBrush(Color.FromRgb(255, 100, 100))
+                : this.TryFindResource("PinkBrush", out var pink) ? pink as IBrush : null;
+            DropZoneStatus.IsVisible = true;
+            DispatcherTimer.RunOnce(() => DropZoneStatus.IsVisible = false, TimeSpan.FromSeconds(3));
+        }
+
+        private Border PresetChip(Preset preset)
+        {
+            var glyphs = (preset.FlashEnabled ? "⚡" : "") + (preset.MandatoryVideosEnabled ? "🎬" : "")
+                + (preset.SubliminalEnabled ? "💭" : "") + (preset.SpiralEnabled ? "🌀" : "")
+                + (preset.LockCardEnabled ? "🔒" : "");
+            var name = CoreMods.MakeModAware(preset.Name);
+            var isDefault = preset.IsDefault;
+            var selected = _selectedPreset?.Id == preset.Id;
+
             var line = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
             // Feature glyphs ahead of the name - the same five the detail pane uses.
@@ -297,6 +427,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             });
 
             var nameText = new TextBlock { Text = name, MaxWidth = 150, Theme = TabTheme("SdPresetChipName") };
+            ToolTip.SetTip(nameText, CoreMods.MakeModAware(preset.Description));
             line.Children.Add(nameText);
 
             // DEF / CUSTOM in the RACK's provenance colours: a built-in preset and a built-in
@@ -306,11 +437,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 : (Loc.Get("preset_tag_custom"), "SessionSrcCustomBrush", "SessionSrcCustomWashBrush");
             line.Children.Add(Pill(tagText, tagWash, tagSolid, "SdRackBadgeText", "SdChipTag"));
 
-            return new Border
+            var chip = new Border
             {
+                Tag = preset.Id,
                 Theme = TabTheme(selected ? "SdPresetChipSelected" : "SdPresetChip"),
                 Child = line,
             };
+            chip.PointerPressed += (_, e) => { SelectPreset(preset); e.Handled = true; };
+            return chip;
         }
 
         /// <summary>Four source chips (single-select) and four difficulty dots (independent).</summary>
@@ -647,6 +781,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (!session.IsAvailable) return;
 
             _selectedSession = session;
+            _selectedPreset = null;
+            RefreshPresetsList();
             PresetDetailScroller.IsVisible = false;
             PresetButtonsPanel.IsVisible = false;
             SessionDetailScroller.IsVisible = true;

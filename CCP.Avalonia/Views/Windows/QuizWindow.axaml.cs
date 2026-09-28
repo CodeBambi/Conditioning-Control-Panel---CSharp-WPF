@@ -13,6 +13,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
@@ -36,9 +37,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    <c>Log</c>. The question flow, scoring, timers, formatting and visual state are the WPF
     ///    original's.
     ///  - <c>QuizService</c> (<c>ConditioningControlPanel/Services/Quiz/QuizService.cs</c>),
-    ///    is still in the WPF head (<c>QuizSessionGenerator</c> and <c>SessionFileService</c> are in
-    ///    Core but not wired here), so
-    ///    the AI round trip, the category store, the history file and the session export are what
+    ///    is still in the WPF head, so
+    ///    the AI round trip, the category store and the history file are what
     ///    remains stubbed; each stub names its exact symbol.
     ///    <c>QuizQuestion</c> and <c>QuizResult</c> are copied below, trimmed to what this view
     ///    reads (the TextEditorDialog / QuizReportWindow / QuizCategoryEditorWindow precedent);
@@ -604,18 +604,72 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _ = PerfectScorePercent;
 
             BuildTrendDisplay();
+            GenerateSession(result);
 
             ShowPanel(_resultPanel);
             PlayResultSound();
         }
 
-        private void BtnTrySession_Click()
+        private Models.Session? _generatedSession;
+
+        /// <summary>WPF's GenerateSessionInBackgroundAsync, over Core's QuizSessionGenerator.
+        /// WPF tried QuizService.GenerateSessionContentAsync (the AI text) first and fell back to
+        /// GetFallbackContent; QuizService is head-side, so this head always takes the fallback.
+        /// WPF also gated this on the history entry QuizService.SaveEntry returned; with no history
+        /// store here the session is built for every result.</summary>
+        private void GenerateSession(QuizResult result)
         {
-            // ponytail: needs QuizSessionGenerator (ConditioningControlPanel/Services/Quiz/
-            // QuizSessionGenerator.cs) and SessionFileService (ConditioningControlPanel/Services/
-            // Session/SessionFileService.cs) to build and export the quiz-shaped Session, plus a
-            // save-file picker - Avalonia's IStorageProvider covers that half. Both services are
-            // head-side. The border stays IsHitTestVisible="False", so this cannot fire.
+            try
+            {
+                var catDef = _currentCategoryDefinition;
+                var categoryId = catDef?.Id ?? result.Category.ToString();
+                var categoryName = catDef?.Name ?? result.Category.ToString();
+                var scorePercent = result.MaxScore > 0 ? (double)result.TotalScore / result.MaxScore * 100 : 0;
+
+                var session = Services.QuizSessionGenerator.GenerateSession(
+                    result.TotalScore, result.MaxScore, categoryId, categoryName,
+                    Services.QuizSessionGenerator.GetFallbackContent(categoryId, scorePercent));
+                _generatedSession = session;
+
+                var displayName = session.Name.Length > 30 ? session.Name.Substring(0, 30) + "..." : session.Name;
+                _txtTrySessionIcon.Text = "\u2728"; // sparkles
+                _txtTrySessionLabel.Text = Loc.GetF("quiz_save_session", displayName);
+                _btnTrySession.IsHitTestVisible = true;
+                _btnTrySession.Opacity = 1.0;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "QuizWindow: Failed to generate session");
+                _btnTrySession.IsVisible = false;
+            }
+        }
+
+        private async void BtnTrySession_Click()
+        {
+            if (_generatedSession == null) return;
+
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Save Quiz Session",
+                SuggestedFileName = Services.SessionFileService.GetExportFileName(_generatedSession),
+                DefaultExtension = ".session.json",
+                FileTypeChoices = new[]
+                {
+                    new FilePickerFileType("Session files") { Patterns = new[] { "*.session.json" } },
+                },
+            });
+            if (file?.TryGetLocalPath() is not { } path) return;
+
+            try
+            {
+                new Services.SessionFileService().ExportSession(_generatedSession, path);
+                _txtTrySessionLabel.Text = Loc.Get("label_session_saved");
+                _btnTrySession.IsHitTestVisible = false;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "QuizWindow: Failed to export session");
+            }
         }
 
         /// <summary>

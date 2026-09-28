@@ -47,6 +47,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -109,11 +110,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         // ---- window-level drag and drop ------------------------------------------------------
-        // ponytail: every one of these needs the asset/import pipeline (MainWindow.Assets.cs:
+        // A single *.preset.json imports through Core's PresetFileService (WPF's DropType.Preset).
+        // ponytail: every other drop type needs the asset/import pipeline (MainWindow.Assets.cs:
         // media -> Play/Edit/Library prompt, *.ccpenh.json -> Deeper library import) plus the
         // GlobalDropOverlay copy chooser. Wired when those services move to Core. The overlay
         // itself is in the XAML and still collapses/expands correctly once they are.
-        private void Window_Drop(object? sender, DragEventArgs e) { }
+        private void Window_Drop(object? sender, DragEventArgs e)
+        {
+            if (e.DataTransfer.TryGetFiles() is { Length: 1 } files
+                && files[0].TryGetLocalPath() is { } path
+                && path.EndsWith(".preset.json", StringComparison.OrdinalIgnoreCase))
+                Named<Tabs.PresetsTabView>("PresetsTab")?.HandlePresetDrop(path);
+        }
         private void Window_DragEnter(object? sender, DragEventArgs e) { }
         private void Window_DragOver(object? sender, DragEventArgs e) { }
         private void Window_DragLeave(object? sender, RoutedEventArgs e) { }
