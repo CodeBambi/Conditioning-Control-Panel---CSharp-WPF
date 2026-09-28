@@ -629,3 +629,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   (oracle-deep; decision logged). The portrait maximize that stretched everything 2.2x now keeps the art's shape.
 - Evidence: ShellResizeMaximizeTests (15, fail-proofed); live maximize/restore screenshots. Not proven live: a real window-manager
   edge drag and the hover cursor. Review: ACCEPT + the oracle's policy.
+
+## avalonia-port/trainer-card: +536 (auth unit 6 part 3, read-only)
+- The Trainer Card shows real data: your card (settings, achievements, board rank with WPF's name fallback), My Profile,
+  search (exact then partial), leaderboard row double-click; another trainer's card from the board row then GET /user/lookup
+  (presence, staff/whitelist pills, achievement tiles). Unknown/offline shows the search plate (offline searches the last
+  board). The sample card is gone; the card's text rules moved to Core TrainerCardText (WPF calls them). Board cached 60 s.
+- Evidence: TrainerCardTests (fail-proofed); live sandbox: own card real values, a public trainer looked up without signing
+  in, offline states, 0 binding errors. Missing: avatar picture, Patreon art, cosmetics, writes (unit 7). Review: ACCEPT.
