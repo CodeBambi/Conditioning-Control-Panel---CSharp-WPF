@@ -29,9 +29,10 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
   let turnStartedMs = 0;
   let timer = null;
   let flagged = null;
+  let pausedAt = null;   // a local pause (Esc): the running side is not charged until resume()
 
   function drain() {
-    if (!active || untimed) return;
+    if (!active || untimed || pausedAt !== null) return;
     const t = now();
     left[active] = Math.max(0, left[active] - (t - since));
     since = t;
@@ -66,6 +67,7 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
 
   function stop() {
     drain();
+    pausedAt = null;
     active = null;
     if (timer) { clearInterval(timer); timer = null; }
   }
@@ -77,7 +79,26 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
     press(next) { start(next); },
     snapshot,
     // Reading presentation age never drains, pauses, or otherwise changes a clock.
-    turnElapsedMs: () => active ? Math.max(0, now() - turnStartedMs) : 0,
+    turnElapsedMs: () => active ? Math.max(0, (pausedAt ?? now()) - turnStartedMs) : 0,
+    /** Hold the running side's time (a local game only; an online clock belongs to the server). */
+    pause() {
+      if (!active || pausedAt !== null) return false;
+      drain();
+      pausedAt = now();
+      if (timer) { clearInterval(timer); timer = null; }
+      return true;
+    },
+    resume() {
+      if (pausedAt === null) return false;
+      const t = now();
+      turnStartedMs += t - pausedAt;
+      pausedAt = null;
+      since = t;
+      if (active && !untimed && !timer) { timer = setInterval(tick, TICK_MS); timer.unref?.(); }
+      if (onTick) onTick(snapshot());
+      return true;
+    },
+    isPaused: () => pausedAt !== null,
     remaining(side) { drain(); return left[side]; },
     flagged: () => flagged,
     isRunning: () => active !== null,

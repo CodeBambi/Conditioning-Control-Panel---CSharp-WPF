@@ -3089,6 +3089,10 @@ namespace ConditioningControlPanel
             RefreshHypnotubeLinksUI();
             _avatarTubeWindow?.UpdateQuickMenuState();
 
+            // The personality picked in this mod comes back, like the look does (tester, 6.11.3).
+            try { App.Personality?.RestoreForActiveMod(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Mod switch: personality restore failed"); }
+
             // Last: the user's per-mod default presets (Customise window), if they picked any.
             ApplyModDefaultPresets(App.Mods.ActiveModId);
 

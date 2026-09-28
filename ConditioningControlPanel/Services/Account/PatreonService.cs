@@ -804,6 +804,13 @@ namespace ConditioningControlPanel.Services
         /// </param>
         private async Task<bool> RefreshTokensAsync(string refreshToken, DateTime? accessTokenExpiresAtUtc)
         {
+            // Already refused this session: do not ask again (the Reconnect row is already lit).
+            if (DeadRefreshTokens.IsDead(refreshToken))
+            {
+                App.Logger?.Debug("Patreon token refresh skipped - this grant was refused earlier this session");
+                return NoteRefresh(PatreonRefreshOutcome.Refused, refreshToken);
+            }
+
             try
             {
                 var response = await _httpClient.PostAsJsonAsync("/patreon/refresh", new
@@ -813,9 +820,12 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    string? body = null;
+                    try { body = await response.Content.ReadAsStringAsync(); } catch { /* verdict from status alone */ }
                     App.Logger?.Warning("Token refresh failed with status {Status}", response.StatusCode);
                     return NoteRefresh(PatreonGrantHealth.Classify(
-                        response.StatusCode, null, threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow));
+                        response.StatusCode, null, threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow, body),
+                        refreshToken);
                 }
 
                 var tokenResponse = await response.Content.ReadFromJsonAsync<PatreonTokenResponse>();
@@ -828,7 +838,8 @@ namespace ConditioningControlPanel.Services
                     return NoteRefresh(tokenResponse == null
                         ? PatreonRefreshOutcome.Unavailable
                         : PatreonGrantHealth.Classify(response.StatusCode, tokenResponse.Error,
-                            threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow));
+                            threw: false, accessTokenExpiresAtUtc, DateTime.UtcNow),
+                        refreshToken);
                 }
 
                 _tokenStorage.StoreTokens(
@@ -851,11 +862,17 @@ namespace ConditioningControlPanel.Services
         /// Records what a refresh attempt said about the grant and reports whether it worked.
         /// Only a refusal raises <see cref="GrantLooksDead"/>; a success lowers it; an outage
         /// leaves it exactly as it was, so a flaky connection can neither raise nor clear it.
+        /// A refusal also puts <paramref name="refreshToken"/> on <see cref="DeadRefreshTokens"/>
+        /// so the same refused request does not go out again this session.
         /// </summary>
-        private bool NoteRefresh(PatreonRefreshOutcome outcome)
+        private bool NoteRefresh(PatreonRefreshOutcome outcome, string? refreshToken = null)
         {
             if (outcome == PatreonRefreshOutcome.Refreshed) GrantLooksDead = false;
-            else if (PatreonGrantHealth.MarksGrantDead(outcome)) GrantLooksDead = true;
+            else if (PatreonGrantHealth.MarksGrantDead(outcome))
+            {
+                GrantLooksDead = true;
+                DeadRefreshTokens.MarkDead(refreshToken);
+            }
             return outcome == PatreonRefreshOutcome.Refreshed;
         }
 

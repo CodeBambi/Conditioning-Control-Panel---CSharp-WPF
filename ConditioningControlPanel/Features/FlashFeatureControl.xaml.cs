@@ -148,6 +148,8 @@ namespace ConditioningControlPanel.Features
                 SliderMaxOnScreen.Value = s.HydraLimit;
                 TxtMaxOnScreen.Text = s.HydraLimit.ToString();
                 ChkClickable.IsChecked = s.FlashClickable;
+                ChkStayUntilPopped.IsChecked = s.FlashStayUntilPopped;
+                SelectExit(s.FlashExitStyle);
                 ChkCorruption.IsChecked = s.CorruptionMode;
                 ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
                 ChkGlow.IsChecked = s.FlashGlowEnabled;
@@ -176,6 +178,8 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.SimultaneousImages) ||
                 e.PropertyName == nameof(Models.AppSettings.HydraLimit) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashClickable) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashStayUntilPopped) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashExitStyle) ||
                 e.PropertyName == nameof(Models.AppSettings.CorruptionMode) ||
                 e.PropertyName == nameof(Models.AppSettings.HydraLinkedTiming) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGlowEnabled) ||
@@ -319,6 +323,15 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
         }
 
+        private void ChkStayUntilPopped_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashStayUntilPopped = ChkStayUntilPopped.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
         private void ChkCorruption_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
@@ -428,6 +441,50 @@ namespace ConditioningControlPanel.Features
                 if (item.Tag is Models.FlashMotionStyle s && s == style) { match = item; break; }
             }
             CmbMotion.SelectedItem = match ?? CmbMotion.Items[0];
+        }
+
+        private static readonly (Models.FlashExitStyle Style, string Key)[] ExitChoices =
+        {
+            (Models.FlashExitStyle.Mix, "option_flash_exit_mix"),
+            (Models.FlashExitStyle.Pop, "option_flash_exit_pop"),
+            (Models.FlashExitStyle.TvOff, "option_flash_exit_tvoff"),
+            (Models.FlashExitStyle.Spiral, "option_flash_exit_spiral"),
+            (Models.FlashExitStyle.Melt, "option_flash_exit_melt"),
+            (Models.FlashExitStyle.Glitch, "option_flash_exit_glitch"),
+            (Models.FlashExitStyle.None, "option_flash_exit_none"),
+        };
+
+        /// <summary>Selects the leave-animation row, building the rows on first use.</summary>
+        private void SelectExit(Models.FlashExitStyle style)
+        {
+            if (CmbExit.Items.Count == 0)
+            {
+                foreach (var (s, key) in ExitChoices)
+                {
+                    var text = new TextBlock
+                    {
+                        Text = Localization.Loc.Get(key),
+                        Foreground = RowTextBrush(),
+                        VerticalAlignment = VerticalAlignment.Center,
+                    };
+                    CmbExit.Items.Add(new ComboBoxItem { Content = text, Tag = s });
+                }
+            }
+            ComboBoxItem? match = null;
+            foreach (ComboBoxItem item in CmbExit.Items)
+                if (item.Tag is Models.FlashExitStyle s && s == style) { match = item; break; }
+            CmbExit.SelectedItem = match ?? CmbExit.Items[0];
+        }
+
+        private void CmbExit_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (CmbExit.SelectedItem is not ComboBoxItem item || item.Tag is not Models.FlashExitStyle style) return;
+            if (s.FlashExitStyle == style) return;
+            s.FlashExitStyle = style;
+            App.Settings?.Save();
         }
 
         private void CmbMotion_Changed(object sender, SelectionChangedEventArgs e)
