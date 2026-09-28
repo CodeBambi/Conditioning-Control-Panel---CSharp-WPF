@@ -25,7 +25,7 @@ public class SkillDefinition
     /// <para>This used to be a split. Stat/analytics nodes were "permanent" and the mechanical
     /// XP-economy nodes were "seasonal": the server dropped them at the monthly rollover and the
     /// re-buy was the Prestige loop. The Descent ended monthly seasons on
-    /// <see cref="Services.Descent.DescentEpochs.SeasonsEndUtc"/> and the server now suppresses
+    /// DescentEpochs.SeasonsEndUtc (WPF head) and the server now suppresses
     /// the wipe permanently, so the seasonal half of that split describes a thing that cannot
     /// happen again. It is folded in here rather than left to rot, because a dead branch that
     /// still renders "this resets at the monthly rollover" at a user is a lie the UI keeps
