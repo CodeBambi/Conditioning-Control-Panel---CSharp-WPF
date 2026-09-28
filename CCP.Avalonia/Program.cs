@@ -1,5 +1,6 @@
 using System;
 using Avalonia;
+using Serilog;
 #if DEBUG
 using Keincheck;
 #endif
