@@ -24,17 +24,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - The settings half is REAL: the track list, the master enable, the master volume and the
     ///    audio-only switch all read and write <see cref="CoreSettings"/>, which carries
     ///    AudioLayers / AudioLayersEnabled / AudioLayersMasterVolume / AudioOnlySession.
-    ///  - What is still missing is the MIXER, and only the mixer. <c>CoreAudio</c> is a one-shot
-    ///    seam (PlayOneShot / Duck / Unduck / DuckGeneration) with no multi-track surface, so
-    ///    <c>LayeredAudioService.Start/Stop/Restart/SetMasterVolumeLive/SetTrackVolumeLive</c>
-    ///    (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs) have no Core equivalent.
-    ///    Each of those five call sites keeps a note; everything around them runs.
+    ///  - The mixer is <see cref="Platform.LayeredAudio"/> (LibVLC, one player per track), driven
+    ///    from the same five call sites as WPF's App.LayeredAudio.
     ///  - The file picker uses Avalonia's StorageProvider (async) instead of
     ///    Microsoft.Win32.OpenFileDialog.
-    ///  - The static Open(DependencyObject) helper is DROPPED. Its three jobs - best-effort
-    ///    Owner, single-instance re-surface, and EnsureOnScreen against SystemParameters'
-    ///    virtual-desktop metrics - are WPF window-manager repairs with no caller in this head.
-    ///    It comes back (over Avalonia's Screens API) with the call sites that need it.
+    ///  - <see cref="Open"/> keeps WPF's single-instance re-surface and best-effort owner; the
+    ///    EnsureOnScreen clamp is dropped (it repairs WPF's CenterOwner arithmetic, which
+    ///    Avalonia does not share).
     ///  - TryFindResource("ToggleStyle") returns a ControlTheme here, assigned to Theme.
     ///  - Checked/Unchecked collapse into IsCheckedChanged; Slider.ValueChanged carries
     ///    RangeBaseValueChangedEventArgs.
@@ -236,9 +232,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 track.Volume = (int)e.NewValue;
                 volValue.Text = $"{track.Volume}%";
-                // ponytail: needs LayeredAudioService.SetTrackVolumeLive(AudioLayerTrack, int)
-                // (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs) - live per-track
-                // gain with no graph rebuild. CoreAudio has no multi-track surface.
+                Platform.LayeredAudio.Instance?.SetTrackVolumeLive(track, track.Volume);
                 SaveDebounced();
             }));
             Grid.SetColumn(volSlider, 1);
@@ -305,9 +299,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             s.AudioLayersEnabled = _chkMasterEnable.IsChecked ?? false;
             CoreSettings.Save();
 
-            // ponytail: needs LayeredAudioService.Start() / .Stop()
-            // (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs). The setting is
-            // persisted either way, so the mixer picks it up when this head gets one.
+            if (s.AudioLayersEnabled) Platform.LayeredAudio.Instance?.Start();
+            else Platform.LayeredAudio.Instance?.Stop();
 
             // The empty-state warning above depends on this toggle.
             if (Tracks().Count == 0) BuildRows();
@@ -325,8 +318,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_loading) return;
             CoreSettings.Current.AudioLayersMasterVolume = (int)e.NewValue;
             _txtMaster.Text = $"{(int)e.NewValue}%";
-            // ponytail: needs LayeredAudioService.SetMasterVolumeLive()
-            // (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs).
+            Platform.LayeredAudio.Instance?.SetMasterVolumeLive();
             SaveDebounced();
         }
 
@@ -334,8 +326,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ApplyStructural()
         {
             CoreSettings.Save();
-            // ponytail: needs LayeredAudioService.Restart() when AudioLayersEnabled is true
-            // (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs).
+            if (CoreSettings.Current.AudioLayersEnabled) Platform.LayeredAudio.Instance?.Restart();
+        }
+
+        private static LayeredAudioWindow? _open;
+
+        /// <summary>Open or re-surface the single Audio Layers window (WPF LayeredAudioWindow.Open):
+        /// two windows would be two debounced writers of the same AudioLayers list.</summary>
+        internal static void Open(Visual? context)
+        {
+            try
+            {
+                if (_open != null)
+                {
+                    if (_open.WindowState == WindowState.Minimized) _open.WindowState = WindowState.Normal;
+                    _open.Activate();
+                    return;
+                }
+                var win = new LayeredAudioWindow();
+                win.Closed += (_, _) => { if (ReferenceEquals(_open, win)) _open = null; };
+                _open = win;
+                if (context != null && TopLevel.GetTopLevel(context) is Window owner && owner.IsVisible) win.Show(owner);
+                else { win.WindowStartupLocation = WindowStartupLocation.CenterScreen; win.Show(); }
+            }
+            catch (Exception ex)
+            {
+                _open = null;
+                Serilog.Log.Error(ex, "[AudioLayers] Could not open the Audio Layers window.");
+            }
         }
 
         private void SaveDebounced()

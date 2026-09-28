@@ -390,15 +390,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void HomeBtnAudioOutputRefresh_Click(object? sender, RoutedEventArgs e) { }  // mw.BtnAudioOutputRefresh_Click(...)
         private void HomeBtnTestAudio_Click(object? sender, RoutedEventArgs e) { }           // mw.BtnTestAudio_Click(...)
         /// <summary>Self-contained on the old dashboard too - it only opens a window.</summary>
-        // ponytail: WPF is `LayeredAudioWindow.Open(this)` and the window is ported, with its
-        // settings half REAL (tracks, master enable, master volume, audio-only, all over
-        // CoreSettings). What is NOT ported is Open itself - dropped at
-        // CCP.Avalonia/Views/Windows/LayeredAudioWindow.axaml.cs:34 with its best-effort owner and
-        // its SINGLE-INSTANCE re-surface. That guard is load-bearing here, not window-manager
-        // polish: two of these windows are two debounced writers of the same AudioLayers list, so
-        // a bare `new + Show` would make a second click cost the user a track. Restore Open (over
-        // Avalonia's Screens API) in that file, then this is one line.
-        private void HomeBtnAudioLayers_Click(object? sender, RoutedEventArgs e) { }
+        private void HomeBtnAudioLayers_Click(object? sender, RoutedEventArgs e)
+            => Windows.LayeredAudioWindow.Open(this);
 
         // -- companion + account strips --------------------------------------------------
         /// <summary>Home's companion strip. Pure navigation into the Companion door - the strip

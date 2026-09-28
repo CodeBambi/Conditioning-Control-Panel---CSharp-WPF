@@ -45,6 +45,52 @@ namespace ConditioningControlPanel.Avalonia
             return played && duckOk ? 0 : 1;
         }
 
+        /// <summary>`--layers-probe`: two looping Audio Layers on the real output. Fails unless pactl
+        /// shows two of our streams, one moves on a live volume change, and one is left after it is
+        /// disabled (the window's toggle path: Restart).</summary>
+        public static int RunLayers()
+        {
+            new LibVlcAudio().Seed();
+            var dir = Path.Combine(AppContext.BaseDirectory, "Resources", "sounds");
+            var s = CoreSettings.Current;
+            var a = new Models.AudioLayerTrack { Path = Path.Combine(dir, "faucet_charge_drop.wav"), Volume = 100 };
+            var b = new Models.AudioLayerTrack { Path = Path.Combine(dir, "00 Bimbo Drone.mp3"), Volume = 50 };
+            s.AudioLayers = new() { a, b };
+            s.AudioLayersEnabled = true;
+            s.AudioLayersMasterVolume = 100;
+            s.MasterVolume = 100;
+            var layers = LayeredAudio.Instance!;
+            layers.Start();
+            Thread.Sleep(1500);
+            var started = Ours();
+            Console.WriteLine($"-- 2 layers started (100%, 50%):\n{string.Join('\n', started)}");
+            b.Volume = 20; // as the window: the setting, then the live call
+            layers.SetTrackVolumeLive(b, 20);
+            Thread.Sleep(500);
+            var changed = Ours();
+            Console.WriteLine($"-- layer 2 set to 20%:\n{string.Join('\n', changed)}");
+            a.Enabled = false;
+            layers.Restart();
+            Thread.Sleep(1500);
+            var one = Ours();
+            Console.WriteLine($"-- layer 1 disabled:\n{string.Join('\n', one)}");
+            layers.Stop();
+            Thread.Sleep(1000);
+            var ok = started.Length == 2 && changed.Length == 2 && !changed.SequenceEqual(started) && one.Length == 1 && Ours().Length == 0;
+            Console.WriteLine($"layers: {(ok ? "PASS" : "FAIL")}");
+            return ok ? 0 : 1;
+        }
+
+        /// <summary>Our own sink-inputs as "name volume%".</summary>
+        private static string[] Ours()
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(LibVlcAudio.Pactl("-f json list sink-inputs"));
+            return doc.RootElement.EnumerateArray()
+                .Where(si => si.GetProperty("properties").TryGetProperty("application.process.id", out var pid) && pid.GetString() == Environment.ProcessId.ToString())
+                .Select(si => $"{si.GetProperty("properties").GetProperty("application.name").GetString()} {si.GetProperty("volume").EnumerateObject().First().Value.GetProperty("value_percent").GetString()}")
+                .ToArray();
+        }
+
         private static string SinkInputs() => string.Join('\n', LibVlcAudio.Pactl("list sink-inputs").Split('\n')
             .Where(l => l.StartsWith("Sink Input") || l.Contains("Volume:") || l.Contains("application.name") || l.Contains("process.id")));
 
