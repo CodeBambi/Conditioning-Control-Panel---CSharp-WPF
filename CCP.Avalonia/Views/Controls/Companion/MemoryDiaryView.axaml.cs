@@ -381,11 +381,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public string StorageLinkLabel { get; init; } = Loc.Get("companion_memory_storage_link");
         public string ForgetEverythingLabel { get; init; } = Loc.Get("companion_memory_forget_everything");
 
-        // ponytail: the PATH is not the blocker - CorePaths answers it today. What is missing is
-        // a head-side "reveal in file manager": Avalonia has no launcher for a directory
-        // (TopLevel.Launcher opens files and URIs), so this needs an xdg-open shim in
-        // CCP.Avalonia/Helpers before the command can do anything but lie about opening.
-        public ICommand? OpenStorageFolderCommand => null;
+        // WPF MemoryDiaryRuntimeVm.OpenStorageFolder: MemoryStore.CompanionDirectory (head-only, so
+        // its one-line path is spelled here). Shell-execute on a directory is xdg-open on Linux.
+        public ICommand OpenStorageFolderCommand { get; } = new CompanionRelayCommand(() =>
+        {
+            try
+            {
+                var dir = System.IO.Path.Combine(CorePaths.UserData, "companion");
+                System.IO.Directory.CreateDirectory(dir);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = dir, UseShellExecute = true });
+            }
+            catch (Exception ex) { Serilog.Log.Debug("open memory folder failed: {E}", ex.Message); }
+        });
         public ICommand ForgetEverythingCommand { get; }
 
         private void Attach(MemoryFact fact)

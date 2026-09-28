@@ -52,12 +52,12 @@
 
             <!-- ========== hero header ==========
                  The negative margin cancels the card's own 20,18 padding so the art reaches the
-                 card edges. ponytail: the lab_aimemory_hero.png ImageBrush is dropped - this head
-                 ships no Resources/ PNGs yet; only the scrim gradient is drawn. Re-add the brush
-                 as an avares:// ImageBrush when the art moves. -->
+                 card edges. The CmpElevBrush tile is the no-art fallback;
+                 LabAiMemoryHeroArt is painted from code (features/lab_aimemory_hero.png, mod override first). -->
             <Border CornerRadius="14,14,0,0" Height="138" Margin="-20,-18,-20,16" ClipToBounds="True">
                 <Grid>
                     <Border CornerRadius="14,14,0,0" Background="{StaticResource CmpElevBrush}"/>
+                    <Border x:Name="LabAiMemoryHeroArt" CornerRadius="14,14,0,0"/>
                     <Border CornerRadius="14,14,0,0">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">

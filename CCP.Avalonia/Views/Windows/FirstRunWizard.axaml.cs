@@ -14,6 +14,8 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Platform;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.Styling;
 using ConditioningControlPanel.Avalonia.Controls;
@@ -47,12 +49,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         public string Note { get; init; } = "";
 
         /// <summary>
-        /// ponytail: the WPF card's ArtUri is a compiled <c>&lt;Resource&gt;</c> pack:// path
-        /// (Resources/intake/pass_card_*.png). This head ships no Resources/ PNGs and cannot
-        /// reference the WPF assembly, so the art frame draws its accent border over the flat
-        /// #1A1A2E ground. Bind a real IImage here when the art moves to Core as avares://.
+        /// The catalogue's shipped art, never the active mod's: WPF binds the compiled ArtUri for
+        /// the same reason (five candidates, one active mod).
         /// </summary>
-        public IImage? Art => null;
+        public IImage? Art { get; init; }
 
         public bool HasPack => !string.IsNullOrEmpty(PackId);
 
@@ -224,6 +224,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// </summary>
     public partial class FirstRunWizard : Window
     {
+        /// <summary>The catalogue's shipped pass card, or null (the frame then shows its flat ground).</summary>
+        private static IImage? LoadPassCard(string artName)
+        {
+            try
+            {
+                using var s = AssetLoader.Open(new Uri("avares://CCP.Avalonia/Resources/" + artName));
+                return new Bitmap(s);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("FirstRunWizard: pass card {Name} would not load: {E}", artName, ex.Message);
+                return null;
+            }
+        }
+
         private const int StepCount = 3;
 
         private readonly ObservableCollection<FirstRunModCard> _cards = new();
@@ -688,6 +703,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     PackId = entry.PackId,
                     Name = Loc.Get(entry.NameLocKey),
                     Description = Loc.Get(entry.DescriptionLocKey),
+                    Art = LoadPassCard(entry.ArtName),
                     AccentBrush = accent,
                     Note = note,
                     InstalledText = installedBadge

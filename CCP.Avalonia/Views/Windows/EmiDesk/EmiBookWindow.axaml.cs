@@ -58,10 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///     the reader's language), never a raw key.</item>
     ///   <item><b>The emphasis parser is the real one.</b> <c>EmiBookText.Parse</c> is already in
     ///     Core, so the <c>*asterisk*</c> runs are ported rather than approximated.
-    ///     <c>EmiBookLayout</c> is NOT: it is <c>internal</c> to CCP.Core and this assembly is not
-    ///     in Core's <c>InternalsVisibleTo</c>, so the side/width decision is stubbed rather than
-    ///     copied - a second copy of that arithmetic is the exact thing it was extracted to
-    ///     prevent.</item>
+    ///     <c>EmiBookLayout.Place</c> makes the side/width decision.</item>
     ///   <item><c>Left</c>/<c>Top</c> (DIPs) -&gt; <c>Position</c>, which is PHYSICAL pixels: the
     ///     conversion the original does in one direction now runs in both.
     ///     <c>PresentationSource...TransformToDevice.M11</c> -&gt; <c>RenderScaling</c>;
@@ -1134,8 +1131,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 double bodyR = bodyPx.Right / s;
                 double bodyH = bodyPx.Height / s;
 
-                var place = Place(workL, workW, bodyL, bodyR);
-                if (ForceNarrow) place = place with { Width = NarrowWidth, Narrow = true };
+                var place = Services.EmiDesk.EmiBookLayout.Place(workL, workW, bodyL, bodyR);
+                if (ForceNarrow) place = place with { Width = Services.EmiDesk.EmiBookLayout.NarrowWidth, Narrow = true };
                 if (Math.Abs(Width - place.Width) > 0.5) Width = place.Width;
 
                 double h = Math.Min(FullHeight, Math.Max(MinPanelHeight, workH - 24));
@@ -1194,28 +1191,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _stage.Height = hh;
             }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book stage scale failed"); }
-        }
-
-        // ---- the side/width decision -------------------------------------------------
-        //
-        // ponytail: needs CCP.Core's EmiBookLayout.Place, which is `internal` to CCP.Core and this
-        // assembly is NOT in Core's InternalsVisibleTo - so it cannot be called from here and must
-        // not be re-derived: geometry that only misbehaves at desk sizes nobody owns is exactly what
-        // was extracted into that class, and a second copy would put the bug back. Widening Core's
-        // InternalsVisibleTo (or making the type public) is its own one-line layer; until then this
-        // is the crudest honest stand-in - full width, her right, never narrow.
-
-        /// <summary>The narrow book's width, mirroring Core's <c>EmiBookLayout.NarrowWidth</c>.</summary>
-        private const double NarrowWidth = 270.0;
-
-        private readonly record struct Placement(double Left, double Width, bool OnHerLeft, bool Narrow, bool CoversHer);
-
-        private static Placement Place(double workLeft, double workWidth, double bodyLeft, double bodyRight)
-        {
-            _ = workLeft;
-            _ = workWidth;
-            _ = bodyLeft;
-            return new Placement(bodyRight + 12.0, 364.0, false, false, false);
         }
 
         // ---------------------------------------------------------------- the stub deck

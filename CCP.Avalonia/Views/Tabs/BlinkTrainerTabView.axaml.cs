@@ -21,7 +21,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     {
         public BlinkTrainerTabView()
         {
-            AvaloniaXamlLoader.Load(this);
+            InitializeComponent(); // generated: fills HeroArt/SideArt (AvaloniaXamlLoader.Load would not)
+            Helpers.ModArt.BindFeaturePlates(this, "features/blink_trainer.png", HeroArt, SideArt);
         }
 
         // ponytail: needs MainWindow's blink-trainer handlers -

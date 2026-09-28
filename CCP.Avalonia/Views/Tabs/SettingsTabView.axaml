@@ -43,13 +43,11 @@
        Border.Resources                ->  UserControl.Resources (one dictionary, and a template
                                            resolves its siblings there without ordering surprises)
 
-     ponytail: the eight rail ImageBrushes (features/takeover.png, awareness.png, vibe.png,
-     lab_quiz_hero.png, remote_control.png, blink_trainer.png, fyp.png, lockdown_icon.png) and
-     every FeatureCard/SplitFeatureCard Icon are DROPPED. They are pack:// resources of the WPF
-     head and this head ships no Resources/; each chip keeps a wash in the art's slot so it draws
-     a coloured plate rather than a hole, and the Viewbox crop rectangles go with the art. Restore
-     them as avares:// ImageBrushes when Resources/features moves - the same call PlayTabView,
-     AiPermissionsGrid and SeasonRecapCard already made.
+     FeatureCard/SplitFeatureCard Icons carry WPF's literal art (Resources/features/*.png); WPF's
+     mod-aware re-point of those icons lives in MainWindow.xaml.cs and is not ported.
+     ponytail: the eight rail chip plates keep a wash. WPF paints them from code
+     (MainWindow.FavoritesRail.cs BuildRailChipArt + Services/FavoritesRailArt.cs crop map),
+     neither of which is on this head; port that pair to restore them.
      ponytail: BrowserLoadingText starts hidden here. On WPF it is the prompt that stands in the
      browser slot until BrowserLoadingText_Click creates the WebView2; this head puts the
      cross-platform controls:WebHost in that slot from the start, so the prompt would sit straight
@@ -924,15 +922,15 @@
            (RefreshMysteryTile) and the tease tile (ApplyTeaseCard). -->
 
       <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
-      <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash"
+      <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" Icon="/Resources/features/flash.png"
                             Title="Flash Images"
                             HelpSectionId="FlashImages"/>
-      <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble"
+      <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" IconB="/Resources/features/Bubble_count.png" IconA="/Resources/features/mandatory_videos.png"
                                  TitleA="Mandatory Video" TitleB="Bubble Count"/>
-      <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal"
+      <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" Icon="/Resources/features/subliminal.png"
                             Title="Subliminals"
                             HelpSectionId="Subliminals"/>
-      <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText"
+      <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" Icon="/Resources/features/bouncing_text.png"
                             Title="Bouncing Text"
                             HelpSectionId="BouncingText"/>
 
@@ -1042,7 +1040,8 @@
                    as a background brush rather than an Image child because ClipToBounds ignores
                    CornerRadius - a background brush is the only fill that follows the rounded
                    corners. Collapsed until IntakeNiche.PassCardImage() returns a bitmap.
-                   ponytail: the brush is left empty here (no Resources/ on this head). -->
+                   ponytail: the PNGs ship here; what is missing is the writer - WPF's
+                   MainWindow.UiUpdates.cs:1559 via IntakeNiche.PassCardImage(), neither ported. -->
               <Border x:Name="IntakePassArt" CornerRadius="11" IsVisible="False">
                 <Border.Background>
                   <ImageBrush Stretch="UniformToFill"
@@ -1151,7 +1150,7 @@
         </Grid>
       </Border>
 
-      <features:SplitFeatureCard Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink"
+      <features:SplitFeatureCard Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" IconB="/Resources/features/Pink_filter.png" IconA="/Resources/features/spiral_overlay.png"
                                  TitleA="Spiral Overlay" TitleB="Pink Filter"/>
 
       <!-- Row 3: the ? box + the immersion pair -->
@@ -1171,7 +1170,7 @@
           </TransformGroup>
         </Grid.RenderTransform>
 
-        <features:FeatureCard x:Name="CardMystery"
+        <features:FeatureCard x:Name="CardMystery" Icon="/Resources/features/mysterybox.png"
                               Title="FREE TODAY"/>
 
         <!-- The reveal face: today's feature, full-bleed. Art + name are painted by
@@ -1256,13 +1255,13 @@
         <TextBlock Text="{loc:Str mosaic_new_today}"
                    Foreground="#3A2A00" FontSize="10" FontWeight="Black"/>
       </Border>
-      <features:SplitFeatureCard Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain"
+      <features:SplitFeatureCard Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" IconB="/Resources/features/brain_drain.png" IconA="/Resources/features/Mind_Wipers.png"
                                  TitleA="Mind Wipe" TitleB="Brain Drain"/>
 
       <!-- Row 4: the vault (double-wide) + the two games -->
       <!-- THE VAULT: the Exclusives storefront (Velvet Vault + the premium T2 shelf).
            Double-wide because it is a billboard as much as a door. -->
-      <features:FeatureCard Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault"
+      <features:FeatureCard Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault" Icon="/Resources/features/vault.png"
                             Title="The Vault"/>
       <!-- The vault's animated CTA: big, slightly diagonal, breathing. Overlaid on the CELL
            rather than inside FeatureCard so the card control stays generic. IsHitTestVisible
@@ -1287,10 +1286,10 @@
                             BlurRadius="14" OffsetX="0" OffsetY="0" Opacity="0.95"/>
         </TextBlock.Effect>
       </TextBlock>
-      <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop"
+      <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" Icon="/Resources/features/Bubble_pop.png"
                             Title="Bubble Pop"
                             HelpSectionId="BubblePop"/>
-      <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardLockCard"
+      <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" Icon="/Resources/features/Phrase_Lock.png"
                             Title="Lock Card"
                             HelpSectionId="LockCard"/>
 
