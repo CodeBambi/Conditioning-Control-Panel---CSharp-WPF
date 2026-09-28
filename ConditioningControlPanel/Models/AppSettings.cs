@@ -2315,6 +2315,19 @@ namespace ConditioningControlPanel.Models
             set { _modAvatarSet = new Dictionary<string, int>(value ?? new Dictionary<string, int>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
         }
 
+        private Dictionary<string, string> _modPersonalityPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Per mod id, the companion personality (PersonalityPreset.Id) last picked in that mod,
+        /// put back when the mod is switched to again. A missing key = never picked there; the
+        /// mod's own default applies. Local only. See Services/Companion/ModPersonalityPicks.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModPersonalityPreset
+        {
+            get => _modPersonalityPreset;
+            set { _modPersonalityPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
         private string? _currentAssetPresetId = null;
         /// <summary>
         /// ID of the currently selected asset preset, or null if none selected.

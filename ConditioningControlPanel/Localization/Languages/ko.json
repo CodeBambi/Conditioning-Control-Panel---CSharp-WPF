@@ -3600,6 +3600,7 @@
   "haptics_devices_merged": "{1}을(를) 통해 토이 {0}개",
   "haptics_no_provider_enabled": "먼저 제공자를 하나 이상 체크하세요 - Lovense, Intiface 또는 Mock.",
   "haptics_connect_failed_hint": "아무 응답이 없어요. 제공자가 실행 중이고 같은 네트워크에 있는지 확인하세요.",
+  "haptics_intiface_url_invalid": "이 Intiface 주소는 사용할 수 없습니다: {0}. 포트 앞에 콜론을 넣어 ws://127.0.0.1:12345 처럼 입력하세요.",
   "haptics_feel": "느낌",
   "haptics_feel_sub": "세기를 정하는 다이얼 하나, 성격을 정하는 칩 한 줄. 나머지는 전부 선택이에요.",
   "haptics_intensity": "강도",

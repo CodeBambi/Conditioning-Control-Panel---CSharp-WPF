@@ -3600,6 +3600,7 @@
   "haptics_devices_merged": "{1} 経由で {0} 台のトイ",
   "haptics_no_provider_enabled": "まずプロバイダーを1つ以上チェックしてください - Lovense、Intiface、モックのいずれか。",
   "haptics_connect_failed_hint": "応答がありませんでした。プロバイダーが起動していて、同じネットワーク上にあるか確認してください。",
+  "haptics_intiface_url_invalid": "このIntifaceアドレスは使えません: {0}。ポートの前はコロンにして、ws://127.0.0.1:12345 のように入力してください。",
   "haptics_feel": "感触",
   "haptics_feel_sub": "強さを決めるダイヤルが1つ、振る舞いを決めるチップが1列。それ以外はすべて任意です。",
   "haptics_intensity": "強度",

@@ -3600,6 +3600,7 @@
   "haptics_devices_merged": "{0} игрушек через {1}",
   "haptics_no_provider_enabled": "Сначала отметь хотя бы одного провайдера - Lovense, Intiface или Mock.",
   "haptics_connect_failed_hint": "Никто не ответил. Проверь, что провайдер запущен и находится в той же сети.",
+  "haptics_intiface_url_invalid": "Этот адрес Intiface не подходит: {0}. Попробуй ws://127.0.0.1:12345, с двоеточием перед портом.",
   "haptics_feel": "Каково это на ощупь",
   "haptics_feel_sub": "Одна ручка для силы, один ряд фишек для характера. Всё остальное — по желанию.",
   "haptics_intensity": "Интенсивность",

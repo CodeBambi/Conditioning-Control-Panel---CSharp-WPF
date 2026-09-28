@@ -3600,6 +3600,7 @@
   "haptics_devices_merged": "{0} jouet(s) via {1}",
   "haptics_no_provider_enabled": "Coche d'abord au moins un fournisseur : Lovense, Intiface ou Mock.",
   "haptics_connect_failed_hint": "Aucune réponse. Vérifie que le fournisseur tourne et qu'il est sur le même réseau.",
+  "haptics_intiface_url_invalid": "Cette adresse Intiface ne fonctionne pas : {0}. Essaie ws://127.0.0.1:12345, avec deux-points avant le port.",
   "haptics_feel": "Le ressenti",
   "haptics_feel_sub": "Un curseur pour la force, une rangée de pastilles pour le caractère. Tout le reste est facultatif.",
   "haptics_intensity": "Intensité",

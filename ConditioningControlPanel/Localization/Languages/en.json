@@ -4994,6 +4994,7 @@
   "haptics_devices_merged": "{0} toy(s) via {1}",
   "haptics_no_provider_enabled": "Tick at least one provider first - Lovense, Intiface or Mock.",
   "haptics_connect_failed_hint": "Nothing answered. Check the provider is running and on the same network.",
+  "haptics_intiface_url_invalid": "That Intiface address won't work: {0}. Try ws://127.0.0.1:12345, with a colon before the port.",
   "haptics_feel": "How it feels",
   "haptics_feel_sub": "One dial for how strong it is, one row of chips for how it behaves. Everything else is optional.",
   "haptics_intensity": "Intensity",
