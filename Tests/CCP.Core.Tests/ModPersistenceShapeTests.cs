@@ -14,8 +14,7 @@ namespace CCP.Core.Tests;
 /// Pins the on-disk shape of the mod state before <c>ModService</c> moves to Core: every mod key
 /// in settings.json and a full mod.json must survive load -> save through the same serializer calls
 /// the WPF head uses. A renamed key, a new converter or a dropped field fails here. The pack.json
-/// stamp type is still private to the head, so its round trip lives in the WPF suite
-/// (ModActivationGoldenTests) until the move.
+/// stamp round trip lives in ModServiceCoreTests.
 /// </summary>
 public sealed class ModPersistenceShapeTests
 {

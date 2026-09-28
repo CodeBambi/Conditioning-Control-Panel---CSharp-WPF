@@ -27,6 +27,17 @@ namespace ConditioningControlPanel.LinuxSmoke
     internal static class Program
     {
         private static int _failures;
+        private static string? _sandbox;
+
+        /// <summary>Deletes only the ccp-smoke-&lt;pid&gt; folder this run created, and only when CorePaths
+        /// actually resolved into it - never a path derived from a CorePaths the env var did not steer.</summary>
+        private static void DeleteSandbox()
+        {
+            if (_sandbox is null || CorePaths.UserData != _sandbox) return;
+            var dir = Path.GetDirectoryName(_sandbox)!;
+            if (!Path.GetFileName(dir).StartsWith("ccp-smoke-", StringComparison.Ordinal)) return;
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
 
         private static void Check(string what, bool ok, string? detail = null)
         {
@@ -41,7 +52,7 @@ namespace ConditioningControlPanel.LinuxSmoke
 
             // Sandbox the user-data tree BEFORE anything touches CorePaths (it resolves once, at
             // type init). Ends with the app folder so the Paths() checks below still describe it.
-            var sandbox = Path.Combine(Path.GetTempPath(), $"ccp-smoke-{Environment.ProcessId}", "ConditioningControlPanel");
+            var sandbox = _sandbox = Path.Combine(Path.GetTempPath(), $"ccp-smoke-{Environment.ProcessId}", "ConditioningControlPanel");
             Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", sandbox);
 
             Paths();
@@ -395,6 +406,8 @@ namespace ConditioningControlPanel.LinuxSmoke
 
             }
 
+            Mods();
+
             // Re-tested AFTER the seam block, not inside it: the block used to return 0 on its
             // last line, so a seam Check that failed printed [FAIL], incremented _failures and
             // still exited 0 - the ubuntu job stayed green on a broken seam.
@@ -405,6 +418,34 @@ namespace ConditioningControlPanel.LinuxSmoke
             }
             Console.WriteLine($"{_failures} assertion(s) failed - Core behaves differently here than intended.");
             return 1;
+        }
+
+        /// <summary>
+        /// ModService lives in Core: it builds its folders under the sandboxed CorePaths.UserData,
+        /// takes the persisted id, and switches to a built-in, with no head seeded. Runs after the
+        /// seam block because activation writes pools into the settings it is given.
+        /// </summary>
+        private static void Mods()
+        {
+            Console.WriteLine("\nMod service");
+            var settings = new ConditioningControlPanel.Services.SettingsService();
+            CoreSettings.ServiceProvider = () => settings;
+            try
+            {
+                var mods = new ModService();
+                Check("the mods folder is created under the sandboxed user data",
+                      Directory.Exists(Path.Combine(CorePaths.UserData, "mods")), CorePaths.UserData);
+                mods.Initialize(Models.BuiltInMods.BambiSleepId);
+                Check("Initialize takes the persisted mod id", mods.ActiveModId == Models.BuiltInMods.BambiSleepId, mods.ActiveModId);
+                mods.ActivateMod(Models.BuiltInMods.SissyHypnoId);
+                // Persisting ActiveModId is the caller's job (ModManagerDialog.xaml.cs:582), not ActivateMod's.
+                Check("ActivateMod switches the active mod", mods.ActiveModId == Models.BuiltInMods.SissyHypnoId, mods.ActiveModId);
+            }
+            finally
+            {
+                CoreSettings.ServiceProvider = null;
+                DeleteSandbox();
+            }
         }
 
         /// <summary>Path resolution is the single most platform-divergent thing Core does.</summary>
@@ -436,7 +477,7 @@ namespace ConditioningControlPanel.LinuxSmoke
             CoreSettings.SaveImmediate();
             Check("CoreSettings.SaveImmediate persists through the seeded service", new ConditioningControlPanel.Services.SettingsService().Current.ActiveModId == "smoke-mod-2");
             CoreSettings.ServiceProvider = null;
-            try { Directory.Delete(Path.GetDirectoryName(CorePaths.UserData)!, recursive: true); } catch { }
+            DeleteSandbox();
             Console.WriteLine();
         }
 

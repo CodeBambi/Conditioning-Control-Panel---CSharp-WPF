@@ -346,3 +346,11 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   CirceNeutralPackPatch.cs (a dependency the plan missed) into CCP.Core.
 - Evidence: the mod behaviour golden (#1799, green on Windows CI against the real WPF build) is reproduced by the
   moved Core ModService in a Linux harness; broken once (mismatch) and restored. Review: ACCEPT.
+
+## avalonia-port/modservice-core-tests: +285
+- ModService unit 4: the activation golden runs in CCP.Core.Tests on Linux (WPF copy removed; nothing seam-specific
+  lost). New Core tests install a .ccpmod built in the test (backslash entries, traversal, reserved id, MinAppVersion
+  above/below) and an uninstall that deletes only mods/<id>; LinuxSmoke gains an Initialize + ActivateMod check.
+- Real Linux defect found and fixed: Windows-zipped .ccpmod entries with backslashes installed as flat files. The
+  custom extraction runs off Windows only; WPF keeps .NET's ExtractToDirectory exactly. Each test fail-proofed.
+  Same defect remains in ContentPackService, ReleaseContentService and the Avalonia ModCreatorWindow (follow-up).
