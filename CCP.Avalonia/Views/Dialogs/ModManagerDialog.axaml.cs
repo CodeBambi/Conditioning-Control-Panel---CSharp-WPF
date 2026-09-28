@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    Core. With no mod service seeded (this head today) that is the one built-in CCP Default,
     ///    which is exactly what <c>App.Mods</c> answered before its service came up.
     ///  - The mod-id → pack-id mapping comes from Core <c>ModService.PackIdForMod</c>; pack sizes and install state come from
-    ///    <see cref="ModPacks"/>, its twin on this head.
+    ///    <see cref="ModPickerCatalog"/> on this head.
     ///  - Install, uninstall, activate and export go through the head's <c>App.Mods</c>
     ///    (Core ModService), exactly as WPF. Catalogue sharing is still a stub (no catalogue client).
     ///  - Pack download progress plumbing is dropped; only ModAvailabilityChanged is listened to.
