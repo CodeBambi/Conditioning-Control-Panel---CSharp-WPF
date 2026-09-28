@@ -27,6 +27,17 @@ namespace ConditioningControlPanel.LinuxSmoke
     internal static class Program
     {
         private static int _failures;
+        private static string? _sandbox;
+
+        /// <summary>Deletes only the ccp-smoke-&lt;pid&gt; folder this run created, and only when CorePaths
+        /// actually resolved into it - never a path derived from a CorePaths the env var did not steer.</summary>
+        private static void DeleteSandbox()
+        {
+            if (_sandbox is null || CorePaths.UserData != _sandbox) return;
+            var dir = Path.GetDirectoryName(_sandbox)!;
+            if (!Path.GetFileName(dir).StartsWith("ccp-smoke-", StringComparison.Ordinal)) return;
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
 
         private static void Check(string what, bool ok, string? detail = null)
         {
@@ -41,7 +52,7 @@ namespace ConditioningControlPanel.LinuxSmoke
 
             // Sandbox the user-data tree BEFORE anything touches CorePaths (it resolves once, at
             // type init). Ends with the app folder so the Paths() checks below still describe it.
-            var sandbox = Path.Combine(Path.GetTempPath(), $"ccp-smoke-{Environment.ProcessId}", "ConditioningControlPanel");
+            var sandbox = _sandbox = Path.Combine(Path.GetTempPath(), $"ccp-smoke-{Environment.ProcessId}", "ConditioningControlPanel");
             Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", sandbox);
 
             Paths();
@@ -433,7 +444,7 @@ namespace ConditioningControlPanel.LinuxSmoke
             finally
             {
                 CoreSettings.ServiceProvider = null;
-                try { Directory.Delete(Path.GetDirectoryName(CorePaths.UserData)!, recursive: true); } catch { }
+                DeleteSandbox();
             }
         }
 
@@ -466,7 +477,7 @@ namespace ConditioningControlPanel.LinuxSmoke
             CoreSettings.SaveImmediate();
             Check("CoreSettings.SaveImmediate persists through the seeded service", new ConditioningControlPanel.Services.SettingsService().Current.ActiveModId == "smoke-mod-2");
             CoreSettings.ServiceProvider = null;
-            try { Directory.Delete(Path.GetDirectoryName(CorePaths.UserData)!, recursive: true); } catch { }
+            DeleteSandbox();
             Console.WriteLine();
         }
 

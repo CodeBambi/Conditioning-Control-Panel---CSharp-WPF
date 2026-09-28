@@ -2110,7 +2110,7 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                // Leftovers from a run that died mid-swap would make ExtractToDirectory throw.
+                // Leftovers from a run that died mid-swap would make the extraction throw (no overwrite).
                 TryDeleteTree(stagingDir);
                 TryDeleteTree(retiredDir);
 
@@ -2986,12 +2986,15 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// ZipFile.ExtractToDirectory, except a Windows-zipped "resources\x.png" entry lands in a
-        /// folder on every OS (Linux keeps the backslash as a file-name character). Entries that
-        /// resolve outside <paramref name="dir"/> throw, as ExtractToDirectory does.
+        /// ZipFile.ExtractToDirectory on Windows, so the WPF head keeps .NET's exact behaviour
+        /// (illegal-char sanitising, IOException for a directory entry with data, case-insensitive
+        /// containment). Off Windows only, a Windows-zipped "resources\x.png" entry is sent to a
+        /// folder (Linux keeps the backslash as a file-name character), and entries that resolve
+        /// outside <paramref name="dir"/> still throw.
         /// </summary>
         private static void ExtractCcpmod(string zipPath, string dir)
         {
+            if (OperatingSystem.IsWindows()) { ZipFile.ExtractToDirectory(zipPath, dir); return; }
             var root = Path.GetFullPath(dir) + Path.DirectorySeparatorChar;
             using var zip = ZipFile.OpenRead(zipPath);
             foreach (var entry in zip.Entries)
