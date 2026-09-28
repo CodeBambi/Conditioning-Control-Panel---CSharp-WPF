@@ -180,6 +180,23 @@ public sealed class CoreStandInTests
     });
 
     [Fact]
+    public Task EnhancementsTabDrawsOwnedSkillAsOwned() => Run(() =>
+    {
+        var settings = ConditioningControlPanel.CoreSettings.Current;
+        var old = settings.UnlockedSkills;
+        settings.UnlockedSkills = new System.Collections.Generic.List<string> { "sparkle_boost_1" };
+        try
+        {
+            var nodes = new EnhancementsTabView().FindControl<Canvas>("SkillTreeCanvas")!.Children.OfType<Border>()
+                .Where(b => b.Tag is string).ToDictionary(b => (string)b.Tag!);
+            string?[] Texts(string id) => nodes[id].GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+            Assert.Contains(Texts("sparkle_boost_1"), t => t!.EndsWith(Loc.Get("label_skill_permanent")));
+            Assert.DoesNotContain(Texts("sparkle_boost_2"), t => t!.EndsWith(Loc.Get("label_skill_permanent")));
+        }
+        finally { settings.UnlockedSkills = old; }
+    });
+
+    [Fact]
     public Task SessionEditorDrivesCoreTimelineSession() => Run(() =>
     {
         Assert.Null(typeof(SessionEditorWindow).GetNestedType("EditorSession", BindingFlags.NonPublic));

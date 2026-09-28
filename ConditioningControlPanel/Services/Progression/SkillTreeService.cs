@@ -64,50 +64,14 @@ public class SkillTreeService : IDisposable
     /// <summary>
     /// Check if a skill can be purchased (has prereq, enough points, not already owned)
     /// </summary>
-    public bool CanPurchaseSkill(string skillId)
-    {
-        var settings = App.Settings?.Current;
-        if (settings == null) return false;
-
-        var skill = SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
-        if (skill == null) return false;
-
-        // Already owned
-        if (settings.UnlockedSkills.Contains(skillId)) return false;
-
-        // Not enough points
-        if (settings.SkillPoints < skill.Cost) return false;
-
-        // Check prerequisite
-        if (!string.IsNullOrEmpty(skill.PrerequisiteId))
-        {
-            if (!settings.UnlockedSkills.Contains(skill.PrerequisiteId))
-                return false;
-        }
-
-        // Secret skills have special unlock requirements
-        if (skill.IsSecret && !IsSecretSkillAvailable(skillId))
-            return false;
-
-        return true;
-    }
+    public bool CanPurchaseSkill(string skillId) =>
+        App.Settings?.Current is { } settings && SkillTreeRules.CanPurchaseSkill(settings, skillId);
 
     /// <summary>
     /// Check if a secret skill's unlock requirement has been met
     /// </summary>
-    public bool IsSecretSkillAvailable(string skillId)
-    {
-        var settings = App.Settings?.Current;
-        if (settings == null) return false;
-
-        return skillId switch
-        {
-            "night_shift" => settings.NightTimeUsageCount >= 10,
-            "early_bird_bimbo" => settings.EarlyMorningUsageCount >= 10,
-            "eternal_doll" => settings.HighestLevelEver >= 50,
-            _ => false
-        };
-    }
+    public bool IsSecretSkillAvailable(string skillId) =>
+        App.Settings?.Current is { } settings && SkillTreeRules.IsSecretSkillAvailable(settings, skillId);
 
     /// <summary>
     /// Purchase a skill via server when online, or locally when offline.
@@ -179,23 +143,14 @@ public class SkillTreeService : IDisposable
     /// <summary>
     /// Check if a specific skill is unlocked.
     /// </summary>
-    public bool HasSkill(string skillId)
-    {
-        var settings = App.Settings?.Current;
-        if (settings == null) return false;
-        return settings.UnlockedSkills.Contains(skillId);
-    }
+    public bool HasSkill(string skillId) =>
+        App.Settings?.Current is { } settings && SkillTreeRules.HasSkill(settings, skillId);
 
     /// <summary>
     /// Returns the highest sparkle boost tier unlocked (0 = none, 1-3 = tier).
     /// </summary>
-    public int GetSparkleBoostTier()
-    {
-        if (HasSkill("sparkle_boost_3")) return 3;
-        if (HasSkill("sparkle_boost_2")) return 2;
-        if (HasSkill("sparkle_boost_1")) return 1;
-        return 0;
-    }
+    public int GetSparkleBoostTier() =>
+        App.Settings?.Current is { } settings ? SkillTreeRules.GetSparkleBoostTier(settings) : 0;
 
     /// <summary>
     /// Get all unlocked skills
@@ -705,18 +660,8 @@ public class SkillTreeService : IDisposable
     /// <summary>
     /// Get total free rerolls available per day
     /// </summary>
-    public int GetDailyFreeRerolls()
-    {
-        int total = 0;
-
-        if (HasSkill("quest_refresh"))
-            total += 1;
-
-        if (HasSkill("reroll_addict"))
-            total += 2;
-
-        return total;
-    }
+    public int GetDailyFreeRerolls() =>
+        App.Settings?.Current is { } settings ? SkillTreeRules.GetDailyFreeRerolls(settings) : 0;
 
     /// <summary>
     /// Get remaining free rerolls for today
@@ -759,12 +704,8 @@ public class SkillTreeService : IDisposable
     /// <summary>
     /// Get bonus XP multiplier for rerolled quests
     /// </summary>
-    public double GetRerollBonusMultiplier()
-    {
-        if (HasSkill("better_quests"))
-            return 1.25; // +25%
-        return 1.0;
-    }
+    public double GetRerollBonusMultiplier() =>
+        App.Settings?.Current is { } settings ? SkillTreeRules.GetRerollBonusMultiplier(settings) : 1.0;
 
     #endregion
 
