@@ -273,6 +273,15 @@ expect(!sfx.state().pulsing && fake.state === 'closed', 'dispose stops the pulse
   // many replays: old replay gains are let go of
   for (let k = 0; k < 5; k++) { rbus.emit('replay-show', { layout: 'corner', n: 1, hit }); rbus.emit('replay-done', {}); }
   expect(rf.disconnected >= 3, 'old replay gains are disconnected (' + rf.disconnected + ')');
+  // the director drops a replay silently (a new move, the menu): update() lets the beds up
+  let showing = true;
+  rwin.PBP.board = { director: { active: () => showing } };
+  rbus.emit('replay-show', { layout: 'trio', n: 3, hit });
+  rsfx.update();
+  expect(rsfx.state().ducked, 'update() keeps the duck while the director still shows the replay');
+  showing = false; rsfx.update();
+  expect(!rsfx.state().ducked && rsfx.state().beds === 1, 'a replay dropped without replay-done: update() un-ducks the beds');
+  delete rwin.PBP.board;
   // hidden tab and volume 0: nothing schedules
   rdoc.hidden = true; rdoc.fire('visibilitychange');
   let quiet = during(() => { rbus.emit('replay-show', { layout: 'corner', n: 1, hit }); rbus.emit('replay-panel-hit', { i: 0, n: 1, layout: 'corner', hit }); });

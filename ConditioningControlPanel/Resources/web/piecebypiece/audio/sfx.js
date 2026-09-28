@@ -635,7 +635,15 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     play,
     wake,
     crowd,
-    update: crowd.update,
+    update() {
+      crowd.update();
+      // The director can drop a replay without replay-exit/replay-done (a new
+      // move, the menu, a reset): once it no longer shows one, stop ducking and
+      // let the slowed hits still ringing go.
+      if (!ducked) return;
+      const director = win?.PBP?.board?.director;
+      if (director && typeof director.active === 'function' && !director.active()) { fadeReplay(.1); duck(false); }
+    },
     log: () => log.slice(),
     ready: () => !!ctx,
     state: () => ({
