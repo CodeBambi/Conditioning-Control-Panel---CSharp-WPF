@@ -327,6 +327,18 @@ public sealed class BubbleLayer : BaseLayer
                 canvas.DrawCircle(cx, cy, half * item.FuseScale, _stroke);
             }
 
+            // ---- Natasha's favourite held: the mint ring filling clockwise from twelve ----
+            if (item.HoldRing > 0.003f)
+            {
+                float rr = half - 3f * s;
+                _stroke.Color = new SKColor(Chaster.NatashasFavourite.MintR, Chaster.NatashasFavourite.MintG,
+                    Chaster.NatashasFavourite.MintB, ga);
+                _stroke.StrokeWidth = 5f * s;
+                _stroke.StrokeCap = SKStrokeCap.Round;
+                canvas.DrawArc(new SKRect(cx - rr, cy - rr, cx + rr, cy + rr), -90f, 360f * Math.Min(1f, item.HoldRing), false, _stroke);
+                _stroke.StrokeCap = SKStrokeCap.Butt;
+            }
+
             // ---- Echo ghost ring (offset outline) ----
             if (item.IsEcho)
             {
@@ -446,6 +458,8 @@ public sealed class BubbleLayer : BaseLayer
         public float GlowOpacity;
         /// <summary>Natasha's favourite: alpha of the red wash over the body this frame (0 = none).</summary>
         public float RedWash;
+        /// <summary>Natasha's favourite held: 0..1 of the mint ring drawn round it (0 = none).</summary>
+        public float HoldRing;
         public SKImage? PrismGhost;         // shared, cached, never disposed here
         public SKPoint[][]? Cracks;         // DIP points in the 0.._size box
         public string? HintText;
