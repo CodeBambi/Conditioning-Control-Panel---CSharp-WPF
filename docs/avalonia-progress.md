@@ -645,3 +645,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   supervisor: WPF parity).
 - Evidence: SessionRunnerTests (fail-proofed 4 ways); live 3-minute session: quiz at +46 s, tray panic closed it and paused,
   none while paused, back 43 s after Resume, closed at the end. Review: ACCEPT.
+
+## avalonia-port/quiz-window-static: +303 (quiz unit 5)
+- QuizWindow runs on Core QuizStore: categories, WPF's fallback question/profile path, scoring, quiz_history.json in WPF's
+  shape, trend. The Graded Intake start button, its AI login gate and the past-quizzes list follow WPF's hidden state
+  (pending removal in WPF; decision logged), so no user path reaches the quiz on either head. Fixed the score pulse /
+  surrender shake animating the transform (it threw on the first question).
+- Evidence: QuizWindowStaticTests (gate, full run with a golden history shape, trend, report), fail-proofed. Review: ACCEPT.
