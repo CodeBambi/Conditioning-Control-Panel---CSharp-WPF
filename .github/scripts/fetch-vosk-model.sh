@@ -8,7 +8,7 @@ if [ ! -d "$dir/$name/am" ]; then
   mkdir -p "$dir"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL --max-time 300 -o "$tmp/m.zip" "https://alphacephei.com/vosk/models/$name.zip"
+  curl -fsSL --retry 3 --retry-delay 5 --max-time 300 -o "$tmp/m.zip" "https://alphacephei.com/vosk/models/$name.zip"
   unzip -q "$tmp/m.zip" -d "$dir"
 fi
 echo "$dir/$name"

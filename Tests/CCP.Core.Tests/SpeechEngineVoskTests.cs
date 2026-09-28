@@ -66,6 +66,8 @@ public class SpeechEngineVoskTests
         var r = await engine.RecognizePhraseAsync("hello my darling", new RecognizeOptions { Timeout = TimeSpan.FromSeconds(20) }, TestContext.Current.CancellationToken);
         Assert.False(r.Matched, $"matched on '{r.Transcript}' score {r.Score}");
         Assert.False(r.Unavailable);
+        Assert.False(r.TimedOut);
+        Assert.NotEmpty(r.Transcript);
     }
 
     [Fact]
