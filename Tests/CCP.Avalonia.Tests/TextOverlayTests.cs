@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -8,6 +9,7 @@ using Avalonia.Media;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Views.Overlays;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Avalonia.Platform;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -61,6 +63,41 @@ public sealed class TextOverlayTests
     {
         Assert.Equal(100, SubliminalOverlay.HoldMs(2));
         Assert.Equal(85 * 17, SubliminalOverlay.HoldMs(85));
+    }
+
+    [Fact]
+    public async Task SubliminalCard_ClosesOnTime_EvenWithoutAFirstFrame()
+    {
+        // A first frame that never comes (measured on XWayland: up to 2 s late). The card must
+        // still go, at most MaxLifetime after Show.
+        var frame = SubliminalOverlayWindow.RequestFrame;
+        SubliminalOverlayWindow.RequestFrame = (_, _) => { };
+        try
+        {
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            EnsureAvalonia();
+            var w = new SubliminalOverlayWindow("OBEY");
+            var closed = false;
+            w.Closed += (_, _) => closed = true;
+            w.Show();
+            w.Run(1, TimeSpan.FromMilliseconds(SubliminalOverlay.HoldMs(2)));
+            Assert.Equal(TimeSpan.FromMilliseconds(300), SubliminalOverlayWindow.MaxLifetime(TimeSpan.FromMilliseconds(100)));
+            await Task.Delay(600);
+            Assert.True(closed);
+        });
+        }
+        finally { SubliminalOverlayWindow.RequestFrame = frame; }
+    }
+
+    [Fact]
+    public void OverlayOpacity_IsNeverExactlyZero()
+    {
+        // KWin/XWayland starves an opacity-0 window of frame callbacks and stalls every render 1-2 s.
+        Assert.Equal(1u, X11Overlay.OpacityCardinal(0));
+        Assert.Equal(1u, X11Overlay.OpacityCardinal(-1));
+        Assert.Equal(uint.MaxValue, X11Overlay.OpacityCardinal(1));
+        Assert.Equal(uint.MaxValue / 2, X11Overlay.OpacityCardinal(0.5));
     }
 
     [Fact]
