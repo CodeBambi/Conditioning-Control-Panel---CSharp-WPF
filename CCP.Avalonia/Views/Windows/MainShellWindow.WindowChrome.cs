@@ -139,14 +139,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             CoreBark.NotifyUiAction("minimize");
             // ponytail: still needs App.Lockdown (NotifyEscapeAttempt - minimizing during a
-            // lockdown stays ALLOWED, it just gets noticed) and HideAvatarTube.
+            // lockdown stays ALLOWED, it just gets noticed). The tube hides via OnShellStateForTube.
             WindowState = WindowState.Minimized;
         }
 
         private void BtnMaximize_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs the avatar tube window (detach before maximizing, re-attach after);
-            // wired when AvatarTubeWindow's host service moves to Core.
+            // The tube's detach-on-maximize / re-attach-on-restore is OnShellStateForTube
+            // (MainShellWindow.Companion.cs), which also sees WM-driven state changes.
             // The glyph is set through Named<T>, not through the generated BtnMaximize field.
             // MainShellWindow loads with AvaloniaXamlLoader.Load, which never assigns those fields,
             // so `BtnMaximize.Content = …` threw a NullReferenceException on the first click of the

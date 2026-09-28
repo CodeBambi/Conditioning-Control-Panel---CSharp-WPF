@@ -25,12 +25,9 @@
 //                            CompanionTabView re-publishes none of the room's cell controls
 //                            (MainShellWindow.CompanionTab.cs says why), so there is no accessor
 //                            path to it. A future wiring reaches it through the hero card.
-//   the mute + detach half - AvatarTubeWindow.SetMuteAvatar, ShowTube, HideTube, IsDetached,
-//                            Detach and Giggle are all in the EIGHT WPF partials that did not
-//                            cross (ConditioningControlPanel/AvatarTube/AvatarTubeWindow.Speech.cs
-//                            and .Windowing.cs). Their absence is why HideAvatarTube below has no
-//                            detach guard: nothing on this head can detach the tube, so the guard
-//                            would be dead code rather than a missing safeguard.
+//   the mute half         - AvatarTubeWindow.SetMuteAvatar and Giggle are in the WPF Speech.cs
+//                            partial that did not cross. Detach/Attach did (the tube's
+//                            Windowing.cs partial), and OnShellStateForTube below drives them.
 //
 // _avatarTubeWindow IS DECLARED HERE. WPF declares it in MainWindow.xaml.cs:179, whose twin
 // (MainShellWindow.axaml.cs) already lists it in its dropped ledger and is not this layer's to
@@ -116,6 +113,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                                && CoreSettings.Current.AvatarEnabled;
 
                 _avatarTubeWindow = new AvatarTubeWindow(this);
+                PropertyChanged += (_, e) => { if (e.Property == WindowStateProperty) OnShellStateForTube(); };
 
                 // ponytail: AvatarMuted has nowhere to land - AvatarTubeWindow.SetMuteAvatar is in
                 // the Speech.cs partial that did not cross. The setting is still read and saved by
@@ -152,14 +150,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _avatarTubeWindow.StartPoseAnimation();
         }
 
-        /// <summary>
-        /// Park her. WPF skipped this for a DETACHED tube so a floating companion survived the
-        /// shell minimising; nothing on this head can detach one (AvatarTubeWindow.Windowing.cs
-        /// did not cross), so that branch would be dead code and is left out rather than faked.
-        /// </summary>
+        private bool _avatarWasAttachedBeforeMaximize;
+
+        /// <summary>WPF MainWindow.WindowChrome.cs:68-92,414-455: minimise hides an attached tube,
+        /// maximise detaches it, restore shows it and re-attaches what maximise detached.</summary>
+        private void OnShellStateForTube()
+        {
+            var tube = _avatarTubeWindow;
+            if (tube == null) return;
+            if (WindowState == WindowState.Minimized) { HideAvatarTube(); return; }
+            if (WindowState == WindowState.Maximized && !tube.IsDetached)
+            {
+                _avatarWasAttachedBeforeMaximize = true;
+                tube.Detach();
+            }
+            ShowAvatarTube();
+            if (WindowState == WindowState.Normal && _avatarWasAttachedBeforeMaximize && tube.IsDetached)
+            {
+                tube.Attach();
+                _avatarWasAttachedBeforeMaximize = false;
+            }
+        }
+
+        /// <summary>Park her. Skipped for a DETACHED tube so a floating companion survives the
+        /// shell minimising (WPF HideAvatarTube).</summary>
         public void HideAvatarTube()
         {
             if (_avatarTubeWindow == null) return;
+            if (_avatarTubeWindow.IsDetached && CoreSettings.Current.AvatarEnabled) return;   // dismiss still hides
             _avatarTubeWindow.StopPoseAnimation();
             _avatarTubeWindow.RunOnAvatar(() => _avatarTubeWindow?.Hide());
         }
@@ -190,9 +208,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _avatarTubeWindow.ShowSafe();
             _avatarTubeWindow.StartPoseAnimation();
 
-            // ponytail: the WPF version then Detach()es the tube so it floats independently and
-            // has her Giggle("Good morning~!"). Both live in AvatarTubeWindow.Windowing.cs /
-            // .Speech.cs, neither of which crossed - so she wakes attached and silent here.
+            _avatarTubeWindow.Detach();
+            // ponytail: WPF also has her Giggle("Good morning~!") - Speech.cs has not crossed.
         }
 
         /// <summary>Force a pose. Poses themselves load in the tube's Avatar.cs partial, which has

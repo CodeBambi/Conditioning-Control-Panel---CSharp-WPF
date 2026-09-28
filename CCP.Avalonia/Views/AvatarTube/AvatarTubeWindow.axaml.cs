@@ -248,6 +248,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // replacement PNG, CoreMods for the persona name), so the tube draws its glass, its
             // avatar and its caption instead of rendering as an empty frame.
             SetTubeStyle(!_isAttached);
+            InitWindowing();
             ApplyAvatarSet();
             // The caption is Loc-driven and set from code (a persona name has no static key), so it
             // has to be re-run rather than bound - see the porting note about {loc:Str} and .Text.
@@ -285,13 +286,18 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         {
             base.OnOpened(e);
 
-            // Ensure NOT topmost when attached (starts attached). Window.Topmost is Avalonia's
-            // _NET_WM_STATE_ABOVE, which is the correct replacement for HWND_TOPMOST.
-            Topmost = false;
+            // WPF OnLoaded: CalculateScaleFactor, then UpdatePosition (attached) or
+            // RestoreSavedPlacement (detached). Topmost follows the mode (ApplyModeChrome).
+            FitToScreen();
+            UpdatePosition();
+            RestoreSavedPlacement();
+            // Fallback when ScalingChanged never comes (or never agrees): restore once anyway.
+            DispatcherTimer.RunOnce(() => { if (IsVisible) RestoreSavedPlacement(force: true); }, TimeSpan.FromSeconds(1));
+            ToggleDetachedSink = ToggleDetached;
 
             // The z-order pairing the WPF head got from native (GWL_HWNDPARENT) ownership. Safe to
             // call unconditionally - the shim returns false off X11 and on the headless render.
-            if (_parentWindow is not null)
+            if (_parentWindow is not null && _isAttached)
                 X11Overlay.RestackAbove(this, _parentWindow);
 
             // The live tube owns the static chat command for as long as it is open. WPF routed the
@@ -304,11 +310,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // chamber rather than on the stock one.
             RefreshTubeLayout();
 
-            // ponytail: needs AvatarTubeWindow.Windowing.cs. WPF's OnLoaded also ran
-            // CalculateScaleFactor / UpdatePosition / StartFloatingAnimation / RestoreSavedPlacement
-            // / StartFullscreenDetection and InitTakeoverCountdownBar. Screens.ScreenFromPoint +
-            // screen.WorkingArea/Scaling are the replacements for GetDpiForMonitor /
-            // MonitorFromPoint / SystemParameters.WorkArea when that partial ports.
+            // ponytail: WPF's OnLoaded also ran StartFloatingAnimation / StartFullscreenDetection
+            // and InitTakeoverCountdownBar; none has ported.
         }
 
         protected override void OnClosed(EventArgs e)
@@ -317,6 +320,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // target and method, which is what makes "is the sink still MINE?" answerable at all;
             // ReferenceEquals would be false every time because the conversion allocates.
             if (OpenChatSink == (Action)OpenChatInput) OpenChatSink = null;
+            ReleaseWindowing();
 
             // Every timer this window starts is stopped here. --render-all constructs ~180 windows
             // in one process, and a tick against a torn-down visual tree is exactly the flaky
@@ -765,8 +769,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
         /// <summary>Attached = riding beside main. Seeded from the state the user left the tube
         /// in, which is what makes a detached user's layout and glass come back detached.
-        /// ponytail: the attach/detach GESTURE is Windowing.cs and did not port, so the tube stays
-        /// in the state it starts in - it just no longer always starts attached.</summary>
+        /// Flipped by <see cref="ToggleDetached"/> (AvatarTubeWindow.Windowing.cs).</summary>
         private bool _isAttached = !CoreSettings.Current.AvatarTubeDetached;
 
         /// <summary>
