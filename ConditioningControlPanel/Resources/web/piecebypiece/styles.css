@@ -328,3 +328,12 @@ html, body {
 .intensity meter::-webkit-meter-optimum-value { background: #ff91c9; border-radius: 6px; }
 .intensity meter::-moz-meter-bar { background: #ff91c9; border-radius: 6px; }
 .game-notice { margin: 8px 0 0; padding: 9px 11px; background: #211d38; border: 1px solid #80668e; border-radius: 10px; color: #ead6ed; font-size: 13px; line-height: 1.4; }
+/* Esc pause card (a local game holds its clock; online the clock keeps running) */
+.pbp-pause { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(12, 10, 30, .62); backdrop-filter: blur(3px); }
+.pbp-pause[hidden] { display: none; }
+.pbp-pause-card { display: grid; gap: 10px; min-width: 240px; padding: 22px 26px; background: #211d38; border: 2px solid var(--pbp-pink); border-radius: 16px; color: var(--pbp-ink); text-align: center; box-shadow: 0 12px 40px rgba(0, 0, 0, .45); }
+.pbp-pause-card h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: .18em; color: var(--pbp-cream); }
+.pbp-pause-note { margin: 0; font-size: 13px; color: #cdb8e0; }
+.pbp-pause-card button { padding: 10px 14px; border: 0; border-radius: 10px; background: #3a2f5e; color: var(--pbp-ink); font: inherit; cursor: pointer; }
+.pbp-pause-card button[data-pause="resume"] { background: var(--pbp-pink); color: #1a1a3e; font-weight: 700; }
+.pbp-pause-card button:hover, .pbp-pause-card button:focus-visible { filter: brightness(1.12); outline: none; }

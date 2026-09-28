@@ -214,6 +214,23 @@
 
                             <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
 
+                            <!-- Keep pictures clear (BrainDrainKeepPicturesClear): the blur tucks under
+                                 CCP's own windows, so flashes, videos, lock cards and words stay sharp.
+                                 Comfort knob, editable mid-session. -->
+                            <Grid Height="34" ToolTip="{loc:Str st4_braindrain_keep_clear_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_keep_clear}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkKeepClear" x:FieldModifier="internal"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkKeepClear_Changed" Unchecked="ChkKeepClear_Changed"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
                             <!-- High refresh. Comfort/perf knob, NOT prescribed dose: deliberately
                                  unmarked so it stays editable mid-session, exactly as in the dead XAML. -->
                             <Grid Height="34" ToolTip="{loc:Str st4_braindrain_high_refresh_hint}">

@@ -1361,7 +1361,7 @@ namespace ConditioningControlPanel
                     case "lockcard": { s.LockCardEnabled = on; if (running) { if (on) App.LockCard?.Start(); else App.LockCard?.Stop(); } break; }
                     case "bubblecount": { s.BubbleCountEnabled = on; if (running) { if (on) App.BubbleCount?.Start(); else App.BubbleCount?.Stop(); } break; }
                     case "bouncingtext": { s.BouncingTextEnabled = on; if (running) { if (on) App.BouncingText?.Start(); else App.BouncingText?.Stop(); } break; }
-                    case "mindwipe": s.MindWipeEnabled = on; break;
+                    case "mindwipe": s.MindWipeEnabled = on; Services.MindWipeRunRule.ApplyToService(); break;
                     case "braindrain": { s.BrainDrainEnabled = on; if (running) { if (on) App.BrainDrain?.Start(); else App.BrainDrain?.Stop(); } break; }
                     default: return;
                 }
@@ -2028,7 +2028,9 @@ namespace ConditioningControlPanel
         {
             if (_sessionEngine == null || !_sessionEngine.IsRunning) return;
 
-            if (App.Lockdown?.IsActive == true)
+            // Lockdown refuses the PAUSE, never the resume: a session paused some other way (the
+            // blink stop gesture, panic) must always be resumable, or the user is stranded.
+            if (Services.LockdownPauseRule.RefusesPauseButton(App.Lockdown?.IsActive == true, _sessionEngine.IsPaused))
             {
                 MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_pause_du"), Loc.Get("title_lockdown"),
                     MessageBoxButton.OK, MessageBoxImage.Stop);
@@ -2259,6 +2261,8 @@ namespace ConditioningControlPanel
                 if (!s.BubbleCountEnabled) App.BubbleCount?.Stop();
                 if (!s.LockCardEnabled) App.LockCard?.Stop();
                 if (!s.BouncingTextEnabled) App.BouncingText?.Stop();
+                // #1304: Mind Wipe was missing here, so a preset without it left the clips firing.
+                Services.MindWipeRunRule.ApplyToService();
             }
             catch (Exception ex)
             {

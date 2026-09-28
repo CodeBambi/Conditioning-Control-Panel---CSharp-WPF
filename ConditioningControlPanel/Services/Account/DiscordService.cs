@@ -574,6 +574,15 @@ namespace ConditioningControlPanel.Services
 
         private async Task<bool> RefreshTokensAsync(string refreshToken)
         {
+            // A grant Discord already refused this session is not asked about again: the proxy
+            // answers the same invalid_grant every time (Sep 2026: thousands a day, see
+            // PatreonGrantHealth). Signing in with Discord again stores a new token and clears this.
+            if (DeadRefreshTokens.IsDead(refreshToken))
+            {
+                App.Logger?.Debug("Discord token refresh skipped - this grant was refused earlier this session");
+                return false;
+            }
+
             try
             {
                 var response = await _httpClient.PostAsJsonAsync("/discord/refresh", new
@@ -583,6 +592,17 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    string? body = null;
+                    try { body = await response.Content.ReadAsStringAsync(); } catch { /* status alone */ }
+                    var code = (int)response.StatusCode;
+                    if ((code >= 400 && code < 500 && code != 408 && code != 429)
+                        || PatreonGrantHealth.BodySaysGrantDead(body))
+                    {
+                        DeadRefreshTokens.MarkDead(refreshToken);
+                        App.Logger?.Warning("Discord token refresh refused ({Status}): the grant is dead, sign in with Discord again to repair it",
+                            response.StatusCode);
+                        return false;
+                    }
                     App.Logger?.Warning("Discord token refresh failed with status {Status}", response.StatusCode);
                     return false;
                 }
@@ -592,6 +612,8 @@ namespace ConditioningControlPanel.Services
                 if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
                 {
                     App.Logger?.Warning("Discord token refresh error: {Error}", tokenResponse?.ErrorDescription);
+                    // An OAuth error field is the refusal wearing a 200.
+                    if (!string.IsNullOrEmpty(tokenResponse?.Error)) DeadRefreshTokens.MarkDead(refreshToken);
                     return false;
                 }
 

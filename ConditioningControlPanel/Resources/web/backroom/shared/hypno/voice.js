@@ -1,18 +1,17 @@
 /* ============================================================================
  * shared/hypno/voice.js - who actually SAYS the subliminal word (CONTRACT 10.21).
  *
- * The page used to speak it with the browser's own speechSynthesis, which is whatever placeholder
- * voice the WebView happened to have. Hosted, the word goes to the app instead, which owns a real
- * chain: the player's own clip for that phrase, else a bundled Back Room clip, else Windows speech,
- * all through the app's chosen audio output device. The page only speaks for itself when the host
- * says `none`, or when there is no host at all (the Vercel phone playtest).
+ * Only RECORDED audio ever says it (owner, 2026-09-25, no synthetic speech: no browser voice and no
+ * Windows speech). Hosted, the word goes to the app: the player's own clip for that phrase, else a
+ * bundled Back Room recording, through the app's chosen audio output device. When the host says
+ * `none`, or there is no host at all (the Vercel phone playtest), the word is silent.
  *
  * CONTRACT (stable):
  *   createVoice({ bridge, hosted })   -> null with no host; else { available, speak, stop }
- *   .available === true               the host is there; the caller must NOT also use speechSynthesis
- *                                     until the ack comes back saying `none`
+ *   .available === true               the host is there and owns the line
  *   .speak({ text, reversed, seed })  -> Promise<{ source, durationMs }>, NEVER rejects.
- *                                     source: 'clip' | 'preset' | 'tts' | 'none'
+ *                                     source: 'clip' | 'preset' | 'none' ('tts' is a retired
+ *                                     value still read for wire compatibility; no host sends it)
  *                                     durationMs: how long the host's audio runs, 0 when silent.
  *                                     `reversed` is the easter egg: the host plays the samples
  *                                     BACKWARDS, so the page must not also spell it backwards out
@@ -39,7 +38,7 @@ export function readAck(m) {
 }
 
 /**
- * The host voice, or null when this page is not hosted (which leaves the caller on speechSynthesis).
+ * The host voice, or null when this page is not hosted (every word is then silent).
  * @param {Object} [o]
  * @param {Object} [o.bridge]  the bridge module (tests pass a fake)
  * @param {boolean} [o.hosted] override the bridge's own host detection (tests)

@@ -87,6 +87,8 @@ namespace ConditioningControlPanel.Features
             var s = App.Settings?.Current;
             if (s == null) return;
             s.MindWipeEnabled = ChkEnable.IsChecked ?? false;
+            // #1304: unticking used to leave a running Mind Wipe firing until the engine stopped.
+            Services.MindWipeRunRule.ApplyToService();
             App.Settings?.Save();
         }
 
@@ -123,14 +125,10 @@ namespace ConditioningControlPanel.Features
             if (s == null) return;
             var looping = ChkLoop.IsChecked ?? false;
             s.MindWipeLoop = looping;
-            try
-            {
-                if (looping)
-                    App.MindWipe?.StartLoop(s.MindWipeVolume / 100.0);
-                else
-                    App.MindWipe?.StopLoop();
-            }
-            catch (Exception ex) { App.Logger?.Warning(ex, "MindWipe loop toggle failed"); }
+            // #1304: the loop box used to start a loop even with Mind Wipe off and the engine
+            // stopped, and nothing but panic or an engine stop ended it. It follows the same rule
+            // as the rest of Mind Wipe now: it plays on top of an enabled, running Mind Wipe.
+            Services.MindWipeRunRule.ApplyToService();
             App.Settings?.Save();
         }
 

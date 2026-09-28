@@ -6,7 +6,7 @@ using Serilog;
 namespace ConditioningControlPanel.Services.Launcher;
 
 /// <summary>
-/// The launcher's six cues, on the <see cref="EmiDesk.EmiSfx"/> shape: one-shots through
+/// The launcher's seven cues, on the <see cref="EmiDesk.EmiSfx"/> shape: one-shots through
 /// <c>App.Audio.PlayOneShot</c>, silent when output is suppressed, the master volume is 0 or the
 /// file is missing. Quiet on purpose: the hover cue fires on every tile crossing, and only three
 /// notes are ever left ringing (the oldest is cut), so a fast sweep never piles up.
@@ -22,6 +22,7 @@ public static class LauncherSfx
     private const float DeniedScale = 0.16f;
     private const float LaunchScale = 0.24f;
     private const float ReturnScale = 0.14f;
+    private const float EdgeScale = 0.12f;
 
     /// <summary>Notes left ringing at once. The pluck is short, so three is already generous.</summary>
     private const int HoverVoices = 3;
@@ -92,6 +93,9 @@ public static class LauncherSfx
         Melody.Reset();
         Play("chaos/reveal_chime.mp3", LaunchScale, "launcher-launch");
     }
+
+    /// <summary>The window edge's glint running round (open, focus back): a soft shimmer.</summary>
+    public static void Edge() => Play("chaos/ripple_cast.mp3", EdgeScale, "launcher-edge");
 
     /// <summary>The launcher back after a game. The next sweep starts a new phrase.</summary>
     public static void Return()

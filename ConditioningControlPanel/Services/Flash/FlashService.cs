@@ -75,6 +75,10 @@ namespace ConditioningControlPanel.Services
         internal static int ResolveFlashCap(bool useLayer, bool useHost)
             => (useLayer || useHost) ? MAX_CONCURRENT_FLASH_HOST : MAX_CONCURRENT_FLASH;
 
+        /// <summary>Does a flash spawned now stay until popped? See <see cref="FlashStayRule"/>.</summary>
+        private static bool StayUntilPopped(AppSettings settings, bool pointFired)
+            => FlashStayRule.Applies(settings.FlashStayUntilPopped, settings.FlashClickable, pointFired);
+
         /// <summary>
         /// Floor for an animated flash's per-frame delay, in milliseconds. A 4x multiplier on a GIF
         /// that already carries a 10-20ms frame time would otherwise ask the heartbeat for a new
@@ -658,6 +662,19 @@ namespace ConditioningControlPanel.Services
             {
                 Services.UI.DoNotDisturbGuard.LogSuppressionThrottled("flash");
                 return;
+            }
+
+            // Stay until popped: while the screen is full, skip the whole tick (picture AND
+            // whisper). The scheduler reschedules on its own, so this is a wait, not a stop.
+            var stay = App.Settings.Current;
+            if (StayUntilPopped(stay, pointFired: false))
+            {
+                bool layer = UseCompositor;
+                int cap = FlashStayRule.Cap(ResolveFlashCap(layer, !layer && stay.FlashSolidMode), true,
+                    sharedHost: layer || stay.FlashSolidMode);
+                int active;
+                lock (_lockObj) active = _activeWindows.Count;
+                if (FlashStayRule.ScreenFull(true, active, cap)) return;
             }
 
             _isBusy = true;
@@ -1516,7 +1533,12 @@ namespace ConditioningControlPanel.Services
             {
                 lifetimeMs = overrideLifetimeMs.Value;
             }
-            
+
+            // Stay until popped: an ambient flash (and its hydra children) lives until clicked,
+            // capped by the safety lifetime. Point-fired flashes keep their authored timing.
+            if (StayUntilPopped(settings, pointFired: oneShotGen != null))
+                lifetimeMs = FlashStayRule.SafetyLifetimeMs;
+
             // For one-shot mode, schedule cleanup of one-shot state after all windows should be done fading
             if (_oneShotActive && !isMultiplication)
             {
@@ -1638,7 +1660,8 @@ namespace ConditioningControlPanel.Services
             // Prevent memory explosion / compositor backup from too many concurrent flash windows.
             // Only the classic layered-window path carries that risk; compositor/solid flashes are
             // cheap shared-host items, so they get the higher cap (see MAX_CONCURRENT_FLASH_HOST).
-            int cap = ResolveFlashCap(useLayer, useHost);
+            int cap = FlashStayRule.Cap(ResolveFlashCap(useLayer, useHost),
+                StayUntilPopped(settings, pointFired: oneShotGen != null), sharedHost: useLayer || useHost);
             lock (_lockObj)
             {
                 if (_activeWindows.Count >= cap) return;
@@ -2261,6 +2284,21 @@ namespace ConditioningControlPanel.Services
         /// returns a done, shardless state, and this hands back the same null either way.
         /// UI thread (every SafeCloseFlashWindow caller is), so _random needs no guard.
         /// </summary>
+        // The last style Mix dealt, so two pops in a row never leave the same way. UI thread only.
+        private FlashExitStyle? _lastExitStyle;
+
+        /// <summary>
+        /// The leave animation for a popped compositor flash, or null for the plain cut
+        /// (FlashExitStyle.None). Owned Shatter is decided first and wins. See FlashExit.
+        /// </summary>
+        private FlashExitState? BuildExit()
+        {
+            var setting = App.Settings?.Current?.FlashExitStyle ?? FlashExitStyle.Mix;
+            if (FlashExit.Pick(setting, _lastExitStyle, _random) is not { } style) return null;
+            _lastExitStyle = style;
+            return FlashExit.Begin(style, MotionFx.Level, _random.Next());
+        }
+
         private FlashShatterState? BuildShatter(FlashWindow window, Compositor.FlashLayer.FlashItem item)
         {
             if (!window.PreviewV2 && (App.Settings?.Current?.FlashShatterEnabled != true || !OwnsFlashV2())) return null;
@@ -4907,7 +4945,9 @@ namespace ConditioningControlPanel.Services
                         var item = window.LayerItem;
                         window.LayerItem = null;
                         var shatter = shatterThis ? BuildShatter(window, item) : null;
+                        var exit = shatter == null && shatterThis ? BuildExit() : null;
                         if (shatter != null) _flashLayer?.BeginShatter(item, shatter);
+                        else if (exit != null) _flashLayer?.BeginExit(item, exit);
                         else _flashLayer?.Remove(item);
                     }
                     // Dropped with the item: a dead pendulum must not keep reserving its pivot
@@ -5302,6 +5342,9 @@ namespace ConditioningControlPanel.Services
             // CTS can never re-fire, leaving it immortal on screen. Don't revive
             // a window that is already on its way out. (#384)
             if (IsFadingOut || LifetimeCts == null || LifetimeCts.IsCancellationRequested) return;
+            // A boost only ever lengthens: a stay-until-popped flash already has minutes left,
+            // and "extraMs from now" would cut it down to a few seconds.
+            if (DateTime.Now.AddMilliseconds(extraMs) <= ExpiresAt) return;
             try
             {
                 LifetimeCts.CancelAfter(extraMs);
