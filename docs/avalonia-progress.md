@@ -408,3 +408,12 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   deferred starts, SessionSettingsSnapshot (WPF's 36 fields), PhrasePoolCustody (FoldUserPoolEdit verbatim). D1/D1a fix
   WPF mod-switch-mid-session pool leaks (D1a in Core ModService, so WPF too, only while a session runs). 50 Core tests
   (fail-proofed); --smoke checks the pool delegates are seeded. Review: FIX -> D1a (oracle-deep) -> ACCEPT. No user path yet.
+
+## avalonia-port/session-runner-core: +425
+- Session runner U3a: Core SessionRunner ports WPF SessionEngine Start/Stop/Tick for flash, subliminal (frames, whispers
+  flag), bouncing text and lock cards: deferred starts (lock cards get the remaining window, #736), phase index, settings
+  snapshot + pool custody restore, engine start/stop, WPF-format session log (XPEarned = banked XP, 0 until progression is
+  ported). The session-start ledger is saved before the overrides apply, so a crash never persists session values.
+  SubliminalDuration no longer leaks after a session (WPF bug, logged). No user path yet (U3b).
+- Evidence: SessionRunnerTests (1-minute run, settings + log goldens, early stop, <30 s no file, deferred starts, ledger
+  on disk before overrides), each fail-proofed. Review: ACCEPT, follow-ups applied.

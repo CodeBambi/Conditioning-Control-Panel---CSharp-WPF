@@ -9,6 +9,7 @@ using Xunit;
 
 namespace CCP.Core.Tests;
 
+[Collection(SessionStatics.Name)]
 public sealed class AssetImportAndSessionLogCoreTests
 {
     [Fact]

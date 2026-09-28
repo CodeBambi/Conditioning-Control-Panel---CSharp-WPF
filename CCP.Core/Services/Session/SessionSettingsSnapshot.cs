@@ -5,8 +5,9 @@ namespace ConditioningControlPanel.Services
     /// <summary>
     /// The non-pool settings a session overrides, held in memory only: WPF SessionEngine.SaveCurrentSettings
     /// and RestoreSettings (SessionEngine.cs:1053-1114, 1659-1777), same fields, same order. The three
-    /// phrase pools are <see cref="PhrasePoolCustody"/>'s. SubliminalDuration is written by the session
-    /// and absent here, exactly as in WPF.
+    /// phrase pools are <see cref="PhrasePoolCustody"/>'s. Plus SubliminalDuration: WPF writes it from the
+    /// session's frames and never restores it, leaking it into the user's settings - a WPF bug not carried
+    /// over (docs/avalonia-decisions.md).
     /// </summary>
     public sealed class SessionSettingsSnapshot
     {
@@ -34,6 +35,7 @@ namespace ConditioningControlPanel.Services
             to.SubliminalEnabled = from.SubliminalEnabled;
             to.SubliminalFrequency = from.SubliminalFrequency;
             to.SubliminalOpacity = from.SubliminalOpacity;
+            to.SubliminalDuration = from.SubliminalDuration;
             to.SubAudioEnabled = from.SubAudioEnabled;
             to.SubAudioVolume = from.SubAudioVolume;
             to.AudioDuckingEnabled = from.AudioDuckingEnabled;

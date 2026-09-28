@@ -6,6 +6,7 @@ namespace CCP.Core.Tests;
 
 // WPF MainWindow.StartEngine / StopEngine arming matrix for the Core-driven features, and the
 // card rule: a toggle only saves while stopped and applies live while running.
+[Collection(SessionStatics.Name)]
 public sealed class CoreEngineTests
 {
     [Theory]

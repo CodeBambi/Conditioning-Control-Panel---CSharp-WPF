@@ -87,11 +87,12 @@ public sealed class SessionRulesTests
         Assert.Equal(new[] { "flash" }, fired);
     }
 
-    /// <summary>WPF SaveCurrentSettings' field list, in order (SessionEngine.cs:1060-1114).</summary>
+    /// <summary>WPF SaveCurrentSettings' 36 fields, in order (SessionEngine.cs:1060-1114), plus
+    /// SubliminalDuration (37): WPF writes it from the session and never restores it (decision log).</summary>
     private static readonly string[] WpfSnapshotFields =
     {
         "FlashEnabled", "FlashFrequency", "FlashOpacity", "FlashClickable", "CorruptionMode", "FlashAudioEnabled",
-        "ImageScale", "SimultaneousImages", "SubliminalEnabled", "SubliminalFrequency", "SubliminalOpacity",
+        "ImageScale", "SimultaneousImages", "SubliminalEnabled", "SubliminalFrequency", "SubliminalOpacity", "SubliminalDuration",
         "SubAudioEnabled", "SubAudioVolume", "AudioDuckingEnabled", "DuckingLevel", "PinkFilterEnabled",
         "PinkFilterOpacity", "SpiralEnabled", "SpiralOpacity", "BrainDrainEnabled", "BrainDrainIntensity",
         "BubblesEnabled", "BubblesFrequency", "BubblesClickable", "BouncingTextEnabled", "BouncingTextSpeed",
