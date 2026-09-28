@@ -92,6 +92,19 @@ namespace ConditioningControlPanel.Avalonia
             if (Array.IndexOf(args, "--layers-probe") >= 0)
                 return AudioProbe.RunLayers();
 
+            // --video-check <file> [out.png] plays a video in the real MiniPlayerWindow and fails
+            // unless frames change, seek moves, pause freezes and close frees the player.
+            var vc = Array.IndexOf(args, "--video-check");
+            if (vc >= 0)
+            {
+                if (vc + 1 >= args.Length)
+                {
+                    Console.Error.WriteLine("usage: --video-check <file> [out.png]");
+                    return 2;
+                }
+                return VideoCheck.Run(args[vc + 1], vc + 2 < args.Length ? args[vc + 2] : null);
+            }
+
             var app = BuildAvaloniaApp();
 #if DEBUG
             // Keincheck MCP server on http://127.0.0.1:3001, Debug builds only. Kept out of

@@ -9,7 +9,10 @@
        MouseLeftButtonDown / KeyDown / Click    -> wired in the constructor
        RenderOptions.BitmapScalingMode          -> RenderOptions.BitmapInterpolationMode
        Style="{StaticResource {x:Type Slider}}" -> dropped; that was "use the default theme"
-       vlc:VideoView / gif: namespaces          -> dropped, both are WPF-only packages
+       vlc:VideoView                            -> an Image fed a WriteableBitmap from LibVLC's
+                                                   video callbacks (LibVLCSharp.Avalonia targets
+                                                   Avalonia 11; see docs/avalonia-decisions.md)
+       gif: namespace                           -> dropped, XamlAnimatedGif is WPF-only
        <Button.Style> with a ControlTemplate    -> the default Button template plus the two
                                                    pointerover setters below. A property-only
                                                    ControlTheme would blank the button (trap 4),
@@ -80,7 +83,7 @@
             <Grid Grid.Row="1" Background="#000000">
                 <!-- Video Player (LibVLC) -->
                 <Border x:Name="VideoContainer" IsVisible="False">
-                    <!-- VideoView added programmatically -->
+                    <Image x:Name="VideoImage" Stretch="Uniform"/>
                 </Border>
 
                 <!-- Image/GIF Display -->
