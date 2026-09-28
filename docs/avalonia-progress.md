@@ -463,3 +463,5 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   sign-in; a busy port fails before the browser opens. Decision: OAuth redirect on Linux = loopback.
 - Evidence: 19 LoopbackOAuthTests (IPv4/IPv6, bad state, error=, timeout, busy port, stray requests, port reuse, page
   SHA-256 pinned to the WPF originals), each fail-proofed. No real provider sign-in (not provable here). Review: ACCEPT.
+## avalonia-port/providers-patreon-substar: +1000 (auth 4a; Patreon/SubscribeStar lifecycle in Core, WPF delegates, Avalonia seeds CoreAccount fail-closed; SecretStore memory-only under CCP_USERDATA_DIR;
+review FIX->r1 applied; one earlier live run was unsandboxed: real settings.json not written (mtime before run), no keyring items, two empty mods dirs created and left)

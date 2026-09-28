@@ -40,6 +40,9 @@ namespace ConditioningControlPanel
             try { return RetrieveProvider?.Invoke(name); } catch { return null; }
         }
 
+        /// <summary>As <see cref="Store"/> but a store fault propagates (a token that was not saved must not read as saved).</summary>
+        public static void StoreOrThrow(string name, string? value) => StoreProvider?.Invoke(name, value);
+
         /// <summary>Stores the value, or clears it when null. No-op with no store attached.</summary>
         public static void Store(string name, string? value)
         {
