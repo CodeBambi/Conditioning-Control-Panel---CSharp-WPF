@@ -10,7 +10,6 @@ namespace ConditioningControlPanel.Services
             ["FlashImages"] = new HelpContent
             {
                 SectionId = "FlashImages",
-                ClipFile = "flash_images.mov",
                 CaptionKey = "help_caption_flash_images",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\u26A1",
@@ -56,7 +55,6 @@ namespace ConditioningControlPanel.Services
             ["Video"] = new HelpContent
             {
                 SectionId = "Video",
-                ClipFile = "mandatory_video.mov",
                 CaptionKey = "help_caption_mandatory_video",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83C\uDFAC",
@@ -103,7 +101,6 @@ namespace ConditioningControlPanel.Services
             ["Subliminals"] = new HelpContent
             {
                 SectionId = "Subliminals",
-                ClipFile = "subliminals.mov",
                 CaptionKey = "help_caption_subliminals",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDCAD",
@@ -283,7 +280,6 @@ namespace ConditioningControlPanel.Services
             ["SessionEditor"] = new HelpContent
             {
                 SectionId = "SessionEditor",
-                ClipFile = "sessioneditor.mov",
                 CaptionKey = "help_caption_timeline_editor",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "🎚", // 🎚 level slider - connotes timeline tracks
@@ -868,7 +864,6 @@ namespace ConditioningControlPanel.Services
             ["KeywordTriggers"] = new HelpContent
             {
                 SectionId = "KeywordTriggers",
-                ClipFile = "keyword_triggers.mp4",
                 CaptionKey = "help_caption_keyword_triggers",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\u2328",
@@ -998,7 +993,6 @@ namespace ConditioningControlPanel.Services
             ["SpiralOverlay"] = new HelpContent
             {
                 SectionId = "SpiralOverlay",
-                ClipFile = "spiral.mov",
                 CaptionKey = "help_caption_spiral_overlay",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83C\uDF00",
@@ -1023,7 +1017,6 @@ namespace ConditioningControlPanel.Services
             ["PinkFilter"] = new HelpContent
             {
                 SectionId = "PinkFilter",
-                ClipFile = "pinkfilter.mov",
                 CaptionKey = "help_caption_pink_filter",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDC97",
@@ -1047,7 +1040,6 @@ namespace ConditioningControlPanel.Services
             ["BubblePop"] = new HelpContent
             {
                 SectionId = "BubblePop",
-                ClipFile = "bubblepop.mov",
                 CaptionKey = "help_caption_bubble_pop",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83E\uDEE7",
@@ -1072,7 +1064,6 @@ namespace ConditioningControlPanel.Services
             ["LockCard"] = new HelpContent
             {
                 SectionId = "LockCard",
-                ClipFile = "lockcard.mov",
                 CaptionKey = "help_caption_lock_card",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDD12",
@@ -1096,7 +1087,6 @@ namespace ConditioningControlPanel.Services
             ["BouncingText"] = new HelpContent
             {
                 SectionId = "BouncingText",
-                ClipFile = "bouncingtext.mov",
                 CaptionKey = "help_caption_bouncing_text",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDCFA",
@@ -1139,10 +1129,29 @@ namespace ConditioningControlPanel.Services
                              "looping track playing in the background."
             },
 
+            ["BrainDrain"] = new HelpContent
+            {
+                SectionId = "BrainDrain",
+                Icon = "💧",
+                Title = "Brain Drain",
+                WhatItDoes = "**Blurs the whole screen into a haze** and plays **brain-drain audio clips** at " +
+                             "random while it runs. The picture and the sound have **separate dials**.",
+                Tips = new List<string>
+                {
+                    "**Blur strength** sets the haze; **0 turns the picture off** and keeps the audio",
+                    "**Audio rate** sets how often a clip plays, separately from the blur",
+                    "**Melting mode** adds a slow warp on top of the blur, like melting glass",
+                    "Drop your own clips into the **Brain Drain folder** to replace the stock ones",
+                    "**High refresh** smooths the blur at a small CPU cost"
+                },
+                HowItWorks = "The blur is drawn on the **overlay layer** over your screen at the chosen strength. " +
+                             "A separate timer rolls the **audio rate** each minute to decide whether a clip " +
+                             "plays. Popping a **Brain Drain bubble** can also trigger a short melt."
+            },
+
             ["BubbleCount"] = new HelpContent
             {
                 SectionId = "BubbleCount",
-                ClipFile = "bubblecount.mov",
                 CaptionKey = "help_caption_bubble_count",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83E\uDEE7",
@@ -1166,7 +1175,6 @@ namespace ConditioningControlPanel.Services
             ["Modding"] = new HelpContent
             {
                 SectionId = "Modding",
-                ClipFile = "mod_creator.mp4",
                 CaptionKey = "help_caption_mod_creator",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDD27",
@@ -1221,7 +1229,6 @@ namespace ConditioningControlPanel.Services
             ["WebcamCalibration"] = new HelpContent
             {
                 SectionId = "WebcamCalibration",
-                ClipFile = "calibration.mp4",
                 CaptionKey = "help_caption_calibration",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\ud83c\udfaf", // \ud83c\udfaf target - "look at the dot"

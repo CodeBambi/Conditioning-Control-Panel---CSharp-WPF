@@ -55,7 +55,15 @@ public static class ChasterHooks
         _attached = true;
         try
         {
-            if (App.Quests != null) App.Quests.QuestCompleted += (_, e) => Safe(() => chaster.Note(QuestRow(e.QuestType)));
+            if (App.Quests is { } quests)
+            {
+                quests.QuestCompleted += (_, e) => Safe(() => chaster.Note(QuestRow(e.QuestType)));
+                // The dailies-left row judges the board once its day is over, so it needs to see
+                // the board every time it changes, and once now.
+                quests.QuestCompleted += (_, _) => Safe(() => chaster.NoteQuestBoard(OpenDailies(quests)));
+                quests.QuestsRefreshed += (_, _) => Safe(() => chaster.NoteQuestBoard(OpenDailies(quests)));
+                Safe(() => chaster.NoteQuestBoard(OpenDailies(quests)));
+            }
             if (App.Progression != null) App.Progression.LevelUp += (_, _) => Safe(() => chaster.Note("levelup"));
             if (App.Programs != null)
             {
@@ -66,6 +74,15 @@ public static class ChasterHooks
                 App.Lockdown.EscapeAttempted += attempt => Safe(() => { if (EscapeCosts(attempt.Kind)) chaster.Note("escape"); });
         }
         catch (Exception ex) { Diag.Swallowed(ex, "chaster hooks attach"); }
+    }
+
+    /// <summary>Dailies on the board not finished yet.</summary>
+    public static int OpenDailies(QuestService quests)
+    {
+        var open = 0;
+        foreach (var q in quests.Progress?.DailyQuests ?? new System.Collections.Generic.List<ActiveQuest>())
+            if (q != null && !q.IsCompleted) open++;
+        return open;
     }
 
     private static void Safe(Action book)

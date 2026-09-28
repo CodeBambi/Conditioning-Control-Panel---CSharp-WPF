@@ -169,7 +169,7 @@ namespace ConditioningControlPanel
                 Orientation = Orientation.Horizontal,
                 Margin = new Thickness(0, 8, 0, 0),
             };
-            footer.Children.Add(new TextBlock
+            footer.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = $"👁 {entry.ViewCount}",
                 FontSize = 11,

@@ -27,6 +27,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public MemoryDiaryView()
         {
             InitializeComponent();
+            if (Services.Companion.CompanionExperience.IsV2Enabled)
+            {
+                TrainTag.Visibility = Visibility.Collapsed;
+                DiaryHint.Visibility = Visibility.Collapsed;
+                ForgetQuestion.Text = Localization.Loc.Get("companion_v2_memory_confirm");
+                ForgetYes.Content = Localization.Loc.Get("companion_v2_clear");
+                ForgetNo.Content = Localization.Loc.Get("companion_v2_cancel");
+            }
             ForgetConfirm = new MemoryForgetConfirm();
             // The fact wall is height-capped and scrolls internally, so without this a wheel notch
             // over it never reaches the page — see CompanionWheelRelay.

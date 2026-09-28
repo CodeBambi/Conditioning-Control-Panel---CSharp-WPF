@@ -19,13 +19,16 @@
  * turned to face down the board, leans the same way a white one does.
  *
  * Wiring, all of it optional, all of it one line at the call site:
- *   pieces.js  attach on build, idle sway from the meter wobble
+ *   pieces.js  attach on build; idle.js bends resting bodies with planted bases
  *   anim.js    land on arrival, buzz drives a fast small bend
  *   drag.js    sag on grab, lag while the pointer drags it around
  *   boot.js    update(dt) once a frame, after everything else has moved
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { SILICONE_GLSL } from './silicone.js';
+import { TRAVEL } from './captures.js';
+import { createIdle } from './idle.js';
 
 /** Every number that decides how the men feel. One place, on purpose. */
 export const TUNING = Object.freeze({
@@ -64,17 +67,20 @@ export const TUNING = Object.freeze({
   substep: 1 / 240,         // the spring is stiff, so integrate it small
 });
 
-const CACHE_KEY = 'pbp-jiggle-1';
-const DEPTH_KEY = 'pbp-jiggle-depth-1';
+const CACHE_KEY = 'pbp-jiggle-5';
+const DEPTH_KEY = 'pbp-jiggle-depth-5';
 const T = TUNING;
 const f = (n) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 
 const PRELUDE = `
+varying vec3 vPbpPosition;
 uniform vec2 uBend;
+uniform float uAct;
 uniform float uSquash;
 uniform float uHeight;
 uniform float uPhase;
 uniform float uTime;
+${SILICONE_GLSL}
 float pbpH(float y) { return clamp(y / max(uHeight, 0.0001), 0.0, 1.0); }
 `;
 
@@ -84,11 +90,13 @@ const BEND_VERTEX = `#include <begin_vertex>
   float wb = pow(h, ${f(T.bendWeightPow)});
   float ws = pow(h, ${f(T.squashWeightPow)});
   vec2 wave = uBend * (sin(h * ${f(T.rippleWaves)} - uTime * ${f(T.rippleSpeed)} + uPhase) * ${f(T.rippleGain)});
-  vec2 off = (uBend + wave) * wb;
+  vec2 off = (uBend + wave * (1.0 - uAct)) * wb;
   transformed.y *= (1.0 - uSquash * ws);
   transformed.xz *= (1.0 + ${f(T.volumeGain)} * uSquash);
   transformed.x += off.x;
   transformed.z += off.y;
+  if (uAct > 0.5) transformed = siliconePoint(position);
+  vPbpPosition = transformed;
 }`;
 
 // The normal is rotated by the derivative of the bend and rescaled by the
@@ -102,11 +110,12 @@ const BEND_NORMAL = `#include <beginnormal_vertex>
   float sy = max(1.0 - uSquash * pow(h, ${f(T.squashWeightPow)}), 0.05);
   float sxz = max(1.0 + ${f(T.volumeGain)} * uSquash, 0.05);
   objectNormal = normalize(vec3(objectNormal.x / sxz, objectNormal.y / sy, objectNormal.z / sxz));
+  if (uAct > 0.5) objectNormal = normalize(siliconeFrame(normal, h));
 }`;
 
 function prefersReducedMotion() {
   if (typeof window === 'undefined') return false;
-  if (window.PBP && window.PBP.reducedMotion) return true;
+  if (window.PBP && (window.PBP.reducedMotion || window.PBP.settings?.reducedMotion)) return true;
   try { return !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   catch { return false; }
 }
@@ -118,6 +127,13 @@ export function createJiggle() {
   let clock = 0;
   let wobble = 0;
   let lastCost = 0;
+  const available = piece => {
+    const d = piece.userData, s = states.get(piece);
+    return !!s && !d.held && !d.busy && !d.capturePose && !d.parade && !d.pose
+      && Math.abs(piece.position.y) < .025 && clock >= (s.idleAfter || 0)
+      && s.vel.lengthSq() < .003 && s.bend.lengthSq() < .0002 && Math.abs(s.sVel) < .05;
+  };
+  const idle = createIdle({ pieces: () => states.keys(), available });
 
   const gain = () => (prefersReducedMotion() ? T.reducedScale : 1);
 
@@ -140,6 +156,16 @@ export function createJiggle() {
     const hook = (shader, renderer) => {
       if (prior) prior(shader, renderer);
       shader.uniforms.uBend = u.uBend;
+      shader.uniforms.uAct = u.uAct;
+      shader.uniforms.uLag = u.uLag; shader.uniforms.uFlex = u.uFlex; shader.uniforms.uTwist = u.uTwist; shader.uniforms.uBulge = u.uBulge; shader.uniforms.uDent = u.uDent;
+      shader.uniforms.uDissolve = u.uDissolve;
+      shader.fragmentShader = 'varying vec3 vPbpPosition; uniform float uDissolve;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', `
+        #include <clipping_planes_fragment>
+        vec3 cell = floor(vPbpPosition * 38.0);
+        float crumb = fract(sin(dot(cell, vec3(12.9898, 78.233, 39.425))) * 43758.5453);
+        if (uDissolve > 0.0 && crumb < uDissolve) discard;
+      `);
       shader.uniforms.uSquash = u.uSquash;
       shader.uniforms.uHeight = u.uHeight;
       shader.uniforms.uPhase = u.uPhase;
@@ -177,6 +203,9 @@ export function createJiggle() {
   function attach(piece) {
     if (states.has(piece)) return states.get(piece);
     const u = {
+      uAct: { value: 0 },
+      uLag: { value: new THREE.Vector2() }, uFlex: { value: new THREE.Vector2() }, uTwist: { value: 0 }, uBulge: { value: 0 }, uDent: { value: new THREE.Vector4() },
+      uDissolve: { value: 0 },
       uBend: { value: new THREE.Vector2(0, 0) },
       uSquash: { value: 0 },
       uHeight: { value: 1 },
@@ -241,7 +270,8 @@ export function createJiggle() {
   function impulse(piece, { bend = null, squash = 0, local = false } = {}) {
     const s = stateOf(piece);
     if (!s) return;
-    const g = gain() / s.world;
+    s.idleAfter = clock + 1;
+    const g = gain() / s.world * (piece.userData.type === 'p' ? .60 : 1);
     if (bend) {
       const v = local ? dir.set(bend[0], 0, bend[1]) : toLocal(piece, bend[0], bend[1]);
       s.vel.x += v.x * g;
@@ -257,7 +287,7 @@ export function createJiggle() {
   function land(piece, travel = null) {
     const s = stateOf(piece);
     if (!s) return;
-    const hard = piece.userData.tookOne ? T.captureGain : 1;
+    const hard = (piece.userData.tookOne ? T.captureGain : 1) * (TRAVEL[piece.userData.type]?.gain || 1);
     piece.userData.tookOne = false;
     let bx = 0, bz = 0;
     if (travel) {
@@ -266,6 +296,7 @@ export function createJiggle() {
       bz = (-travel[1] / len) * T.landBend * hard;
     }
     impulse(piece, { bend: [bx, bz], squash: T.landSquash * hard });
+    s.idleAfter = clock + 1.2;
   }
 
   /** Lifted off the board: the tip stretches down under its own weight. */
@@ -292,11 +323,12 @@ export function createJiggle() {
   }
 
   function step(s, dt) {
-    s.vel.x += (-T.bendStiffness * s.bend.x - T.bendDamping * s.vel.x) * dt;
-    s.vel.y += (-T.bendStiffness * s.bend.y - T.bendDamping * s.vel.y) * dt;
+    const damping = TRAVEL[s.piece.userData.type]?.damping || 1;
+    s.vel.x += (-T.bendStiffness * s.bend.x - T.bendDamping * damping * s.vel.x) * dt;
+    s.vel.y += (-T.bendStiffness * s.bend.y - T.bendDamping * damping * s.vel.y) * dt;
     s.bend.x += s.vel.x * dt;
     s.bend.y += s.vel.y * dt;
-    s.sVel += (-T.squashStiffness * s.squash - T.squashDamping * s.sVel) * dt;
+    s.sVel += (-T.squashStiffness * s.squash - T.squashDamping * damping * s.sVel) * dt;
     s.squash += s.sVel * dt;
   }
 
@@ -305,19 +337,32 @@ export function createJiggle() {
     clock += dt;
     const steps = Math.max(1, Math.min(24, Math.ceil(dt / T.substep)));
     const h = dt / steps;
-    const idle = wobble > 0.001 && !prefersReducedMotion() ? wobble * T.idleAmp : 0;
+    idle.update(dt, prefersReducedMotion());
     for (const [piece, s] of states) {
       if (!piece.parent) { states.delete(piece); continue; }
+      if (piece.userData.capturePose) {
+        const act = piece.userData.capturePose;
+        s.idleAfter = clock + .9;
+        s.bend.set(0, 0); s.vel.set(0, 0); s.squash = s.sVel = 0; s.forced.set(0, 0);
+        s.u.uBend.value.set(act.x, act.z); s.u.uSquash.value = 0;
+        s.u.uLag.value.set(act.lx || 0, act.lz || 0); s.u.uFlex.value.set(act.stretch || 0, act.drop || 0);
+        s.u.uDent.value.set(act.dx || 0, act.dy || 0, act.dz || 0, act.dentAt || 0);
+        s.u.uTwist.value = act.twist || 0; s.u.uBulge.value = act.bulge || 0; s.u.uAct.value = 1; continue;
+      }
+      s.u.uAct.value = 0;
       for (let i = 0; i < steps; i++) step(s, h);
       s.bend.x = THREE.MathUtils.clamp(s.bend.x, -T.maxBend, T.maxBend);
       s.bend.y = THREE.MathUtils.clamp(s.bend.y, -T.maxBend, T.maxBend);
       s.squash = THREE.MathUtils.clamp(s.squash, -T.maxSquash, T.maxSquash);
-      if (idle && !piece.userData.busy && !piece.userData.held) {
-        s.forced.x += Math.sin(clock * T.idleFreq + s.phase) * idle;
-        s.forced.y += Math.cos(clock * T.idleFreq * T.idleCross + s.phase * 1.7) * idle;
+      const quiet = s.forced.lengthSq() < .000001 ? idle.sample(piece, wobble) : null;
+      let qx = 0, qz = 0, qs = 0;
+      if (quiet) {
+        const local = toLocal(piece, quiet.worldX, quiet.worldZ);
+        qx = (quiet.x + local.x) * s.height; qz = (quiet.z + local.z) * s.height;
+        qs = quiet.squash;
       }
-      s.u.uBend.value.set(s.bend.x + s.forced.x, s.bend.y + s.forced.y);
-      s.u.uSquash.value = s.squash;
+      s.u.uBend.value.set(s.bend.x + s.forced.x + qx, s.bend.y + s.forced.y + qz);
+      s.u.uSquash.value = s.squash + qs;
       s.u.uTime.value = clock;
       s.forced.set(0, 0);
     }
@@ -326,6 +371,8 @@ export function createJiggle() {
 
   return {
     attach, release, update, impulse, land, grab, lag, drive,
+    bindBus: idle.bindBus, follow: idle.follow, idleStats: idle.stats,
+    dispose() { idle.dispose(); states.clear(); },
     setWobble(v) { wobble = Math.max(0, Math.min(1, Number(v) || 0)); },
     /** Harness and ramp entry point: poke(piece, {bend:[x,z], squash}). */
     poke(piece, opts = {}) { impulse(piece, { bend: opts.bend || null, squash: opts.squash || 0 }); },
@@ -340,6 +387,6 @@ export function createJiggle() {
         uBend: [s.u.uBend.value.x, s.u.uBend.value.y], uSquash: s.u.uSquash.value,
       };
     },
-    stats() { return { pieces: states.size, lastMs: lastCost, reduced: prefersReducedMotion() }; },
+    stats() { return { pieces: states.size, lastMs: lastCost, reduced: prefersReducedMotion(), idle: idle.stats() }; },
   };
 }

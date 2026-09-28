@@ -23,10 +23,12 @@ public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string
 
 /// <summary>
 /// update-time adds to the lock's end date, so a push onto a lock whose timer already ran out
-/// lands in the past and the lock stays "ready to unlock". With the option on, a push first
-/// catches the end up to now. That catch-up is not a price: it never touches the tab or the
-/// daily limit. A lock that ran out more than <see cref="MaxCatchUpSeconds"/> ago is left alone,
-/// so a lock forgotten for days is never pulled back shut.
+/// lands in the past and the lock stays "ready to unlock". With the option on, the push carries
+/// a catch-up that brings the end up to now. That catch-up is not a price: it never touches the
+/// tab. It rides the priced write (<see cref="CircesTab.WithCatchUp"/>), so it counts against the
+/// day's push ceiling and never goes out on its own. A lock that ran out more than
+/// <see cref="MaxCatchUpSeconds"/> ago is left alone, so a lock forgotten for days is never
+/// pulled back shut.
 /// </summary>
 public static class LockRelock
 {
@@ -93,6 +95,15 @@ public sealed partial class ChasterService : IDisposable
     /// </summary>
     public const int RemoteDailySeconds = 30 * 60;
 
+    /// <summary>A Remote session still counts toward <see cref="RemoteDailySeconds"/> for this long
+    /// after it ends, so a controller cannot queue effects, disconnect, and let them book uncapped.</summary>
+    public static readonly TimeSpan RemoteGrace = TimeSpan.FromMinutes(2);
+
+    /// <summary>Whether bookings count as made under Remote right now: a session is open, or one
+    /// ended less than <see cref="RemoteGrace"/> ago.</summary>
+    public static bool RemoteCounts(bool active, DateTime? endedAtUtc, DateTime nowUtc) =>
+        active || (endedAtUtc is { } ended && nowUtc - ended < RemoteGrace && nowUtc >= ended.AddSeconds(-5));
+
     private readonly ChasterClient _client;
     private readonly IChasterTokenStore _tokens;
     private readonly string _tabPath;
@@ -130,6 +141,9 @@ public sealed partial class ChasterService : IDisposable
         _localNow = localNow ?? (() => DateTime.Now);
         _runStartUtc = _utcNow();
         _tab = LoadTab();
+        // The file on disk is not trusted, from the very first read (security pass 3).
+        if (CircesTab.Sanitise(_tab, (_options() ?? ChasterOptions.Off).Caps))
+            App.Logger?.Warning("[Chaster] the tab file held numbers outside its limits; clamped at load");
     }
 
     public bool IsLinked => _tokens.Read() is { RefreshToken.Length: > 0 };
@@ -205,7 +219,14 @@ public sealed partial class ChasterService : IDisposable
         if (eventId == "session") ForgiveMisses();
         // "misses" has a row so it can be switched on, but only NoteSeen ever books it.
         if (eventId == CircesMisses.EventId) return new(0, TabRefusal.Nothing);
-        return BookSeconds(eventId, TabPrices.Resolve(eventId, options.Prices, units), originPx);
+        // The day-end rows and the streak are the service's own verdicts; no caller books them.
+        if (TabDayEnd.ServiceRows.Contains(eventId)) return new(0, TabRefusal.Nothing);
+        var seconds = TabPrices.Resolve(eventId, options.Prices, units);
+        if (options.Prices.Contains(TabDayEnd.HeatId) && TabDayEnd.HeatApplies(eventId))
+            seconds = TabDayEnd.Heated(seconds, HeatCount(eventId));
+        var booking = BookSeconds(eventId, seconds, originPx);
+        if (eventId == "session") NoteStreak(options);
+        return booking;
     }
 
     /// <summary>CCP is running today. Call at launch and when the local day turns over. With
@@ -215,20 +236,29 @@ public sealed partial class ChasterService : IDisposable
     {
         if (!IsLinked) return 0;
         var booked = 0;
+        string? endedDay = null;
         lock (_gate)
         {
             var local = _localNow();
             var today = CircesTab.DayKey(local);
             var last = _tab.LastSeenDay;
             if (last == today) return 0;
+            endedDay = last;
             _tab.LastSeenDay = today;
             if (Active(out var options) && options.Prices.Contains(CircesMisses.EventId)
                 && CircesMisses.TryDay(last, out var lastDay))
             {
                 var charges = CircesMisses.Charges(CircesMisses.DaysAway(last, local));
                 for (var i = 0; i < charges.Count; i++)
+                {
+                    var on = lastDay.AddDays(i + 1).AddHours(12);
+                    var keep = (_tab.Day, _tab.DayAddedSeconds);
                     booked += CircesTab.Book(_tab, CircesMisses.EventId, charges[i], _utcNow(),
-                        lastDay.AddDays(i + 1).AddHours(12), _runStartUtc, safetyExit: false, options.Caps).AppliedSeconds;
+                        on, _runStartUtc, safetyExit: false, options.Caps).AppliedSeconds;
+                    // A charge dated on a past day must not roll the day counter back to that day:
+                    // it would zero what today already booked and hand today's cap out again.
+                    if (CircesTab.DayKey(on) != keep.Day) (_tab.Day, _tab.DayAddedSeconds) = keep;
+                }
                 if (booked > 0) _tab.ForgivableSeconds = CircesMisses.Forgivable(booked);
             }
             SaveTab();
@@ -238,6 +268,7 @@ public sealed partial class ChasterService : IDisposable
             RaiseBooked(CircesMisses.EventId, new TabBooking(booked, TabRefusal.None), null);
             SchedulePush();
         }
+        JudgeEndedDay(endedDay);
         return booked;
     }
 
@@ -318,7 +349,7 @@ public sealed partial class ChasterService : IDisposable
                 seconds = Math.Min(seconds, room);
             }
             booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps);
-            if (booking.AppliedSeconds > 0) CircesTab.NoteUse(_tab, eventId, _localNow());
+            if (booking.AppliedSeconds > 0) { CircesTab.NoteUse(_tab, eventId, _localNow()); NoteHeat(eventId); }
             if (remote && booking.AppliedSeconds > 0)
             {
                 var today = CircesTab.DayKey(_localNow());
@@ -343,11 +374,8 @@ public sealed partial class ChasterService : IDisposable
     /// <summary>The wearer's active locks, or null when the link cannot be used right now.</summary>
     public async Task<IReadOnlyList<ChasterLock>?> GetLocksAsync(CancellationToken ct = default)
     {
-        var access = await AccessTokenAsync(ct).ConfigureAwait(false);
-        if (access == null) return null;
-        var locks = await _client.GetLocksAsync(access, ct).ConfigureAwait(false);
-        if (locks.Status == ChasterStatus.LinkExpired) DropLink();
-        return locks.Ok ? locks.Value : null;
+        var locks = await CallWithAccessAsync(a => _client.GetLocksAsync(a, ct), ct).ConfigureAwait(false);
+        return locks is { Ok: true } ok ? ok.Value : null;
     }
 
     /// <summary>Send the tab to the lock, if today's push has not gone and the balance is
@@ -369,7 +397,7 @@ public sealed partial class ChasterService : IDisposable
                     App.Logger?.Warning("[Chaster] the tab file held numbers outside its limits; clamped");
                 }
                 // An add from last time that was never answered: counted as landed, never resent.
-                var doubted = CircesTab.ResolvePending(_tab);
+                var doubted = CircesTab.ResolvePending(_tab, _utcNow());
                 if (doubted > 0)
                 {
                     SaveTab();
@@ -393,14 +421,26 @@ public sealed partial class ChasterService : IDisposable
             if (string.IsNullOrEmpty(lockId)) return SettleOutcome.NoLockChosen;
 
             if (options.RelockPastEnd)
-                await CatchUpPastEndAsync(access, lockId!, null, ct).ConfigureAwait(false);
+            {
+                // The catch-up rides this one write, so it never goes out without the price and
+                // a run of failed pushes cannot stack catch-ups on the lock.
+                var catchUp = await CatchUpSecondsAsync(lockId!, ct).ConfigureAwait(false);
+                lock (_gate) plan = CircesTab.WithCatchUp(plan, catchUp, _tab, options.Caps, _localNow());
+            }
 
             lock (_gate)
             {
                 CircesTab.MarkPending(_tab, plan, _localNow());
                 SaveTab();
             }
-            var added = await _client.AddTimeAsync(access, lockId!, plan.Seconds, ct).ConfigureAwait(false);
+            var sent = plan;
+            var answer = await CallWithAccessAsync(a => _client.AddTimeAsync(a, lockId!, sent.Total, ct), ct).ConfigureAwait(false);
+            if (answer is not { } added)
+            {
+                // No usable token for the call: nothing went out, so nothing is in doubt.
+                lock (_gate) { CircesTab.ClearPending(_tab); SaveTab(); }
+                return IsLinked ? SettleOutcome.TryLater : SettleOutcome.LinkExpired;
+            }
             // No answer at all: the mark stays, and the next settle counts the push as landed.
             if (added.Status == ChasterStatus.TimedOut) return SettleOutcome.TryLater;
 
@@ -409,34 +449,45 @@ public sealed partial class ChasterService : IDisposable
                 CircesTab.ClearPending(_tab);
                 if (added.Ok)
                 {
-                    CircesTab.ApplyPush(_tab, plan, _localNow());
+                    CircesTab.ApplyPush(_tab, plan, _localNow(), _utcNow());
                     _pushedThisRun += plan.Seconds;
                 }
                 SaveTab();
             }
             if (!added.Ok) return Failed(added.Status);
-            App.Logger?.Information("[Chaster] settled {Seconds}s to the lock", plan.Seconds);
+            App.Logger?.Information("[Chaster] settled {Seconds}s to the lock (catch-up {CatchUp}s)", plan.Seconds, plan.CatchUp);
+            LadderPushLanded();
             return SettleOutcome.Pushed;
         }
         finally { _settleGate.Release(); }
     }
 
-    /// <summary>Opt-in: bring a run-out lock's end up to now before the priced push, so the
-    /// price lands in the future. Best effort: any failure just leaves the push as it was.</summary>
-    private async Task CatchUpPastEndAsync(string access, string lockId, IReadOnlyList<ChasterLock>? active, CancellationToken ct)
+    /// <summary>Opt-in: how far a run-out lock's end is behind now, so the priced push can carry
+    /// it back up. Read only; best effort: any failure reads as 0 and the push goes as it was.</summary>
+    private async Task<int> CatchUpSecondsAsync(string lockId, CancellationToken ct)
     {
-        if (active == null)
-        {
-            var locks = await _client.GetLocksAsync(access, ct).ConfigureAwait(false);
-            if (!locks.Ok) return;
-            active = locks.Value;
-        }
-        var pick = active!.FirstOrDefault(l => l.Id == lockId);
+        var locks = await CallWithAccessAsync(a => _client.GetLocksAsync(a, ct), ct).ConfigureAwait(false);
+        if (locks is not { Ok: true } ok) return 0;
+        var pick = ok.Value!.FirstOrDefault(l => l.Id == lockId);
         var end = pick?.EndDate is { } e ? (e.Kind == DateTimeKind.Utc ? e : e.ToUniversalTime()) : (DateTime?)null;
-        var seconds = LockRelock.CatchUpSeconds(end, _utcNow());
-        if (seconds <= 0) return;
-        var caught = await _client.AddTimeAsync(access, lockId, seconds, ct).ConfigureAwait(false);
-        if (caught.Ok) App.Logger?.Information("[Chaster] the lock had run out; caught its end up by {Seconds}s", seconds);
+        return LockRelock.CatchUpSeconds(end, _utcNow());
+    }
+
+    /// <summary>One api.chaster.app call with the link's token. A 401 from the API is only that
+    /// token being refused: refresh once and try again. Only the broker's "link_expired" on
+    /// /chaster/refresh drops the link (inside <see cref="AccessTokenAsync"/>). Null when no
+    /// usable token could be had.</summary>
+    private async Task<ChasterResult<T>?> CallWithAccessAsync<T>(Func<string, Task<ChasterResult<T>>> call, CancellationToken ct)
+    {
+        var access = await AccessTokenAsync(ct).ConfigureAwait(false);
+        if (access == null) return null;
+        var result = await call(access).ConfigureAwait(false);
+        if (result.Status != ChasterStatus.Unauthorized) return result;
+        access = await AccessTokenAsync(ct, refused: access).ConfigureAwait(false);
+        if (access == null) return null;
+        result = await call(access).ConfigureAwait(false);
+        // Still refused with a fresh token: an outage for the caller, never a reason to unlink.
+        return result.Status == ChasterStatus.Unauthorized ? new ChasterResult<T>(ChasterStatus.Unavailable, default) : result;
     }
 
     private SettleOutcome Failed(ChasterStatus status)
@@ -452,42 +503,92 @@ public sealed partial class ChasterService : IDisposable
     /// stays: unlinking is a way out, not a way to clear what was already owed or earned.</summary>
     public async Task UnlinkAsync()
     {
-        var tokens = _tokens.Read();
-        _tokens.Clear();
+        var tokens = ForgetTokens(null);
         ForgetProfile();
         LinkChanged?.Invoke();
         if (tokens is { RefreshToken.Length: > 0 }) await _client.RevokeAsync(tokens.RefreshToken).ConfigureAwait(false);
     }
 
-    private void StoreTokens(ChasterTokens fresh, string? previousRefresh)
+    // Every link change (link, unlink, a dead link) moves the generation under _linkGate, together
+    // with the token write. A refresh that started before the change then cannot write its answer
+    // back over an unlink (security pass 3): the stored tokens only ever belong to the current link.
+    private readonly object _linkGate = new();
+    private int _linkGeneration;
+
+    /// <summary>Clear the tokens and start a new generation, as one step. With a generation
+    /// given, only if it is still the current one (a relink since then is left alone).
+    /// Returns what was stored, or null when nothing was cleared.</summary>
+    private ChasterStoredTokens? ForgetTokens(int? generation)
     {
-        var refresh = string.IsNullOrEmpty(fresh.RefreshToken) ? previousRefresh : fresh.RefreshToken;
-        _tokens.Write(new ChasterStoredTokens(fresh.AccessToken, refresh ?? "", _utcNow().AddSeconds(Math.Max(0, fresh.ExpiresIn))));
+        lock (_linkGate)
+        {
+            if (generation is { } g && g != _linkGeneration) return null;
+            _linkGeneration++;
+            var old = _tokens.Read();
+            _tokens.Clear();
+            return old;
+        }
+    }
+
+    /// <summary>A new link's tokens, replacing whatever was there. Returns the old ones so the
+    /// caller can revoke their grant: a relink must not leave a live token behind on Chaster.</summary>
+    private ChasterStoredTokens? ReplaceTokens(ChasterTokens fresh)
+    {
+        lock (_linkGate)
+        {
+            _linkGeneration++;
+            var old = _tokens.Read();
+            _tokens.Write(new ChasterStoredTokens(fresh.AccessToken, fresh.RefreshToken ?? "", _utcNow().AddSeconds(Math.Max(0, fresh.ExpiresIn))));
+            return old;
+        }
+    }
+
+    /// <summary>A refresh's answer. Refused (false) when the link changed since the refresh began.</summary>
+    private bool StoreTokens(ChasterTokens fresh, string? previousRefresh, int generation)
+    {
+        lock (_linkGate)
+        {
+            if (generation != _linkGeneration) return false;
+            var refresh = string.IsNullOrEmpty(fresh.RefreshToken) ? previousRefresh : fresh.RefreshToken;
+            _tokens.Write(new ChasterStoredTokens(fresh.AccessToken, refresh ?? "", _utcNow().AddSeconds(Math.Max(0, fresh.ExpiresIn))));
+            return true;
+        }
     }
 
     // One refresh at a time. If Chaster rotates refresh tokens, two at once means the second
     // presents a spent token, gets a 401, and a perfectly good link is dropped.
-    private async Task<string?> AccessTokenAsync(CancellationToken ct)
+    // refused: an access token the API just answered 401 to. When it is still the stored one it
+    // is refreshed whatever its expiry says; when another call already replaced it, the new one is used.
+    private async Task<string?> AccessTokenAsync(CancellationToken ct, string? refused = null)
     {
         await _refreshGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var tokens = _tokens.Read();
+            int generation;
+            ChasterStoredTokens? tokens;
+            lock (_linkGate) { generation = _linkGeneration; tokens = _tokens.Read(); }
             if (tokens == null || string.IsNullOrEmpty(tokens.RefreshToken)) return null;
-            if (!ChasterClient.NeedsRefresh(tokens.ExpiresAtUtc, _utcNow())) return tokens.AccessToken;
+            var stale = refused != null && tokens.AccessToken == refused;
+            if (!stale && !ChasterClient.NeedsRefresh(tokens.ExpiresAtUtc, _utcNow())) return tokens.AccessToken;
 
             var fresh = await _client.RefreshAsync(tokens.RefreshToken, ct).ConfigureAwait(false);
-            if (fresh.Status == ChasterStatus.LinkExpired) { DropLink(); return null; }
+            if (fresh.Status == ChasterStatus.LinkExpired) { DropLink(generation); return null; }
             if (!fresh.Ok) return null;
-            StoreTokens(fresh.Value!, tokens.RefreshToken);
+            if (!StoreTokens(fresh.Value!, tokens.RefreshToken, generation))
+            {
+                // Unlinked (or relinked) while the refresh was out: its grant is nobody's now.
+                var orphan = fresh.Value!.RefreshToken;
+                if (!string.IsNullOrEmpty(orphan) && orphan != tokens.RefreshToken) _ = _client.RevokeAsync(orphan);
+                return null;
+            }
             return fresh.Value!.AccessToken;
         }
         finally { _refreshGate.Release(); }
     }
 
-    private void DropLink()
+    private void DropLink(int? generation = null)
     {
-        _tokens.Clear();
+        if (ForgetTokens(generation) == null && generation != null) return;
         ForgetProfile();
         App.Logger?.Information("[Chaster] the link expired; the tab is kept");
         LinkChanged?.Invoke();
@@ -528,6 +629,7 @@ public sealed partial class ChasterService : IDisposable
         _settleTimer?.Dispose();
         _pushTimer?.Dispose();
         _lockTimer?.Dispose();   // ChasterService.App.cs
+        DisposeLadder();         // ChasterService.Ladder.cs
         _settleGate.Dispose();
         _refreshGate.Dispose();
     }

@@ -49,9 +49,52 @@ public static class EmiSfx
     /// </summary>
     private const int MinGapMs = 130;
 
+    /// <summary>Trims for the toss and the pet streak (2026-09-25). The campus levels in ratio
+    /// (pad .08, bump .12, thud .16, chime .14), lifted to sit beside the desk's own pat.</summary>
+    private const float LiftScale = 0.10f;
+    private const float BumpScale = 0.14f;
+    private const float ThudScale = 0.17f;
+    private const float ChimeScale = 0.15f;
+
+    private static readonly string[] LiftChain = { "emi/lift.mp3", "chaos/ui_equip.mp3", "chaos/cards_in.mp3" };
+    private static readonly string[] BumpChain = { "emi/bump.mp3", "chaos/shield_thunk.mp3", "chaos/thud.mp3" };
+    private static readonly string[] ThudChain = { "emi/thud.mp3", "chaos/thud.mp3" };
+    private static readonly string[] ChimeChain = { "emi/chime.mp3", "chaos/reveal_chime.mp3", "chime1.mp3" };
+
     private static readonly object Gate = new();
     private static DateTime _lastPat = DateTime.MinValue;
     private static DateTime _lastRing = DateTime.MinValue;
+    private static DateTime _lastToss = DateTime.MinValue;
+    private static DateTime _lastLand = DateTime.MinValue;
+    private static DateTime _lastChime = DateTime.MinValue;
+
+    /// <summary>Picked up.</summary>
+    public static void Lift()
+    {
+        if (!Throttle(ref _lastToss)) return;
+        Play(LiftChain, LiftScale, "emi-sfx-toss");
+    }
+
+    /// <summary>Put down.</summary>
+    public static void Bump()
+    {
+        if (!Throttle(ref _lastLand)) return;
+        Play(BumpChain, BumpScale, "emi-sfx-toss");
+    }
+
+    /// <summary>Thrown, and landed.</summary>
+    public static void Thud()
+    {
+        if (!Throttle(ref _lastLand)) return;
+        Play(ThudChain, ThudScale, "emi-sfx-toss");
+    }
+
+    /// <summary>The pet streak: three quick pets.</summary>
+    public static void Chime()
+    {
+        if (!Throttle(ref _lastChime)) return;
+        Play(ChimeChain, ChimeScale, "emi-sfx-chime");
+    }
 
     /// <summary>Her head, touched. Fires on both triggers of the one gesture - the click pat and
     /// the 1.2 s hover pet - because the sound is the touch, not the performance it earns.</summary>
@@ -85,6 +128,7 @@ public static class EmiSfx
         new[] { "emi/pat.mp3", "chaos/chip_pop.mp3", "bubbles/Pop3.mp3" },
         new[] { "emi/ring_open.mp3", "chaos/cards_in.mp3", "chaos/reveal_chime.mp3" },
         new[] { "emi/ring_close.mp3", "chaos/ui_unequip.mp3", "chaos/sink.mp3" },
+        LiftChain, BumpChain, ThudChain, ChimeChain,
     };
 
     private static bool Throttle(ref DateTime slot)

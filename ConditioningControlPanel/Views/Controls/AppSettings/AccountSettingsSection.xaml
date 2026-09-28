@@ -1,6 +1,7 @@
 <UserControl x:Class="ConditioningControlPanel.Views.Controls.AppSettingsSections.AccountSettingsSection"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
@@ -84,7 +85,7 @@
                             Background="{DynamicResource DarkerBgBrush}"
                             BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1"
                             VerticalAlignment="Center">
-                        <TextBlock x:Name="TxtAccountTierBadge" x:FieldModifier="internal" Text="🔒"
+                        <helpers:EmojiTextBlock x:Name="TxtAccountTierBadge" x:FieldModifier="internal" Text="🔒"
                                    Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
                     </Border>
                 </Grid>

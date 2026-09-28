@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Windows.Input;
 using ConditioningControlPanel.Localization;
@@ -56,6 +57,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
                 Cell(CompanionRoomAnchors.WorkshopCommunityCell, "companion_workshop_cell_community", parts.Community),
                 Cell(CompanionRoomAnchors.WorkshopAwarenessCell, "companion_workshop_cell_awareness", parts.Awareness)
             };
+
+            if (Services.Companion.CompanionExperience.IsV2Enabled)
+                Cells = Cells.Where(cell => cell.Key != CompanionRoomAnchors.WorkshopAwarenessCell).ToArray();
 
             FocusCellCommand = new CompanionRelayCommand(
                 p => _ctx.Navigator?.RevealWorkshop(p as string));

@@ -22,6 +22,17 @@ import { S, mmss } from '../strings.js';
 import { avatarSlot, emitAva } from '../avatar.js';
 import { GoonEndReason, GoonMatchPhase } from '../../core/contracts.js';
 import { evidenceFor, submitReport, NOTE_MAX, REPORT_REASONS } from '../report.js';
+import { noteMatchFinished } from '../nightProgress.js';
+import { settleOnce, formatRecord, outcomeOf } from '../rivalry.js';
+
+/** Matches already counted by noteMatchFinished (ui/nightProgress.js). */
+const countedMatches = new WeakSet();
+import { duelSummary } from '../duel/duelController.js';
+import { DUEL_COPY } from '../duel/copy.js';
+import { burst, centreOf, countUp, isCalm, play, popIn, squash, staggerIn } from '../juiceDom.js';
+import { buildShareData, cardKey, FLAVOUR_TINTS } from '../shareWords.js';
+import { renderCard, copyCard, saveCard, canvasBlob, cardFileName } from '../shareCard.js';
+import { THUD_EASE, staggerDelays } from '../juice.js';
 
 const COLLAPSE_AT = 6;
 const GRACEFUL_MS = 8 * 60 * 1000;
@@ -40,10 +51,8 @@ export const EXPLORE_URL = 'https://cclabs.app/explore.html';
 /** One retry on a failed submit, then the card stops offering false hope. */
 export const REPORT_MAX_RETRIES = 1;
 
-const KIND_NAMES = Object.freeze({
-  0: 'flash burst', 1: 'subliminal storm', 2: 'bubble swarm',
-  3: 'video', 4: 'lock card', 5: 'toy pattern', 6: 'brain drain',
-});
+/* Payload names, by GoonPayloadKind code: S.payloads in ui/strings.js. */
+const KIND_NAMES = S.payloads;
 
 /**
  * DEFENCE IN DEPTH, NOT THE FIX. boot.js clearForRecap() empties #gg-stage when
@@ -463,7 +472,7 @@ export function mount(container, ctx) {
     return el('li', { class: 'gg-plrow gg-plrow--' + entry.dir }, [
       el('span', { class: 'gg-plrow-t', text: mmss(entry.atMs) }),
       el('span', { class: 'gg-plrow-dir', text: entry.dir === 'in' ? S.recap.dirIn : S.recap.dirOut }),
-      el('span', { class: 'gg-plrow-kind', text: KIND_NAMES[entry.kind] || ('kind ' + entry.kind) }),
+      el('span', { class: 'gg-plrow-kind', text: (typeof KIND_NAMES[entry.kind] === 'string' && KIND_NAMES[entry.kind]) || S.payloads.unknown(entry.kind) }),
       el('span', { class: 'gg-chip ' + chip.cls, text: chip.text }),
       chip.note && entry.dir === 'in' ? el('span', { class: 'gg-plrow-note', text: chip.note }) : null,
     ]);
@@ -598,6 +607,140 @@ export function mount(container, ctx) {
     ]);
   }
 
+  /* ------------------------------------------------------------- rivalry
+   * Booked ONCE per match (settleOnce latches on the match object), on the
+   * first paint that has a result. Practice never books. The line reads the
+   * stored record back, so it already includes this match. */
+  const rivalry = ctx.rivalry || null;
+  const practice = typeof ctx.isPractice === 'function' ? !!ctx.isPractice() : false;
+  function rivalLine() {
+    if (!rivalry || practice || !match) return '';
+    try {
+      settleOnce(match, rivalry, { practice });
+      const name = match.opponent ? match.opponent.displayName : '';
+      return formatRecord(rivalry.recordFor(name), name);
+    } catch (_e) { return ''; }
+  }
+
+  /* ---------------------------------------------------------- share card
+   * THE CARD PLAYERS POST (2026-09-24). One persistent node: paint() re-appends
+   * it rather than rebuilding it, so a countersignature landing mid-copy does not
+   * throw the picture away. It redraws only when what it shows changed (cardKey).
+   * No match picture ever goes on it (ui/shareCard.js): it is made for public
+   * channels. Copy and Save never open a sheet or a modal here; a hosted Save is
+   * the host's own file dialog. */
+  const shareNode = el('section', { class: 'gg-card gg-recap-share' });
+  let shareKey = '';
+  let shareCanvas = null;
+  let shareWord = '';
+  let shareUrl = '';
+  let shareBusy = false;
+  let shareShown = false;
+  ledger.add(() => { if (shareUrl) { try { URL.revokeObjectURL(shareUrl); } catch (_e) { /* gone */ } } });
+
+  function shareData(result) {
+    const st = discord ? discord.state : null;
+    const card = discord ? discord.peer : null;
+    const showOpp = !discord || discord.showOpponentAvatars;
+    let flavour = '';
+    try { const m = ctx.mediaFlavour && ctx.mediaFlavour.get ? ctx.mediaFlavour.get() : null; flavour = (m && m.flavour) || ''; } catch (_e) { flavour = ''; }
+    let highlights = [];
+    try { highlights = computeTitles(result).map((t) => t.name); } catch (_e) { highlights = []; }
+    let outcome = null;
+    try { outcome = outcomeOf(result); } catch (_e) { outcome = null; }
+    return buildShareData({
+      result,
+      outcome,
+      log: matchLog,
+      duels: duelSummary(match),
+      /* Per-player stats from the points model (match.matchStats), in shareWords.statsFromScoring's
+       * shape; null in an old-score match, which keeps the match-log numbers. */
+      scoring: (match && match.scoreCard) || scoreCardOf(match),
+      youName: (match && match.localDisplayName) || (session && session.identity && session.identity.displayName) || '',
+      themName: peerName(),
+      youAvatar: (discord && discord.sharingAvatar && st) ? st.avatarDataUri : '',
+      themAvatar: (showOpp && card) ? card.avatarDataUri : '',
+      flavour,
+      seed: match ? match.matchSeed : 0,
+      highlights,
+    });
+  }
+
+  function shareToast(ok, good, bad) {
+    try { if (ok) ctx.toasts?.good?.(good); else ctx.toasts?.warn?.(bad); } catch (_e) { /* toasts are optional */ }
+  }
+
+  function paintShare(tint) {
+    shareNode.replaceChildren(
+      el('h2', { class: 'gg-recap-h', text: S.share.title }),
+      el('p', { class: 'gg-recap-fine', text: S.share.lead }),
+    );
+    if (!shareUrl) {
+      shareNode.appendChild(el('div', { class: 'gg-share-preview is-pending', text: S.share.preparing }));
+      return;
+    }
+    const img = el('img', { class: 'gg-share-preview', src: shareUrl, alt: S.share.alt(shareWord) });
+    shareNode.appendChild(img);
+    const copy = button(ledger, S.share.copy, async () => {
+      if (shareBusy || !shareCanvas) return;
+      shareBusy = true;
+      squash(copy);
+      const r = await copyCard(shareCanvas);
+      shareBusy = false;
+      if (ledger.isDisposed) return;
+      shareToast(r.ok, S.share.copied, S.share.copyFailed);
+      if (r.ok) { const c = centreOf(copy); if (c && c.w) burst(c.x, c.y, { count: 14, dist: 60, color: '255, 212, 94' }); }
+    }, { variant: 'primary', audio });
+    const save = button(ledger, S.share.save, async () => {
+      if (shareBusy || !shareCanvas) return;
+      shareBusy = true;
+      squash(save);
+      const r = await saveCard(shareCanvas, cardFileName(Date.now()));
+      shareBusy = false;
+      if (ledger.isDisposed || r.error === 'cancelled') return;
+      shareToast(r.ok, S.share.saved, S.share.saveFailed);
+    }, { variant: 'ghost', audio });
+    shareNode.appendChild(el('div', { class: 'gg-share-actions' }, [copy, save]));
+    if (!shareShown) {
+      shareShown = true;
+      popIn(img, { from: 0.86, over: 1.03, ms: 420, delay: 120 });
+      if (!isCalm()) {
+        ledger.timer(() => {
+          const c = centreOf(img);
+          if (c && c.w) burst(c.x, c.y, { count: 18, dist: 110, spread: 70, color: hexRgb(tint) });
+        }, 260);
+      }
+    }
+  }
+
+  function hexRgb(hex) {
+    const n = parseInt(String(hex || '#ff69b4').slice(1), 16) || 0;
+    return ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255);
+  }
+
+  function refreshShare(result) {
+    let data = null;
+    try { data = shareData(result); } catch (_e) { data = null; }
+    if (!data) return;
+    const key = cardKey(data);
+    const tint = FLAVOUR_TINTS[data.flavour] || FLAVOUR_TINTS.plain;
+    if (key === shareKey) return;
+    shareKey = key;
+    if (!shareUrl) paintShare(tint);
+    void (async () => {
+      const r = await renderCard(data);
+      if (ledger.isDisposed || key !== shareKey || !r) return;
+      let blob = null;
+      try { blob = await canvasBlob(r.canvas); } catch (_e) { blob = null; }
+      if (ledger.isDisposed || key !== shareKey || !blob) return;
+      if (shareUrl) { try { URL.revokeObjectURL(shareUrl); } catch (_e) { /* gone */ } }
+      shareCanvas = r.canvas;
+      shareWord = r.word;
+      shareUrl = URL.createObjectURL(blob);
+      paintShare(tint);
+    })();
+  }
+
   /* --------------------------------------------------------------- paint */
 
   function paint() {
@@ -655,7 +798,20 @@ export function mount(container, ctx) {
         ]),
         el('p', { class: 'gg-recap-fine', text: S.recap.scoreFineprint }),
         el('p', { class: 'gg-recap-fine', text: S.recap.survived(result.survivedMs) }),
+        el('p', { class: 'gg-rival-line', text: rivalLine() }),
+        duelSummary(match).won > 0 && el('p', { class: 'gg-recap-fine', text: DUEL_COPY.recapLine(duelSummary(match).won) }),
       ]));
+    }
+
+    /* --- the share card: right under the numbers it is made of --- */
+    if (result) {
+      try {
+        refreshShare(result);
+        column.appendChild(shareNode);
+      } catch (e) {
+        try { ctx?.logger?.warn?.('recap: share card failed to build: ' + ((e && e.message) || e)); }
+        catch (_e2) { /* logger is optional */ }
+      }
     }
 
     /* --- payload log --- */
@@ -701,17 +857,27 @@ export function mount(container, ctx) {
       catch (_e2) { /* logger is optional */ }
     }
 
-    /* --- actions --- */
-    // Rematch needs a fresh room (the old one is spent) — that is v2. It ships
-    // visible and disabled rather than absent, so the shape of the screen does
-    // not move when it arrives.
-    const rematch = button(ledger, S.recap.rematch, () => {}, { variant: 'ghost', audio });
-    rematch.disabled = true;
-    // gg-menu-item carries `position: relative` — without it the absolutely
+    /* --- actions ---
+     * REMATCH IS THE SMALLEST HONEST VERSION. The room is spent the moment the
+     * match ends, so a rematch is a fresh room: the host's button opens one (a
+     * new link to send), the guest's lands on the join screen ready for it, and
+     * practice simply goes again. No new wire frame, so an old peer cannot be
+     * confused by it. Disabled only when the page gave us no road to take. */
+    const canRematch = !!(actions && typeof actions.rematch === 'function');
+    const rematch = button(ledger, S.recap.rematch, () => {
+      if (canRematch) void actions.rematch();
+    }, { variant: 'ghost', audio });
+    rematch.disabled = !canRematch;
+    // gg-menu-item carries `position: relative` - without it the absolutely
     // positioned note escapes to the nearest positioned ancestor and lands at
     // the bottom of the page. (It did.)
     rematch.classList.add('gg-menu-item', 'has-note');
-    rematch.appendChild(el('span', { class: 'gg-menu-note', text: S.recap.rematchSoon }));
+    rematch.appendChild(el('span', {
+      class: 'gg-menu-note',
+      text: !canRematch ? S.recap.rematchSoon
+        : practice ? S.recap.rematchPractice
+          : (match && match.isHost) ? S.recap.rematchHost : S.recap.rematchGuest,
+    }));
     const back = button(ledger, S.recap.back, () => actions.leave('recap'), { variant: 'primary', audio, sfx: 'ui-back' });
     column.appendChild(el('div', { class: 'gg-recap-actions' }, [rematch, back]));
 
@@ -726,6 +892,51 @@ export function mount(container, ctx) {
     }
   }
 
+  /**
+   * THE REVEAL (juice pass 2026-09-23), first paint only; a repaint (the
+   * countersignature landing) just swaps the numbers. The router cascades the
+   * cards in; on top of that the verdict THUDs, each score counts up from zero
+   * with a climbing pentatonic tick, the payload rows cascade inside their card
+   * and the title chips pop one by one. Reduced motion: numbers land at once,
+   * everything else is the router's fade.
+   */
+  function reveal() {
+    try {
+      const q = (sel) => Array.from(column.querySelectorAll ? column.querySelectorAll(sel) : []);
+      const calm = isCalm();
+      const verdict = q('.gg-recap-verdict')[0];
+      if (verdict && !calm) {
+        play(verdict, [
+          { opacity: 0, transform: 'scale(1.8) rotate(-4deg)' },
+          { opacity: 1, transform: 'scale(1) rotate(0deg)' },
+        ], { duration: 340, delay: 140, easing: THUD_EASE, fill: 'backwards' });
+      }
+      let rung = 0;
+      q('.gg-scorenum').forEach((node, i) => {
+        const final = parseInt(node.textContent, 10);
+        if (!Number.isFinite(final)) return;
+        const stop = countUp(node, 0, final, {
+          delay: 360 + i * 180,
+          onStep: () => { if (!calm) { try { audio?.tone?.(rung++ % 10, { ms: 90 }); } catch (_e) { /* stub bus */ } } },
+          onDone: () => {
+            if (calm) return;
+            popIn(node, { from: 0.8, over: 1.25, ms: 300 });
+            const c = centreOf(node);
+            if (c && c.w && node.classList.contains('is-you')) burst(c.x, c.y, { count: 10, dist: 50, spread: 40, color: '255, 212, 94' });
+          },
+        });
+        ledger.add(stop);
+      });
+      staggerIn(q('.gg-pllist > li').slice(0, 14), { start: 420, step: 55 });
+      const chips = q('.gg-title-chip');
+      const delays = staggerDelays(chips.length, { start: 700, step: 120, max: 600 });
+      chips.forEach((chip, i) => {
+        popIn(chip, { delay: delays[i], from: 0.5, over: 1.12, ms: 340 });
+        if (!calm) ledger.timer(() => { try { audio?.tone?.(4 + i, { ms: 160 }); } catch (_e) { /* stub bus */ } }, delays[i] + 80);
+      });
+    } catch (_e) { /* the reveal is decoration: the recap stands without it */ }
+  }
+
   if (match) {
     ledger.sub(match.onResultFinalized(() => { if (!ledger.isDisposed) paint(); }));
     ledger.sub(match.onMatchEnded(() => { if (!ledger.isDisposed) paint(); }));
@@ -737,8 +948,23 @@ export function mount(container, ctx) {
     ledger.add(discord.subscribe(() => { if (!ledger.isDisposed) paint(); }));
   }
   if (prefs) prefs.set('matchesPlayed', (prefs.get('matchesPlayed') | 0) + 1);
+  // Game Night's own count (ui/nightProgress.js): game cards unlock from the second one.
+  // Once per match object (the recap can be shown again for the same match), and only for a
+  // REAL result: an early abandon or a result that never finalized counts for nothing. The
+  // result can land after this screen mounts, so the check rides the same repaint hooks.
+  function countFinished() {
+    if (practice || !match || countedMatches.has(match)) return;
+    let real = false;
+    try { real = outcomeOf(match.result) != null; } catch (_e) { real = false; }
+    if (!real) return;
+    countedMatches.add(match);
+    try { noteMatchFinished(); } catch (_e) { /* never breaks the recap */ }
+  }
+  countFinished();
+  if (match) ledger.sub(match.onResultFinalized(() => countFinished()));
 
   paint();
+  reveal();
   try { audio?.sfx?.('recap-reveal'); } catch (_e) { /* stub bus */ }
   try { audio?.music?.('recap'); } catch (_e) { /* stub bus */ }
   ledger.add(() => { try { audio?.stopMusic?.(); } catch (_e) { /* stub bus */ } });
@@ -747,3 +973,14 @@ export function mount(container, ctx) {
 }
 
 export default { mount };
+
+/** The scoring lane's ledger in the card's { you, them } shape; null outside the points model
+ *  (an old-score match keeps the card's match-log numbers). */
+function scoreCardOf(match) {
+  try {
+    if (!match || typeof match.matchStats !== 'function') return null;
+    const s = match.matchStats();
+    if (!s || !s.pointsModel || !s.me) return null;
+    return { you: s.me, them: s.them || null };
+  } catch (_e) { return null; }
+}

@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Tests;
 
 /// <summary>
 /// Natasha's favourite: about one bubble in ten and one flash in ten wears a faint red, and the
-/// one popped or seen is 3:00 on the tab. The roll, the price row, the presets that carry it,
+/// one popped or seen is 5:00 on the tab. The roll, the price row, the presets that carry it,
 /// the blink envelope and the "can this even charge" gate the cue is dealt behind.
 /// </summary>
 public class NatashasFavouriteTests
@@ -28,12 +28,12 @@ public class NatashasFavouriteTests
     {
         var row = TabPrices.Find("natasha");
         Assert.NotNull(row);
-        Assert.Equal(180, row!.Seconds);
+        Assert.Equal(300, row!.Seconds);
         Assert.Equal(TabPriceGate.Free, row.Gate);
         Assert.False(row.PerUnit);
 
         Assert.Equal(0, TabPrices.Resolve("natasha", new HashSet<string>()));
-        Assert.Equal(180, TabPrices.Resolve("natasha", new HashSet<string> { "natasha" }));
+        Assert.Equal(300, TabPrices.Resolve("natasha", new HashSet<string> { "natasha" }));
     }
 
     [Fact]
@@ -70,6 +70,30 @@ public class NatashasFavouriteTests
             NatashasFavourite.WashAlphaAt(NatashasFavourite.PulseSec + NatashasFavourite.PulseGapSec + NatashasFavourite.PulseSec / 2), 6);
         // And the halo stays under the lucky gold, so it never reads as a prize.
         Assert.True(NatashasFavourite.HaloOpacity < 0.55);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Bubble_tint_stays_visible_between_blinks_and_with_motion_off(bool animate)
+    {
+        for (var i = 0; i < 270; i++)
+            Assert.InRange(NatashasFavourite.BubbleWashAt(i / 100.0, animate),
+                NatashasFavourite.BubbleWashBase, NatashasFavourite.BubbleWashBase + NatashasFavourite.WashPeak);
+        Assert.Equal(NatashasFavourite.BubbleWashBase, NatashasFavourite.BubbleWashAt(1.5, animate));
+    }
+
+    [Theory]
+    [InlineData(false, LockLookup.Unlinked, false, false, null)]
+    [InlineData(true, LockLookup.Ambiguous, false, false, "chaster_setup_pick")]
+    [InlineData(true, LockLookup.None, false, false, "chaster_setup_none")]
+    [InlineData(true, LockLookup.Away, false, false, "chaster_state_away")]
+    [InlineData(true, LockLookup.Chosen, true, false, "chaster_setup_run")]
+    [InlineData(true, LockLookup.Chosen, true, true, null)]
+    public void Setup_always_explains_the_next_required_step(bool linked, LockLookup lookup,
+        bool hasLock, bool enabled, string? expected)
+    {
+        Assert.Equal(expected, TabPageText.SetupHint(linked, lookup, hasLock, enabled));
     }
 
     [Fact]
@@ -119,7 +143,7 @@ public class NatashasFavouriteTests
             // Popping the red one is the row's price, once, like any other event.
             var booking = service.Note("natasha");
             Assert.True(booking.Booked);
-            Assert.Equal(180, service.BalanceSeconds);
+            Assert.Equal(300, service.BalanceSeconds);
 
             options = options with { TabEnabled = false };
             Assert.False(service.CanBook("natasha"));

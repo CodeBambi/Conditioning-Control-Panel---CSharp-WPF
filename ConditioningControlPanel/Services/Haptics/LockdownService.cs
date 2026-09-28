@@ -284,6 +284,14 @@ public class LockdownService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Forget the pre-lockdown values for good. The leash cut (Services/Leash/LeashCutSafety.cs)
+    /// ends Lockdown and then forces Strict Lock off and the panic key on; a recovery file left on
+    /// disk would let the next launch's <see cref="RecoverIfNeeded"/> put the old values back.
+    /// <see cref="Deactivate"/> already deletes it, this is the belt for a file that outlived it.
+    /// </summary>
+    public static void DiscardRecovery() => DeleteRecoveryFile();
+
     private static void DeleteRecoveryFile()
     {
         try { if (File.Exists(RecoveryFilePath)) File.Delete(RecoveryFilePath); }

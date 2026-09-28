@@ -15,6 +15,8 @@
  *                     who caps at rung 5 has driven it as hard as it goes.
  *   .15 PERFECT share PERFECTs over correct swipes: the last 40% of the ring is
  *                     where the room wants you living.
+ *                     A QUICK swipe (the first half second, chain.js) is a
+ *                     PERFECT too, so it counts here unchanged.
  *
  * S GATE: accuracy >= .95 AND best rung >= cap - 1. Speed alone cannot buy an
  * S (you can hold rung 8 while getting one in ten wrong), and neither can care

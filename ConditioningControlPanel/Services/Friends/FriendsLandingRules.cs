@@ -220,6 +220,18 @@ public interface ILandingSink
     void Knock(InboxItem item, bool inGame);
     void Inbox(InboxItem item);
     void SentBeat(SendKind kind, Friend to);
+
+    /// <summary>Files an incoming friend request as an Inbox row. Always, whatever the world.</summary>
+    void RequestRow(FriendRequest request);
+
+    /// <summary>The request's cue and toast, while something of ours (or a game) has the screen.</summary>
+    void RequestAnnounce(FriendRequest request, bool inGame);
+
+    /// <summary>One request cue after a hold ends, for the requests that arrived during it.</summary>
+    void RequestCue();
+
+    /// <summary>The request left the list (accepted, declined, withdrawn): its row goes.</summary>
+    void RequestGone(string requestId);
 }
 
 /// <summary>The routing, as a plain class over the service: subscribe, decide, hold, release.
@@ -240,7 +252,14 @@ public sealed class FriendsLandingRouter : IDisposable
         _sink = sink;
         _service.Delivered += OnDelivered;
         _service.Sent += OnSent;
+        _service.RequestArrived += OnRequestArrived;
+        _service.RequestGone += OnRequestGone;
     }
+
+    private bool _requestCuePending;
+
+    /// <summary>True while a request arrived during a hold and its one cue waits for the release.</summary>
+    public bool RequestCuePending => _requestCuePending;
 
     public IFriendsService Service => _service;
     public int Held => _queue.Count;
@@ -267,12 +286,36 @@ public sealed class FriendsLandingRouter : IDisposable
         }
     }
 
+    /// <summary>A new incoming friend request: always a row; a cue and a toast only while
+    /// something of ours or a game is on screen; held states save one cue for the release.</summary>
+    public void OnRequestArrived(FriendRequest request)
+    {
+        if (request == null) return;
+        _sink.RequestRow(request);
+        var world = _world();
+        if (world.Holding) { _requestCuePending = true; return; }
+        if (world.GameHostActive) _sink.RequestAnnounce(request, inGame: true);
+        else if (world.PanelVisible || world.LauncherVisible) _sink.RequestAnnounce(request, inGame: false);
+    }
+
+    public void OnRequestGone(string requestId)
+    {
+        if (string.IsNullOrEmpty(requestId)) return;
+        _sink.RequestGone(requestId);
+    }
+
     /// <summary>Called on a timer: once the hold ends, everything still alive lands in order.</summary>
     public void Release()
     {
-        if (_queue.Count == 0) return;
+        if (_queue.Count == 0 && !_requestCuePending) return;
         var world = _world();
         if (world.Holding) return;
+        if (_requestCuePending)
+        {
+            _requestCuePending = false;
+            if (world.GameHostActive || world.PanelVisible || world.LauncherVisible) _sink.RequestCue();
+        }
+        if (_queue.Count == 0) return;
         var now = _now();
         foreach (var item in _queue.Drain(now))
             Route(item, LandingRules.Decide(item, world, now));
@@ -289,5 +332,7 @@ public sealed class FriendsLandingRouter : IDisposable
     {
         _service.Delivered -= OnDelivered;
         _service.Sent -= OnSent;
+        _service.RequestArrived -= OnRequestArrived;
+        _service.RequestGone -= OnRequestGone;
     }
 }

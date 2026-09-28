@@ -125,6 +125,8 @@ namespace ConditioningControlPanel
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            Services.FirstShow.FirstShowService.Stop();
+
             // Lockdown mode: block all close attempts
             if (App.Lockdown?.IsActive == true)
             {

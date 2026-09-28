@@ -360,58 +360,46 @@ public partial class EmiDeskWindow
 
             // Her right unless the book is standing there. bookSide is +1 for her right, -1 for her
             // left, 0 for no book, so a closed book leaves the old default untouched.
-            bool flip = bookSide > 0;
+            //
+            // The work area is converted into this window's local DIPs by the window itself
+            // (PointFromScreen), not by Left x scale: that shortcut only holds while the window's
+            // DPI and the monitor's agree, and a mixed-DPI desk put the line off the screen edge
+            // (ticket 2026-09-24). The monitor is the one the window is on (MonitorFromWindow).
             double workLeftDip = double.NegativeInfinity, workRightDip = double.PositiveInfinity;
             try
             {
-                double s = DipScale;
-                if (s <= 0) s = 1.0;
-                var body = BodyScreenRect;
-                var screen = System.Windows.Forms.Screen.FromRectangle(new System.Drawing.Rectangle(
-                    (int)body.X, (int)body.Y, Math.Max(1, (int)body.Width), Math.Max(1, (int)body.Height)));
-                workLeftDip = screen.WorkingArea.Left / s;
-                workRightDip = screen.WorkingArea.Right / s;
-
-                // How far each side hangs off the work area, in physical pixels, 0 when it fits.
-                double rightPx = (Left + left + size.Width) * s;
-                double flippedLeftPx = (Left + flippedLeft) * s;
-                double spillRight = Math.Max(0, rightPx - screen.WorkingArea.Right);
-                double spillLeft = Math.Max(0, screen.WorkingArea.Left - flippedLeftPx);
-
-                // `flip` above is only the PREFERENCE - the old default with no book, the away side
-                // with one. The screen still overrules it: a preferred side that spills leaves for
-                // the other one, and it only stays there if the other one spills LESS. A flip that
-                // clips harder than the thing it was fixing is not a flip.
-                //
-                // With no book this is the old two-line rule exactly (stay right, flip when the
-                // right spills, un-flip when the left spills worse). With a book it is also the
-                // "no room on the away side" fallback: neither side fits, so the side that shows
-                // more of the line wins, even when that is the side the panel is standing on.
-                //
-                // The >= on the second line is not a typo: with no book, an exact tie used to flip,
-                // and this keeps that. Ties happen on a bubble wider than the whole work area.
-                if (flip && spillLeft > spillRight) flip = false;
-                else if (!flip && spillRight > 0 && spillRight >= spillLeft) flip = true;
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
+                    var wa = screen.WorkingArea;
+                    double midY = wa.Top + wa.Height / 2.0;
+                    workLeftDip = PointFromScreen(new Point(wa.Left, midY)).X;
+                    workRightDip = PointFromScreen(new Point(wa.Right, midY)).X;
+                    if (!double.IsFinite(workLeftDip) || !double.IsFinite(workRightDip) || workRightDip <= workLeftDip)
+                    {
+                        workLeftDip = double.NegativeInfinity;
+                        workRightDip = double.PositiveInfinity;
+                    }
+                }
             }
-            catch { /* one monitor, or none enumerable: keep whichever side the book left her */ }
+            catch { /* no source yet, or no monitor enumerable: the window clamp still holds */ }
 
-            if (flip) left = flippedLeft;
+            // THE CLIP GUARD lives in EmiBubblePlacement: the preferred side gives way when it
+            // spills more than the other one, then the bubble is clamped into the window and the
+            // work area, the LEFT edge winning when both cannot hold ("no hands." / "work.",
+            // owner screenshot 2026-08-29).
+            var (placedLeft, flip) = EmiBubblePlacement.Resolve(
+                left, flippedLeft, size.Width, bookSide > 0, Width, workLeftDip, workRightDip);
+            left = placedLeft;
 
-            // THE CLIP GUARD. The window is only OverlayPadX wide either side of her and the work
-            // area is only so wide: a bubble that starts past either is a bubble cut off mid-word
-            // ("no hands." / "work.", owner screenshot 2026-08-29). Window first, screen second,
-            // and the LEFT edge wins when both cannot be honoured - a line whose start you can read
-            // is recoverable, one that starts off screen is not.
-            double lo = 2.0;
-            double hi = Math.Max(lo, Width - size.Width - 2.0);
-            if (!double.IsInfinity(workLeftDip)) lo = Math.Max(lo, workLeftDip - Left);
-            if (!double.IsInfinity(workRightDip)) hi = Math.Min(hi, workRightDip - Left - size.Width);
-            left = hi < lo ? lo : Math.Max(lo, Math.Min(hi, left));
+            double lo = EmiBubblePlacement.EdgeGap;
+            if (!double.IsInfinity(workLeftDip)) lo = Math.Max(lo, workLeftDip + EmiBubblePlacement.EdgeGap);
 
             _bubbleClampLo = lo;
             _bubbleClampRight = Math.Max(lo, Width - 2.0);
             if (!double.IsInfinity(workRightDip))
-                _bubbleClampRight = Math.Max(lo, Math.Min(_bubbleClampRight, workRightDip - Left));
+                _bubbleClampRight = Math.Max(lo, Math.Min(_bubbleClampRight, workRightDip));
 
             // Never let her talk off the top of her own window either: the pad is all the room the
             // bubble has, and a clipped first line reads as a bug, not as a style.
@@ -514,6 +502,7 @@ public partial class EmiDeskWindow
     /// </summary>
     public void SpeakLine(LineDraw? line)
     {
+        if (PresentationActive) return;
         if (line == null) return;
         try
         {
@@ -555,6 +544,7 @@ public partial class EmiDeskWindow
     /// </summary>
     public void HoldFace(LineDraw? line)
     {
+        if (PresentationActive) return;
         if (line == null) return;
         try
         {
@@ -562,7 +552,7 @@ public partial class EmiDeskWindow
             CloseChannel(declined: true);
             CancelChain();
             StopIdleBeats();
-            EmiLineEngine.Instance.Ack(line.Id);
+            EmiLineEngine.Instance.Ack(line.Id, spoke: false);
 
             DrawFace(string.IsNullOrEmpty(line.Face) ? "-_-" : line.Face);
 
@@ -595,6 +585,7 @@ public partial class EmiDeskWindow
     /// </summary>
     public void ShowAsk(AskDraw? ask)
     {
+        if (PresentationActive) return;
         if (ask == null) return;
         try
         {

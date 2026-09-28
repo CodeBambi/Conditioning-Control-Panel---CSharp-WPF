@@ -166,10 +166,11 @@ export function createServerLobby({
    * Handing back a match with a guessed side is better than handing back
    * nothing: net/match.js corrects the side from its own first GET anyway.
    */
-  async function matchFrom(matchId, colorHint, opponentHint) {
+  async function matchFrom(matchId, colorHint, opponentHint, strict = false) {
     const res = await api.match(matchId);
     if (res.ok && res.data) {
       const d = res.data;
+      if (strict && (!['w', 'b'].includes(d.you) || d.status === 'done' || d.result)) throw new Error('not ready');
       const side = (d.you === 'w' || d.you === 'b') ? d.you : (colorHint === 'b' ? 'b' : 'w');
       const them = (side === 'w' ? d.black : d.white) || opponentHint || {};
       return {
@@ -182,6 +183,7 @@ export function createServerLobby({
         rating: (them.rating === null || them.rating === undefined) ? null : Number(them.rating),
       };
     }
+    if (strict) throw new Error(res.error || 'not ready');
     return {
       id: String(matchId),
       opponent: {
@@ -203,56 +205,25 @@ export function createServerLobby({
 
   /* ----------------------------------------------------------------- offers */
 
-  /**
-   * Hand the door an incoming challenge.
-   *
-   * ONE WART, DELIBERATE AND DOCUMENTED. door.js does
-   * `const m = ask.accept(); if (m) matched(m);` - it takes the return value
-   * SYNCHRONOUSLY. Accepting on a server is a round trip, so there is no honest
-   * synchronous answer to give. What comes back instead is the Match object the
-   * door will eventually deal from, with `id` and `side` filled in a moment
-   * later, in place, and a `ready` promise for anything that would rather wait
-   * properly. The door's own "found" screen shows the opponent's name, which is
-   * known immediately, so the gap is invisible at the speed a person clicks.
-   *
-   * The clean fix is one line in door.js -
-   *     Promise.resolve(ask.accept()).then((m) => { if (m) matched(m); });
-   * which the sync mock satisfies unchanged. It is written up in
-   * scratchpad/pbp-online/lobby-adapter.md for whoever owns that file.
-   */
+  /** The offer resolves only once the server has accepted and assigned a seat. */
   function offer(row) {
     const challengeId = String(row.challenge_id || row.challengeId || '');
     const from = row.from || {};
     let done = false;
-    const placeholder = {
-      id: '',
-      opponent: { id: String(from.id || ''), name: String(from.display_name || from.name || 'someone') },
-      side: (row.color === 'w' || row.color === 'b') ? row.color : 'w',
-      clockMs: Number((row.time_control && row.time_control.initial_ms)) || tc.initial_ms,
-      state: null,
-      ready: null,
-    };
     return {
       id: String(from.id || challengeId),
-      name: placeholder.opponent.name,
+      name: String(from.display_name || from.name || 'someone'),
       challengeId,
       timeControl: row.time_control || null,
-      accept() {
+      async accept() {
         if (done || disposed) return null;
         done = true;
-        placeholder.ready = (async () => {
-          const res = await api.acceptChallenge(challengeId);
-          if (!res.ok) return null;
-          const id = res.data.match_id || res.data.matchId;
-          if (!id) return null;
-          const m = await matchFrom(id, res.data.color, from);
-          // In place: the door is already holding this object.
-          Object.assign(placeholder, m);
-          announce(placeholder);
-          return placeholder;
-        })();
-        placeholder.ready.catch(() => {});
-        return placeholder;
+        const res = await api.acceptChallenge(challengeId);
+        if (!res.ok) throw new Error(res.error || 'left');
+        const id = res.data.match_id || res.data.matchId;
+        if (!id) throw new Error('not ready');
+        const match = await matchFrom(id, res.data.color, from, true);
+        return disposed ? null : announce(match);
       },
       decline() {
         if (done) return;
@@ -313,12 +284,18 @@ export function createServerLobby({
 
       // Our own challenge: accepted is a match, and gone is a no.
       if (pending && pending.kind === 'challenge' && pending.challengeId) {
-        const mine = outgoing.find((r) => String(r.challenge_id || r.challengeId || '') === pending.challengeId);
+        const request = pending;
+        const mine = outgoing.find((r) => String(r.challenge_id || r.challengeId || '') === request.challengeId);
         if (mine && (mine.match_id || mine.matchId)) {
           const hint = mine.to || null;
           const id = mine.match_id || mine.matchId;
-          const m = await matchFrom(id, mine.color, hint);
-          if (!disposed) resolveLook(announce(m));
+          try {
+            if (id === request.previousMatchId) throw new Error('not ready');
+            const m = await matchFrom(id, mine.color, hint, !!request.previousMatchId);
+            if (!disposed && pending === request) resolveLook(announce(m));
+          } catch (err) {
+            if (pending === request) rejectLook(err.message || 'left');
+          }
           return;
         }
         // The row is gone, or explicitly turned down. Either way he is not
@@ -457,35 +434,36 @@ export function createServerLobby({
     },
 
     /** Ask one player, by the opaque id off their lobby row. */
-    challenge(id) {
+    challenge(id, options = {}) {
       cancel();
       if (disposed) return Promise.reject(new Error('cancelled'));
       if (!id) return Promise.reject(new Error('left'));
       return new Promise((resolve, reject) => {
-        pending = { kind: 'challenge', challengeId: null, resolve, reject, settled: false };
+        const request = pending = { kind: 'challenge', challengeId: null, resolve, reject, settled: false, previousMatchId: options.previousMatchId || null };
         entered = true;
         if (!handle) handle = setT(tick, pollMs);
         (async () => {
           // Same wait as quickMatch, for the same reason.
           await whenIdentity();
-          if (disposed || !pending || pending.settled || pending.kind !== 'challenge') return;
+          if (disposed || pending !== request || request.settled) return;
           if (!signedIn()) { rejectLook('left'); return; }
-          const res = await api.challenge(String(id), tc);
-          if (disposed || !pending || pending.settled || pending.kind !== 'challenge') return;
+          const res = await api.challenge(String(id), options.timeControl || tc, options.color);
+          if (disposed || pending !== request || request.settled) return;
           // He is not there any more, or the server refused the pairing. The
           // door plays its refusal on exactly this word.
           if (!res.ok) { rejectLook('left'); return; }
           const direct = res.data.match_id || res.data.matchId;
           if (direct) {
-            const m = await matchFrom(direct, res.data.color, null);
-            if (!disposed) resolveLook(announce(m));
+            if (direct === request.previousMatchId) throw new Error('not ready');
+            const m = await matchFrom(direct, res.data.color, null, !!request.previousMatchId);
+            if (!disposed && pending === request) resolveLook(announce(m));
             return;
           }
           const cid = res.data.challenge_id || res.data.challengeId || null;
           if (!cid) { rejectLook('left'); return; }
-          pending.challengeId = String(cid);
+          request.challengeId = String(cid);
           // ...and the poll watches for him to say yes.
-        })().catch(() => rejectLook('left'));
+        })().catch((err) => { if (pending === request) rejectLook(err.message || 'left'); });
       });
     },
 

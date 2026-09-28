@@ -127,7 +127,7 @@
                 <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
                     <Button Content="{loc:Str companion_engine_btn_test}" Style="{StaticResource CmpGrayButtonStyle}"
                             Command="{Binding TestConnectionCommand}"/>
-                    <Button Content="{Binding DailyLimitLabel}" Style="{StaticResource CmpGrayButtonStyle}"
+                    <Button x:Name="CloudDailyLimit" Content="{Binding DailyLimitLabel}" Style="{StaticResource CmpGrayButtonStyle}"
                             Command="{Binding DailyLimitCommand}"/>
                 </WrapPanel>
             </StackPanel>
