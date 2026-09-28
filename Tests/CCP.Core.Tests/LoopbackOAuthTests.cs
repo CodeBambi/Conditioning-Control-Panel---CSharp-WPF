@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -119,6 +120,69 @@ public sealed class LoopbackOAuthTests
             Assert.Contains($"Is another program using port {port}?", ex.Message);
         }
         finally { busy.Stop(); }
+    }
+
+    /// <summary>What an HTTP client sends, raw: status line of the reply.</summary>
+    private static async Task<string> RawGet(int port, string requestLine, string host)
+    {
+        using var c = new TcpClient();
+        await c.ConnectAsync(IPAddress.Loopback, port);
+        var s = c.GetStream();
+        await s.WriteAsync(Encoding.ASCII.GetBytes($"{requestLine}\r\nHost: {host}\r\n\r\n"));
+        return (await new StreamReader(s).ReadLineAsync())!;
+    }
+
+    [Theory]
+    [InlineData("GET /favicon.ico HTTP/1.1", "localhost", "HTTP/1.1 404 Not Found")]
+    [InlineData("GET /callbackX?code=evil HTTP/1.1", "localhost", "HTTP/1.1 404 Not Found")]
+    [InlineData("GET /callback/?code=evil HTTP/1.1", "evil", "HTTP/1.1 400 Bad Request")]
+    public async Task StrayRequest_IsRefused_AndTheRealCallbackStillLands(string requestLine, string hostName, string expected)
+    {
+        var port = FreePort();
+        using var oauth = new LoopbackOAuth(port, useHttpListener: false);
+        var wait = Wait(oauth);
+
+        Assert.Equal(expected, await RawGet(port, requestLine, $"{hostName}:{port}"));
+        Assert.False(wait.IsCompleted);
+
+        await BrowserGet("127.0.0.1", port, $"code=abc&state={oauth.State}");
+        Assert.Equal("abc", (await wait)["code"]);
+    }
+
+    [Fact]
+    public async Task OversizedHeaders_Are400()
+    {
+        var port = FreePort();
+        using var oauth = new LoopbackOAuth(port, useHttpListener: false);
+        _ = Wait(oauth);
+        var many = string.Concat(Enumerable.Repeat("X-Pad: 1\r\n", 101));
+        Assert.Equal("HTTP/1.1 400 Bad Request", await RawGet(port, $"GET /callback/ HTTP/1.1\r\nHost: localhost:{port}\r\n" + many.TrimEnd(), $"localhost:{port}"));
+    }
+
+    [Fact]
+    public async Task SilentSocket_DoesNotHoldThePort_AfterDispose()
+    {
+        var port = FreePort();
+        using var silent = new TcpClient();
+        using (var oauth = new LoopbackOAuth(port, useHttpListener: false))
+        {
+            _ = Wait(oauth);
+            await silent.ConnectAsync(IPAddress.Loopback, port); // browser pre-connect that never sends
+            await Task.Delay(100);
+        }
+        new LoopbackOAuth(port, useHttpListener: false).Dispose(); // a retry can bind again
+    }
+
+    /// <summary>SHA-256 (LF line ends) of the pages in the pre-move WPF sources, origin/avalonia-port/v2-client-core.</summary>
+    [Theory]
+    [InlineData(nameof(LoopbackOAuth.SuccessHtml), "8B0F0D3419AF1F1877918F550D79FB03DDE1BAD2A68DDCC26B8D1364806E24C3")]
+    [InlineData(nameof(LoopbackOAuth.FailureHtml), "F25AE5262C2115C7598896BC9BDD847A963B65909DCC66B0A4502C5CCF5DED90")]
+    [InlineData(nameof(LoopbackOAuth.DiscordSuccessHtml), "C72708B0A22C0E8BCB17677F2D00B7C5400F860AA951C24E201049A9D86A3520")]
+    [InlineData(nameof(LoopbackOAuth.DiscordFailureHtml), "E36155BE44CAADCD3B0A39FA19AECE6732EE660C9E58FDDCC947ED0465ED8697")]
+    public void BrowserPages_MatchWpfByteForByte(string field, string sha256)
+    {
+        var html = ((string)typeof(LoopbackOAuth).GetField(field)!.GetValue(null)!).Replace("\r\n", "\n");
+        Assert.Equal(sha256, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(html))));
     }
 
     private sealed class FakeProxy(HttpStatusCode status, string body) : HttpMessageHandler

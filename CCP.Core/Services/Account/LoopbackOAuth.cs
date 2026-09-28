@@ -145,21 +145,24 @@ namespace ConditioningControlPanel.Services
                 using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, leaveOpen: true);
                 var target = (await reader.ReadLineAsync(cts.Token))?.Split(' ') is [_, var t, ..] ? t : "";
                 string? host = null;
-                for (string? line; !string.IsNullOrEmpty(line = await reader.ReadLineAsync(cts.Token));)
+                int lines = 0, chars = target.Length;
+                for (string? line; !string.IsNullOrEmpty(line = await reader.ReadLineAsync(cts.Token)) && ++lines <= 100 && (chars += line.Length) <= 8192;)
                     if (line.StartsWith("Host:", StringComparison.OrdinalIgnoreCase)) host = line[5..].Trim();
 
+                var path = target.Split('?')[0];
                 string? status = null;
-                if (!string.Equals(host, $"localhost:{_port}", StringComparison.OrdinalIgnoreCase)) status = "400 Bad Request";
-                else if (!target.StartsWith("/callback", StringComparison.OrdinalIgnoreCase)) status = "404 Not Found";
+                if (lines > 100 || chars > 8192) status = "400 Bad Request"; // header cap
+                else if (!string.Equals(host, $"localhost:{_port}", StringComparison.OrdinalIgnoreCase)) status = "400 Bad Request";
+                else if (!path.Equals("/callback", StringComparison.OrdinalIgnoreCase)
+                    && !path.StartsWith("/callback/", StringComparison.OrdinalIgnoreCase)) status = "404 Not Found";
                 if (status != null)
                 {
-                    await WriteAsync(stream, status, "");
-                    client.Dispose();
+                    try { await WriteAsync(stream, status, ""); } finally { client.Dispose(); }
                     return;
                 }
 
                 var query = HttpUtility.ParseQueryString(new Uri("http://localhost" + target).Query);
-                if (!callback.TrySetResult((query, async html => { await WriteAsync(stream, "200 OK", html); client.Dispose(); })))
+                if (!callback.TrySetResult((query, async html => { try { await WriteAsync(stream, "200 OK", html); } finally { client.Dispose(); } })))
                     client.Dispose();
             }
             catch (Exception) { client.Dispose(); } // a broken connection is not the callback; keep waiting
