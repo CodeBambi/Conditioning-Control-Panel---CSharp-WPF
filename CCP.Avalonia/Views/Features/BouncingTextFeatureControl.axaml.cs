@@ -159,12 +159,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             s.BouncingTextEnabled = want;
             CoreSettings.Save();
 
-            // Live-apply: start/stop the bouncing-text service if the engine is running.
-            if (CoreSession.IsEngineRunning)
-            {
-                if (want) CoreBouncingText.Start();
-                else CoreBouncingText.Stop();
-            }
+            // WPF live-applies only while the engine runs. This head has no engine yet, so - the
+            // same decision as the Flash card - the toggle itself starts and stops the overlay.
+            // ponytail: no engine gate; gate on CoreSession.IsEngineRunning once Start/Stop is ported.
+            if (want) CoreBouncingText.Start();
+            else CoreBouncingText.Stop();
         }
 
         private void SliderSpeed_Changed(object? sender, RangeBaseValueChangedEventArgs e)
