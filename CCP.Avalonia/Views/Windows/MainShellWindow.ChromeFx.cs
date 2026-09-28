@@ -10,10 +10,9 @@
 //
 // NOTHING ELSE IN THIS FILE HAS AN ENTRY POINT ON THIS HEAD - the honest reason the rest is a note
 // and not a shortage of Avalonia. WPF's whole chrome-FX lifecycle hangs off InitializeChromeFx(),
-// called from MainWindow's constructor; this window's three lifecycle overrides are already taken
-// (OnLoaded -> .Marquee.cs, OnAttachedToVisualTree -> .NavRail.cs, OnOpened -> .WorkAreaFit.cs)
-// and the constructor lives in MainShellWindow.axaml.cs. A fourth override is a compile error, not
-// a design choice. So the loops below would be dead code a render cannot disprove - exactly the
+// called from MainWindow's constructor; the matching hook here is a call from the constructor in
+// MainShellWindow.axaml.cs (as InitializeNavRail does - OnAttachedToVisualTree never fires on a
+// Window). Nobody has added that call for chrome FX yet, so the loops below would be dead code a render cannot disprove - exactly the
 // failure the port has already hit once, where three animations threw into a catch and the badge
 // was inert and silent about it. When a chrome-FX init hook exists, restore in this order
 // (62 members):

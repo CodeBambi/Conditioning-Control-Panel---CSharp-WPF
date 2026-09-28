@@ -83,10 +83,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// WPF's InitializeNavRail hover half (MainWindow.NavRail.cs:308-402): cache the rail's
         /// parts, author the shut state, then open on pointer-over and shut on leave / outside
-        /// press / deactivation. The pointer test is <c>e.GetPosition(rail)</c>, i.e. in the
-        /// rail's OWN space: the rail sits inside Viewbox > DesignCanvas, so window coordinates
-        /// against its parent-local Bounds misread the hover at any scale but 1. Tunnel +
-        /// handledEventsToo so no child can swallow the move. Popups opened from the rail hold it
+        /// press / deactivation. The pointer test is <c>rail.IsPointerOver</c> (WPF IsMouseOver):
+        /// hit-test aware and immune to the Viewbox scale, where window coordinates against the
+        /// rail's parent-local Bounds were not. Tunnel + handledEventsToo so no child can swallow
+        /// the move. Popups opened from the rail hold it
         /// through <see cref="HoldNavRailOpen"/>; the WPF watchdog is not ported (every trigger
         /// here is level, re-read on each move).
         /// </summary>
@@ -104,7 +104,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // Shut state first, THEN the transitions, so the first frame does not tween.
             ApplyNavRail(false);
             rail.Transitions = Eased(Layoutable.WidthProperty);
-            foreach (var l in _navRailLabels) l.Transitions = Eased(Visual.OpacityProperty);
+            // Linear, as WPF's label/pill fade (SetNavRailExpanded builds it with no easing).
+            foreach (var l in _navRailLabels)
+                l.Transitions = new Transitions { new DoubleTransition { Property = Visual.OpacityProperty } };
             foreach (var r in _navDoorRows)
             {
                 r.Tile.Transitions = Eased(Layoutable.WidthProperty, Layoutable.HeightProperty);
@@ -113,10 +115,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 r.Slide.Transitions = Eased(TranslateTransform.YProperty);
             }
 
+            // IsPointerOver is hit-test aware, like WPF's IsMouseOver: an overlay covering the rail
+            // (tutorial, remote control, fullscreen browser) owns the pointer, so the rail stays shut.
             void Sync(PointerEventArgs e)
             {
-                var p = e.GetPosition(rail);
-                bool over = p.X >= 0 && p.Y >= 0 && p.X <= rail.Bounds.Width && p.Y <= rail.Bounds.Height;
+                bool over = rail.IsPointerOver;
                 if (over || _navRailHolds.Count == 0) SetNavRailExpanded(over);
             }
             AddHandler(PointerMovedEvent, (_, e) => Sync(e), RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -206,7 +209,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF HoldNavRailOpen/ReleaseNavRailOpen (:1309-1351): a popup opened from the
         /// rail keeps it out until the last holder lets go; then it shuts unless the pointer is
-        /// on it.</summary>
+        /// on it. No popup on this head calls it yet (the favorites rail and friends chip that do on
+        /// WPF are not ported).</summary>
         internal void HoldNavRailOpen(object owner)
         {
             if (_navRailHolds.Add(owner)) SetNavRailExpanded(true);

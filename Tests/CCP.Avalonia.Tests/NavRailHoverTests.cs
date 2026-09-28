@@ -67,6 +67,14 @@ public sealed class NavRailHoverTests
             Assert.Equal(56, rail.Width, 1);
             Assert.Equal(0, label.Opacity, 2);
 
+            // An overlay covering the rail (tutorial, remote control) owns the pointer: stays shut.
+            var root = w.Named<Grid>("RootGrid")!;
+            var overlay = new Border { Background = global::Avalonia.Media.Brushes.Transparent, ZIndex = 1000 };
+            root.Children.Add(overlay);
+            await MoveAndSettle(30);
+            Assert.False(w.NavRailExpanded, "the rail opened under an overlay that covers it");
+            root.Children.Remove(overlay);
+
             // A popup hold keeps it out while the pointer is away; releasing shuts it.
             var owner = new object();
             w.HoldNavRailOpen(owner);
