@@ -60,10 +60,24 @@
       <div id="game-options-panel" class="game-options-panel" hidden>
         <strong>Game feel</strong>
         <div class="experience-pick" role="group" aria-label="Game feel">
-          <button type="button" class="hud-btn" data-experience="classic" aria-pressed="true">Classic</button>
-          <button type="button" class="hud-btn" data-experience="distraction" aria-pressed="false">Distraction</button>
+          <button type="button" class="hud-btn" data-experience="classic" aria-pressed="false">Classic</button>
+          <button type="button" class="hud-btn" data-experience="distraction" aria-pressed="true">Distraction</button>
         </div>
-        <p id="experience-description">The board, animated captures and sound.</p>
+        <p id="experience-description">Media and effects build as the match progresses.</p>
+        <!-- Distraction's pictures (ui/pictures.js). Hidden until the host says
+             what it holds, so a plain browser shows nothing half-built. -->
+        <div class="pictures" id="game-pictures" hidden>
+          <strong>Pictures</strong>
+          <div class="flavour-pick" id="flavour-pick" role="group" aria-label="Pictures"></div>
+          <small>Flavours mix in pictures from Scrolller's Reddit communities.</small>
+          <details class="niche-box" id="niche-box" hidden>
+            <summary>Niches</summary>
+            <div class="niche-pills" id="niche-pills"></div>
+            <form class="niche-add" id="niche-add"><span>r/</span><input id="niche-input" type="text" maxlength="60" autocomplete="off" spellcheck="false" aria-label="Add a niche"><button type="submit" class="hud-btn">Add</button></form>
+            <small id="niche-note" hidden></small>
+          </details>
+          <small id="pictures-status" role="status"></small>
+        </div>
         <label><input type="checkbox" id="game-sound" checked> Sound effects</label>
         <label><input type="checkbox" id="game-reduced"> Reduce motion</label>
         <small id="game-preference-note" hidden></small>

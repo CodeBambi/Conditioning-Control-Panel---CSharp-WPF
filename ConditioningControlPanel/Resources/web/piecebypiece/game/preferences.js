@@ -13,7 +13,10 @@ const clamp = value => Math.max(0, Math.min(1, value));
 export function presentation() {
   const volume = Number.isFinite(saved.volume) ? clamp(saved.volume) : hostVolume;
   return {
-    experience: saved.experience === 'distraction' ? 'distraction' : 'classic',
+    // Distraction is the default (2026-09-28). Only a saved explicit 'classic' keeps
+    // Classic: setPresentation writes `experience` only when a button asks for it,
+    // so nobody was ever saved as classic by default.
+    experience: saved.experience === 'classic' ? 'classic' : 'distraction',
     volume: Math.min(volume, hostVolume),
     reducedMotion: !!saved.reducedMotion || hostReduced || !!osMotion?.matches,
     motionLocked: hostReduced || !!osMotion?.matches,

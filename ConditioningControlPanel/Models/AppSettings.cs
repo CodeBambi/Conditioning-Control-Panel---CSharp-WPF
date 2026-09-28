@@ -8232,6 +8232,52 @@ namespace ConditioningControlPanel.Models
             set { _goonMediaOnline = value; OnPropertyChanged(); }
         }
 
+        // ---- Piece by Piece pictures (2026-09-28) ----
+        // The chess game's Distraction pictures: the Goon Game's flavour model, host-owned.
+
+        private string _pbpMediaFlavour = "";
+        /// <summary>
+        /// Piece by Piece's picture flavour (trance, pink, frills, shiny, censored, mine), or ""
+        /// when never picked. Remembered as a preselection only: a pick counts as the online
+        /// opt-in for the window it was made in, unless the app-wide online source is already
+        /// consented (MediaSource not local and HasRemoteMediaConsent).
+        /// </summary>
+        [JsonProperty("pbpMediaFlavour")]
+        public string PbpMediaFlavour
+        {
+            get => _pbpMediaFlavour;
+            set { _pbpMediaFlavour = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _pbpMediaCustom = "";
+        /// <summary>The chess page's per-flavour niche edits as a JSON object string, same shape
+        /// and caps as <see cref="GoonMediaCustom"/>. "" = no edits.</summary>
+        [JsonProperty("pbpMediaCustom")]
+        public string PbpMediaCustom
+        {
+            get => _pbpMediaCustom;
+            set { _pbpMediaCustom = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _pbpMediaSubs = "";
+        /// <summary>The validated niche list the page computed for the pick (comma-joined, max 8).</summary>
+        [JsonProperty("pbpMediaSubs")]
+        public string PbpMediaSubs
+        {
+            get => _pbpMediaSubs;
+            set { _pbpMediaSubs = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _pbpMediaOnline = true;
+        /// <summary>Online pictures for Piece by Piece. Off ("Own pictures only") = the host fetches
+        /// nothing and the Distraction effects draw from the player's own library, as before.</summary>
+        [JsonProperty("pbpMediaOnline")]
+        public bool PbpMediaOnline
+        {
+            get => _pbpMediaOnline;
+            set { _pbpMediaOnline = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region The Arcademy (webview mini-game hub)

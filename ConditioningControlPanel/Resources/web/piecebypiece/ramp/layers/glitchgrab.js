@@ -16,6 +16,8 @@
  * so this layer never needs to know where anything is in 3D.
  * ==========================================================================*/
 
+import { dressBox, undressBox } from './clip.js';
+
 export function createGlitchGrab(ctx) {
   const t = (ctx.tuning && ctx.tuning.glitchGrab) || { sizePx: 96, alpha: 0.85 };
   let el = null;
@@ -69,7 +71,7 @@ export function createGlitchGrab(ctx) {
     try {
       // re-measured every grab: the camera swings between turns
       node.style.setProperty('--pbp-grab-size', sizePx() + 'px');
-      if (url) node.style.backgroundImage = `url("${url}")`;
+      dressBox(ctx, node, url, ctx.image);   // a clip plays, a still stays a background
       node.style.opacity = String(t.alpha == null ? 0.85 : t.alpha);
       node.classList.add('is-on');
     } catch { /* gone */ }
@@ -82,6 +84,7 @@ export function createGlitchGrab(ctx) {
   function drop() {
     holding = false;
     if (el) { try { el.classList.remove('is-on'); el.style.opacity = '0'; } catch { /* gone */ } }
+    undressBox(el);
   }
 
   function clear() { drop(); }
@@ -89,6 +92,7 @@ export function createGlitchGrab(ctx) {
   function dispose() {
     disposed = true;
     if (raf) { try { cancelAnimationFrame(raf); } catch { /* ignore */ } raf = 0; }
+    undressBox(el);
     if (el) { try { el.remove(); } catch { /* gone */ } el = null; }
   }
 
