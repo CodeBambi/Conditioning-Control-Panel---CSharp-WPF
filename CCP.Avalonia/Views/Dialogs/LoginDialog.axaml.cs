@@ -706,11 +706,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         /// <summary>The success tail every WPF path shares: the WPF ApplyUserDataToSettings adopt (Core), the read-only
         /// profile load, the session's unified id, the provider's copy of it, the result.</summary>
-        private void Succeed(V2AuthService.V2User user, string? authToken, string? provider, bool legacy)
+        /// <summary>The read-only profile load Succeed started (tests await it).</summary>
+        internal Task ProfileLoad { get; private set; } = Task.CompletedTask;
+
+        internal void Succeed(V2AuthService.V2User user, string? authToken, string? provider, bool legacy)
         {
             ProfileAdopt.ApplyUserData(CoreSettings.Current, user, authToken, DateTime.UtcNow);
             CoreSettings.Save();
-            _ = AccountSeed.LoadProfileAsync(); // WPF MainWindow.Login.cs:170
+            ProfileLoad = AccountSeed.LoadProfileAsync(); // WPF MainWindow.Login.cs:170
             CoreAccount.UnifiedUserId = user.UnifiedId;
 
             // WPF UpdateServiceProperties

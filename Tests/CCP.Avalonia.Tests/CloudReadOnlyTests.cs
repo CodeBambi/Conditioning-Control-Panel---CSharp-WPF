@@ -10,6 +10,9 @@ using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Newtonsoft.Json.Linq;
+using Avalonia;
+using Avalonia.Headless;
+using CCP.Avalonia.Testing;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -49,6 +52,10 @@ public sealed partial class AccountSeedTests
         "local":  { "PlayerLevel": 42, "PlayerXP": 0, "CurrentSeason": "2026-09", "DescentEpoch": 0 },
         "server": { "unified_id": "u1", "level": 1, "xp": 0, "curve_epoch": 1, "current_season": "2026-09" },
         "expect": { "DescentEpoch": 1, "PlayerLevel": 41, "PlayerXP": 1661, "HighestLevelEver": 41 } },
+      { "name": "load: ceremony pending, no re-price",
+        "local":  { "PlayerLevel": 42, "PlayerXP": 0, "CurrentSeason": "2026-09", "DescentEpoch": 0, "PendingDescentMigrationChoice": "restore" },
+        "server": { "unified_id": "u1", "level": 1, "xp": 0, "curve_epoch": 1, "current_season": "2026-09" },
+        "expect": { "DescentEpoch": 0, "PlayerLevel": 42, "PlayerXP": 0 } },
       { "name": "login: server higher adopts, identity and 14-day grace",
         "login": true,
         "local":  { "PlayerLevel": 3, "PlayerXP": 100 },
@@ -145,6 +152,38 @@ public sealed partial class AccountSeedTests
         {
             foreach (var n in Touched) Set(s, n, saved[n]);
             s.AuthToken = oldToken;
+            CoreAccount.UnifiedUserId = null;
+        }
+    }
+
+    [Fact]
+    public async Task LoginSuccess_LoadsTheProfile_WithoutAnyWriteEndpoint()
+    {
+        var s = CoreSettings.Current;
+        var saved = Touched.ToDictionary(n => n, n => Get(s, n));
+        var (oldToken, oldNew) = (s.AuthToken, AccountSeed.NewV2);
+        var wire = new Wire { Profile = """{"user":{"unified_id":"u1","level":5,"xp":3500,"current_season":"2026-09"}}""" };
+        try
+        {
+            AccountSeed.NewV2 = () => new V2AuthService(() => s, wire);
+            (s.PlayerLevel, s.PlayerXP, s.CurrentSeason, s.DescentEpoch, s.PendingDescentMigrationChoice) = (1, 0, "2026-09", 0, null);
+            await AvaloniaTestDispatcher.RunAsync(async () =>
+            {
+                if (global::Avalonia.Application.Current is null)
+                    global::Avalonia.AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                        .UseSkia().UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                        .SetupWithoutStarting();
+                var dialog = new global::ConditioningControlPanel.Avalonia.Views.Dialogs.LoginDialog();
+                dialog.Succeed(new V2AuthService.V2User { UnifiedId = "u1", Level = 1, Xp = 0 }, "tok", null, false);
+                await dialog.ProfileLoad;
+            });
+            Assert.Equal(5, s.PlayerLevel);                     // the login path did load and adopt
+            Assert.Equal(new[] { "GET /v2/user/profile" }, wire.Seen);
+        }
+        finally
+        {
+            foreach (var n in Touched) Set(s, n, saved[n]);
+            (s.AuthToken, AccountSeed.NewV2) = (oldToken, oldNew);
             CoreAccount.UnifiedUserId = null;
         }
     }

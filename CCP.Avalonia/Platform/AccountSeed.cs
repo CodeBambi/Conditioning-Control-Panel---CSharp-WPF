@@ -71,7 +71,7 @@ internal static class AccountSeed
     {
         var id = CoreAccount.UnifiedUserId;
         if (string.IsNullOrEmpty(id) || CoreSettings.Current.OfflineMode) return;
-        v2 ??= new V2AuthService();
+        v2 ??= NewV2();
         // If a provider already authenticated, it validated the session (and owns the load in WPF).
         if (Patreon?.IsAuthenticated != true && Discord?.IsAuthenticated != true)
         {
@@ -91,10 +91,24 @@ internal static class AccountSeed
     /// <param name="v2">Tests only.</param>
     internal static async Task<bool> LoadProfileAsync(V2AuthService? v2 = null)
     {
+        try { return await LoadProfileCoreAsync(v2 ?? NewV2()); }
+        catch (Exception ex)
+        {
+            // Fire-and-forget from the login dialog and inside an async void Post at startup: never throw.
+            Log.Warning(ex, "Profile load failed");
+            return false;
+        }
+    }
+
+    /// <summary>Tests only: the client every default-path load and restore uses.</summary>
+    internal static Func<V2AuthService> NewV2 = () => new V2AuthService();
+
+    private static async Task<bool> LoadProfileCoreAsync(V2AuthService v2)
+    {
         var s = CoreSettings.Current;
         var id = s.UnifiedId;
         if (s.OfflineMode || string.IsNullOrEmpty(id)) return false;
-        var user = await (v2 ?? new V2AuthService()).GetUserProfileAsync(id);
+        var user = await v2.GetUserProfileAsync(id);
         if (user == null)
         {
             Log.Warning("Profile load: server profile could not be read for {Id}", id);
