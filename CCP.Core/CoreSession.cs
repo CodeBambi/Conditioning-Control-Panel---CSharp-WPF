@@ -40,12 +40,12 @@ namespace ConditioningControlPanel
         /// <summary>Re-assert the pools the session prescribes after a mod switch restored others.</summary>
         public static volatile Action? ReapplyPhrasePoolOverrides;
 
-        /// <summary>True while a session has replaced the live phrase pools with its own.</summary>
-        public static volatile Func<bool>? IsOverridingPhrasePoolsProvider;
-
-        /// <summary>The user's own pre-session pools, or null.</summary>
-        public static volatile Func<Dictionary<string, bool>?>? UserSubliminalPoolProvider;
-        public static volatile Func<Dictionary<string, bool>?>? UserLockCardPoolProvider;
-        public static volatile Func<Dictionary<string, bool>?>? UserBouncingTextPoolProvider;
+        /// <summary>The user's own pre-session pools (each may be null) while a session has replaced
+        /// the live phrase pools with its own; null when no session is overriding them. One
+        /// delegate, not four, so the backup reads "overriding" and the pools from ONE session
+        /// snapshot - a StopSession between separate reads would bring back #906.</summary>
+        public static volatile Func<(Dictionary<string, bool>? Subliminal,
+                                     Dictionary<string, bool>? LockCard,
+                                     Dictionary<string, bool>? BouncingText)?>? UserPhrasePoolsWhileOverriding;
     }
 }
