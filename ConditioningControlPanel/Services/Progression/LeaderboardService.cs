@@ -254,12 +254,9 @@ public class LeaderboardEntry : LeaderboardEntryData
     /// </summary>
     public static Brush BuildAvatarBrush(string? name)
     {
-        var hash = StableHash(name ?? "");
-        var hue = 200.0 + (hash % 146);              // 200 .. 345
-        var hue2 = hue - 14.0; if (hue2 < 195.0) hue2 += 150.0;
-
-        var top = FromHsl(hue, 0.70, 0.70);
-        var bottom = FromHsl(hue2, 0.52, 0.40);
+        var ((r1, g1, b1), (r2, g2, b2)) = AvatarGradient(name);
+        var top = Color.FromRgb(r1, g1, b1);
+        var bottom = Color.FromRgb(r2, g2, b2);
 
         var brush = new LinearGradientBrush
         {
@@ -270,41 +267,5 @@ public class LeaderboardEntry : LeaderboardEntryData
         brush.GradientStops.Add(new GradientStop(bottom, 1));
         brush.Freeze();
         return brush;
-    }
-
-    /// <summary>FNV-1a over the lower-cased name — stable across runs and machines.</summary>
-    private static uint StableHash(string s)
-    {
-        unchecked
-        {
-            uint h = 2166136261;
-            foreach (var c in s)
-            {
-                h ^= char.ToLowerInvariant(c);
-                h *= 16777619;
-            }
-            return h;
-        }
-    }
-
-    private static Color FromHsl(double h, double s, double l)
-    {
-        h = ((h % 360) + 360) % 360;
-        var c = (1 - Math.Abs(2 * l - 1)) * s;
-        var x = c * (1 - Math.Abs((h / 60.0) % 2 - 1));
-        var m = l - c / 2;
-
-        double r, g, b;
-        if (h < 60) { r = c; g = x; b = 0; }
-        else if (h < 120) { r = x; g = c; b = 0; }
-        else if (h < 180) { r = 0; g = c; b = x; }
-        else if (h < 240) { r = 0; g = x; b = c; }
-        else if (h < 300) { r = x; g = 0; b = c; }
-        else { r = c; g = 0; b = x; }
-
-        return Color.FromRgb(
-            (byte)Math.Round(Math.Clamp((r + m) * 255, 0, 255)),
-            (byte)Math.Round(Math.Clamp((g + m) * 255, 0, 255)),
-            (byte)Math.Round(Math.Clamp((b + m) * 255, 0, 255)));
     }
 }

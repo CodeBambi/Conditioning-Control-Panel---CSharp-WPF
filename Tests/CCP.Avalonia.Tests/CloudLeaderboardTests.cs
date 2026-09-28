@@ -48,16 +48,19 @@ public sealed partial class AccountSeedTests
     private sealed class BoardWire : HttpMessageHandler
     {
         public readonly List<string> Seen = new();
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        /// <summary>When set, every answer waits for it (an in-flight fetch).</summary>
+        public TaskCompletionSource? Gate;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
             Seen.Add($"{r.Method} {r.RequestUri!.PathAndQuery}");
+            if (Gate != null) await Gate.Task;
             var (code, body) = r.RequestUri.AbsolutePath switch
             {
                 "/v3/leaderboard" => (HttpStatusCode.OK, Board),
                 "/user/lookup" => (HttpStatusCode.OK, Lookup),
                 _ => (HttpStatusCode.InternalServerError, "{}"),
             };
-            return Task.FromResult(new HttpResponseMessage(code) { Content = new StringContent(body) });
+            return new HttpResponseMessage(code) { Content = new StringContent(body) };
         }
     }
 
@@ -112,7 +115,7 @@ public sealed partial class AccountSeedTests
     public async Task LeaderboardTab_RendersTheFetchedBoard_SelfRow_AndOfflineHonestly()
     {
         var s = CoreSettings.Current;
-        var (oldOffline, oldClient) = (s.OfflineMode, LeaderboardTabView.NewClient);
+        var (oldOffline, oldClient, oldId) = (s.OfflineMode, LeaderboardTabView.NewClient, CoreAccount.UnifiedUserId);
         var wire = new BoardWire();
         try
         {
@@ -153,8 +156,46 @@ public sealed partial class AccountSeedTests
         }
         finally
         {
-            (s.OfflineMode, LeaderboardTabView.NewClient) = (oldOffline, oldClient);
-            CoreAccount.UnifiedUserId = null;
+            (s.OfflineMode, LeaderboardTabView.NewClient, CoreAccount.UnifiedUserId) = (oldOffline, oldClient, oldId);
+        }
+    }
+
+    [Fact]
+    public async Task LeaderboardTab_OneFetchInFlight_AndAModeSwitchMidFetchRefetchesTheNewBoard()
+    {
+        var (oldClient, oldId) = (LeaderboardTabView.NewClient, CoreAccount.UnifiedUserId);
+        var oldOffline = CoreSettings.Current.OfflineMode;
+        var wire = new BoardWire { Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        try
+        {
+            LeaderboardTabView.NewClient = () => new LeaderboardClient(wire);
+            (CoreAccount.UnifiedUserId, CoreSettings.Current.OfflineMode) = ("u7", false);
+            await AvaloniaTestDispatcher.RunAsync(async () =>
+            {
+                if (global::Avalonia.Application.Current is null)
+                    global::Avalonia.AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                        .UseSkia().UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                        .SetupWithoutStarting();
+                var tab = new LeaderboardTabView();
+                var first = tab.RefreshLeaderboardAsync();        // monthly, held at the gate
+                Assert.True(tab.RefreshLeaderboardAsync().IsCompleted); // WPF IsRefreshing: a second press does nothing
+                Assert.Single(wire.Seen);
+
+                tab.SetLeaderboardMode(true);                     // switched mid-fetch; its own refresh is dropped too
+                Assert.Single(wire.Seen);
+                wire.Gate.SetResult();
+                await first;
+
+                Assert.Equal(2, wire.Seen.Count);                 // the monthly slice was dropped, all-time fetched
+                Assert.Contains("season=all-time", wire.Seen[1]);
+                var podium = ((IEnumerable<LeaderboardRow>)tab.FindControl<ItemsControl>("PodiumHost")!.ItemsSource!).ToList();
+                Assert.Equal(new[] { "u2", "u7", "u1" }, podium.Select(r => r.UnifiedId)); // all-time order, #1 centred
+                Assert.All(podium, r => Assert.True(r.IsAllTimeView));
+            });
+        }
+        finally
+        {
+            (LeaderboardTabView.NewClient, CoreAccount.UnifiedUserId, CoreSettings.Current.OfflineMode) = (oldClient, oldId, oldOffline);
         }
     }
 }

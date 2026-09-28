@@ -402,6 +402,53 @@ public class LeaderboardEntryData
         return chars.Count > 0 ? new string(chars.ToArray()) : "?";
     }
 
+    /// <summary>
+    /// The initials avatar's two gradient stops (top, bottom) as RGB, from a stable hash of the name. Hues are clamped to
+    /// 200-345 deg (blue - indigo - violet - magenta - pink) so the generated avatars stay inside the app's palette.
+    /// Each head builds its brush from these (WPF LeaderboardEntry, Avalonia LeaderboardRow).
+    /// </summary>
+    public static ((byte R, byte G, byte B) Top, (byte R, byte G, byte B) Bottom) AvatarGradient(string? name)
+    {
+        var hash = StableHash(name ?? "");
+        var hue = 200.0 + (hash % 146);              // 200 .. 345
+        var hue2 = hue - 14.0; if (hue2 < 195.0) hue2 += 150.0;
+        return (FromHsl(hue, 0.70, 0.70), FromHsl(hue2, 0.52, 0.40));
+    }
+
+    /// <summary>FNV-1a over the lower-cased name — stable across runs and machines.</summary>
+    private static uint StableHash(string s)
+    {
+        unchecked
+        {
+            uint h = 2166136261;
+            foreach (var c in s)
+            {
+                h ^= char.ToLowerInvariant(c);
+                h *= 16777619;
+            }
+            return h;
+        }
+    }
+
+    private static (byte, byte, byte) FromHsl(double h, double s, double l)
+    {
+        h = ((h % 360) + 360) % 360;
+        var c = (1 - Math.Abs(2 * l - 1)) * s;
+        var x = c * (1 - Math.Abs((h / 60.0) % 2 - 1));
+        var m = l - c / 2;
+
+        double r, g, b;
+        if (h < 60) { r = c; g = x; b = 0; }
+        else if (h < 120) { r = x; g = c; b = 0; }
+        else if (h < 180) { r = 0; g = c; b = x; }
+        else if (h < 240) { r = 0; g = x; b = c; }
+        else if (h < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+
+        static byte B(double v) => (byte)Math.Round(Math.Clamp(v * 255, 0, 255));
+        return (B(r + m), B(g + m), B(b + m));
+    }
+
     private static char FirstLetterOrDigit(string s)
     {
         foreach (var c in s) if (char.IsLetterOrDigit(c)) return c;

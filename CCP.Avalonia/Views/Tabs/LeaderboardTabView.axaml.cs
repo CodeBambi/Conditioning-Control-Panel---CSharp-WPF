@@ -355,6 +355,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         internal async Task RefreshLeaderboardAsync()
         {
+            if (_fetching) return; // WPF LeaderboardService.IsRefreshing
+            _fetching = true;
+            var allTime = IsAllTimeMode;
+            var stale = false;
             var status = this.FindControl<TextBlock>("TxtLeaderboardStatus")!;
             var button = this.FindControl<Button>("BtnRefreshLeaderboard")!;
             status.Text = Loc.Get("label_loading_2");
@@ -364,8 +368,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 // WPF LeaderboardService.RefreshAsync: offline returns false with no error text.
                 var (page, error) = CoreSettings.Current.OfflineMode
                     ? (null, null)
-                    : await NewClient().FetchAsync<LeaderboardRow>(IsAllTimeMode ? "all-time" : "monthly",
+                    : await NewClient().FetchAsync<LeaderboardRow>(allTime ? "all-time" : "monthly",
                         CoreAccount.UnifiedUserId, DateTime.UtcNow);
+                // The board was switched mid-fetch: this slice belongs to the other mode, fetch again below.
+                if (IsAllTimeMode != allTime) { stale = true; return; }
                 if (page == null)
                 {
                     status.Text = error ?? Loc.Get("label_failed_to_load");
@@ -373,7 +379,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 }
                 _page = page;
                 _ranked.Clear();
-                _ranked.AddRange(LeaderboardClient.Rank(page.Entries!, IsAllTimeMode));
+                _ranked.AddRange(LeaderboardClient.Rank(page.Entries!, allTime));
                 _sortKey = "rank";
                 RebuildLeaderboardView();
                 status.Text = Loc.GetF("lb_online_and_total", page.OnlineUsers, page.TotalUsers);
@@ -386,8 +392,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             finally
             {
                 button.IsEnabled = true;
+                _fetching = false;
+                if (stale) await RefreshLeaderboardAsync();
             }
         }
+
+        private bool _fetching;
 
         /// <summary>MainWindow.Leaderboard.cs:749 UpdateYourRankDisplay: the server rank only, never a row's Rank (#693).</summary>
         private void UpdateYourRankDisplay()
@@ -638,7 +648,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// Deterministic two-stop gradient for the initials avatar. The leaderboard payload carries
         /// no avatar URL, so the circle is generated from a stable hash of the display name: the
-        /// same subject always gets the same colours. Copied from LeaderboardEntry.BuildAvatarBrush.
+        /// same subject always gets the same colours. The stops come from Core AvatarGradient, as WPF's.
         /// </summary>
         public IBrush AvatarBrush => _avatarBrush ??= BuildAvatarBrush(DisplayName);
 
@@ -649,9 +659,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         public static IBrush BuildAvatarBrush(string? name)
         {
-            var hash = StableHash(name ?? "");
-            var hue = 200.0 + (hash % 146);              // 200 .. 345
-            var hue2 = hue - 14.0; if (hue2 < 195.0) hue2 += 150.0;
+            var ((r1, g1, b1), (r2, g2, b2)) = AvatarGradient(name);
 
             var brush = new LinearGradientBrush
             {
@@ -660,45 +668,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 StartPoint = new RelativePoint(0.15, 0, RelativeUnit.Relative),
                 EndPoint = new RelativePoint(0.85, 1, RelativeUnit.Relative),
             };
-            brush.GradientStops.Add(new GradientStop(FromHsl(hue, 0.70, 0.70), 0));
-            brush.GradientStops.Add(new GradientStop(FromHsl(hue2, 0.52, 0.40), 1));
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(r1, g1, b1), 0));
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(r2, g2, b2), 1));
             return brush;
-        }
-
-        /// <summary>FNV-1a over the lower-cased name - stable across runs and machines.</summary>
-        private static uint StableHash(string s)
-        {
-            unchecked
-            {
-                uint h = 2166136261;
-                foreach (var c in s)
-                {
-                    h ^= char.ToLowerInvariant(c);
-                    h *= 16777619;
-                }
-                return h;
-            }
-        }
-
-        private static Color FromHsl(double h, double s, double l)
-        {
-            h = ((h % 360) + 360) % 360;
-            var c = (1 - Math.Abs(2 * l - 1)) * s;
-            var x = c * (1 - Math.Abs((h / 60.0) % 2 - 1));
-            var m = l - c / 2;
-
-            double r, g, b;
-            if (h < 60) { r = c; g = x; b = 0; }
-            else if (h < 120) { r = x; g = c; b = 0; }
-            else if (h < 180) { r = 0; g = c; b = x; }
-            else if (h < 240) { r = 0; g = x; b = c; }
-            else if (h < 300) { r = x; g = 0; b = c; }
-            else { r = c; g = 0; b = x; }
-
-            return Color.FromRgb(
-                (byte)Math.Round(Math.Clamp((r + m) * 255, 0, 255)),
-                (byte)Math.Round(Math.Clamp((g + m) * 255, 0, 255)),
-                (byte)Math.Round(Math.Clamp((b + m) * 255, 0, 255)));
         }
     }
 }
