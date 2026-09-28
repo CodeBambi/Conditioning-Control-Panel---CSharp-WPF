@@ -164,6 +164,7 @@ public sealed partial class FriendsDrawer : Border
     /// list, draw and play the entrance.</summary>
     public void OnOpened()
     {
+        _isOpen = true;
         Rebind();
         try { _svc?.SetDrawerOpen(true); } catch { }
         try { if (_svc?.Available == true) _ = SafeRefreshAsync(); } catch { }
@@ -177,8 +178,10 @@ public sealed partial class FriendsDrawer : Border
     public void OnClosed()
     {
         try { _svc?.SetDrawerOpen(false); } catch { }
+        _isOpen = false;
         _openId = null;
         _picker = null;
+        ForgetAsk();
         _addBox.Visibility = Visibility.Collapsed;
         StopAmbient();
         StopTables();
@@ -370,16 +373,14 @@ public sealed partial class FriendsDrawer : Border
         (online, offline) = FriendsDrawerRules.HostingFirst(online, offline, f => TableFor(f) != null);
         if (_openId != null && !ContainsFriend(snap, _openId)) { _openId = null; _picker = null; }
 
+        DropStaleAsk(snap);
+
         if (online.Count > 0)
         {
             AddSection("friends_section_online", online.Count);
             foreach (var f in online) AddRow(f.Id, BuildFriendRow(f));
         }
-        if (offline.Count > 0)
-        {
-            AddSection("friends_section_offline", offline.Count);
-            foreach (var f in offline) AddRow(f.Id, BuildFriendRow(f));
-        }
+        // Requests sit above the offline list: they are something to answer, the offline list is not.
         int req = snap.Incoming.Count + snap.Outgoing.Count;
         if (req > 0)
         {
@@ -387,8 +388,16 @@ public sealed partial class FriendsDrawer : Border
             foreach (var r in snap.Incoming) AddRow("in:" + r.Id, BuildRequestRow(r, incoming: true));
             foreach (var r in snap.Outgoing) AddRow("out:" + r.Id, BuildRequestRow(r, incoming: false));
         }
-        if (online.Count + offline.Count + req == 0)
+        if (offline.Count > 0)
+        {
+            AddSection("friends_section_offline", offline.Count);
+            foreach (var f in offline) AddRow(f.Id, BuildFriendRow(f));
+        }
+        bool extras = false;
+        ListExtrasShowing(ref extras);
+        if (online.Count + offline.Count + req == 0 && !extras)
             _list.Children.Add(EmptyLine(Loc.Get("friends_empty")));
+        AddListExtras();
 
         StartAmbient();
     }
@@ -613,7 +622,9 @@ public sealed partial class FriendsDrawer : Border
         };
         card.Children.Add(more);
 
-        if (_picker != null)
+        bool asking = false;
+        AddCardAsk(f, card, ref asking);
+        if (!asking && _picker != null)
         {
             var picker = BuildPicker(f, _picker);
             picker.Margin = new Thickness(0, 8, 0, 0);
@@ -685,37 +696,57 @@ public sealed partial class FriendsDrawer : Border
         string sub = !incoming ? Loc.Get("friends_request_waiting")
             : !string.IsNullOrEmpty(r.Via) ? Loc.GetF("friends_request_via", r.Via!)
             : Loc.Get("friends_request_new");
-        mid.Children.Add(FriendsLook.Label(sub, 11.5, FriendsLook.MutedBrush));
+        var (agoKey, agoArg) = FriendsDrawerRules.RequestAgo(r.At, DateTimeOffset.UtcNow);
+        if (agoKey != null) sub += " \u00B7 " + (agoArg is int n ? Loc.GetF(agoKey, n) : Loc.Get(agoKey));
+        var subLine = FriendsLook.Label(sub, 11.5, FriendsLook.MutedBrush);
+        subLine.Tag = "friends-request-sub";
+        mid.Children.Add(subLine);
+        var rowId = (incoming ? "in:" : "out:") + r.Id;
+        if (_results.TryGetValue(rowId, out var res))
+        {
+            var line = FriendsLook.Label(res.Text, 11.5, res.Good ? FriendsLook.MintBrush : FriendsLook.GoldBrush, FriendsLook.Display);
+            line.Tag = "friends-result";
+            mid.Children.Add(line);
+        }
         Grid.SetColumn(mid, 1);
         g.Children.Add(mid);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         if (incoming)
         {
-            var add = FriendsLook.Pill(Loc.Get("friends_request_add"), FriendsLook.MintBrush, FriendsLook.MintInkBrush,
+            var accept = FriendsLook.Pill(Loc.Get("friends_request_accept"), FriendsLook.MintBrush, FriendsLook.MintInkBrush,
                 FriendsLook.MintBrush, 8, new Thickness(9, 3, 9, 3), FriendsLook.MintBrush);
-            add.FontSize = 12;
-            add.Tag = "friends-accept";
-            add.Click += async (_, _) =>
-            {
-                Shockwave(add, FriendsLook.Mint);
-                FriendsSfx.Accepted();
-                try { if (_svc != null) await _svc.AcceptAsync(r.Id); } catch { }
-                await SafeRefreshAsync();
-            };
-            var no = FriendsLook.Pill(Loc.Get("friends_request_no"), FriendsLook.RaisedBrush, FriendsLook.TextBrush,
+            accept.FontSize = 12;
+            accept.Tag = "friends-accept";
+            accept.Click += async (_, _) => await AnswerRequestAsync(r, "accept", accept);
+            var decline = FriendsLook.Pill(Loc.Get("friends_request_decline"), FriendsLook.RaisedBrush, FriendsLook.TextBrush,
                 FriendsLook.Line2Brush, 8, new Thickness(9, 3, 9, 3));
-            no.FontSize = 12;
-            no.Margin = new Thickness(6, 0, 0, 0);
-            no.Tag = "friends-decline";
-            no.Click += async (_, _) =>
+            decline.FontSize = 12;
+            decline.Margin = new Thickness(6, 0, 0, 0);
+            decline.Tag = "friends-decline";
+            decline.Click += async (_, _) => await AnswerRequestAsync(r, "decline");
+            var more = FriendsLook.Pill(new TextBlock
             {
-                FriendsSfx.Dismiss();
-                try { if (_svc != null) await _svc.DeclineAsync(r.Id); } catch { }
-                await SafeRefreshAsync();
+                Text = "\uE712",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 11,
+                Foreground = FriendsLook.MutedBrush,
+            }, Brushes.Transparent, FriendsLook.MutedBrush, Brushes.Transparent, 8, new Thickness(5, 4, 5, 4), FriendsLook.HoverBrush);
+            more.Margin = new Thickness(2, 0, 0, 0);
+            more.Tag = "friends-request-more";
+            more.ToolTip = Loc.Get("friends_action_more");
+            more.Click += (_, _) =>
+            {
+                FriendsSfx.Click();
+                var menu = BuildRequestMenu(r);
+                menu.PlacementTarget = more;
+                menu.Placement = PlacementMode.Bottom;
+                menu.IsOpen = true;
             };
-            buttons.Children.Add(add);
-            buttons.Children.Add(no);
+            row.ContextMenu = BuildRequestMenu(r);
+            buttons.Children.Add(accept);
+            buttons.Children.Add(decline);
+            buttons.Children.Add(more);
         }
         else
         {
@@ -723,12 +754,7 @@ public sealed partial class FriendsDrawer : Border
                 FriendsLook.Line2Brush, 8, new Thickness(9, 3, 9, 3));
             cancel.FontSize = 12;
             cancel.Tag = "friends-cancel";
-            cancel.Click += async (_, _) =>
-            {
-                FriendsSfx.Dismiss();
-                try { if (_svc != null) await _svc.CancelRequestAsync(r.Id); } catch { }
-                await SafeRefreshAsync();
-            };
+            cancel.Click += async (_, _) => await AnswerRequestAsync(r, "cancel");
             buttons.Children.Add(cancel);
         }
         Grid.SetColumn(buttons, 2);
@@ -775,6 +801,7 @@ public sealed partial class FriendsDrawer : Border
         var left = new StackPanel { Orientation = Orientation.Horizontal };
         left.Children.Add(settings);
         left.Children.Add(bell);
+        AddFootExtras(left);
         g.Children.Add(left);
 
         var add = FootButton("", Loc.Get("friends_add_title"));
@@ -959,16 +986,18 @@ public sealed partial class FriendsDrawer : Border
 
     // ---- results ----------------------------------------------------------------------
 
-    /// <summary>Words a send in the friend's row for two seconds.</summary>
+    /// <summary>Words a send in the friend's row for <see cref="FriendsDrawerRules.ResultHoldSeconds"/>.
+    /// A drawer that folded while the send was out (a game took the screen) says it outside.</summary>
     internal void ShowResult(string friendId, SendResult r)
     {
         if (FriendsDrawerRules.IsGood(r)) FriendsSfx.Sent(); else FriendsSfx.Denied();
         ShowResultQuiet(friendId, r);
+        TellOutside(Loc.Get(FriendsDrawerRules.SendResultKey(r)), FriendsDrawerRules.IsGood(r));
     }
 
     private void ShowResultQuiet(string friendId, SendResult r)
         => ShowTimed(friendId, Loc.Get(FriendsDrawerRules.SendResultKey(r)), FriendsDrawerRules.IsGood(r),
-            TimeSpan.FromSeconds(2));
+            TimeSpan.FromSeconds(FriendsDrawerRules.ResultHoldSeconds));
 
     /// <summary>Words a line in the friend's row for <paramref name="hold"/>.</summary>
     private void ShowTimed(string friendId, string text, bool good, TimeSpan hold)

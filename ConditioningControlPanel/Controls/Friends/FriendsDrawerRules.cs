@@ -95,6 +95,16 @@ internal static class FriendsDrawerRules
         return ("friends_seen_long", null);
     }
 
+    /// <summary>How long ago a request came in, as the seen buckets word it. Null key for a request
+    /// with no time (an old server), which then shows none.</summary>
+    public static (string? Key, int? Arg) RequestAgo(DateTimeOffset at, DateTimeOffset now)
+    {
+        if (at == DateTimeOffset.MinValue || at == default) return (null, null);
+        if (at > now) at = now;
+        var (key, arg) = SeenKey(at, now);
+        return (key, arg);
+    }
+
     /// <summary>A squelched friend never learns it: the server already answers "sent" for one,
     /// and the client words its own copy the same way.</summary>
     public static string SendResultKey(SendResult r) => r switch

@@ -44,6 +44,9 @@ public partial class FriendsDrawerTests
     {
         PresenceAsk.Asked = () => true;
         PresenceAsk.MarkAsked = () => { };
+        Outside.Clear();
+        FriendsDrawer.Outside = (text, _) => Outside.Add(text);
+        ResetDrawerExtras();
         var d = new FriendsDrawer(svc) { MeName = () => "cb", MeTier = () => 0 };
         d.Render();
         return d;
@@ -102,6 +105,14 @@ public partial class FriendsDrawerTests
         var keys = new List<string>();
         foreach (var id in PokeSet.All) keys.Add("friends_poke_" + id);
         foreach (var id in InviteDestination.All) keys.Add("friends_invite_" + id);
+        foreach (var r in Enum.GetValues<ActResult>()) keys.Add(FriendsDrawerRules.ActResultKey(r));
+        keys.AddRange(new[]
+        {
+            "friends_request_accept", "friends_request_decline", "friends_removed_done", "friends_blocked_done",
+            "friends_squelch_done", "friends_unsquelch_done", "friends_notice_hours", "friends_land_waiting_many", "friends_land_waiting_open",
+            "friends_land_goon_failed", "friends_land_goon_no_code", "friends_land_goon_busy",
+            "profile_friends_where_title", "profile_friends_where_body",
+        });
         foreach (var id in WatchRef.Flavours) keys.Add("friends_flavour_" + id);
         foreach (var a in Enum.GetValues<PresenceActivity>()) keys.Add(FriendsDrawerRules.ActivityKey(a));
         foreach (var r in Enum.GetValues<SendResult>()) keys.Add(FriendsDrawerRules.SendResultKey(r));
@@ -134,9 +145,10 @@ public partial class FriendsDrawerTests
         WpfRenderHarness.OnStaThread(() =>
         {
             var d = NewDrawer(new FakeFriends(Sample()));
-            Assert.Equal(new[] { "friends_section_online", "friends_section_offline", "friends_section_requests" }, d.SectionKeys);
-            // Online by name, offline by who was here last, then incoming before outgoing.
-            Assert.Equal(new[] { "kit", "sam", "robin", "noor", "in:dee", "out:ash" }, d.RowIds);
+            // Requests sit above the offline list: they are something to answer.
+            Assert.Equal(new[] { "friends_section_online", "friends_section_requests", "friends_section_offline" }, d.SectionKeys);
+            // Online by name, then incoming before outgoing, then offline by who was here last.
+            Assert.Equal(new[] { "kit", "sam", "in:dee", "out:ash", "robin", "noor" }, d.RowIds);
 
             var sam = d.RowFor("sam")!;
             Assert.NotNull(Find(sam, "friends-lock"));
@@ -197,19 +209,18 @@ public partial class FriendsDrawerTests
         WpfRenderHarness.OnStaThread(() =>
         {
             var goon = InviteCodes.GoonCode;
-            var remote = InviteCodes.RemoteCode;
             var canHost = InviteCodes.CanHostGoon;
             try
             {
                 InviteCodes.GoonCode = () => null;
-                InviteCodes.RemoteCode = () => null;
                 InviteCodes.CanHostGoon = () => true;
                 var d = NewDrawer(new FakeFriends(Sample()));
                 d.OpenPickerFor("sam", "invite");
                 var row = d.RowFor("sam")!;
                 // No room yet, but a host can open one from the tile itself.
                 Assert.True(((Button)Find(row, "friends-invite:goon")!).IsEnabled);
-                Assert.False(((Button)Find(row, "friends-invite:remote")!).IsEnabled);
+                // Remote was dropped (owner, 2026-09-28): no tile at all.
+                Assert.Null(Find(row, "friends-invite:remote"));
                 Assert.True(((Button)Find(row, "friends-invite:backroom")!).IsEnabled);
                 Assert.True(((Button)Find(row, "friends-invite:ramp")!).IsEnabled);
 
@@ -224,7 +235,6 @@ public partial class FriendsDrawerTests
             finally
             {
                 InviteCodes.GoonCode = goon;
-                InviteCodes.RemoteCode = remote;
                 InviteCodes.CanHostGoon = canHost;
             }
         });

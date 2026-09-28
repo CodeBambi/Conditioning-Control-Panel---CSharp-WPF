@@ -366,6 +366,10 @@ public static class FriendsLanding
     private static FriendNotice Notice(NoticeKind kind, string friendId, string name, object payload, DateTimeOffset sent)
         => new(kind, friendId, name, LandingRules.NoticeAt(sent, DateTimeOffset.UtcNow), FriendNoticeRules.LifetimeMs(kind), payload);
 
+    /// <summary>The drawer's way to word a result it can no longer show (it folded while a game
+    /// took the screen, or the row it belonged to is gone).</summary>
+    internal static void Tell(string text, bool good) => Say(text, good);
+
     /// <summary>A short word where the player is looking (the game, the panel, the launcher).</summary>
     private static void Say(string text, bool good)
     {
