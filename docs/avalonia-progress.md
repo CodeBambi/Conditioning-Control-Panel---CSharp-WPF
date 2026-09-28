@@ -506,3 +506,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Core PopQuizScheduler (WPF's 60/rate ±30% tick, disabled -> nothing, no stacking, lock-card defer once then drop,
   busy-queue defer) + question bank/mod resolver behind a 7-member IPopQuizHost; WPF PopQuizService is the host
   (behaviour unchanged). 5 fake-clock tests, each fail-proofed. Review: ACCEPT. No Avalonia host yet (unit 3).
+
+## avalonia-port/popquiz-avalonia-open: +186 (quiz unit 3)
+- Pop quizzes are live on the Avalonia head: PopQuizHost opens the topmost PopQuizWindow with the mod-resolved pool,
+  chimes via CoreAudio, a one-slot replay after the last lock card closes; a lock card also waits behind an open quiz
+  (WPF #763). CoreEngine arms the scheduler on Start and Stop closes everything. Graded Intake "Test pop quiz" works.
+- Evidence: PopQuizHostTests (fail-proofed 6 ways); live sandbox: quiz on Start, answering closes it, Stop closes an open
+  one in <43 ms, a lock card defers it, Test opens one, broken arming shows none. XP not banked (no provider on this head).
+  Review: FIX -> r1 applied. Open: one quiz closed by itself in one run (close reasons now logged).
