@@ -27,7 +27,7 @@
          runtime, with no compile error. Move both, or neither. -->
     <RootNamespace>ConditioningControlPanel</RootNamespace>
     <AssemblyName>CCP.Core</AssemblyName>
-    <!-- <Version> comes from ..\Version.props (imported below), shared with both heads. Without
+    <!-- <Version> comes from ..\Version.props (imported at the top), shared with both heads. Without
          it the dll ships stamped 0.0.0.0, which makes a crash-log assembly version useless. -->
     <!-- Deliberately NOT matching the app, which sets this false and hand-writes
          Properties/AssemblyInfo.cs. That switch turns off the whole GenerateAssemblyInfo
