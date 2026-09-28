@@ -212,3 +212,13 @@ branch's predecessor. "Not run" lists anything that was compiled but not execute
   the overlay draws); new advisory CI step on the windows job (continue-on-error until its first green run).
 - Evidence: OverlayBackendDispatchTests (fail-proofed); Linux --overlay-check still PASS. Two review rounds.
 - Not run: anything on Windows locally; the CI step is the only proof. DPI risk on mixed-scale monitors noted.
+
+## avalonia-port/video-miniplayer: +444
+- LibVLC video on Avalonia 12 via video callbacks into a WriteableBitmap (LibVLCSharp.Avalonia 3.10.1 only
+  supports Avalonia 11; decision logged). One shared LibVLC for audio and video; audio media opt out of video.
+- MiniPlayerWindow plays real local video with WPF's controls (silent preview, loop, play/pause/Space, seek,
+  ±5 s, Esc, drag, full teardown); slider seek bug fixed.
+- --video-check <file>: opens the real window, asserts frames change, seek lands, pause freezes, close frees.
+- Evidence: MiniPlayerVideoTests + --video-check (fail-proofed: skipped Play -> exit 1; no teardown -> crash);
+  screenshot on the real desktop. Review: ACCEPT.
+- Gaps: no production opener (Assets tree held back on content packs), animated GIFs show one frame.
