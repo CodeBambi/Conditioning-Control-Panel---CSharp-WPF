@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Animation;
@@ -22,6 +23,7 @@ using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -201,22 +203,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// reaches the tour service and no tour appears (the same state AwarenessTabView and
     /// ModCreatorWindow are in).</para>
     ///
-    /// <para>KNOWN AND ACCEPTED, now that a fresh install actually walks these three steps: step 2
-    /// takes a mod choice that <see cref="CommitModChoice"/> does not commit, and its hint copy
-    /// ("Downloads carry on in the background", "you can switch any time from the title bar")
-    /// describes a mod system this head does not have at all - <c>CoreMods</c> is unseeded, and
-    /// the shell's own mod switcher (<c>BtnManageMods_Click</c>,
-    /// <c>ModSelectorCombo_SelectionChanged</c>) is a stub for the same reason. Nothing is
-    /// downloaded, charged, consented to or falsely reported as installed: the cards read their
-    /// state from <c>CoreReleaseContent</c>'s stamps, which answer "unknown" unseeded rather than
-    /// guessing. This is the mod seam's gap showing through, not a defect this screen introduces,
-    /// and it is worth less than an install with no onboarding at all - but it is the first thing
-    /// to fix once a mod service reaches Core.</para>
-    ///
-    /// <para>What does not survive: <see cref="PrepareModStep"/> (the offline-offer bookkeeping is
-    /// <c>ModPickerDialog</c>'s, and reimplementing it is how a modular install loses its mod media)
-    /// and <see cref="CommitModChoice"/> (<c>PendingModActivation</c> and
-    /// <c>ModManagerService.ActivateMod</c>). Each is a stub naming what it needs.</para>
+    /// <para>Step 2 commits for real: <see cref="PrepareModStep"/> spends (or, offline, latches)
+    /// the picker's one-shot offer and <see cref="CommitModChoice"/> switches through the shell's
+    /// one path (<c>MainShellWindow.ActivateChosenMod</c>) or records a <c>PendingModChoice</c> and
+    /// starts the pack download (WPF FirstRunWizard.xaml.cs:913-969, 1048-1103).</para>
     ///
     /// <para>The hardening lessons the original documents are preserved as comments where the code
     /// they guard still exists, and dropped with the code where it does not - a comment about
@@ -477,7 +467,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 MainShellWindow.IsStartupDialogShowing = true;
-                wizard = new FirstRunWizard();
+                wizard = new FirstRunWizard { ShellOwner = owner };
                 await wizard.ShowDialog(owner);
             }
             catch (Exception ex)
@@ -790,7 +780,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                    ?? _cards.FirstOrDefault());
         }
 
-        private void Select(FirstRunModCard? card)
+        internal void Select(FirstRunModCard? card)
         {
             _selected = card;
             foreach (var c in _cards) c.IsSelected = ReferenceEquals(c, card);
@@ -802,30 +792,178 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if ((e.Source as Control)?.DataContext is FirstRunModCard card) Select(card);
         }
 
-        /// <summary>
-        /// ponytail: settings and release content are NOT the blockers - CoreSettings.Current and
-        /// CoreReleaseContent both answer today. What is missing is the WPF ModPickerDialog's
-        /// offline policy (ShouldDeferForOffline / ShouldReArmAfterOfflineShowing /
-        /// MaxOfflineOffers); this head's ported Dialogs.ModPickerDialog does not carry it, and it
-        /// is the only part that matters. In WPF this is where the picker's one-shot offer is spent - at the
-        /// moment the step is first shown, not when a download is queued - where a full/dev layout
-        /// marks every card installed, and where offline is handled as a first-class state that
-        /// hands the offer BACK rather than burning it. A reimplemented offline guard is how a
-        /// modular install loses its mod media permanently, so port the real one; do not restate it.
-        /// </summary>
-        private void PrepareModStep() { }
+        /// <summary>The shell that owns the one switching path (WPF's constructor argument); set by <see cref="Run"/>.</summary>
+        internal MainShellWindow? ShellOwner { get; set; }
+
+        private bool _modStepPrepared;
+        private bool _modStepOffline;
+        private bool _offlineOfferCounted;
+        private string? _committedModId;
 
         /// <summary>
-        /// ponytail: needs PendingModActivation and MainWindow.ActivateChosenMod, both still WPF
-        /// head-side. CoreMods is not the gap - it reads the active mod but cannot SWITCH one, and
-        /// CoreModsHooks.SwitchCompanion is unseeded on this head, so there is no path to commit
-        /// through. WPF hands the chosen mod to the EXACT existing switching path:
-        /// content on disk goes straight through ActivateChosenMod, content that must be fetched
-        /// records the intent and starts the download, so the switch happens the moment the pack
-        /// lands - even after this window is gone. Choosing a mod MEANS choosing to run it.
-        /// <see cref="_selected"/> is what it commits.
+        /// PORTED from WPF FirstRunWizard.xaml.cs:913-969: the picker's one-shot bookkeeping, applied
+        /// the moment this step is first shown. Reuses <see cref="Dialogs.ModPickerDialog.ShouldDeferForOffline"/>
+        /// rather than restating it.
         /// </summary>
-        private void CommitModChoice() { }
+        private void PrepareModStep()
+        {
+            if (_modStepPrepared) return;
+            _modStepPrepared = true;
+
+            try
+            {
+                var svc = App.ReleaseContent;
+                if (!CoreSettings.HasProvider || svc == null)
+                {
+                    // No pack service this session: the cards still render, nothing to download.
+                    SetModStepOffline(countOffer: false);
+                    return;
+                }
+                var settings = CoreSettings.Current;
+
+                if (svc.IsFullInstall)
+                {
+                    foreach (var card in _cards) card.MarkInstalled();
+                    _txtModHint.Text = Str("fr8_modpick_installed_hint",
+                        "Every mod is already on disk in this build - pick one and it switches straight away.");
+                    return;
+                }
+
+                if (settings.ModPickerShown) return;   // already offered: picking still works
+
+                if (Dialogs.ModPickerDialog.ShouldDeferForOffline(settings.OfflineMode, svc.ManifestUnavailable,
+                                                                  settings.ModPickerOfflineOffers))
+                {
+                    Log.Information("[FirstRun] {Reason} - the flavour step opens read-only",
+                        settings.OfflineMode ? "Offline mode is on" : "Manifest unreachable this session");
+                    SetModStepOffline(countOffer: true);
+                    return;
+                }
+
+                // Spend the offer BEFORE anything can go wrong on this page.
+                settings.ModPickerShown = true;
+                CoreSettings.Save();
+                _ = RefreshManifestAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[FirstRun] Flavour step preparation failed - falling back to the offline copy");
+                SetModStepOffline(countOffer: false);
+            }
+        }
+
+        private async Task RefreshManifestAsync()
+        {
+            try
+            {
+                var svc = App.ReleaseContent;
+                if (svc == null) { SetModStepOffline(countOffer: false); return; }
+
+                var packed = ModPickerCatalog.All.Where(en => en.PackId != null).ToList();
+                if (packed.Any(en => svc.GetPackInfo(en.PackId!) == null)
+                    && await svc.FetchManifestAsync().ConfigureAwait(true) == null)
+                {
+                    SetModStepOffline(countOffer: true);
+                    return;
+                }
+
+                foreach (var entry in packed)
+                {
+                    var card = FindCard(entry.PackId);
+                    if (card == null || card.IsInstalled) continue;
+                    card.SizeText = ModPickerCatalog.FormatSize(ModPickerCatalog.SizeBytesFor(entry));
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[FirstRun] Manifest refresh failed - falling back to the offline copy");
+                SetModStepOffline(countOffer: true);
+            }
+        }
+
+        /// <summary>WPF SetModStepOffline: read-only step; an offline showing latches the offer
+        /// (FirstRunGate.ModPickerShownAfterOfflineFlavourStep is constant true) and is counted once.</summary>
+        private void SetModStepOffline(bool countOffer)
+        {
+            _modStepOffline = true;
+            try { _txtModHint.Text = Loc.Get("modpicker_hint_offline"); } catch { }
+
+            if (!countOffer || _offlineOfferCounted || !CoreSettings.HasProvider) return;
+            _offlineOfferCounted = true;
+            try
+            {
+                var settings = CoreSettings.Current;
+                settings.ModPickerOfflineOffers++;
+                settings.ModPickerShown = true;
+                CoreSettings.Save();
+                Log.Information("[FirstRun] Flavour step ended offline (offer {Count}, diagnostics only) - latched; " +
+                                "the Mod Manager owns downloads from here", settings.ModPickerOfflineOffers);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[FirstRun] Could not record the offline flavour offer");
+            }
+        }
+
+        /// <summary>
+        /// PORTED from WPF FirstRunWizard.xaml.cs:1048-1103: content on disk goes straight through
+        /// <see cref="MainShellWindow.ActivateChosenMod"/>; content that must be fetched records the
+        /// intent (<see cref="PendingModChoice"/>) and starts the download, so the switch happens the
+        /// moment the pack lands - even after this window is gone.
+        /// </summary>
+        private void CommitModChoice()
+        {
+            try
+            {
+                var card = _selected;
+                var chosen = card?.ModId;
+                if (card == null || string.IsNullOrWhiteSpace(chosen)) return;
+                if (string.Equals(_committedModId, chosen, StringComparison.OrdinalIgnoreCase)) return;
+                _committedModId = chosen;
+
+                if (string.Equals(chosen, App.Mods?.ActiveModId, StringComparison.OrdinalIgnoreCase)) return;
+
+                if (PendingModChoice.IsContentAvailable(chosen, App.ReleaseContent))
+                {
+                    ShellOwner?.ActivateChosenMod(chosen, MainShellWindow.ModChoiceTrigger.Immediate);
+                    return;
+                }
+
+                if (_modStepOffline || !card.HasPack) return;
+
+                PendingModChoice.Record(chosen, App.Mods?.ActiveModId);
+                ChosenPackDownload = DownloadChosenPackAsync(card);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[FirstRun] Could not apply the chosen mod");
+            }
+        }
+
+        /// <summary>The download task, for tests to await.</summary>
+        internal Task? ChosenPackDownload { get; private set; }
+
+        private async Task DownloadChosenPackAsync(FirstRunModCard card)
+        {
+            var svc = App.ReleaseContent;
+            if (svc == null || string.IsNullOrEmpty(card.PackId)) return;
+
+            card.MarkQueued();
+            var progress = new Progress<double>(p => card.MarkProgress(p));
+            var ok = false;
+            try
+            {
+                // CancellationToken.None on purpose: closing this window must not kill the download.
+                ok = await svc.RequestPackAsync(card.PackId!, progress, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[FirstRun] Pack {Pack} download threw", card.PackId);
+            }
+
+            if (ok) card.MarkInstalled();
+            else card.MarkFailed();
+        }
 
         // ------------------------------------------------------------------ step 3: the doors
 

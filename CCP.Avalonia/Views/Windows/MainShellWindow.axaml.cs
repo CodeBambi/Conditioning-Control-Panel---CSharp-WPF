@@ -74,10 +74,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class MainShellWindow : Window
     {
         /// <summary>
-        /// The header mod switcher's rows. In the WPF head this is repopulated from ModService on
-        /// every mod change; here it is SAMPLE DATA so the chip draws a real name and a real
-        /// accent dot in the render proof instead of an empty pill.
-        /// ponytail: needs ModService; wired when it moves to Core.
+        /// The header mod switcher's rows, rebuilt from App.Mods by InitializeModSelector
+        /// (MainShellWindow.ModSwitch.cs). The sample row stays only on the headless render path,
+        /// which has no mod service, so the chip still draws a name and an accent dot there.
         /// </summary>
         public ObservableCollection<ModSelectorItem> AvailableMods { get; } = new()
         {
@@ -104,6 +103,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // The rail's setup pass. Here, not in OnAttachedToVisualTree: a Window IS the visual
             // root, so that override never fires on it and the rail never opened.
             InitializeNavRail();
+            // The mod switcher's rows, the saved mod's palette and the pending first-run choice
+            // (MainShellWindow.ModSwitch.cs). No-op on the headless render path (no App.Mods).
+            AttachModSwitch();
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
             Opened += (_, _) => { if (CoreSettings.Current.AvatarEnabled) InitializeAvatarTube(); };
             Closed += (_, _) => _avatarTubeWindow?.Close();
@@ -135,14 +137,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void Window_DragLeave(object? sender, RoutedEventArgs e) { }
 
         // ---- the two handlers MainShellWindow.axaml takes from this file ---------------------
-        // WPF MainWindow.xaml.cs:2883. ponytail: WPF then runs ApplyActiveModChange on
-        // ModWasChanged; this head has no live re-theme yet, so a switch lands on next launch.
+        // WPF MainWindow.xaml.cs:2910: a switch made in the manager repaints through the one path.
         private async void BtnManageMods_Click(object? sender, RoutedEventArgs e)
         {
-            try { await new Dialogs.ModManagerDialog().ShowDialog(this); }
+            try
+            {
+                var dialog = new Dialogs.ModManagerDialog();
+                await dialog.ShowDialog(this);
+                // Install/uninstall of a non-active mod still changes the combo's rows.
+                if (dialog.ModWasChanged) ApplyActiveModChange(); else InitializeModSelector();
+            }
             catch (Exception ex) { Serilog.Log.Warning(ex, "[ModManager] failed to open"); }
         }
-        private void ModSelectorCombo_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
 
         // MainWindow.Settings.cs's BtnExit_Click: the real exit, not the X-to-tray close.
         private void BtnExit_Click(object? sender, RoutedEventArgs e) => RequestExit();
@@ -170,7 +176,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 //   public bool IsEngineRunning
 //   private bool _isLoading
 //   public ObservableCollection<ModSelectorItem> AvailableMods
-//   private bool _suppressModSelectorChange
 //   private BrowserService? _browser
 //   private bool _browserInitialized
 //   private Window? _browserPopoutWindow
@@ -290,8 +295,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 //   private void RefreshThemeAwareElements(…)
 //   private static Color LightenColor(…)
 //   private static Color DarkenColor(…)
-//   private void InitializeModSelector(…)
-//   private static ModSelectorItem BuildSelectorItem(…)
 //   private void RefreshBrowserLoadingText(…)
 //   private static System.Windows.Media.ImageSource? ModTileVariant(…)
 //   private const int TileDecodeWidth
@@ -300,10 +303,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 //   private static ImageSource? LoadModImageDecoded(…)
 //   private static void ApplyArtFraming(…)
 //   private static ModArtFraming? ActiveModFraming(…)
-//   private void BtnManageMods_Click(…)
-//   private void ModSelectorCombo_SelectionChanged(…)
-//   internal void ActivateChosenMod(…)
-//   private void ApplyActiveModChange(…)
 //   private readonly List<(…)
 //   private void RefreshHypnotubeLinksUI(…)
 //   private static bool IsListingUrl(…)
