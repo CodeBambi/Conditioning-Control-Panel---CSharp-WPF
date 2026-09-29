@@ -747,6 +747,7 @@ export async function mount(ctx) {
       }
       if(action==='close-options'){options.hidden=true;closePictures();optionsFrom?.focus();}
       if(action==='skip-board'&&activeEndless&&!menuOpen&&game?.skipBoard()){   // the next board, no reward; Resume plays it
+        syncEndless(game.snapshot());   // the frame loop that moves the checkpoint is held while paused, and Save and menu writes it
         options.hidden=true;closePictures();ui.paused.querySelector('[data-menu="resume"]')?.focus();
       }
     });
