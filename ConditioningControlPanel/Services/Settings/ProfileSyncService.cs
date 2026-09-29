@@ -1563,6 +1563,7 @@ namespace ConditioningControlPanel.Services
         private DateTime? _syncBlockedUntilUtc;
         private string? _syncBackoffToken;
         private TimeSpan _syncBackoffOffset;
+        private int _syncSuccesses;   // syncs that reached the server; see SyncBeforeRetryAsync
 
         /// <summary>
         /// Arm the failure backoff. Keyed to the auth token and clock offset this attempt used, so a
@@ -2775,6 +2776,7 @@ namespace ConditioningControlPanel.Services
                 // Track sync health — only count actual failures, not skips (cooldown, gate, offline)
                 if (syncSucceeded)
                 {
+                    _syncSuccesses++;
                     _syncBackoffFailures = 0;
                     _syncBlockedUntilUtc = null;
                     if (ConsecutiveSyncFailures > 0)
@@ -4072,6 +4074,24 @@ namespace ConditioningControlPanel.Services
         public Task<(bool success, string? error)> PurchaseSkillAsync(string skillId)
             => PurchaseSkillAsync(skillId, afterSync: false);
 
+        /// <summary>
+        /// One real sync before a balance refusal is asked again (#1300). Waits for a sync already
+        /// running (the level up fires one; if it landed, the server has heard), and inside the 30 s
+        /// cooldown, which the server enforces too, waits out the rest of it once. True only when a
+        /// sync reached the server.
+        /// </summary>
+        private async Task<bool> SyncBeforeRetryAsync()
+        {
+            var landed = _syncSuccesses;
+            if (!await _syncGate.WaitAsync(SyncCooldown)) return false;
+            _syncGate.Release();
+            if (_syncSuccesses != landed || await SyncProfileAsync()) return true;
+            var left = LastSyncTime.HasValue ? SyncCooldown - (DateTime.Now - LastSyncTime.Value) : TimeSpan.Zero;
+            if (left <= TimeSpan.Zero || left > SyncCooldown) return false;
+            await Task.Delay(left + TimeSpan.FromMilliseconds(250));
+            return await SyncProfileAsync();
+        }
+
         private async Task<(bool success, string? error)> PurchaseSkillAsync(string skillId, bool afterSync)
         {
             var settings = App.Settings?.Current;
@@ -4170,11 +4190,16 @@ namespace ConditioningControlPanel.Services
                         // milestones it has not seen yet, then ask again (#1300). Only a refusal
                         // that survives the sync lowers the wallet.
                         var step = SparklePoints.AfterBalanceRefusal(settings.SkillPoints, result.SkillPoints, refusedSkill.Cost, afterSync);
-                        if (step == SparklePoints.RefusalStep.SyncAndRetry && await SyncProfileAsync())
+                        if (step == SparklePoints.RefusalStep.SyncAndRetry)
                         {
-                            App.Logger?.Information("Skill purchase: balance refusal at {Server} vs local {Local}, synced, asking again",
-                                result.SkillPoints, settings.SkillPoints);
-                            return await PurchaseSkillAsync(skillId, afterSync: true);
+                            if (await SyncBeforeRetryAsync())
+                            {
+                                App.Logger?.Information("Skill purchase: balance refusal at {Server} vs local {Local}, synced, asking again",
+                                    result.SkillPoints, settings.SkillPoints);
+                                return await PurchaseSkillAsync(skillId, afterSync: true);
+                            }
+                            // No sync reached the server: keep the wallet, the next sync settles it.
+                            return (false, result.Error ?? "Purchase failed");
                         }
                         var adopted = SparklePoints.AdoptAfterRefusal(settings.SkillPoints, result.SkillPoints, refusedSkill.Cost);
                         if (adopted.HasValue)
