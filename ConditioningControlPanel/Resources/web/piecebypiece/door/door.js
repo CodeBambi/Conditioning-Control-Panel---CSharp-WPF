@@ -175,7 +175,7 @@ export function createDoor(opts = {}) {
     if (!s.enabled) return '';
     const L = s.labels;
     const lock = !!s.locked;
-    const row = stakePills(s.options, s.timeOk).map((p) => `<button type="button" class="stake-pill${sameStake(p, s.pick) ? ' on' : ''}" data-act="stake" data-id="${esc(p.kind + ':' + p.amount)}"${lock ? ' disabled' : ''}>${esc(stakeLabel(p, L))}</button>`).join('');
+    const row = stakePills(s.options, s.timeOk).map((p) => `<button type="button" class="stake-pill${sameStake(p, s.pick) ? ' on' : ''}" data-act="stake" data-id="${esc(p.kind + ':' + p.amount)}"${(lock || s.busy) ? ' disabled' : ''}>${esc(stakeLabel(p, L))}</button>`).join('');
     const them = (s.match && s.them && !isNone(s.them)) ? `<span class="stake-chip">${esc(L.them)} <b>${esc(stakeLabel(s.them, L))}</b></span>` : '';
     const note = s.refusal ? esc(refusalText(s.refusal, L)) : (lock ? esc(L.locked) : '');
     return `<div class="stake-row" role="group" aria-label="${esc(L.title)}"><span class="stake-k">${esc(L.title)}</span>${row}</div>`

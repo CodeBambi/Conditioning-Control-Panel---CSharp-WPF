@@ -8,6 +8,7 @@
  * Exits non-zero with the checks that broke.
  * ==========================================================================*/
 
+import { readFileSync } from 'node:fs';
 import {
   pills, stakeLabel, readStake, sameStake, onOffer, resultText, refusalText, reduce,
   initialState, createStake, EN,
@@ -120,6 +121,58 @@ function eq(what, got, want) {
   off.end('m9');
   eq('a page with stakes off never asks to settle', quiet.length, 0);
   st.dispose(); off.dispose();
+}
+
+// --- two quick taps (bug hunt 2026-09-29, STAKES-7). The server takes the first
+// offer and answers one that meets its held stake lock 'busy', so the first stands.
+// The row must never light an amount that is not the one at stake.
+{
+  const sent = [];
+  const timers = [];
+  let hear = null;
+  const st = createStake({
+    post: (m) => sent.push(m), onMessage: (fn) => { hear = fn; return () => {}; }, store: false,
+    later: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+  });
+  const offers = () => sent.filter((m) => m.type === 'stake-offer').map((m) => m.kind + m.amount);
+  hear({ type: 'stake', op: 'limits', ok: true, enabled: true, options: { time: [900, 1800], sp: [5, 10, 25] }, time_ok: false });
+  const M = 'm_0123456789abcdef';
+  st.begin(M);
+  st.choose('sp', 25);   // tap 1
+  st.choose('sp', 5);    // tap 2, before the first reply lands
+  eq('a second tap while the first offer is on the wire sends nothing', offers(), ['sp25']);
+  eq('and the lit pill stays the one offered', st.state.pick, { kind: 'sp', amount: 25 });
+  ok('the row is busy until the reply', st.state.busy === true);
+  hear({ type: 'stake', op: 'offer', match: M, ok: true, stake: { kind: 'sp', amount: 25 }, sp: 75 });
+  ok('the reply frees the row', st.state.busy === false);
+  eq('the lit pill is the stake', [st.state.pick, st.state.you], [{ kind: 'sp', amount: 25 }, { kind: 'sp', amount: 25 }]);
+  hear({ type: 'stake', op: 'state', match: M, ok: true, you: { kind: 'sp', amount: 25 }, them: null, locked: true, settled: null });
+  eq('after the lock the lit pill and the stake still agree', st.state.pick, st.state.you);
+
+  // the server's stake lock was held for a moment: one quiet retry, then words
+  const N = 'm_fedcba9876543210';
+  st.end(M); st.clear(); st.begin(N);   // the finished match spent the pick, so nothing is offered unasked
+  st.choose('sp', 10);
+  hear({ type: 'stake', op: 'offer', match: N, ok: false, reason: 'busy' });
+  eq('busy is retried once, after a moment', [timers.length, (timers[0]?.ms || 0) >= 500], [1, true]);
+  ok('the row stays busy for the retry, with no words yet', st.state.busy === true && !st.state.refusal);
+  timers.shift()?.fn();
+  eq('the retry offers the same pick', offers().at(-1), 'sp10');
+  hear({ type: 'stake', op: 'offer', match: N, ok: false, reason: 'busy' });
+  eq('a second busy is not retried', timers.length, 0);
+  eq('it says so, and the lit pill goes back to what is at stake', [st.state.refusal, st.state.pick], ['busy', { kind: 'none', amount: 0 }]);
+
+  // any other refusal: the pill goes back to the stake the server already holds
+  st.choose('sp', 5);
+  hear({ type: 'stake', op: 'offer', match: N, ok: true, stake: { kind: 'sp', amount: 5 }, sp: 95 });
+  st.choose('sp', 25);
+  hear({ type: 'stake', op: 'offer', match: N, ok: false, reason: 'insufficient_sp' });
+  eq('a refused raise lights the stake that stands', [st.state.pick, st.state.you], [{ kind: 'sp', amount: 5 }, { kind: 'sp', amount: 5 }]);
+  eq('and says why', st.state.refusal, 'insufficient_sp');
+  st.dispose();
+
+  const door = readFileSync(new URL('../door/door.js', import.meta.url), 'utf8');
+  ok('the door disables the pills while an offer is on the wire', /stake-pill[\s\S]{0,400}?\(lock \|\| s\.busy\) \? ' disabled'/.test(door));
 }
 
 if (failures.length) {
