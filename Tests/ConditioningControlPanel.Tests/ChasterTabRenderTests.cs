@@ -371,6 +371,48 @@ public class ChasterTabRenderTests
         });
     }
 
+    /// <summary>Bug hunt 2026-09-29 (TAB-10): the rubber stamp sat over the end of the tag's own
+    /// line ("on its way to the lo" with the rest under UNPAID; the backlog split lost "0 later").
+    /// For every stamp word in every language and every line the tag can show, the stamp, tilt
+    /// included, stays clear of the line's box and reaches no higher than the empty foot of the
+    /// amount's line.</summary>
+    [Fact]
+    public void The_paper_tag_stamp_never_covers_the_tags_own_line()
+    {
+        var langs = new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" }
+            .Select(lang => Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(System.IO.Path.Combine(
+                RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", lang + ".json"))))
+            .ToList();
+        var words = langs.SelectMany(json => new[] { "chaster_tag_unpaid", "chaster_tag_clear", "chaster_tag_credit" }
+            .Select(k => (string)json[k]!)).ToList();
+        var lines = langs.SelectMany(json => new[] { "chaster_tag_lands", "chaster_tag_credit_lands", "chaster_tag_paused",
+                "chaster_tag_nolock", "chaster_tag_tomorrow", "chaster_tag_split" }
+            .Select(k => ((string)json[k]!).Replace("{0}", "15:00").Replace("{1}", "45:00"))).ToList();
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            tab.LinkedPanel.Visibility = Visibility.Visible;
+            tab.PaperTag.Visibility = Visibility.Visible;
+            Realize(tab, 1000, 1400);
+            tab.RefreshTag(750);
+            foreach (var word in words)
+            foreach (var line in lines)
+            {
+                tab.TxtTagStamp.Text = word;
+                tab.TxtTagLands.Text = line;
+                tab.UpdateLayout();
+                var lands = tab.TxtTagLands.TransformToAncestor(tab.PaperTag).TransformBounds(new Rect(tab.TxtTagLands.RenderSize));
+                var amount = tab.TxtTagAmount.TransformToAncestor(tab.PaperTag).TransformBounds(new Rect(tab.TxtTagAmount.RenderSize));
+                var stamp = tab.TagStamp.TransformToAncestor(tab.PaperTag).TransformBounds(new Rect(tab.TagStamp.RenderSize));
+                Assert.True(lands.Height > 0 && stamp.Width > 0, "the tag's line or stamp did not lay out");
+                Assert.True(stamp.Left >= lands.Right - 0.5 || stamp.Top >= lands.Bottom - 0.5,
+                    $"{word} stamp ({stamp.Left:0.0},{stamp.Top:0.0}) covers '{line}' (right {lands.Right:0.0}, bottom {lands.Bottom:0.0})");
+                Assert.True(stamp.Top >= amount.Bottom - 6.5,
+                    $"{word} stamp top {stamp.Top:0.0} reaches the amount (bottom {amount.Bottom:0.0}) beside '{line}'");
+            }
+        });
+    }
+
     [Fact]
     public void Clicking_the_figure_opens_a_box_only_on_rows_with_one_fixed_figure()
     {
