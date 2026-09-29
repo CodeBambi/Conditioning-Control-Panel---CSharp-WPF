@@ -26,8 +26,8 @@
                                           side-art scrim alike.
        x:FieldModifier="internal"     ->  dropped; no host re-publishes these fields on this head,
                                           and the x:Names are kept so the wiring is a one-line change.
-       feat:SessionLock.Owned         ->  dropped; the attached behaviour lives in the WPF head.
-       feat:AdaptiveSideArt.CollapseBelow -> dropped, same reason. The 3*/2* split with
+       feat:SessionLock.Owned         ->  sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
+       feat:AdaptiveSideArt.CollapseBelow -> dropped; the attached behaviour lives in the WPF head. The 3*/2* split with
                                           MaxWidth="780" is kept verbatim.
        hover:HoverPop.IsEnabled       ->  dropped, same reason.
        pack:// BitmapImage AwarenessArt -> dropped, and with it the ElementName ImageBrush bindings
@@ -38,6 +38,7 @@
                                           so the per-mod art swap is one avares:// line later. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -136,7 +137,7 @@
                             <Border CornerRadius="99" Background="#8C131320" VerticalAlignment="Center"
                                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
                                     Padding="12,5,12,5">
-                                <CheckBox x:Name="ChkAwarenessMaster"
+                                <CheckBox x:Name="ChkAwarenessMaster" sessionLock:SessionLock.Owned="True"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                           IsCheckedChanged="ChkAwarenessMaster_Changed">
                                     <ToolTip.Tip>

@@ -32,8 +32,7 @@
        RenderTransformOrigin="0.5,0.5"   -> "50%,50%"; LinearGradient "0.9,0.7" -> "90%,70%"
                                             (Avalonia parses bare numbers as pixels)
        x:FieldModifier="internal"        -> dropped; no host on this head reads the fields. x:Names kept.
-       feat:SessionLock.Owned            -> dropped; Features/SessionLock is a WPF-head attached
-                                            property. Re-add when it moves to Core.
+       feat:SessionLock.Owned            -> sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        feat:AdaptiveSideArt.CollapseBelow-> dropped with the side-art column, see below.
 
      features/vibe.png plates: the hero (HapticsHeroArt) and the Video-Haptic-Sync thumb
@@ -50,6 +49,7 @@
 
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -530,7 +530,7 @@
                                             <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                        VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                            <CheckBox x:Name="ChkHapticsEnabled"
+                                            <CheckBox x:Name="ChkHapticsEnabled" sessionLock:SessionLock.Owned="True"
                                                       Theme="{StaticResource ToggleStyle}"
                                                       VerticalAlignment="Center"
                                                       IsCheckedChanged="ChkHapticsEnabled_Changed"/>

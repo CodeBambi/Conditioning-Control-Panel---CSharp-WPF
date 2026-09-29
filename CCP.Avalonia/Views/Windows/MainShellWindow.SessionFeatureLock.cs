@@ -18,24 +18,15 @@
 //     a plain Start never greys the cards. Unseeded until a session runner exists: never active.
 //   - The ribbon (SettingsTabView.ProgramFeatureLockRibbon / TxtProgramFeatureLock, both in the
 //     ported XAML) shows and hides with the derived state and carries the reason.
-//   - The Studio rack's feature panels (StudioTabView.HostedFeaturePanels) get the master
-//     ChkEnable greyed, the reason as a tooltip, and the lock banner inserted above them - the
-//     same painter WPF uses for the dashboard popups, in both directions, idempotent, banner
-//     found by Tag before insert so repaints cannot stack it.
+//   - The Studio rack's feature panels (StudioTabView.HostedFeaturePanels) get every dial
+//     marked features:SessionLock.Owned (Views/Features/SessionLock.cs) greyed, the reason as a
+//     tooltip (original restored on unlock), and the lock banner inserted above them.
+//   - ApplySessionLockToTabs sweeps the same marker on GradedIntakeTab, AwarenessTab and the
+//     Studio rack's Haptics page (WPF :276).
 //
 // WHAT IS NOT, and why - not one of these is "wired when a service moves to Core":
-//   - The per-dial marker sweep. WPF marks each dosage dial in XAML with
-//     features:SessionLock.Owned and finds them with Features.SessionLock.FindOwnedControls.
-//     That attached property was DROPPED in the port (every ported Features/*FeatureControl.axaml
-//     says so in its header, e.g. CCP.Avalonia/Views/Features/FlashFeatureControl.axaml:11), so
-//     there is nothing to sweep. CONSEQUENCE, stated plainly: on this head a running session
-//     greys the master enable and shows the banner, but the individual dose sliders under it stay
-//     draggable. Restoring the full lock needs the attached property ported first - it belongs in
-//     CCP.Avalonia/Features/SessionLock.cs, which does not exist.
-//   - ApplySessionLockToTabs, for the same reason plus a second one: it sweeps GradedIntakeTab,
-//     AwarenessTab and HapticsTab by marker only. Those three views exist here
-//     (CCP.Avalonia/Views/Tabs/{GradedIntake,Awareness,Haptics}TabView.axaml) and are reachable
-//     through Named<T>, so this method is one line away the moment the marker lands.
+//   - Six WPF markers have no Avalonia control to carry them yet (BubblePop CmbMotion and five
+//     LockCard repeat/target dials).
 //   - ApplySessionLockToFeaturePopup's OTHER caller: _activeFeaturePopupContent, the dashboard
 //     tile popup. The popup host is MainShellWindow.TakeoverUi.cs / FeatureSettingsPopup, still a
 //     stub, so nothing sets that field and the painter is called for the rack only.
@@ -138,6 +129,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var allOk = true;
             allOk &= PaintSection("ribbon", () => ApplySessionLockRibbon(locked, reason));
             allOk &= PaintSection("studio", ApplySessionLockToStudioRack);
+            allOk &= PaintSection("tabs", () => ApplySessionLockToTabs(locked, reason));
 
             // Only remember this paint if it fully succeeded, so a partial one is retried.
             _sessionLockPainted = allOk ? locked : null;
@@ -187,6 +179,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 ApplySessionLockToFeaturePopup(panel);
         }
 
+        /// <summary>WPF ApplySessionLockToTabs (:276): the dose dials on ordinary tabs - Pop Quiz,
+        /// the Awareness master, and the Haptics master (a Studio rack page here).</summary>
+        private void ApplySessionLockToTabs(bool locked, string? reason)
+        {
+            foreach (var tab in new Control?[] { Named<UserControl>("GradedIntakeTab"), Named<UserControl>("AwarenessTab"), StudioRack?.HapticsPanel })
+            {
+                if (tab is null) continue;
+                foreach (var owned in Views.Features.SessionLock.FindOwnedControls(tab))
+                    SetToggleLock(owned, locked, reason);
+            }
+        }
+
         /// <summary>
         /// A locked feature panel: the master enable greys out and a banner names the reason
         /// above it. Both directions are applied, so a session that ends while the panel is on
@@ -201,10 +205,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var locked = IsSessionFeatureLockActive;
                 var reason = locked ? SessionFeatureLockReason : null;
 
-                // Uniform convention across every Features/*FeatureControl.axaml: the master
-                // on/off is named ChkEnable. FindControl searches the control's own namescope
-                // only, so this cannot reach a same-named control elsewhere in the app.
-                SetToggleLock(content.FindControl<CheckBox>("ChkEnable"), locked, reason);
+                // Every dial marked features:SessionLock.Owned (WPF SessionFeatureLock.cs:312).
+                foreach (var owned in Views.Features.SessionLock.FindOwnedControls(content))
+                    SetToggleLock(owned, locked, reason);
 
                 if (content.Content is Panel root)
                 {
@@ -298,17 +301,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (locked)
             {
                 control.IsEnabled = false;
-                ToolTip.SetTip(control, reason ?? Loc.Get("session_lock_reason"));
             }
             else
             {
                 control.ClearValue(global::Avalonia.Input.InputElement.IsEnabledProperty);
-                // ponytail: WPF's SessionLock.ApplyLockToolTip restores whatever tooltip the
-                // control carried before the lock. Without the attached property there is no
-                // saved original to restore, so unlocking clears the tip outright. A ported
-                // Features/SessionLock.cs would take this over.
-                ToolTip.SetTip(control, null);
             }
+            Views.Features.SessionLock.ApplyLockToolTip(control, locked, reason ?? Loc.Get("session_lock_reason"));
         }
 
         /// <summary>

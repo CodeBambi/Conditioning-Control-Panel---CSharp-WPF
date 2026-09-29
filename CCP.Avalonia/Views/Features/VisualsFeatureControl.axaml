@@ -6,14 +6,14 @@
        ToolTip="..."                     -> ToolTip.Tip="..."
        helpers:EmojiTextBlock            -> TextBlock (Avalonia renders colour emoji natively)
        Image + EmojiToImageSource        -> TextBlock with the emoji
-       feat:SessionLock.Owned            -> dropped (ponytail: session-lock attached prop lives in
-                                            the WPF head; restore when the banner is ported)
-       feat:AdaptiveSideArt.CollapseBelow-> dropped (ponytail: same, the art column stays)
+       feat:SessionLock.Owned            -> sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
+       feat:AdaptiveSideArt.CollapseBelow-> dropped (ponytail: WPF-head attached prop; the art column stays)
        <Slider> (unstyled)               -> Theme="{StaticResource PinkSlider}" (the WPF theme applies
                                             PinkSlider implicitly to every Slider: Resources/Theme/MainWindow.xaml:341)
        ValueChanged= / Checked= / ...    -> wired in the constructor -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Features.VisualsFeatureControl">
 
@@ -56,7 +56,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderSize" Minimum="50" Maximum="250" Value="100"
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderSize" sessionLock:SessionLock.Owned="True" Minimum="50" Maximum="250" Value="100"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtSize" Text="100%" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
@@ -71,7 +71,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100"
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderOpacity" sessionLock:SessionLock.Owned="True" Minimum="10" Maximum="100" Value="100"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="100%" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
@@ -101,7 +101,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_duration}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderDuration" Minimum="1" Maximum="30" Value="5"
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderDuration" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="30" Value="5"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtDuration" Text="5s" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
