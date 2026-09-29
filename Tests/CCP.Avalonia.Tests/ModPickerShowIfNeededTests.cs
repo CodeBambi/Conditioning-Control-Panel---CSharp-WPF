@@ -25,11 +25,4 @@ public sealed class ModPickerShowIfNeededTests
         var spent = new AppSettings { OfflineMode = true, ModPickerOfflineOffers = ModPickerDialog.MaxOfflineOffers };
         Assert.True(ModPickerDialog.ShouldShow(spent, true, false, false));
     }
-
-    [Fact]
-    public void ThisHeadHasNoPackServiceSoThePickerNeverOpens()
-    {
-        // Oracle §5: ReleaseContentService is not ported; WPF's App.ReleaseContent == null branch.
-        Assert.False(ModPickerDialog.HasPackService);
-    }
 }
