@@ -1,7 +1,9 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using Serilog;
@@ -95,6 +97,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         /// <summary>Null when a web view can be hosted; otherwise the platform's own explanation.</summary>
         public static string? UnavailableReason => _reason.Value;
 
+        private static readonly Lazy<(string Text, string? Command)?> _linuxHint = new(() =>
+            ConditioningControlPanel.Services.LinuxDependencies.Check(
+                ConditioningControlPanel.Services.LinuxDependencies.All.Where(d => d.Need.StartsWith("web views"))));
+
         private readonly Panel _webSlot;
         private readonly Border _fallback;
         private readonly TextBlock _txtReason, _txtSource;
@@ -129,7 +135,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             }
             else
             {
-                _txtReason.Text = UnavailableReason!;
+                // Linux: name the distro's install command (docs/avalonia-linux-install.md) instead of
+                // the adapter's generic "Install webkit2gtk 4.0+ package.", which stays the fallback.
+                var hint = _linuxHint.Value;
+                _txtReason.Text = hint?.Text ?? UnavailableReason!;
+                if (hint?.Command is { } command)
+                {
+                    var copy = this.FindControl<Button>("BtnCopyCommand")!;
+                    copy.IsVisible = true;
+                    copy.Click += async (_, _) =>
+                    {
+                        try { if (TopLevel.GetTopLevel(this)?.Clipboard is { } c) await c.SetTextAsync(command); }
+                        catch (Exception ex) { Log.Debug("WebHost: copy failed: {Error}", ex.Message); }
+                    };
+                }
             }
 
             _fallback.IsVisible = _web is null;

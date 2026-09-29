@@ -10,6 +10,9 @@ namespace ConditioningControlPanel.Avalonia
 {
     internal static class Program
     {
+        /// <summary>The Linux app id: .desktop file, WM_CLASS, portal registration (packaging/linux).</summary>
+        internal const string AppId = "io.github.CodeBambi.ConditioningControlPanel";
+
         [STAThread]
         public static int Main(string[] args)
         {
@@ -207,7 +210,7 @@ namespace ConditioningControlPanel.Avalonia
             // See docs/avalonia-decisions.md (desktop overlays).
             // WM_CLASS = the app id, so desktops match windows to the .desktop file (StartupWMClass).
             return OperatingSystem.IsLinux()
-                ? builder.UseX11().With(new X11PlatformOptions { WmClass = "io.github.CodeBambi.ConditioningControlPanel" })
+                ? builder.UseX11().With(new X11PlatformOptions { WmClass = AppId })
                 : builder;
         }
     }
