@@ -76,10 +76,10 @@ public sealed class EmiNudgeMachine
     public const int RingRepeatMs = 360_000;
 
     /// <summary>Pats after which the pet nudge is retired for good.</summary>
-    public const int PetGistCount = 3;
+    public const int PetGistCount = EmiState.PetGistCount;
 
     /// <summary>Ring opens after which the ring nudge is retired for good.</summary>
-    public const int RingGistCount = 2;
+    public const int RingGistCount = EmiState.RingGistCount;
 
     /// <summary>
     /// The ring nudge does not exist on a user's very first summon: that one already carries the

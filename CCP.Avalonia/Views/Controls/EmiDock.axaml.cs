@@ -16,9 +16,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// Click summons her, click again sends her away.
     ///
     /// PORTED from ConditioningControlPanel/Controls/EmiDock.xaml.cs. Deviations:
-    ///  - <c>App.EmiDesk</c> (OutChanged, KnockRequested, Toggle, the live face binding and the
-    ///    muted flag) is a WPF-head service. <see cref="Refresh"/> and <see cref="StartKnock"/> are
-    ///    public so a host can drive the chip until the service moves to Core.
+    ///  - <c>App.EmiDesk</c> is the head's <c>EmiDeskService.Instance</c> (Toggle, OutChanged,
+    ///    AvatarMuted). Its KnockRequested and the live face binding are not ported yet (ponytail:
+    ///    need EmiKnock + EmiFace/EmiChains), so <see cref="StartKnock"/> stays public.
     ///  - The four WPF keyframe timelines become one Avalonia <see cref="Animation"/> on the ring
     ///    (stroke colour, thickness) plus one on its glow. Both run three times and stop.
     ///  - The frozen-brush guard is gone: Avalonia brushes do not freeze.
@@ -41,8 +41,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             _txtMuted = this.FindControl<TextBlock>("TxtMuted")!;
 
             _btnChip.Click += OnChipClick;
-            Unloaded += (_, _) => StopKnock();
+            // WPF EmiDock.xaml.cs:57-107: follow the service while loaded, let go when unloaded.
+            var svc = Windows.EmiDesk.EmiDeskService.Instance;
+            Loaded += (_, _) => { svc.OutChanged += OnOutChanged; Refresh(svc.IsOut, svc.AvatarMuted); };
+            Unloaded += (_, _) => { svc.OutChanged -= OnOutChanged; StopKnock(); };
         }
+
+        private void OnOutChanged(object? sender, bool isOut) =>
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                Refresh(isOut, Windows.EmiDesk.EmiDeskService.Instance.AvatarMuted));
 
         /// <summary>Show or hide the muted pill. The pill states a FACT about right now, so the
         /// host asks the same gate the tube asks: it is never shown just because the setting is on.
@@ -60,12 +67,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         {
             e.Handled = true;
             StopKnock();
-            // ponytail: needs EmiDeskService.Toggle (ConditioningControlPanel/Services/EmiDesk/
-            // EmiDeskService.cs). Not blocked on the WINDOW - CCP.Avalonia/Views/Windows/EmiDesk/
-            // EmiDeskWindow is ported - but on the service that owns whether she is out, the
-            // summon gate and the dismiss. Showing the window from here would give her a second
-            // owner, which is the trap this port keeps hitting.
-            Log.Debug("[EmiDesk] dock chip clicked with no service");
+            Windows.EmiDesk.EmiDeskService.Instance.Toggle();
         }
 
         // ============================================================================================
