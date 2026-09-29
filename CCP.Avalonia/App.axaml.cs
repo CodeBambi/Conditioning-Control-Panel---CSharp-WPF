@@ -61,6 +61,23 @@ namespace ConditioningControlPanel.Avalonia
         /// </summary>
         private static volatile bool _exiting;
 
+        /// <summary>
+        /// Hard guard on top of WPF's rules: a sandboxed profile (CCP_USERDATA_DIR, i.e. tests and
+        /// Keincheck runs) never auto-fetches from GitHub. Only an honoured loopback
+        /// CCP_CONTENT_BASE_URL lets the startup check run there.
+        /// </summary>
+        internal static bool SkipStartupFetch(string? userDataDir, string? contentBaseUrl) =>
+            !string.IsNullOrEmpty(userDataDir)
+            && ReleaseContentService.ResolveBaseUrlFormat(contentBaseUrl) == ReleaseContentService.ResolveBaseUrlFormat(null);
+
+        /// <summary>Test-only: forget the pack service, the mod service and the exit flag.</summary>
+        internal static void ResetReleaseContent()
+        {
+            ReleaseContent = null;
+            Mods = null;
+            _exiting = false;
+        }
+
         internal static void StartReleaseContent(ReleaseContentService service)
         {
             CoreReleaseContent.StampProvider = ReleaseContentService.GetStampFor;
@@ -232,7 +249,9 @@ namespace ConditioningControlPanel.Avalonia
                 {
                     var releaseContent = new ReleaseContentService();
                     StartReleaseContent(releaseContent);
-                    _ = System.Threading.Tasks.Task.Run(async () =>
+                    if (SkipStartupFetch(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable("CCP_CONTENT_BASE_URL")))
+                        Serilog.Log.Information("ReleaseContent: sandboxed profile without a loopback CCP_CONTENT_BASE_URL - startup fetch skipped");
+                    else _ = System.Threading.Tasks.Task.Run(async () =>
                     {
                         try { await releaseContent.EnsureBaselineAsync(); }
                         catch (Exception ex) { Serilog.Log.Warning(ex, "ReleaseContent: baseline check failed"); }

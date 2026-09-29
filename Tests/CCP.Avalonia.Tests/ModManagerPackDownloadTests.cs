@@ -109,6 +109,16 @@ public sealed class ModManagerPackDownloadTests
             CoreReleaseContent.StampProvider = null;
             CoreReleaseContent.PackInfoProvider = null;
             CoreReleaseContent.UiInvoke = null;
+            AvApp.ResetReleaseContent();
         }
     });
+
+    [Theory]
+    [InlineData("/tmp/sandbox", null, true)]
+    [InlineData("/tmp/sandbox", "", true)]
+    [InlineData("/tmp/sandbox", "https://example.com/x", true)]      // non-loopback is ignored, so still GitHub
+    [InlineData("/tmp/sandbox", "http://127.0.0.1:18931", false)]
+    [InlineData(null, null, false)]                                    // a real profile keeps WPF's rules
+    public void SandboxedStartupNeverFetchesFromGitHub(string? userData, string? baseUrl, bool skip) =>
+        Assert.Equal(skip, AvApp.SkipStartupFetch(userData, baseUrl));
 }
