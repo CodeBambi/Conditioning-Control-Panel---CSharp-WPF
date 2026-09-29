@@ -13,9 +13,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// (the Windows head seeds them from <c>UpdateService</c>; an unseeded head answers with its
     /// assembly version and empty notes, so a headless render still paints something true). The
     /// patch-notes button opens the same <c>WhatsNewDialog</c> the post-update popup uses, as on
-    /// WPF. The manual update check stays a named stub: the download-and-install flow is
-    /// installer-bound (<c>App.CheckForUpdatesManuallyAsync</c> drives Inno Setup) and has no
-    /// meaning on this head yet.
+    /// WPF. The manual update check is <see cref="Platform.AppUpdater.ManualCheckAsync"/>.
     /// </summary>
     public partial class UpdatesSettingsSection : UserControl
     {
@@ -31,10 +29,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnViewPatchNotes.Click += BtnViewPatchNotes_Click;
         }
 
-        private void BtnCheckUpdates_Click(object? sender, RoutedEventArgs e)
+        // WPF UpdatesSettingsSection -> App.CheckForUpdatesManuallyAsync (Linux: notify only).
+        private async void BtnCheckUpdates_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs App.CheckForUpdatesManuallyAsync (installer-bound), wired when an
-            // update flow exists for this platform
+            if (TopLevel.GetTopLevel(this) is Window owner) await Platform.AppUpdater.ManualCheckAsync(owner);
         }
 
         /// <summary>
