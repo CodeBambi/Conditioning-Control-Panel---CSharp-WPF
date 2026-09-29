@@ -1510,9 +1510,10 @@ namespace ConditioningControlPanel
             {
                 var now = DateTime.UtcNow;
                 bool raceInFront = Services.Chaos.CaucusHostService.IsInFront;
+                bool boardInFront = Services.PieceByPiece.PieceByPieceHostService.IsInFront;
                 bool claim = Services.Safety.PanicPolicy.GameClaimsEscapeAsPause(
                     App.Settings?.Current?.PanicKey,
-                    gameInFront: raceInFront || Services.PieceByPiece.PieceByPieceHostService.IsInFront,
+                    gameInFront: raceInFront || boardInFront,
                     engineRunning: _isRunning,
                     lockCardOpen: LockCardWindow.IsAnyOpen(),
                     lastClaimUtc: _lastRaceEscapeClaimUtc,
@@ -1520,6 +1521,12 @@ namespace ConditioningControlPanel
                 if (!claim) { _lastRaceEscapeClaimUtc = null; return false; }
                 _lastRaceEscapeClaimUtc = now;
                 VideoDiag.Log("PANIC", $"Escape kept by {(raceInFront ? "Racing Thoughts" : "Piece by Piece")} as its pause (again within 2 s = full panic)");
+                // The board pauses on its own keydown, which never comes while its WebView2 is out of
+                // keyboard focus, so it is handed the kept press too; the page drops it when the real
+                // key reached it as well (ui/host-escape.js).
+                if (Services.Safety.PanicPolicy.BoardGetsKeptEscape(claim, raceInFront, boardInFront,
+                        boardReady: Services.PieceByPiece.PieceByPieceHostService.IsReady))
+                    Services.PieceByPiece.PieceByPieceHostService.PostKeptEscape();
                 return true;
             }
             catch (Exception ex)

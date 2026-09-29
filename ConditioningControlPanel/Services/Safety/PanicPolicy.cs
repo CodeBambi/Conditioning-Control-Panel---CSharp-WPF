@@ -82,6 +82,19 @@ namespace ConditioningControlPanel.Services.Safety
             return true;
         }
 
+        /// <summary>
+        /// Whether an Escape a game kept as its pause is handed to the chess page as well. The board
+        /// pauses on its own keydown, and while its WebView2 is out of keyboard focus (the title bar
+        /// clicked) that keydown never comes: the press was kept, so nothing paused and nothing
+        /// panicked. Only once a press was kept (a full panic closes the board), only the board (the
+        /// race brakes on its own key, unchanged) and only to a page that is up: frames posted before
+        /// its ready are queued, and an Escape pressed during the boot must not pause or close the
+        /// board seconds later. The page drops the frame when the real key reached it too
+        /// (ui/host-escape.js), so a focused board still handles the press once.
+        /// </summary>
+        internal static bool BoardGetsKeptEscape(bool claimed, bool raceInFront, bool boardInFront, bool boardReady)
+            => claimed && boardInFront && !raceInFront && boardReady;
+
         /// <summary>Reads the master switch off settings, defaulting to ON when settings are missing
         /// (a panic with no settings loaded should still stop everything).</summary>
         internal static bool OverrideEnabled(AppSettings? settings) => settings?.PanicOverridesAll != false;
