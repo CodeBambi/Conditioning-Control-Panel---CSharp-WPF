@@ -565,6 +565,9 @@ namespace ConditioningControlPanel
         public static Services.Friends.IFriendsService? Friends { get; private set; }
         private static Services.Friends.FriendsService? _friendsService;
 
+        /// <summary>The friends feed ("What happened"): the lines App.Friends raises, per account, kept on disk.</summary>
+        public static Services.Friends.FriendsFeed? FriendsFeed { get; private set; }
+
         /// <summary>THE LEASH (2026-09-26): rides the friends poll. Null until startup builds it
         /// and after exit; every caller guards with <c>App.Leash?.</c>. The UI reaches it through
         /// <c>Controls.Leash.LeashLocator</c>, which this wiring sets once both lanes merge.</summary>
@@ -2361,6 +2364,7 @@ namespace ConditioningControlPanel
             {
                 _friendsService = Services.Friends.FriendsService.CreateForApp();
                 Friends = _friendsService;
+                try { FriendsFeed = Services.Friends.FriendsFeed.CreateForApp(_friendsService); } catch (Exception exFeed) { Logger?.Debug("Friends feed failed to start: {E}", exFeed.Message); }
                 ProfileSync.ProfileLoaded += (_, _) => _friendsService?.Kick();
                 _friendsService.Start();
             }
