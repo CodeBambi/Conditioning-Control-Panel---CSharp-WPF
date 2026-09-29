@@ -849,3 +849,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Blink Trainer camera-free half: settings, demo loop (art moved to /Assets, WPF path unchanged), premium gate, Core
   BlinkTrainerState status row (WPF delegates), folder library, editors; consent manage/revoke; camera buttons disabled with a
   tooltip. Play card opens it. Rows stay stub (camera, session, calibration). Review: FIX -> fixed.
+
+## avalonia-port/profile-wardrobe-live: +716
+- Trainer Card wears the real decoration and charms (own card, board row, lookup), re-placed on resize; Customize opens from the
+  hero, its wardrobe section and the Wardrobe editor use Core art; WardrobeStageGeometry moved to Core (git mv).
+- Saving pushes the loadout like WPF PersistOwnCosmetics (SyncPush.PushCosmeticsAsync: cosmetics only on this push; empty = WPF's
+  clear; a save skipped by the 30 s cooldown rides the next push instead of being dropped - deviation, logged).
+- Evidence: ProfileWardrobeTests + ProfileCosmeticsSyncTests, fail-proven (6 breaks); live card/dialogs/editor screenshots. Rows
+  stay stub (HoverPop, banners/presets/pins need CosmeticsCatalog, no WPF side-by-side). Review: FIX -> fixed.
