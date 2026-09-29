@@ -16,9 +16,10 @@ namespace ConditioningControlPanel.Services.Chaster;
 /// read, so a hand-edited settings file cannot book past it, and every booking still goes
 /// through the day and backlog limits after that. Only rows booked through
 /// <see cref="TabPrices.Resolve"/> with one fixed figure take an edit: the way out never has a
-/// figure, "misses" doubles by itself, the leash and a stake name their own size, and the
-/// day-end rows are the service's own verdicts. Figures are set only while no lock runs; the
-/// page enforces that with <see cref="CanEdit"/>.</para>
+/// figure, "misses" doubles by itself, the leash and a stake name their own size, the
+/// day-end rows are the service's own verdicts, and a row with a daily use ceiling (the escape
+/// row: three a day, so 9:00 at most) keeps its figure, because that ceiling is a safety promise.
+/// Figures are set only while no lock runs; the page enforces that with <see cref="CanEdit"/>.</para>
 /// </summary>
 public static class TabPriceEdit
 {
@@ -26,11 +27,12 @@ public static class TabPriceEdit
     public const int MaxSeconds = 60 * 60;
 
     /// <summary>May this row's figure be set by the player at all: one fixed figure, never a
-    /// way out, not a day-end verdict.</summary>
+    /// way out, not a day-end verdict, and not a row whose day is capped by a count of uses.</summary>
     public static bool Editable(string? id) =>
         TabMenuCopy.HasFixedFigure(id)
         && !TabPrices.NeverPriced.Contains(id!)
-        && !TabDayEnd.ServiceRows.Contains(id!);
+        && !TabDayEnd.ServiceRows.Contains(id!)
+        && TabPrices.DailyMaxUses(id!) == null;
 
     /// <summary>Figures move only while no lock is running: not linked, or linked with no active
     /// lock. Chaster out of reach counts as a lock (it may well be one).</summary>

@@ -36,10 +36,42 @@ public class TabPriceEditTests
     {
         foreach (var id in new[] { "panic", "emergency_exit", "safeword", "unlink", "leash_cut", CircesMisses.EventId,
                      "leash", "leash_credit", Services.Stakes.StakeRules.LossRowId,
-                     TabDayEnd.IdleEventId, TabDayEnd.DailiesEventId, TabDayEnd.StreakEventId, TabDayEnd.HeatId, "nope" })
+                     TabDayEnd.IdleEventId, TabDayEnd.DailiesEventId, TabDayEnd.StreakEventId, TabDayEnd.HeatId, "escape", "nope" })
             Assert.False(TabPriceEdit.Editable(id), id);
-        foreach (var id in new[] { "typo", "lockcard", "attention", "escape", "session", "crash", "natasha" })
+        foreach (var id in new[] { "typo", "lockcard", "attention", "session", "crash", "natasha" })
             Assert.True(TabPriceEdit.Editable(id), id);
+    }
+
+    /// <summary>TAB-4. The escape row's ceiling (three a day, so 9:00 at most) is a safety promise
+    /// about the moment a player is trying to get out, so its figure never moves: the box refuses
+    /// it, and a figure already written into the settings file is ignored on read.</summary>
+    [Fact]
+    public void The_escape_row_keeps_its_nine_minute_day_whatever_the_file_says()
+    {
+        Assert.False(TabPriceEdit.Editable("escape"));
+        Assert.False(TabPriceEdit.With(null, "escape", 3600).ContainsKey("escape"));
+        Assert.Equal(180, TabPriceEdit.Effective("escape", new Dictionary<string, int> { ["escape"] = 3600 }));
+
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-priceedit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var utc = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
+            var store = new MemoryStore { Tokens = new ChasterStoredTokens("AT", "RT", utc.AddSeconds(300)) };
+            var options = new ChasterOptions(true, "lock1", new HashSet<string> { "escape" },
+                Limits: TabLimits.FromMinutes(720, 2880),
+                PriceOverrides: new Dictionary<string, int> { ["escape"] = 3600 });
+            using var service = new ChasterService(new ChasterClient(), store, Path.Combine(dir, "tab.json"),
+                () => options, () => utc, () => utc.ToLocalTime());
+
+            var total = 0;
+            for (var i = 0; i < 5; i++) total += service.Note("escape").AppliedSeconds;
+            Assert.Equal(9 * 60, total);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch (IOException) { }
+        }
     }
 
     [Fact]
