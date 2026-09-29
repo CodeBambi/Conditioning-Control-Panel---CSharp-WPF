@@ -190,6 +190,8 @@ public class SyncFloodGuardsTests
     [Theory]
     [InlineData(HttpStatusCode.InternalServerError, "{\"reason\":\"provider_config\"}")]
     [InlineData(HttpStatusCode.ServiceUnavailable, "{\"reason\":\"provider_busy\",\"retry_after\":30}")]
+    [InlineData(HttpStatusCode.BadGateway, "{\"error\":\"Provider unavailable\",\"reason\":\"provider_unavailable\"}")]
+    [InlineData(HttpStatusCode.InternalServerError, "{\"error\":\"Internal server error\",\"reason\":\"server_error\"}")]
     public void ProviderTrouble_IsNeverTheGrant_HoweverStale(HttpStatusCode status, string body)
     {
         var outcome = PatreonGrantHealth.Classify(status, null, false, Now.AddDays(-30), Now, body);
