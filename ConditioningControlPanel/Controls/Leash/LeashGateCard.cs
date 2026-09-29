@@ -90,7 +90,13 @@ public sealed class LeashGateCard : Grid
                 LeashFx.Thud(_card, 1.06);
             }
         }
-        if (fresh) StampIn();
+        if (fresh)
+        {
+            StampIn();
+            // The panel only presents the gate while it is up and idle: the punishment is on screen.
+            try { LeashLocator.Service()?.NoteShown(p.Pid); }
+            catch (Exception ex) { App.Logger?.Debug("[Leash] gate seen note failed: {E}", ex.Message); }
+        }
     }
 
     public void Dismiss()

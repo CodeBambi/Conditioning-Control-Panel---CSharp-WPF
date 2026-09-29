@@ -36,6 +36,8 @@ public sealed class LeashDrawerSection : StackPanel
         Tag = "leash-section";
         Loaded += (_, _) => { Rebind(); Render(); };
         Unloaded += (_, _) => Unsubscribe();
+        // The drawer opening is the moment an offer row or today's task is on screen.
+        IsVisibleChanged += (_, _) => NoteShownIfVisible();
         Rebind();
         Render();
     }
@@ -54,19 +56,52 @@ public sealed class LeashDrawerSection : StackPanel
         if (_svc != null)
         {
             _svc.SnapshotChanged += OnSnapshot;
+            _svc.ReceiptsChanged += OnReceipts;
             _subscribed = true;
         }
     }
 
     private void Unsubscribe()
     {
-        if (_svc != null && _subscribed) _svc.SnapshotChanged -= OnSnapshot;
+        if (_svc != null && _subscribed)
+        {
+            _svc.SnapshotChanged -= OnSnapshot;
+            _svc.ReceiptsChanged -= OnReceipts;
+        }
         _subscribed = false;
     }
 
     private void OnSnapshot(LeashSnapshot _)
     {
         try { Render(); } catch (Exception ex) { App.Logger?.Debug("[Leash] section repaint failed: {E}", ex.Message); }
+    }
+
+    /// <summary>A receipt moved something a holder card lists: repaint the cards in place.</summary>
+    private void OnReceipts()
+    {
+        try { foreach (var c in _cards.Values) c.Render(); }
+        catch (Exception ex) { App.Logger?.Debug("[Leash] receipts repaint failed: {E}", ex.Message); }
+    }
+
+    private void NoteShownIfVisible()
+    {
+        if (IsVisible) NoteOnScreen();
+    }
+
+    /// <summary>Leashed side: what this section puts in front of the player right now, reported
+    /// <c>seen</c> (the service reports each id once): an offer row, and today's task on the own
+    /// card. A punishment is seen on the gate, not here (this card only counts them).</summary>
+    internal void NoteOnScreen()
+    {
+        var s = _svc;
+        if (s == null) return;
+        var snap = Snap();
+        try
+        {
+            foreach (var o in snap.Offers) s.NoteShown(o.Id);
+            if (snap.Me?.Assignment is { } a) s.NoteShown(a.Aid);
+        }
+        catch (Exception ex) { App.Logger?.Debug("[Leash] seen note failed: {E}", ex.Message); }
     }
 
     private LeashSnapshot Snap()
@@ -111,6 +146,8 @@ public sealed class LeashDrawerSection : StackPanel
 
         Visibility = Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         Changed?.Invoke();
+        // A new offer or task that lands while the drawer is open is on screen now.
+        NoteShownIfVisible();
     }
 
     private static LeashPerson Me()
@@ -190,6 +227,14 @@ public sealed class LeashDrawerSection : StackPanel
         }), 13, accent, FriendsLook.Display, FontWeights.Medium);
         label.Tag = "leash-offer-label";
         content.Children.Add(label);
+        if (state == LeashUiRules.OfferChip.Sent && OfferStep(f.Id) is { } step)
+        {
+            // How far the offer got: arrived, seen (the answer ends it and the chip moves on).
+            var w = FriendsLook.Label("  ·  " + Loc.Get(LeashUiRules.StepKey(step)), 11, FriendsLook.LilacBrush, FriendsLook.Mono);
+            w.VerticalAlignment = VerticalAlignment.Center;
+            w.Tag = "leash-offer-step:" + step.ToString().ToLowerInvariant();
+            content.Children.Add(w);
+        }
         var chip = FriendsLook.Pill(content, FriendsLook.Frozen(Color.FromArgb(0x22, 0xFF, 0xCF, 0x6B)), accent,
             state == LeashUiRules.OfferChip.Sent ? FriendsLook.Frozen(LeashLook.MintDeep) : LeashLook.GoldDeepBrush, 999, new Thickness(10, 6, 10, 6));
         chip.Tag = "leash-offer";
@@ -217,6 +262,13 @@ public sealed class LeashDrawerSection : StackPanel
         Grid.SetColumn(help, 1);
         row.Children.Add(help);
         return row;
+    }
+
+    /// <summary>The step the newest offer to this friend reached (<see cref="LeashUiRules.OfferStep"/>).</summary>
+    private LeashStep? OfferStep(string friendId)
+    {
+        try { return _svc is { } s ? LeashUiRules.OfferStep(s.ReceiptsSupported, s.SentTo(friendId)) : null; }
+        catch { return null; }
     }
 
     /// <summary>THE one place an offer is sent (the chip calls only this). The explain lane wraps
