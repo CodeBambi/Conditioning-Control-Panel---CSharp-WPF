@@ -217,7 +217,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
   }
   function begin(clip) {
     const allowed = allowedNow();
-    if (allowed === 'off' || menuUp()) return;
+    if (allowed === 'off' || menuUp() || paused()) return;   // never starts under the pause card (CHESS-3)
     const layout = nextLayout(allowed);
     const dN = clip.to.clone().sub(clip.from).setY(0);
     if (dN.lengthSq() < 1e-6) dN.set(0, 0, -1);
@@ -524,6 +524,9 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
 
   return {
     update, afterRender, skip, cancel,
+    /** The pause: cut a replay at once (a skip's exit waits for the clock, so it froze on screen) and
+     *  forget a capture still being recorded, so no replay starts under the card (bug hunt 2026-09-29, CHESS-3). */
+    drop() { dropReplay(); rec = null; },
     /** Hold the replay at presentation time t (null lets it run again): a screenshot harness's seek. */
     pin(t) { if (replay) replay.pinned = t == null ? null : Math.max(0, +t); return !!replay; },
     /** True while a full-screen replay owns the view: the turn card and the computer wait for it. */

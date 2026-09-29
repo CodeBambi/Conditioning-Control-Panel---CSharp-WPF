@@ -346,7 +346,7 @@ function main() {
     view.update(dt);
     pieces.update(dt);
     anim.update(dt);
-    board.turnHandoff.update(dt);
+    if (!pausedGame) board.turnHandoff.update(dt);   // no turn card comes in under the pause card (CHESS-3)
     drag.update(dt);
     jiggle.update(dt);   // last: it reads what everything else just decided
     // A paused local game holds the computer's reply too; an online seat keeps talking to the server.

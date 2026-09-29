@@ -14,6 +14,7 @@
  *      lands: with Options open, with the promotion picker up, or mid-drag
  *      (bug hunt 2026-09-29, CHESS-1).
  *   E  Backspace / Z take nothing back under the pause card (CHESS-10).
+ *   F  no turn card and no replay play under the pause card (CHESS-3).
  *
  *   node smoke/pause-hush-smoke.mjs        (no server, no browser)
  * ==========================================================================*/
@@ -41,13 +42,14 @@ function expect(cond, name) {
   let paused = false;
   const board = {
     sfx: { hush: (on) => calls.push('hush:' + on) },
-    director: { skip: () => calls.push('skip') },
+    director: { skip: () => calls.push('skip'), drop: () => calls.push('drop') },
   };
   const ramp = { setEnabled: (on) => calls.push('ramp:' + on) };
   const hush = createPauseHush({ board, ramp: () => ramp, isPaused: () => paused, later, cancel });
 
   paused = true; hush.set(true);
-  expect(calls.join() === 'hush:true,skip,ramp:false', 'pause: sound hushed, replay cut, Distraction layers off');
+  // drop, not skip: a skip's exit waits for the replay clock, which the pause stops (CHESS-3)
+  expect(calls.join() === 'hush:true,drop,ramp:false', 'pause: sound hushed, replay cut, Distraction layers off');
   expect(timers.size === 0, 'pause arms nothing');
 
   calls.length = 0; paused = false; hush.set(false);
@@ -79,14 +81,14 @@ function expect(cond, name) {
 
   const loud = [];
   const broken = createPauseHush({
-    board: { sfx: { hush: () => { throw new Error('boom'); } }, director: { skip: () => loud.push('skip') } },
+    board: { sfx: { hush: () => { throw new Error('boom'); } }, director: { drop: () => loud.push('drop') } },
     ramp: () => ({ setEnabled: (on) => loud.push('ramp:' + on) }),
     later, cancel,
   });
   const warn = console.warn; console.warn = () => {};
   broken.set(true);
   console.warn = warn;
-  expect(loud.join() === 'skip,ramp:false', 'a part that throws never stops the rest going quiet');
+  expect(loud.join() === 'drop,ramp:false', 'a part that throws never stops the rest going quiet');
 
   const bare = createPauseHush({ board: {}, ramp: () => null, later, cancel });
   let threw = false;
@@ -182,6 +184,18 @@ function expect(cond, name) {
   const drag = readFileSync(new URL('../board/drag.js', import.meta.url), 'utf8');
   const takeBack = drag.match(/ev\.key === 'Backspace'[\s\S]*?game\.takeBack\(\)/);
   expect(!!takeBack && /window\.PBP\?\.isPaused\?\.\(\)\) return;/.test(takeBack[0]), 'no take-back while the game is paused');
+}
+
+/* ---- F: nothing plays under the pause card ------------------------------------- */
+// The turn card came in while paused, a cut replay froze mid-screen, and a capture still
+// being recorded at the Esc started its replay under the card (bug hunt 2026-09-29, CHESS-3).
+{
+  const boot = readFileSync(new URL('../boot.js', import.meta.url), 'utf8');
+  const director = readFileSync(new URL('../board/director.js', import.meta.url), 'utf8');
+  expect(/if \(!pausedGame\) board\.turnHandoff\.update\(dt\);/.test(boot), 'the turn card waits out the pause');
+  expect(/drop\(\) \{ dropReplay\(\); rec = null; \}/.test(director), 'director.drop() cuts the replay at once and forgets a recording');
+  const begin = director.match(/function begin\(clip\) \{[\s\S]*?\n  \}/);
+  expect(!!begin && /menuUp\(\) \|\| paused\(\)\) return;/.test(begin[0]), 'no replay starts while the game is paused');
 }
 
 console.log(`\npause hush smoke: ${passed} passed, ${failed} failed`);
