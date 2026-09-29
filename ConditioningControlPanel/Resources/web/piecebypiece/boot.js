@@ -22,6 +22,7 @@ import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
 import { createPauseHush } from './ui/pause-hush.js';
+import { presentation } from './game/preferences.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
@@ -91,7 +92,9 @@ function main() {
   // `ramp` is filled in once the effects layer has attached. It is on the
   // object from the start so a reader never has to care whether that has
   // happened yet: it is simply null until it has.
-  window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: false } };
+  // reducedMotion starts from the player's saved choice: preferences.js ran before PBP existed, so its
+  // own first write went nowhere, and every mover reads PBP.settings.
+  window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: presentation().reducedMotion } };
   board.turnHandoff = createTurnHandoff({ bus, game, board, menuOpen: () => !!window.PBP.door?.isUp() });
   { const dispose = view.dispose; view.dispose = () => { board.turnHandoff.dispose(); dispose(); }; }
   // The follow camera and the capture replay (board/director.js). It blends on top
@@ -115,7 +118,10 @@ function main() {
   });
   onHostMessage((m) => {
     if (m.type !== 'pbp:settings') return;
-    const { type, ...values } = m;   // the envelope's own key is not a setting
+    // The envelope's own key is not a setting, and reducedMotion belongs to preferences.js: it folds the
+    // host's value in with the saved choice and the OS (they can only add reduction). Copying the raw host
+    // value here wrote a false over a ticked "Reduce motion" on every launch.
+    const { type, reducedMotion, ...values } = m;
     Object.assign(window.PBP.settings, values);
   });
   // The host names the player from the account (pbp:identity, displayName),
