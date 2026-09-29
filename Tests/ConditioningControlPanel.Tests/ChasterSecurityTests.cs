@@ -94,28 +94,6 @@ public class ChasterSecurityTests
     }
 
     [Fact]
-    public void A_catch_up_rides_the_price_inside_the_days_room()
-    {
-        var s = new TabState { BalanceSeconds = 900 };
-        var limits = TabLimits.FromMinutes(20, 120); // 1200 s a day
-        var plan = CircesTab.PlanPush(s, canRemove: false, limits, Noon);
-
-        var fits = CircesTab.WithCatchUp(plan, 200, s, limits, Noon);
-        Assert.Equal(new TabPush(TabPushKind.Add, 900, 200), fits);
-        Assert.Equal(1100, fits.Total);
-
-        var shrinks = CircesTab.WithCatchUp(plan, 600, s, limits, Noon);
-        Assert.Equal(new TabPush(TabPushKind.Add, 600, 600), shrinks);
-
-        // A catch-up with no room left for a price is dropped, not sent on its own.
-        Assert.Equal(new TabPush(TabPushKind.Add, 900, 0), CircesTab.WithCatchUp(plan, 1200, s, limits, Noon));
-        Assert.Equal(new TabPush(TabPushKind.None, 0), CircesTab.WithCatchUp(new TabPush(TabPushKind.None, 0), 300, s, limits, Noon));
-        // Never more than a lock's own run-out limit, whatever the caller hands in.
-        var big = CircesTab.WithCatchUp(new TabPush(TabPushKind.Add, 60), 99999, new TabState(), TabLimits.FromMinutes(720, 2880), Noon);
-        Assert.Equal(LockRelock.MaxCatchUpSeconds + LockRelock.MarginSeconds, big.CatchUp);
-    }
-
-    [Fact]
     public void A_landed_catch_up_counts_on_the_ceiling_and_the_ladder_but_not_the_tab()
     {
         var s = new TabState { BalanceSeconds = 900 };

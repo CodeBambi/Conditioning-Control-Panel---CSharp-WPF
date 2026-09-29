@@ -470,7 +470,7 @@
   "chaster_limit_backlog": "Höchstens auf dem Deckel",
   "chaster_limit_backlog_hint": "Die meiste unbezahlte Zeit, die der Deckel hält, solange es kein Schloss gibt oder Chaster nicht erreichbar ist.",
   "chaster_relock": "Neu sperren, wenn der Timer abgelaufen ist",
-  "chaster_relock_hint": "Ist das Ende des Schlosses schon vorbei, zieht ein Push es erst auf jetzt und fügt dann den Preis hinzu. Nur für ein Schloss, das in den letzten 6 Stunden abgelaufen ist.",
+  "chaster_relock_hint": "Ist der Timer des Schlosses abgelaufen, sperrt ein Push es ab jetzt erneut, für den Preis. Nur in den 6 Stunden nach dem Ablauf. Aus: Die Abrechnung wartet stattdessen.",
   "chaster_fact_push_launch": "Sofort geschickt",
   "chaster_fact_floor_long": "Sie nimmt nur zurück, was sie gegeben hat",
   "chaster_menu_eyebrow": "Die Karte",

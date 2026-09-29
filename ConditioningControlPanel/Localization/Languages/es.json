@@ -455,7 +455,7 @@
   "chaster_limit_backlog": "Máximo en la cuenta",
   "chaster_limit_backlog_hint": "El máximo de tiempo sin pagar que guarda la cuenta mientras no hay candado o Chaster está caído.",
   "chaster_relock": "Volver a cerrar cuando el temporizador se acabó",
-  "chaster_relock_hint": "Si el final del candado ya pasó, un envío primero lo trae hasta ahora y luego añade el precio. Solo para un candado que se acabó en las últimas 6 horas.",
+  "chaster_relock_hint": "Si el temporizador del candado ya se acabó, un envío lo vuelve a cerrar desde ahora por el precio. Solo en las 6 horas después de que se acabó. Apagado: la cuenta espera.",
   "chaster_fact_push_launch": "Se envía al momento",
   "chaster_fact_floor_long": "Solo recupera lo que dio",
   "chaster_menu_eyebrow": "La carta",

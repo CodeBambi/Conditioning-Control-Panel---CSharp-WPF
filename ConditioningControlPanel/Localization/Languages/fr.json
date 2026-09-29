@@ -455,7 +455,7 @@
   "chaster_limit_backlog": "Au plus sur l'ardoise",
   "chaster_limit_backlog_hint": "Le plus de temps impayé que l'ardoise garde tant qu'il n'y a pas de cadenas ou que Chaster est en panne.",
   "chaster_relock": "Reverrouiller quand le minuteur est écoulé",
-  "chaster_relock_hint": "Si la fin du cadenas est déjà passée, un envoi la ramène d'abord à maintenant, puis ajoute le prix. Seulement pour un cadenas terminé dans les 6 dernières heures.",
+  "chaster_relock_hint": "Si le minuteur du cadenas est écoulé, un envoi le reverrouille à partir de maintenant, pour le prix. Seulement dans les 6 heures qui suivent. Désactivé : l’ardoise attend.",
   "chaster_fact_push_launch": "Envoyé au fur et à mesure",
   "chaster_fact_floor_long": "Elle ne reprend que ce qu'elle a donné",
   "chaster_menu_eyebrow": "La carte",

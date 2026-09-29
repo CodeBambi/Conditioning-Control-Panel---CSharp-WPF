@@ -455,7 +455,7 @@
   "chaster_limit_backlog": "ツケの最大",
   "chaster_limit_backlog_hint": "ロックがないときやChasterが落ちているときに、ツケがためておける未払い時間の最大値。",
   "chaster_relock": "タイマーが切れていたらロックし直す",
-  "chaster_relock_hint": "ロックの終了時刻をすでに過ぎていれば、送信時にまず現在時刻まで戻し、そこに料金を足します。過去6時間以内に切れたロックのみ。",
+  "chaster_relock_hint": "ロックのタイマーがすでに切れていれば、送信すると今から料金分だけロックし直します。切れてから6時間以内のみ。オフ：集計はそのまま待ちます。",
   "chaster_fact_push_launch": "その場で送信",
   "chaster_fact_floor_long": "彼女が取り戻すのは、自分が与えた分だけ",
   "chaster_menu_eyebrow": "メニュー",
