@@ -762,3 +762,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - WPF CatalogueService logic moved verbatim to Core CatalogueClient (HTTP, token exchange + per-instance cache, SubmissionResult,
   status mapping incl. 429 Retry-After); WPF is a thin subclass; write gate stays WPF's token + unified id (decision logged).
 - Evidence: CatalogueClientTests (15, fake handler, no network), fail-proofed 4 ways. Avalonia wiring is U3. Review: ACCEPT.
+
+## avalonia-port/catalogue-lookup-core: +542 (catalogue U2)
+- WPF CatalogueLookupService logic moved to Core CatalogueLookup (lookup by HT URL, download, validate, save with the collision
+  suffix; the UI-thread opener is a per-head callback); WPF keeps its Dispatcher behaviour. Avalonia uses the Core CatalogueEntry.
+- Evidence: CatalogueLookupTests + the SubmissionSucceeded once/never test, fake handler, no network, fail-proofed. Review: ACCEPT.
