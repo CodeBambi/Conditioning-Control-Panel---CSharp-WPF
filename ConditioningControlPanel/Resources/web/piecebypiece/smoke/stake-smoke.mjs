@@ -103,9 +103,16 @@ function eq(what, got, want) {
   eq('and the card says it is settling', st.resultLine(), EN.pending);
   hear({ type: 'stake', op: 'settled', match: 'm1', ok: true, settled: { result: 'won', sp_delta: 10 }, booked_s: 0 });
   eq('then the result', st.resultLine(), '+10 ✦');
+  eq('the finished match spends the pick', st.state.pick, { kind: 'none', amount: 0 });
   st.clear();
   eq('the menu forgets the match', st.state.match, null);
-  eq('but keeps the pick', st.state.pick, { kind: 'sp', amount: 10 });
+  const before = sent.filter((m) => m.type === 'stake-offer').length;
+  st.begin('m2');
+  eq('the next match offers nothing unasked', sent.filter((m) => m.type === 'stake-offer').length, before);
+  st.choose('sp', 5);
+  eq('until the player picks again', sent.filter((m) => m.type === 'stake-offer').at(-1), { type: 'stake-offer', match: 'm2', kind: 'sp', amount: 5 });
+  st.clear();
+  eq('a match left before its end keeps the pick', st.state.pick, { kind: 'sp', amount: 5 });
 
   const quiet = [];
   const off = createStake({ post: (m) => quiet.push(m), onMessage: () => () => {}, store: false });

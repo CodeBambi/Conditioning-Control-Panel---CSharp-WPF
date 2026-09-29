@@ -4,7 +4,9 @@
  * A player stakes TIME (Chaster lock time) or SPARKLES against the house, never
  * against the opponent. The pick is made in the lobby (it waits for the next
  * match) and can be changed on the found screen; the server locks it on the
- * first move. Leaving mid-match never costs: the server voids it.
+ * first move. Leaving mid-match never costs: the server voids it. A finished
+ * match spends the pick: the next one starts at Off and the player picks again
+ * (owner, 2026-09-29), so a stake is never carried into a match unasked.
  *
  * The page never talks to /v2/stakes itself. Every call goes through the host
  * (Services/Stakes/StakeBridge.cs), which also books a lost time stake in C#:
@@ -223,7 +225,7 @@ export function createStake({ post, onMessage, store = true } = {}) {
     subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
     /** Ask the host what is on offer (and whether stakes are on at all). */
     limits() { send({ type: 'stake-limits' }); },
-    /** The player tapped a pill. Remembered for the next match; offered at once to a live one. */
+    /** The player tapped a pill. Held for the next match; offered at once to a live one. */
     choose(kind, amount) {
       const p = readStake({ kind, amount });
       if (!p || !onOffer(p, state.options, state.timeOk)) return;
@@ -246,8 +248,12 @@ export function createStake({ post, onMessage, store = true } = {}) {
     end(matchId) {
       const id = matchId || state.match;
       stopPoll();
-      if (!id || !state.enabled) return;
-      const staked = !isNone(state.you) || (!state.you && !isNone(state.pick));
+      // the match spends the pick: the next one starts at Off
+      const pick = state.pick;
+      state = { ...state, pick: { ...NONE } };
+      if (store && !isNone(pick)) writePick(NONE);
+      if (!id || !state.enabled) { emit(); return; }
+      const staked = !isNone(state.you) || (!state.you && !isNone(pick));
       state = { ...state, ended: String(id), pending: staked && !state.settled };
       if (staked) send({ type: 'stake-settle', match: String(id) });
       emit();
