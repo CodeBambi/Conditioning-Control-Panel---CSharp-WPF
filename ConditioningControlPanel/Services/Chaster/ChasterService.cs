@@ -212,8 +212,9 @@ public sealed partial class ChasterService : IDisposable
     public TabBooking Note(string eventId, int units = 1) => NoteAt(eventId, null, units);
 
     /// <summary><see cref="Note"/> with the screen point (physical px) of what caused it, so the
-    /// "+3:00" pops there rather than on the rail.</summary>
-    public TabBooking NoteAt(string eventId, System.Windows.Point? originPx, int units = 1)
+    /// "+3:00" pops there rather than on the rail. <paramref name="unprompted"/> marks a booking
+    /// no act of the player's caused (a red flash's ring ran out): see <see cref="TabBooking.Unprompted"/>.</summary>
+    public TabBooking NoteAt(string eventId, System.Windows.Point? originPx, int units = 1, bool unprompted = false)
     {
         if (!Active(out var options)) return new(0, options.Paused ? TabRefusal.Paused : TabRefusal.Nothing);
         // The first finished session after coming back forgives half of what being away cost,
@@ -226,7 +227,7 @@ public sealed partial class ChasterService : IDisposable
         var seconds = TabPrices.Resolve(eventId, options.Prices, units, options.PriceOverrides);
         if (options.Prices.Contains(TabDayEnd.HeatId) && TabDayEnd.HeatApplies(eventId))
             seconds = TabDayEnd.Heated(seconds, HeatCount(eventId));
-        var booking = BookSeconds(eventId, seconds, originPx);
+        var booking = BookSeconds(eventId, seconds, originPx, unprompted: unprompted);
         if (eventId == "session") NoteStreak(options);
         return booking;
     }
@@ -348,7 +349,8 @@ public sealed partial class ChasterService : IDisposable
 
     // heats: false for a booking heat can never price (a size the caller named), so it is not
     // counted toward heat either and the mood never shows a factor nothing pays.
-    private TabBooking BookSeconds(string eventId, int seconds, System.Windows.Point? originPx = null, bool heats = true)
+    private TabBooking BookSeconds(string eventId, int seconds, System.Windows.Point? originPx = null, bool heats = true,
+        bool unprompted = false)
     {
         if (seconds == 0) return new(0, TabRefusal.Nothing);
         TabBooking booking;
@@ -366,7 +368,8 @@ public sealed partial class ChasterService : IDisposable
                 if (room == 0) return new(0, TabRefusal.Remote);
                 seconds = Math.Min(seconds, room);
             }
-            booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps);
+            booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps)
+                with { Unprompted = unprompted };
             if (booking.AppliedSeconds > 0) { CircesTab.NoteUse(_tab, eventId, _localNow()); if (heats) NoteHeat(eventId); }
             else if (booking.AppliedSeconds < 0) NoteCool();
             if (remote && booking.AppliedSeconds > 0)

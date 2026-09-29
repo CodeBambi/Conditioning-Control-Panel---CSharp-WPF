@@ -110,6 +110,9 @@ public class NatashaDodgeTests
         var guard = flash.IndexOf("NatashasFavourite.DodgeBooks(up, window.NatashaDodged)", StringComparison.Ordinal);
         var book = flash.IndexOf("NoteAt(\"natasha\"", StringComparison.Ordinal);
         Assert.True(ring > 0 && guard > ring && book > guard, "the flash booking must sit behind the ring's end");
+        // TAB-9: the player did nothing, so the booking says so and Circe keeps her "popped" lines.
+        var unprompted = flash.IndexOf("unprompted: true);", book, StringComparison.Ordinal);
+        Assert.True(unprompted > book && unprompted - book < 300, "the ring's booking must be marked unprompted");
     }
 
     [Fact]

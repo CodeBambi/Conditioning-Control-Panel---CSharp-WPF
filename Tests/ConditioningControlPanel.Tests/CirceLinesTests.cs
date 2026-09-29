@@ -108,6 +108,17 @@ public class CirceLinesTests
         Assert.Null(CirceLines.ForBooking(null, 30));
     }
 
+    /// <summary>TAB-9. A red flash whose ring ran out books the same row as a popped red bubble,
+    /// but the player never touched it, so her "popped" lines would mock a pop nobody made. A
+    /// booking nobody prompted has no line.</summary>
+    [Fact]
+    public void A_ring_that_ran_out_has_no_line()
+    {
+        Assert.Null(CirceLines.ForBooking("natasha", new TabBooking(300, TabRefusal.None) { Unprompted = true }));
+        Assert.Equal(CirceMoment.Popped, CirceLines.ForBooking("natasha", new TabBooking(300, TabRefusal.None)));
+        Assert.Equal(CirceMoment.Held, CirceLines.ForBooking("natasha_held", new TabBooking(-60, TabRefusal.None)));
+    }
+
     [Fact]
     public void A_mood_that_moves_up_is_warmer_and_down_is_cooler()
     {

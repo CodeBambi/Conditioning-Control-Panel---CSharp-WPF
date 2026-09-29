@@ -120,6 +120,10 @@ public enum TabRefusal
 public readonly record struct TabBooking(int AppliedSeconds, TabRefusal Refusal)
 {
     public bool Booked => AppliedSeconds != 0;
+
+    /// <summary>Nobody did anything to cause it: a red flash's ring ran out. Circe's lines stay
+    /// quiet for it (her "popped" lines would blame a pop the player never made).</summary>
+    public bool Unprompted { get; init; }
 }
 
 public enum TabPushKind { None, Add, Remove }

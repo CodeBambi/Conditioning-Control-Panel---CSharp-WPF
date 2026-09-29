@@ -179,6 +179,29 @@ public class ChasterServiceTests : IDisposable
         Assert.Equal(30, after.AppliedSeconds);
     }
 
+    /// <summary>TAB-9. A red flash whose ring ran out still books +5:00 (and the ladder, the rail
+    /// and the page still see it), but the booking says nobody prompted it, and Circe's line picker
+    /// is handed the whole booking so she stays quiet for it. A popped red bubble still speaks.</summary>
+    [Fact]
+    public void A_ring_that_ran_out_books_but_Circe_does_not_say_it_was_popped()
+    {
+        _options = _options with { Prices = new HashSet<string> { NatashasFavourite.EventId } };
+        using var service = Make();
+        var seen = new List<TabBooking>();
+        service.Booked += (_, b) => seen.Add(b);
+
+        var ring = service.NoteAt(NatashasFavourite.EventId, new System.Windows.Point(10, 10), unprompted: true);
+        var pop = service.NoteAt(NatashasFavourite.EventId, new System.Windows.Point(10, 10));
+
+        Assert.Equal(new[] { 300, 300 }, seen.Select(b => b.AppliedSeconds));
+        Assert.True(ring.Unprompted && seen[0].Unprompted);
+        Assert.False(pop.Unprompted || seen[1].Unprompted);
+        Assert.Null(CirceLines.ForBooking(NatashasFavourite.EventId, seen[0]));
+        Assert.Equal(CirceMoment.Popped, CirceLines.ForBooking(NatashasFavourite.EventId, seen[1]));
+        var lines = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.CirceLines.cs"));
+        Assert.Contains("CirceLines.ForBooking(eventId, booking)", lines);
+    }
+
     [Fact]
     public void The_tab_survives_a_restart()
     {

@@ -75,6 +75,11 @@ public sealed class CirceLines
         : netSeconds >= BigOwedSeconds ? CirceMoment.BillBig
         : CirceMoment.BillOwed;
 
+    /// <summary>The moment a booking is, or null when Circe has nothing to say about it. Nothing
+    /// for a booking nobody prompted (a red flash's ring ran out): the player never touched it.</summary>
+    public static CirceMoment? ForBooking(string? eventId, TabBooking booking) =>
+        booking.Unprompted ? null : ForBooking(eventId, booking.AppliedSeconds);
+
     /// <summary>The moment a booking is, or null when Circe has nothing to say about it.</summary>
     public static CirceMoment? ForBooking(string? eventId, int appliedSeconds) => eventId switch
     {
