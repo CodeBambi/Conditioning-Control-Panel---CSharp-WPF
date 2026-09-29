@@ -15,7 +15,7 @@
                                         properties became bools; Avalonia binds IsVisible to a
                                         bool directly (CLAUDE.md trap 3).
        MouseLeftButtonDown           -> PointerPressed, wired in the constructor
-       hover:HoverPop.IsEnabled      -> the Image.hoverPop style below (scale only, no wobble)
+       hover:HoverPop.IsEnabled      -> unchanged (Controls/HoverPop.cs)
        RenderOptions.BitmapScalingMode -> RenderOptions.BitmapInterpolationMode
 
      The footer buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content
@@ -23,6 +23,7 @@
      is swapped between two keys from code, so its TextBlock is re-BOUND rather than assigned. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Dialogs"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.ModPickerDialog"
@@ -45,22 +46,6 @@
             <Setter Property="Margin" Value="0,0,0,12"/>
         </ControlTheme>
     </Window.Resources>
-
-    <Window.Styles>
-        <!-- ponytail: local copy of ConditioningControlPanel/Behaviors/HoverPopBehavior.cs:HoverPop
-             - the 1.06 scale only, not the back-ease wobble - hoist when a second view needs it. -->
-        <Style Selector="Image.hoverPop">
-            <Setter Property="RenderTransform" Value="scale(1)"/>
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.22"/>
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Image.hoverPop:pointerover">
-            <Setter Property="RenderTransform" Value="scale(1.06)"/>
-        </Style>
-    </Window.Styles>
 
     <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12"
             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
@@ -113,7 +98,7 @@
                                             BorderBrush="{Binding AccentBrush}" BorderThickness="2"
                                             ClipToBounds="True"
                                             Background="#1A1A2E" Margin="0,0,14,0">
-                                        <Image Classes="hoverPop" Source="{Binding Art}" Stretch="UniformToFill"
+                                        <Image hover:HoverPop.IsEnabled="True" Source="{Binding Art}" Stretch="UniformToFill"
                                                RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                     </Border>
 

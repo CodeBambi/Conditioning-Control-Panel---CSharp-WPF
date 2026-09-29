@@ -36,14 +36,15 @@
        x:Name on the two ImageBrushes (TakeoverHeroArtBrush / TakeoverSideArtBrush) - AVLN2000,
          only a StyledElement can be named, so the two BORDERS carry the names instead
          (TakeoverHeroArt / TakeoverSideArt) and the brushes are built in code.
-       feat:AdaptiveSideArt.CollapseBelow and hover:HoverPop.IsEnabled - attached behaviours that
-         live in the WPF head. The 3*/2* split with MaxWidth="780" is kept verbatim.
+       feat:AdaptiveSideArt.CollapseBelow - an attached behaviour that
+         lives in the WPF head. The 3*/2* split with MaxWidth="780" is kept verbatim.
        x:FieldModifier="internal" - no host re-publishes these fields on this head. The x:Names are
          kept so the eventual wiring is a one-line change.
 
      No {Binding} survives the emoji change, so this file needs no x:DataType. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
@@ -179,7 +180,7 @@
                                         <Grid>
                                             <TextBlock Text="🌀" FontSize="44" Opacity="0.5"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            <Image x:Name="ImgBambiTakeoverDesc" Stretch="UniformToFill"/>
+                                            <Image hover:HoverPop.IsEnabled="True" x:Name="ImgBambiTakeoverDesc" Stretch="UniformToFill"/>
                                         </Grid>
                                     </Border>
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">

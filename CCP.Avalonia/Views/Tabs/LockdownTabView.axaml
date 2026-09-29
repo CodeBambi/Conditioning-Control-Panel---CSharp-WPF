@@ -34,7 +34,7 @@
                                           x:Names are kept so the wiring is a one-line change.
        feat:AdaptiveSideArt           ->  dropped; the attached behaviour lives in the WPF head.
                                           The 3*/2* split with MaxWidth="780" is kept verbatim.
-       hover:HoverPop.IsEnabled       ->  dropped, same reason.
+       hover:HoverPop.IsEnabled       ->  dropped: its only target, ImgLockdownFeature, is not on this head.
        poss:Possession.Role/Name/Exclude -> dropped throughout; the Possession tagger is a WPF
                                           service. Re-add as attached properties when it moves.
        pack:// ImageSource            ->  dropped. This head ships no Resources/ PNGs yet, so the

@@ -30,6 +30,7 @@
      draft when a key is missing, which {loc:Str} cannot do. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
         xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Windows"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.FirstRunWizard"
         Title="Welcome"
@@ -215,15 +216,13 @@
 
                                             <!-- ClipToBounds was added in WPF with the hover pop:
                                                  without it the 1.06 zoom painted the art over the
-                                                 accent border. Kept, though the pop itself is
-                                                 ponytail: needs Behaviors/HoverPop, wired when it
-                                                 moves to Core. The art is null here - see
+                                                 accent border. The art is null here - see
                                                  FirstRunModCard.Art. -->
                                             <Border Grid.Column="1" Width="72" Height="72" CornerRadius="8"
                                                     BorderBrush="{Binding AccentBrush}" BorderThickness="2"
                                                     ClipToBounds="True"
                                                     Background="#1A1A2E" Margin="0,0,14,0">
-                                                <Image Source="{Binding Art}" Stretch="UniformToFill"
+                                                <Image hover:HoverPop.IsEnabled="True" Source="{Binding Art}" Stretch="UniformToFill"
                                                        RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                             </Border>
 
