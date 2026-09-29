@@ -74,4 +74,64 @@ public sealed class HeaderLevelLiveTests
         }
         return Task.CompletedTask;
     });
+
+    /// <summary>Sign-in adoption and logout repaint through UpdateQuickLoginUI (WPF Login.cs:198 /
+    /// OnProfileLoaded), and a closed shell stops listening to the static ProgressionBank events.</summary>
+    [Fact]
+    public Task AccountChangesRepaint_AndClosedShellUnsubscribes() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var s = CoreSettings.Current;
+        (s.PlayerLevel, s.PlayerXP, s.OfflineMode, s.OfflineUsername, s.MotionLevel) = (10, 5, true, "header-test", MotionLevel.Off);
+
+        var shell = new MainShellWindow();
+        string Text(string name) => shell.FindControl<TextBlock>(name)!.Text!;
+        try
+        {
+            shell.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("Lvl 10", Text("TxtLevel"));
+
+            // The cloud profile adopted a higher level (ProfileAdopt writes settings), then the
+            // sign-in/restore path repaints the account surfaces.
+            (s.PlayerLevel, s.PlayerXP) = (40, 12);
+            shell.UpdateQuickLoginUI();
+            Assert.Equal("Lvl 40", Text("TxtLevel"));
+            Assert.Equal("LVL 40", Text("TxtLevelLabel"));
+
+            // Logout clears progression (ProgressionClear) and must repaint, not keep "Lvl 40".
+            shell.Logout();
+            await Task.Delay(50);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(1, s.PlayerLevel);
+            Assert.Equal("Lvl 1", Text("TxtLevel"));
+            Assert.Equal($"0 / {(int)XpCurve.GetXPForLevel(1, XpCurve.EpochOf(s))} XP", Text("TxtXP"));
+        }
+        finally
+        {
+            shell.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        try
+        {
+            // Closed: an award must not reach the dead window.
+            var before = Text("TxtXP");
+            ProgressionBank.Add(1, "Quest");
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotEqual(0, s.PlayerXP);
+            Assert.Equal(before, Text("TxtXP"));
+        }
+        finally
+        {
+            s.OfflineMode = false;
+            service.SaveImmediate();
+            CoreSettings.ServiceProvider = null;
+        }
+    });
 }

@@ -148,6 +148,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 RefreshProfileMenu();
+                UpdateLevelDisplay();   // the rail's "Level"/"XP" words follow a language switch
                 SubscribeProfileBubbleWatchers();
                 // Subscribed per open and dropped again inside the handler, so this never
                 // accumulates - Avalonia's Popup.Closed is a plain event with no dedupe.

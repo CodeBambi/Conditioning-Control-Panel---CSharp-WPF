@@ -45,6 +45,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                 if (isLoggedIn && settings?.FindControl<TextBlock>("TxtLoggedInName") is { } name)
                     name.Text = s.IsSeason0Og ? $"⭐ {displayName}" : displayName;
+                // Sign-in, startup restore and logout all land here; WPF repaints the header on
+                // each (Login.cs:198 UpdateLevelDisplay, OnProfileLoaded).
+                UpdateLevelDisplay();
             }
             catch (Exception ex)
             {
@@ -67,6 +70,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     _notRememberedShown = true;
                     await MessageDialog.ShowAsync(this, Loc.Get("login_not_remembered_title"), Loc.Get("login_not_remembered_body"));
                 }
+                // The cloud profile may adopt a different level (WPF OnProfileLoaded -> UpdateLevelDisplay).
+                try { await dialog.ProfileLoad; } catch (Exception ex) { Serilog.Log.Debug("ProfileLoad: {E}", ex.Message); }
+                UpdateLevelDisplay();
             }
         }
 
