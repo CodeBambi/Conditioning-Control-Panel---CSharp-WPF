@@ -938,8 +938,9 @@ namespace ConditioningControlPanel
             
             // Check if panic key is enabled and pressed
             var settings = App.Settings.Current;
-            // The leash's hold-to-cut: while leashed, a held panic key is ONE press (its repeats are
-            // swallowed here, or two of them would quit the app) and five seconds of it asks to cut.
+            // A held panic key is ONE press, leashed or not: its repeats are swallowed here, or two of
+            // them would quit the app (bug hunt 2026-09-29, DESK-5). While leashed, five seconds of it
+            // asks to cut. Every down comes through here first, a press a surface takes included.
             if (LeashHoldSwallows(key)) return;
             // An Escape aimed at a CCP surface that drops or closes on it (Circe's Tab price box, the
             // friends drawer, the dashboard's click-choice popup) is that surface's, not a panic press
