@@ -181,12 +181,12 @@ namespace ConditioningControlPanel
                 // halted the whole session; and under Lockdown the halt left a paused session that
                 // Lockdown then refused to resume. Owner 2026-09-28: it also cut through Strict Lock
                 // and a disabled panic key. The gesture is a hands-free stop button, so it is never
-                // more permissive than the panic key (BlinkStopGate).
+                // more permissive than the panic key (BlinkStopGate). A leash does not block it:
+                // panic works while leashed, so the blink stop does too (owner call 4).
                 var s = App.Settings?.Current;
                 var block = Services.Safety.BlinkStopGate.Check(
                     blinkTrainerRunning: App.BlinkTrainer?.IsRunning == true,
                     lockdownActive: App.Lockdown?.IsActive == true,
-                    leashed: Controls.Leash.LeashSurfaces.IsLeashed,
                     panicKeyEnabled: s?.PanicKeyEnabled != false,
                     strictLockEnabled: s?.StrictLockEnabled == true);
                 if (block != Services.Safety.BlinkStopGate.Block.None)
@@ -225,6 +225,8 @@ namespace ConditioningControlPanel
                 // Halt everything the user is experiencing — same surface as a
                 // panic press — but DELIBERATELY leave App.Webcam running: the
                 // calibration window requires the capture loop to be live.
+                // A running leash task stops the way a panic press stops it (parked, still pending).
+                try { LeashOnPanicPress(); } catch (Exception ex) { App.Logger?.Debug("Leash stop on blink failed: {E}", ex.Message); }
                 StopAllForRecalibration();
 
                 // Guard against a race where the capture loop stopped between the

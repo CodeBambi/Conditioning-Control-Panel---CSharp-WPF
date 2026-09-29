@@ -23,6 +23,7 @@ public sealed class LeashGateCard : Grid
     private int _done;
     private int _total;
     private bool _running;
+    private bool _unplayable;
     private readonly Border _card = new();
     private readonly StackPanel _body = new();
     private readonly Canvas _fx = new() { IsHitTestVisible = false, ClipToBounds = false };
@@ -31,6 +32,12 @@ public sealed class LeashGateCard : Grid
     public event Action<Punishment>? PardonRequested;
     public event Action? PanicRequested;
     public event Action? CutRequested;
+    /// <summary>"Not now" on a video that will not play: the gate stands down (the punishment
+    /// stays pending and stays off the gate for the day).</summary>
+    public event Action? LaterRequested;
+
+    /// <summary>True while the card shows a punishment video that will not play.</summary>
+    public bool ShowsUnplayable => IsUp && _unplayable;
 
     public LeashGateCard()
     {
@@ -64,12 +71,14 @@ public sealed class LeashGateCard : Grid
     internal (int Done, int Total) ProgressShown => (_done, _total);
 
     /// <summary>Shows (or refreshes) the card for <paramref name="p"/>. The stamp lands once per punishment.</summary>
-    public void Present(Punishment p, int pardons)
+    public void Present(Punishment p, int pardons, bool unplayable = false)
     {
         bool fresh = _p?.Pid != p.Pid || !IsUp;
         if (_p?.Pid != p.Pid) { _done = 0; _total = LeashUiRules.Pips(p); _running = false; }
         _p = p;
         _pardons = pardons;
+        _unplayable = unplayable;
+        if (unplayable) _running = false;
         Render();
         if (!IsUp)
         {
@@ -106,6 +115,16 @@ public sealed class LeashGateCard : Grid
         }
     }
 
+    /// <summary>The runner went idle without finishing: the pips stay, the button is live again.</summary>
+    public void StopRunning()
+    {
+        if (!_running) return;
+        _running = false;
+        Render();
+    }
+
+    internal bool Running => _running;
+
     private StackPanel? _pipRow;
     private Border? _stamp;
 
@@ -140,15 +159,34 @@ public sealed class LeashGateCard : Grid
         big.Tag = "leash-gate-title";
         _body.Children.Add(big);
 
-        _body.Children.Add(ProgressView(p));
+        if (_unplayable)
+        {
+            // The video would not play and the holder could not be told: say so, no Play button,
+            // Pardon and Cut stay, "Not now" stands the gate down.
+            var why = LeashLook.Wrap(FriendsLook.Label(Loc.GetF("leash_gate_unplayable", p.From.Name), 13, FriendsLook.GoldBrush, null, FontWeights.SemiBold));
+            why.TextAlignment = TextAlignment.Center;
+            why.HorizontalAlignment = HorizontalAlignment.Center;
+            why.Margin = new Thickness(0, 12, 0, 0);
+            why.Tag = "leash-gate-unplayable";
+            _body.Children.Add(why);
+            var later = LeashLook.Chunky(Loc.Get("leash_gate_later"), LeashLook.Tone.Ghost, size: 14);
+            later.Margin = new Thickness(0, 14, 0, 0);
+            later.Tag = "leash-gate-later";
+            later.Click += (_, _) => LaterRequested?.Invoke();
+            _body.Children.Add(later);
+        }
+        else
+        {
+            _body.Children.Add(ProgressView(p));
 
-        var go = LeashLook.Chunky(_running ? Loc.Get("leash_gate_running") : Loc.Get(LeashUiRules.GateActionKey(p, _done)),
-            LeashLook.Tone.Pink, PunishIcon(p.Kind), size: 16);
-        go.Margin = new Thickness(0, 14, 0, 0);
-        go.Tag = "leash-gate-go";
-        go.IsEnabled = !_running;
-        go.Click += (_, _) => { if (_p != null) StartRequested?.Invoke(_p); };
-        _body.Children.Add(go);
+            var go = LeashLook.Chunky(_running ? Loc.Get("leash_gate_running") : Loc.Get(LeashUiRules.GateActionKey(p, _done)),
+                LeashLook.Tone.Pink, PunishIcon(p.Kind), size: 16);
+            go.Margin = new Thickness(0, 14, 0, 0);
+            go.Tag = "leash-gate-go";
+            go.IsEnabled = !_running;
+            go.Click += (_, _) => { if (_p != null) StartRequested?.Invoke(_p); };
+            _body.Children.Add(go);
+        }
 
         if (_pardons > 0)
         {

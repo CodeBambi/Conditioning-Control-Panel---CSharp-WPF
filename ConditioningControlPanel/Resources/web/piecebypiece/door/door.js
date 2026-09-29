@@ -36,7 +36,8 @@
 import { buildReplay, showReplayStep, resultLine } from './replay.js';
 import { readSolo, soloOptions } from '../game/save.js';
 import { requestRematch } from '../net/rematch.js';
-import { isHosted, identity, whenIdentity } from '../bridge.js';
+import { isHosted, identity, whenIdentity, postToHost, onHostMessage } from '../bridge.js';
+import { createStake, pills as stakePills, stakeLabel, refusalText, sameStake, isNone } from '../net/stake.js';
 import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, outcome, fmtDuration, fmtMoves, fmtWhen } from './store.js';
 
 /** Every number the door decides with. */
@@ -84,6 +85,10 @@ export function createDoor(opts = {}) {
   let replay = null;            // { moves, positions, marks, i, timer }
   const timers = new Set();
   const unbind = [];
+  // PvP stakes (net/stake.js): online games only. Disabled, and drawn as nothing, until the
+  // host says stakes are on for this account.
+  const stake = opts.stake || createStake({ post: postToHost, onMessage: onHostMessage });
+  let stakeChip = null;
 
   /**
    * Who the host says we are, behind one object so a harness can stand in for
@@ -133,6 +138,7 @@ export function createDoor(opts = {}) {
     for (const el of [hudEl(), camEl()]) if (el) el.classList.add('parked');
     try { board.setCameraSway(name === 'replay' ? 0 : T.menuSway); } catch { /* no rig */ }
     render();
+    paintStake();
   }
 
   function hide() {
@@ -144,6 +150,7 @@ export function createDoor(opts = {}) {
     root.className = 'door';
     for (const el of [hudEl(), camEl()]) if (el) el.classList.remove('parked');
     try { board.setCameraSway(0); } catch { /* no rig */ }
+    paintStake();
   }
 
   function render() {
@@ -160,6 +167,38 @@ export function createDoor(opts = {}) {
     const focus = body.querySelector('.door-btn.primary') || body.querySelector('button');
     if (focus && !still()) later(() => { try { focus.focus({ preventScroll: true }); } catch { /* fine */ } }, 60);
   }
+
+  // ---------------------------------------------------------------- stakes
+  /** The pill row: Off, 15 min, 30 min (only while the lock could take it), 5, 10, 25 sparkles. */
+  function stakeHtml() {
+    const s = stake.state;
+    if (!s.enabled) return '';
+    const L = s.labels;
+    const lock = !!s.locked;
+    const row = stakePills(s.options, s.timeOk).map((p) => `<button type="button" class="stake-pill${sameStake(p, s.pick) ? ' on' : ''}" data-act="stake" data-id="${esc(p.kind + ':' + p.amount)}"${lock ? ' disabled' : ''}>${esc(stakeLabel(p, L))}</button>`).join('');
+    const them = (s.match && s.them && !isNone(s.them)) ? `<span class="stake-chip">${esc(L.them)} <b>${esc(stakeLabel(s.them, L))}</b></span>` : '';
+    const note = s.refusal ? esc(refusalText(s.refusal, L)) : (lock ? esc(L.locked) : '');
+    return `<div class="stake-row" role="group" aria-label="${esc(L.title)}"><span class="stake-k">${esc(L.title)}</span>${row}</div>`
+      + ((them || note) ? `<div class="stake-meta">${them}${note ? `<span class="stake-note">${note}</span>` : ''}</div>` : '');
+  }
+
+  /** Stakes changed: repaint only the stake bits (a full render would restart the count). */
+  function paintStake() {
+    const slot = card.querySelector('.stake-slot');
+    if (slot) slot.innerHTML = stakeHtml();
+    const res = card.querySelector('.stake-result');
+    if (res) res.textContent = stake.resultLine() || '';
+    // over the board during the game: you and them, until it is over
+    const s = stake.state;
+    const show = screen === null && s.enabled && s.match && !s.ended && (!isNone(s.you) || !isNone(s.them));
+    if (!show) { if (stakeChip) stakeChip.hidden = true; return; }
+    if (!stakeChip) { stakeChip = document.createElement('div'); stakeChip.className = 'stake-live'; document.body.append(stakeChip); }
+    const L = s.labels;
+    const part = (who, st) => isNone(st) ? '' : `<span>${esc(who)} <b>${esc(stakeLabel(st, L))}</b></span>`;
+    stakeChip.innerHTML = part(L.you, s.you) + part(L.them, s.them) + (s.locked ? `<span class="lock">${esc(L.locked)}</span>` : '');
+    stakeChip.hidden = false;
+  }
+  unbind.push(stake.subscribe(paintStake));
 
   // ---------------------------------------------------------------- screens
   const me = () => playerName(settings());
@@ -211,6 +250,7 @@ export function createDoor(opts = {}) {
     return `
       <h1 class="door-title">lobby</h1>
       <p class="door-sub">${sub}</p>
+      ${canPlay ? '<div class="stake-slot">' + stakeHtml() + '</div>' : ''}
       ${askRow}
       <button type="button" class="door-btn primary" data-act="quick" ${(looking || !canPlay) ? 'disabled' : ''}>${looking ? 'looking for a game' : 'quick match'} ${looking ? '<span class="door-dot"></span>' : '<span class="k">whoever waited longest</span>'}</button>
       ${people.length && canPlay ? `<ul class="door-list">${rows}</ul>` : `<div class="door-empty">${empty}</div>`}
@@ -224,6 +264,7 @@ export function createDoor(opts = {}) {
       <div class="door-found">
         <p class="line">matched with ${esc(m ? m.opponent.name : '')}</p>
         <p class="side">you play <b class="${side}">${side === 'w' ? 'white' : 'black'}</b></p>
+        <div class="stake-slot">${stakeHtml()}</div>
         <div class="door-count" id="door-count"></div>
         <button type="button" class="door-link skip" data-act="go">tap to start now</button>
       </div>`;
@@ -289,6 +330,7 @@ export function createDoor(opts = {}) {
       <div class="door-end">
         <p class="result ${o || ''}">${esc(line)}</p>
         <p class="tally">${esc(fmtMoves(g.plies))} &middot; ${esc(fmtDuration(g.durationMs))}</p>
+        ${g.mode === 'online' ? '<p class="stake-result">' + esc(stake.resultLine() || '') + '</p>' : ''}
         <div id="door-recap"></div>
       </div>
       ${ask ? `<div class="door-ask"><span><b>${esc(ask.name)}</b> wants a rematch</span><button type="button" class="door-pill" data-act="accept">Play</button><button type="button" class="door-link" data-act="decline">Decline</button></div>` : ''}
@@ -306,6 +348,7 @@ export function createDoor(opts = {}) {
   // ---------------------------------------------------------------- lobby
   let offList = null, offAsk = null;
   async function enterLobby() {
+    askHost().then(() => { if (host.isHosted && !signedOut) stake.limits(); }).catch(() => {});
     // The host first: a signed-out account has nothing to enter with, and
     // the screen has to say so rather than sit on an empty list.
     await askHost();
@@ -353,6 +396,7 @@ export function createDoor(opts = {}) {
 
   function matched(match) {
     current = { mode: 'online', match, startedAt: 0, captures: { w: 0, b: 0 } };
+    if (match && match.id) stake.begin(match.id);
     sfx('promote');
     show('found');
     countdown();
@@ -360,7 +404,8 @@ export function createDoor(opts = {}) {
 
   let countTimer = null;
   function countdown() {
-    let n = 3;
+    // with stakes on, two more beats: long enough to read what the other side put down
+    let n = stake.state.enabled ? 5 : 3;
     const el = () => card.querySelector('#door-count');
     const tick = () => {
       const c = el();
@@ -409,6 +454,7 @@ export function createDoor(opts = {}) {
   function deal(mode, match = null, restore = null) {
     current = { mode, match, options: restore?.options || setup, startedAt: Date.now() - (restore?.durationMs || 0), captures: { w: 0, b: 0 } };
     if (restore) for (const [i, san] of restore.moves.entries()) if (san.includes('x')) current.captures[i % 2 ? 'b' : 'w']++;
+    if (mode === 'online' && match && match.id) stake.begin(match.id);
     hide();
     startGame({ mode, match, options: setup, restore });
   }
@@ -431,6 +477,7 @@ export function createDoor(opts = {}) {
       moves: rec.moves || [], plies: rec.plies || 0, result: rec.result || null, fen: rec.fen || history[0]?.before,
       durationMs: rec.durationMs ?? (Date.now() - current.startedAt), captures, clocks: rec.clocks || null,
     });
+    if (current.mode === 'online' && m && m.id) stake.end(m.id);
     const finished = current;
     current = null;
     // the board's own end beat first, then the card
@@ -453,6 +500,7 @@ export function createDoor(opts = {}) {
   function toMenu() {
     if (current?.mode === 'online' && !game.isOver()) return;
     current = null;
+    stake.clear();
     board.anim?.skip?.();
     game.clock?.stop?.();
     // A finished online seat stays in the chair for the end card, so the
@@ -526,6 +574,7 @@ export function createDoor(opts = {}) {
       case 'accept': if (ask) { const a = ask; ask = null; if (a.timer) clearTimeout(a.timer); Promise.resolve(a.accept()).then((m) => { if (m) matched(m); }).catch(() => { sfx('squelch'); if (screen) render(); }); } break;
       case 'decline': if (ask) { try { ask.decline(); } catch { /* fine */ } if (ask.timer) clearTimeout(ask.timer); ask = null; render(); } break;
       case 'go': go(); break;
+      case 'stake': { const [k, a] = String(id || '').split(':'); stake.choose(k, Number(a)); break; }
       case 'watch': openReplay(id); break;
       case 'rstart': stopReplay(); stepReplay(0); break;
       case 'rprev': stopReplay(); stepReplay(replay ? replay.i - 1 : 0); break;
@@ -550,7 +599,7 @@ export function createDoor(opts = {}) {
     if (screen === 'menu') return;                  // boot posts pbp:exit
     e.stopImmediatePropagation();
     e.preventDefault();
-    if (screen === 'found') { if (countTimer) { clearTimeout(countTimer); timers.delete(countTimer); countTimer = null; } current = null; show('lobby'); return; }
+    if (screen === 'found') { if (countTimer) { clearTimeout(countTimer); timers.delete(countTimer); countTimer = null; } current = null; stake.clear(); show('lobby'); return; }
     if (screen === 'end') { toMenu(); return; }
     if (screen === 'replay') { show('games'); return; }
     show('menu');
@@ -567,9 +616,38 @@ export function createDoor(opts = {}) {
     unbind.push(bus.on('gameover', onGameOver));
   }
 
+  // ---------------------------------------------------------------- friends drawer
+  /**
+   * An intent from the desktop's friends drawer (host frame `pbp:friend`):
+   *   { mode: 'challenge', friendId }   challenge that friend; the challenge id goes back to
+   *                                     the host (`pbp:friend-challenge`) so the drawer can send
+   *                                     it as the invite, and the lobby waits for the yes
+   *   { mode: 'accept', challengeId }   the friend's side: take it up, straight to the board
+   * A live online game is never interrupted; the host hears null and says so.
+   */
+  function friend(intent) {
+    const m = intent || {};
+    const tell = (challengeId) => { try { postToHost({ type: 'pbp:friend-challenge', friendId: m.friendId || null, challengeId: challengeId || null }); } catch { /* no host */ } };
+    const busy = current && current.mode === 'online' && !game.isOver();
+    if (busy || !lobby) { if (m.mode === 'challenge') tell(null); return; }
+    if (m.mode === 'challenge' && m.friendId) {
+      if (screen !== 'lobby') show('lobby');
+      let told = false;
+      const said = (id) => { if (!told) { told = true; tell(id); } };
+      look(afterHost(() => lobby.challenge(String(m.friendId), { onChallengeId: said }))
+        .catch((err) => { said(null); throw err; }));
+      return;
+    }
+    if (m.mode === 'accept' && m.challengeId && typeof lobby.acceptChallenge === 'function') {
+      if (screen !== 'lobby') show('lobby');
+      look(afterHost(() => lobby.acceptChallenge(String(m.challengeId))));
+    }
+  }
+
   return {
     show,
     hide,
+    friend,
     isUp: () => screen !== null,
     screen: () => screen,
     /** For the harness: the door's state, and levers to pull. */
@@ -578,6 +656,7 @@ export function createDoor(opts = {}) {
       act,
       openReplay,
       matched,
+      stake,
       shelf: { save: saveGame, list: listGames },
       /**
        * Stand in for the desktop host: { isHosted, identity(), whenIdentity() },
@@ -598,6 +677,8 @@ export function createDoor(opts = {}) {
       for (const off of unbind) { try { off(); } catch { /* gone */ } }
       for (const t of timers) clearTimeout(t);
       leaveLobby();
+      try { stake.dispose(); } catch { /* gone */ }
+      if (stakeChip) stakeChip.remove();
     },
   };
 }

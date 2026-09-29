@@ -196,7 +196,7 @@ internal static class CaucusHostService
             if (_devTrackLog) ArmDevTrackDrive();
             if (_devOpenCloud) DevAfter(3, () => OpenCloudWindow());
             App.Logger?.Information("CaucusHostService: launched");
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Race);
+            App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Race);
         }
         catch (Exception ex)
         {
@@ -694,7 +694,8 @@ internal static class CaucusHostService
             _meta = null;
             _exiting = false;
             App.Logger?.Information("CaucusHostService: closed");
-            App.Friends?.SetActivity(returnToRoom != null ? ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom : ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
+            // The stack puts back whatever was open under the race (the room when it came from there).
+            App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Race);
             returnToRoom?.Invoke();
         }
         finally { _disposing = false; }

@@ -44,6 +44,9 @@ public partial class FriendsDrawerTests
     {
         PresenceAsk.Asked = () => true;
         PresenceAsk.MarkAsked = () => { };
+        Outside.Clear();
+        FriendsDrawer.Outside = (text, _) => Outside.Add(text);
+        ResetDrawerExtras();
         var d = new FriendsDrawer(svc) { MeName = () => "cb", MeTier = () => 0 };
         d.Render();
         return d;
@@ -102,6 +105,14 @@ public partial class FriendsDrawerTests
         var keys = new List<string>();
         foreach (var id in PokeSet.All) keys.Add("friends_poke_" + id);
         foreach (var id in InviteDestination.All) keys.Add("friends_invite_" + id);
+        foreach (var r in Enum.GetValues<ActResult>()) keys.Add(FriendsDrawerRules.ActResultKey(r));
+        keys.AddRange(new[]
+        {
+            "friends_request_accept", "friends_request_decline", "friends_removed_done", "friends_blocked_done",
+            "friends_squelch_done", "friends_unsquelch_done", "friends_notice_hours", "friends_land_waiting_many", "friends_land_waiting_open",
+            "friends_land_goon_failed", "friends_land_goon_no_code", "friends_land_goon_busy",
+            "profile_friends_where_title", "profile_friends_where_body",
+        });
         foreach (var id in WatchRef.Flavours) keys.Add("friends_flavour_" + id);
         foreach (var a in Enum.GetValues<PresenceActivity>()) keys.Add(FriendsDrawerRules.ActivityKey(a));
         foreach (var r in Enum.GetValues<SendResult>()) keys.Add(FriendsDrawerRules.SendResultKey(r));
@@ -134,9 +145,10 @@ public partial class FriendsDrawerTests
         WpfRenderHarness.OnStaThread(() =>
         {
             var d = NewDrawer(new FakeFriends(Sample()));
-            Assert.Equal(new[] { "friends_section_online", "friends_section_offline", "friends_section_requests" }, d.SectionKeys);
-            // Online by name, offline by who was here last, then incoming before outgoing.
-            Assert.Equal(new[] { "kit", "sam", "robin", "noor", "in:dee", "out:ash" }, d.RowIds);
+            // Requests sit above the offline list: they are something to answer.
+            Assert.Equal(new[] { "friends_section_online", "friends_section_requests", "friends_section_offline" }, d.SectionKeys);
+            // Online by name, then incoming before outgoing, then offline by who was here last.
+            Assert.Equal(new[] { "kit", "sam", "in:dee", "out:ash", "robin", "noor" }, d.RowIds);
 
             var sam = d.RowFor("sam")!;
             Assert.NotNull(Find(sam, "friends-lock"));
@@ -197,19 +209,18 @@ public partial class FriendsDrawerTests
         WpfRenderHarness.OnStaThread(() =>
         {
             var goon = InviteCodes.GoonCode;
-            var remote = InviteCodes.RemoteCode;
             var canHost = InviteCodes.CanHostGoon;
             try
             {
                 InviteCodes.GoonCode = () => null;
-                InviteCodes.RemoteCode = () => null;
                 InviteCodes.CanHostGoon = () => true;
                 var d = NewDrawer(new FakeFriends(Sample()));
                 d.OpenPickerFor("sam", "invite");
                 var row = d.RowFor("sam")!;
                 // No room yet, but a host can open one from the tile itself.
                 Assert.True(((Button)Find(row, "friends-invite:goon")!).IsEnabled);
-                Assert.False(((Button)Find(row, "friends-invite:remote")!).IsEnabled);
+                // Remote was dropped (owner, 2026-09-28): no tile at all.
+                Assert.Null(Find(row, "friends-invite:remote"));
                 Assert.True(((Button)Find(row, "friends-invite:backroom")!).IsEnabled);
                 Assert.True(((Button)Find(row, "friends-invite:ramp")!).IsEnabled);
 
@@ -224,10 +235,48 @@ public partial class FriendsDrawerTests
             finally
             {
                 InviteCodes.GoonCode = goon;
-                InviteCodes.RemoteCode = remote;
                 InviteCodes.CanHostGoon = canHost;
             }
         });
+    }
+
+    [Fact]
+    public void Chess_invite_opens_the_board_on_a_challenge_then_sends_its_id()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var challenge = InviteCodes.ChallengeFriend;
+            try
+            {
+                var asked = new List<string>();
+                InviteCodes.ChallengeFriend = (id, _) => { asked.Add(id); return Task.FromResult<string?>("c_0123456789abcdef"); };
+                var svc = new FakeFriends(Sample()) { NextSend = SendResult.Sent };
+                var d = NewDrawer(svc);
+                d.OpenPickerFor("sam", "invite");
+                Assert.True(((Button)Find(d.RowFor("sam")!, "friends-invite:chess")!).IsEnabled);
+                Assert.Equal(SendResult.Sent, d.InviteToChessAsync("sam").GetAwaiter().GetResult());
+                Assert.Equal(new[] { "sam" }, asked);
+                Assert.Equal(("sam", "chess", "c_0123456789abcdef"), svc.Invites.Single());
+
+                // No challenge from the board: nothing is sent, and the row says why.
+                InviteCodes.ChallengeFriend = (_, _) => Task.FromResult<string?>(null);
+                Assert.Null(d.InviteToChessAsync("sam").GetAwaiter().GetResult());
+                Assert.Single(svc.Invites);
+                Assert.Equal(Loc.Get("friends_invite_chess_failed"), d.ResultTextFor("sam"));
+            }
+            finally { InviteCodes.ChallengeFriend = challenge; }
+        });
+    }
+
+    [Fact]
+    public void Chess_invite_code_is_a_challenge_id_and_nothing_else()
+    {
+        Assert.True(InviteDestination.IsValid(InviteDestination.Chess));
+        Assert.True(InviteDestination.IsChallengeId("c_0123456789abcdef"));
+        Assert.False(InviteDestination.IsChallengeId("c_0123456789ABCDEF"));
+        Assert.False(InviteDestination.IsChallengeId("c_0123"));
+        Assert.False(InviteDestination.IsChallengeId("ABC123"));
+        Assert.False(InviteDestination.IsChallengeId(null));
     }
 
     [Fact]
@@ -415,14 +464,18 @@ public partial class FriendsDrawerTests
         }
         public Task<SendResult> SendWatchAsync(string friendId, WatchRef watch) { Watches.Add(watch); return Task.FromResult(NextSend); }
         public Task<AddResult> AddByCodeAsync(string code) { Adds.Add(code); return Task.FromResult(NextAdd); }
-        public Task AcceptAsync(string requesterId) => Task.CompletedTask;
-        public Task DeclineAsync(string requesterId) => Task.CompletedTask;
-        public Task CancelRequestAsync(string targetId) => Task.CompletedTask;
-        public Task RemoveAsync(string friendId) => Task.CompletedTask;
-        public Task BlockAsync(string friendId) => Task.CompletedTask;
-        public Task UnblockAsync(string friendId) => Task.CompletedTask;
-        public Task SetSquelchAsync(string friendId, bool on) => Task.CompletedTask;
-        public Task ReportAsync(string friendId, string reason) => Task.CompletedTask;
+        /// <summary>What every list change answers; each call is recorded as "op:id".</summary>
+        public ActResult NextAct { get; set; } = ActResult.Done;
+        public List<string> Acts { get; } = new();
+        private Task<ActResult> Act(string op, string id) { Acts.Add(op + ":" + id); return Task.FromResult(NextAct); }
+        public Task<ActResult> AcceptAsync(string requesterId) => Act("accept", requesterId);
+        public Task<ActResult> DeclineAsync(string requesterId) => Act("decline", requesterId);
+        public Task<ActResult> CancelRequestAsync(string targetId) => Act("cancel", targetId);
+        public Task<ActResult> RemoveAsync(string friendId) => Act("remove", friendId);
+        public Task<ActResult> BlockAsync(string friendId) => Act("block", friendId);
+        public Task<ActResult> UnblockAsync(string friendId) => Act("unblock", friendId);
+        public Task<ActResult> SetSquelchAsync(string friendId, bool on) => Act(on ? "squelch" : "unsquelch", friendId);
+        public Task<ActResult> ReportAsync(string friendId, string reason) => Act("report_" + reason, friendId);
         public void SetActivity(PresenceActivity activity) { }
         public void SetDrawerOpen(bool open) { }
     }

@@ -106,6 +106,12 @@ function main() {
    * know the game changed hands.
    */
   window.PBP.startOnline = (match) => startOnlineMatch({ bus, board, hud: dom.hud, game, match });
+  // The friends drawer: challenge a friend, or take a friend's challenge up. Heard here, early,
+  // because the frame can land before the door exists; it waits for the door.
+  onHostMessage((m) => {
+    if (!m || m.type !== 'pbp:friend') return;
+    Promise.resolve(window.PBP.doorReady).then((door) => { if (door && door.friend) door.friend(m); }).catch(() => {});
+  });
   onHostMessage((m) => {
     if (m.type !== 'pbp:settings') return;
     const { type, ...values } = m;   // the envelope's own key is not a setting

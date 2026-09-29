@@ -315,6 +315,26 @@
                     <TextBlock Text="{loc:Str label_export_your_cloud_data_or_view_our_privacy_po}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
+                    <!-- FRIENDS PRESENCE (2026-09-28): the same switch as the friends drawer header. -->
+                    <Grid MinHeight="34" ToolTip="{loc:Str friends_presence_toggle_tip}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueAccountBrush}"
+                                   Text="{loc:Str friends_presence_setting}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkFriendsPresence" x:FieldModifier="internal"
+                                  Style="{StaticResource ToggleStyle}" IsChecked="False"
+                                  VerticalAlignment="Center"
+                                  Checked="ChkFriendsPresence_Changed"
+                                  Unchecked="ChkFriendsPresence_Changed"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str friends_presence_setting_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,12"/>
+
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <Button x:Name="BtnExportData" x:FieldModifier="internal"
                                 Content="{loc:Str btn_export_my_data}"

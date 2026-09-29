@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services.Chaos;
 using Microsoft.Web.WebView2.Core;
+using ConditioningControlPanel.Services.Stakes;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -220,6 +221,7 @@ internal static partial class PieceByPieceHostService
             // the board's own keys work from the first frame.
             _host.FocusWeb();
 
+            try { App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Chess); } catch (Exception ex) { Diag.Swallowed(ex); }
             App.Logger?.Information("PieceByPieceHostService: launched");
         }
         catch (Exception ex)
@@ -250,6 +252,8 @@ internal static partial class PieceByPieceHostService
             DisposeOnlineMedia();
             try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _host = null;
+            DropFriendIntent();
+            try { App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Chess); } catch (Exception ex) { Diag.Swallowed(ex); }
             if (had) App.Logger?.Information("PieceByPieceHostService: closed");
         }
         catch (Exception ex) { App.Logger?.Debug("PieceByPieceHostService.Close: {E}", ex.Message); }
@@ -272,6 +276,7 @@ internal static partial class PieceByPieceHostService
             PostIdentity();
             PostMediaState();
             StartOnlineMedia();
+            PostFriendIntent();
         }
         catch (Exception ex) { App.Logger?.Warning("PieceByPieceHostService.OnPageReady: {E}", ex.Message); }
     }
@@ -346,6 +351,15 @@ internal static partial class PieceByPieceHostService
         _lastProgressUtc = DateTime.UtcNow;
         try
         {
+            // PvP stakes (Services/Stakes): the shared bridge talks to /v2/stakes/* itself and
+            // books a lost time stake in C# once the match settles. Online PvP only; the page
+            // never sends these for a solo or hotseat game.
+            if (StakeBridge.Handles((string?)o["type"]))
+            {
+                _stakes ??= StakeBridge.ForApp("pbp", PostStake);
+                _ = _stakes.Handle(o);
+                return;
+            }
             switch ((string?)o["type"])
             {
                 case "heartbeat":
@@ -368,6 +382,10 @@ internal static partial class PieceByPieceHostService
 
                 case "pbp:media-more":
                     OnMediaMore();
+                    break;
+
+                case "pbp:friend-challenge":
+                    OnFriendChallenge(o);
                     break;
 
                 case "pbp:exit":
@@ -597,6 +615,18 @@ internal static partial class PieceByPieceHostService
         }
         catch { return "Player"; }
     }
+
+    // ============================ stakes ============================
+
+    /// <summary>One bridge for the life of the app: a settle watch it started keeps running (and
+    /// books) after the window closes, and posting to a closed board is a quiet no-op.</summary>
+    private static StakeBridge? _stakes;
+
+    private static void PostStake(JObject o) => RunOnUi(() =>
+    {
+        try { _host?.Post(o); }
+        catch (Exception ex) { App.Logger?.Debug("PieceByPiece: stake post failed: {E}", ex.Message); }
+    });
 
     // ============================ window plumbing ============================
 

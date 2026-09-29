@@ -104,11 +104,15 @@ public sealed class FakeLeashService : ILeashService
     /// <summary>Offers this client has sent and nobody has answered (the chip reads "offered").</summary>
     public bool HasOffered(string friendId) => _offered.Contains(friendId);
 
-    public Task ReleaseAsync(string leashedId)
+    /// <summary>Tests: the next release is refused (the holder card must not play the cut).</summary>
+    public bool ReleaseRefused { get; set; }
+
+    public Task<bool> ReleaseAsync(string leashedId)
     {
         Calls.Add("release:" + leashedId);
+        if (ReleaseRefused) return Task.FromResult(false);
         Snapshot = _snap with { Holding = _snap.Holding.Where(h => h.Who.Id != leashedId).ToList() };
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
     public Task<LeashSendResult> AssignAsync(string leashedId, AssignKind kind, int size, LeashWatch? watch = null)
@@ -158,18 +162,22 @@ public sealed class FakeLeashService : ILeashService
 
     // ---- leashed side -----------------------------------------------------------------
 
-    public Task<bool> AnswerAsync(string holderId, bool accept, LeashIntensity intensity)
+    /// <summary>Tests: the next answer comes back as this instead of going through.</summary>
+    public LeashAnswerResult? NextAnswer { get; set; }
+
+    public Task<LeashAnswerResult> AnswerAsync(string holderId, bool accept, LeashIntensity intensity)
     {
         Calls.Add($"answer:{holderId}:{accept}:{intensity}");
+        if (NextAnswer is { } forced && forced != LeashAnswerResult.Done) { NextAnswer = null; return Task.FromResult(forced); }
         var offer = _snap.Offers.FirstOrDefault(o => o.From.Id == holderId);
         var offers = _snap.Offers.Where(o => o.From.Id != holderId).ToList();
-        if (offer == null) { Snapshot = _snap with { Offers = offers }; return Task.FromResult(false); }
+        if (offer == null) { Snapshot = _snap with { Offers = offers }; return Task.FromResult(LeashAnswerResult.Gone); }
         MyLeash? me = _snap.Me;
         if (accept)
             me = new MyLeash(offer.From, intensity, DateTimeOffset.UtcNow, 1, null, LeashRemoteMode.Ask,
                 Array.Empty<Punishment>(), null, 0, _snap.Me?.Stickers ?? Array.Empty<Sticker>());
         Snapshot = _snap with { Me = me, Offers = offers };
-        return Task.FromResult(true);
+        return Task.FromResult(LeashAnswerResult.Done);
     }
 
     public Task CutAsync()

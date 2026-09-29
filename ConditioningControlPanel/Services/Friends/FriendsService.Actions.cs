@@ -21,9 +21,14 @@ public sealed partial class FriendsService
 
     public Task<SendResult> InviteAsync(string friendId, string destination, string? code)
     {
-        if (!InviteDestination.IsValid(destination)) return Task.FromResult(SendResult.Refused);
-        bool wantsCode = destination == InviteDestination.Goon || destination == InviteDestination.Remote;
-        if (wantsCode)
+        // Remote is still wire grammar (an old client may send one) but never offered or sent (owner, 2026-09-28).
+        if (!InviteDestination.IsSendable(destination)) return Task.FromResult(SendResult.Refused);
+        bool wantsCode = destination == InviteDestination.Goon;
+        if (destination == InviteDestination.Chess)
+        {
+            if (!InviteDestination.IsChallengeId(code)) return Task.FromResult(SendResult.Refused);
+        }
+        else if (wantsCode)
         {
             if (code == null || !FriendsApi.IsJoinCode(code)) return Task.FromResult(SendResult.Refused);
         }
@@ -74,23 +79,27 @@ public sealed partial class FriendsService
         return r;
     }
 
-    public Task AcceptAsync(string requesterId) => ActThenRefresh("accept", requesterId);
-    public Task DeclineAsync(string requesterId) => ActThenRefresh("decline", requesterId);
-    public Task CancelRequestAsync(string targetId) => ActThenRefresh("cancel", targetId);
-    public Task RemoveAsync(string friendId) => ActThenRefresh("remove", friendId);
-    public Task BlockAsync(string friendId) => ActThenRefresh("block", friendId);
-    public Task UnblockAsync(string friendId) => ActThenRefresh("unblock", friendId);
-    public Task SetSquelchAsync(string friendId, bool on) => ActThenRefresh("squelch", friendId, new JObject { ["on"] = on });
+    public Task<ActResult> AcceptAsync(string requesterId) => ActThenRefresh("accept", requesterId);
+    public Task<ActResult> DeclineAsync(string requesterId) => ActThenRefresh("decline", requesterId);
+    public Task<ActResult> CancelRequestAsync(string targetId) => ActThenRefresh("cancel", targetId);
+    public Task<ActResult> RemoveAsync(string friendId) => ActThenRefresh("remove", friendId);
+    public Task<ActResult> BlockAsync(string friendId) => ActThenRefresh("block", friendId);
+    public Task<ActResult> UnblockAsync(string friendId) => ActThenRefresh("unblock", friendId);
+    public Task<ActResult> SetSquelchAsync(string friendId, bool on) => ActThenRefresh("squelch", friendId, new JObject { ["on"] = on });
 
-    public async Task ReportAsync(string friendId, string reason)
+    public async Task<ActResult> ReportAsync(string friendId, string reason)
     {
-        if (!ReportReason.IsValid(reason) || !Available || string.IsNullOrEmpty(friendId)) return;
-        await _api.ActAsync("report", friendId, new JObject { ["reason"] = reason });
+        if (!ReportReason.IsValid(reason) || string.IsNullOrEmpty(friendId)) return ActResult.Refused;
+        if (!Available) return ActResult.TryLater;
+        return await _api.ActForResultAsync("report", friendId, new JObject { ["reason"] = reason });
     }
 
-    private async Task ActThenRefresh(string op, string id, JObject? extra = null)
+    private async Task<ActResult> ActThenRefresh(string op, string id, JObject? extra = null)
     {
-        if (!Available || string.IsNullOrEmpty(id)) return;
-        if (await _api.ActAsync(op, id, extra)) await RefreshAsync();
+        if (string.IsNullOrEmpty(id)) return ActResult.Refused;
+        if (!Available) return ActResult.TryLater;
+        var r = await _api.ActForResultAsync(op, id, extra);
+        if (r == ActResult.Done) await RefreshAsync();
+        return r;
     }
 }
