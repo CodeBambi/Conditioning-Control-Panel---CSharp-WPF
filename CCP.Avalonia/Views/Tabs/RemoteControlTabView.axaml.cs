@@ -106,7 +106,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnEmoteCustomSend_Click(object? sender, RoutedEventArgs e) { }
         private void BtnEmoteEdit_Click(object? sender, RoutedEventArgs e) { }
         private void BtnEmotePreset_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
         private void BtnStopRemote_Click(object? sender, RoutedEventArgs e) { }
         private void ChkOptInTag_Click(object? sender, RoutedEventArgs e) { }
         private void CmbRemoteTier_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }

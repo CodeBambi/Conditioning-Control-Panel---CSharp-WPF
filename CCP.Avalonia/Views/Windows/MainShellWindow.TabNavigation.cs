@@ -174,6 +174,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
+                RefreshEntitlementVeils();
                 switch (tab)
                 {
                     // WPF re-derives the session feature lock on the way into each of these

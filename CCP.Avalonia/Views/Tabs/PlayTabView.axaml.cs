@@ -202,6 +202,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CoreSettings.Save();
         }
 
+        /// <summary>WPF MainWindow.PlayTab.cs:96-103, the tier lockbands (same loc keys as the refusal).
+        /// DtRH and Arcademy are cards this head still carries: their gates are App.xaml.cs:3422
+        /// RequiresLab("dtrh") and ArcademyHostService.cs:175 DemandLab. ponytail: the Intake band
+        /// (IntakePassService) and the FREE TODAY stamps (RefreshPlayFreeStamps) are not ported.</summary>
+        internal void RefreshPlayCards()
+        {
+            PlayLockGaze.IsVisible = !TierGate.RequiresLab(Loc.Get("label_gaze_minigame")).Allowed;
+            PlayLockFocusGaze.IsVisible = !TierGate.RequiresLab(Loc.Get("label_focus_gaze")).Allowed;
+            PlayLockRemote.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_remote_control"), "remote").Allowed;
+            PlayLockLockdown.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_lockdown_mode")).Allowed;
+            PlayLockBlink.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_blink_trainer")).Allowed;
+            PlayLockFyp.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp").Allowed;
+            PlayLockDtrh.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_dtrh_title"), "dtrh").Allowed;
+            PlayLockArcademy.IsVisible = !TierGate.RequiresLab("The Arcademy").Allowed;
+        }
+
         private void OnPlayTabAttached(object? sender, EventArgs e)
         {
             LoadChaosBoxes();
@@ -279,8 +295,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// door. The window itself is ported and honest (GazeMinigameWindow disables Start and says
         /// why, since with no tracker every round would resolve 0 >= 0 into GOOD GIRL).
         ///
-        /// <para>This head seeds no entitlement, so the gate denies and the window does not open -
-        /// which is the WPF answer with no Patreon service, not a new refusal.</para>
+        /// <para>The seam is seeded by Platform.AccountSeed, so a Tier 2 account opens the window.</para>
         /// </summary>
         private void BtnGazeMinigame_Click(object? sender, RoutedEventArgs e)
         {

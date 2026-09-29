@@ -40,6 +40,8 @@ public sealed class ContentHitTestTests
                 w.ShowTab(tab);
                 // The logged-out cover is WPF behaviour (MainWindow.Login.cs:378); test the tab under it.
                 if (tab == "quests") w.Named<Control>(panelName)!.FindControl<Border>("QuestsLoginOverlay")!.IsVisible = false;
+                // Same for the free-tier veil (WPF MainWindow.Patreon.cs:63 RefreshPremiumGate).
+                if (tab == "awareness") w.Named<Control>(panelName)!.FindControl<Border>("AwarenessGate")!.IsVisible = false;
                 Dispatcher.UIThread.RunJobs();
                 // Hit testing reads the compositor's last frame: a tab shown since then is not in it yet.
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();

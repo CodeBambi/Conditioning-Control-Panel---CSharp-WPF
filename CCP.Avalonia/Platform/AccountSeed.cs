@@ -46,6 +46,7 @@ internal static class AccountSeed
         // WPF App.xaml.cs:487-488: TierGate's seam reads the same gates (Patreon.HasPremiumAccess there).
         CoreEntitlement.HasPremiumProvider = () => CoreAccount.HasPremiumAccess;
         CoreEntitlement.HasLabProvider = () => CoreAccount.HasLabAccess;
+        CoreProgram.HasPremiumProvider = () => CoreAccount.HasPremiumAccess; // WPF App.xaml.cs:426
         return true;
     }
 

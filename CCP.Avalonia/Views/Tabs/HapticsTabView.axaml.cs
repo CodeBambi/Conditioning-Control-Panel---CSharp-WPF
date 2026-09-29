@@ -138,7 +138,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // (Window.GetWindow(this) as MainWindow -> mw.<same name>). Needs the MainWindow.Haptics
         // partial and HapticService, wired when they move to Core. Names kept identical so the
         // wiring diffs cleanly against ConditioningControlPanel/Views/Tabs/HapticsTabView.xaml.cs.
-        private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
         private void ChkHapticsEnabled_Changed(object? sender, RoutedEventArgs e) { }
         private void BtnHapticConnect_Click(object? sender, RoutedEventArgs e) { }
         private void BtnHapticPanic_Click(object? sender, RoutedEventArgs e) { }

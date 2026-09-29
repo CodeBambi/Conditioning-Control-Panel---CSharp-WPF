@@ -53,10 +53,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
 
             // ponytail: needs ConditioningControlPanel/Services/AutonomyService.cs (start/stop,
-            // TestTrigger, TestVoiceCommand) and the premium gate behind the unlock button.
+            // TestTrigger, TestVoiceCommand).
             BtnAutonomyStartStop.Click += (_, _) => { };   // mw.BtnAutonomyStartStop_Click(...)
             BtnForceStartAutonomy.Click += (_, _) => { };  // mw.BtnForceStartAutonomy_Click(...)
-            BtnGateUnlock.Click += (_, _) => { };          // mw.BtnGateUnlock_Click(...)
+            BtnGateUnlock.Click += (s, e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(s, e);
             BtnTestAutonomy.Click += (_, _) => { };        // mw.BtnTestAutonomy_Click(...)
             BtnTestVoice.Click += (_, _) => { };           // mw.BtnTestVoice_Click(...)
             BtnOpenDeviceSettings.Click += BtnOpenDeviceSettings_Click;
