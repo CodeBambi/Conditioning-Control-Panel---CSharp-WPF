@@ -29,6 +29,9 @@ public sealed class QuestsTabLiveTests
             var dir = Directory.CreateTempSubdirectory("ccp-quests-tab-").FullName;
             var oldQuests = AvApp.Quests;
             Window? host = null;
+            QuestService? quests = null;
+            var settings = ConditioningControlPanel.CoreSettings.Current;
+            var (oldLevel, oldStreak) = (settings.PlayerLevel, settings.DailyQuestStreak);
             try
             {
                 if (Application.Current is null)
@@ -36,7 +39,10 @@ public sealed class QuestsTabLiveTests
                         .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                         .SetupWithoutStarting();
 
-                var quests = new QuestService(null, dir);
+                // Explicit, not whatever an earlier test left in the shared settings.
+                settings.PlayerLevel = 1;
+                settings.DailyQuestStreak = 0;
+                quests = new QuestService(null, dir);
                 quests.Progress.DailyQuests = new List<ActiveQuest> { new("pop_parade_d"), new("flash_rush_d"), new("spiral_sink_d") };
                 quests.Progress.WeeklyQuest = new ActiveQuest("flash_monsoon_w");
                 AvApp.Quests = quests;
@@ -50,7 +56,9 @@ public sealed class QuestsTabLiveTests
                 var pop = QuestDefinition.DailyQuests.Find(d => d.Id == "pop_parade_d")!;
                 Assert.Equal("0/3", tab.FindControl<TextBlock>("TxtDailyQuestCounter")!.Text);
                 Assert.Equal($"0 / {pop.TargetValue}", card0.FindControl<TextBlock>("TxtProgress")!.Text);
-                Assert.Equal("🎁 156 XP", card0.FindControl<TextBlock>("TxtXp")!.Text); // what CompleteQuest pays
+                // The card quotes what CompleteQuest pays (one Core formula); the payout lands below.
+                var payout = QuestService.ScaledQuestXp(pop.XPReward, settings);
+                Assert.Equal($"🎁 {payout} XP", card0.FindControl<TextBlock>("TxtXp")!.Text);
                 Assert.Equal(QuestDefinition.WeeklyQuests.Find(d => d.Id == "flash_monsoon_w")!.Name,
                     tab.FindControl<TextBlock>("TxtWeeklyQuestName")!.Text);
 
@@ -60,7 +68,7 @@ public sealed class QuestsTabLiveTests
                 Assert.Equal("1/3", tab.FindControl<TextBlock>("TxtDailyQuestCounter")!.Text);
                 Assert.True(tab.FindControl<Border>("QuestCompleteBanner")!.IsVisible);
                 Assert.Equal("1", tab.FindControl<TextBlock>("TxtTotalDailyCompleted")!.Text);
-                Assert.Equal("156", tab.FindControl<TextBlock>("TxtTotalQuestXP")!.Text);
+                Assert.Equal(payout.ToString(), tab.FindControl<TextBlock>("TxtTotalQuestXP")!.Text);
 
                 // A reroll click spends the budget on that seat.
                 var seat1 = quests.Progress.DailyQuests[1]!.DefinitionId;
@@ -75,11 +83,12 @@ public sealed class QuestsTabLiveTests
                 tab.FindControl<Button>("BtnRerollWeekly")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Dispatcher.UIThread.RunJobs();
                 Assert.NotEqual(weekly, quests.Progress.WeeklyQuest!.DefinitionId);
-                quests.Dispose();
             }
             finally
             {
                 try { host?.Close(); } catch { }
+                quests?.Dispose();
+                (settings.PlayerLevel, settings.DailyQuestStreak) = (oldLevel, oldStreak);
                 AvApp.Quests = oldQuests;
                 try { Directory.Delete(dir, recursive: true); } catch { }
             }

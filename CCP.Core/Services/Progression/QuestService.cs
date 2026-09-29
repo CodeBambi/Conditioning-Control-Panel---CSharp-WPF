@@ -1772,11 +1772,8 @@ public class QuestService : IDisposable
         // ProgressionService.QuestLevelScale reads the per-user epoch, so this is a no-op for
         // every un-migrated account.
         var playerLevel = CoreSettings.Service?.Current?.PlayerLevel ?? 1;
-        var betterQuestsMultiplier = CoreSettings.Service?.Current is { } skillSettings ? SkillTreeRules.GetRerollBonusMultiplier(skillSettings) : 1.0;
-        // Quest streak bonus: +3% per consecutive day
         var questStreak = CoreSettings.Service?.Current?.DailyQuestStreak ?? 0;
-        var streakMultiplier = 1.0 + (questStreak * 0.03);
-        var scaledXP = (int)Math.Round(def.XPReward * XpCurve.QuestLevelScale(playerLevel, XpCurve.EpochOf(CoreSettings.Service?.Current)) * betterQuestsMultiplier * streakMultiplier);
+        var scaledXP = ScaledQuestXp(def.XPReward, CoreSettings.Service?.Current);
 
         Progress.TotalXPFromQuests += scaledXP;
 
@@ -1813,6 +1810,19 @@ public class QuestService : IDisposable
         // daily quest had to roll the next one or the player was left with an empty card. All
         // three are dealt at midnight now, so a completion just stamps its own seat and leaves the
         // other two exactly as they were.
+    }
+
+    /// <summary>
+    /// The XP a quest pays: base x level curve (per-user epoch) x Better Quests reroll multiplier
+    /// x the +3%/day quest-streak bonus. ONE formula for the payout and every head's display, so
+    /// the number on a card is the number that lands. Null settings = level 1, no bonuses.
+    /// </summary>
+    public static int ScaledQuestXp(int baseXp, AppSettings? settings)
+    {
+        var playerLevel = settings?.PlayerLevel ?? 1;
+        var betterQuestsMultiplier = settings is { } s ? SkillTreeRules.GetRerollBonusMultiplier(s) : 1.0;
+        var streakMultiplier = 1.0 + ((settings?.DailyQuestStreak ?? 0) * 0.03);
+        return (int)Math.Round(baseXp * XpCurve.QuestLevelScale(playerLevel, XpCurve.EpochOf(settings)) * betterQuestsMultiplier * streakMultiplier);
     }
 
     /// <summary>

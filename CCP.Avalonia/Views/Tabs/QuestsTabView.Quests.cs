@@ -37,7 +37,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             quests.QuestCompleted += OnQuestCompleted;
             quests.QuestProgressChanged += OnQuestProgressChanged;
             quests.QuestsRefreshed += OnQuestsRefreshed;
-            WeeklyProgressTrack.SizeChanged += (_, _) => ApplyWeeklyBar();
+            WeeklyProgressTrack.SizeChanged += OnWeeklyTrackSizeChanged;
             RefreshQuestUI();
         }
 
@@ -48,7 +48,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             quests.QuestCompleted -= OnQuestCompleted;
             quests.QuestProgressChanged -= OnQuestProgressChanged;
             quests.QuestsRefreshed -= OnQuestsRefreshed;
+            WeeklyProgressTrack.SizeChanged -= OnWeeklyTrackSizeChanged;
         }
+
+        private void OnWeeklyTrackSizeChanged(object? sender, SizeChangedEventArgs e) => ApplyWeeklyBar();
 
         // ShowTab calls RefreshQuestUI on every entry in WPF; IsVisible flipping true is that entry.
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -90,13 +93,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (Platform.AccountSeed.Sync is { Loaded: true } sync) _ = sync.PushAsync("quest-complete");
         });
 
-        /// <summary>MainWindow.QuestsTab.cs:115, the same maths QuestService.CompleteQuest pays.</summary>
+        /// <summary>MainWindow.QuestsTab.cs:115; the XP is QuestService.ScaledQuestXp, what CompleteQuest pays.</summary>
         internal static (int Xp, string? Bonus) ComputeQuestXpDisplay(QuestDefinition def, AppSettings s)
         {
             var rerollMult = SkillTreeRules.GetRerollBonusMultiplier(s);
             var streak = s.DailyQuestStreak;
-            var xp = (int)Math.Round(def.XPReward * XpCurve.QuestLevelScale(s.PlayerLevel, XpCurve.EpochOf(s))
-                                     * rerollMult * (1.0 + streak * 0.03));
+            var xp = QuestService.ScaledQuestXp(def.XPReward, s);
             string? bonus = null;
             if (streak > 0) bonus = $"+{streak * 3}%\U0001f525";
             if (rerollMult > 1.0)
