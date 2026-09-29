@@ -1,55 +1,17 @@
-// NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.QuestsTab.cs (990 lines).
+// PORTED into Views/Tabs/QuestsTabView.Quests.cs (the view owns every control it paints):
+// RerollDailySlot, BtnRerollWeekly_Click, RefreshQuestUI, BuildDailyCardModel,
+// ComputeQuestXpDisplay (XpCurve + SkillTreeRules, the maths CompleteQuest pays) and
+// RefreshStreakCalendar, all off App.Quests (the Core QuestService).
 //
-// Sorted member by member: this file is GENUINELY 100% head-side. Its seventeen members are one
-// service's presentation layer - every path starts at App.Quests and none of the seams answer for
-// it. The card control it feeds IS ported (Views/Controls/DailyQuestCard + DailyQuestCardModel,
-// already carrying IImage in place of ImageSource), so what is missing is strictly the data, not
-// the drawing.
-//
-// What each member needs, exactly:
-//   RerollDailySlot         - App.Quests.RerollDaily / RerollWeekly and the reroll budget
-//   BtnRerollWeekly_Click     (CCP.Core/Services/Progression/QuestService.cs).
-//   RefreshQuestUI          - the same service for the three daily seats, the weekly card, the
-//   BuildDailyCardModel       stats tiles and the streak, plus Models.QuestDefinition /
-//   _dailyCardQuestIds        Models.ActiveQuest (CCP.Core/Models/Quest.cs) and
-//                             QuestDefinitionService for the roster. Both are in Core now; this
-//                             head just does not construct the service yet.
-//   ComputeQuestXpDisplay   - ProgressionService.QuestLevelScale
-//                             (ConditioningControlPanel/Services/Progression/ProgressionService.cs)
-//                             and App.SkillTree.GetRerollBonusMultiplier
-//                             (…/Progression/SkillTreeService.cs). CoreProgression carries AddXP
-//                             only, so the ONE formula that must match what CompleteQuest actually
-//                             pays cannot be reproduced here - and a second, drifting copy of it is
-//                             exactly the bug the WPF comment says this method was written to end.
-//   GetQuestArt             - GetModeAwareQuestImagePath + LoadQuestImage, both in
-//   ClearQuestArtCache        MainWindow.xaml.cs, which resolve mod-aware art to a BitmapImage over
-//                             pack:// URIs. CoreModArt.OverridePath answers the mod-override half,
-//                             but this head ships no Resources/quests art to fall back to.
-//   RefreshPunchCard        - App.Quests' punch-card state; BuildPunchHole draws with
-//   BuildPunchHole            System.Windows.Shapes + a DropShadowEffect.
-//   RefreshStreakCalendar   - App.Quests' completion history + AppSettings.StreakFixCharges for the
-//   BtnFixStreak_Click        button caption. The settings half IS reachable (CoreSettings.Current),
-//   ExitStreakFixMode         but a calendar with no history to paint is not a calendar.
-//   StreakFixDay_Click      - App.Quests.SpendStreakFix, which is a server round trip.
-//   RecalculateDailyQuestStreak - App.Quests.RecalculateStreak. One line, and the line is the service.
-//   OnSettingsPropertyChangedForQuests - the only member whose TRIGGER is portable
-//                             (AppSettings implements INPC and CoreSettings.Current hands it over,
-//                             and DispatcherHelper.RunOnUI maps to Dispatcher.UIThread.Post). It is
-//                             not restored because all it does is call RefreshQuestUI, so on this
-//                             head it would be a subscription that repaints nothing.
-//
-// One correction for whoever wires this: an earlier revision of this header warned that
-// Views/Tabs/QuestsTabView loads with AvaloniaXamlLoader.Load and so has null x:Name fields. That
-// was fixed at the source - QuestsTabView's constructor calls InitializeComponent() and already
-// uses DailyCard0..2, BtnRerollWeekly and StreakCalendarCanvas directly, so its fields can be used
-// as written. The hazard is still real for THIS window, whose partials must reach controls through
-// Named<T>(name).
+// ponytail, still missing:
+//   GetQuestArt / ClearQuestArtCache - resolve pack:// quest art this head does not ship.
+//   RefreshPunchCard / BuildPunchHole - IntakePunchCardService is WPF-only.
+//   BtnFixStreak_Click / StreakFixDay_Click / ExitStreakFixMode - SpendStreakFix, a server round trip.
+//   OnSettingsPropertyChangedForQuests - mod/settings repaint; the tab repaints on entry instead.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // Deliberately empty - see the header. No member of this partial is referenced from
-        // MainShellWindow.axaml.
     }
 }

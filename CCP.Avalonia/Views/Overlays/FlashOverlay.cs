@@ -106,6 +106,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                             // WPF FlashService.cs:1608 records the batch; per shown image here, so the
                             // log's media count is exactly what reached the screen.
                             if (!refused) App.Sessions?.SessionLog.RecordImages(new[] { path });
+                            // WPF FlashService.cs:2102 -> AchievementService.cs:416: one quest tick per image.
+                            if (!refused) App.Quests?.TrackFlashImage();
                         }
                         catch (Exception ex) { refused = true; Log.Error(ex, "Flash: spawn failed"); }
                         finally { if (last) _busy = false; }

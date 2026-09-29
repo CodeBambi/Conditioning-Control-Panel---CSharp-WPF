@@ -35,6 +35,35 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The one session runner (WPF MainWindow._sessionEngine), or null on the headless render path.</summary>
         internal static SessionRunner? Sessions { get; set; }
 
+        /// <summary>The Core quest board (WPF App.Quests), built by StartQuests before the shell.</summary>
+        internal static QuestService? Quests { get; set; }
+
+        /// <summary>WPF App.xaml.cs:2527-2536 plus the CoreQuests seeds of :398-421. Seeded where this
+        /// head has the service; SkillTree (streak shield, perfect-week bonus) and Programs
+        /// (TrackVerifier) are WPF-only, so those three stay unseeded: no shield, no bonus, no
+        /// program tracking - the WPF "service is null" answers.</summary>
+        private static void StartQuests()
+        {
+            CoreQuests.PatreonVerifyingProvider = () => Platform.AccountSeed.Patreon?.IsVerifying;
+            CoreQuests.SubscribeStarVerifyingProvider = () => Platform.AccountSeed.SubscribeStar?.IsVerifying == true;
+            // WPF plays SystemSounds.Exclamation; Linux has no stock equivalent, so a bundled chime
+            // through the head audio. ponytail: no haptic post - no haptics service on this head.
+            CoreQuests.PlayCompletionEffectsProvider = () => CoreAudio.PlayOneShot(
+                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "chime1.mp3"),
+                Math.Clamp(CoreSettings.Current.MasterVolume / 100f, 0f, 1f), "quest-complete");
+            // Real probes, not the fail-open default (which reads present + resolved). A throw
+            // (no pactl) reaches the gate's CachedProbe and still fails open, as WPF's strict pair does.
+            CoreQuests.CameraProbe = () => System.IO.Directory.EnumerateFiles("/dev", "video*").Any();
+            CoreQuests.MicrophoneProbe = () => Platform.PulseMicSource.ParseSources(Platform.LibVlcAudio.Pactl("list short sources")).Count > 1;
+
+            var definitions = new QuestDefinitionService();
+            _ = definitions.InitializeAsync(); // cache first, then the server, as WPF
+            Quests = new QuestService(definitions);
+            definitions.QuestDefinitionsUpdated += () => Quests?.CheckAndGenerateQuests();
+            // WPF ProgressionService.AddXP:120 feeds every award to the "earn X XP" quests.
+            ProgressionBank.Awarded += (amount, _) => Quests?.TrackXPEarned((int)amount);
+        }
+
         /// <summary>The mod service (WPF App.Mods), or null on the headless render path.</summary>
         internal static ModService? Mods { get; private set; }
 
@@ -320,6 +349,7 @@ namespace ConditioningControlPanel.Avalonia
                 Achievements.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+                StartQuests();
 
                 // CoreProgram: its patreon, pack-video and roadmap providers stay unseeded - this head
                 // has no PatreonService, ContentPackService or RoadmapService, so it answers "no
@@ -514,6 +544,7 @@ namespace ConditioningControlPanel.Avalonia
             // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
+            try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never
             // opened the quest page.
