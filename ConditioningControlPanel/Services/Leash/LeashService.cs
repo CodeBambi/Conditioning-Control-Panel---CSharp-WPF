@@ -622,14 +622,50 @@ public sealed class LeashService : ILeashService
     // ---- app wiring ----
 
     /// <summary>The app's own wiring: the real wire, the account off AppSettings, the real tab,
-    /// the day numbers off the services that already count them.</summary>
-    public static LeashService CreateForApp(Action kick) => new(
-        new LeashApi(),
-        () => BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
-        dayInputs: AppDayInputs,
-        tab: new ChasterLeashTab(),
-        kick: kick,
-        cutStore: new FileCutStore(Path.Combine(App.UserDataPath, "leash_cut_pending.txt")));
+    /// the day numbers off the services that already count them, and the friends poll's shared
+    /// receipt channel both ways (a <c>seen</c> rides the next poll out; the holder's sender
+    /// receipts come back on it).</summary>
+    public static LeashService CreateForApp(Action kick)
+    {
+        var svc = new LeashService(
+            new LeashApi(),
+            () => BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
+            dayInputs: AppDayInputs,
+            tab: new ChasterLeashTab(),
+            kick: kick,
+            cutStore: new FileCutStore(Path.Combine(App.UserDataPath, "leash_cut_pending.txt")));
+        if (App.Friends is { } friends) svc.Attach(friends);
+        return svc;
+    }
+
+    /// <summary>Hooks this service to the friends poll's receipt channel.</summary>
+    internal void Attach(Friends.IFriendsService friends) =>
+        Attach(friends.ReportReceipt, h => friends.ReceiptsArrived += h);
+
+    /// <summary>The same, by its two halves: <paramref name="report"/> queues a report for the
+    /// next poll; <paramref name="subscribe"/> takes the handler for the sender receipts.</summary>
+    internal void Attach(Action<Friends.ReceiptReport> report, Action<Action<IReadOnlyList<Friends.SenderReceipt>>> subscribe)
+    {
+        ReportSeen = id => report(Friends.ReceiptReport.Item(id, Friends.ReceiptState.Seen));
+        subscribe(list => ApplyReceipts(FromFriends(list)));
+    }
+
+    /// <summary>The friends channel's sender receipts, leash kinds only, in the leash's own shape.</summary>
+    internal static IReadOnlyList<LeashReceipt> FromFriends(IEnumerable<Friends.SenderReceipt>? list)
+    {
+        var mine = new List<LeashReceipt>();
+        if (list == null) return mine;
+        foreach (var r in list)
+        {
+            if (r == null || !Friends.ReceiptKind.IsLeash(r.Kind)) continue;
+            var kind = LeashSteps.KindFromWire(r.Kind);
+            var state = LeashSteps.StateFromWire(r.State);
+            if (kind == null || state == null || !LeashSteps.IsId(r.Id) || string.IsNullOrEmpty(r.To)) continue;
+            var at = new DateTimeOffset(DateTime.SpecifyKind(r.AtUtc, DateTimeKind.Utc));
+            mine.Add(new LeashReceipt(r.Id!, kind.Value, r.To, r.ToName, state.Value, at, r.Ref));
+        }
+        return mine;
+    }
 
     /// <summary>R's numbers, read fresh. Null when the services are not up yet.</summary>
     internal static LeashDayInputs? AppDayInputs()
