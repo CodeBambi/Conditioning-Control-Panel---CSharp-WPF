@@ -29,7 +29,7 @@
        feat:SessionLock.Owned         ->  sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        feat:AdaptiveSideArt.CollapseBelow -> dropped; the attached behaviour lives in the WPF head. The 3*/2* split with
                                           MaxWidth="780" is kept verbatim.
-       hover:HoverPop.IsEnabled       ->  dropped, same reason.
+       hover:HoverPop.IsEnabled       ->  unchanged (Controls/HoverPop.cs)
        pack:// BitmapImage AwarenessArt -> dropped, and with it the ElementName ImageBrush bindings
                                           that fed the hero strip and the side plate. This head
                                           ships no Resources/features PNGs yet, so both keep their
@@ -38,6 +38,7 @@
                                           so the per-mod art swap is one avares:// line later. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -626,7 +627,7 @@
                          stretched plate would be a 2000px column of upscaled art. The bitmap is not
                          on this head yet, so the plate keeps its frame, its scrim and its geometry
                          and stands the feature glyph in for the art. -->
-                    <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    <Border hover:HoverPop.IsEnabled="True" Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
                             BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                             Background="{StaticResource TabHueWashBrush}"
                             VerticalAlignment="Top" Height="520">

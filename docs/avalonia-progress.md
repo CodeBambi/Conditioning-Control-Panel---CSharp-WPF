@@ -857,3 +857,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   clear; a save skipped by the 30 s cooldown rides the next push instead of being dropped - deviation, logged).
 - Evidence: ProfileWardrobeTests + ProfileCosmeticsSyncTests, fail-proven (6 breaks); live card/dialogs/editor screenshots. Rows
   stay stub (HoverPop, banners/presets/pins need CosmeticsCatalog, no WPF side-by-side). Review: FIX -> fixed.
+
+## avalonia-port/hover-pop-behavior: +303
+- WPF HoverPop ported (Controls/HoverPop.cs: 1.06 back-ease, 4-key wobble, leave ride-home, MotionLevel Off snap, rig on first
+  hover) and attached on 16 of 17 WPF sites (Lockdown art absent here); FeatureCard drives it from ApplyHover like WPF.
+- Evidence: HoverPopTests (Full/Off, real pointer enter/leave), fail-proven. Live hover not shown: Keincheck hit-test lands on the
+  window template Panel in the content area (investigating separately). Rows wired: behavior-hover-pop, shell-profile-wardrobe,
+  views-adorned-avatar. Review: ACCEPT.

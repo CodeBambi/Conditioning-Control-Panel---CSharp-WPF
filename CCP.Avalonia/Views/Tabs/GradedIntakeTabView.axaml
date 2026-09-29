@@ -22,9 +22,9 @@
                                              as ABSOLUTE pixels, which collapses a gradient to 1px
                                              (and would un-mask the whole hero plate)
        x:FieldModifier="internal"        ->  dropped; x:Names kept (nothing on this head pokes them)
-       feat:AdaptiveSideArt.CollapseBelow,
-       hover:HoverPop.IsEnabled          ->  dropped (WPF-head attached behaviours; they follow
-                                             their services to Core)
+       feat:AdaptiveSideArt.CollapseBelow ->  dropped (WPF-head attached behaviour; it follows
+                                             its service to Core)
+       hover:HoverPop.IsEnabled          ->  unchanged (Controls/HoverPop.cs)
        feat:SessionLock.Owned            ->  sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        ImageBrush GradedIntakeHeroBrush  ->  x:Name on a brush is AVLN2000, so the two plate
                                              Borders are named and ModArt.BindFeaturePlates paints
@@ -42,6 +42,7 @@
      (MainWindow.BtnStartIntake_Click); the page only carries the launch button. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.GradedIntakeTabView">
@@ -327,7 +328,7 @@
                          child content, so a child Image would square off the rounded corners
                          (round-2 lesson). Bound to the hero's brush, as WPF (GradedIntakeTabView.xaml:318).
                          The scrim is kept verbatim. -->
-                    <Border x:Name="GradedIntakeSideArt" Grid.Column="1" Background="{Binding #GradedIntakeHeroArtHost.Background}" Margin="10,0,0,10" CornerRadius="14"
+                    <Border hover:HoverPop.IsEnabled="True" x:Name="GradedIntakeSideArt" Grid.Column="1" Background="{Binding #GradedIntakeHeroArtHost.Background}" Margin="10,0,0,10" CornerRadius="14"
                             BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                             VerticalAlignment="Stretch" MinHeight="200" MaxHeight="560">
                         <!-- Scrim so the plate sits under the page instead of fighting it. -->

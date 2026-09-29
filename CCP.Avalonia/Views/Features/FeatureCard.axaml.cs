@@ -36,7 +36,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private const double ActiveBreathSeconds = 3.5;
         private const double RimLightOpacity = 0.85;
         private const double HoverLiftScale = 1.02;
-        private const double HoverPopScale = 1.06;
         private const int HoverMs = 150;
         private const double TeaseBlurRadius = 26;
         private const double TeaseBorderThickness = 2;
@@ -90,7 +89,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private readonly TextBlock _txtTitle, _txtGlyph, _txtTeaseGlyph, _txtLockLabel, _txtTierBadge;
         private readonly Button _btnHelp;
         private readonly DropShadowEffect _activeGlow;
-        private readonly ScaleTransform _rootScale = new(1, 1), _artScale = new(1, 1);
+        private readonly ScaleTransform _rootScale = new(1, 1);
         private CancellationTokenSource? _breath;
         private IDisposable? _visibilityWatch;
         private bool _hovered;
@@ -115,17 +114,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _btnHelp = this.FindControl<Button>("BtnHelp")!;
             _activeGlow = (DropShadowEffect)_rootBorder.Effect!;
 
-            // Hover lift (WPF: MotionFx.HoverLift) and art pop (WPF: HoverPop) as transitions on
-            // two scale transforms; the 6px margin on RootBorder is the headroom the lift paints into.
+            // Hover lift (WPF: MotionFx.HoverLift) as a transition on the root scale (the art pop is
+            // Controls/HoverPop, driven from ApplyHover as WPF does); the 6px margin on RootBorder is the headroom the lift paints into.
             var hoverTransitions = new Transitions
             {
                 new DoubleTransition { Property = ScaleTransform.ScaleXProperty, Duration = TimeSpan.FromMilliseconds(HoverMs), Easing = new QuadraticEaseOut() },
                 new DoubleTransition { Property = ScaleTransform.ScaleYProperty, Duration = TimeSpan.FromMilliseconds(HoverMs), Easing = new QuadraticEaseOut() },
             };
             _rootScale.Transitions = hoverTransitions;
-            _artScale.Transitions = hoverTransitions;
             _rootBorder.RenderTransform = _rootScale;
-            _imgIconHost.RenderTransform = _artScale;
 
             _contentRoot.SizeChanged += (_, _) => UpdateRoundedClip();
             PointerEntered += (_, _) => ApplyHover(true);
@@ -313,7 +310,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // A locked tile is not an affordance; lighting it up promises a click that does nothing.
             if (IsLocked) on = false;
             _rootScale.ScaleX = _rootScale.ScaleY = on ? HoverLiftScale : 1;
-            _artScale.ScaleX = _artScale.ScaleY = on ? HoverPopScale : 1;
+            if (on) HoverPop.Enter(_imgIconHost); else HoverPop.Leave(_imgIconHost);
             _rimLight.Opacity = on ? RimLightOpacity : 0;
         }
 
