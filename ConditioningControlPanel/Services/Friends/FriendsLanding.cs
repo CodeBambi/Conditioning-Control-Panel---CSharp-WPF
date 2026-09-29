@@ -62,7 +62,7 @@ public static class FriendsLanding
             }
             _router?.Release();
 
-            // A notice already up when a lockdown, Strict Lock or program session starts goes on the next tick.
+            // A notice already up when a lockdown or a session starts goes on the next tick.
             if (FriendNotices.AnyUp && ReadWorld().Holding) FriendNotices.CloseAll(fold: true);
             // So does a knock card, unanswered: it waits in the Inbox while the invite still lives.
             if (KnockCard.AnyUp && ReadWorld().Holding) KnockCard.FoldAll();
@@ -102,7 +102,8 @@ public static class FriendsLanding
             ProgramSession: program,
             PanelVisible: panel,
             LauncherVisible: launcher,
-            GameHostActive: ActiveGameWindow() != null);
+            GameHostActive: ActiveGameWindow() != null,
+            SessionRunning: session);
     }
 
     private static Window? LauncherWindow()

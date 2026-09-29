@@ -13,16 +13,19 @@ namespace ConditioningControlPanel.Services.Friends;
 /// <param name="PanelVisible">The panel window is on screen (not tray-hidden, not minimised).</param>
 /// <param name="LauncherVisible">The launcher window is on screen.</param>
 /// <param name="GameHostActive">A game host (Back Room, race, goon) is the active window.</param>
+/// <param name="SessionRunning">Any session is running (DESK-RUN 34: a session starting sends
+/// the card to the Inbox; nothing knocks over one).</param>
 public readonly record struct LandingWorld(
     bool Lockdown,
     bool StrictLock,
     bool ProgramSession,
     bool PanelVisible,
     bool LauncherVisible,
-    bool GameHostActive)
+    bool GameHostActive,
+    bool SessionRunning = false)
 {
-    /// <summary>The three states that hold every delivery until they end.</summary>
-    public bool Holding => Lockdown || StrictLock || ProgramSession;
+    /// <summary>The states that hold every delivery until they end: a lockdown or any session.</summary>
+    public bool Holding => Lockdown || StrictLock || ProgramSession || SessionRunning;
 }
 
 /// <summary>Where one delivery goes right now.</summary>
