@@ -266,6 +266,26 @@ public class PanicPolicyTests
             overrideAll: OverrideEnabled(fresh)));
     }
 
+    /// <summary>Bug hunt 2026-09-29 (DESK-1): the global hook's "dismiss this video" route must not
+    /// swallow a panic press. On the default install an Escape over an unfocused mandatory video
+    /// closed only the video; the engine, flashes, bubbles and Brain Drain kept running.</summary>
+    [Theory]
+    //          video  card   palette panicOn key       lockdown -> video route?
+    [InlineData(true,  false, false,  true,  "Escape", false,    false)] // default install: the panic owns it
+    [InlineData(true,  false, false,  true,  "Escape", true,     true)]  // Lockdown blocks the panic: the video keeps ESC
+    [InlineData(true,  false, false,  true,  "F8",     false,    true)]  // panic on another key: ESC is only the video key
+    [InlineData(true,  false, false,  false, "Escape", false,    true)]  // panic key off
+    [InlineData(true,  true,  false,  true,  "F8",     false,    false)] // a lock card owns ESC first
+    [InlineData(true,  false, true,   true,  "F8",     false,    false)] // the palette owns ESC first
+    [InlineData(false, false, false,  true,  "F8",     false,    false)] // no non-strict video up
+    public void AnEscapeOverAnUnfocusedVideo_IsAPanicPress_WhenEscapeIsThePanicKey(
+        bool video, bool card, bool palette, bool panicOn, string key, bool lockdown, bool expected)
+    {
+        Assert.Equal(expected, EscapeDismissesVideo(video, card, palette, panicOn, key, lockdown));
+        var fresh = new AppSettings();
+        Assert.False(EscapeDismissesVideo(true, false, false, fresh.PanicKeyEnabled, fresh.PanicKey, false));
+    }
+
     // ---- 5. the optional pause key ----
 
     [Fact]

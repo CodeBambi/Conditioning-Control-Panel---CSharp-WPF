@@ -861,8 +861,17 @@ namespace ConditioningControlPanel
             // are side-effect free — deliberately NOT SettingsPaletteWindow.TryConsumeEscape(), which
             // CLOSES the palette just by asking and would burn the grace window HandlePanicKeyPress
             // depends on.
-            if (key == Key.Escape && App.Video?.WantsGlobalEscape == true
-                && !LockCardWindow.IsAnyOpen() && !SettingsPaletteWindow.IsOpen)
+            //
+            // When Escape IS the panic key and the panic can run, the press is a panic press and
+            // falls through to HandlePanicKeyPress, whose stop pass closes the video as well
+            // (PanicPolicy.EscapeDismissesVideo, bug hunt 2026-09-29 DESK-1).
+            if (key == Key.Escape && Services.Safety.PanicPolicy.EscapeDismissesVideo(
+                    videoWantsEscape: App.Video?.WantsGlobalEscape == true,
+                    lockCardOpen: LockCardWindow.IsAnyOpen(),
+                    paletteOpen: SettingsPaletteWindow.IsOpen,
+                    panicKeyEnabled: App.Settings?.Current?.PanicKeyEnabled == true,
+                    panicKey: App.Settings?.Current?.PanicKey,
+                    lockdownActive: App.Lockdown?.IsActive == true))
             {
                 // Never run teardown inside the WH_KEYBOARD_LL callback — it is delivered on this
                 // thread's message pump and must return well inside LowLevelHooksTimeout. Same
