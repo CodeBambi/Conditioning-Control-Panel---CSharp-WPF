@@ -13,11 +13,8 @@
 // which exist on this head - so the rows those would fill are HIDDEN rather than left showing the
 // XAML's placeholders:
 //   * ProfileMenuName + ProfileMenuBadge - no display name and no tier truth here.
-//   * ProfileMenuXpBlock - AppSettings.PlayerLevel/PlayerXP ARE in Core, but the header's own LVL
-//     chip and XP bar are still the XAML's static "Lvl 1" / "0/70 XP" (MainShellWindow.axaml's
-//     TxtLevelLabel and XPBar, driven by MainWindow.HeroFx.cs, which is a stub). A menu reading
-//     "Lvl 7" two inches under a header reading "Lvl 1" is a worse answer than no rail at all, so
-//     the block is hidden until the header is live. It is one edit here to un-hide.
+//   * ProfileMenuBadges - the achievement count reads App.Achievements. The Level/XP rail above it
+//     is LIVE, painted by UpdateLevelDisplay (MainShellWindow.HeroFx.cs) with the header's numbers.
 //   * ProfileMenuAccountBtn - the XAML ships it captioned "Log out". Whether that is even the
 //     right word needs App.IsLoggedIn, and acting on it needs BtnQuickLogout_Click
 //     (ConditioningControlPanel/MainWindow/MainWindow.Login.cs). A row that says "Log out" and
@@ -188,7 +185,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Hide("ProfileMenuName");
                 Hide("ProfileMenuBadge");
-                Hide("ProfileMenuXpBlock");
+                Hide("ProfileMenuBadges");
                 Hide("ProfileMenuAccountBtn");
             }
             catch (Exception ex) { Log.Debug("RefreshProfileMenu: {E}", ex.Message); }
