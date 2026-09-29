@@ -421,7 +421,7 @@ public class ChasterTabRenderTests
     {
         var langs = new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" }
             .Select(lang => Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(System.IO.Path.Combine(
-                RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", lang + ".json"))))
+                SourceRoots.LanguagesDirectory, lang + ".json"))))
             .ToList();
         var words = langs.SelectMany(json => new[] { "chaster_tag_unpaid", "chaster_tag_clear", "chaster_tag_credit" }
             .Select(k => (string)json[k]!)).ToList();

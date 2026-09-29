@@ -131,7 +131,7 @@ public class NatashaHoldTests
         Assert.Equal(TabMenuCopy.ArtFor("natasha"), TabMenuCopy.ArtFor("natasha_held"));
         Assert.Equal("bubbles", TabMenuCopy.VignetteFor("natasha_held"));
 
-        var dir = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");
         Assert.Equal(9, files.Length);
         foreach (var file in files)
