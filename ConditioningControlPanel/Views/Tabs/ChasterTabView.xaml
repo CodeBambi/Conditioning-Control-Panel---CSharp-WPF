@@ -472,6 +472,13 @@
                             </Border>
                         </Grid>
 
+                        <!-- CIRCE'S MOOD: the heat row drawn, bottom right over the art. Hidden with heat off. -->
+                        <ctrl:CircesMoodMeter x:Name="MoodMeter" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                              Margin="0,0,24,16" Panel.ZIndex="5"/>
+                        <!-- CIRCE SAYS: her line, over the art above the meter. Hidden between lines. -->
+                        <ctrl:CirceSays x:Name="PageSays" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                        Margin="0,0,20,190" Panel.ZIndex="6"/>
+
                         <!-- the words and the digits, over the art's fade -->
                         <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Margin="26,14,26,14" VerticalAlignment="Center">
                             <!-- the lock's name, big and candy, every o a padlock -->

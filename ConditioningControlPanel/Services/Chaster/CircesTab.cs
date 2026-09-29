@@ -68,6 +68,8 @@ public sealed class TabState
     /// the heat rule (<see cref="TabDayEnd.Heated"/>).</summary>
     [JsonProperty("heat_day")] public string? HeatDay { get; set; }
     [JsonProperty("heat")] public Dictionary<string, int>? Heat { get; set; }
+    /// <summary>Steps a credit cooled today (<see cref="CircesMood.Cool"/>). Resets with <see cref="HeatDay"/>.</summary>
+    [JsonProperty("heat_cool")] public int HeatCool { get; set; }
 
     /// <summary>The last daily-quest board seen: its day and how many dailies were still open.
     /// Judged once its day is over (the dailies-left row).</summary>

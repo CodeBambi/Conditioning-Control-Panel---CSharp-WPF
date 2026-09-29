@@ -18,7 +18,9 @@ public sealed partial class ChasterService
         lock (_gate)
         {
             var today = CircesTab.DayKey(_localNow());
-            return _tab.HeatDay == today && _tab.Heat != null && _tab.Heat.TryGetValue(eventId, out var n) ? Math.Max(0, n) : 0;
+            // A credit today cools every row by a step (CircesMood.Cool).
+            return _tab.HeatDay == today && _tab.Heat != null && _tab.Heat.TryGetValue(eventId, out var n)
+                ? CircesMood.Effective(n, _tab.HeatCool) : 0;
         }
     }
 
@@ -31,6 +33,7 @@ public sealed partial class ChasterService
         {
             _tab.HeatDay = today;
             _tab.Heat = new Dictionary<string, int>(StringComparer.Ordinal);
+            _tab.HeatCool = 0;
         }
         _tab.Heat[eventId] = (_tab.Heat.TryGetValue(eventId, out var n) ? n : 0) + 1;
     }
