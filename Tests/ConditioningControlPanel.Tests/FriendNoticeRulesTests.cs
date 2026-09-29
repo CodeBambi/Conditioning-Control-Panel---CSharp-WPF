@@ -145,4 +145,25 @@ public class FriendNoticeRulesTests
         Assert.Equal(("friends_notice_minutes", 3), FriendNoticeRules.Ago(T0, T0.AddMinutes(3.5)));
         Assert.Equal("", FriendNoticeRules.CountSuffix(1));
     }
+
+    [Fact]
+    public void AnOldNoticeReadsInHoursNotHundredsOfMinutes()
+    {
+        Assert.Equal(("friends_notice_minutes", 59), FriendNoticeRules.Ago(T0, T0.AddMinutes(59.9)));
+        Assert.Equal(("friends_notice_hours", 3), FriendNoticeRules.Ago(T0, T0.AddHours(3.2)));
+    }
+
+    [Fact]
+    public void AFullStackHandsBackWhatItPushedOff()
+    {
+        var s = new FriendNoticeStack();
+        for (int i = 0; i < FriendNoticeRules.Cap; i++) s.Add(N(NoticeKind.Poke, "f" + i));
+        Assert.Empty(s.TakeEvicted());
+
+        s.Add(N(NoticeKind.Poke, "late1"));
+        s.Add(N(NoticeKind.Poke, "late2"));
+        var gone = s.TakeEvicted();
+        Assert.Equal(new[] { "f0", "f1" }, gone.Select(n => n.FriendId));
+        Assert.Empty(s.TakeEvicted());
+    }
 }

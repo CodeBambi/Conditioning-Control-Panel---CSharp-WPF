@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services.Chaos;
 using Microsoft.Web.WebView2.Core;
+using ConditioningControlPanel.Services.Stakes;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -56,7 +57,7 @@ namespace ConditioningControlPanel.Services.PieceByPiece;
 /// 1200ms <see cref="DispatcherTimer"/> the way the descent does - that timer can never tick from
 /// inside <c>App.OnExit</c>, and here it would be guarding nothing.</para>
 /// </summary>
-internal static class PieceByPieceHostService
+internal static partial class PieceByPieceHostService
 {
     /// <summary>Display name for the tier gate, the window title and log lines.</summary>
     public const string ProductName = "Piece by Piece";
@@ -200,6 +201,7 @@ internal static class PieceByPieceHostService
             // the board's own keys work from the first frame.
             _host.FocusWeb();
 
+            try { App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Chess); } catch (Exception ex) { Diag.Swallowed(ex); }
             App.Logger?.Information("PieceByPieceHostService: launched");
         }
         catch (Exception ex)
@@ -229,6 +231,8 @@ internal static class PieceByPieceHostService
             bool had = _host != null;
             try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _host = null;
+            DropFriendIntent();
+            try { App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Chess); } catch (Exception ex) { Diag.Swallowed(ex); }
             if (had) App.Logger?.Information("PieceByPieceHostService: closed");
         }
         catch (Exception ex) { App.Logger?.Debug("PieceByPieceHostService.Close: {E}", ex.Message); }
@@ -249,6 +253,7 @@ internal static class PieceByPieceHostService
             _host?.FocusWeb();
             PostSettings();
             PostIdentity();
+            PostFriendIntent();
         }
         catch (Exception ex) { App.Logger?.Warning("PieceByPieceHostService.OnPageReady: {E}", ex.Message); }
     }
@@ -322,6 +327,15 @@ internal static class PieceByPieceHostService
         _lastProgressUtc = DateTime.UtcNow;
         try
         {
+            // PvP stakes (Services/Stakes): the shared bridge talks to /v2/stakes/* itself and
+            // books a lost time stake in C# once the match settles. Online PvP only; the page
+            // never sends these for a solo or hotseat game.
+            if (StakeBridge.Handles((string?)o["type"]))
+            {
+                _stakes ??= StakeBridge.ForApp("pbp", PostStake);
+                _ = _stakes.Handle(o);
+                return;
+            }
             switch ((string?)o["type"])
             {
                 case "heartbeat":
@@ -336,6 +350,10 @@ internal static class PieceByPieceHostService
 
                 case "pbp:net":
                     OnNetRequest(o);
+                    break;
+
+                case "pbp:friend-challenge":
+                    OnFriendChallenge(o);
                     break;
 
                 case "pbp:exit":
@@ -564,6 +582,18 @@ internal static class PieceByPieceHostService
         }
         catch { return "Player"; }
     }
+
+    // ============================ stakes ============================
+
+    /// <summary>One bridge for the life of the app: a settle watch it started keeps running (and
+    /// books) after the window closes, and posting to a closed board is a quiet no-op.</summary>
+    private static StakeBridge? _stakes;
+
+    private static void PostStake(JObject o) => RunOnUi(() =>
+    {
+        try { _host?.Post(o); }
+        catch (Exception ex) { App.Logger?.Debug("PieceByPiece: stake post failed: {E}", ex.Message); }
+    });
 
     // ============================ window plumbing ============================
 

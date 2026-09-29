@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -106,18 +107,13 @@ public static class FriendsLanding
         catch { return null; }
     }
 
-    /// <summary>The active window when it belongs to a game host (Back Room, race, goon), else null.
-    /// The hosts do not expose their windows, so it is the active window that is neither the panel,
-    /// the launcher nor one of ours, while a host is up.</summary>
+    /// <summary>The active window when it belongs to a game host (Back Room, race, goon, the
+    /// Arcademy, Piece by Piece), else null. The hosts do not expose their windows, so it is the
+    /// active window that is neither the panel, the launcher nor one of ours, while a host is up.</summary>
     private static Window? ActiveGameWindow()
     {
         bool anyHost;
-        try
-        {
-            anyHost = BackRoom.BackRoomHostService.IsActive
-                || Chaos.CaucusHostService.IsActive
-                || GoonGame.GoonHostService.IsActive;
-        }
+        try { anyHost = LandingRules.AnyGameHost(GameHostsUp()); }
         catch { return null; }
         if (!anyHost) return null;
         try
@@ -133,6 +129,21 @@ public static class FriendsLanding
         }
         catch { /* windows collection changed mid-walk */ }
         return null;
+    }
+
+    /// <summary>Which game hosts are up, one probe each, so one host that throws does not hide the rest.</summary>
+    private static bool[] GameHostsUp() => new[]
+    {
+        Probe(() => BackRoom.BackRoomHostService.IsActive),
+        Probe(() => Chaos.CaucusHostService.IsActive),
+        Probe(() => GoonGame.GoonHostService.IsActive),
+        Probe(() => Arcademy.ArcademyHostService.IsActive),
+        Probe(() => PieceByPiece.PieceByPieceHostService.IsActive),
+    };
+
+    private static bool Probe(Func<bool> read)
+    {
+        try { return read(); } catch { return false; }
     }
 
     /// <summary>Where a card or a word lands when there is no game: the panel, else the launcher.</summary>
@@ -163,8 +174,8 @@ public static class FriendsLanding
     private static string DestinationName(string? dest) => dest switch
     {
         InviteDestination.Goon => Str("friends_land_dest_goon", "the Goon Game"),
-        InviteDestination.Remote => Str("friends_land_dest_remote", "Remote Control"),
         InviteDestination.Ramp => Str("friends_land_dest_ramp", "a Ramp link"),
+        InviteDestination.Chess => Str("friends_land_dest_chess", "a game of chess"),
         _ => Str("friends_land_dest_backroom", "the Back Room"),
     };
 
@@ -193,10 +204,11 @@ public static class FriendsLanding
         {
             var word = PokeText(item.PokeId);
             var pink = LandingRules.PokeIsPink(item.PokeId);
-            FriendsSfx.PokeIn(inGame);
+            // Bell off means silent: the Inbox row and nothing else, not even the cue.
             if (!NoticesOn) { Inbox(item); return; }
+            FriendsSfx.PokeIn(inGame);
             var game = inGame ? ActiveGameWindow() : null;
-            FriendNotices.Show(game ?? Anchor(), Notice(NoticeKind.Poke, item.FromId, item.FromName, item), new NoticeLook
+            FriendNotices.Show(game ?? Anchor(), Notice(NoticeKind.Poke, item.FromId, item.FromName, item, item.At), new NoticeLook
             {
                 Line = Str("friends_notice_poked", "poked you:"),
                 Word = word,
@@ -205,6 +217,8 @@ public static class FriendsLanding
                 ActionLabel = Str("friends_notice_poke_back", "Poke back"),
                 Act = p => { if (p is InboxItem i) PokeBack(i); },
                 Open = p => OpenDrawer((p as InboxItem)?.FromId),
+                // Ran out unseen (or pushed off the stack): it waits in the Inbox instead of vanishing.
+                Missed = p => { if (p is InboxItem i) Inbox(i); },
             });
             if (game != null) return;
             EmiSays(string.Format(Str("friends_land_emi_poke", "{0} says {1}"), item.FromName, word),
@@ -218,15 +232,15 @@ public static class FriendsLanding
         {
             var anchor = inGame ? ActiveGameWindow() ?? Anchor() : Anchor();
             if (anchor == null) { Inbox(item); return; }
-            FriendsSfx.Knock();
             if (!NoticesOn) { Inbox(item); return; }
+            FriendsSfx.Knock();
             if (!inGame)
                 EmiSays(item.Kind == SendKind.Invite
                         ? Str("friends_land_emi_knock", "someone wants you")
                         : Str("friends_land_emi_present", "a present"),
                     item.Kind == SendKind.Invite ? "o_o" : "^_~");
             var kind = item.Kind == SendKind.Invite ? NoticeKind.Invite : NoticeKind.Watch;
-            FriendNotices.Show(anchor, Notice(kind, item.FromId, item.FromName, item), new NoticeLook
+            FriendNotices.Show(anchor, Notice(kind, item.FromId, item.FromName, item, item.At), new NoticeLook
             {
                 Line = KnockLine(item),
                 AvatarUrl = item.FromAvatarUrl,
@@ -272,11 +286,11 @@ public static class FriendsLanding
 
         public void RequestAnnounce(FriendRequest request, bool inGame)
         {
-            FriendsSfx.Request();
             if (!NoticesOn) return;
             var owner = inGame ? ActiveGameWindow() ?? Anchor() : Anchor();
             if (owner == null) return;
-            FriendNotices.Show(owner, Notice(NoticeKind.Request, request.Id, request.Name, request), new NoticeLook
+            FriendsSfx.Request();
+            FriendNotices.Show(owner, Notice(NoticeKind.Request, request.Id, request.Name, request, request.At), new NoticeLook
             {
                 Line = Str("friends_land_request_line", "wants to be friends"),
                 AvatarUrl = request.AvatarUrl,
@@ -286,9 +300,45 @@ public static class FriendsLanding
             });
         }
 
-        public void RequestCue() => FriendsSfx.Request();
+        public void RequestCue()
+        {
+            if (NoticesOn) FriendsSfx.Request();
+        }
 
         public void RequestGone(string requestId) => App.StartupLadder?.RemoveRow(RequestKey(requestId));
+
+        public void RequestsWaiting(IReadOnlyList<FriendRequest> waiting, bool announce, bool inGame)
+        {
+            var ladder = App.StartupLadder;
+            if (waiting.Count == 0) { ladder?.RemoveRow(WaitingKey); return; }
+            var newest = waiting[0];
+            foreach (var r in waiting) if (r.At > newest.At) newest = r;
+            var title = waiting.Count == 1
+                ? newest.Name
+                : string.Format(Str("friends_land_waiting_many", "{0} friend requests waiting"), waiting.Count);
+            var summary = waiting.Count == 1 ? Str("friends_land_request_line", "wants to be friends") : "";
+            ladder?.FileRow(new Startup.InboxItem
+            {
+                Key = WaitingKey,
+                Title = title,
+                Summary = summary,
+                Glyph = "💌",
+                Open = () => OpenDrawer(null),
+            });
+            if (!announce || !NoticesOn) return;
+            var owner = inGame ? ActiveGameWindow() ?? Anchor() : Anchor();
+            if (owner == null) return;
+            FriendsSfx.Request();
+            FriendNotices.Show(owner, Notice(NoticeKind.Request, WaitingKey, waiting.Count == 1 ? newest.Name : "", newest, newest.At),
+                new NoticeLook
+                {
+                    Line = waiting.Count == 1 ? summary : title,
+                    AvatarUrl = waiting.Count == 1 ? newest.AvatarUrl : null,
+                    ActionLabel = Str("friends_land_waiting_open", "Open"),
+                    Act = _ => OpenDrawer(null),
+                    Open = _ => OpenDrawer(null),
+                });
+        }
 
         public void SentBeat(SendKind kind, Friend to)
         {
@@ -306,13 +356,27 @@ public static class FriendsLanding
 
     private static string RequestKey(string id) => "friends-request:" + id;
 
+    private const string WaitingKey = "friends-requests-waiting";
+
     // ---------------------------------------------------------------- corner notices
 
     /// <summary>The drawer's bell. Off: Inbox rows and the cue only, nothing on screen.</summary>
     private static bool NoticesOn => App.Settings?.Current?.FriendNotificationsEnabled != false;
 
-    private static FriendNotice Notice(NoticeKind kind, string friendId, string name, object payload)
-        => new(kind, friendId, name, DateTimeOffset.UtcNow, FriendNoticeRules.LifetimeMs(kind), payload);
+    /// <summary>A notice dated by when it was SENT (the server's <c>at</c>), not when it landed here.</summary>
+    private static FriendNotice Notice(NoticeKind kind, string friendId, string name, object payload, DateTimeOffset sent)
+        => new(kind, friendId, name, LandingRules.NoticeAt(sent, DateTimeOffset.UtcNow), FriendNoticeRules.LifetimeMs(kind), payload);
+
+    /// <summary>The drawer's way to word a result it can no longer show (it folded while a game
+    /// took the screen, or the row it belonged to is gone).</summary>
+    internal static void Tell(string text, bool good) => Say(text, good);
+
+    /// <summary>A short word where the player is looking (the game, the panel, the launcher).</summary>
+    private static void Say(string text, bool good)
+    {
+        var anchor = ActiveGameWindow() ?? Anchor();
+        if (anchor != null) FloatingWord.Throw(anchor, text, pink: !good, small: true);
+    }
 
     /// <summary>The same preset straight back, through the drawer's own send path.</summary>
     private static async void PokeBack(InboxItem item)
@@ -323,7 +387,11 @@ public static class FriendsLanding
             if (svc == null || string.IsNullOrEmpty(item.FromId)) return;
             FriendsSfx.Click();
             var r = await svc.PokeAsync(item.FromId, string.IsNullOrEmpty(item.PokeId) ? "hi" : item.PokeId);
-            if (r != SendResult.Sent) App.Logger?.Debug("[Friends] poke back: {R}", r);
+            // A good send has its own beat (the router's SentBeat); only a refusal needs words here.
+            if (Controls.Friends.FriendsDrawerRules.IsGood(r)) return;
+            App.Logger?.Debug("[Friends] poke back: {R}", r);
+            FriendsSfx.Denied();
+            Say(Loc.Get(Controls.Friends.FriendsDrawerRules.SendResultKey(r)), good: false);
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] poke back: {E}", ex.Message); }
     }
@@ -335,8 +403,15 @@ public static class FriendsLanding
             var svc = App.Friends;
             if (svc == null) return;
             FriendsSfx.Click();
-            await svc.AcceptAsync(request.Id);
-            await svc.RefreshAsync();
+            var r = await svc.AcceptAsync(request.Id);
+            if (r == ActResult.Done)
+            {
+                FriendsSfx.Accepted();
+                Say(Loc.Get("friends_add_accepted"), good: true);
+                return;
+            }
+            FriendsSfx.Denied();
+            Say(Loc.Get(Controls.Friends.FriendsDrawerRules.ActResultKey(r)), good: false);
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] accept: {E}", ex.Message); }
     }
@@ -402,22 +477,7 @@ public static class FriendsLanding
         switch (item.Destination)
         {
             case InviteDestination.Goon:
-                // The duel lobby lives in the goon page and takes the code there; there is no
-                // app-level GoonGameService to hand it to. Copy it, open the game.
-                if (LandingRules.JoinCodeOk(item.Code))
-                {
-                    try { Clipboard.SetText(item.Code!); } catch (Exception ex) { App.Logger?.Debug("[Friends] clipboard: {E}", ex.Message); }
-                    var anchor = Anchor();
-                    if (anchor != null)
-                        FloatingWord.Throw(anchor, Str("friends_land_code_copied", "code copied"), pink: false, small: true);
-                }
-                try { GoonGame.GoonHostService.Launch(); }
-                catch (Exception ex) { App.Logger?.Warning(ex, "[Friends] goon launch failed"); }
-                return;
-
-            case InviteDestination.Remote:
-                if (!LandingRules.JoinCodeOk(item.Code)) return;
-                Helpers.BrowserLauncher.OpenUrlOrPrompt(LandingRules.RemoteUrl(item.Code!), "Remote Control");
+                JoinGoon(item.Code);
                 return;
 
             case InviteDestination.BackRoom:
@@ -425,11 +485,59 @@ public static class FriendsLanding
                 catch (Exception ex) { App.Logger?.Warning(ex, "[Friends] back room launch failed"); }
                 return;
 
+            case InviteDestination.Chess:
+                // The code is the friend's challenge: the board opens and takes it up at once.
+                if (!InviteDestination.IsChallengeId(item.Code)) return;
+                try { ConditioningControlPanel.Services.PieceByPiece.PieceByPieceHostService.JoinFriendChallenge(item.Code!); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "[Friends] chess launch failed"); }
+                return;
+
             case InviteDestination.Ramp:
                 // Link to Ramp lives on the Ramp card in the Studio rack; one tab away, not one call.
                 OpenTab("studio");
                 return;
         }
+    }
+
+    /// <summary>The Goon invite: the game opens straight on the join screen with the code
+    /// (<see cref="GoonGame.GoonHostService.Launch(bool, string?)"/>, the open tables path). A
+    /// window already up gets the code as a frame, which the page only takes between matches, so
+    /// the player is told, and the code waits on the clipboard for after the match.</summary>
+    private static void JoinGoon(string? code)
+    {
+        var codeOk = LandingRules.JoinCodeOk(code);
+        bool alreadyUp;
+        try { alreadyUp = GoonGame.GoonHostService.IsActive; } catch { alreadyUp = false; }
+        if (codeOk && alreadyUp)
+        {
+            try { Clipboard.SetText(code!); } catch (Exception ex) { App.Logger?.Debug("[Friends] clipboard: {E}", ex.Message); }
+        }
+        try { GoonGame.GoonHostService.Launch(true, codeOk ? code : null); }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "[Friends] goon launch failed");
+            FriendsSfx.Denied();
+            Say(Str("friends_land_goon_failed", "the Goon Game did not open"), good: false);
+            return;
+        }
+        if (!codeOk)
+        {
+            Say(Str("friends_land_goon_no_code", "no code came with it, ask again"), good: false);
+            return;
+        }
+        if (alreadyUp) EmiOrSay(Str("friends_land_goon_busy", "in a match? finish it, the code is copied"));
+    }
+
+    /// <summary>A line through Emi when she is out, else as a word where the player is looking.</summary>
+    private static void EmiOrSay(string line)
+    {
+        try
+        {
+            var desk = App.EmiDesk;
+            if (desk?.IsOut == true && desk.Window != null) { desk.Window.Say(line, "o_o"); return; }
+        }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] emi say: {E}", ex.Message); }
+        Say(line, good: true);
     }
 
     // ---------------------------------------------------------------- watch

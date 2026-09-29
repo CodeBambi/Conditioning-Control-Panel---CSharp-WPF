@@ -22,6 +22,8 @@ public enum PresenceActivity
     Breakout,
     Deeper,
     Remote,
+    /// <summary>Piece by Piece (chess). Wire <c>chess</c>; a server that predates it maps it to "online".</summary>
+    Chess,
 }
 
 /// <summary>A friend's presence as the server last reported it. <see cref="LockDay"/> is
@@ -99,13 +101,32 @@ public static class InviteDestination
     public const string BackRoom = "backroom";
     public const string Remote = "remote";
     public const string Ramp = "ramp";
+    /// <summary>Piece by Piece. The code is the server's challenge id (<c>c_</c> + 16 hex),
+    /// minted by <c>/v2/pbp/challenge</c> with the friend as target.</summary>
+    public const string Chess = "chess";
 
-    public static readonly IReadOnlyList<string> All = new[] { Goon, BackRoom, Remote, Ramp };
+    public static readonly IReadOnlyList<string> All = new[] { Goon, BackRoom, Remote, Ramp, Chess };
+
+    /// <summary>What the drawer offers and the service sends. Remote was dropped (owner,
+    /// 2026-09-28): its PIN never travelled, so an invite was a dead end. It stays in
+    /// <see cref="All"/> only so an old client's invite still parses, and the landing drops it.</summary>
+    public static readonly IReadOnlyList<string> Sendable = new[] { Goon, BackRoom, Ramp, Chess };
 
     /// <summary>Seconds an invite stays answerable. Mirrored server-side.</summary>
     public const int LifetimeSeconds = 90;
 
     public static bool IsValid(string? id) => id != null && All.Contains(id);
+
+    public static bool IsSendable(string? id) => id != null && Sendable.Contains(id);
+
+    /// <summary>The chess invite's code: a Piece by Piece challenge id, <c>c_</c> + 16 lowercase hex.</summary>
+    public static bool IsChallengeId(string? s)
+    {
+        if (s == null || s.Length != 18 || s[0] != 'c' || s[1] != '_') return false;
+        for (int i = 2; i < s.Length; i++)
+            if (!((s[i] >= '0' && s[i] <= '9') || (s[i] >= 'a' && s[i] <= 'f'))) return false;
+        return true;
+    }
 }
 
 /// <summary>A watch is a REFERENCE the receiver resolves, never a URL. Catalogue = an
@@ -162,6 +183,10 @@ public enum SendResult { Sent, Squelched, TooFast, NotFriends, Offline, Refused,
 
 /// <summary>What adding by code came back with.</summary>
 public enum AddResult { Sent, Accepted, Already, NotFound, Blocked, Self, Full, TryLater }
+
+/// <summary>What a list change (accept, decline, cancel, remove, block, unblock, squelch, report)
+/// came back with. Only <see cref="Done"/> changed anything; the rest are worded to the player.</summary>
+public enum ActResult { Done, NotFound, Full, TooFast, Refused, TryLater }
 
 /// <summary>Report reasons. A fixed list, no text box, mirrored server-side.</summary>
 public static class ReportReason

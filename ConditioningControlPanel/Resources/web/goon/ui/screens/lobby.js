@@ -27,6 +27,7 @@ import { buildSongRow } from './songRow.js';
 import { songClock } from '../../core/song.js';
 import { customizeSection } from './customize.js';
 import { finishedMatches } from '../nightProgress.js';
+import { mountStakeRow } from '../stake.js';
 
 const DUR_MIN_SEC = 60;
 const DUR_MAX_SEC = 3600;
@@ -209,8 +210,18 @@ export function mount(container, ctx) {
 
   const eyebrow = el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.lobby.eyebrowWaiting })]);
 
+  /* PVP STAKES (ui/stake.js): one pill row, the opponent's chip under it. Only a real,
+   * hosted, signed-in 1v1 gets one (ctx.stakeCode is '' otherwise), and it stays hidden
+   * until the host says stakes are on for this account. Outside the consent box: a stake
+   * is each player's own bet against the house, not a term the two of them negotiate. */
+  let stakeRow = null;
+  try {
+    const code = typeof ctx.stakeCode === 'function' ? ctx.stakeCode() : '';
+    if (code && ctx.stake) stakeRow = mountStakeRow({ ledger, client: ctx.stake, code, audio });
+  } catch (e) { ledger._err('stake row', e); stakeRow = null; }
+
   container.appendChild(el('div', { class: 'gg-card gg-lobby' }, [
-    eyebrow, duel, rivalLine, connLine, prepLine, songRow.node, sheetBox, customBox, lamps, changedLine,
+    eyebrow, duel, rivalLine, connLine, prepLine, songRow.node, stakeRow && stakeRow.node, sheetBox, customBox, lamps, changedLine,
     el('div', { class: 'gg-lobby-actions' }, [leaveBtn, confirmBtn]),
   ]));
 

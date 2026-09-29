@@ -52,10 +52,33 @@ public static class LandingRules
     public static LandingRoute Decide(InboxItem item, LandingWorld world, DateTimeOffset now)
     {
         if (item == null || item.IsExpired(now)) return LandingRoute.Drop;
+        if (IsRetired(item)) return LandingRoute.Drop;
         if (world.Holding) return LandingRoute.Hold;
         if (world.GameHostActive) return LandingRoute.InGame;
         if (world.PanelVisible || world.LauncherVisible) return LandingRoute.Present;
         return LandingRoute.Inbox;
+    }
+
+    /// <summary>True when any game host is up. One flag per host, so adding a host is one probe.</summary>
+    public static bool AnyGameHost(IReadOnlyList<bool> hostsUp)
+    {
+        if (hostsUp == null) return false;
+        foreach (var up in hostsUp) if (up) return true;
+        return false;
+    }
+
+    /// <summary>A delivery nobody can answer any more: a Remote invite from an old client (the
+    /// PIN never travelled, owner dropped the tile 2026-09-28). Shown as nothing.</summary>
+    public static bool IsRetired(InboxItem item)
+        => item.Kind == SendKind.Invite && item.Destination == InviteDestination.Remote;
+
+    /// <summary>When a notice says it arrived: the server's send time, so a poke held through a
+    /// lockdown reads as old. Clamped to now (a fast server clock) and to a day back (a broken one).</summary>
+    public static DateTimeOffset NoticeAt(DateTimeOffset sent, DateTimeOffset now)
+    {
+        if (sent == DateTimeOffset.MinValue || sent > now) return now;
+        var floor = now.AddDays(-1);
+        return sent < floor ? floor : sent;
     }
 
     /// <summary>When the knock card folds: an invite at its own expiry (90 s from At), a watch
@@ -164,10 +187,6 @@ public static class LandingRules
         return true;
     }
 
-    /// <summary>The controller page for a remote invite. The PIN never rides an invite: the
-    /// subject reads it out or the page asks.</summary>
-    public static string RemoteUrl(string code) => "https://cclabs.app/remote/#code=" + Uri.EscapeDataString(code);
-
     /// <summary>The picture a knock card shows, as a path under Resources/.</summary>
     public static string KnockArt(InboxItem item)
     {
@@ -175,8 +194,8 @@ public static class LandingRules
             return item.Destination switch
             {
                 InviteDestination.Goon => "features/goon_game_tile.png",
-                InviteDestination.Remote => "features/remote_control.png",
                 InviteDestination.Ramp => "features/Phrase_Lock.png",
+                InviteDestination.Chess => "features/piecebypiece.png",
                 _ => "features/backroom.png",
             };
         return item.Watch?.Kind == WatchKind.Flavour ? "features/backroom.png" : "features/deeper.png";
@@ -232,6 +251,78 @@ public interface ILandingSink
 
     /// <summary>The request left the list (accepted, declined, withdrawn): its row goes.</summary>
     void RequestGone(string requestId);
+
+    /// <summary>Requests that were already waiting when the list first arrived (launch, sign in):
+    /// one Inbox row for all of them, and one notice when <paramref name="announce"/>. An empty
+    /// list takes that row back; a shorter one re-words it quietly.</summary>
+    void RequestsWaiting(IReadOnlyList<FriendRequest> waiting, bool announce, bool inGame);
+}
+
+/// <summary>
+/// The requests that were already there on the first list after a start or a sign in. The
+/// service takes that list as a silent baseline (<see cref="FriendRequestWatch"/>), so without
+/// this nobody would ever hear about them. Fed every snapshot and every request event; the
+/// router asks <see cref="Take"/> on its tick, after the service has raised its own arrivals
+/// for the same list, so a request is never announced twice.
+/// </summary>
+public sealed class WaitingRequests
+{
+    private bool _seeded;
+    private List<FriendRequest> _pending = new();
+    private HashSet<string> _filed = new(StringComparer.Ordinal);
+
+    /// <summary>Ids the one waiting row currently speaks for.</summary>
+    public IReadOnlyCollection<string> Filed => _filed;
+
+    /// <summary>A snapshot arrived. The first one with anything in it is the baseline. An empty
+    /// one (signed out, account changed) starts over. Returns true when the filed row changed
+    /// (a filed request was answered) and should be re-worded or taken back.</summary>
+    public bool OnSnapshot(FriendsSnapshot snap)
+    {
+        if (snap == null) return false;
+        bool empty = snap.Friends.Count == 0 && snap.Incoming.Count == 0 && snap.Outgoing.Count == 0
+            && string.IsNullOrEmpty(snap.MyCode);
+        if (empty)
+        {
+            _seeded = false;
+            _pending.Clear();
+            if (_filed.Count == 0) return false;
+            _filed.Clear();
+            return true;
+        }
+        if (!_seeded)
+        {
+            _seeded = true;
+            _pending = new List<FriendRequest>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var r in snap.Incoming)
+                if (r != null && !string.IsNullOrEmpty(r.Id) && seen.Add(r.Id)) _pending.Add(r);
+        }
+        if (_filed.Count == 0) return false;
+        var still = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var r in snap.Incoming) if (r != null && _filed.Contains(r.Id)) still.Add(r.Id);
+        if (still.Count == _filed.Count) return false;
+        _filed = still;
+        return true;
+    }
+
+    /// <summary>The service raised this one on its own (it is new, or gone): not ours to announce.</summary>
+    public void Forget(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        _pending.RemoveAll(r => r.Id == id);
+    }
+
+    public bool HasPending => _pending.Count > 0;
+
+    /// <summary>Takes the waiting ones to announce, once. They become the filed row.</summary>
+    public IReadOnlyList<FriendRequest> Take()
+    {
+        var list = _pending;
+        _pending = new List<FriendRequest>();
+        foreach (var r in list) _filed.Add(r.Id);
+        return list;
+    }
 }
 
 /// <summary>The routing, as a plain class over the service: subscribe, decide, hold, release.
@@ -254,9 +345,24 @@ public sealed class FriendsLandingRouter : IDisposable
         _service.Sent += OnSent;
         _service.RequestArrived += OnRequestArrived;
         _service.RequestGone += OnRequestGone;
+        _service.SnapshotChanged += OnSnapshot;
+        OnSnapshot(_service.Snapshot);
     }
 
     private bool _requestCuePending;
+    private readonly WaitingRequests _waiting = new();
+
+    /// <summary>True while requests from the first list wait for the next tick to be announced.</summary>
+    public bool WaitingPending => _waiting.HasPending;
+
+    private void OnSnapshot(FriendsSnapshot snap)
+    {
+        if (!_waiting.OnSnapshot(snap)) return;
+        // A filed request was answered (or the account went): re-word the one row quietly.
+        var left = new List<FriendRequest>();
+        foreach (var r in snap.Incoming) if (r != null && _waiting.Filed.Contains(r.Id)) left.Add(r);
+        _sink.RequestsWaiting(left, announce: false, inGame: false);
+    }
 
     /// <summary>True while a request arrived during a hold and its one cue waits for the release.</summary>
     public bool RequestCuePending => _requestCuePending;
@@ -274,7 +380,10 @@ public sealed class FriendsLandingRouter : IDisposable
     {
         switch (route)
         {
-            case LandingRoute.Drop: return;
+            case LandingRoute.Drop:
+                if (item != null && LandingRules.IsRetired(item))
+                    App.Logger?.Information("[Friends] dropped a retired {Dest} invite from {From}", item.Destination, item.FromId);
+                return;
             case LandingRoute.Hold: _queue.Add(item); return;
             case LandingRoute.Inbox: _sink.Inbox(item); return;
             case LandingRoute.InGame:
@@ -291,6 +400,7 @@ public sealed class FriendsLandingRouter : IDisposable
     public void OnRequestArrived(FriendRequest request)
     {
         if (request == null) return;
+        _waiting.Forget(request.Id);
         _sink.RequestRow(request);
         var world = _world();
         if (world.Holding) { _requestCuePending = true; return; }
@@ -301,15 +411,23 @@ public sealed class FriendsLandingRouter : IDisposable
     public void OnRequestGone(string requestId)
     {
         if (string.IsNullOrEmpty(requestId)) return;
+        _waiting.Forget(requestId);
         _sink.RequestGone(requestId);
     }
 
-    /// <summary>Called on a timer: once the hold ends, everything still alive lands in order.</summary>
+    /// <summary>Called on a timer: once the hold ends, everything still alive lands in order.
+    /// Requests that were waiting at launch are told here too, once, as one row and one notice.</summary>
     public void Release()
     {
-        if (_queue.Count == 0 && !_requestCuePending) return;
+        if (_queue.Count == 0 && !_requestCuePending && !_waiting.HasPending) return;
         var world = _world();
         if (world.Holding) return;
+        if (_waiting.HasPending)
+        {
+            var waiting = _waiting.Take();
+            bool onScreen = world.GameHostActive || world.PanelVisible || world.LauncherVisible;
+            if (waiting.Count > 0) _sink.RequestsWaiting(waiting, announce: onScreen, inGame: world.GameHostActive);
+        }
         if (_requestCuePending)
         {
             _requestCuePending = false;
@@ -334,5 +452,6 @@ public sealed class FriendsLandingRouter : IDisposable
         _service.Sent -= OnSent;
         _service.RequestArrived -= OnRequestArrived;
         _service.RequestGone -= OnRequestGone;
+        _service.SnapshotChanged -= OnSnapshot;
     }
 }
