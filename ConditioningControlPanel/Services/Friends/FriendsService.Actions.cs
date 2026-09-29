@@ -56,10 +56,17 @@ public sealed partial class FriendsService
         WatchRef? watch, Action<bool>? after)
     {
         if (!Available || string.IsNullOrEmpty(friendId)) return SendResult.TryLater;
-        var result = await _api.SendAsync(friendId, kind, poke, destination, code, watch);
+        var sentFor = _account();
+        var outcome = await _api.SendForItemAsync(friendId, kind, poke, destination, code, watch);
+        var result = outcome.Result;
         after?.Invoke(result == SendResult.Sent);
         if (result == SendResult.Sent)
         {
+            // The trail starts at "sent"; receipts walk it on (FriendsSentBook). Not for an account
+            // that changed while the call was out: that one's book was just cleared.
+            if (_account() == sentFor)
+                NoteSentTrail(friendId, kind, outcome.ItemId,
+                    kind switch { SendKind.Poke => poke, SendKind.Invite => destination, _ => watch?.Title });
             var friend = Snapshot.Friends.FirstOrDefault(f => f.Id == friendId)
                 ?? new Friend(friendId, "", null, 0, false, FriendPresence.None, false);
             try { Sent?.Invoke(kind, friend); }

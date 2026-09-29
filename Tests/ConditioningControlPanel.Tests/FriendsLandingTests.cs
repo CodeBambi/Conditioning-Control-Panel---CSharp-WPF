@@ -81,9 +81,19 @@ public class FriendsLandingTests
     [Fact]
     public void AnExpiredDeliveryIsDropped()
     {
-        var (svc, sink, _) = Rig(() => PanelUp, now: () => T0.AddSeconds(91));
+        var (svc, sink, _) = Rig(() => PanelUp, now: () => T0.AddSeconds(InviteDestination.LifetimeSeconds + 1));
         svc.Deliver(Invite("late"));
         Assert.Empty(sink.Calls);
+    }
+
+    [Fact]
+    public void AnInviteLivesFiveMinutesToMatchTheServer()
+    {
+        // FRIENDS-RECEIPTS v1: the server keeps an invite five minutes (was 90 s).
+        Assert.Equal(300, InviteDestination.LifetimeSeconds);
+        var (svc, sink, _) = Rig(() => PanelUp, now: () => T0.AddSeconds(200));
+        svc.Deliver(Invite("still-good"));
+        Assert.Equal(new[] { "knock:still-good:False" }, sink.Calls);
     }
 
     [Fact]
@@ -180,15 +190,52 @@ public class FriendsLandingTests
     // ---------------------------------------------------------------- the ring
 
     [Fact]
-    public void AnInviteRingRunsNinetySecondsFromAt()
+    public void AnInviteRingRunsFiveMinutesFromAt()
     {
         var item = Invite("i", at: T0);
         var end = LandingRules.KnockEnds(item, T0.AddSeconds(10));
-        Assert.Equal(T0.AddSeconds(90), end);
+        Assert.Equal(T0.AddSeconds(300), end);
         Assert.Equal(1.0, LandingRules.RingFraction(T0, end, T0), 6);
-        Assert.Equal(0.5, LandingRules.RingFraction(T0, end, T0.AddSeconds(45)), 6);
-        Assert.Equal(0.0, LandingRules.RingFraction(T0, end, T0.AddSeconds(200)), 6);
+        Assert.Equal(0.5, LandingRules.RingFraction(T0, end, T0.AddSeconds(150)), 6);
+        Assert.Equal(0.0, LandingRules.RingFraction(T0, end, T0.AddSeconds(400)), 6);
         Assert.Equal(1.0, LandingRules.RingFraction(T0, end, T0.AddSeconds(-5)), 6);
+    }
+
+    [Fact]
+    public void AKnockCardRingsBrieflyThenTucksForTheLongTail()
+    {
+        // A card that shouts for five minutes is wrong: it rings full size, then tucks down.
+        Assert.True(LandingRules.KnockRingSeconds < InviteDestination.LifetimeSeconds / 4);
+        Assert.False(LandingRules.KnockTucked(T0, T0.AddSeconds(LandingRules.KnockRingSeconds - 1)));
+        Assert.True(LandingRules.KnockTucked(T0, T0.AddSeconds(LandingRules.KnockRingSeconds)));
+    }
+
+    [Fact]
+    public void TheCountdownReadsMinutesAndSecondsAndNeverGoesNegative()
+    {
+        var end = T0.AddSeconds(300);
+        Assert.Equal("5:00", LandingRules.Countdown(end, T0));
+        Assert.Equal("4:05", LandingRules.Countdown(end, T0.AddSeconds(55)));
+        Assert.Equal("0:09", LandingRules.Countdown(end, T0.AddSeconds(291)));
+        // Rounded up, so a card that is still lit never reads 0:00.
+        Assert.Equal("0:01", LandingRules.Countdown(end, T0.AddSeconds(299.6)));
+        Assert.Equal("0:00", LandingRules.Countdown(end, T0.AddSeconds(400)));
+    }
+
+    [Fact]
+    public void AReopenedCardShowsTheTimeAlreadySpent()
+    {
+        // Opened from the Inbox three minutes in: the ring starts at the send time, not now.
+        var item = Invite("i", at: T0);
+        var now = T0.AddMinutes(3);
+        var start = LandingRules.KnockStarts(item, now);
+        Assert.Equal(T0, start);
+        Assert.Equal(0.4, LandingRules.RingFraction(start, LandingRules.KnockEnds(item, now), now), 6);
+        // A send time ahead of this clock starts the ring now, and it still reads five minutes, not more.
+        var ahead = Invite("f", at: now.AddSeconds(20));
+        Assert.Equal(now, LandingRules.KnockStarts(ahead, now));
+        Assert.Equal(now.AddSeconds(InviteDestination.LifetimeSeconds), LandingRules.KnockEnds(ahead, now));
+        Assert.Equal("5:00", LandingRules.Countdown(LandingRules.KnockEnds(ahead, now), now));
     }
 
     [Fact]

@@ -42,6 +42,12 @@ public interface IFriendsApi
     Task<SendResult> SendAsync(string to, SendKind kind, string? poke, string? destination, string? code, WatchRef? watch,
         CancellationToken ct = default);
 
+    /// <summary>The same send, keeping the reply's <c>item_id</c> (FRIENDS-RECEIPTS v1) for the
+    /// sender's trail. Default: <see cref="SendAsync"/> with no id (fakes that know nothing of receipts).</summary>
+    async Task<SendOutcome> SendForItemAsync(string to, SendKind kind, string? poke, string? destination, string? code,
+        WatchRef? watch, CancellationToken ct = default)
+        => new(await SendAsync(to, kind, poke, destination, code, watch, ct).ConfigureAwait(true), null);
+
     /// <summary>accept, decline, cancel, remove, block, unblock, squelch, report. True only on <c>ok</c>.</summary>
     Task<bool> ActAsync(string op, string id, JObject? extra = null, CancellationToken ct = default);
 
@@ -206,6 +212,10 @@ public sealed class FriendsApi : IFriendsApi
 
     public async Task<SendResult> SendAsync(string to, SendKind kind, string? poke, string? destination, string? code,
         WatchRef? watch, CancellationToken ct = default)
+        => (await SendForItemAsync(to, kind, poke, destination, code, watch, ct)).Result;
+
+    public async Task<SendOutcome> SendForItemAsync(string to, SendKind kind, string? poke, string? destination, string? code,
+        WatchRef? watch, CancellationToken ct = default)
     {
         var body = new JObject { ["to"] = to, ["kind"] = KindToWire(kind) };
         if (poke != null) body["poke"] = poke;
@@ -218,8 +228,17 @@ public sealed class FriendsApi : IFriendsApi
             body["watch"] = w;
         }
         var o = await CallAsync("send", body, ct);
-        if (o == null) return SendResult.TryLater;
-        return Ok(o) ? SendFromWire(o.Value<string?>("status")) : SendFromWire(o.Value<string?>("reason"));
+        return SendOutcomeFromReply(o);
+    }
+
+    /// <summary>A send reply worded, with its <c>item_id</c> kept only when it is a real id on a <c>sent</c>.</summary>
+    internal static SendOutcome SendOutcomeFromReply(JObject? o)
+    {
+        if (o == null) return new SendOutcome(SendResult.TryLater, null);
+        if (!Ok(o)) return new SendOutcome(SendFromWire(o.Value<string?>("reason")), null);
+        var result = SendFromWire(o.Value<string?>("status"));
+        var id = result == SendResult.Sent ? Str(o["item_id"]) : null;
+        return new SendOutcome(result, FriendReceipts.IsItemId(id) ? id : null);
     }
 
     public async Task<bool> ActAsync(string op, string id, JObject? extra = null, CancellationToken ct = default)
@@ -331,7 +350,25 @@ public sealed class FriendsApi : IFriendsApi
         if (o["me"] is JObject mo)
             me = new FriendPresence(ActivityFromWire(Str(mo["activity"])), IntOrNull(mo["lock_day"]), DateTimeOffset.MinValue);
 
-        return new FriendsSnapshot(friends, ParseRequests(o["incoming"]), ParseRequests(o["outgoing"]), Str(o["code"]) ?? "", me);
+        return new FriendsSnapshot(friends, ParseRequests(o["incoming"]), ParseRequests(o["outgoing"]), Str(o["code"]) ?? "", me)
+        {
+            Blocked = ParseBlocked(o["blocked"]),
+        };
+    }
+
+    /// <summary><c>state.blocked</c> (FRIENDS-RECEIPTS v1): <c>[{ id, name }]</c>. Null when the key is
+    /// absent (a server that predates it), so the drawer can tell "none" from "not told".</summary>
+    internal static IReadOnlyList<BlockedFriend>? ParseBlocked(JToken? t)
+    {
+        if (t is not JArray a) return null;
+        var list = new List<BlockedFriend>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var b in a)
+        {
+            if (b is not JObject bo || Str(bo["id"]) is not { Length: > 0 } id || !seen.Add(id)) continue;
+            list.Add(new BlockedFriend(id, Str(bo["name"]) is { Length: > 0 } n ? n : "?"));
+        }
+        return list;
     }
 
     private static List<FriendRequest> ParseRequests(JToken? t)
