@@ -46,6 +46,14 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
 
+        <!-- One line of the "How it works" card. -->
+        <Style x:Key="CirceHowLine" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
         <!-- The one muted line under a figure. -->
         <Style x:Key="CirceSub" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
@@ -801,7 +809,9 @@
                             </Grid>
                         </Border>
                             <!-- ================= 4. THE KEYS: a 2x2 under the heads-up clock, beside the ladder scrap (owner, 2026-09-26) ================= -->
-                            <TextBlock x:Name="PricesHeader" Text="{loc:Str chaster_keys_eyebrow}" Style="{StaticResource CirceEyebrow}" Margin="4,14,0,8"/>
+                            <TextBlock x:Name="PricesHeader" Text="{loc:Str chaster_keys_eyebrow}" Style="{StaticResource CirceEyebrow}" Margin="4,14,0,2"/>
+                            <TextBlock x:Name="TxtKeysExplain" Text="{loc:Str chaster_keys_explain}" FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" Margin="4,0,0,8"/>
                             <UniformGrid x:Name="PresetRow" Columns="2" Rows="2" Margin="0,0,-12,-12">
                                 <ToggleButton x:Name="BtnPresetGentle" Style="{StaticResource CirceKey}" Tag="gentle" Click="Preset_Click" Margin="0,0,12,12"
                                               ToolTip="{loc:Str chaster_preset_gentle_hint}">
@@ -879,7 +889,25 @@
 
 
                         <!-- ================= 5. THE MENU: two boards, always in view ================= -->
-                        <TextBlock Text="{loc:Str chaster_menu_eyebrow}" Style="{StaticResource CirceEyebrow}" Margin="4,18,0,8"/>
+                        <Grid Margin="4,18,0,2">
+                            <TextBlock Text="{loc:Str chaster_menu_eyebrow}" Style="{StaticResource CirceEyebrow}" VerticalAlignment="Center"/>
+                            <Button x:Name="BtnHowItWorks" Style="{StaticResource CirceLink}" Content="{loc:Str chaster_how_title}"
+                                    HorizontalAlignment="Right" Click="BtnHowItWorks_Click"/>
+                        </Grid>
+                        <Border x:Name="HowItWorksCard" Visibility="Collapsed" Style="{StaticResource CirceCard}" Margin="0,4,0,10">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str chaster_how_1}" Style="{StaticResource CirceHowLine}"/>
+                                <TextBlock Text="{loc:Str chaster_intro_2}" Style="{StaticResource CirceHowLine}"/>
+                                <TextBlock Text="{loc:Str chaster_how_3}" Style="{StaticResource CirceHowLine}"/>
+                                <TextBlock Text="{loc:Str chaster_intro_3}" Style="{StaticResource CirceHowLine}"/>
+                            </StackPanel>
+                        </Border>
+                        <DockPanel Margin="4,0,0,8" LastChildFill="True">
+                            <Button x:Name="BtnResetPrices" DockPanel.Dock="Right" Style="{StaticResource CirceLink}" Visibility="Collapsed"
+                                    Content="{loc:Str chaster_price_reset}" VerticalAlignment="Center" Click="BtnResetPrices_Click"/>
+                            <TextBlock x:Name="TxtMenuHint" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </DockPanel>
                         <Grid x:Name="Boards">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -893,13 +921,20 @@
                                                FontWeight="SemiBold" Foreground="#FF8FA3" Margin="2,0,0,10"/>
                                     <UniformGrid x:Name="CostRows" Columns="2"/>
                                     <!-- Natasha's favourite on flashes: off = only bubbles are ever red. -->
-                                    <StackPanel x:Name="FlashDodgeRow" Orientation="Horizontal" Margin="2,6,8,6"
-                                                ToolTip="{loc:Str chaster_flash_dodge_hint}">
-                                        <CheckBox x:Name="ChkFlashDodge" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                    <Grid x:Name="FlashDodgeRow" Margin="2,6,8,6" ToolTip="{loc:Str chaster_flash_dodge_hint}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox x:Name="ChkFlashDodge" Style="{StaticResource ToggleStyle}" VerticalAlignment="Top" Margin="0,1,0,0"
                                                   Checked="ChkFlashDodge_Changed" Unchecked="ChkFlashDodge_Changed"/>
-                                        <TextBlock Text="{loc:Str chaster_flash_dodge}" FontSize="12.5" Margin="10,0,0,0"
-                                                   Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
-                                    </StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                            <TextBlock Text="{loc:Str chaster_flash_dodge}" FontSize="12.5"
+                                                       Foreground="{DynamicResource TextLightBrush}"/>
+                                            <TextBlock x:Name="TxtFlashDodgeSub" FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,0"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
                             <Border x:Name="EarnBoard" Grid.Column="2" Style="{StaticResource CirceCard}" Padding="14,12,6,6"

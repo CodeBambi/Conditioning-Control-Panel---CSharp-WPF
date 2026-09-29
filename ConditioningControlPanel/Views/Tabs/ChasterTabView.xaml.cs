@@ -1121,14 +1121,7 @@ namespace ConditioningControlPanel.Views.Tabs
             Stakes(TxtStakesStrict, TabPresets.Strict);
             Stakes(TxtStakesCirce, TabPresets.Circe);
             RefreshMood(); // the heat row may have just gone on or off
-        }
-
-        /// <summary>"Worst month +4 days": what the preset can cost past the lock end.</summary>
-        private static void Stakes(TextBlock line, string presetId)
-        {
-            if (TabPresets.Find(presetId) is not { } preset) return;
-            var (value, days) = TabPresets.WorstMonth(preset);
-            line.Text = Loc.GetF(days ? "chaster_preset_stakes_days" : "chaster_preset_stakes_hours", value);
+            PaintMenuHelp(); // Natasha's row may have just gone on or off
         }
 
         /// <summary>Push the saved set onto the rows. Never the other way round: the settings
