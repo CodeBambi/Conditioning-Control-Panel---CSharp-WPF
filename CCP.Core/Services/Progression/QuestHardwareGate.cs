@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -87,16 +88,14 @@ internal sealed class QuestHardwareGate
     // final. A camera that cannot be COUNTED is not a camera that is MISSING. The strict pair
     // throws instead, CachedProbe.Run catches, and the answer is present + UNRESOLVED, exactly
     // like the mic. Only a clean enumeration that really found nothing says "no camera".
-    private static bool DetectCamera()
-    {
-        if (WebcamDeviceEnumerator.EnumerateStrict().Count > 0) return true;
-        return WebcamWinRtEnumerator.EnumerateStrict().Count > 0;
-    }
+    // The strict enumerators are head-side; the head seeds the probe (WPF App.xaml.cs). No head
+    // reads as present, the same fail-open as a probe that throws.
+    private static bool DetectCamera() => CoreQuests.CameraProbe?.Invoke() ?? true;
 
     /// <summary>The same WaveIn enumeration the speech mic picker is built from - no new probe.</summary>
     // Not SpeechService.HasCaptureDevice: that swallows a WaveIn throw into "false", which would
     // read as absent AND resolved. A throw here reaches CachedProbe.Run and fails open instead.
-    private static bool DetectMicrophone() => NAudio.Wave.WaveInEvent.DeviceCount > 0;
+    private static bool DetectMicrophone() => CoreQuests.MicrophoneProbe?.Invoke() ?? true;
 
     /// <summary>Categories that cannot move without a webcam.</summary>
     internal static bool NeedsCamera(QuestCategory category) => category == QuestCategory.BlinkTrainer;
@@ -199,7 +198,7 @@ internal sealed class QuestHardwareGate
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Quest {Device} probe failed; assuming the device is present", _label);
+                Log.Warning(ex, "Quest {Device} probe failed; assuming the device is present", _label);
                 resolved = false;
                 return true;
             }
@@ -213,12 +212,12 @@ internal sealed class QuestHardwareGate
             try { found = _probe(); }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Quest {Device} probe threw; assuming the device is present", _label);
+                Log.Warning(ex, "Quest {Device} probe threw; assuming the device is present", _label);
                 found = true;
                 resolved = false;
             }
             lock (_lock) { _present = found; _resolved = resolved; _probedAtUtc = DateTime.UtcNow; _inFlight = null; }
-            App.Logger?.Information("Quest hardware probe: {Device}={Present}", _label, found);
+            Log.Information("Quest hardware probe: {Device}={Present}", _label, found);
         }
     }
 }

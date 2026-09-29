@@ -8,7 +8,7 @@
 //
 // What each member needs, exactly:
 //   RerollDailySlot         - App.Quests.RerollDaily / RerollWeekly and the reroll budget
-//   BtnRerollWeekly_Click     (ConditioningControlPanel/Services/Progression/QuestService.cs).
+//   BtnRerollWeekly_Click     (CCP.Core/Services/Progression/QuestService.cs).
 //   RefreshQuestUI          - the same service for the three daily seats, the weekly card, the
 //   BuildDailyCardModel       stats tiles and the streak, plus Models.QuestDefinition /
 //   _dailyCardQuestIds        Models.ActiveQuest (CCP.Core/Models/Quest.cs) and

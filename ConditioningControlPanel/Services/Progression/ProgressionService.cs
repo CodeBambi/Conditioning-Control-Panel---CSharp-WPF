@@ -323,8 +323,7 @@ namespace ConditioningControlPanel.Services
         /// that understands epoch 1"; this says "this account has crossed over". Conflating them
         /// would recurve everybody the moment they installed the new version.</para>
         /// </summary>
-        public static int ActiveCurveEpoch =>
-            App.Settings?.Current?.DescentEpoch == CurveEpochDescent ? CurveEpochDescent : CurveEpochLegacy;
+        public static int ActiveCurveEpoch => XpCurve.EpochOf(App.Settings?.Current);
 
         /// <summary>XP to clear <paramref name="level"/> on the curve this account is currently on.</summary>
         public double GetXPForLevel(int level) => GetXPForLevel(level, ActiveCurveEpoch);

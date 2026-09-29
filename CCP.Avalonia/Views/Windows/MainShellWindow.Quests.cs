@@ -1,9 +1,9 @@
 // NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.Quests.cs (124 lines).
 //
 // Five members, and both real ones are EVENT HANDLERS for App.Quests
-// (ConditioningControlPanel/Services/Progression/QuestService.cs). CoreProgression carries AddXP
-// and nothing else, so there is no QuestCompleted / QuestProgressChanged to subscribe to on this
-// head - a restored handler would be a method with no publisher. What they draw is not the
+// (CCP.Core/Services/Progression/QuestService.cs). The service and its QuestCompleted /
+// QuestProgressChanged events are in Core now, but this head does not construct it yet (next
+// layer) - a restored handler would still be a method with no publisher. What they draw is not the
 // problem: QuestCompleteBanner and TxtQuestComplete are both in QuestsTabView.axaml:437-441 and
 // Views/Windows/QuestCompletePopup is ported.
 //
