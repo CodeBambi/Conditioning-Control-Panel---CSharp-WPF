@@ -1,6 +1,7 @@
 // node smoke/replay-smoke.mjs - capture replay timing, stagger, highlights, enter/exit motion,
 // the per-panel hit and the clock rules.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { LAYOUTS, SHOTS, REPLAY, hitAt, replayLength, warp, clipTime, panelState, replayAllowed,
   createLayoutDeck, panelCount, scalePoly, orient, placePoly, offStage, slideOf, exitLength } from '../board/replay-plan.js';
 import { burstStyle, impactWords, boil, panelRank, inkLayers } from '../board/replay-fx.js';
@@ -149,5 +150,16 @@ assert.deepEqual(boil(.6, 0, 1.2), boil(.6, 0, 1.24), 'the boil steps, it does n
     'no hit: later panels over earlier ones, whatever order they come in');
   assert.ok(panelRank(0, true) > panelRank(2, false) && panelRank(2, false) > panelRank(1, false), 'ranks match the picture order');
   assert.deepEqual(inkLayers([{ i: 0, lit: false }]).map(l => l.over.length), [0], 'a lone panel needs no mask');
+}
+// The corner inset sat under the Options pill: behind a corner replay that pill steps back,
+// and only that pill, as the clocks are why the corner layout exists (bug hunt 2026-09-29, CHESS-8).
+{
+  const director = readFileSync(new URL('../board/director.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  assert.match(director, /hudDown\(true, layout === 'corner'\);/, 'a replay tells the HUD which layout it is');
+  assert.match(director, /toggle\('pbp-replay-corner', !!on && corner\)/, 'a corner replay marks the page');
+  assert.match(director, /toggle\('pbp-replay-full', !!on && !corner\)/, 'and only a full-screen replay fades the whole HUD');
+  assert.match(css, /body\.pbp-replay-corner \.game-settings:not\(:has\(\.game-options-panel:not\(\[hidden\]\)\)\) \{ opacity: \.1;/,
+    'the Options pill steps back behind the corner inset, unless its panel is open');
 }
 console.log('replay: stagger, slow motion, highlights, enter/exit, hits, clock rules and layout deck passed');
