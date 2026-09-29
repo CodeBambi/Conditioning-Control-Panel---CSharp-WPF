@@ -52,6 +52,11 @@ namespace ConditioningControlPanel.Avalonia
             Mods.Initialize(CoreSettings.Current.ActiveModId);
         }
 
+        /// <summary>The cclabs catalogue client (WPF App.Catalogue): the same Core client and inputs as WPF's
+        /// CatalogueService. Settable so a test can hand in a fake-handler client.</summary>
+        internal static CatalogueClient Catalogue { get; set; } = new(
+            () => CoreSettings.Current.AuthToken, () => CoreAccount.UnifiedUserId, CoreReleaseContent.AppVersion);
+
         /// <summary>The release-content pack service (WPF App.ReleaseContent), or null on the headless render path.</summary>
         internal static ReleaseContentService? ReleaseContent { get; private set; }
 

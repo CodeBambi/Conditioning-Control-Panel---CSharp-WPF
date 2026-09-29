@@ -16,12 +16,8 @@
 //   Views/Dialogs/ModManagerDialog.axaml.cs:258  the per-row pill (kind "mods" + mod.Id)
 // - and none of those files is owned by this layer. They can now be wired without a Core change.
 //
-// THE WRITE HALF IS STILL OUT, for two different reasons:
-//   RecordCatalogueSubmission(kind, key, SubmissionResult)
-//       Its persistence body is portable line for line, but its parameter type is not:
-//       SubmissionResult was head-only; it is Core's since catalogue U1
-//       (CCP.Core/Services/Catalogue/CatalogueClient.cs), so this is now unblocked (U3 wires it).
-//       It also ends by calling RefreshCatalogueShareBadges (MainShellWindow.PresetIO.cs, a stub).
+// THE WRITE HALF: RecordCatalogueSubmission is ported (catalogue U3; its callers, the preset/session/
+// mod Share buttons, land with U4). Still out:
 //   CheckCatalogueSubmissionStatusesAsync(kind, force)
 //       App.Catalogue.FetchMySubmissionsAsync / FetchMyCatalogueAssetsAsync - a network round trip
 //       with no seam. Its three throttle members (CatalogueCheckThrottle, _lastCatalogueCheckUtc,
@@ -38,6 +34,8 @@
 using System;
 using System.Collections.Generic;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -89,6 +87,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var dict = GetCatalogueDict(kind);
             if (dict == null || string.IsNullOrEmpty(key)) return null;
             dict.TryGetValue(key, out var rec);
+            return rec;
+        }
+
+        /// <summary>WPF MainWindow.CatalogueSubmissions.cs:63: remember a share's server id/status. Only
+        /// Success/Duplicate carry one; other outcomes are no-ops. The badge refresh WPF ends with
+        /// (RefreshCatalogueShareBadges) belongs to the share pills, which are not built on this head.</summary>
+        internal static void RecordCatalogueSubmission(string kind, string key, SubmissionResult result)
+        {
+            try
+            {
+                if (ToRecordFields(result) is not var (id, status) || string.IsNullOrEmpty(key)) return;
+                var dict = GetCatalogueDict(kind);
+                if (dict == null) return;
+                dict.TryGetValue(key, out var existing);
+                dict[key] = UpdateRecord(existing, id, status);
+                CoreSettings.Save();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[Catalogue] RecordCatalogueSubmission failed: {Error}", ex.Message);
+            }
+        }
+
+        private static (string Id, string Status)? ToRecordFields(SubmissionResult result)
+        {
+            var (id, status) = result switch
+            {
+                SubmissionResult.Success s => (s.Id, s.Status),
+                SubmissionResult.Duplicate d => (d.ExistingId, d.ExistingStatus),
+                _ => (null, null),
+            };
+            if (string.IsNullOrEmpty(id)) return null;
+            return (id, string.IsNullOrEmpty(status) ? "pending" : status);
+        }
+
+        private static DeeperSubmissionRecord UpdateRecord(DeeperSubmissionRecord? existing, string id, string status)
+        {
+            var rec = existing ?? new DeeperSubmissionRecord { SubmittedUtc = DateTime.UtcNow };
+            rec.CatalogueId = id;
+            rec.Status = status;
+            rec.LastCheckedUtc = DateTime.UtcNow;
+            // A re-submit that reports it is already accepted must not fire a retroactive "published"
+            // toast later - the duplicate toast already said so.
+            if (IsCatalogueAcceptedStatus(status)) rec.AcceptedNotified = true;
             return rec;
         }
     }
