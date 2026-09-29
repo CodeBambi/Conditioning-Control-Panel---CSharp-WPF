@@ -329,6 +329,9 @@ public sealed partial class ChasterService : IDisposable
     public void NoteSafetyExit()
     {
         lock (_gate) _safetyUntilUtc = _utcNow() + SafetyHold;
+        // The rail chip counts the hold down instead of the lock; with no lock running its clock
+        // ticks once a minute, so tell everything that paints the lock now.
+        LockChanged?.Invoke();
     }
 
     // Caller holds _gate. What an add may still book today with a Remote session open: all of it

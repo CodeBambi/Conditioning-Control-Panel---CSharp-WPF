@@ -179,6 +179,25 @@ public class ChasterServiceTests : IDisposable
         Assert.Equal(30, after.AppliedSeconds);
     }
 
+    /// <summary>DESK-6. The rail chip counts a hold down instead of the lock, and with no lock
+    /// running its clock ticks once a minute, so a panic must repaint it at once: the hold is
+    /// raised as a lock change, which the chip already repaints on (marshalled to its dispatcher).</summary>
+    [Fact]
+    public void A_safety_exit_repaints_the_lock_at_once()
+    {
+        using var service = Make();
+        var raised = 0;
+        service.LockChanged += () => raised++;
+
+        service.NoteSafetyExit();
+
+        Assert.Equal(1, raised);
+        Assert.Equal(ChasterService.SafetyHold, service.SafetyHoldRemaining);
+        var chip = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Controls", "ChasterRailChip.cs"));
+        Assert.Contains("chaster.LockChanged += OnServiceChanged;", chip);
+        Assert.Contains("Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(Apply));", chip);
+    }
+
     /// <summary>TAB-9. A red flash whose ring ran out still books +5:00 (and the ladder, the rail
     /// and the page still see it), but the booking says nobody prompted it, and Circe's line picker
     /// is handed the whole booking so she stays quiet for it. A popped red bubble still speaks.</summary>
