@@ -154,11 +154,16 @@ internal static partial class PieceByPieceHostService
     /// Hand the page an Escape the panel kept as the game's pause. The board pauses on its own
     /// keydown, which never comes while its WebView2 is out of keyboard focus; the page plays this as
     /// its own Escape unless the real key reached it too. MainWindow asks
-    /// PanicPolicy.BoardGetsKeptEscape first.
+    /// PanicPolicy.BoardGetsKeptEscape first. The page gets the keyboard back as well, so Enter on
+    /// Resume works without a click (the board is already in front, so nothing else moves).
     /// </summary>
     public static void PostKeptEscape()
     {
-        try { _host?.Post(new { type = KeptEscapeType }); }
+        try
+        {
+            _host?.Post(new { type = KeptEscapeType });
+            _host?.FocusWeb();
+        }
         catch (Exception ex) { App.Logger?.Debug("PieceByPiece: kept Escape post failed: {E}", ex.Message); }
     }
 

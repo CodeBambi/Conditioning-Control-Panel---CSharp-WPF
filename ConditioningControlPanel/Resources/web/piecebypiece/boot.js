@@ -327,7 +327,8 @@ function main() {
   // nothing pauses at all (bug hunt 2026-09-29, CHESS-1).
   window.PBP.escapePause = () => { if (!pausedGame && inGameNow()) setGamePaused(true); };
   window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
+    // A held Escape is one press (the panel counts it once too); its key repeats must not leave the pause.
+    if (e.key !== 'Escape' || e.repeat) return;
     if (pausedGame) { postToHost({ type: 'pbp:exit' }); return; }   // still hushed: nothing comes back on the way out
     if (drag.isDragging()) { drag.drop(); window.PBP.escapePause(); return; }
     const inGame = inGameNow();
