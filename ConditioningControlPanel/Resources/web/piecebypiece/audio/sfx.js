@@ -43,6 +43,10 @@ import { createTrance } from './trance.js';
  *              voice still ringing is faded out under it
  *   While a replay is up the crowd and the trance bed sit on their own gain
  *   and duck to TUNING.replay.duck, back up on `replay-done` (or any reset).
+ *   The turn card owns the air (`turn-card`, ui/turn-handoff.js): as it comes
+ *   in, whatever the replay still has ringing (the deep room's echoes, a corner
+ *   replay's slowed hit) fades out over TUNING.replay.yieldSec, and that replay
+ *   stays quiet until the next `replay-show`.
  *
  * The room (sfx.setMeter, driven by board.setMeter): a feedback delay sits
  * beside the master and its wet level follows the meter, nothing at 0.25 and
@@ -94,6 +98,7 @@ export const TUNING = Object.freeze({
     out: { from: 3800, to: 240, sec: .26, gain: .09, thumpHz: 90, thumpGain: .08 },
     stop: { from: 340, to: 38, sec: .24, gain: .1, filterHz: 1400, hissGain: .05, fadeSec: .05 },
     duck: .55, duckTc: .08, releaseTc: .25, safetyMs: 4500,
+    yieldSec: .14,   // the replay's fade as the turn card comes in: gone by the time the slam lands
   }),
   logSize: 32,
 });
@@ -148,6 +153,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   let stretch = 1;           // time stretch for tone/hiss (a replayed hit is slow motion)
   let ducked = false;
   let duckTimer = 0;
+  let yielded = false;       // the turn card came in: this replay says nothing more
   const log = [];
   const settings = () => (win && win.PBP && win.PBP.settings) || {};
   const volume = () => {
@@ -493,6 +499,13 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     stretch = s;
     try { fn(); } finally { sink = prevSink; stretch = prevStretch; }
   }
+  /** The turn card is coming in: the replay's voices and its echoes fade out under it. */
+  function yieldReplay() {
+    yielded = true;
+    if (!ctx) return;
+    fadeReplay(TUNING.replay.yieldSec);
+    if (ducked) duck(false);
+  }
   function duck(on) {
     if (duckTimer) { clearTimeout(duckTimer); duckTimer = 0; }
     ducked = !!on;
@@ -563,11 +576,12 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   on('captureCue', p => { if (p?.name) play(p.name); });
   on('hit', p => { for (const name of hitCues(p)) play(name, name === 'rebound' ? {} : { piece: p?.piece, height: p?.height }); });
   // the capture replay (board/director.js): its own cues, never the live ones above
-  on('replay-show', p => { duck(true); play('replayIn', { layout: p?.layout, n: p?.n }); });
-  on('replay-panel-in', p => play('replaySlam', { i: p?.i | 0, layout: p?.layout }));
-  on('replay-panel-hit', p => play('replayHit', { i: p?.i | 0, layout: p?.layout, hit: p?.hit || null }));
-  on('replay-exit', p => play(p?.skipped ? 'replayStop' : 'replayOut', { layout: p?.layout }));
+  on('replay-show', p => { yielded = false; duck(true); play('replayIn', { layout: p?.layout, n: p?.n }); });
+  on('replay-panel-in', p => { if (!yielded) play('replaySlam', { i: p?.i | 0, layout: p?.layout }); });
+  on('replay-panel-hit', p => { if (!yielded) play('replayHit', { i: p?.i | 0, layout: p?.layout, hit: p?.hit || null }); });
+  on('replay-exit', p => { if (!yielded) play(p?.skipped ? 'replayStop' : 'replayOut', { layout: p?.layout }); });
   on('replay-done', () => duck(false));
+  on('turn-card', yieldReplay);
   for (const type of ['local', 'newgame', 'menu', 'takeback', 'gameover']) on(type, () => { if (ducked) { fadeReplay(.05); duck(false); } });
   on('check', () => { checkArmed = true; startPulse(); });
   on('turn', () => {
@@ -650,6 +664,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       context: ctx ? ctx.state : 'none', volume: master ? master.gain.value : 0, pulsing: !!checkTimer, over, hover,
       meter, wet: +wetLevel.toFixed(3), drift: Math.round(drift), lowClock, room: !!wet,
       ducked, beds: beds ? +beds.gain.value.toFixed(3) : null,
+      yielded, tail: tailOut ? +tailOut.gain.value.toFixed(3) : null,
       trance: trance ? trance.debug() : null,
     }),
     setMeter,

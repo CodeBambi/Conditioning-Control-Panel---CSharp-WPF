@@ -5,6 +5,9 @@
 // edge and a glow along the mover's side). Your side is pink, the other lilac.
 // The GATE is handoffSeconds, as before: the computer's reply waits exactly that
 // long. The card's own exit may run a little past it and never holds anything.
+// As it comes in, the card says so on the bus ('turn-card' {side, style, short}):
+// the card never shares the air with a capture replay, whose sound fades out under
+// its entrance (owner, 2026-09-29; audio/sfx.js).
 import { presentation } from '../game/preferences.js';
 import { formatClock } from '../game/clock.js';
 
@@ -74,6 +77,7 @@ export function createTurnHandoff({ bus, game, board, root = null, menuOpen = ()
     const still = stillMotion();
     const style = short || still ? 'tag' : chosenStyle();
     shown = { side, style, age: 0, life: short ? .7 : LIFE[style], still, text: label(side) };
+    bus.emit?.('turn-card', { side, style, short: !!short });
     if (!card) return;
     card.hidden = false;
     card.dataset.style = style;
@@ -140,7 +144,10 @@ export function createTurnHandoff({ bus, game, board, root = null, menuOpen = ()
       // The move settles first, and a full-screen capture replay plays out, before the card.
       if (board.anim?.busy?.() || board.director?.holding?.()) {
         pending.age = 0; pending.still = 0;
-        if (board.director?.holding?.()) pending.replayed = true;
+        // Only a full-screen replay that held the card earns the shorter beat. The
+        // recording before a corner replay holds too, but a corner never makes anyone
+        // wait: it keeps the whole beat, so its slowed hit is heard before the card.
+        if (board.director?.holding?.() && board.director?.active?.()) pending.replayed = true;
         return;
       }
       // Then a beat with the man standing still on his square (owner, 2026-09-28): the card

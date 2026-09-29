@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { LAYOUTS, SHOTS, REPLAY, hitAt, replayLength, warp, clipTime, panelState, replayAllowed,
   createLayoutDeck, panelCount, scalePoly, orient, placePoly, offStage, slideOf, exitLength } from '../board/replay-plan.js';
-import { burstStyle, impactWords, boil } from '../board/replay-fx.js';
+import { burstStyle, impactWords, boil, panelRank, inkLayers } from '../board/replay-fx.js';
 
 // Warp is monotonic, odd, and slow at contact.
 for (let x = -3; x < 3; x += .01) assert.ok(warp(x + .01) > warp(x), 'warp never runs backwards');
@@ -138,4 +138,16 @@ const b1 = boil(.6, 0, 1.23), b2 = boil(.6, 0, 1.23);
 assert.deepEqual(b1, b2);
 assert.ok(Math.abs(b1[0]) <= 1.6 && Math.abs(b1[1]) <= 1.6, 'seam wobble stays small');
 assert.deepEqual(boil(.6, 0, 1.2), boil(.6, 0, 1.24), 'the boil steps, it does not crawl');
+// Seams paint in the pictures' own order (the panel taking its hit on top, else later
+// over earlier), and each is masked by every panel painted above it, so a sliding
+// panel's ink goes under its neighbour's picture instead of across it.
+{
+  const layers = inkLayers([{ i: 0, lit: false }, { i: 1, lit: true }, { i: 2, lit: false }]);
+  assert.deepEqual(layers.map(l => l.poly.i), [0, 2, 1], 'the lit panel paints last');
+  assert.deepEqual(layers.map(l => l.over.map(o => o.i)), [[2, 1], [1], []], 'each seam sits under every panel above it');
+  assert.deepEqual(inkLayers([{ i: 2, lit: false }, { i: 0, lit: false }, { i: 1, lit: false }]).map(l => l.poly.i), [0, 1, 2],
+    'no hit: later panels over earlier ones, whatever order they come in');
+  assert.ok(panelRank(0, true) > panelRank(2, false) && panelRank(2, false) > panelRank(1, false), 'ranks match the picture order');
+  assert.deepEqual(inkLayers([{ i: 0, lit: false }]).map(l => l.over.length), [0], 'a lone panel needs no mask');
+}
 console.log('replay: stagger, slow motion, highlights, enter/exit, hits, clock rules and layout deck passed');

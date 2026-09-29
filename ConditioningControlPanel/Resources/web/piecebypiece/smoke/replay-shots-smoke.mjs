@@ -1,8 +1,8 @@
 // node smoke/replay-shots-smoke.mjs - the replay cameras: fitted framing, the in-front test,
 // the shot bank's motion and the per-replay shot choice. Pure maths from board/replay-frame.js.
 import assert from 'node:assert/strict';
-import { SHOT_BANK, FRAME, lensDir, basis, projectSpheres, fitFrame, clampLens, hides, motion, fovFor, pickShots, seeded }
-  from '../board/replay-frame.js';
+import { SHOT_BANK, FRAME, lensDir, basis, projectSpheres, fitFrame, clampLens, hides, motion, fovFor, pickShots, seeded,
+  spinePoints, SPINE } from '../board/replay-frame.js';
 
 const near = (a, b, e = 1e-6) => Math.abs(a - b) < e;
 const dN = [0, 0, -1], perp = [1, 0, 0];
@@ -45,6 +45,43 @@ for (const [pname, panel] of Object.entries(panels)) for (const aspect of [1.6, 
   assert.ok(Math.abs(cp[0]) < 1e-6 && Math.abs(cp[1]) < 1e-6, `${tag}: the action centre sits on the axis`);
   const r2 = projectSpheres(pair, cam2, panel).rect;
   if (f2.dist < FRAME.maxDist - 1e-6) assert.ok(Math.max(-r2[0], r2[2], -r2[1], r2[3]) <= spec.share + .03, `${tag}: centred fit keeps the subject in`);
+}
+
+// Fill (the low shot): across, the blow stays on the axis; up and down, the men's own
+// box is centred, so the lens near the floor does not spend the foot of the panel on
+// empty board. It never frames the men smaller than the contact-centred fit does.
+for (const [pname, panel] of Object.entries(panels)) for (const aspect of [1.6, .625]) {
+  const spec = SHOT_BANK.low, c = [0, .3, -.5], tag = `fill ${pname} ${aspect}`;
+  assert.equal(spec.fill, true, 'the low shot fills');
+  const dir = lensDir(0, 0, dN, perp);
+  const shoot = fill => {
+    const f = fitFrame({ spheres: pair, dir, fov: spec.fov, aspect, panel, share: spec.share, centre: c, fill });
+    const cam = { pos: f.pos, ...basis(f.pos, f.target), fov: spec.fov, aspect };
+    return { f, rect: projectSpheres(pair, cam, panel).rect, at: projectSpheres([[...c, 0]], cam, panel).rect };
+  };
+  const on = shoot(true), off = shoot(false);
+  assert.ok(Math.abs(on.at[0]) < 1e-6, `${tag}: the blow stays centred across`);
+  assert.ok(Math.abs((on.rect[1] + on.rect[3]) / 2) < .03, `${tag}: the men are centred up and down (${on.rect.map(v => v.toFixed(2))})`);
+  assert.ok(Math.abs((off.rect[1] + off.rect[3]) / 2) > .05, `${tag}: (a low contact left them off centre before)`);
+  assert.ok(on.rect[3] - on.rect[1] >= off.rect[3] - off.rect[1] - 1e-6, `${tag}: never smaller than the centred fit`);
+  assert.ok(on.rect[0] > -1 && on.rect[2] < 1 && on.rect[1] > -1 && on.rect[3] < 1, `${tag}: all of them inside the panel`);
+}
+
+// The spine follows the soft body (board/silicone.js): upright it is the column, a bend
+// carries the head over in the man's own frame, and the base never moves.
+{
+  const tr = [1, 0, -2, 0, 0, 0, 1, 1, 1, 1];
+  const up = spinePoints(tr, 1.285, null);
+  assert.equal(up.length, SPINE.length, 'one point per height');
+  assert.deepEqual(up[0], [1, 0, -2], 'the base is on the square');
+  assert.ok(near(up.at(-1)[0], 1) && near(up.at(-1)[1], 1.285) && near(up.at(-1)[2], -2), 'upright: the head is straight up');
+  const bow = spinePoints(tr, 1.285, { x: 0, z: -.9, lx: 0, lz: 0, stretch: .2, drop: -.6 });
+  assert.deepEqual(bow[0], up[0], 'a bend never moves the base');
+  assert.ok(near(bow.at(-1)[2], -2.9) && near(bow.at(-1)[1], 1.285 * 1.2 - .6), 'a bow carries the head a square over and down');
+  const s = Math.SQRT1_2, turned = spinePoints([0, 0, 0, 0, s, 0, s, 1, 1, 1], 1, { x: .5, z: 0, lx: 0, lz: 0, stretch: 0, drop: 0 });
+  assert.ok(near(turned.at(-1)[0], 0) && near(turned.at(-1)[2], -.5) && near(turned.at(-1)[1], 1), 'the bend turns with the man');
+  const small = spinePoints([0, 0, 0, 0, 0, 0, 1, .5, .5, .5], 1, { x: .4, z: 0, lx: 0, lz: 0, stretch: 0, drop: 0 });
+  assert.ok(near(small.at(-1)[0], .2) && near(small.at(-1)[1], .5), 'and scales with him');
 }
 
 // A tighter shot stands nearer (or narrower) than a wider one on the same subject.

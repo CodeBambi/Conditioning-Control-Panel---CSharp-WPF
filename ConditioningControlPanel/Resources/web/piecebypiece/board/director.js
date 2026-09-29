@@ -27,7 +27,7 @@
 import * as THREE from 'three';
 import { LAYOUTS, clipTime, panelState, panelCount, replayLength, replayAllowed,
   createLayoutDeck, placePoly, offStage, exitLength, orient, REPLAY, hitAt, lensZoom } from './replay-plan.js';
-import { REPLAY_VERT, REPLAY_FRAG, burstStyle, impactWords, boil } from './replay-fx.js';
+import { REPLAY_VERT, REPLAY_FRAG, burstStyle, impactWords, boil, panelRank, inkLayers } from './replay-fx.js';
 import { createReplayShots } from './replay-shots.js';
 import { presentation } from '../game/preferences.js';
 
@@ -46,6 +46,7 @@ export const FOLLOW = Object.freeze({
   settle: 6,        // e-fold rate of the aim point chasing the man
 });
 const REC_MAX = 7;  // seconds; a capture that runs longer is not recorded
+let inkSerial = 0;  // one set of seam masks per director
 
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const smooth = t => t * t * (3 - 2 * t);
@@ -302,6 +303,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     + '<div class="pbp-replay-chip"><i></i>REPLAY</div><div class="pbp-replay-skip">Click to skip</div>';
   host?.appendChild(dom);
   const seams = dom.querySelector('svg'), chip = dom.querySelector('.pbp-replay-chip'), hint = dom.querySelector('.pbp-replay-skip');
+  const inkId = `pbp-ink-${++inkSerial}`;   // mask ids, unique in the page
   const words = [...dom.querySelectorAll('.pbp-replay-word')];
   function paintDom(frame) {
     if (!frame) {
@@ -314,15 +316,28 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     seams.setAttribute('viewBox', `0 0 ${w} ${h}`);
     const corner = layout === 'corner';
     // ink seams: drawn on as the panel lands, boiling a little, retracting on the way out
-    seams.innerHTML = polys.map(({ pts, seat, lit, seam }) => {
-      const d = pts.map(([x, y], v) => {
-        const [bx, by] = boil(seat[v][0], seat[v][1], t, corner ? 1 : 1.6);
-        return `${(x * w + bx).toFixed(1)},${(y * h + by).toFixed(1)}`;
-      }).join(' ');
+    const outline = new Map(polys.map(({ i, pts, seat }) => [i, pts.map(([x, y], v) => {
+      const [bx, by] = boil(seat[v][0], seat[v][1], t, corner ? 1 : 1.6);
+      return `${(x * w + bx).toFixed(1)},${(y * h + by).toFixed(1)}`;
+    }).join(' ')]));
+    // Painted in the pictures' own order, and each seam masked by the panels above
+    // it, so a panel's edge slides under a neighbour instead of across its picture.
+    const box = `x="-64" y="-64" width="${(w + 128).toFixed(0)}" height="${(h + 128).toFixed(0)}"`;
+    let defs = '', ink = '';
+    for (const { poly: { i, lit, seam }, over } of inkLayers(polys)) {
+      const d = outline.get(i);
+      let mask = '';
+      if (over.length) {
+        const id = `${inkId}-${i}`;
+        defs += `<mask id="${id}" maskUnits="userSpaceOnUse" ${box}><rect ${box} fill="#fff"/>`
+          + over.map(o => `<polygon points="${outline.get(o.i)}" fill="#000"/>`).join('') + '</mask>';
+        mask = ` mask="url(#${id})"`;
+      }
       const dash = `stroke-dasharray="1 1" stroke-dashoffset="${(1 - seam).toFixed(3)}"`;
-      return `<polygon points="${d}" pathLength="1" ${dash} class="seam${corner ? ' corner' : ''}"/>`
-        + (lit || corner ? `<polygon points="${d}" pathLength="1" ${dash} class="lit"/>` : '');
-    }).join('');
+      ink += `<g${mask}><polygon points="${d}" pathLength="1" ${dash} class="seam${corner ? ' corner' : ''}"/>`
+        + (lit || corner ? `<polygon points="${d}" pathLength="1" ${dash} class="lit"/>` : '') + '</g>';
+    }
+    seams.innerHTML = (defs ? `<defs>${defs}</defs>` : '') + ink;
     chip.style.opacity = hint.style.opacity = alpha;
     // the impact word rides its own panel, up and to one side of the action
     words.forEach((el, i) => {
@@ -407,6 +422,11 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     const points = [];
     view.scene.traverseVisible(o => { if (o.isPoints) points.push(o); });
     for (const o of points) o.visible = false;
+    // The men in the fight are bent by their shader (board/silicone.js), so their
+    // meshes' bounds are the upright rest pose: a close lens on the victim culled
+    // the king's whole body while his head was in its frame. Never culled in a panel.
+    const uncull = [];
+    for (const o of clip.objs) o.traverse(m => { if (m.isMesh && m.frustumCulled) { m.frustumCulled = false; uncull.push(m); } });
     const polys = [];
     const undim = dimRest(clip, 1 - REST_DIM * clamp01(replay.t / .2) * (1 - clamp01((replay.t - replay.end) / .25)));
     const prevTarget = renderer.getRenderTarget();
@@ -448,13 +468,14 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
         u.radius.value = .5 * Math.max(pw * st.scale * bw, ph * st.scale * bh);
         u.center.value.set(placed.cx * bw, (1 - placed.cy) * bh);
         u.wipeDir.value.set(-st.dir[0], st.dir[1]);
-        q.renderOrder = st.lit ? 10 : i;       // the panel taking its hit punches over its neighbours
+        q.renderOrder = panelRank(i, st.lit);  // the panel taking its hit punches over its neighbours
         q.visible = true;
         polys.push({ i, pts, seat: full, cx: placed.cx, cy: placed.cy, lit: st.lit, seam: st.seam,
           word: st.lit || n === 1 ? st.word : { alpha: 0, scale: 0 } });
       }
     } finally {
       for (const [o, s] of live) applySnap(o, s, null, 0, group, true);
+      for (const m of uncull) m.frustumCulled = true;
       for (const o of points) o.visible = true;
       undim();
       renderer.setRenderTarget(prevTarget);

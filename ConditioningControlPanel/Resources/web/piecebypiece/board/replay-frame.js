@@ -23,11 +23,13 @@
 // ceil   poses higher than this (a stomp's hop, a flip) count only up to it: the man
 //        may leave the top of the frame at the apex rather than shrink the whole shot
 // flight true: the victim's flight after contact counts (rook fling)
+// fill   true: the men's box is centred up and down (the contact still across), so a
+//        low lens fills the panel with the fight, not with the board in front of it
 // motion what moves inside the shot (see motion())
 export const SHOT_BANK = Object.freeze({
   xclose: { size: 0, fov: 30, el: [.1, .26], az: [-.4, .4], share: .85, window: [-.12, .12], ceil: 9, subject: 'contact', motion: 'dolly' },
   close:  { size: 1, fov: 34, el: [.2, .34], az: [-.5, .5], share: .72, window: [-.28, .3], ceil: 1.25, subject: 'pair', motion: 'orbit' },
-  low:    { size: 1, fov: 40, el: [-.05, .05], az: [-.45, .45], share: .7, window: [-.3, .35], ceil: 1.35, subject: 'pair', motion: 'push' },
+  low:    { size: 1, fov: 40, el: [-.05, .05], az: [-.45, .45], share: .85, window: [-.12, .35], ceil: 1.1, subject: 'pair', motion: 'push', fill: true },
   medium: { size: 2, fov: 40, el: [.3, .44], az: [.62, 1.0], share: .68, window: [-.5, .45], ceil: 1.6, subject: 'pair', motion: 'push' },
   wide:   { size: 3, fov: 44, el: [.44, .62], az: [-.8, .8], share: .62, window: [-1.2, .9], ceil: 1.8, subject: 'pair', flight: true, motion: 'drift' },
   top:    { size: 4, fov: 34, el: [1.2, 1.36], az: [-1.2, 1.2], share: .6, window: [-1.0, .9], ceil: 2.6, subject: 'pair', flight: true, motion: 'spin' },
@@ -56,6 +58,33 @@ const add = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k]
 const len = a => Math.hypot(a[0], a[1], a[2]);
 const norm = a => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+const rotate = (q, v) => {                     // v by the unit quaternion q = [x, y, z, w]
+  const [qx, qy, qz, qw] = q, [vx, vy, vz] = v;
+  const tx = 2 * (qy * vz - qz * vy), ty = 2 * (qz * vx - qx * vz), tz = 2 * (qx * vy - qy * vx);
+  return [vx + qw * tx + qy * tz - qz * ty, vy + qw * ty + qz * tx - qx * tz, vz + qw * tz + qx * ty - qy * tx];
+};
+
+/**
+ * A man's spine as the soft body bends it (board/silicone.js, the centre line
+ * only), in world space. A capture pose moves the head a long way from the
+ * base: the king's slam arcs his head a whole square over onto the victim's
+ * crown, the bishop's tentacle reaches across, so framing on the upright
+ * column alone left the blow out of the shot.
+ * tr = [px, py, pz, qx, qy, qz, qw, sx, sy, sz]; H = the man's own height;
+ * act = { x, z, lx, lz, stretch, drop } (null: upright). Returns one point per h.
+ */
+export const SPINE = Object.freeze([0, .35, .7, 1]);
+export function spinePoints(tr, H, act, hs = SPINE) {
+  const q = tr.slice(3, 7), s = tr.slice(7, 10);
+  return hs.map(h => {
+    const lag = Math.sin(Math.PI * h) * h;
+    const a = act || { x: 0, z: 0, lx: 0, lz: 0, stretch: 0, drop: 0 };
+    const local = [(a.x * h * h + a.lx * lag) * s[0], (h * H * (1 + a.stretch) + a.drop * h * h) * s[1], (a.z * h * h + a.lz * lag) * s[2]];
+    const w = rotate(q, local);
+    return [tr[0] + w[0], tr[1] + w[1], tr[2] + w[2]];
+  });
+}
 
 /** Unit vector from the subject to the lens, for an elevation and azimuth in the move's own frame. */
 export function lensDir(el, az, dN, perp) {
@@ -95,7 +124,7 @@ export function projectSpheres(spheres, cam, panel) {
  * dir: unit vector from subject to lens. panel: { w, h } share of the stage.
  * Returns { pos, target, dist }.
  */
-export function fitFrame({ spheres, dir, fov, aspect, panel, share, centre = null }) {
+export function fitFrame({ spheres, dir, fov, aspect, panel, share, centre = null, fill = false }) {
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const s of spheres) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], s[k] - s[3]); hi[k] = Math.max(hi[k], s[k] + s[3]); }
   // With a centre (the contact), the lens looks straight at it and the frame is sized
@@ -110,7 +139,14 @@ export function fitFrame({ spheres, dir, fov, aspect, panel, share, centre = nul
     const { rect, near } = projectSpheres(spheres, cam, panel);
     if (!rect) { dist *= 1.5; continue; }
     let ext;
-    if (centre) ext = Math.max(-rect[0], rect[2], -rect[1], rect[3]);
+    if (centre && fill) {
+      // Across, the blow stays centred; up and down, the men's own box is. A lens
+      // near the floor centred on the contact had to reach as far below it as the
+      // heads reach above, and filled the bottom of the panel with empty board.
+      const cy = (rect[1] + rect[3]) / 2;
+      ext = Math.max(-rect[0], rect[2], (rect[3] - rect[1]) / 2);
+      target = add(target, b.up, cy * panel.h * dist * tv);
+    } else if (centre) ext = Math.max(-rect[0], rect[2], -rect[1], rect[3]);
     else {
       // Slide the target so the box centre lands on the axis.
       const cx = (rect[0] + rect[2]) / 2, cy = (rect[1] + rect[3]) / 2;
