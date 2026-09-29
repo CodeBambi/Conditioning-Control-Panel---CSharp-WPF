@@ -779,3 +779,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   triggered at WPF's point with the requested URL (WebHost has no live-URL hook, so no user path yet: row stub). /mine share-status
   polls at startup, Presets/Deeper tab open (90 s throttle) and Manage Mods; pills on the preset pane, session rack and Mod Manager.
 - Evidence: CatalogueShellTests (fake handler, fail-proofed); live: Mod Manager pill "Rejected", 0 binding errors. Review: ACCEPT.
+
+## avalonia-port/login-dialog-fixes: +53 (user live test 2026-09-29)
+- Login: an error or late success after the dialog closed crashed the app (closed owner) or signed in silently; now logged and dropped.
+- Shell: screen/scaling work-area fit waits 300 ms for the move to settle (it bounced the window between monitors mid-drag).
+- Sandbox SecretStore no longer shows the "no secret store" notice. SIGTERM now shuts down through the lifetime (was ignored).
+- Evidence: user Discord OAuth live in a sandbox (tokens received); SIGTERM live (exited in <6 s); SecretStoreTests; full gate. Review: ACCEPT.

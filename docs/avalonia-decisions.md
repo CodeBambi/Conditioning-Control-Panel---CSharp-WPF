@@ -66,3 +66,10 @@ here record where and why the port chose something, and who advised.
 | 2026-09-29 | Where publish settings live | csproj; publish profiles | `CCP.Avalonia/Properties/PublishProfiles/{win-x64,linux-x64}.pubxml`; the csproj stays RID-less so test projects referencing it avoid NETSDK1151/1191 | oracle-deep |
 | 2026-09-29 | Second-instance signal on Avalonia | WPF named events (Windows only); named pipe on both OSes | Same mutex name as WPF; show/ack over a named pipe, since named EventWaitHandles are unsupported on Unix | worker |
 | 2026-09-29 | Linux package shape | AppImage; Flatpak bundles WPE; tarball + Flatpak + AUR | Tarball `ConditioningControlPanel/` with the Vosk model, `.desktop` and icon; app id `io.github.CodeBambi.ConditioningControlPanel`; Flatpak on GNOME 50 (has webkit2gtk-4.1, libsecret) bundles libVLC only - WebHost needs the GTK3 NativeControlHost engine, not WPE. CONFLICT: docs/avalonia-linux-install.md asks to bundle wpewebkit/wpebackend-fdo/libwpe; the Flatpak row stays blocked until the first flatpak-builder run shows whether any web surface needs WPE, then bundle it or amend the brief with the user; WM_CLASS = app id (X11PlatformOptions.WmClass) matching StartupWMClass; AUR `-bin` depends on system vlc/webkit/WPE | worker |
+
+## 2026-09-29: flashing line after moving the window on KDE
+- Question: the user saw a thin purple line flash where the window's top edge had been after moving it. Can the app fix it?
+- Options: (a) work around it in the shell; (b) run as a native Wayland window; (c) log it as a platform limit.
+- Finding: a bare 20-line undecorated Avalonia 12 window (no CCP code) shows the same line on KWin 6.7.5 over XWayland at 1.79x scaling.
+- Choice: (c). Native Wayland would conflict with the X11 override-redirect overlays, so it is out of scope for this port.
+- Advisor: supervisor, with the user's own reproduction.
