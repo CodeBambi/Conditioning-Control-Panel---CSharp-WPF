@@ -225,7 +225,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void BtnActivateLockdown_Click(object? sender, RoutedEventArgs e) { }
 
-        private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
 
         private void TxtLockdownExit_KeyDown(object? sender, KeyEventArgs e) { }
 

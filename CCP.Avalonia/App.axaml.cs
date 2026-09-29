@@ -259,6 +259,11 @@ namespace ConditioningControlPanel.Avalonia
                 var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 CoreReleaseContent.AppVersionProvider = () =>
                     version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
+                // WPF App.xaml.cs:490/2549: the ? box's daily-free rotation that TierGate ORs in.
+                // Pure ctor; the override fetch is fire-and-forget and falls back to the seeded pick.
+                var dailyFree = new DailyFreeService();
+                _ = dailyFree.RefreshAsync();
+                CoreEntitlement.IsFreeTodayProvider = dailyFree.IsFreeToday;
                 // After the version seed (the proxy client's headers carry it). Fail closed; the
                 // startup validate runs on the UI thread as WPF's does (App.xaml.cs OnStartup).
                 if (Platform.AccountSeed.Seed())
@@ -354,10 +359,10 @@ namespace ConditioningControlPanel.Avalonia
                 SeedLevelAchievements(Achievements);
                 StartQuests();
 
-                // CoreProgram: its patreon, pack-video and roadmap providers stay unseeded - this head
-                // has no PatreonService, ContentPackService or RoadmapService, so it answers "no
-                // premium, no pack videos, no roadmap". NotifyProvider is seeded below, once the
-                // shell's toast host exists. HasPremium false still refuses a premium enrolment.
+                // CoreProgram: its pack-video and roadmap providers stay unseeded - this head has no
+                // ContentPackService or RoadmapService, so it answers "no pack videos, no roadmap".
+                // HasPremiumProvider is seeded by AccountSeed.Seed(); NotifyProvider below, once the
+                // shell's toast host exists.
 
                 // CoreAccount and CoreEntitlement are seeded by Platform.AccountSeed.Seed() (the
                 // Patreon/SubscribeStar gates, WPF App.xaml.cs:487-488). If the providers cannot be

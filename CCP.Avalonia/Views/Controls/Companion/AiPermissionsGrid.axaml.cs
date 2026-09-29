@@ -141,9 +141,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         }
 
         private void BtnEffectsLockCta_Click(object? sender, RoutedEventArgs e)
-        {
-            // ponytail: needs MainWindow.ShowAppInfoPopup, wired when the shell has one
-        }
+            => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
 
         private void BtnClearChatMemory_Click(object? sender, RoutedEventArgs e)
         {

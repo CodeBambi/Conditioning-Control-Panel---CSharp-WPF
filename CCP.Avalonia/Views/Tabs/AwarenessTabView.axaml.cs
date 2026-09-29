@@ -422,10 +422,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e)
-        {
-            // ponytail: the premium gate. Needs PatreonService to open the pledge page, and
-            // RefreshPremiumGate to raise or drop the AwarenessGate overlay in the first place.
-        }
+            => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
 
         /// <summary>
         /// WPF: MainWindow.Awareness.cs:1175. Prefer the installed preset's editor; with none
