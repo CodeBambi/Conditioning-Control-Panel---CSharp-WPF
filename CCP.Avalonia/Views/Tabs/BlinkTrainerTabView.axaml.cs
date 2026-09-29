@@ -57,6 +57,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             BlinkTrainerStatusAction.Click += (_, _) => _statusAction?.Invoke();
 
+            // Camera-only actions: visibly off, with the reason on hover, until a tracker lands.
+            foreach (var b in new[] { BtnBlinkTrainerStartSession, BtnBlinkTrainerStartStopTracker, BtnBlinkTrainerCalibrate, BtnBlinkTrainerQuickRecal })
+            {
+                b.IsEnabled = false;
+                ToolTip.SetShowOnDisabled(b, true);
+                b.Bind(ToolTip.TipProperty, new Binding("[deeper_player_eye_tracking_unavailable]") { Source = LocalizationManager.Instance });
+            }
+
             // WPF ShowTab: RefreshBlinkTrainerTab on entry, StopBlinkTrainerDemoLoop on exit.
             PropertyChanged += (_, e) =>
             {
@@ -197,8 +205,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 // there is nothing to calibrate, so the fix-it button is not offered.
                 default: WireStatusAction(null, null); break;
             }
-            // WPF SetStartButtonState: only the consent and folder states block a start.
-            BtnBlinkTrainerStartSession.IsEnabled = StatusState is not (BlinkTrainerStatusState.NeedsConsent or BlinkTrainerStatusState.NeedsFolders);
+            // WPF SetStartButtonState enables Start outside the consent/folder states; here it stays
+            // off (see the constructor) because there is no BlinkTrainerService to start.
         }
 
         private void WireStatusAction(string? key, Action? action)
@@ -406,14 +414,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e)
             => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OpenAppSettingsSection("devices");
 
-        // ponytail: the camera half - WebcamTrackingService, BlinkTrainerService (the overlay
-        // session), WebcamCalibrationWindow and the consent revoke/tracker teardown - has no Linux
-        // twin. A start or tracker button that looks live over a closed camera is worse than a
-        // dead one, so these stay no-ops until a tracker lands (see MainShellWindow.BlinkTrainer.cs).
+        /// <summary>WPF: the same consent dialog both ways (grant, or review when granted).</summary>
+        private void BtnBlinkTrainerManageConsent_Click(object? sender, RoutedEventArgs e) => GrantConsent();
+
+        /// <summary>WPF BtnBlinkTrainerRevokeConsent_Click: confirm (Cancel default), then
+        /// WebcamTrackingService.RevokeConsent's settings half. Its Stop/ClearCalibration half is
+        /// CoreWebcam.RevokeConsent, a no-op while no tracker is seeded - and with none there is
+        /// no running camera and no calibration to clear.</summary>
+        private async void BtnBlinkTrainerRevokeConsent_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                if (!await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get("blink_trainer_consent_revoke_confirm_title"),
+                        Loc.Get("blink_trainer_consent_revoke_confirm_body"), defaultToCancel: true)) return;
+                RevokeConsent();
+            }
+            catch (Exception ex) { Log.Warning(ex, "BtnBlinkTrainerRevokeConsent_Click failed"); }
+        }
+
+        internal void RevokeConsent()
+        {
+            CoreWebcam.RevokeConsent();
+            var s = CoreSettings.Current;
+            s.WebcamConsentGiven = false;
+            s.WebcamConsentVersion = "";
+            s.WebcamConsentDate = null;
+            s.WebcamCalibrated = false;
+            s.WebcamCalibrationMode = "";
+            s.WebcamTriggersEnabled = false;
+            s.FocusGameEnabled = false;
+            CoreSettings.Save();
+            Refresh();
+        }
+
+        // Disabled in the constructor: WebcamTrackingService, BlinkTrainerService and
+        // WebcamCalibrationWindow have no Linux twin (see MainShellWindow.BlinkTrainer.cs).
         private void BtnBlinkTrainerCalibrate_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnBlinkTrainerManageConsent_Click(object? sender, RoutedEventArgs e) { }
         private void BtnBlinkTrainerQuickRecal_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnBlinkTrainerRevokeConsent_Click(object? sender, RoutedEventArgs e) { }
         private void BtnBlinkTrainerStartSession_Click(object? sender, RoutedEventArgs e) { }
         private void BtnBlinkTrainerStartStopTracker_Click(object? sender, RoutedEventArgs e) { }
     }

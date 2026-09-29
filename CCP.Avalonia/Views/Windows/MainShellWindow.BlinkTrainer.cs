@@ -10,9 +10,10 @@
 // STILL REFUSED, because each needs a capture device this head does not have
 // (WebcamTrackingService, BlinkTrainerService, WebcamCalibrationWindow): the tracker toggles and
 // ToggleWebcamFromHotkey, SetBlinkTrainerStatusPulse, start/stop session and its countdown, live
-// preview (OnBlink swaps, asset pool, stage video), calibrate/quick-recal, consent manage/revoke
-// (revoke must tear the tracker down), and the Deeper hub's webcam twins. A control that reads
-// "running" over a closed camera is worse than a dead one.
+// preview (OnBlink swaps, asset pool, stage video), calibrate/quick-recal, and the Deeper hub's
+// webcam twins. The page disables its camera buttons with a "not available on this build" tooltip.
+// Consent manage/revoke DO work on the page (settings half; CoreWebcam.RevokeConsent tears down a
+// tracker once one is seeded).
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {

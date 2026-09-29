@@ -43,6 +43,9 @@ internal static class AccountSeed
         CoreAccount.IsWhitelistedProvider = () => patreon.IsWhitelisted;
         CoreAccount.HasPremiumAccessProvider = () => ProviderSubscription.HasPremiumAccess(patreon, substar, CoreSettings.Current);
         CoreAccount.HasLabAccessProvider = () => ProviderSubscription.HasLabAccess(patreon, substar, CoreSettings.Current);
+        // WPF App.xaml.cs:487-488: TierGate's seam reads the same gates (Patreon.HasPremiumAccess there).
+        CoreEntitlement.HasPremiumProvider = () => CoreAccount.HasPremiumAccess;
+        CoreEntitlement.HasLabProvider = () => CoreAccount.HasLabAccess;
         return true;
     }
 

@@ -575,12 +575,12 @@
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>
                       </StackPanel>
                       <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Padding="12,5" Margin="0,0,8,0"
+                        <Button x:Name="BtnBlinkTrainerCalibrate" Padding="12,5" Margin="0,0,8,0"
                                 Theme="{StaticResource OutlineButton}"
                                 Click="BtnBlinkTrainerCalibrate_Click">
                           <TextBlock Text="{loc:Str blink_trainer_calibration_btn}" FontSize="11"/>
                         </Button>
-                        <Button Padding="12,5"
+                        <Button x:Name="BtnBlinkTrainerQuickRecal" Padding="12,5"
                                 Theme="{StaticResource OutlineButton}"
                                 Click="BtnBlinkTrainerQuickRecal_Click">
                           <TextBlock Text="{loc:Str blink_trainer_calibration_quick}" FontSize="11"/>

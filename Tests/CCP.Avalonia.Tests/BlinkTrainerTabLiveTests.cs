@@ -30,6 +30,8 @@ public sealed class BlinkTrainerTabLiveTests
             var dir = Directory.CreateTempSubdirectory("ccp-blink-").FullName;
             File.WriteAllBytes(Path.Combine(dir, "a.png"), new byte[] { 1 });
             Window? host = null;
+            var oldPremium = ConditioningControlPanel.CoreEntitlement.HasPremiumProvider;
+            ConditioningControlPanel.CoreEntitlement.HasPremiumProvider = null; // free tier, whatever ran before
             try
             {
                 if (Application.Current is null)
@@ -78,12 +80,34 @@ public sealed class BlinkTrainerTabLiveTests
                 Assert.Single(tab.FindControl<StackPanel>("BlinkTrainerFolderCardsHost")!.Children);
                 Assert.Contains(dir, s.BlinkTrainerFolders);
 
+                // Camera-only actions are off with a reason, never a live-looking no-op.
+                Assert.False(tab.FindControl<Button>("BtnBlinkTrainerStartSession")!.IsEnabled);
+                Assert.False(tab.FindControl<Button>("BtnBlinkTrainerCalibrate")!.IsEnabled);
+                Assert.NotNull(ToolTip.GetTip(tab.FindControl<Button>("BtnBlinkTrainerStartStopTracker")!));
+
                 tab.IsVisible = false; // leaving the tab stops the loop
                 Assert.False(tab.DemoRunning);
+
+                // A patron: gate down, editors live; consent + a folder is live preview, so the
+                // demo stops and the stage parks (WPF ResetBlinkTrainerStageForLive).
+                ConditioningControlPanel.CoreEntitlement.HasPremiumProvider = () => true;
+                tab.IsVisible = true;
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(tab.FindControl<Border>("BlinkTrainerGate")!.IsVisible);
+                Assert.True(tab.FindControl<StackPanel>("BlinkTrainerGatedContent")!.IsEnabled);
+                Assert.False(tab.DemoRunning);
+                Assert.Equal(0, a.Opacity);
+
+                // Revoke clears the consent record and the row asks for consent again.
+                tab.RevokeConsent();
+                Assert.False(WebcamConsent.IsCurrent(s));
+                Assert.Equal(BlinkTrainerStatusState.NeedsConsent, tab.StatusState);
+                Assert.True(tab.DemoRunning);
             }
             finally
             {
                 host?.Close();
+                ConditioningControlPanel.CoreEntitlement.HasPremiumProvider = oldPremium;
                 (s.BlinkTrainerDurationMinutes, s.BlinkTrainerOpacity, s.BlinkTrainerMixImages,
                     s.WebcamConsentGiven, s.WebcamConsentVersion) = (old.Item1, old.Item2, old.Item3, old.Item4, old.Item5);
                 s.BlinkTrainerFolders.Clear();
@@ -103,5 +127,19 @@ public sealed class BlinkTrainerTabLiveTests
         Assert.Equal(BlinkTrainerStatusState.NeedsCalibration, BlinkTrainerState.Status(false, null, true, 1, true, false));
         Assert.Equal(BlinkTrainerStatusState.IdleReady, BlinkTrainerState.Status(false, null, true, 1, false, false));
         Assert.Null(BlinkTrainerState.FolderCountLine(null, false));
+
+        var dir = Directory.CreateTempSubdirectory("ccp-blink-count-").FullName;
+        try
+        {
+            foreach (var f in new[] { "a.png", "b.jpg", "c.gif", "d.mp4" })
+                File.WriteAllBytes(Path.Combine(dir, f), new byte[] { 1 });
+            var pack = ConditioningControlPanel.Lab.GazeMinigame.AssetPack.FromFolder(dir);
+            Assert.Equal("2 images, 1 GIFs", BlinkTrainerState.FolderCountLine(pack, includeVideos: false));
+            Assert.Equal("3 images, 1 videos", BlinkTrainerState.FolderCountLine(pack, includeVideos: true));
+            File.Delete(Path.Combine(dir, "c.gif"));
+            Assert.Equal("2 images", BlinkTrainerState.FolderCountLine(
+                ConditioningControlPanel.Lab.GazeMinigame.AssetPack.FromFolder(dir), includeVideos: false));
+        }
+        finally { Directory.Delete(dir, true); }
     }
 }
