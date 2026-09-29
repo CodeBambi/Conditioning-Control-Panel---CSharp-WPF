@@ -5294,6 +5294,18 @@ namespace ConditioningControlPanel.Models
             set { _chasterPrices = value ?? new List<string>(); OnPropertyChanged(); }
         }
 
+        private bool _chasterFlashDodge;
+
+        /// <summary>Natasha's favourite on flashes. Off (the default): flashes are never red, only
+        /// bubbles are. On: about one flash in ten is red with a 4 s ring; dismiss or fling it in
+        /// time and nothing books, let the ring empty and it is +5:00.</summary>
+        [JsonProperty]
+        public bool ChasterFlashDodge
+        {
+            get => _chasterFlashDodge;
+            set { _chasterFlashDodge = value; OnPropertyChanged(); }
+        }
+
         private int _chasterDailyLimitMinutes = 180;
         private int _chasterBacklogLimitMinutes = 720;
 

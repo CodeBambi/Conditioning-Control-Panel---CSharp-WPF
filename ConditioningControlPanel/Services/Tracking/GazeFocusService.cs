@@ -499,7 +499,7 @@ public class GazeFocusService : IDisposable
                 // own "Stare to pop" toggle is armed.
                 if (BubblesGazeEnabled)
                 {
-                    try { b.Pop(); GazePopped?.Invoke(); }
+                    try { b.PopByGaze(); GazePopped?.Invoke(); }
                     catch (Exception ex) { App.Logger?.Debug("Gaze blink-pop bubble failed: {Error}", ex.Message); }
                 }
             }
@@ -725,7 +725,7 @@ public class GazeFocusService : IDisposable
                     SourceBounds = s.Bounds,
                     Kind = GazeRefineKind.Bubble,
                     IsAlive = () => b.CanGazePop,
-                    Activate = () => b.Pop(),
+                    Activate = () => b.PopByGaze(),
                 };
             }
             if (s.Flash is FlashWindow fw)
@@ -1199,7 +1199,7 @@ public class GazeFocusService : IDisposable
             // false whenever the refine can't or shouldn't run, so the pop
             // below is still the default path.
             if (TryRaiseRefine()) return;
-            try { b.Pop(); GazePopped?.Invoke(); }
+            try { b.PopByGaze(); GazePopped?.Invoke(); }
             catch (Exception ex) { App.Logger?.Debug("Gaze bubble pop failed: {Error}", ex.Message); }
             _currentBubble = null;
             _cooldownUntil = DateTime.UtcNow.AddMilliseconds(CooldownMs);

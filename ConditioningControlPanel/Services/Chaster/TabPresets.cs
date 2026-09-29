@@ -61,7 +61,7 @@ public static class TabPresets
 
     private static readonly string[] StrictIds =
     {
-        CircesMisses.EventId, "typo", "attention", NatashasFavourite.EventId, "mantra", "program_skipped",
+        CircesMisses.EventId, "typo", "attention", NatashasFavourite.EventId, NatashasFavourite.HeldEventId, "mantra", "program_skipped",
         "remote_media", "remote_video", "escape", "watcher",
         "melt", "bubbles", "ball", "padlock", "crash",
         TabDayEnd.IdleEventId, TabDayEnd.DailiesEventId, TabDayEnd.HeatId,
@@ -76,6 +76,7 @@ public static class TabPresets
         TabDayEnd.DailiesEventId, TabDayEnd.HeatId,
         // earns back
         TabDayEnd.StreakEventId, "lockcard", "session", "quest", "video", "levelup", "program_done",
+        NatashasFavourite.HeldEventId,
     };
 
     public static readonly IReadOnlyList<TabPreset> All = new[]

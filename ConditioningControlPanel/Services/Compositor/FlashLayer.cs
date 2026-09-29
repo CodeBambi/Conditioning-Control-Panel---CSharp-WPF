@@ -81,6 +81,8 @@ public sealed class FlashLayer : BaseLayer
         internal double GlowOpacity;
         /// <summary>Natasha's favourite: a short red blink across the picture now and then.</summary>
         internal bool NatashaCue;
+        /// <summary>Natasha's dodge: Environment.TickCount64 when the ring empties (0 = no ring).</summary>
+        internal long DodgeUntilMs;
         internal bool LuckyPulse;
 
         internal double ElapsedSec;          // pulse clock, advanced by Update
@@ -122,6 +124,7 @@ public sealed class FlashLayer : BaseLayer
     // Reused paints (no per-frame allocations).
     private readonly SKPaint _imagePaint = new() { FilterQuality = SKFilterQuality.Low };
     private readonly SKPaint _fillPaint = new();
+    private readonly SKPaint _ringPaint = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeCap = SKStrokeCap.Round };
 
     public FlashLayer(CompositorEngine engine) : base(engine) { }
 
@@ -301,6 +304,7 @@ public sealed class FlashLayer : BaseLayer
             // whereas a state compare self-heals on the next tick. A lucky pulse animates its
             // glow off ElapsedSec every frame, so it is legitimately dirty throughout.
             if ((item.HasGlow && item.LuckyPulse)
+                || (item.DodgeUntilMs > 0 && Environment.TickCount64 <= item.DodgeUntilMs + 50)
                 || item.Opacity != item.LastOpacity
                 || item.FrameIndex != item.LastFrameIndex
                 || item.DwellScale != item.LastDwellScale)
@@ -468,12 +472,29 @@ public sealed class FlashLayer : BaseLayer
                     canvas.DrawRoundRect(new SKRoundRect(fit, item.CornerRadiusPx), _fillPaint);
                 }
             }
+            if (item.DodgeUntilMs > 0 && item.Exit == null) DrawDodgeRing(canvas, fit, alpha, item.DodgeUntilMs);
             canvas.RestoreToCount(saves);
             if (item.Exit != null) DrawSparks(canvas, item);
         }
     }
 
     private static readonly SKColor SparkPink = new(0xFF, 0x69, 0xB4);
+
+    /// <summary>Natasha's dodge: a small red dial in the picture's top-right corner, draining
+    /// clockwise from twelve as the ring runs out.</summary>
+    private void DrawDodgeRing(SKCanvas canvas, SKRect fit, byte alpha, long untilMs)
+    {
+        var left = Chaster.NatashasFavourite.DodgeLeft(Chaster.NatashasFavourite.DodgeMs - (untilMs - Environment.TickCount64));
+        if (left <= 0.001) return;
+        float r = Math.Clamp(Math.Min(fit.Width, fit.Height) * 0.06f, 12f, 22f);
+        float cx = fit.Right - r - 10f, cy = fit.Top + r + 10f;
+        _fillPaint.MaskFilter = null;
+        _fillPaint.Color = new SKColor(0x10, 0x06, 0x0C, (byte)(0.6 * alpha));
+        canvas.DrawCircle(cx, cy, r + 3f, _fillPaint);
+        _ringPaint.StrokeWidth = Math.Max(3f, r * 0.24f);
+        _ringPaint.Color = new SKColor(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B, alpha);
+        canvas.DrawArc(new SKRect(cx - r, cy - r, cx + r, cy + r), -90f, 360f * (float)left, false, _ringPaint);
+    }
 
     /// <summary>Pop's spray of pink sparks, in world space around the flash's box.</summary>
     private void DrawSparks(SKCanvas canvas, FlashItem item)
