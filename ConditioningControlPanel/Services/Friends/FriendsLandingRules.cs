@@ -107,13 +107,17 @@ public static class LandingRules
         => item.At == DateTimeOffset.MinValue || item.At > now ? now : item.At;
 
     /// <summary>When the knock card folds: an invite at its own expiry (five minutes from At), a watch
-    /// after <see cref="WatchCardSeconds"/> from now or its expiry, whichever is first.</summary>
+    /// after <see cref="WatchCardSeconds"/> from now or its expiry, whichever is first. An invite
+    /// never shows more than its lifetime from now: a server clock ahead of this PC's puts At in the
+    /// future, and the countdown must not read 7:00 for a five minute invite.</summary>
     public static DateTimeOffset KnockEnds(InboxItem item, DateTimeOffset now)
     {
         if (item.Kind == SendKind.Invite)
         {
             var fromAt = item.At.AddSeconds(InviteDestination.LifetimeSeconds);
-            return fromAt < item.ExpiresAt ? fromAt : item.ExpiresAt;
+            var end = fromAt < item.ExpiresAt ? fromAt : item.ExpiresAt;
+            var cap = now.AddSeconds(InviteDestination.LifetimeSeconds);
+            return end < cap ? end : cap;
         }
         var card = now.AddSeconds(WatchCardSeconds);
         return card < item.ExpiresAt ? card : item.ExpiresAt;

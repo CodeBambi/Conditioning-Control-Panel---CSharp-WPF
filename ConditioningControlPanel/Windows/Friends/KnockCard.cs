@@ -32,6 +32,8 @@ internal sealed class KnockCard : Window
     private const double TuckedWidth = 206;
     private const double RingSize = 22;
     private static readonly List<KnockCard> Open = new();
+    // Shown but not loaded yet: a second open of the same Inbox row in that gap must not stack a twin.
+    private static readonly List<KnockCard> Coming = new();
 
     private readonly InboxItem _item;
     private readonly DateTimeOffset _start;
@@ -335,6 +337,7 @@ internal sealed class KnockCard : Window
     {
         if (anchor == null || item == null) return;
         foreach (var c in Open) if (c._item.Id == item.Id) return;
+        foreach (var c in Coming) if (c._item.Id == item.Id) return;
         try
         {
             var card = new KnockCard(anchor, item, line, goLabel, notNowLabel, laterTip, done, shown);
@@ -343,10 +346,20 @@ internal sealed class KnockCard : Window
             card.Top = -10000;
             card.Loaded += (_, _) =>
             {
+                if (!Coming.Remove(card)) return;   // closed on the way (CloseAll)
                 Open.Add(card);
                 Restack();
                 card.Enter();
             };
+            // Closed from outside (its owner went): no outcome, just out of the stack with its clock stopped.
+            card.Closed += (_, _) =>
+            {
+                Coming.Remove(card);
+                card._folded = true;
+                card._tick.Stop();
+                if (Open.Remove(card)) Restack();
+            };
+            Coming.Add(card);
             card.Show();
         }
         catch (Exception ex) { App.Logger?.Warning(ex, "[Friends] knock card failed"); }
@@ -364,12 +377,15 @@ internal sealed class KnockCard : Window
     /// <summary>Exit path: close every card without running its outcome.</summary>
     public static void CloseAll()
     {
-        foreach (var c in Open.ToArray())
+        var all = new List<KnockCard>(Open);
+        all.AddRange(Coming);
+        Open.Clear();
+        Coming.Clear();
+        foreach (var c in all)
         {
             c._folded = true;
             c._tick.Stop();
             c.SafeClose();
         }
-        Open.Clear();
     }
 }

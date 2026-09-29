@@ -264,6 +264,20 @@ public class FriendsKnockTests
         Assert.Empty(store);
     }
 
+    [Fact]
+    public async Task A_sign_in_swap_stops_the_move_before_the_next_block()
+    {
+        var store = new List<BlockedEntry> { new("me", "u_a", "Ann", T0), new("me", "u_b", "Bo", T0) };
+        var list = new FriendsBlockList(() => store.ToList(), l => { store.Clear(); store.AddRange(l); });
+        var svc = new RecordingService { BlockAnswers = { ["u_a"] = ActResult.Done, ["u_b"] = ActResult.Done } };
+        var signedIn = "me";
+        svc.OnBlock = _ => signedIn = "someone_else";   // the swap lands while the first block is out
+
+        Assert.False(await FriendsBlockList.MigrateAsync(svc, list, "me", Array.Empty<BlockedFriend>(), () => signedIn == "me"));
+        Assert.Single(svc.Blocks);                                   // u_b never went out as the new account
+        Assert.Equal(new[] { "u_b" }, list.For("me").Select(e => e.Id));   // and waits for "me" to come back
+    }
+
     // ---------------------------------------------------------------- fakes
 
     /// <summary>A wire that answers sends with an item id and polls with queued receipts, and keeps
@@ -306,6 +320,7 @@ public class FriendsKnockTests
         public List<ReceiptReport> Reports { get; } = new();
         public List<string> Blocks { get; } = new();
         public Dictionary<string, ActResult> BlockAnswers { get; } = new();
+        public Action<string>? OnBlock { get; set; }
 
         public void ReportReceipt(ReceiptReport report) => Reports.Add(report);
 
@@ -329,6 +344,7 @@ public class FriendsKnockTests
         public Task<ActResult> BlockAsync(string friendId)
         {
             Blocks.Add(friendId);
+            OnBlock?.Invoke(friendId);
             return Task.FromResult(BlockAnswers.TryGetValue(friendId, out var r) ? r : ActResult.Done);
         }
         public Task<ActResult> UnblockAsync(string friendId) => Task.FromResult(ActResult.Done);

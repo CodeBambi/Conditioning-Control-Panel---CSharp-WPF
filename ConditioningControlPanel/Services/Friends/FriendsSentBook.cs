@@ -50,7 +50,8 @@ public sealed class FriendsSentBook
         bool moved = false;
         foreach (var r in receipts)
         {
-            if (r == null || r.Id == null || ReceiptKind.IsLeash(r.Kind) || r.Kind == ReceiptKind.Request) continue;
+            if (r == null || r.Id == null || string.IsNullOrEmpty(r.To)) continue;
+            if (ReceiptKind.IsLeash(r.Kind) || r.Kind == ReceiptKind.Request) continue;
             if (!_latest.TryGetValue(r.To, out var t) || t.ItemId != r.Id) continue;
             if (!FriendReceipts.MovesForward(t.State, r.State)) continue;
             if (!Fits(t.Kind, r.State)) continue;

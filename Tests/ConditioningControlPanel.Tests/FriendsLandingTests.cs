@@ -231,8 +231,11 @@ public class FriendsLandingTests
         var start = LandingRules.KnockStarts(item, now);
         Assert.Equal(T0, start);
         Assert.Equal(0.4, LandingRules.RingFraction(start, LandingRules.KnockEnds(item, now), now), 6);
-        // A send time ahead of this clock starts the ring now.
-        Assert.Equal(now, LandingRules.KnockStarts(Invite("f", at: now.AddSeconds(20)), now));
+        // A send time ahead of this clock starts the ring now, and it still reads five minutes, not more.
+        var ahead = Invite("f", at: now.AddSeconds(20));
+        Assert.Equal(now, LandingRules.KnockStarts(ahead, now));
+        Assert.Equal(now.AddSeconds(InviteDestination.LifetimeSeconds), LandingRules.KnockEnds(ahead, now));
+        Assert.Equal("5:00", LandingRules.Countdown(LandingRules.KnockEnds(ahead, now), now));
     }
 
     [Fact]

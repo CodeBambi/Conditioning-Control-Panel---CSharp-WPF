@@ -84,7 +84,7 @@ public sealed class FriendsBlockList
             if (string.IsNullOrEmpty(account) || MovedAccounts.Contains(account)) return;
             if (Shared.For(account).Count == 0) { MovedAccounts.Add(account); return; }
             _moving = true;
-            if (await MigrateAsync(svc, Shared, account, server)) MovedAccounts.Add(account);
+            if (await MigrateAsync(svc, Shared, account, server, () => Account() == account)) MovedAccounts.Add(account);
         }
         catch (Exception ex) { ConditioningControlPanel.App.Logger?.Debug("[Friends] blocked move: {E}", ex.Message); }
         finally { _moving = false; }
@@ -92,14 +92,17 @@ public sealed class FriendsBlockList
 
     /// <summary>The move itself (the suite drives it): each remembered block the server's list lacks
     /// is sent; every entry the server now has, or will never take, is forgotten; one that hit a
-    /// network fault stays for the next try. True when nothing is left to move.</summary>
+    /// network fault stays for the next try. True when nothing is left to move. The service sends as
+    /// whoever is signed in, so a sign-in swap mid-move (<paramref name="stillOn"/> false) stops it
+    /// before another account's block goes out under the new one.</summary>
     internal static async Task<bool> MigrateAsync(IFriendsService svc, FriendsBlockList list, string account,
-        IReadOnlyList<BlockedFriend> server)
+        IReadOnlyList<BlockedFriend> server, Func<bool>? stillOn = null)
     {
         var onServer = new HashSet<string>(server.Select(b => b.Id), StringComparer.Ordinal);
         bool left = false;
         foreach (var e in list.For(account))
         {
+            if (stillOn != null && !stillOn()) return false;
             if (!onServer.Contains(e.Id))
             {
                 ActResult r;
