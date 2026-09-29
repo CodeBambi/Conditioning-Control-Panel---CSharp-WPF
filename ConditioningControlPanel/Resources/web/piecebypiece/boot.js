@@ -279,9 +279,9 @@ function main() {
     view.dispose = () => { board.turnSpiral.dispose(); dispose(); };
   }).catch(e => console.warn('[pbp] turn spiral missing', e));
   // --- end T ---
-  // Esc on the menu closes the board; Esc in a game pauses it (owner, 2026-09-27). Never mid-drag, where it
-  // is "put the piece back". A local game holds its clock and the computer's reply; an online clock belongs to
-  // the server, so the card says it keeps running.
+  // Esc on the menu closes the board; Esc in a game pauses it (owner, 2026-09-27). Mid-drag it also puts the
+  // piece back, and never closes the board. A local game holds its clock and the computer's reply; an online
+  // clock belongs to the server, so the card says it keeps running.
   // The pause is also the first half of a panic press (the panel lets the board keep a first Escape as its
   // pause; a second within 2 s closes it), so it goes quiet at once (ui/pause-hush.js), and an Escape on the
   // pause card LEAVES, whatever the gap: Esc, Esc is always the way out. Resume is the focused button.
@@ -315,10 +315,16 @@ function main() {
     if (b.dataset.pause === 'resume') setGamePaused(false);
     else postToHost({ type: 'pbp:exit' });   // leave hushed, the window closes
   });
+  const inGameNow = () => !window.PBP.door?.isUp() && window.PBP.game && !window.PBP.game.isOver();
+  // The panel has already spent a first Escape as the game's pause (not a panic), so a part of the page that
+  // keeps the key for itself (the Options panel, the promotion picker) pauses the game through this too, or
+  // nothing pauses at all (bug hunt 2026-09-29, CHESS-1).
+  window.PBP.escapePause = () => { if (!pausedGame && inGameNow()) setGamePaused(true); };
   window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || drag.isDragging()) return;
+    if (e.key !== 'Escape') return;
     if (pausedGame) { postToHost({ type: 'pbp:exit' }); return; }   // still hushed: nothing comes back on the way out
-    const inGame = !window.PBP.door?.isUp() && window.PBP.game && !window.PBP.game.isOver();
+    if (drag.isDragging()) { drag.drop(); window.PBP.escapePause(); return; }
+    const inGame = inGameNow();
     if (inGame) setGamePaused(true);
     else postToHost({ type: 'pbp:exit' });
   });

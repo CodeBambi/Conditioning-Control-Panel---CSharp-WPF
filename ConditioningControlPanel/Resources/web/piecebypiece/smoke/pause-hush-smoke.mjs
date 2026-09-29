@@ -10,6 +10,9 @@
  *      a tab-visibility flip, back to the player's volume after.
  *   C  boot.js: an Escape on the pause card leaves (never resumes), leaving
  *      stays hushed, and the slow-turn spiral board drops while paused.
+ *   D  the one Escape the panel keeps as the pause pauses the game wherever it
+ *      lands: with Options open, with the promotion picker up, or mid-drag
+ *      (bug hunt 2026-09-29, CHESS-1).
  *
  *   node smoke/pause-hush-smoke.mjs        (no server, no browser)
  * ==========================================================================*/
@@ -133,6 +136,24 @@ function expect(cond, name) {
   expect(!/if \(pausedGame\) \{ setGamePaused\(false\)/.test(boot), 'no Escape path un-hushes on the way out');
   expect(/pauseHush\.set\(p\)/.test(boot), 'every pause and resume goes through the hush');
   expect(/menuOpen: \(\) => [^\n]*isPaused/.test(boot), 'the slow-turn spiral board drops while paused');
+}
+
+/* ---- D: one Escape pauses wherever it lands ------------------------------------ */
+// The panel has already spent that press as the game's pause (PanicPolicy.GameClaimsEscapeAsPause),
+// so a part of the page that keeps the key for itself must pause the game too, or nothing pauses
+// and the first half of the panic press is gone.
+{
+  const boot = readFileSync(new URL('../boot.js', import.meta.url), 'utf8');
+  const hud = readFileSync(new URL('../hud.js', import.meta.url), 'utf8');
+  const promote = readFileSync(new URL('../board/promote.js', import.meta.url), 'utf8');
+  const drag = readFileSync(new URL('../board/drag.js', import.meta.url), 'utf8');
+  expect(/window\.PBP\.escapePause = \(\) => \{[^\n]*setGamePaused\(true\)/.test(boot), 'boot offers the pause to whoever keeps an Escape');
+  expect(!/e\.key !== 'Escape' \|\| drag\.isDragging\(\)\) return;/.test(boot), 'an Escape mid-drag is not dropped on the floor');
+  expect(/if \(drag\.isDragging\(\)\) \{ drag\.drop\(\); window\.PBP\.escapePause\(\); return; \}/.test(boot), 'mid-drag: the man goes back and the game pauses');
+  expect(/drop\(\) \{ onCancel\(\); clearSelection\(\); \}/.test(drag), 'drag.drop() puts a man in hand back and lets a waiting one go');
+  const optionKey = hud.match(/const optionKey = e => \{[\s\S]*?\n  \};/);
+  expect(!!optionKey && /closeOptions\(\)[\s\S]*escapePause/.test(optionKey[0]), 'Escape with Options open closes it and pauses');
+  expect(/if \(key === 'escape'\) \{ close\(\); window\.PBP\?\.escapePause\?\.\(\); return; \}/.test(promote), 'Escape with the promotion picker up closes it and pauses');
 }
 
 console.log(`\npause hush smoke: ${passed} passed, ${failed} failed`);

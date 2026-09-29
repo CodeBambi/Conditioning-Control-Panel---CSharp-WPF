@@ -565,6 +565,8 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     selection: () => selSquare,
     /** Let go of him, from anywhere. */
     deselect: () => clearSelection(),
+    /** Esc mid-drag: a man in hand springs back to his square, a waiting one is let go. */
+    drop() { onCancel(); clearSelection(); },
     // The height of the plane the cursor is dragging along. The screenshot
     // harness aims its release with this, because board level is no longer
     // where the held man is.
