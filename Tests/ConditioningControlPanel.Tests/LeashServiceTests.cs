@@ -224,6 +224,68 @@ public class LeashServiceTests
         Assert.False(r.Svc.CutPending);
     }
 
+    // Bug hunt 2026-09-29, SOCIAL-6: the friends poll stops at its own account check, so nothing
+    // re-checked the leash after a sign-out and the gate kept standing up every 2 s.
+    [Fact]
+    public void Signed_out_the_gate_stands_down_and_the_leash_goes_with_the_account()
+    {
+        var r = new Rig().Build();
+        var flips = new List<bool>();
+        r.Svc.LeashedChanged += flips.Add;
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p1", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Equal("p1", r.Svc.GateDue!.Pid);
+
+        r.Account = null;
+        Assert.Null(r.Svc.GateDue);
+        Assert.Null(r.Svc.Snapshot.Me);
+        Assert.Equal(new[] { true, false }, flips);
+        Assert.Equal(0, r.Safety);                         // a sign-out is not a cut
+
+        // Back in: the leash is still on the server, the next poll brings it and its gate back.
+        r.Account = "u_me";
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p1", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Equal("p1", r.Svc.GateDue!.Pid);
+        Assert.Equal(0, r.Api.Count("cut"));
+    }
+
+    [Fact]
+    public async Task A_cut_pressed_while_signed_out_sticks_and_reaches_the_server_on_the_next_sign_in()
+    {
+        var r = new Rig().Build();
+        var flips = new List<bool>();
+        r.Svc.LeashedChanged += flips.Add;
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p1", "lines", 3, T0.AddHours(-1)) })));
+
+        r.Account = null;                                  // the token dropped, no poll has noticed yet
+        await r.Svc.CutAsync();
+
+        Assert.Equal(1, r.Safety);
+        Assert.Null(r.Svc.Snapshot.Me);
+        Assert.Null(r.Svc.GateDue);
+        Assert.Equal(new[] { true, false }, flips);
+        Assert.Equal("u_me", r.Store.V);                   // kept for that account
+        Assert.Equal(0, r.Api.Count("cut"));               // nothing goes out signed out
+
+        // Another account signing in on this PC is not cut by it.
+        r.Account = "u_other";
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p9", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Equal("p9", r.Svc.GateDue!.Pid);
+        Assert.Equal(0, r.Api.Count("cut"));
+        Assert.Equal("u_me", r.Store.V);
+
+        // The account that cut signs back in: still cut here, and the server hears it on the first poll.
+        r.Account = "u_me";
+        Assert.Null(r.Svc.GateDue);
+        Assert.True(r.Svc.CutPending);
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p1", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Null(r.Svc.Snapshot.Me);
+        Assert.Null(r.Svc.GateDue);
+        Assert.Equal(1, r.Api.Count("cut"));
+        Assert.False(r.Svc.CutPending);
+        Assert.Null(r.Store.V);
+        Assert.Equal(1, r.Safety);
+    }
+
     [Fact]
     public async Task Complete_hides_the_gate_and_is_resent_until_it_lands()
     {

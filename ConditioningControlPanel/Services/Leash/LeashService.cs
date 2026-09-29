@@ -113,7 +113,10 @@ public sealed class LeashService : ILeashService
 
     private bool _wasLeashed;
 
-    public Punishment? GateDue => _cutPending ? null : LeashGateRule.Due(Snapshot.Me?.Pending, _now(), GateSkips());
+    /// <summary>The gate asks every 2 s, so it is also where a sign-out is noticed: nothing else
+    /// re-checks the account once the friends poll stops (it returns at its own account check), and a
+    /// signed-out app must not keep standing a punishment up (bug hunt 2026-09-29, SOCIAL-6).</summary>
+    public Punishment? GateDue => !CheckAccount() || _cutPending ? null : LeashGateRule.Due(Snapshot.Me?.Pending, _now(), GateSkips());
 
     /// <summary>Pids the gate passes over: completed here and not yet dropped by the server, or
     /// marked "will not play" within the last <see cref="UnplayableHold"/>.</summary>
@@ -382,7 +385,11 @@ public sealed class LeashService : ILeashService
         try { _cutSafety(); }
         catch (Exception ex) { App.Logger?.Warning("Leash cut safety failed: {E}", ex.Message); }
 
-        var account = _account();
+        // Signed out (or the token dropped), the leash on screen still belongs to the last account:
+        // cut it for that one. The leash goes here at once, and the stored mark sends the cut the
+        // next time that account signs in (bug hunt 2026-09-29, SOCIAL-6: returning here left the
+        // gate standing back up 2 s after every Cut).
+        var account = _account() ?? _lastAccount;
         if (account == null) return;
         _cutPending = true;
         try { _cutStore.Write(account); } catch (Exception ex) { App.Logger?.Debug("Leash cut store failed: {E}", ex.Message); }
