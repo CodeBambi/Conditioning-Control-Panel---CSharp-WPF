@@ -139,7 +139,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CoreSettings.Save();
 
             // audio-base is fetched only for the mod that plays it (no-op when stamped/offline).
-            if (ModAudioPolicy.UsesBaselineVoicePack(mods.ActiveModId) && AvApp.ReleaseContent is { } releaseContent)
+            // Same sandbox guard as startup: a restart-resumed choice is not a user action.
+            if (ModAudioPolicy.UsesBaselineVoicePack(mods.ActiveModId) && AvApp.ReleaseContent is { } releaseContent
+                && !AvApp.SkipStartupFetch(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable("CCP_CONTENT_BASE_URL")))
                 _ = System.Threading.Tasks.Task.Run(() => releaseContent.EnsureBaselineAsync());
 
             // WPF App.KeywordPresets.NotifyVisibilityChanged: themed presets show only under their mod.
