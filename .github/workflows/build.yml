@@ -171,7 +171,9 @@ jobs:
         timeout-minutes: 20
         run: |
           dotnet publish CCP.Avalonia/CCP.Avalonia.csproj -c Release -p:PublishProfile=win-x64
-          $p = Start-Process -FilePath CCP.Avalonia\bin\publish\win-x64\CCP.Avalonia.exe -ArgumentList '--smoke' -Wait -PassThru -NoNewWindow
+          # WinExe has no console: capture the smoke's own report, or a failure says only "exited 1".
+          $p = Start-Process -FilePath CCP.Avalonia\bin\publish\win-x64\CCP.Avalonia.exe -ArgumentList '--smoke' -Wait -PassThru -NoNewWindow -RedirectStandardOutput smoke.out -RedirectStandardError smoke.err
+          Get-Content smoke.out, smoke.err
           if ($p.ExitCode -ne 0) { throw "--smoke exited $($p.ExitCode)" }
 
   # build-content-packs.ps1 is Windows-only (\\?\ long paths), so its proof runs here.
