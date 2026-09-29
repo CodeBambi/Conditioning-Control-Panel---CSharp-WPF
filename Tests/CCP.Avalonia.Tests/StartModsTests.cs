@@ -72,6 +72,7 @@ public sealed class StartModsTests
             svc?.SealForReset();
             CoreSettings.ServiceProvider = oldSettings;
             mods.Dispose();
+            AvApp.ResetReleaseContent();   // App.Mods is static: never leak it into a later test
             foreach (var f in Directory.GetFiles(root, "settings*")) File.Delete(f);
             foreach (var dir in new[] { "mods", "builtin_mods" })
                 if (Directory.Exists(Path.Combine(root, dir))) Directory.Delete(Path.Combine(root, dir), recursive: true);
@@ -116,6 +117,7 @@ public sealed class StartModsTests
                 svc?.SealForReset();
                 CoreSettings.ServiceProvider = oldSettings;
                 mods.Dispose();
+                AvApp.ResetReleaseContent();
                 foreach (var f in Directory.GetFiles(root, "settings*")) File.Delete(f);
                 foreach (var dir in new[] { "mods", "builtin_mods" })
                     if (Directory.Exists(Path.Combine(root, dir))) Directory.Delete(Path.Combine(root, dir), recursive: true);
