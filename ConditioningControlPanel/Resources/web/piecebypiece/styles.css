@@ -385,6 +385,9 @@ html, body {
 .hud, .cam-views { transition: opacity 320ms ease; }
 body.pbp-replay-full .hud:not(:has(.game-options-panel:not([hidden]))),
 body.pbp-replay-full .cam-views { opacity: .1; transition: opacity 160ms ease; }
+/* Behind the corner inset only the Options pill steps back: it sits over the inset (CHESS-8). */
+.game-settings { transition: opacity 320ms ease; }
+body.pbp-replay-corner .game-settings:not(:has(.game-options-panel:not([hidden]))) { opacity: .1; transition: opacity 160ms ease; }
 
 /* The change-of-turn card (ui/turn-handoff.js): slam, ribbon or tag. --tc is the mover's colour. */
 .turn-card { position: fixed; inset: 0; z-index: 20; pointer-events: none; overflow: hidden; --tc: #ff5aa5; }

@@ -7,12 +7,14 @@
  * go quiet at once, not only show a card (owner, 2026-09-29):
  *
  *   on   the sound (sfx, crowd, the Distraction bed and whispers) fades out in
- *        about 0.1 s, a running capture replay is cut, the Distraction layers
+ *        about 0.1 s, a running capture replay is cut and one still being
+ *        recorded is dropped (director.drop), the Distraction layers
  *        (flashes, pictures, veils) are cleared and held off. The slow-turn
  *        spiral board reads isPaused() and drops on its own.
  *   off  the sound comes back slowly (sfx.hush eases it in over ~3.5 s) and the
  *        Distraction layers only come back RETURN_MS later, so a resume never
- *        lands the player straight back in a full trance.
+ *        lands the player straight back in a full trance. The spiral board reads
+ *        returning() and waits out the same window, then eases in.
  *
  * Every part is optional: Classic has no ramp, an older board has no director
  * and sfx loads late. A part that throws never stops the rest going quiet.
@@ -28,7 +30,7 @@ export function createPauseHush({ board = {}, ramp = () => null, isPaused = () =
     if (back) { cancel(back); back = 0; }
     safe(() => board.sfx?.hush?.(on));
     if (on) {
-      safe(() => board.director?.skip?.());
+      safe(() => board.director?.drop?.());
       safe(() => ramp()?.setEnabled?.(false));
       return;
     }
@@ -38,5 +40,6 @@ export function createPauseHush({ board = {}, ramp = () => null, isPaused = () =
     }, RETURN_MS);
   }
 
-  return { set };
+  // True from a resume until the layers are due back: the slow-turn spiral board waits it out too.
+  return { set, returning: () => !!back };
 }

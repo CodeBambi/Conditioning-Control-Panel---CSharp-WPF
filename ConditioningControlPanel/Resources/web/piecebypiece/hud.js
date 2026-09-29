@@ -416,6 +416,8 @@ export function createHud(opts = {}) {
   const optionKey = e => {
     if (e.key !== 'Escape' || panel?.hidden) return;
     e.preventDefault(); e.stopPropagation(); closeOptions(); options?.focus();
+    // the panel has already spent this press as the game's pause, so the game pauses too
+    window.PBP?.escapePause?.();
   };
   document.addEventListener('keydown', optionKey);
   undom.push(() => document.removeEventListener('keydown', optionKey));

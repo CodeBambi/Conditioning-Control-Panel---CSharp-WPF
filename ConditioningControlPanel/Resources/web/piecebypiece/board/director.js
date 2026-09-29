@@ -217,7 +217,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
   }
   function begin(clip) {
     const allowed = allowedNow();
-    if (allowed === 'off' || menuUp()) return;
+    if (allowed === 'off' || menuUp() || paused()) return;   // never starts under the pause card (CHESS-3)
     const layout = nextLayout(allowed);
     const dN = clip.to.clone().sub(clip.from).setY(0);
     if (dN.lengthSq() < 1e-6) dN.set(0, 0, -1);
@@ -230,7 +230,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     replay = { clip: full, layout, t: 0, prevT: -1, end: replayLength(layout) - REPLAY.exit, dN, mid, perp, exiting: false,
       shots: shots.pick(layout, full), words: impactWords(impact, random), bstyle: burstStyle(impact), seed: Math.floor(random() * 997),
       tilt: [0, 1, 2].map(() => (random() - .5) * 16), pinned: null };
-    hudDown(layout !== 'corner');
+    hudDown(true, layout === 'corner');
     chip.classList.remove('stamp'); void chip.offsetWidth; chip.classList.add('stamp');
     bus?.emit?.('replay-show', { layout, n: panelCount(layout), hit: clip.hitInfo || null });
   }
@@ -256,8 +256,12 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     bus?.emit?.('replay-done', { cancelled: true });
   }
   function cancel() { dropReplay(); rec = null; follow = null; weight = 0; pendingVictim = null; paintDom(null); }
-  // The HUD (clocks, camera buttons, hints) steps back behind a full-screen replay.
-  function hudDown(on) { globalThis.document?.body?.classList.toggle('pbp-replay-full', !!on); }
+  // The HUD (clocks, camera buttons, hints) steps back behind a full-screen replay; behind the
+  // corner inset only the Options pill does, as it sits over the inset (bug hunt 2026-09-29, CHESS-8).
+  function hudDown(on, corner = false) {
+    globalThis.document?.body?.classList.toggle('pbp-replay-full', !!on && !corner);
+    globalThis.document?.body?.classList.toggle('pbp-replay-corner', !!on && corner);
+  }
 
   // cameras, one per panel; where they stand is board/replay-shots.js
   const shots = createReplayShots({ group, random });
@@ -524,6 +528,9 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
 
   return {
     update, afterRender, skip, cancel,
+    /** The pause: cut a replay at once (a skip's exit waits for the clock, so it froze on screen) and
+     *  forget a capture still being recorded, so no replay starts under the card (bug hunt 2026-09-29, CHESS-3). */
+    drop() { dropReplay(); rec = null; },
     /** Hold the replay at presentation time t (null lets it run again): a screenshot harness's seek. */
     pin(t) { if (replay) replay.pinned = t == null ? null : Math.max(0, +t); return !!replay; },
     /** True while a full-screen replay owns the view: the turn card and the computer wait for it. */

@@ -10,6 +10,11 @@
  *      a tab-visibility flip, back to the player's volume after.
  *   C  boot.js: an Escape on the pause card leaves (never resumes), leaving
  *      stays hushed, and the slow-turn spiral board drops while paused.
+ *   D  the one Escape the panel keeps as the pause pauses the game wherever it
+ *      lands: with Options open, with the promotion picker up, or mid-drag
+ *      (bug hunt 2026-09-29, CHESS-1).
+ *   E  Backspace / Z take nothing back under the pause card (CHESS-10).
+ *   F  no turn card and no replay play under the pause card (CHESS-3).
  *
  *   node smoke/pause-hush-smoke.mjs        (no server, no browser)
  * ==========================================================================*/
@@ -37,13 +42,14 @@ function expect(cond, name) {
   let paused = false;
   const board = {
     sfx: { hush: (on) => calls.push('hush:' + on) },
-    director: { skip: () => calls.push('skip') },
+    director: { skip: () => calls.push('skip'), drop: () => calls.push('drop') },
   };
   const ramp = { setEnabled: (on) => calls.push('ramp:' + on) };
   const hush = createPauseHush({ board, ramp: () => ramp, isPaused: () => paused, later, cancel });
 
   paused = true; hush.set(true);
-  expect(calls.join() === 'hush:true,skip,ramp:false', 'pause: sound hushed, replay cut, Distraction layers off');
+  // drop, not skip: a skip's exit waits for the replay clock, which the pause stops (CHESS-3)
+  expect(calls.join() === 'hush:true,drop,ramp:false', 'pause: sound hushed, replay cut, Distraction layers off');
   expect(timers.size === 0, 'pause arms nothing');
 
   calls.length = 0; paused = false; hush.set(false);
@@ -59,16 +65,30 @@ function expect(cond, name) {
   calls.length = 0; paused = false; hush.set(false); paused = true; fire();
   expect(!calls.includes('ramp:true'), 'a return that lands while paused again stays off');
 
+  // The slow-turn spiral board waits out the same window (bug hunt 2026-09-29, CHESS-2):
+  // it used to come straight back at full strength the frame the pause ended.
+  paused = false; hush.set(false); fire();
+  expect(hush.returning() === false, 'at rest nothing is on its way back');
+  paused = true; hush.set(true);
+  expect(hush.returning() === false, 'a pause is not a return');
+  paused = false; hush.set(false);
+  expect(hush.returning() === true, 'after a resume the effects are on their way back');
+  fire();
+  expect(hush.returning() === false, 'and back once RETURN_MS is up');
+  hush.set(false); paused = true; hush.set(true);
+  expect(hush.returning() === false, 'a pause inside the window ends the return');
+  paused = false;
+
   const loud = [];
   const broken = createPauseHush({
-    board: { sfx: { hush: () => { throw new Error('boom'); } }, director: { skip: () => loud.push('skip') } },
+    board: { sfx: { hush: () => { throw new Error('boom'); } }, director: { drop: () => loud.push('drop') } },
     ramp: () => ({ setEnabled: (on) => loud.push('ramp:' + on) }),
     later, cancel,
   });
   const warn = console.warn; console.warn = () => {};
   broken.set(true);
   console.warn = warn;
-  expect(loud.join() === 'skip,ramp:false', 'a part that throws never stops the rest going quiet');
+  expect(loud.join() === 'drop,ramp:false', 'a part that throws never stops the rest going quiet');
 
   const bare = createPauseHush({ board: {}, ramp: () => null, later, cancel });
   let threw = false;
@@ -133,6 +153,49 @@ function expect(cond, name) {
   expect(!/if \(pausedGame\) \{ setGamePaused\(false\)/.test(boot), 'no Escape path un-hushes on the way out');
   expect(/pauseHush\.set\(p\)/.test(boot), 'every pause and resume goes through the hush');
   expect(/menuOpen: \(\) => [^\n]*isPaused/.test(boot), 'the slow-turn spiral board drops while paused');
+  expect(/menuOpen: \(\) => [^\n]*isPaused[^\n]*isReturning/.test(boot), 'and stays down while the other effects wait to come back');
+  expect(/window\.PBP\.isReturning = \(\) => pauseHush\.returning\(\)/.test(boot), 'boot hands the spiral the hush\'s return window');
+  const spiral = readFileSync(new URL('../board/turn-spiral.js', import.meta.url), 'utf8');
+  expect(/menuOpen\(\)\) \{ clear\(\); back = 0; return; \}/.test(spiral) && /alpha = turn\.alpha \* back;/.test(spiral), 'then the spiral eases in, never popping back at full strength');
+}
+
+/* ---- D: one Escape pauses wherever it lands ------------------------------------ */
+// The panel has already spent that press as the game's pause (PanicPolicy.GameClaimsEscapeAsPause),
+// so a part of the page that keeps the key for itself must pause the game too, or nothing pauses
+// and the first half of the panic press is gone.
+{
+  const boot = readFileSync(new URL('../boot.js', import.meta.url), 'utf8');
+  const hud = readFileSync(new URL('../hud.js', import.meta.url), 'utf8');
+  const promote = readFileSync(new URL('../board/promote.js', import.meta.url), 'utf8');
+  const drag = readFileSync(new URL('../board/drag.js', import.meta.url), 'utf8');
+  expect(/window\.PBP\.escapePause = \(\) => \{[^\n]*setGamePaused\(true\)/.test(boot), 'boot offers the pause to whoever keeps an Escape');
+  expect(!/e\.key !== 'Escape' \|\| drag\.isDragging\(\)\) return;/.test(boot), 'an Escape mid-drag is not dropped on the floor');
+  expect(/if \(drag\.isDragging\(\)\) \{ drag\.drop\(\); window\.PBP\.escapePause\(\); return; \}/.test(boot), 'mid-drag: the man goes back and the game pauses');
+  expect(/drop\(\) \{ onCancel\(\); clearSelection\(\); \}/.test(drag), 'drag.drop() puts a man in hand back and lets a waiting one go');
+  const optionKey = hud.match(/const optionKey = e => \{[\s\S]*?\n  \};/);
+  expect(!!optionKey && /closeOptions\(\)[\s\S]*escapePause/.test(optionKey[0]), 'Escape with Options open closes it and pauses');
+  expect(/if \(key === 'escape'\) \{ close\(\); window\.PBP\?\.escapePause\?\.\(\); return; \}/.test(promote), 'Escape with the promotion picker up closes it and pauses');
+}
+
+/* ---- E: the pause card holds the position -------------------------------------- */
+// Backspace and Z took moves back behind the card, and a take-back credits clock time
+// back (bug hunt 2026-09-29, CHESS-10).
+{
+  const drag = readFileSync(new URL('../board/drag.js', import.meta.url), 'utf8');
+  const takeBack = drag.match(/ev\.key === 'Backspace'[\s\S]*?game\.takeBack\(\)/);
+  expect(!!takeBack && /window\.PBP\?\.isPaused\?\.\(\)\) return;/.test(takeBack[0]), 'no take-back while the game is paused');
+}
+
+/* ---- F: nothing plays under the pause card ------------------------------------- */
+// The turn card came in while paused, a cut replay froze mid-screen, and a capture still
+// being recorded at the Esc started its replay under the card (bug hunt 2026-09-29, CHESS-3).
+{
+  const boot = readFileSync(new URL('../boot.js', import.meta.url), 'utf8');
+  const director = readFileSync(new URL('../board/director.js', import.meta.url), 'utf8');
+  expect(/if \(!pausedGame\) board\.turnHandoff\.update\(dt\);/.test(boot), 'the turn card waits out the pause');
+  expect(/drop\(\) \{ dropReplay\(\); rec = null; \}/.test(director), 'director.drop() cuts the replay at once and forgets a recording');
+  const begin = director.match(/function begin\(clip\) \{[\s\S]*?\n  \}/);
+  expect(!!begin && /menuUp\(\) \|\| paused\(\)\) return;/.test(begin[0]), 'no replay starts while the game is paused');
 }
 
 console.log(`\npause hush smoke: ${passed} passed, ${failed} failed`);

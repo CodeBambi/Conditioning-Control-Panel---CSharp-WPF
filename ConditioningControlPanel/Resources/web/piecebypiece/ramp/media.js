@@ -23,6 +23,8 @@
  * same rule that keeps dtrh/hostMedia.js's two pools apart).
  * ==========================================================================*/
 
+import { lastHostFrame } from '../bridge.js';
+
 const KINDS = ['image', 'gif', 'video'];
 const NO_ECHO = 6;   // a reshuffled deck avoids repeating the last N draws
 
@@ -290,6 +292,10 @@ export function createHostMedia(entries, opts = {}) {
   if (bridge && typeof bridge.addEventListener === 'function') {
     listener = (e) => { try { handle(e && e.data); } catch { /* a bad frame is not a crash */ } };
     try { bridge.addEventListener('message', listener); } catch { listener = null; }
+    // The settings frame comes once, at ready, and this pool is made after an async import:
+    // start from the one the host already sent, or videoHoldSec never reaches the video card.
+    const seen = lastHostFrame('pbp:settings');
+    if (seen) handle(seen);
     request();
   } else {
     warnEmpty();
