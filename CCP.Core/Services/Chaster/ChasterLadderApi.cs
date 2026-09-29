@@ -38,7 +38,7 @@ public interface IChasterLadderApi
 
 /// <summary>
 /// POST /chaster/raffle/{verify,optin,me,top,name} on the proxy, with the account's token door (the pair
-/// <see cref="BackRoomApi.AppIdentity"/> stamps). A proxy without the routes answers 404, which
+/// <c>BackRoomApi.AppIdentity</c> stamps). A proxy without the routes answers 404, which
 /// reads as null here: the page then simply shows no raffle card. Never retried.
 /// </summary>
 public sealed class ChasterLadderApi : IChasterLadderApi
@@ -52,11 +52,11 @@ public sealed class ChasterLadderApi : IChasterLadderApi
     private readonly Func<(string UnifiedId, string Token)?> _identity;
     private readonly string _baseUrl;
 
-    public ChasterLadderApi(HttpClient? http = null, Func<(string UnifiedId, string Token)?>? identity = null, string? baseUrl = null)
+    public ChasterLadderApi(HttpClient? http, Func<(string UnifiedId, string Token)?> identity, string baseUrl)
     {
         _http = http ?? SharedHttp;
-        _identity = identity ?? BackRoomApi.AppIdentity;
-        _baseUrl = baseUrl ?? BackRoomApi.BaseUrl;
+        _identity = identity;
+        _baseUrl = baseUrl;
     }
 
     public Task<LadderVerify?> VerifyAsync(string lockId, string accessToken, CancellationToken ct = default) =>
@@ -181,7 +181,7 @@ public sealed class ChasterLadderApi : IChasterLadderApi
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("Chaster raffle {Op} failed: {E}", op, ex.Message);
+            Serilog.Log.Debug("Chaster raffle {Op} failed: {E}", op, ex.Message);
             return null;
         }
     }

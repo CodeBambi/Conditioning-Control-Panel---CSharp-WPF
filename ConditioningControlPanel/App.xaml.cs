@@ -2510,7 +2510,7 @@ namespace ConditioningControlPanel
             // later in OnStartup, so this only moves the entitlement READ earlier.
             Patreon = new PatreonService();
             SubscribeStar = new SubscribeStarService();
-            Chaster = Services.Chaster.ChasterService.CreateForApp();
+            Chaster = Services.Chaster.ChasterServiceApp.CreateForApp();
 
             splash?.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();

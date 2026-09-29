@@ -2765,7 +2765,7 @@ namespace ConditioningControlPanel.Services
                     if (!Chaster.NatashasFavourite.DodgeBooks(up, window.NatashaDodged)) return;
                     var dpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
                     // Unprompted: the player did nothing, so Circe does not say they popped it.
-                    App.Chaster?.NoteAt("natasha", new System.Windows.Point(
+                    App.Chaster?.NoteAt("natasha", new Chaster.ScreenPoint(
                         (window.Left + window.Width / 2) * dpi, (window.Top + window.Height / 2) * dpi), unprompted: true);
                 }
                 catch (Exception ex) { Diag.Swallowed(ex, "natasha dodge"); }

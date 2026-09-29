@@ -150,7 +150,7 @@ public class ChasterServiceTests : IDisposable
         Assert.Equal("+0:30 each", TabPageText.Price(TabPrices.Find("mantra")!, "{0} each"));
         Assert.Equal("-10:00", TabPageText.Price(TabPrices.Find("session")!, "{0} each"));
 
-        var en = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, "en.json")));
+        var en = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "CCP.Core", "Localization", "Languages", "en.json")));
         foreach (var id in TabPrices.All.Select(p => p.Id).Append(CircesTab.JackpotEventId))
             Assert.NotNull(en[TabPageText.NameKey(id)]);
     }
@@ -209,8 +209,8 @@ public class ChasterServiceTests : IDisposable
         var seen = new List<TabBooking>();
         service.Booked += (_, b) => seen.Add(b);
 
-        var ring = service.NoteAt(NatashasFavourite.EventId, new System.Windows.Point(10, 10), unprompted: true);
-        var pop = service.NoteAt(NatashasFavourite.EventId, new System.Windows.Point(10, 10));
+        var ring = service.NoteAt(NatashasFavourite.EventId, new ScreenPoint(10, 10), unprompted: true);
+        var pop = service.NoteAt(NatashasFavourite.EventId, new ScreenPoint(10, 10));
 
         Assert.Equal(new[] { 300, 300 }, seen.Select(b => b.AppliedSeconds));
         Assert.True(ring.Unprompted && seen[0].Unprompted);

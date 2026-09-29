@@ -67,7 +67,7 @@ public class ChasterLadderScrapRenderTests
         {
             var tab = new ChasterTabView();
             tab.LinkedPanel.Visibility = Visibility.Visible;
-            tab.PaintScrap(ChasterService.DemoRaffle.Board(showName));
+            tab.PaintScrap(ChasterServiceApp.DemoRaffle.Board(showName));
             Realize(tab, 1100, 1600);
 
             Assert.Equal(Visibility.Visible, tab.LadderScrap.Visibility);
@@ -92,7 +92,7 @@ public class ChasterLadderScrapRenderTests
 
             Shot(tab.AddedRow, showName ? "scrap-named.png" : "scrap-label.png");
             // The raffle card as the clock's hover lays it out: under the clock, beside the scrap.
-            tab.ShowRaffleCard(new ChasterService.DemoRaffle("in").MeAsync().Result);
+            tab.ShowRaffleCard(new ChasterServiceApp.DemoRaffle("in").MeAsync().Result);
             var clockBottom = tab.AddedClock.TranslatePoint(new Point(0, tab.AddedClock.ActualHeight), tab.AddedRow).Y;
             var clockLeft = tab.AddedClock.TranslatePoint(new Point(0, 0), tab.AddedRow).X;
             if (tab.LadderPopup.Child is FrameworkElement raffle)
