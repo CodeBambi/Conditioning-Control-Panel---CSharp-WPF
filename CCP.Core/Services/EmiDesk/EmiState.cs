@@ -2,8 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Windows;
-using System.Windows.Threading;
+using System.Threading;
 using Newtonsoft.Json;
 using Serilog;
 
@@ -25,6 +24,15 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// </summary>
 public sealed class EmiState
 {
+    // The six dials this file enforces, owned here so the state can live in Core. EmiNudgeMachine
+    // and EmiKnockMachine (WPF head) alias them and carry their rationale.
+    public const int PetGistCount = 3;
+    public const int RingGistCount = 2;
+    public const int KnockNever = 0;
+    public const int KnockKnocked = 1;
+    public const int KnockSpent = 2;
+    public const int KnockOfferCap = 1;
+
     /// <summary>Schema version. Bump when a field's meaning changes, not when one is added.</summary>
     [JsonProperty("version")]
     public int Version { get; set; } = 1;
@@ -201,7 +209,7 @@ public sealed class EmiState
 
     /// <summary>
     /// The pet nudge is DONE, forever. Latched once <see cref="PetsTotal"/> reaches
-    /// <c>EmiNudgeMachine.PetGistCount</c> and never cleared by anything but the QA reset: a
+    /// <c>PetGistCount</c> and never cleared by anything but the QA reset: a
     /// tutorial that comes back after you have learned the thing is the definition of nagging.
     /// </summary>
     [JsonProperty("petGistGot")] public bool PetGistGot { get; set; }
@@ -229,7 +237,8 @@ public sealed class EmiState
 
     private static readonly object Gate = new();
     private static EmiState? _current;
-    private static DispatcherTimer? _saveTimer;
+    private static Timer? _saveTimer;
+    private static SynchronizationContext? _saveCtx;
     private static bool _dirty;
     private static bool _loadWarned;
 
@@ -238,7 +247,7 @@ public sealed class EmiState
     {
         get
         {
-            try { return Path.Combine(App.UserDataPath, "emi-desk.json"); }
+            try { return Path.Combine(CorePaths.UserData, "emi-desk.json"); }
             catch { return Path.Combine(Path.GetTempPath(), "emi-desk.json"); }
         }
     }
@@ -309,38 +318,20 @@ public sealed class EmiState
         try
         {
             _dirty = true;
-            var disp = Application.Current?.Dispatcher;
-            if (disp == null || disp.HasShutdownStarted)
+            // Core: a re-armed one-shot threading timer replaces the UI DispatcherTimer (same 500 ms
+            // debounce). The write is posted back to the UI context, as the DispatcherTimer ran it:
+            // the Note* mutators do not lock, so serialising on the pool could race them.
+            _saveCtx ??= SynchronizationContext.Current;
+            _saveTimer ??= new Timer(_ =>
             {
-                SaveNow();
-                return;
-            }
-            if (!disp.CheckAccess())
-            {
-                disp.BeginInvoke(new Action(SaveSoon));
-                return;
-            }
-            if (_saveTimer == null)
-            {
-                _saveTimer = new DispatcherTimer(DispatcherPriority.Background, disp)
+                void Save()
                 {
-                    Interval = TimeSpan.FromMilliseconds(500)
-                };
-                _saveTimer.Tick += (_, _) =>
-                {
-                    try
-                    {
-                        _saveTimer?.Stop();
-                        SaveNow();
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Debug(ex, "[EmiDesk] debounced save failed");
-                    }
-                };
-            }
-            _saveTimer.Stop();
-            _saveTimer.Start();
+                    try { SaveNow(); }
+                    catch (Exception ex) { Log.Debug(ex, "[EmiDesk] debounced save failed"); }
+                }
+                if (_saveCtx != null) _saveCtx.Post(_ => Save(), null); else Save();
+            });
+            _saveTimer.Change(500, Timeout.Infinite);
         }
         catch (Exception ex)
         {
@@ -441,7 +432,7 @@ public sealed class EmiState
         {
             var s = Current;
             s.PetsTotal++;
-            if (!s.PetGistGot && s.PetsTotal >= EmiNudgeMachine.PetGistCount)
+            if (!s.PetGistGot && s.PetsTotal >= PetGistCount)
             {
                 s.PetGistGot = true;
                 Log.Information("[EmiDesk] pet nudge retired: {N} pats", s.PetsTotal);
@@ -480,7 +471,7 @@ public sealed class EmiState
         {
             var s = Current;
             s.RingOpens++;
-            if (!s.RingGistGot && s.RingOpens >= EmiNudgeMachine.RingGistCount)
+            if (!s.RingGistGot && s.RingOpens >= RingGistCount)
             {
                 s.RingGistGot = true;
                 Log.Information("[EmiDesk] ring nudge retired: {N} opens", s.RingOpens);
@@ -558,7 +549,7 @@ public sealed class EmiState
 
     /// <summary>
     /// SHE IS COMING OUT TO ASK. Latches <see cref="KnockState"/> to
-    /// <see cref="EmiKnockMachine.Knocked"/>, stamps the time and SPENDS the one and only offer.
+    /// <see cref="KnockKnocked"/>, stamps the time and SPENDS the one and only offer.
     ///
     /// <para>The offer is spent here, at the knock, and not when they answer: somebody who closes
     /// the app while the bubble is still on screen has been asked, and a counter that waited for a
@@ -574,12 +565,12 @@ public sealed class EmiState
         try
         {
             var s = Current;
-            if (s.KnockState < EmiKnockMachine.Knocked) s.KnockState = EmiKnockMachine.Knocked;
+            if (s.KnockState < KnockKnocked) s.KnockState = KnockKnocked;
             s.KnockAtUtc = DateTime.UtcNow.Ticks;
-            s.KnockOffers = Math.Min(EmiKnockMachine.OfferCap, s.KnockOffers + 1);
+            s.KnockOffers = Math.Min(KnockOfferCap, s.KnockOffers + 1);
             SaveNow();
             Log.Information("[EmiDesk] the knock spent its offer ({N} of {Cap})",
-                s.KnockOffers, EmiKnockMachine.OfferCap);
+                s.KnockOffers, KnockOfferCap);
         }
         catch (Exception ex)
         {
@@ -600,8 +591,8 @@ public sealed class EmiState
         try
         {
             var s = Current;
-            if (s.KnockState >= EmiKnockMachine.Spent) return;
-            s.KnockState = EmiKnockMachine.Spent;
+            if (s.KnockState >= KnockSpent) return;
+            s.KnockState = KnockSpent;
             SaveNow();
             Log.Information("[EmiDesk] the knock is spent: she was answered");
         }
@@ -658,7 +649,7 @@ public sealed class EmiState
         try
         {
             var s = Current;
-            s.KnockState = EmiKnockMachine.Never;
+            s.KnockState = KnockNever;
             s.KnockAtUtc = 0;
             s.KnockOffers = 0;
             s.ToursDone?.Clear();

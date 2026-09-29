@@ -91,9 +91,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// own rule, that a question which was never put is never consent to being silenced. It is
         /// also the branch the headless render takes, which has no desktop lifetime.</para>
         ///
-        /// <para>Uncalled on this head: the one caller is <c>EmiDeskService.MaybeAskAboutMuting</c>
-        /// (ConditioningControlPanel/Services/EmiDesk/EmiDeskService.cs), which moves with the
-        /// shell. It exists so that caller lands with no owner-threading edit.</para>
+        /// <para>The one caller is this head's <c>EmiDeskService.MaybeAskAboutMuting</c>
+        /// (CCP.Avalonia/Views/Windows/EmiDesk/EmiDeskService.cs), through its <c>AskMute</c> seam.</para>
         /// </summary>
         public static Task<EmiMuteChoice> Ask()
         {

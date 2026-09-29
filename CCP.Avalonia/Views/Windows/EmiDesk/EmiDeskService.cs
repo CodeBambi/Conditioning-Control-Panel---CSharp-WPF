@@ -147,8 +147,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 };
                 // WPF closed her in App.OnExit. Here a hidden window would keep an
                 // OnLastWindowClose lifetime alive, so she goes with the main window.
-                if ((Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow is Window main)
-                    main.Closed += (_, _) => win.ShutDown();
+                HookShell((Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow, win);
                 _window = win;
                 return win;
             }
@@ -160,11 +159,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             }
         }
 
+        internal static void HookShell(Window? main, EmiDeskWindow win)
+        {
+            if (main != null) main.Closed += (_, _) => win.ShutDown();
+        }
+
         /// <summary>
         /// Ask, at most once per session, whether the avatar should sit out while she is here.
         /// Dismissing the dialog keeps the avatar. ponytail: WPF also skips when nothing talks
-        /// (AnyTalkingFeatureLive: Autonomy, wake word, AI chat, Awareness, remote); this head reads
-        /// the three settings flags only - Autonomy and RemoteControl have no service here.
+        /// (AnyTalkingFeatureLive); both heads share its settings half, Core <c>EmiMuteRule.SettingsTalk</c>.
+        /// The live half (Autonomy, remote controller) has no service on this head.
         /// </summary>
         private async Task MaybeAskAboutMuting()
         {
@@ -174,12 +178,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 if (!s.EmiDeskMuteAvatar) { _muteAccepted = false; return; }
                 if (s.EmiDeskMuteDontAsk) { _muteAccepted = true; return; }
                 if (_mutePromptShownThisSession) return;
-                bool talking = s.SpeechWakeWordEnabled || s.AiChatEnabled
-                               || (s.AwarenessModeEnabled && s.AwarenessConsentGiven);
-                if (!talking) { _muteAccepted = false; return; }
+                if (!ConditioningControlPanel.Services.EmiDesk.EmiMuteRule.SettingsTalk(s)) { _muteAccepted = false; return; }
 
                 _mutePromptShownThisSession = true;
-                var choice = await EmiMutePromptWindow.Ask();
+                var choice = await AskMute();
                 _muteAccepted = choice != EmiMuteChoice.Keep;
                 if (choice == EmiMuteChoice.DontAsk)
                 {
@@ -194,6 +196,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _muteAccepted = false;
             }
         }
+
+        /// <summary>The mute question. A seam only so a test can hold the prompt open.</summary>
+        internal Func<Task<EmiMuteChoice>> AskMute = EmiMutePromptWindow.Ask;
+
+        /// <summary>Test seam: forget this session's prompt, as a fresh launch would.</summary>
+        internal void ResetMutePrompt() { _mutePromptShownThisSession = false; _muteAccepted = false; }
 
         private void RaiseOutChanged()
         {

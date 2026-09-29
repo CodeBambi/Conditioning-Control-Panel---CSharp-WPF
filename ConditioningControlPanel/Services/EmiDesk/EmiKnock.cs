@@ -109,13 +109,13 @@ public sealed class EmiKnockMachine
     // ---------------------------------------------------------------- the states
 
     /// <summary>She has never flashed the chip.</summary>
-    public const int Never = 0;
+    public const int Never = EmiState.KnockNever;
 
     /// <summary>The chip has knocked; the offer is still live.</summary>
-    public const int Knocked = 1;
+    public const int Knocked = EmiState.KnockKnocked;
 
     /// <summary>Spent. They said yes, and nothing in here ever fires again.</summary>
-    public const int Spent = 2;
+    public const int Spent = EmiState.KnockSpent;
 
     // ---------------------------------------------------------------- the dials
 
@@ -128,7 +128,7 @@ public sealed class EmiKnockMachine
     /// shrug bought one quieter re-offer on a later launch. Now the ask arrives with her, so the
     /// user has genuinely been asked the first time and there is nothing left to re-offer.</para>
     /// </summary>
-    public const int OfferCap = 1;
+    public const int OfferCap = EmiState.KnockOfferCap;
 
     private readonly Func<DateTime> _now;
 
