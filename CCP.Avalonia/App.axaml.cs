@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
@@ -391,6 +392,17 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Serilog.Log.Warning(ex, "Tray icon unavailable; X closes the app"); }
                 // The panic key (WPF MainWindow.xaml.cs:363 installs its hook at startup the same way).
                 shell.StartPanicKey();
+                // Linux: one toast naming the distro's install command for any missing runtime library
+                // (docs/avalonia-linux-install.md). dlopen off the UI thread; nothing when all load.
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    if (await System.Threading.Tasks.Task.Run(() => LinuxDependencies.Check(null)) is not { } missing) return;
+                    Serilog.Log.Warning("Missing Linux dependencies: {Text}", missing.Text);
+                    var command = missing.Command;
+                    Notifications.Show(missing.Text, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(20),
+                        command is null ? null : "Copy command",
+                        command is null ? null : () => _ = shell.Clipboard?.SetTextAsync(command));
+                });
                 // WPF App.xaml.cs:4858: pending-outcome report + background update check.
                 Dispatcher.UIThread.Post(async () => await Platform.AppUpdater.StartupAsync(shell));
             }

@@ -52,6 +52,10 @@
                            TextAlignment="Center"
                            Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center"/>
+                <!-- Shown when TxtReason names a distro install command. TextBlock content: '_' access keys. -->
+                <Button x:Name="BtnCopyCommand" HorizontalAlignment="Center" IsVisible="False">
+                    <TextBlock Text="Copy command"/>
+                </Button>
                 <!-- The page that would have loaded. Hidden until Source is set. -->
                 <TextBlock x:Name="TxtSource"
                            FontSize="11"
