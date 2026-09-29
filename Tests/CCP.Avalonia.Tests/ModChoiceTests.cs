@@ -1,0 +1,207 @@
+using System;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Threading;
+using CCP.Avalonia.Testing;
+using CCP.Tests.Shared;
+using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Views.Windows;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using Xunit;
+using AvApp = ConditioningControlPanel.Avalonia.App;
+
+namespace CCP.Avalonia.Tests;
+
+/// <summary>
+/// The one mod-switching path (WPF MainWindow ApplyActiveModChange / ActivateChosenMod /
+/// PendingModActivation) and the first-run mod step (WPF FirstRunWizard PrepareModStep /
+/// CommitModChoice), against a loopback fake release server only.
+/// </summary>
+public sealed class ModChoiceTests
+{
+    [Fact]
+    public Task HeaderComboSwitchesTheModSavesAndRethemes() => Run(async (shell, svc, server) =>
+    {
+        var combo = shell.FindControl<ComboBox>("ModSelectorCombo")!;
+        Assert.Equal(BuiltInMods.CCPDefaultId, ((ModSelectorItem)combo.SelectedItem!).Id);
+        var before = (Color)Application.Current!.Resources["PinkColor"]!;
+        PendingModChoice.Record(BuiltInMods.BambiSleepId, BuiltInMods.CCPDefaultId);
+
+        combo.SelectedItem = shell.AvailableMods.Single(i => i.Id == BuiltInMods.DronificationId);
+
+        Assert.Equal(BuiltInMods.DronificationId, AvApp.Mods!.ActiveModId);
+        Assert.Equal(BuiltInMods.DronificationId, CoreSettings.Current.ActiveModId);   // saved
+        Assert.True(CoreSettings.Current.ModChosen);
+        var after = (Color)Application.Current.Resources["PinkColor"]!;
+        Assert.Equal(Color.Parse(AvApp.Mods.GetAccentColorHex()), after);                 // re-themed live
+        Assert.NotEqual(before, after);
+        Assert.Null(PendingModChoice.Pending);                                           // manual switch outranks it
+        Assert.Equal(BuiltInMods.DronificationId, ((ModSelectorItem)combo.SelectedItem!).Id);
+        Assert.Equal(BuiltInMods.DronificationId, (combo.SelectionBoxItem as ModSelectorItem)?.Id);   // chip not blank
+        await Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task FirstRunPackChoiceRecordsDownloadsThenActivatesOnArrival() => Run(async (shell, svc, server) =>
+    {
+        var wizard = Wizard(shell);
+        wizard.Select(Card(wizard, BuiltInMods.BambiSleepId));
+        Next(wizard);   // step 2 -> CommitModChoice
+
+        Assert.Equal(BuiltInMods.BambiSleepId, PendingModChoice.Pending);   // recorded before the bytes land
+        Assert.Equal(BuiltInMods.CCPDefaultId, AvApp.Mods!.ActiveModId);
+        Assert.True(CoreSettings.Current.ModPickerShown);                    // offer spent at open
+        await wizard.ChosenPackDownload!;
+        await WaitFor(() => AvApp.Mods.ActiveModId == BuiltInMods.BambiSleepId);   // PackArrived
+
+        Assert.True(svc.IsInstalled("mod-bambi"));
+        Assert.Equal(BuiltInMods.BambiSleepId, CoreSettings.Current.ActiveModId);
+        Assert.Null(PendingModChoice.Pending);
+        Assert.Equal(1, server.PackGets);
+        wizard.Close();
+    });
+
+    [Fact]
+    public Task FirstRunChoiceOnDiskActivatesNow() => Run(async (shell, svc, server) =>
+    {
+        shell.ActivateChosenMod(BuiltInMods.DronificationId, MainShellWindow.ModChoiceTrigger.Immediate);
+        var wizard = Wizard(shell);
+        wizard.Select(Card(wizard, BuiltInMods.CCPDefaultId));   // ships in the box
+        Next(wizard);
+
+        Assert.Equal(BuiltInMods.CCPDefaultId, AvApp.Mods!.ActiveModId);
+        Assert.Null(PendingModChoice.Pending);
+        Assert.Equal(0, server.PackGets);
+        wizard.Close();
+        await Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task FirstRunOfflineLatchesTheOfferAndRecordsNothing() => Run(async (shell, svc, server) =>
+    {
+        CoreSettings.Current.OfflineMode = true;
+        var wizard = Wizard(shell);
+        wizard.Select(Card(wizard, BuiltInMods.BambiSleepId));
+        Next(wizard);
+
+        Assert.Equal(1, CoreSettings.Current.ModPickerOfflineOffers);
+        Assert.True(CoreSettings.Current.ModPickerShown);
+        Assert.Null(PendingModChoice.Pending);
+        Assert.Null(wizard.ChosenPackDownload);
+        Assert.Equal(BuiltInMods.CCPDefaultId, AvApp.Mods!.ActiveModId);
+        wizard.Close();
+        await Task.CompletedTask;
+    });
+
+    // ---- helpers ----
+
+    private static FirstRunWizard Wizard(MainShellWindow shell)
+    {
+        var wizard = new FirstRunWizard { ShellOwner = shell };
+        wizard.Show();
+        wizard.FindControl<CheckBox>("ChkAgeConfirm")!.IsChecked = true;
+        Next(wizard);   // step 1 -> 2: PrepareModStep
+        return wizard;
+    }
+
+    private static FirstRunModCard Card(FirstRunWizard w, string modId) =>
+        w.FindControl<ItemsControl>("ModCardsList")!.ItemsSource!.Cast<FirstRunModCard>().Single(c => c.ModId == modId);
+
+    private static void Next(FirstRunWizard w) =>
+        w.FindControl<Button>("BtnNext")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(20);
+        }
+        Assert.True(condition(), "timed out");
+    }
+
+    private static byte[] BuildZip()
+    {
+        var payload = new byte[256 * 1024];
+        new Random(7).NextBytes(payload);
+        using var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        using (var s = zip.CreateEntry("Resources/sounds/test/clip.mp3", CompressionLevel.NoCompression).Open())
+            s.Write(payload);
+        return ms.ToArray();
+    }
+
+    private static Task Run(Func<MainShellWindow, ReleaseContentService, FakeServer, Task> body) => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        Assert.Equal(TestUserDataProfile.Root, CorePaths.UserData);   // never the real profile
+        if (Application.Current is null)
+            AppBuilder.Configure<AvApp>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var zip = BuildZip();
+        var sha = Convert.ToHexString(SHA256.HashData(zip)).ToLowerInvariant();
+        var manifest = System.Text.Encoding.UTF8.GetBytes(
+            "{\"packs\":[{\"id\":\"mod-bambi\",\"file\":\"mod-bambi.zip\",\"sizeBytes\":" + zip.Length +
+            ",\"sha256\":\"" + sha + "\",\"contentVersion\":1,\"targetRoot\":\"\"}]}");
+        using var server = new FakeServer();
+        server.Handle = c => c.Request.Url!.AbsolutePath switch
+        {
+            "/v6.6.0/content-manifest.json" => FakeServer.Send(c, manifest),
+            "/v6.6.0/mod-bambi.zip" => FakeServer.Send(c, zip),
+            _ => FakeServer.Send(c, Array.Empty<byte>(), 404),
+        };
+        var handler = new LoopbackOnlyHandler();
+        var oldSettings = CoreSettings.ServiceProvider;
+        var oldVersion = CoreReleaseContent.AppVersionProvider;
+        var settings = new SettingsService();
+        CoreSettings.ServiceProvider = () => settings;
+        CoreReleaseContent.AppVersionProvider = () => "6.6.3";   // cycle v6.6.0
+        using var svc = new ReleaseContentService(server.Prefix + "{0}/", handler);
+        var oldResources = Application.Current!.Resources.Keys.ToHashSet();
+        MainShellWindow? shell = null;
+        try
+        {
+            var s = settings.Current;
+            s.InstalledContentPacks.Clear();
+            s.OfflineMode = false;
+            s.ModPickerShown = false;
+            s.ModPickerOfflineOffers = 0;
+            s.PendingModActivationId = "";
+            s.ActiveModId = BuiltInMods.CCPDefaultId;
+            s.Welcomed = true;
+            s.HasAcceptedAgeVerification = true;
+            AvApp.StartMods();
+            AvApp.StartReleaseContent(svc);
+            shell = new MainShellWindow();
+            shell.Show();
+            await body(shell, svc, server);
+            Assert.Empty(handler.Violations);
+        }
+        finally
+        {
+            foreach (var w in shell?.OwnedWindows.ToList() ?? new()) w.Close();
+            shell?.RequestExit();
+            Dispatcher.UIThread.RunJobs();
+            foreach (var key in Application.Current.Resources.Keys.Where(k => !oldResources.Contains(k)).ToList())
+                Application.Current.Resources.Remove(key);   // the palette must not leak into later tests
+            settings.SaveImmediate();
+            settings.SealForReset();
+            CoreSettings.ServiceProvider = oldSettings;
+            CoreReleaseContent.AppVersionProvider = oldVersion;
+            CoreReleaseContent.StampProvider = null;
+            CoreReleaseContent.PackInfoProvider = null;
+            CoreReleaseContent.UiInvoke = null;
+            AvApp.ResetReleaseContent();
+        }
+    });
+}
