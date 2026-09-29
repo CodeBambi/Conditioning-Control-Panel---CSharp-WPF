@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -35,9 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    the window has no system decorations to darken.
     ///  - The remote thumbnail is not fetched (see <see cref="BuildThumbnail"/>); the placeholder
     ///    tile the WPF original also shows is what draws.
-    ///  - <see cref="CatalogueEntry"/> is copied from
-    ///    ConditioningControlPanel/Services/CatalogueLookupService.cs: the record lives in the WPF
-    ///    head, not CCP.Core, and neither may be touched by this port.
+    ///  - <see cref="CatalogueEntry"/> is the Core record (CCP.Core/Services/Catalogue/CatalogueLookup.cs).
     ///
     /// <para><b>No opener yet, and the blocker is the CALLER.</b> WPF reaches this from
     /// <c>MainWindow.OpenCataloguePickerDialog</c> (MainWindow.DeeperTab.cs:1025), itself the
@@ -287,27 +286,4 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 "https://hypnotube.example/v/9f2c41", null, "https://app.cclabs.app/files/e3.ccp"),
         };
     }
-
-    /// <summary>
-    /// One catalogue entry as returned by /api/enhancements/by-ht-url. All
-    /// fields are server-truth; the client doesn't enrich or transform
-    /// (except for graceful defaults when fields are missing).
-    ///
-    /// Copied verbatim from ConditioningControlPanel/Services/CatalogueLookupService.cs — the
-    /// record lives in the WPF head and this port may reference neither it nor CCP.Core for it.
-    /// Delete this copy when CatalogueLookupService moves to Core.
-    /// </summary>
-    public record CatalogueEntry(
-        string Id,
-        string Title,
-        string Description,
-        string CreatorName,
-        string? RemixerName,
-        List<string> Tags,
-        string? License,
-        int ViewCount,
-        string HtUrl,
-        string? ThumbnailPath,
-        string FileUrl
-    );
 }

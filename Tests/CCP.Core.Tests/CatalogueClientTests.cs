@@ -40,6 +40,26 @@ public sealed class CatalogueClientTests
         c.SubmitCatalogueAssetAsync("presets", new JObject { ["n"] = 1 }, "ccp-preset", "me", new[] { " a ", "" }, CancellationToken.None);
 
     [Fact]
+    public async Task EnhancementSuccessFiresSubmissionSucceededOnceButAssetSuccessDoesNot()
+    {
+        var f = new Fake { Submit = _ => Json(HttpStatusCode.Created, "{\"id\":\"e1\"}") };
+        var c = Client(f);
+        var fired = new List<string>();
+        c.SubmissionSucceeded += (_, s) => fired.Add(s.Id);
+        var file = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".ccpenh.json");
+        try
+        {
+            System.IO.File.WriteAllText(file, "{\"title\":\"t\"}");
+            Assert.IsType<SubmissionResult.Success>(await c.SubmitEnhancementAsync(file, CancellationToken.None));
+            Assert.Equal(new[] { "e1" }, fired);
+
+            Assert.IsType<SubmissionResult.Success>(await Submit(c));
+            Assert.Equal(new[] { "e1" }, fired);
+        }
+        finally { System.IO.File.Delete(file); }
+    }
+
+    [Fact]
     public async Task ExchangesTokenThenPostsWithBearerAndVersionHeaders()
     {
         var f = new Fake();
