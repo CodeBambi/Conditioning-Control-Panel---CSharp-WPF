@@ -327,4 +327,27 @@ public sealed partial class AccountSeedTests
         finally { ProgressionBank.LevelUp -= OnLevel; }
         return Task.CompletedTask;
     });
+
+    [Fact]
+    public void LevelUp_ThroughProgressionBank_UnlocksTheLevelMilestone_ViaTheAppSeed() => WithFreshInstall(() =>
+    {
+        var s = CoreSettings.Current;
+        var dir = System.IO.Directory.CreateTempSubdirectory("ccp-ach-seed-").FullName;
+        var engine = new AchievementEngine(new AchievementStore(System.IO.Path.Combine(dir, "achievements.json")));
+        s.PlayerLevel = 9;
+        var popups = 0;
+        engine.Unlocked += (_, _) => popups++;
+        var hook = ConditioningControlPanel.Avalonia.App.SeedLevelAchievements(engine);
+        try
+        {
+            Assert.False(engine.Progress.IsUnlocked("plastic_initiation"));   // retroactive check at 9: nothing
+            CoreAccount.UnifiedUserId = "u1";
+            ProgressionBank.Add(XpCurve.GetXPForLevel(9, ProfileAdopt.Epoch(s)) + 1, "Session");
+            Assert.Equal(10, s.PlayerLevel);
+            Assert.True(engine.Progress.IsUnlocked("plastic_initiation"));
+            Assert.Equal(1, popups);                                           // a real level-up celebrates
+        }
+        finally { ProgressionBank.LevelUp -= hook; System.IO.Directory.Delete(dir, recursive: true); }
+        return Task.CompletedTask;
+    });
 }

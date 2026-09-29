@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -30,9 +31,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             PatreonFill = Brush.Parse("#3DFF69B4"), PatreonEdge = Brush.Parse("#8CFF69B4"), PatreonInk = Brush.Parse("#FFC9E3");
 
         private readonly AchievementEngine _engine;
-        private readonly Dictionary<ToggleButton, Achievement> _cards = new();
+        private readonly Dictionary<string, Tile> _tiles = new();
         private readonly List<ToggleButton> _chips = new();
+        private readonly HashSet<string> _pending = new();
+        private bool _flushQueued;
         internal string Filter { get; private set; } = FilterAll;
+
+        /// <summary>Everything a card redraws without walking the visual tree (WPF AchievementCardParts).</summary>
+        private sealed class Tile
+        {
+            public Achievement A = null!;
+            public ToggleButton Card = null!;
+            public Image Badge = null!;
+            public TextBlock Name = null!, Info = null!, State = null!;
+            public StackPanel InfoStack = null!;
+            public Control? Meter;
+        }
+
+        /// <summary>Decoded badges keyed by resolved path, so a mod switch re-resolves and a refresh costs a lookup.</summary>
+        private static readonly Dictionary<string, global::Avalonia.Media.Imaging.Bitmap?> ArtCache = new();
+
+        /// <summary>Test hooks: how many cards have been redrawn, and in how many UI passes.</summary>
+        internal int TileApplies { get; private set; }
+        internal int Passes { get; private set; }
 
         public AchievementsTabView() : this(Engine) { }
 
@@ -40,11 +61,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             AvaloniaXamlLoader.Load(this);
             _engine = engine;
-            Populate();
-            // WPF MainWindow.xaml.cs:420: the page refreshes on every unlock, and on every show (RefreshAllAchievementTiles).
-            void Refresh(object? _, Achievement __) => global::Avalonia.Threading.Dispatcher.UIThread.Post(Populate);
-            AttachedToVisualTree += (_, _) => { engine.Unlocked -= Refresh; engine.Unlocked += Refresh; Populate(); };
-            DetachedFromVisualTree += (_, _) => engine.Unlocked -= Refresh;
+            Build();
+            // WPF MainWindow.xaml.cs:420 refreshes the one tile on unlock (AchievementsTab.cs:886); many unlocks in one
+            // burst (N level-ups) coalesce into one UI pass. WPF TabNavigation.cs:374 refreshes every tile on show.
+            void OnUnlocked(object? _, Achievement a)
+            {
+                lock (_pending) { _pending.Add(a.Id); if (_flushQueued) return; _flushQueued = true; }
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(Flush);
+            }
+            AttachedToVisualTree += (_, _) => { engine.Unlocked -= OnUnlocked; engine.Unlocked += OnUnlocked; };
+            DetachedFromVisualTree += (_, _) => engine.Unlocked -= OnUnlocked;
+            PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty && IsVisible) RefreshAll(); };
         }
 
         /// <summary>The live engine; on the headless render path a read-only load of the same file
@@ -52,26 +79,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private static AchievementEngine Engine =>
             App.Achievements ?? new AchievementEngine(new AchievementStore(AchievementStore.DefaultPath));
 
-        internal IEnumerable<ToggleButton> Cards => _cards.Keys;
+        internal IEnumerable<ToggleButton> Cards => _tiles.Values.Select(t => t.Card);
 
-        /// <summary>WPF PopulateAchievementGrid, minus the reward map.</summary>
-        internal void Populate()
+        /// <summary>WPF PopulateAchievementGrid, minus the reward map. Runs once.</summary>
+        private void Build()
         {
-            DataContext = new AchievementsTabViewModel(_engine);
             var free = this.FindControl<WrapPanel>("AchievementGrid")!;
             var patron = this.FindControl<WrapPanel>("PatronAchievementGrid")!;
-            free.Children.Clear();
-            patron.Children.Clear();
-            _cards.Clear();
             var theme = this.FindResource("AchievementCard") as ControlTheme;
             foreach (var a in Achievement.All.Values)
             {
                 if (a.IsHidden) continue; // parked: no reachable unlock path
-                var card = BuildCard(a, IsUnlocked(a.Id), theme);
-                _cards[card] = a;
-                (a.IsExclusive ? patron : free).Children.Add(card);
+                var tile = BuildCard(a, theme);
+                _tiles[a.Id] = tile;
+                (a.IsExclusive ? patron : free).Children.Add(tile.Card);
             }
             BuildFilters();
+            RefreshAll();
+        }
+
+        private void Flush()
+        {
+            string[] ids;
+            lock (_pending) { ids = _pending.ToArray(); _pending.Clear(); _flushQueued = false; }
+            foreach (var id in ids) if (_tiles.TryGetValue(id, out var t)) Apply(t);
+            AfterApply();
+        }
+
+        /// <summary>WPF RefreshAllAchievementTiles: in place, never a rebuild.</summary>
+        internal void RefreshAll()
+        {
+            foreach (var t in _tiles.Values) Apply(t);
+            AfterApply();
+        }
+
+        private void AfterApply()
+        {
+            Passes++;
+            DataContext = new AchievementsTabViewModel(_engine);
             ApplyFilter();
         }
 
@@ -87,61 +132,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private static string Req(Achievement a) => ModAware($"achievement_{a.Id}_req", a.Requirement);
         private static string Flavor(Achievement a) => ModAware($"achievement_{a.Id}_flavor", a.FlavorText);
 
-        private ToggleButton BuildCard(Achievement a, bool unlocked, ControlTheme? theme)
+        private static global::Avalonia.Media.Imaging.Bitmap? Art(string imageName)
         {
-            var card = new ToggleButton { Theme = theme, Tag = a.Id, IsChecked = false };
-
-            var badge = new Image { Width = 150, Height = 150, Stretch = Stretch.Uniform,
-                Source = Helpers.ModArt.TryLoad($"achievements/{a.ImageName}"),
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            if (!unlocked) badge.Effect = new BlurEffect { Radius = 15 };
-
-            var name = new TextBlock { FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White,
-                TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis,
-                LineHeight = 17, MaxHeight = 34, Margin = new Thickness(10, 6, 10, 0), VerticalAlignment = VerticalAlignment.Top,
-                Text = unlocked ? Name(a) : Loc.Get("achv_card_locked_name") };
-
-            // Requirement while locked, flavor once earned (WPF ApplyAchievementInfoText).
-            var info = new TextBlock { FontSize = 11, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap,
-                TextTrimming = TextTrimming.CharacterEllipsis, LineHeight = 14, MaxHeight = 42, Margin = new Thickness(12, 4, 12, 4),
-                Text = unlocked ? Flavor(a) : Req(a), Foreground = unlocked ? Muted : Dim,
-                FontStyle = unlocked ? FontStyle.Italic : FontStyle.Normal };
-            var infoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { info } };
-
-            // WPF ApplyAchievementMeter: locked + countable shows the bar and caps the requirement at two lines.
-            var meter = unlocked ? null : AchievementMeters.Compute(a, _engine.Progress, CoreSettings.Current.PlayerLevel);
-            if (meter is { } m)
+            var name = $"achievements/{imageName}";
+            var key = (CoreModArt.OverridePath(name) ?? "") + "|" + name;
+            lock (ArtCache)
             {
-                info.MaxHeight = 28;
-                var cols = new Grid { ColumnDefinitions = new ColumnDefinitions($"{m.Fraction.ToString(System.Globalization.CultureInfo.InvariantCulture)}*,{(1 - m.Fraction).ToString(System.Globalization.CultureInfo.InvariantCulture)}*") };
-                cols.Children.Add(new Border { Background = MeterFill, CornerRadius = new CornerRadius(2) });
-                infoStack.Children.Add(new StackPanel { Name = "Meter", Margin = new Thickness(0, 0, 0, 2), Children =
-                {
-                    new Border { Height = 4, Background = MeterTrack, CornerRadius = new CornerRadius(2), Margin = new Thickness(14, 0), Child = cols },
-                    new TextBlock { FontSize = 10, Foreground = Muted, TextAlignment = TextAlignment.Center, Margin = new Thickness(12, 3, 12, 0), Text = m.Label },
-                } });
+                if (!ArtCache.TryGetValue(key, out var art)) ArtCache[key] = art = Helpers.ModArt.TryLoad(name, decodeWidth: 150);
+                return art;
             }
+        }
+
+        /// <summary>The state-free structure of a card; <see cref="Apply"/> fills in the state.</summary>
+        private static Tile BuildCard(Achievement a, ControlTheme? theme)
+        {
+            var t = new Tile { A = a, Card = new ToggleButton { Theme = theme, Tag = a.Id, IsChecked = false } };
+            t.Badge = new Image { Width = 150, Height = 150, Stretch = Stretch.Uniform,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            t.Name = new TextBlock { FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White,
+                TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis,
+                LineHeight = 17, MaxHeight = 34, Margin = new Thickness(10, 6, 10, 0), VerticalAlignment = VerticalAlignment.Top };
+            t.Info = new TextBlock { FontSize = 11, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap,
+                TextTrimming = TextTrimming.CharacterEllipsis, LineHeight = 14, MaxHeight = 42, Margin = new Thickness(12, 4, 12, 4) };
+            t.InfoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { t.Info } };
 
             // Bottom band: the category glyph WPF falls back to without reward art, and the state mark.
             var band = new Grid { Margin = new Thickness(10, 0), VerticalAlignment = VerticalAlignment.Center, ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
             band.Children.Add(new TextBlock { Text = Glyph(a.Category), FontSize = 22, Foreground = Brushes.White, Opacity = 0.3, Width = 40,
                 TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
-            var state = unlocked
-                ? new TextBlock { Text = "✓", FontSize = 16, FontWeight = FontWeight.Bold, Foreground = Tick }
-                : new TextBlock { Text = "🔒", FontSize = 13, Foreground = Muted };
-            state.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(state, 2);
-            band.Children.Add(state);
+            t.State = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(t.State, 2);
+            band.Children.Add(t.State);
             var bandChrome = new Border { Height = 56, Background = BandBg, BorderBrush = Rule, BorderThickness = new Thickness(0, 1, 0, 0),
                 CornerRadius = new CornerRadius(0, 0, 14, 14), Child = band };
 
             var content = new Grid { RowDefinitions = new RowDefinitions("164,Auto,*,Auto") };
-            Grid.SetRow(name, 1);
-            Grid.SetRow(infoStack, 2);
+            Grid.SetRow(t.Name, 1);
+            Grid.SetRow(t.InfoStack, 2);
             Grid.SetRow(bandChrome, 3);
-            content.Children.Add(badge);
-            content.Children.Add(name);
-            content.Children.Add(infoStack);
+            content.Children.Add(t.Badge);
+            content.Children.Add(t.Name);
+            content.Children.Add(t.InfoStack);
             content.Children.Add(bandChrome);
 
             if (a.IsPremiumFeature)
@@ -154,13 +185,56 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 ToolTip.SetTip(chip, Loc.Get("tooltip_achievement_premium_program"));
                 content.Children.Add(chip);
             }
-            card.Content = content;
+            t.Card.Content = content;
+            return t;
+        }
+
+        /// <summary>WPF RefreshAchievementTile: art, blur, name, info, meter, state mark, tooltip.</summary>
+        private void Apply(Tile t)
+        {
+            TileApplies++;
+            var a = t.A;
+            var unlocked = IsUnlocked(a.Id);
+            var art = Art(a.ImageName);
+            if (art != null) t.Badge.Source = art; // missing art leaves the old source (WPF contract)
+            t.Badge.Effect = unlocked ? null : new BlurEffect { Radius = 15 };
+            t.Name.Text = unlocked ? Name(a) : Loc.Get("achv_card_locked_name");
+
+            // Requirement while locked, flavor once earned (WPF ApplyAchievementInfoText).
+            t.Info.Text = unlocked ? Flavor(a) : Req(a);
+            t.Info.Foreground = unlocked ? Muted : Dim;
+            t.Info.FontStyle = unlocked ? FontStyle.Italic : FontStyle.Normal;
+
+            // WPF ApplyAchievementMeter: locked + countable shows the bar and caps the requirement at two lines.
+            if (t.Meter != null) { t.InfoStack.Children.Remove(t.Meter); t.Meter = null; }
+            t.Info.MaxHeight = 42;
+            var meter = unlocked ? null : AchievementMeters.Compute(a, _engine.Progress, CoreSettings.Current.PlayerLevel);
+            if (meter is { } m)
+            {
+                t.Info.MaxHeight = 28;
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                var cols = new Grid { ColumnDefinitions = new ColumnDefinitions($"{m.Fraction.ToString(inv)}*,{(1 - m.Fraction).ToString(inv)}*") };
+                cols.Children.Add(new Border { Background = MeterFill, CornerRadius = new CornerRadius(2) });
+                t.Meter = new StackPanel { Name = "Meter", Margin = new Thickness(0, 0, 0, 2), Children =
+                {
+                    new Border { Height = 4, Background = MeterTrack, CornerRadius = new CornerRadius(2), Margin = new Thickness(14, 0), Child = cols },
+                    new TextBlock { FontSize = 10, Foreground = Muted, TextAlignment = TextAlignment.Center, Margin = new Thickness(12, 3, 12, 0), Text = m.Label },
+                } };
+                t.InfoStack.Children.Add(t.Meter);
+            }
+
+            t.State.Text = unlocked ? "✓" : "🔒";
+            t.State.FontSize = unlocked ? 16 : 13;
+            t.State.FontWeight = unlocked ? FontWeight.Bold : FontWeight.Normal;
+            t.State.Foreground = unlocked ? Tick : Muted;
 
             // ponytail: WPF's unlocked tooltip names the reward item; without WardrobeCatalog only the locked,
             // no-reward template is honest, so unlocked cards carry no tooltip yet.
-            if (!unlocked) ToolTip.SetTip(card, Loc.GetF("achv_tooltip_locked_no_reward", Req(a)));
-            AutomationProperties.SetName(card, unlocked ? Name(a) : Loc.GetF("achv_automation_locked", Req(a)));
-            return card;
+            ToolTip.SetTip(t.Card, unlocked ? null : Loc.GetF("achv_tooltip_locked_no_reward", Req(a)));
+            // The reward arg is "???": the item is unknown here (WardrobeCatalog), and "No item" would be false for gated ones.
+            AutomationProperties.SetName(t.Card, unlocked
+                ? Loc.GetF("achv_automation_unlocked", Name(a), Loc.Get("achv_card_locked_name"))
+                : Loc.GetF("achv_automation_locked", Req(a)));
         }
 
         private static string Glyph(AchievementCategory c) => c switch
@@ -207,11 +281,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Hides cards in both grids - the patron section filters with the free one.</summary>
         private void ApplyFilter()
         {
-            foreach (var (card, a) in _cards)
-                card.IsVisible = Filter switch
+            foreach (var t in _tiles.Values)
+                t.Card.IsVisible = Filter switch
                 {
-                    FilterUnlocked => IsUnlocked(a.Id),
-                    FilterLocked => !IsUnlocked(a.Id),
+                    FilterUnlocked => IsUnlocked(t.A.Id),
+                    FilterLocked => !IsUnlocked(t.A.Id),
                     _ => true,
                 };
         }

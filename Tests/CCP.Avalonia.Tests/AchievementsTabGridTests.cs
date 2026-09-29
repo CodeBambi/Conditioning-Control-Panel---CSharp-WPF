@@ -46,8 +46,13 @@ public sealed class AchievementsTabGridTests
                     view.FindControl<WrapPanel>("PatronAchievementGrid")!.Children.Select(c => (string)((Control)c).Tag!));
 
                 // Level 10 is the first milestone (AchievementRules.LevelMilestones); 20 is the next.
+                // One unlock redraws one tile in place: same card objects, one Apply (WPF AchievementsTab.cs:886).
+                var before = view.Cards.ToArray();
+                var applies = view.TileApplies;
                 engine.CheckLevelAchievements(10);
                 Dispatcher.UIThread.RunJobs();
+                Assert.Equal(1, view.TileApplies - applies);
+                Assert.Equal(before, view.Cards.ToArray());
 
                 ToggleButton Card(string id) => view.Cards.Single(c => (string)c.Tag! == id);
                 string[] Texts(Control c) => c.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
@@ -68,6 +73,23 @@ public sealed class AchievementsTabGridTests
                 Assert.Equal(visible.Length - 1, view.Cards.Count(c => c.IsVisible));
                 Assert.False(Card("plastic_initiation").IsVisible);
                 Assert.Single(view.FindControl<WrapPanel>("AchievementFilters")!.Children.OfType<ToggleButton>(), c => c.IsChecked == true);
+
+                // A burst of unlocks coalesces into one pass over just those tiles.
+                applies = view.TileApplies;
+                var passes = view.Passes;
+                engine.TryUnlock("dumb_bimbo");
+                engine.TryUnlock("fully_synthetic");
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(2, view.TileApplies - applies);
+                Assert.Equal(1, view.Passes - passes);
+                Assert.Equal(before, view.Cards.ToArray());
+
+                // Showing the tab refreshes every tile in place (WPF TabNavigation.cs:374), no rebuild.
+                view.IsVisible = false;
+                applies = view.TileApplies;
+                view.IsVisible = true;
+                Assert.Equal(visible.Length, view.TileApplies - applies);
+                Assert.Equal(before, view.Cards.ToArray());
             }
             finally
             {
