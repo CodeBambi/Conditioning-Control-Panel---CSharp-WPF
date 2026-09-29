@@ -45,4 +45,26 @@ public class SparkleRefusalAdoptTests
         Assert.False(AchievementEngine.FirstAlreadyUnlockedNote(id));
         Assert.True(AchievementEngine.FirstAlreadyUnlockedNote(id + "_other"));
     }
+
+    // ccp-bugs #1300: the first balance refusal syncs and asks again before lowering the wallet.
+    [Fact]
+    public void FirstBalanceRefusal_SyncsAndRetries()
+        => Assert.Equal(SparklePoints.RefusalStep.SyncAndRetry,
+            SparklePoints.AfterBalanceRefusal(local: 10, server: 9, cost: 10, alreadySynced: false));
+
+    [Fact]
+    public void RefusalAfterTheSync_AdoptsServer()
+        => Assert.Equal(SparklePoints.RefusalStep.Adopt,
+            SparklePoints.AfterBalanceRefusal(local: 10, server: 9, cost: 10, alreadySynced: true));
+
+    [Fact]
+    public void RefusalNotForBalance_NeverSyncsOrAdopts()
+    {
+        Assert.Equal(SparklePoints.RefusalStep.Keep,
+            SparklePoints.AfterBalanceRefusal(local: 12, server: 11, cost: 10, alreadySynced: false));
+        Assert.Equal(SparklePoints.RefusalStep.Keep,
+            SparklePoints.AfterBalanceRefusal(local: 9, server: 9, cost: 10, alreadySynced: false));
+        Assert.Equal(SparklePoints.RefusalStep.Keep,
+            SparklePoints.AfterBalanceRefusal(local: 10, server: null, cost: 10, alreadySynced: false));
+    }
 }

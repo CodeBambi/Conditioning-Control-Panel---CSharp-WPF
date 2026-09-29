@@ -1338,6 +1338,10 @@ namespace ConditioningControlPanel
         private void ParentWindow_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             if (_parentWindow == null) return;
+            // A boot into the launcher builds the panel without putting it on screen
+            // (MainWindow.ShowHiddenForBoot): WPF calls it visible for that one call, the screen
+            // never does, so the tube stays put too.
+            if ((bool)e.NewValue && _parentWindow is MainWindow { BuildingHiddenForBoot: true }) return;
             try
             {
                 CaptureParentGeom();

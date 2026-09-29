@@ -33,7 +33,8 @@ public sealed partial class ChasterService
                     RemoteOpen: RemoteCounts(App.RemoteControl?.IsActive == true, App.RemoteControl?.LastEndedUtc, DateTime.UtcNow),
                     PanicArmed: s.PanicKeyEnabled,
                     RelockPastEnd: s.ChasterRelockPastEnd,
-                    Paused: s.ChasterPaused);
+                    Paused: s.ChasterPaused,
+                    PriceOverrides: new Dictionary<string, int>(s.ChasterPriceOverrides ?? new Dictionary<string, int>(), StringComparer.Ordinal));
         };
 #if DEBUG
         if (DemoService(options) is { } demo) return demo;

@@ -1820,3 +1820,27 @@ html[data-gg-motion="reduced"] .gg-ot *, html[data-gg-motion="reduced"] .gg-ot-s
   background: rgba(255, 255, 255, 0.04); color: var(--gg-text-3); font-size: 0.9rem;
 }
 .gg-share-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.7rem; margin-top: 1rem; }
+
+/* ---- PvP stakes (ui/stake.js): one pill row in the lobby, one line on the recap ---- */
+.gg-stake { margin: 0.6rem 0 0.2rem; }
+.gg-stake-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.gg-stake-pills { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.gg-stake-pill {
+  font: inherit; font-size: 0.78rem; cursor: pointer;
+  padding: 0.28rem 0.7rem;
+  border-radius: var(--gg-radius-pill);
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  background: transparent; color: rgba(255, 255, 255, 0.55);
+  transition: background 160ms ease-out, color 160ms ease-out, transform 140ms cubic-bezier(.2, 1.5, .4, 1);
+}
+.gg-stake-pill.is-on { border-style: solid; border-color: var(--gg-pink, #ff69b4); background: rgba(255, 105, 180, 0.24); color: #fff; }
+.gg-stake-pill.is-time.is-on { border-color: #ffcf6b; background: rgba(255, 207, 107, 0.2); }
+.gg-stake-pill:active:not(:disabled) { transform: scale(0.92); }
+.gg-stake-pill:disabled { cursor: default; }
+.gg-stake.is-locked .gg-stake-pill:not(.is-on) { opacity: 0.35; }
+.gg-stake-meta { margin-top: 0.35rem; min-height: 1rem; }
+.gg-stake-them { display: inline-block; font-size: 0.74rem; padding: 0.12rem 0.55rem; border-radius: var(--gg-radius-pill); background: rgba(255, 255, 255, 0.07); color: var(--gg-text-3); }
+.gg-stake-note { margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--gg-text-3); min-height: 1rem; }
+.gg-stake-result { margin: 0.5rem 0 0; font-size: 1rem; font-weight: 600; color: var(--gg-text-3); }
+.gg-stake-result.is-won { color: #5fffd0; }
+.gg-stake-result.is-lost { color: var(--gg-pink, #ff69b4); }

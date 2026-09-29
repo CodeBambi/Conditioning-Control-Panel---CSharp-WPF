@@ -37,4 +37,9 @@ public static class LeashAssignRule
         AssignKind.Quests => (Math.Clamp(questsDoneToday, 0, a.Size), a.Size),
         _ => (videoWatched ? 1 : 0, 1),
     };
+
+    /// <summary>True when the self card offers "Watch it": an open video task with a video to
+    /// open, not already watched through on this client.</summary>
+    public static bool OfferWatch(Assignment? a, bool watchedHere = false) =>
+        a is { Kind: AssignKind.Video, Status: AssignStatus.Open, Watch: not null } && !watchedHere;
 }

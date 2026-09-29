@@ -99,6 +99,7 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 SliderBlurStrength.Value = s.BrainDrainBlurStrength;
                 TxtBlurStrength.Text = $"{s.BrainDrainBlurStrength}%";
                 ChkMelt.IsChecked = s.BrainDrainMeltEnabled;
+                ChkKeepClear.IsChecked = s.BrainDrainKeepPicturesClear;
                 ChkAllowCapture.IsChecked = s.AllowOverlayCapture;
 
                 RefreshClipCount();
@@ -290,6 +291,23 @@ namespace ConditioningControlPanel.Views.Controls.Studio
             s.BrainDrainMeltEnabled = ChkMelt.IsChecked ?? false;
 
             App.Logger?.Information("Brain Drain melt toggled: {Enabled}", s.BrainDrainMeltEnabled);
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// VISUAL half: keep CCP's own pictures sharp over the blur (BrainDrainKeepPicturesClear).
+        /// OverlayService's settings hook re-sorts the windows at once, so writing the setting is
+        /// the live update.
+        /// </summary>
+        private void ChkKeepClear_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.BrainDrainKeepPicturesClear = ChkKeepClear.IsChecked ?? false;
+
+            App.Logger?.Information("Brain Drain keep pictures clear toggled: {Enabled}", s.BrainDrainKeepPicturesClear);
             App.Settings?.Save();
         }
 

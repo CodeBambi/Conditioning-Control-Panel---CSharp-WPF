@@ -22,6 +22,7 @@ export function createSpiral(ctx) {
   let lastEndAt = -Infinity;
   let holdTimer = 0;
   let spec = { on: false, alpha: 0, holdMs: 0 };
+  let shown = null;   // the picture on the veil, held while a pass is up
 
   const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
@@ -34,7 +35,10 @@ export function createSpiral(ctx) {
 
   /** Re-pick the imagery for this pass: a pool gif, else the CSS pinwheel. */
   function dress(node) {
+    ctx.release(shown);
     const url = ctx.tile();
+    shown = url;
+    ctx.hold(url);
     try {
       if (url) { node.style.backgroundImage = `url("${url}")`; node.classList.remove('is-drawn'); }
       else { node.style.backgroundImage = ''; node.classList.add('is-drawn'); }
@@ -48,6 +52,7 @@ export function createSpiral(ctx) {
     lastEndAt = now();
     if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
     if (el) { try { el.style.opacity = '0'; el.classList.remove('is-on'); } catch { /* gone */ } }
+    ctx.releaseLater(shown, 650); shown = null;   // after the 620ms fade
   }
 
   function show() {
@@ -78,6 +83,7 @@ export function createSpiral(ctx) {
   function dispose() {
     disposed = true;
     if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
+    ctx.release(shown); shown = null;
     if (el) { try { el.remove(); } catch { /* gone */ } el = null; }
   }
 

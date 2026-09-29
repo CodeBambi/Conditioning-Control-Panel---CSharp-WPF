@@ -606,7 +606,30 @@
              everything including the veil. Same weight as MainWindow's GlassWindowEdge; the
              owner found a hairline too slim. Outside ContentRoot so the shake never moves it;
              above the backdrop layers so their negative margins never cover it. -->
-        <Border x:Name="WindowEdge" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3"
-                Opacity="0.6" IsHitTestVisible="False"/>
+        <!-- 2026-09-27 (owner: "make it pop, add sfx, slightly thicker"): 4px at 85 percent, a soft
+             glow under it, a glint that runs round it on open, on focus and now and then at rest
+             (LauncherWindow.Edge.cs). CornerRadius 8 follows the Windows 11 rounded corner. -->
+        <Grid x:Name="EdgeHost" IsHitTestVisible="False">
+            <Border x:Name="EdgeGlow" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="10"
+                    CornerRadius="8" Opacity="0.3">
+                <Border.Effect>
+                    <BlurEffect Radius="14"/>
+                </Border.Effect>
+            </Border>
+            <Border x:Name="WindowEdge" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="4"
+                    CornerRadius="8" Opacity="0.85"/>
+            <Border x:Name="EdgeGlint" BorderThickness="4" CornerRadius="8" Opacity="0">
+                <Border.BorderBrush>
+                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                        <LinearGradientBrush.RelativeTransform>
+                            <RotateTransform x:Name="EdgeGlintSpin" CenterX="0.5" CenterY="0.5" Angle="0"/>
+                        </LinearGradientBrush.RelativeTransform>
+                        <GradientStop Color="#00FFFFFF" Offset="0.40"/>
+                        <GradientStop Color="#F0FFFFFF" Offset="0.50"/>
+                        <GradientStop Color="#00FFFFFF" Offset="0.60"/>
+                    </LinearGradientBrush>
+                </Border.BorderBrush>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

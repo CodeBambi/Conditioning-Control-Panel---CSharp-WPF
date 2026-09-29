@@ -95,6 +95,17 @@ internal static class FriendsDrawerRules
         return ("friends_seen_long", null);
     }
 
+    /// <summary>How long ago a request came in, short like the feed ("now", "15m", "3h", "2d"): it
+    /// leads a subline beside three buttons in a 300 px drawer. Null key for a request with no time
+    /// (an old server), which then shows none.</summary>
+    public static (string? Key, int? Arg) RequestAgo(DateTimeOffset at, DateTimeOffset now)
+    {
+        if (at == DateTimeOffset.MinValue || at == default) return (null, null);
+        if (at > now) at = now;
+        var (key, arg) = FriendsFeedRules.Ago(at.UtcDateTime, now.UtcDateTime);
+        return (key, arg);
+    }
+
     /// <summary>A squelched friend never learns it: the server already answers "sent" for one,
     /// and the client words its own copy the same way.</summary>
     public static string SendResultKey(SendResult r) => r switch
@@ -123,6 +134,51 @@ internal static class FriendsDrawerRules
     };
 
     public static bool IsGood(AddResult r) => r is AddResult.Sent or AddResult.Accepted;
+
+    /// <summary>The words for a list change that did not go through. Done has none of its own:
+    /// each surface says what was done.</summary>
+    public static string ActResultKey(ActResult r) => r switch
+    {
+        ActResult.NotFound => "friends_act_not_found",
+        ActResult.Full => "friends_add_full",
+        ActResult.TooFast => "friends_result_too_fast",
+        ActResult.Refused => "friends_result_refused",
+        _ => "friends_result_try_later",
+    };
+
+    /// <summary>How long a worded result stays in a friend's row. Long enough to read twice.</summary>
+    public const double ResultHoldSeconds = 5;
+
+    /// <summary>The loc keys a sent trail wears under a friend's name: what it was ("your
+    /// invite") and how far it got ("seen", "not now", "no answer").</summary>
+    public static (string KindKey, string StateKey) TrailKeys(SentTrail t) => (
+        t.Kind switch
+        {
+            SendKind.Poke => "friends_trail_poke",
+            SendKind.Invite => "friends_trail_invite",
+            _ => "friends_trail_watch",
+        },
+        t.State switch
+        {
+            ReceiptState.Arrived => "friends_trail_arrived",
+            ReceiptState.Seen => "friends_trail_seen",
+            ReceiptState.Joined => "friends_trail_joined",
+            ReceiptState.Declined => "friends_trail_declined",
+            ReceiptState.Expired => "friends_trail_expired",
+            _ => "friends_trail_sent",
+        });
+
+    /// <summary>How a trail is coloured: on its way, seen, a yes, a no, or nothing came back.</summary>
+    public enum TrailTone { Going, Seen, Yes, No, Quiet }
+
+    public static TrailTone ToneOf(SentTrail t) => t.State switch
+    {
+        ReceiptState.Seen => TrailTone.Seen,
+        ReceiptState.Joined => TrailTone.Yes,
+        ReceiptState.Declined => TrailTone.No,
+        ReceiptState.Expired => TrailTone.Quiet,
+        _ => TrailTone.Going,
+    };
 
     /// <summary>Digits only, at most eight: the HT box's whole grammar.</summary>
     public static string NormaliseHtId(string? typed)

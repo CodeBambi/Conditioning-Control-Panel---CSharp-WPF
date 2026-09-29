@@ -37,6 +37,68 @@ public class LauncherBootTests
         Assert.Equal(BootSurface.Panel, Decide(Array.Empty<string>(), skip: true).Surface);
     }
 
+    // ---- the panel at boot: built hidden when the launcher (or a game) comes first ----
+
+    private static bool Hidden(BootDecision boot, bool lockdown = false) =>
+        LauncherBoot.PanelStartsHidden(boot, lockdown);
+
+    [Fact]
+    public void A_launcher_boot_builds_the_panel_hidden()
+    {
+        Assert.True(Hidden(Decide(Array.Empty<string>())));
+        Assert.True(Hidden(Decide(new[] { "--launcher" })));
+        Assert.True(Hidden(Decide(new[] { "--client" })));
+    }
+
+    [Theory]
+    [InlineData("race")]
+    [InlineData("nosuchgame")] // an unknown id falls back to the launcher, still hidden
+    public void A_game_boot_builds_the_panel_hidden(string id)
+    {
+        Assert.True(Hidden(Decide(new[] { "--game", id })));
+    }
+
+    [Theory]
+    [InlineData(false, true)]  // fresh install: the first-run wizard owns the first screen
+    [InlineData(true, false)]  // the 18+ gate is still open
+    [InlineData(false, false)]
+    public void A_fresh_install_shows_the_panel(bool welcomed, bool age)
+    {
+        Assert.False(Hidden(Decide(Array.Empty<string>(), welcomed, age)));
+        Assert.False(Hidden(Decide(new[] { "--game", "race" }, welcomed, age)));
+    }
+
+    [Theory]
+    [InlineData("--panel")]
+    [InlineData("--startup")]
+    public void The_panel_and_startup_shortcuts_show_the_panel(string flag)
+    {
+        Assert.False(Hidden(Decide(new[] { flag })));
+    }
+
+    [Fact]
+    public void Skip_to_panel_shows_the_panel()
+    {
+        Assert.False(Hidden(Decide(Array.Empty<string>(), skip: true)));
+    }
+
+    [Fact]
+    public void A_lockdown_in_force_keeps_the_panel_on_screen()
+    {
+        // Lockdown refuses to tuck the panel away (MainWindow.HideForLauncher), so it must not be
+        // built hidden either: the panel stays on screen as it always did.
+        Assert.False(Hidden(Decide(Array.Empty<string>()), lockdown: true));
+        Assert.False(Hidden(Decide(new[] { "--game", "race" }), lockdown: true));
+    }
+
+    [Fact]
+    public void Only_the_panel_surface_shows_the_panel()
+    {
+        Assert.False(Hidden(BootDecision.PanelFirst));
+        Assert.True(Hidden(BootDecision.LauncherFirst));
+        Assert.True(Hidden(BootDecision.GameFirst("race")));
+    }
+
     [Theory]
     [InlineData("--panel")]
     [InlineData("--PANEL")]

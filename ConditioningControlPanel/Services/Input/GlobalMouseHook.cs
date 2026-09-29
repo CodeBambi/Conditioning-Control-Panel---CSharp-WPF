@@ -62,6 +62,10 @@ public sealed class GlobalMouseHook : IDisposable
     /// </summary>
     public Action<Point>? LeftUp;
 
+    /// <summary>Right button RELEASED. Notification only, like <see cref="LeftUp"/>. Used by a
+    /// held red bubble (Natasha's favourite) to learn a swallowed right press was let go.</summary>
+    public Action<Point>? RightUp;
+
     /// <summary>
     /// Pointer moved to this PHYSICAL-px screen point. Mouse moves are the highest-volume message
     /// on the hook by far, so this is the ONE callback owners are expected to attach and detach
@@ -139,11 +143,15 @@ public sealed class GlobalMouseHook : IDisposable
                 // Never swallowed: a drag moves the picture, it does not steal the pointer.
                 Notify(MouseMove, lParam);
             }
-            else if (wParam == (IntPtr)WM_RBUTTONUP && _swallowNextRightUp)
+            else if (wParam == (IntPtr)WM_RBUTTONUP)
             {
-                _swallowNextRightUp = false;
-                CompleteDeferredDisposeIfDrained();
-                return (IntPtr)1;
+                Notify(RightUp, lParam);
+                if (_swallowNextRightUp)
+                {
+                    _swallowNextRightUp = false;
+                    CompleteDeferredDisposeIfDrained();
+                    return (IntPtr)1;
+                }
             }
         }
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
@@ -164,6 +172,7 @@ public sealed class GlobalMouseHook : IDisposable
                 RightDown = null;
                 LeftDown = null;
                 LeftUp = null;
+                RightUp = null;
                 MouseMove = null;
                 _unhookFailsafe = new System.Threading.Timer(
                     static s => ((GlobalMouseHook)s!).CompleteDeferredDispose(),

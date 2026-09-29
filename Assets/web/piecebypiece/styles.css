@@ -314,6 +314,21 @@ html, body {
 .experience-pick { display: flex; gap: 6px; }
 .experience-pick .hud-btn { flex: 1; }
 .experience-pick [aria-pressed="true"] { border-color: #ff91c9; background: #58334e; color: #ffe1f0; }
+/* Distraction's pictures: flavour tiles, niches behind a small expander. */
+.pictures { display: grid; gap: 8px; }
+.pictures[hidden], .niche-box[hidden] { display: none; }
+.flavour-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.flavour-tile { display: grid; gap: 2px; padding: 7px 8px; text-align: left; border-left: 3px solid var(--tint, #8a7a9c); }
+.flavour-tile small { font-size: 11px; color: #bfb0d0; }
+.flavour-tile[aria-pressed="true"] { border-color: var(--tint, #ff91c9); background: #58334e; color: #ffe1f0; }
+.niche-box summary { cursor: pointer; font-size: 13px; color: #d0c2de; }
+.niche-pills { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+.niche-pill { font: inherit; font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid #665474;
+  background: transparent; color: #8f809f; cursor: pointer; }
+.niche-pill.is-on { background: #3d2c4d; color: #ffe1f0; border-color: #ff91c9; }
+.niche-add { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #bfb0d0; }
+.game-options-panel .niche-add input { flex: 1; width: auto; height: 26px; min-width: 0; padding: 0 7px; border-radius: 7px;
+  border: 1px solid #665474; background: #171428; color: #ffe1f0; font: inherit; font-size: 13px; }
 .intensity { margin-top: 12px; max-width: 214px; padding: 9px 11px; border-radius: 10px; background: #211d38; }
 .intensity > div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #cdbddd; }
 .intensity meter { display: block; width: 100%; height: 13px; margin-top: 5px; accent-color: #ff91c9; }
@@ -328,3 +343,74 @@ html, body {
 .intensity meter::-webkit-meter-optimum-value { background: #ff91c9; border-radius: 6px; }
 .intensity meter::-moz-meter-bar { background: #ff91c9; border-radius: 6px; }
 .game-notice { margin: 8px 0 0; padding: 9px 11px; background: #211d38; border: 1px solid #80668e; border-radius: 10px; color: #ead6ed; font-size: 13px; line-height: 1.4; }
+/* Esc pause card (a local game holds its clock; online the clock keeps running) */
+.pbp-pause { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(12, 10, 30, .62); backdrop-filter: blur(3px); }
+.pbp-pause[hidden] { display: none; }
+.pbp-pause-card { display: grid; gap: 10px; min-width: 240px; padding: 22px 26px; background: #211d38; border: 2px solid var(--pbp-pink); border-radius: 16px; color: var(--pbp-ink); text-align: center; box-shadow: 0 12px 40px rgba(0, 0, 0, .45); }
+.pbp-pause-card h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: .18em; color: var(--pbp-cream); }
+.pbp-pause-note { margin: 0; font-size: 13px; color: #cdb8e0; }
+.pbp-pause-card button { padding: 10px 14px; border: 0; border-radius: 10px; background: #3a2f5e; color: var(--pbp-ink); font: inherit; cursor: pointer; }
+.pbp-pause-card button[data-pause="resume"] { background: var(--pbp-pink); color: #1a1a3e; font-weight: 700; }
+.pbp-pause-card button:hover, .pbp-pause-card button:focus-visible { filter: brightness(1.12); outline: none; }
+
+/* Capture replay chrome (board/director.js). The panels themselves are drawn on the
+   board canvas; this is the comic gutters (ink, drawn on and boiling), the impact
+   words, the REPLAY chip stamped in and the skip hint. */
+.pbp-replay { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.pbp-replay[hidden] { display: none; }
+.pbp-replay-seams { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pbp-replay-seams .seam { fill: none; stroke: #0c0a1e; stroke-width: 10; stroke-linejoin: round; stroke-linecap: round; }
+.pbp-replay-seams .seam.corner { stroke-width: 6; }
+.pbp-replay-seams .lit { fill: none; stroke: #ff5aa5; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round;
+  filter: drop-shadow(0 0 6px #ff5aa5aa); }
+.pbp-replay-word { position: absolute; left: 0; top: 0; opacity: 0; white-space: nowrap; will-change: transform, opacity;
+  color: #ff5aa5; font: italic 900 60px/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .02em;
+  -webkit-text-stroke: .085em #0c0a1e; paint-order: stroke fill; text-shadow: .08em .08em 0 #0c0a1e; }
+.pbp-replay-chip { position: absolute; display: flex; gap: 8px; align-items: center; padding: 7px 10px 6px; border: 2px solid #fff;
+  border-radius: 6px; background: #0c0a1ee8; color: #fff; font: 800 12px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .14em;
+  transform: rotate(-2deg); box-shadow: 3px 3px 0 #ff5aa5; }
+.pbp-replay-chip.stamp { animation: pbp-replay-stamp 300ms cubic-bezier(.2, 1.5, .4, 1) both; }
+.pbp-replay-chip i { width: 9px; height: 9px; border-radius: 50%; background: #ff5aa5; box-shadow: 0 0 10px #ff5aa5;
+  animation: pbp-replay-rec 700ms steps(2, jump-none) infinite; }
+@keyframes pbp-replay-stamp {
+  0% { transform: rotate(-14deg) scale(2.4); }
+  55% { transform: rotate(1deg) scale(.92); }
+  75% { transform: rotate(-3.5deg) scale(1.05); }
+  100% { transform: rotate(-2deg) scale(1); }
+}
+@keyframes pbp-replay-rec { 0% { opacity: 1; } 100% { opacity: .25; } }
+.pbp-replay-skip { position: absolute; padding: 6px 10px 5px; border-radius: 999px; background: #0c0a1ed0; color: #fff;
+  font: 700 11px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+/* Behind a full-screen replay the HUD steps back; an open options panel stays. */
+.hud, .cam-views { transition: opacity 320ms ease; }
+body.pbp-replay-full .hud:not(:has(.game-options-panel:not([hidden]))),
+body.pbp-replay-full .cam-views { opacity: .1; transition: opacity 160ms ease; }
+/* Behind the corner inset only the Options pill steps back: it sits over the inset (CHESS-8). */
+.game-settings { transition: opacity 320ms ease; }
+body.pbp-replay-corner .game-settings:not(:has(.game-options-panel:not([hidden]))) { opacity: .1; transition: opacity 160ms ease; }
+
+/* The change-of-turn card (ui/turn-handoff.js): slam, ribbon or tag. --tc is the mover's colour. */
+.turn-card { position: fixed; inset: 0; z-index: 20; pointer-events: none; overflow: hidden; --tc: #ff5aa5; }
+.turn-card[hidden], .turn-card > div[hidden], .turn-card .tc-clock[hidden] { display: none; }
+.turn-card > div { position: absolute; inset: 0; }
+.tc-band { position: absolute; left: -6%; right: -6%; top: 38%; height: 24%; background: var(--tc); transform-origin: 50% 50%;
+  background-image: repeating-linear-gradient(115deg, #ffffff1c 0 14px, transparent 14px 34px); }
+.tc-word { position: absolute; left: 50%; top: 50%; white-space: nowrap; text-transform: uppercase; color: #fff;
+  font: 900 clamp(34px, 8vw, 100px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .02em;
+  -webkit-text-stroke: .09em #0c0a1e; paint-order: stroke fill; }
+.tc-clock { position: absolute; left: 50%; top: 65%; padding: 6px 11px 5px; border-radius: 999px; background: #0c0a1e; color: #fff;
+  font: 700 13px/1 Consolas, 'Courier New', monospace; font-variant-numeric: tabular-nums; }
+.tc-rband { position: absolute; top: 39%; height: 22%; left: -10%; width: 120%; background: var(--tc); box-shadow: 0 7px 0 #0c0a1e; }
+.tc-rword { position: absolute; left: 50%; top: 50%; white-space: nowrap; text-transform: uppercase; color: #0c0a1e;
+  font: 900 clamp(28px, 6.4vw, 80px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .03em; }
+.tc-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; opacity: 0;
+  background: linear-gradient(to top, color-mix(in srgb, var(--tc) 55%, transparent), transparent); }
+.turn-card.theirs .tc-edge { top: 0; bottom: auto; background: linear-gradient(to bottom, color-mix(in srgb, var(--tc) 55%, transparent), transparent); }
+.tc-pill { position: absolute; top: 16px; left: 50%; display: flex; gap: 10px; align-items: center; padding: 9px 16px 8px 12px;
+  border: 2px solid var(--tc); border-radius: 999px; background: #0c0a1ee8; color: #fff; white-space: nowrap; text-transform: uppercase;
+  font: 700 13px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .14em; }
+.tc-pip { width: 11px; height: 11px; border-radius: 50%; background: var(--tc); box-shadow: 0 0 12px var(--tc); }
+.tc-tclock { color: #bfb0d0; font: 700 12px/1 Consolas, 'Courier New', monospace; letter-spacing: .04em; }
+.tc-tclock:empty { display: none; }
+.turncard-pick { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 6px; align-items: center; font-size: 13px; color: #d0c2de; }
+.turncard-pick [aria-pressed="true"] { border-color: #ff91c9; background: #58334e; color: #ffe1f0; }

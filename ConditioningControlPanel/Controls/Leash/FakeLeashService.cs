@@ -79,11 +79,14 @@ public sealed class FakeLeashService : ILeashService
                 new Sticker("star", Vex, DateTimeOffset.UtcNow.AddDays(-1)),
             });
 
+    /// <summary>Juno's offer's receipt id in <see cref="Sample"/>.</summary>
+    public const string SampleOfferId = "00000000000000a1";
+
     /// <summary>The demo world: I hold Mika, Vex holds me, and Juno has offered.</summary>
     public static FakeLeashService Sample()
     {
         var s = new FakeLeashService(new LeashSnapshot(SampleMine(), new[] { SampleHeld() },
-            new[] { new LeashOffer(Juno, DateTimeOffset.UtcNow.AddMinutes(-4), DateTimeOffset.UtcNow.AddDays(7)) }));
+            new[] { new LeashOffer(Juno, DateTimeOffset.UtcNow.AddMinutes(-4), DateTimeOffset.UtcNow.AddDays(7)) { Id = SampleOfferId } }));
         s.LocalReport = SampleReport();
         return s;
     }
@@ -104,11 +107,15 @@ public sealed class FakeLeashService : ILeashService
     /// <summary>Offers this client has sent and nobody has answered (the chip reads "offered").</summary>
     public bool HasOffered(string friendId) => _offered.Contains(friendId);
 
-    public Task ReleaseAsync(string leashedId)
+    /// <summary>Tests: the next release is refused (the holder card must not play the cut).</summary>
+    public bool ReleaseRefused { get; set; }
+
+    public Task<bool> ReleaseAsync(string leashedId)
     {
         Calls.Add("release:" + leashedId);
+        if (ReleaseRefused) return Task.FromResult(false);
         Snapshot = _snap with { Holding = _snap.Holding.Where(h => h.Who.Id != leashedId).ToList() };
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
     public Task<LeashSendResult> AssignAsync(string leashedId, AssignKind kind, int size, LeashWatch? watch = null)
@@ -158,18 +165,22 @@ public sealed class FakeLeashService : ILeashService
 
     // ---- leashed side -----------------------------------------------------------------
 
-    public Task<bool> AnswerAsync(string holderId, bool accept, LeashIntensity intensity)
+    /// <summary>Tests: the next answer comes back as this instead of going through.</summary>
+    public LeashAnswerResult? NextAnswer { get; set; }
+
+    public Task<LeashAnswerResult> AnswerAsync(string holderId, bool accept, LeashIntensity intensity)
     {
         Calls.Add($"answer:{holderId}:{accept}:{intensity}");
+        if (NextAnswer is { } forced && forced != LeashAnswerResult.Done) { NextAnswer = null; return Task.FromResult(forced); }
         var offer = _snap.Offers.FirstOrDefault(o => o.From.Id == holderId);
         var offers = _snap.Offers.Where(o => o.From.Id != holderId).ToList();
-        if (offer == null) { Snapshot = _snap with { Offers = offers }; return Task.FromResult(false); }
+        if (offer == null) { Snapshot = _snap with { Offers = offers }; return Task.FromResult(LeashAnswerResult.Gone); }
         MyLeash? me = _snap.Me;
         if (accept)
             me = new MyLeash(offer.From, intensity, DateTimeOffset.UtcNow, 1, null, LeashRemoteMode.Ask,
                 Array.Empty<Punishment>(), null, 0, _snap.Me?.Stickers ?? Array.Empty<Sticker>());
         Snapshot = _snap with { Me = me, Offers = offers };
-        return Task.FromResult(true);
+        return Task.FromResult(LeashAnswerResult.Done);
     }
 
     public Task CutAsync()
@@ -232,6 +243,51 @@ public sealed class FakeLeashService : ILeashService
         if (_snap.Me is not { } me || me.Pardons <= 0) return Task.FromResult(false);
         Snapshot = _snap with { Me = me with { Pardons = me.Pardons - 1, Pending = me.Pending.Where(p => p.Pid != pid).ToList() } };
         return Task.FromResult(true);
+    }
+
+    // ---- receipts ---------------------------------------------------------------------
+
+    /// <summary>Off by default, like a server that predates receipts; the demo and the suite switch it on.</summary>
+    public bool ReceiptsSupported { get; set; }
+
+    /// <summary>What the holder side lists under "Sent lately", by leashed id, newest first.</summary>
+    public Dictionary<string, List<LeashSentItem>> Sent { get; } = new();
+
+    public IReadOnlyList<LeashSentItem> SentTo(string leashedId) =>
+        Sent.TryGetValue(leashedId, out var l) ? l : Array.Empty<LeashSentItem>();
+
+    public event Action? ReceiptsChanged;
+
+    public void RaiseReceipts() => ReceiptsChanged?.Invoke();
+
+    public void NoteShown(string? id)
+    {
+        if (!string.IsNullOrEmpty(id)) Calls.Add("seen:" + id);
+    }
+
+    /// <summary>Four things sent to Mika at four different stages.</summary>
+    public static List<LeashSentItem> SampleSent()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new List<LeashSentItem>
+        {
+            new("s4", LeashItemKind.Tug, Mika.Id, "0000000000000004", LeashStep.Seen, now.AddMinutes(-2), now.AddMinutes(-1))
+                { ArrivedAt = now.AddMinutes(-2), SeenAt = now.AddMinutes(-1) },
+            new("s3", LeashItemKind.Punish, Mika.Id, "0000000000000003", LeashStep.Arrived, now.AddMinutes(-20), now.AddMinutes(-19))
+                { Punish = PunishKind.Lines, Size = 5, ArrivedAt = now.AddMinutes(-19) },
+            new("s2", LeashItemKind.Punish, Mika.Id, "0000000000000002", LeashStep.Skipped, now.AddHours(-3), now.AddHours(-2))
+                { Punish = PunishKind.Video, Size = 20, ArrivedAt = now.AddHours(-3), SeenAt = now.AddHours(-2), Reason = "unplayable" },
+            new("s1", LeashItemKind.Reward, Mika.Id, null, LeashStep.Refused, now.AddHours(-5), now.AddHours(-5))
+                { Reward = RewardKind.Pardon, Refusal = LeashSendStatus.Full },
+        };
+    }
+
+    /// <summary>The demo's receipts: on, with <see cref="SampleSent"/> on Mika's card.</summary>
+    public FakeLeashService WithSampleReceipts()
+    {
+        ReceiptsSupported = true;
+        Sent[Mika.Id] = SampleSent();
+        return this;
     }
 
     // ---- helpers ----------------------------------------------------------------------

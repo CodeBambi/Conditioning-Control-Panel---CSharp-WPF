@@ -995,6 +995,9 @@ namespace ConditioningControlPanel
         public static Services.Friends.IFriendsService? Friends { get; private set; }
         private static Services.Friends.FriendsService? _friendsService;
 
+        /// <summary>The friends feed ("What happened"): the lines App.Friends raises, per account, kept on disk.</summary>
+        public static Services.Friends.FriendsFeed? FriendsFeed { get; private set; }
+
         /// <summary>THE LEASH (2026-09-26): rides the friends poll. Null until startup builds it
         /// and after exit; every caller guards with <c>App.Leash?.</c>. The UI reaches it through
         /// <c>Controls.Leash.LeashLocator</c>, which this wiring sets once both lanes merge.</summary>
@@ -2801,6 +2804,7 @@ namespace ConditioningControlPanel
             {
                 _friendsService = Services.Friends.FriendsService.CreateForApp();
                 Friends = _friendsService;
+                try { FriendsFeed = Services.Friends.FriendsFeed.CreateForApp(_friendsService); } catch (Exception exFeed) { Logger?.Debug("Friends feed failed to start: {E}", exFeed.Message); }
                 ProfileSync.ProfileLoaded += (_, _) => _friendsService?.Kick();
                 _friendsService.Start();
             }
@@ -3205,12 +3209,12 @@ namespace ConditioningControlPanel
 
             splash?.SetProgress(0.95, "Opening main window...");
 
-            // Show main window — wrapped in try-catch to ensure splash closes on failure
+            // Build the main window, wrapped in try-catch to ensure splash closes on failure. It is
+            // shown below, once the boot surface is known.
             MainWindow mainWindow;
             try
             {
                 mainWindow = new MainWindow();
-                mainWindow.Show();
             }
             catch (Exception ex)
             {
@@ -3244,6 +3248,24 @@ namespace ConditioningControlPanel
                 Boot = Services.Launcher.BootDecision.PanelFirst;
             }
             Logger?.Information("[Launcher] boot surface {Surface} game {GameId}", Boot.Surface, Boot.GameId);
+
+            // Show the main window. A boot into the launcher or a game builds the panel without
+            // putting it on screen, so the launcher is the first window the player sees; the panel
+            // used to flash up here and vanish a pump later, in RouteBootSurface.
+            bool panelHidden = Services.Launcher.LauncherBoot.PanelStartsHidden(Boot, Lockdown?.IsActive == true);
+            try
+            {
+                if (panelHidden) mainWindow.ShowHiddenForBoot();
+                else mainWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to show main window");
+                try { splash?.CloseImmediate(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                _splash = null;
+                throw; // Re-throw to let DispatcherUnhandledException show the error
+            }
+            Logger?.Information("[Launcher] panel shown at boot: {Shown}", !panelHidden);
 
             // HANG HUNT: `--stress` drives the layered-window subsystems (bubbles, flash, shared-host
             // create/close) at max rate to provoke the recurring render-thread deadlock quickly, so the
@@ -3625,13 +3647,29 @@ namespace ConditioningControlPanel
             // splash closes. Topmost-pulse is the standard WPF workaround for
             // ForegroundLockTimeout blocking Activate(). The after-close callback
             // fires on the SPLASH thread, so marshal back to the main dispatcher.
-            ForceWindowToFront(mainWindow);
-            splash?.FadeOutAndClose(() => Dispatcher.BeginInvoke(new Action(() =>
+            // A panel built hidden for the launcher is left alone unless it has been opened since:
+            // activating a hidden window would take the focus off the launcher, so the launcher
+            // gets the same treatment instead once the splash is gone.
+            if (!panelHidden) ForceWindowToFront(mainWindow);
+            void CloseSplash()
             {
-                try { ForceWindowToFront(mainWindow); }
-                catch (Exception ex) { Logger?.Debug("Post-splash ForceWindowToFront failed: {Error}", ex.Message); }
-            })));
-            _splash = null;
+                splash?.FadeOutAndClose(() => Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        if (!panelHidden || mainWindow.IsVisible) ForceWindowToFront(mainWindow);
+                        else if (Services.Launcher.LauncherHost.WindowRef is { IsVisible: true } launcher)
+                            ForceWindowToFront(launcher);
+                    }
+                    catch (Exception ex) { Logger?.Debug("Post-splash ForceWindowToFront failed: {Error}", ex.Message); }
+                })));
+                _splash = null;
+            }
+            // A boot with the panel hidden keeps the splash up until the launcher (or the game) is
+            // on screen: the splash holds the foreground, so the launcher can take it as the splash
+            // fades. Closed first, the foreground went to another app and the launcher came up
+            // behind it.
+            if (!panelHidden) CloseSplash();
 
             // First dispatcher pump = startup is over: from here on, single-instance acks must
             // come from the dispatcher itself so a wedged message loop is detected again.
@@ -3639,6 +3677,7 @@ namespace ConditioningControlPanel
             {
                 _startupPhase = false;
                 if (Boot.Surface != Services.Launcher.BootSurface.Panel) RouteBootSurface(mainWindow);
+                if (panelHidden) CloseSplash();
             }));
 
             // Age verification gate - the LEFTOVER population only.
@@ -3845,9 +3884,9 @@ namespace ConditioningControlPanel
         // documented workaround — it bypasses the lock without leaving the
         // window stuck on top.
         /// <summary>
-        /// Boot into the launcher or a game: tuck the freshly shown panel into the tray (no
-        /// balloon, nobody has seen it yet) and bring the decided surface up. Any failure leaves
-        /// the panel where it is, which is the classic app.
+        /// Boot into the launcher or a game: tuck the panel into the tray (no balloon, nobody has
+        /// seen it: it was built hidden, see MainWindow.ShowHiddenForBoot) and bring the decided
+        /// surface up. Any failure puts the panel on screen, which is the classic app.
         /// </summary>
         private static void RouteBootSurface(MainWindow mainWindow)
         {

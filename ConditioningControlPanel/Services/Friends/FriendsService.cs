@@ -44,7 +44,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     private bool _busy;
     private bool _kickPending;
     private bool _disposed;
-    private PresenceActivity _activity = PresenceActivity.Panel;
+    private readonly PresenceActivityStack _activities = new();
     private HashSet<string> _online = new(StringComparer.Ordinal);
     private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
     private readonly Queue<string> _seenOrder = new();
@@ -62,7 +62,9 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
         _api = api;
         _account = account;
         _foreground = foreground ?? AnyAppWindowActive;
-        _now = now ?? (() => DateTimeOffset.UtcNow);
+        // The server's clock: invites, receipts and trails carry server times (a fast PC clock
+        // would age a trail out at its first receipt). Tests hand in their own clock.
+        _now = now ?? (() => ServerClock.UtcNow);
         _readShared = readShared ?? (() => App.Settings?.Current?.FriendsPresenceShared == true);
         _writeShared = writeShared ?? (v =>
         {
@@ -72,6 +74,33 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             try { App.Settings?.Save(); } catch { }
         });
         _lockDay = lockDay ?? (() => null);
+        WireFeed();
+        // The sender's trails walk forward off the same receipts the feed reads.
+        ReceiptsArrived += receipts =>
+        {
+            if (_sentBook.Apply(receipts)) RaiseSentTrails();
+        };
+    }
+
+    // ---- the sender's trails (FriendsSentBook) ----
+
+    private readonly FriendsSentBook _sentBook = new();
+
+    public event Action? SentTrailsChanged;
+
+    public SentTrail? LastSentTo(string friendId) => _sentBook.Latest(friendId, _now());
+
+    /// <summary>A send that came back sent: its trail starts at "sent".</summary>
+    private void NoteSentTrail(string friendId, SendKind kind, string? itemId, string? detail)
+    {
+        _sentBook.Note(friendId, kind, itemId, detail, _now());
+        RaiseSentTrails();
+    }
+
+    private void RaiseSentTrails()
+    {
+        try { SentTrailsChanged?.Invoke(); }
+        catch (Exception ex) { App.Logger?.Debug("Friends trail handler failed: {E}", ex.Message); }
     }
 
     /// <summary>The app's own wiring: the real wire, the account off AppSettings.</summary>
@@ -117,13 +146,29 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     /// <summary>True while the leash wants the 20 s cadence (leashed or holding anyone).</summary>
     public Func<bool>? LeashActive { get; set; }
 
-    /// <summary>The activity this app would publish. Read by tests and the drawer's own row.</summary>
-    public PresenceActivity Activity => _activity;
+    /// <summary>The activity this app would publish: the top of the stack (see
+    /// <see cref="PresenceActivityStack"/>). Read by tests and the drawer's own row.</summary>
+    public PresenceActivity Activity => _activities.Top;
 
+    /// <summary>The old single-slot call: replaces the whole stack. Hosts use
+    /// <see cref="EnterActivity"/> / <see cref="LeaveActivity"/>.</summary>
     public void SetActivity(PresenceActivity activity)
     {
-        if (_activity == activity) return;
-        _activity = activity;
+        if (_activities.Replace(activity)) ActivityMoved();
+    }
+
+    public void EnterActivity(PresenceActivity activity)
+    {
+        if (_activities.Enter(activity)) ActivityMoved();
+    }
+
+    public void LeaveActivity(PresenceActivity activity)
+    {
+        if (_activities.Leave(activity)) ActivityMoved();
+    }
+
+    private void ActivityMoved()
+    {
         // Presence is only worth a request when someone can see it.
         if (_readShared() && Available) Kick();
     }
@@ -231,14 +276,18 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             JObject? report = null;
             try { report = LeashReportProvider?.Invoke(); }
             catch (Exception ex) { App.Logger?.Debug("Leash report failed: {E}", ex.Message); }
-            var reply = await _api.PollAsync(shared ? _activity : null, shared ? _lockDay() : null, shared, report);
+            var reports = TakeReports();
+            JArray? receipts = reports.Count > 0 ? FriendReceipts.ToWire(reports) : null;
+            var reply = await _api.PollAsync(shared ? _activities.Top : null, shared ? _lockDay() : null, shared, report, receipts);
             if (_account() != sentFor) return;
             if (reply != null)
             {
+                ReportsSent(reports);
                 ApplyOnline(reply.Online);
                 Deliver(reply.Inbox);
                 try { LeashBlockArrived?.Invoke(reply.Leash); }
                 catch (Exception ex) { App.Logger?.Debug("Leash block handler failed: {E}", ex.Message); }
+                RaiseReceipts(reply.Receipts);
             }
 
             if (wantState)
@@ -265,11 +314,13 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
         {
             _lastAccount = now;
             _pollIndex = 0;
+            ClearReports();
             _online = new HashSet<string>(StringComparer.Ordinal);
             _seen.Clear();
             _seenOrder.Clear();
             _lastPoke.Clear();
             _requests.Reset();
+            _sentBook.Clear();
             Publish(FriendsSnapshot.Empty);
         }
         return now != null;
@@ -373,6 +424,13 @@ public static class FriendsSnapshotEquality
             && Equals(a.Me, b.Me)
             && a.Friends.SequenceEqual(b.Friends)
             && a.Incoming.SequenceEqual(b.Incoming)
-            && a.Outgoing.SequenceEqual(b.Outgoing);
+            && a.Outgoing.SequenceEqual(b.Outgoing)
+            && SameBlocked(a.Blocked, b.Blocked);
+    }
+
+    private static bool SameBlocked(IReadOnlyList<BlockedFriend>? a, IReadOnlyList<BlockedFriend>? b)
+    {
+        if (a == null || b == null) return a == null && b == null;
+        return a.SequenceEqual(b);
     }
 }

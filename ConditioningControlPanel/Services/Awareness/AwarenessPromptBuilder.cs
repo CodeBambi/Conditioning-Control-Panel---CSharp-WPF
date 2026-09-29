@@ -108,7 +108,7 @@ namespace ConditioningControlPanel.Services.Awareness
         public const string OutputContract =
 @"Write ONE line, at most 140 characters, in your own voice, about the moment below.
 Use only the facts and numbers given. Never invent a number, never imply you know anything that is not there.
-You cannot see websites, page text, documents, messages, tracks or people - only what is below. Never name one.
+You cannot see websites, page text, documents, messages, tracks or people - only what is below. Never name one, except a ""title"" given below.
 Never recommend, plug or link a video, file or playlist unless an angle above licenses it.
 Never mention screens, watching, tracking or how you know. Never explain the joke. Never greet, never offer help, never open with ""I see"".
 Nothing worth saying? Answer exactly [PASS]. Passing is a good answer and costs you nothing.
@@ -119,6 +119,14 @@ Output only those lines: no quotes, no name label, no brackets, no stage directi
         public const string BanListRule =
             "\"recent\" is what you already said. Never reuse a structure, an opening or a punchline from it - " +
             "if your idea rhymes with one, answer [PASS].";
+
+        /// <summary>
+        /// Added to the tail only for a frame whose projection carries an allow-listed <c>"title"</c>
+        /// (<see cref="AwarenessProjection.TitleFor"/>). It licenses the one thing the contract
+        /// otherwise forbids, for this frame only.
+        /// </summary>
+        public const string TitleRule =
+            "\"title\" is the window or page title they let you read. It is the most specific thing you have: react to what it says.";
 
         /// <summary>Header above the persona digest.</summary>
         public const string PersonaHeader = "--- WHO YOU ARE ---";
@@ -383,6 +391,11 @@ Output only those lines: no quotes, no name label, no brackets, no stage directi
             sb.Append(TailHeader).Append('\n');
             sb.Append(projection).Append('\n');
             sb.Append(BanListRule).Append('\n');
+            // Only when the projection above really carries a title: the user allow-listed this
+            // app's titles so the companion could react to them, and a contract that forbids "page text"
+            // without this line left every title unused (ccp-bugs #1306).
+            if (AwarenessProjection.TitleFor(frame, cloud: !local) != null)
+                sb.Append(TitleRule).Append('\n');
             sb.Append(TierInstruction(tier));
             return sb.ToString();
         }

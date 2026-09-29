@@ -56,17 +56,38 @@ public class LeashPunishWindowRulesTests
         Assert.False(next.Repeat);
     }
 
+    /// <summary>Bug hunt 2026-09-29 (DESK-5): holding the panic key while NOT leashed quit the
+    /// whole app about half a second in, because every keyboard repeat was a fresh panic press and
+    /// the second one inside 2 s is the exit. A held key is one press for everyone; only the
+    /// leashed are asked to cut.</summary>
     [Fact]
-    public void Not_leashed_means_every_down_is_a_press_and_nothing_is_asked()
+    public void Not_leashed_a_held_key_is_still_one_press_and_nothing_is_asked()
     {
         var h = new LeashHoldToCut();
-        for (var ms = 0; ms <= 8000; ms += 33)
+        var first = h.Down(T0, leashed: false);
+        Assert.False(first.Repeat);
+        Assert.False(first.Due);
+        // the keyboard's repeat delay, then about thirty repeats a second
+        for (var ms = 500; ms <= 8000; ms += 33)
         {
             var step = h.Down(T0.AddMilliseconds(ms), leashed: false);
-            Assert.False(step.Repeat);
+            Assert.True(step.Repeat);
             Assert.False(step.Due);
         }
-        Assert.False(h.Held);
+    }
+
+    [Fact]
+    public void Not_leashed_every_real_press_is_still_a_press()
+    {
+        var h = new LeashHoldToCut();
+        Assert.False(h.Down(T0, leashed: false).Repeat);
+        h.Up();
+        // a quick double tap with a key-up between is two presses (the second may quit, on purpose)
+        Assert.False(h.Down(T0.AddMilliseconds(180), leashed: false).Repeat);
+        h.Up();
+        Assert.False(h.Down(T0.AddSeconds(3), leashed: false).Repeat);
+        // and a lost key-up still never swallows a press that comes after any repeat delay
+        Assert.False(h.Down(T0.AddSeconds(6), leashed: false).Repeat);
     }
 
     [Theory]

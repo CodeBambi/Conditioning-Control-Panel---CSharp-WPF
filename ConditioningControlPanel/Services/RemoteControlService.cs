@@ -193,7 +193,7 @@ namespace ConditioningControlPanel.Services
                 ConnectPin = pin;
                 Tier = tier;
                 IsActive = true;
-                App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Remote);
+                App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Remote);
                 _consecutivePollFailures = 0;
                 _consecutivePollSuccesses = 0;
                 _totalCommandsReceived = 0;
@@ -412,7 +412,7 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
+            App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Remote);
             SessionEnded?.Invoke(this, EventArgs.Empty);
         }
 
@@ -1439,8 +1439,9 @@ namespace ConditioningControlPanel.Services
                             {
                                 MainWindowRef.StartSessionFromRemote(session);
                             }
+                            // The same reading the leash screen used: one check, never a looser second one.
                             if (leashVerdict != Leash.LeashRemoteVerdict.StripStrict
-                                && parameters?["strict_lock"]?.Value<bool>() == true)
+                                && Leash.LeashRemoteRule.AsksStrictLock(parameters))
                             {
                                 if (App.Settings?.Current != null)
                                 {

@@ -120,6 +120,14 @@ namespace ConditioningControlPanel.Controls
         private readonly TextBlock _peekEnds;
         private readonly TextBlock _peekPending;
         private readonly TextBlock _peekNote;
+        private readonly TextBlock _peekMood;
+
+        // Circe's mood: a small pip on the ring's top left, in the mood's colour. None when calm
+        // or with no mood at all (heat row off); the peek names it.
+        private readonly Border _moodPip;
+        private readonly SolidColorBrush _moodBrush = new(CircesMoodMeter.CalmMint);
+        private readonly ScaleTransform _moodPop = new(1, 1);
+        private CircesMood? _mood;
 
         private DispatcherTimer? _tick;
         private bool _wired;
@@ -219,6 +227,25 @@ namespace ConditioningControlPanel.Controls
             };
             Children.Add(_badge);
 
+            _moodPip = new Border
+            {
+                Width = 9,
+                Height = 9,
+                CornerRadius = new CornerRadius(4.5),
+                Background = _moodBrush,
+                BorderBrush = Keyline,
+                BorderThickness = new Thickness(1.2),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Top,
+                // Centred, then pulled left by half the right margin: onto the ring's top-left edge.
+                Margin = new Thickness(0, 5, RingSize - 8, 0),
+                Visibility = Visibility.Collapsed,
+                IsHitTestVisible = false,
+                RenderTransformOrigin = new Point(0.5, 0.5),
+                RenderTransform = _moodPop,
+            };
+            Children.Add(_moodPip);
+
             // ---- the peek ----
             _peekTitle = new TextBlock
             {
@@ -252,6 +279,12 @@ namespace ConditioningControlPanel.Controls
             peekStack.Children.Add(_peekLead);
             peekStack.Children.Add(_peekEnds);
             peekStack.Children.Add(_peekPending);
+            _peekMood = new TextBlock
+            {
+                FontFamily = Display, FontSize = 14, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 4, 0, 0),
+                Foreground = _moodBrush,
+            };
+            peekStack.Children.Add(_peekMood);
             peekStack.Children.Add(_peekNote);
 
             var peekRim = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
@@ -408,6 +441,7 @@ namespace ConditioningControlPanel.Controls
                 }
 
                 ApplyBadge(balance);
+                ApplyMood(chaster?.Mood);
                 if (_peek.IsOpen) FillPeek();
             }
             catch (Exception ex) { App.Logger?.Debug("[Chaster] rail chip paint: {E}", ex.Message); }
@@ -454,6 +488,29 @@ namespace ConditioningControlPanel.Controls
             _badge.Visibility = Visibility.Visible;
         }
 
+        /// <summary>The mood pip. Pops when the mood moves, at MotionLevel Full only.</summary>
+        private void ApplyMood(CircesMood? mood)
+        {
+            var changed = _mood is { } was && mood is { } now && was != now;
+            _mood = mood;
+            if (mood is not { Level: not MoodLevel.Calm } m)
+            {
+                _moodPip.Visibility = Visibility.Collapsed;
+                if (mood is { } calm) _moodBrush.Color = CircesMoodMeter.ColourOf(calm.Level);
+                return;
+            }
+            _moodBrush.Color = CircesMoodMeter.ColourOf(m.Level);
+            _moodPip.Visibility = Visibility.Visible;
+            if (!changed || MotionFx.Level != Models.MotionLevel.Full) return;
+            var spring = new ElasticEase { Oscillations = 1, Springiness = 4, EasingMode = EasingMode.EaseOut };
+            var grow = new DoubleAnimation(1.8, 1, TimeSpan.FromMilliseconds(420)) { EasingFunction = spring };
+            _moodPop.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            _moodPop.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+        }
+
+        /// <summary>Whether the mood pip shows. For the render tests.</summary>
+        internal bool MoodPipShown => _moodPip.Visibility == Visibility.Visible;
+
         // ============================== the peek ==============================
 
         private void OpenPeek()
@@ -491,7 +548,7 @@ namespace ConditioningControlPanel.Controls
             var chaster = App.Chaster;
             var now = DateTime.UtcNow;
             _peekNumber.Children.Clear();
-            _peekEnds.Text = _peekPending.Text = _peekNote.Text = _peekLead.Text = string.Empty;
+            _peekEnds.Text = _peekPending.Text = _peekNote.Text = _peekLead.Text = _peekMood.Text = string.Empty;
 
             if (chaster == null || !chaster.IsLinked)
             {
@@ -542,6 +599,8 @@ namespace ConditioningControlPanel.Controls
 
             if (LiveLockClock.PendingAdd(balance) > 0)
                 _peekPending.Text = Loc.GetF("chaster_peek_pending", CircesTab.Format(balance));
+            if (chaster.Mood is { } mood)
+                _peekMood.Text = Loc.GetF("chaster_mood_peek", Loc.Get(mood.WordKey), mood.FactorText);
             if (chaster.IsPaused) _peekNote.Text = Loc.Get("chaster_chip_paused_tip");
             if (hold > TimeSpan.Zero)
                 _peekNote.Text = Loc.GetF("chaster_chip_hold_tip", LockClockText.HoldClock(hold));
@@ -550,7 +609,7 @@ namespace ConditioningControlPanel.Controls
 
         private void Collapse()
         {
-            foreach (var t in new[] { _peekLead, _peekEnds, _peekPending, _peekNote })
+            foreach (var t in new[] { _peekLead, _peekEnds, _peekPending, _peekMood, _peekNote })
                 t.Visibility = string.IsNullOrEmpty(t.Text) ? Visibility.Collapsed : Visibility.Visible;
         }
 

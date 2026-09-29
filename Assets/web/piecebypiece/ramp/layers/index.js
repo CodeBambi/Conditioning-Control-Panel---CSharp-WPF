@@ -53,6 +53,15 @@ export function createStageFilter(stage) {
 function makeCtx(ctx) {
   const rng = typeof ctx.rng === 'function' ? ctx.rng : Math.random;
   const media = ctx.media || null;
+  // Every picture on screen now, url -> how many layers show it. Each draw skips
+  // these, so one picture never shows twice at once: fewer pictures rather than
+  // repeats, the rule the Back Room bursts and the welcome show follow.
+  const onScreen = new Map();
+  const release = (url) => {
+    const n = url ? onScreen.get(url) : 0;
+    if (!n) return;
+    if (n > 1) onScreen.set(url, n - 1); else onScreen.delete(url);
+  };
   return {
     ...ctx,
     rng,
@@ -87,10 +96,16 @@ function makeCtx(ctx) {
         return Number.isFinite(d) && d > 4 ? d : 0;
       } catch { return 0; }
     },
-    /** A gif url, or a generated pink noise tile when the pool has no gifs. */
-    tile: () => (media && media.drawTile ? media.drawTile() : null),
-    image: () => (media && media.draw ? media.draw('image') : null),
-    video: () => (media && media.draw ? media.draw('video') : null),
+    /** A gif url, else a still, else null when every picture is up; a pink noise tile when the pool has none. */
+    tile: () => (media && media.drawTile ? media.drawTile(onScreen) : null),
+    image: () => (media && media.draw ? media.draw('image', onScreen) : null),
+    video: () => (media && media.draw ? media.draw('video', onScreen) : null),
+    /** A layer put `url` on screen. Every hold is paired with one release. */
+    hold(url) { if (url) onScreen.set(url, (onScreen.get(url) || 0) + 1); },
+    release,
+    /** Release once a fade-out is over: a picture that is fading is still on screen. */
+    releaseLater(url, ms) { if (url) setTimeout(() => release(url), ms); },
+    onScreen,
     hasRoot: () => !!ctx.root,
   };
 }
@@ -172,7 +187,7 @@ export function createLayerStack(ctx = {}) {
     },
     /** True while a tape is over the board; the veils read this and step back. */
     get cardLive() { return !!card.live; },
-    debug() { return { counts: { ...counts }, cardLive: !!card.live, hasMedia: !!(ctx.media && ctx.media.size) }; },
+    debug() { return { counts: { ...counts }, cardLive: !!card.live, hasMedia: !!(ctx.media && ctx.media.size), onScreen: base.onScreen.size }; },
   };
   return api;
 }

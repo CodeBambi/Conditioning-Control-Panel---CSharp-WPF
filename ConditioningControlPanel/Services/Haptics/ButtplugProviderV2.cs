@@ -144,12 +144,15 @@ namespace ConditioningControlPanel.Services.Haptics
 
             await DisconnectAsync().ConfigureAwait(false);
 
-            var url = ResolveUrl();
+            var typed = ResolveUrl();
+            // #1310: "localhost.12345" never linked. Clean the address up (dot before a port,
+            // missing ws://) and name what is wrong when it cannot be made valid.
+            var url = ButtplugUrl.Normalize(typed, out var urlProblem) ?? typed;
             ButtplugClient? client = null;
             try
             {
-                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-                    throw new UriFormatException($"'{url}' is not a valid WebSocket URL.");
+                if (urlProblem != null || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                    throw new UriFormatException($"the Intiface address is not valid ({urlProblem ?? "unreadable"}). Try ws://127.0.0.1:12345.");
 
                 Log.Information("ButtplugProviderV2: connecting to {Host}", Logging.UrlLog.Host(url));
 
