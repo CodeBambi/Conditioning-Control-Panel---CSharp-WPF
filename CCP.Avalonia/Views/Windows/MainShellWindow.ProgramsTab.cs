@@ -20,6 +20,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             foreach (var definition in library)
             {
                 var premium = definition.Tier == ProgramTier.Premium;
+                // WPF MainWindow.ProgramsTab.cs:605 (ProgramHasPremium = Patreon.HasPremiumAccess, the
+                // same answer CoreEntitlement is seeded with): owned premium cards drop the padlock.
+                var locked = premium && !CoreEntitlement.HasPremium;
                 var accent = AccentBrush(definition.AccentColor);
                 items.Add(new ProgramBrowseItem
                 {
@@ -36,8 +39,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         ? new SolidColorBrush(Color.Parse("#33FF69B4"))
                         : new SolidColorBrush(Color.Parse("#332DFF9E")),
                     AccentBrush = accent,
-                    IsLocked = premium,
-                    ActionText = Loc.Get(premium ? "btn_program_locked" : "btn_program_enroll"),
+                    IsLocked = locked,
+                    ActionText = Loc.Get(locked ? "btn_program_locked" : "btn_program_enroll"),
                     IsActionEnabled = false,
                     ActionOpacity = 0.5,
                     // Tier metadata stays, but nothing here can be started - by a pledge or
@@ -45,7 +48,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // than programs_locked_hint, which promises a pledge unlocks execution.
                     ReasonText = Loc.Get("programs_unavailable"),
                     ReasonVisible = true,
-                    CardOpacity = premium ? 0.72 : 1.0
+                    CardOpacity = locked ? 0.72 : 1.0
                 });
             }
 

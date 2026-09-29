@@ -254,6 +254,7 @@
                                                     HorizontalContentAlignment="Center"
                                                     Tag="{Binding ProgramId}"
                                                     IsEnabled="{Binding IsActionEnabled}"
+                                                    ToolTip.Tip="{Binding ReasonText}" ToolTip.ShowOnDisabled="True"
                                                     Opacity="{Binding ActionOpacity}"
                                                     Theme="{StaticResource PinkButton}"
                                                     Click="BtnProgramEnroll_Click">

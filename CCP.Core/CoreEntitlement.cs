@@ -34,6 +34,14 @@ namespace ConditioningControlPanel
         /// <summary>DailyFreeService.IsFreeToday - "is this feature the free one today?".</summary>
         public static volatile Func<string?, bool>? IsFreeTodayProvider;
 
+        /// <summary>IntakePassService.IsPassAvailable - a free account's unspent weekly Graded Intake pass.</summary>
+        public static volatile Func<bool>? IntakePassAvailableProvider;
+
+        public static bool IsIntakePassAvailable
+        {
+            get { try { return IntakePassAvailableProvider?.Invoke() ?? false; } catch { return false; } }
+        }
+
         /// <summary>The head's refusal surface. No-op with no head: the gate still denies.</summary>
         public static volatile Action<TierVerdict>? ShowDeniedHandler;
 

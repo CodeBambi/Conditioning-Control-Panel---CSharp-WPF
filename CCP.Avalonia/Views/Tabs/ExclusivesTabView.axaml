@@ -178,9 +178,12 @@
                             <Border x:Name="SpotArtHost"
                                     Grid.Column="0" Grid.ColumnSpan="2" ClipToBounds="True"
                                     CornerRadius="12">
-                                <TextBlock x:Name="TxtSpotArtGlyph" FontSize="120" Opacity="0.14"
-                                           HorizontalAlignment="Left" VerticalAlignment="Center"
-                                           Margin="60,0,0,0"/>
+                                <Grid>
+                                    <Image x:Name="SpotArtImage" Stretch="UniformToFill"/>
+                                    <TextBlock x:Name="TxtSpotArtGlyph" FontSize="120" Opacity="0.14"
+                                               HorizontalAlignment="Left" VerticalAlignment="Center"
+                                               Margin="60,0,0,0"/>
+                                </Grid>
                             </Border>
                             <!-- fade the art into the copy column -->
                             <Border Grid.Column="0" Grid.ColumnSpan="2">
@@ -333,8 +336,10 @@
                                 <Border Width="336" Height="200" Margin="0,0,16,16"
                                         CornerRadius="12"
                                         Background="#1A1A2E"
-                                        BorderBrush="{Binding EdgeBrush}" BorderThickness="1"
-                                        Cursor="Hand">
+                                        BorderBrush="{Binding EdgeBrush}" BorderThickness="{Binding EdgeThickness}"
+                                        Cursor="Hand"
+                                        PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
+                                        PointerReleased="Card_PointerReleased">
                                   <Grid>
                                     <!-- Everything that must respect the card's corners lives in
                                          this inner clip. The card itself does NOT clip: the tier
@@ -343,7 +348,10 @@
                                     <Border ClipToBounds="True" CornerRadius="12">
                                     <Grid>
                                         <!-- art -->
-                                        <TextBlock Text="{Binding Emoji}" FontSize="76" Opacity="{Binding ArtOpacity}"
+                                        <Image x:Name="CardArt" Source="{Binding Art}" Stretch="UniformToFill"
+                                               Opacity="{Binding ArtOpacity}" RenderTransformOrigin="50%,50%"/>
+                                        <TextBlock Text="{Binding Emoji}" FontSize="76" Opacity="{Binding GlyphOpacity}"
+                                                   IsVisible="{Binding !HasArt}"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                                    Margin="0,0,0,34"/>
 
@@ -380,6 +388,21 @@
                                                 BorderBrush="{Binding ChipBorderBrush}">
                                             <TextBlock Text="{Binding ChipText}" FontSize="10" FontWeight="Bold"
                                                        Foreground="{Binding ChipForeground}"/>
+                                        </Border>
+
+                                        <!-- FREE TODAY pill: the chip's corner on an untiered card's free day -->
+                                        <Border IsVisible="{Binding HasFreePill}"
+                                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                Margin="0,8,8,0" CornerRadius="10" Padding="9,3"
+                                                BorderThickness="1" BorderBrush="#CCFFF0C2">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                    <GradientStop Color="#FFD27A" Offset="0"/>
+                                                    <GradientStop Color="#FF9C4A" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <TextBlock Text="{loc:Str mosaic_free_today}" Foreground="#2A1A05"
+                                                       FontSize="10" FontWeight="Bold"/>
                                         </Border>
 
                                         <!-- optional NEW/BETA badge, top-left, in the brand gradient -->
@@ -427,7 +450,7 @@
                                     <!-- the tier sign, pinned over the art's top-right corner and
                                          ABOVE the veil: a locked card must still advertise what it
                                          costs. Hides itself when Tier is 0. -->
-                                    <fx:TierBadge Tier="{Binding Tier}"
+                                    <fx:TierBadge Tier="{Binding Tier}" FreeToday="{Binding BadgeFreeToday}"
                                                   HorizontalAlignment="Right" VerticalAlignment="Top"
                                                   Margin="0,-6,-6,0"/>
                                   </Grid>
