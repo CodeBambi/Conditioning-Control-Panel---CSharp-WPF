@@ -785,3 +785,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Shell: screen/scaling work-area fit waits 300 ms for the move to settle (it bounced the window between monitors mid-drag).
 - Sandbox SecretStore no longer shows the "no secret store" notice. SIGTERM now shuts down through the lifetime (was ignored).
 - Evidence: user Discord OAuth live in a sandbox (tokens received); SIGTERM live (exited in <6 s); SecretStoreTests; full gate. Review: ACCEPT.
+
+## avalonia-port/companion-room-refresh: +232
+- Companion hero card shows real state (WPF CompanionHeroRuntimeVm): name (from CoreMods), mod, flavour, level/XP, mute/show,
+  AI and awareness pills, AI-access plate; mute/show/wake through the shell, Chat opens the tube input, Switch/Engine/Awareness
+  scroll the room, the plate opens Patreon; the room re-reads the hero on tab return. Rows stay stub (Tutorial chip placeholder).
+- Evidence: CompanionHeroSyncTests (fail-proven; order-independent after the StartModsTests reset); live mute saved, 0 binding errors.
+  Review: FIX -> fixed.
