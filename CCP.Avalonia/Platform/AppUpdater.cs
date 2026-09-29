@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -52,12 +53,15 @@ namespace ConditioningControlPanel.Avalonia.Platform
         /// </summary>
         internal static string? ApiBase()
         {
-            var o = Environment.GetEnvironmentVariable("CCP_UPDATE_API_URL");
-            if (Uri.TryCreate(o, UriKind.Absolute, out var u) && u.IsLoopback && string.IsNullOrEmpty(u.UserInfo)
-                && (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps))
+            if (LoopbackUrl.IsHonoured(Environment.GetEnvironmentVariable("CCP_UPDATE_API_URL"), out var u))
                 return u.GetLeftPart(UriPartial.Path).TrimEnd('/');
-            return string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")) ? GitHubApi : null;
+            return Sandboxed ? null : GitHubApi;
         }
+
+        private static bool Sandboxed => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"));
+
+        /// <summary>The startup dialog while it is open (tests close it).</summary>
+        internal static UpdateNotificationDialog? OpenDialog { get; private set; }
 
         private static HttpClient Client(TimeSpan timeout)
         {
@@ -149,9 +153,10 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         /// <summary>
         /// WPF CheckForUpdatesInBackgroundAsync (:4858): report a previous install that did not take
-        /// (reads WPF's own update_attempt/update_result markers), then light the pill. WPF also
-        /// queues the notification dialog on its StartupLadder; this head has no ladder, so the
-        /// dialog is one click on the pill away instead of stacking over first-run modals.
+        /// (reads WPF's own update_attempt/update_result markers), light the pill, then offer the
+        /// notification dialog once (App.xaml.cs:4903). WPF queues it last on its StartupLadder;
+        /// this head has no ladder, so it waits until the age gate is accepted and the first-run
+        /// wizard / age-gate modals are closed. A skipped version never gets here (CheckAsync).
         /// </summary>
         internal static async Task StartupAsync(MainShellWindow shell)
         {
@@ -164,11 +169,45 @@ namespace ConditioningControlPanel.Avalonia.Platform
                         Loc.GetF("msg_update_install_failed", outcome.Version, CoreReleaseContent.AppVersion));
 
                 var info = await CheckAsync(force: false);
-                if (info?.IsNewer == true) shell.ShowUpdatePill(info.Version);
+                if (info?.IsNewer != true) return;
+                shell.ShowUpdatePill(info.Version);
+
+                var closed = false;
+                shell.Closed += (_, _) => closed = true;
+                while (!closed && (!CoreSettings.Current.HasAcceptedAgeVerification || !shell.IsVisible || StartupModalOpen()))
+                    await Task.Delay(500);
+                if (!closed && !_busy) await OfferAsync(shell, info);
             }
             catch (Exception ex)
             {
                 Log.Warning(ex, "Background update check failed");
+            }
+        }
+
+        private static bool StartupModalOpen() =>
+            (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Windows
+                .Any(w => w is FirstRunWizard or MessageDialog && w.IsVisible) == true;
+
+        /// <summary>The notification dialog: Install (Windows) / Download (elsewhere), or Later = quiet for 24h.</summary>
+        private static async Task OfferAsync(Window owner, UpdateInfo info)
+        {
+            _busy = true;
+            try
+            {
+                var dialog = OpenDialog = new UpdateNotificationDialog(info)
+                {
+                    Topmost = true,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                };
+                await dialog.ShowDialog<bool?>(owner);
+                OpenDialog = null;
+                if (dialog.InstallRequested) await InstallAsync(owner);
+                else ReleaseFeed.SetSkippedUpdateVersion(UserData, info.Version);
+            }
+            finally
+            {
+                OpenDialog = null;
+                _busy = false;
             }
         }
 
@@ -191,14 +230,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 if (info?.IsNewer == true)
                 {
                     Shell?.ShowUpdatePill(info.Version);
-                    var dialog = new UpdateNotificationDialog(info)
-                    {
-                        Topmost = true,
-                        WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                    };
-                    await dialog.ShowDialog<bool?>(owner);
-                    if (dialog.InstallRequested) await InstallAsync(owner);
-                    else ReleaseFeed.SetSkippedUpdateVersion(UserData, info.Version);   // "Later": quiet for 24h
+                    _busy = false;
+                    await OfferAsync(owner, info);
                 }
                 else
                 {
@@ -237,24 +270,34 @@ namespace ConditioningControlPanel.Avalonia.Platform
         private static async Task DownloadAndRunAsync(Window owner, UpdateInfo info)
         {
             var progress = new UpdateProgressDialog { Topmost = true };
+            // WPF :5071-5085 hides the main window and the avatar tube while it downloads; the
+            // progress dialog stays up and owns the confirm (ShowDialog needs a visible owner).
+            var hidden = ((Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Windows
+                ?? Array.Empty<Window>()).Where(w => w.IsVisible).ToList();
+            void Restore() { foreach (var w in hidden) try { w.Show(); } catch { } }
             try
             {
                 var api = ApiBase() ?? throw new InvalidOperationException("No release feed in a sandboxed profile");
                 progress.Show();
+                foreach (var w in hidden) w.Hide();
                 var fill = progress.FindControl<Border>("ProgressFill");
                 var installer = await DownloadInstallerAsync(api, info.Version, p => Dispatcher.UIThread.Post(() =>
                     progress.SetProgress(p / 100.0, (fill?.Parent as Control)?.Bounds.Width ?? 0)));
-                progress.Close();
 
-                if (!await MessageDialog.ConfirmAsync(owner, Loc.Get("title_ready_to_update"), Loc.Get("msg_ready_to_update")))
-                    return;
+                var go = await MessageDialog.ConfirmAsync(progress, Loc.Get("title_ready_to_update"), Loc.Get("msg_ready_to_update"));
+                progress.Close();
+                if (!go) { Restore(); return; }
                 if (!RunInstallerSilentlyAndExit(installer, info.Version))
+                {
+                    Restore();
                     UpdateFailedDialog.ShowFor(owner, Loc.Get("title_update_not_installed"), Loc.Get("msg_update_permission_declined"));
+                }
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to download installer");
                 try { progress.Close(); } catch { }
+                Restore();
                 UpdateFailedDialog.ShowFor(owner, Loc.Get("title_update_failed"), Loc.Get("msg_update_download_failed"), ex.Message);
             }
         }
@@ -270,6 +313,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 if (url != null) break;
             }
             if (url is null) throw new InvalidOperationException($"Could not find Setup.exe installer in GitHub release {version}");
+            if (Sandboxed && !LoopbackUrl.IsHonoured(url, out _))
+                throw new InvalidOperationException($"Sandboxed profile: refusing non-loopback installer URL {url}");
 
             var dir = Path.Combine(Path.GetTempPath(), "ConditioningControlPanel_Update");
             try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
@@ -297,8 +342,10 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     }
                     return path;
                 }
-                catch (Exception ex) when (attempt < 3 && ex is HttpRequestException or IOException or TaskCanceledException)
+                catch (Exception ex) when (IsTransientNetworkError(ex))
                 {
+                    if (attempt >= 3)
+                        throw new InvalidOperationException($"Failed to download installer after 3 attempts: {ex.Message}", ex);
                     Log.Warning(ex, "Download attempt {Attempt} failed with transient error", attempt);
                 }
             }
@@ -342,6 +389,17 @@ namespace ConditioningControlPanel.Avalonia.Platform
             Log.Information("Exiting for silent update (helper will install + relaunch)");
             (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
             return true;
+        }
+
+        /// <summary>WPF UpdateService.IsTransientNetworkError (:1387).</summary>
+        internal static bool IsTransientNetworkError(Exception ex)
+        {
+            if (ex is HttpRequestException or IOException or System.Net.Sockets.SocketException or TaskCanceledException)
+                return true;
+            if (ex.InnerException != null) return IsTransientNetworkError(ex.InnerException);
+            var m = ex.Message.ToLowerInvariant();
+            return m.Contains("forcibly closed") || m.Contains("connection was closed") || m.Contains("network")
+                || m.Contains("timeout") || m.Contains("transport");
         }
 
         private static bool NeedsElevation(string? installPath)

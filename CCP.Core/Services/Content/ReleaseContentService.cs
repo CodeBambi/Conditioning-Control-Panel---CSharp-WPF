@@ -97,11 +97,7 @@ namespace ConditioningControlPanel.Services
         internal static string ResolveBaseUrlFormat(string? overrideUrl)
         {
             if (string.IsNullOrWhiteSpace(overrideUrl)) return ReleaseBaseUrlFormat;
-            if (Uri.TryCreate(overrideUrl, UriKind.Absolute, out var uri)
-                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-                && uri.IsLoopback
-                && (uri.HostNameType is UriHostNameType.IPv4 or UriHostNameType.IPv6 || uri.Host == "localhost")
-                && string.IsNullOrEmpty(uri.UserInfo))
+            if (LoopbackUrl.IsHonoured(overrideUrl, out var uri))
             {
                 var baseUrl = uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
                 Log.Information("ReleaseContentService: using loopback content server {Url}", baseUrl);

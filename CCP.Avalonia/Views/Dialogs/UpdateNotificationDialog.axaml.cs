@@ -64,7 +64,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             this.FindControl<HyperlinkButton>("LinkManualDownload")!.Click += (_, _) => LinkManualDownload_Click();
             this.FindControl<Button>("BtnLater")!.Click += (_, _) => BtnLater_Click();
-            this.FindControl<Button>("BtnInstall")!.Click += (_, _) => BtnInstall_Click();
+            var install = this.FindControl<Button>("BtnInstall")!;
+            install.Click += (_, _) => BtnInstall_Click();
+            // Off Windows the updater only notifies: the button opens the releases page.
+            if (!OperatingSystem.IsWindows() && install.Content is TextBlock label)
+                label.Bind(TextBlock.TextProperty,
+                    (global::Avalonia.Data.Binding)new Localization.StrExtension("btn_download_installer_manually").ProvideValue(null!));
         }
 
         /// <summary>
