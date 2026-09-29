@@ -42,6 +42,12 @@ public sealed class ExclusivesVaultTests
                 Assert.True(rows.Single(r => r.Feature.Key == "haptics").HasArt);
                 Assert.True(view.FindControl<Border>("SpotVeil")!.IsVisible);
 
+                // No launcher on this head: visible, inert, and it says so.
+                var tip = ConditioningControlPanel.Localization.Loc.Get("exclusives_not_on_this_build");
+                Assert.Equal(tip, rows.Single(r => r.Feature.Key == "backroom").UnavailableTip);
+                Assert.Null(rows.Single(r => r.Feature.Key == "haptics").UnavailableTip);
+                Assert.False(view.FindControl<Button>("BtnSpotOpen")!.IsEnabled);
+
                 // A free account with its weekly pass unspent, and fyp rotated in as today's free one.
                 CoreEntitlement.IntakePassAvailableProvider = () => true;
                 CoreEntitlement.IsFreeTodayProvider = key => key == "fyp";

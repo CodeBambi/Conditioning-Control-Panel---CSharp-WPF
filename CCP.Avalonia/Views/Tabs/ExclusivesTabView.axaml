@@ -337,7 +337,7 @@
                                         CornerRadius="12"
                                         Background="#1A1A2E"
                                         BorderBrush="{Binding EdgeBrush}" BorderThickness="{Binding EdgeThickness}"
-                                        Cursor="Hand"
+                                        Cursor="{Binding Cursor}" ToolTip.Tip="{Binding UnavailableTip}"
                                         PointerEntered="Card_PointerEntered" PointerExited="Card_PointerExited"
                                         PointerReleased="Card_PointerReleased">
                                   <Grid>

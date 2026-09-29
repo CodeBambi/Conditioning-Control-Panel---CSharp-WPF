@@ -116,6 +116,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var badge = this.FindControl<TierBadge>("SpotTierBadge")!;
             badge.Tier = spot.Tier;
             badge.FreeToday = spot.BadgeFreeToday;
+            var card = this.FindControl<Border>("SpotlightCard")!;
+            card.Cursor = spot.Cursor;
+            ToolTip.SetTip(card, spot.UnavailableTip);
+            var open = this.FindControl<Button>("BtnSpotOpen")!;
+            open.IsEnabled = spot.IsAvailable;
+            ToolTip.SetTip(open, spot.UnavailableTip);
+            ToolTip.SetShowOnDisabled(open, true);
         }
 
         /// <summary>"Resources/features/x.png" -> "features/x.png", the name ModArt resolves.</summary>
@@ -124,18 +131,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void Spotlight_Click(object? sender, RoutedEventArgs e) => Open(ExclusiveFeature.All[0]);
 
-        private void Spotlight_PointerReleased(object? sender, PointerReleasedEventArgs e) => Open(ExclusiveFeature.All[0]);
+        // WPF MouseLeftButtonUp: left button only.
+        private void Spotlight_PointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (e.InitialPressMouseButton == MouseButton.Left) Open(ExclusiveFeature.All[0]);
+        }
 
         private void Card_PointerReleased(object? sender, PointerReleasedEventArgs e)
         {
-            if ((sender as Control)?.DataContext is ExclusiveCardRow row) Open(row.Feature);
+            if (e.InitialPressMouseButton == MouseButton.Left && (sender as Control)?.DataContext is ExclusiveCardRow row)
+                Open(row.Feature);
         }
 
-        /// <summary>WPF OpenExclusiveFeature: the card never blocks, the destination's own gate does.
+        /// <summary>
         /// ponytail: "fyp"/"justdrop" are shell WindowKeys and "backroom" (WPF BtnStartBackRoom_Click)
-        /// has no launcher on this head, so those three are no-ops here.</summary>
+        /// has no launcher on this head. Their cards stay visible but inert (no hand, honest tooltip),
+        /// and never reach ShowTab, so they do not fire a navigation bark either.
+        /// </summary>
+        internal static bool IsOnThisBuild(string key) => key is not ("fyp" or "justdrop" or "backroom");
+
+        /// <summary>WPF OpenExclusiveFeature: the card never blocks, the destination's own gate does.</summary>
         private void Open(ExclusiveFeature feature)
-            => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ShowTab(feature.Key);
+        {
+            if (IsOnThisBuild(feature.Key))
+                (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ShowTab(feature.Key);
+        }
 
         /// <summary>WPF OnExclusiveCardHover: the shared hover pop on the art, driven from the card.
         /// ponytail: no MotionFx.HoverLift or glow bloom on this head yet.</summary>
@@ -169,6 +189,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public bool FreeToday { get; }
         public Bitmap? Art { get; }
         public bool HasArt => Art != null;
+        public bool IsAvailable => ExclusivesTabView.IsOnThisBuild(Feature.Key);
+        public Cursor Cursor => new(IsAvailable ? StandardCursorType.Hand : StandardCursorType.Arrow);
+        public string? UnavailableTip => IsAvailable ? null : Loc.Get("exclusives_not_on_this_build");
         public int Tier => Feature.Tier;
 
         /// <summary>"emoji + title"; WPF ExclusiveTitle takes Takeover's name from the mod.</summary>
