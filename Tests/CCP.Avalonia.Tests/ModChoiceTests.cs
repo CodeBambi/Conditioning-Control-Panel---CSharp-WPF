@@ -264,10 +264,7 @@ public sealed class ModChoiceTests
         var handler = new LoopbackOnlyHandler();
         var oldSettings = CoreSettings.ServiceProvider;
         var oldVersion = CoreReleaseContent.AppVersionProvider;
-        // StartMods seeds CoreMods from this test's service; left seeded, every later test sees its last mod.
-        var modProviders = typeof(CoreMods).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-            .Where(f => f.Name.EndsWith("Provider", StringComparison.Ordinal)).ToArray();
-        var savedMods = modProviders.Select(f => f.GetValue(null)).ToArray();
+        var mods = new CoreModsSnapshot();
         var settings = new SettingsService();
         CoreSettings.ServiceProvider = () => settings;
         CoreReleaseContent.AppVersionProvider = () => "6.6.3";   // cycle v6.6.0
@@ -303,7 +300,7 @@ public sealed class ModChoiceTests
             settings.SealForReset();
             CoreSettings.ServiceProvider = oldSettings;
             CoreReleaseContent.AppVersionProvider = oldVersion;
-            for (var i = 0; i < modProviders.Length; i++) modProviders[i].SetValue(null, savedMods[i]);
+            mods.Dispose();
             CoreReleaseContent.StampProvider = null;
             CoreReleaseContent.PackInfoProvider = null;
             CoreReleaseContent.UiInvoke = null;

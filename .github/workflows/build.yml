@@ -168,6 +168,7 @@ jobs:
       # The installer's input (Properties/PublishProfiles/win-x64.pubxml, WPF's settings). WinExe has no
       # console, so Start-Process -Wait is what makes the exit code reach the step.
       - name: Publish win-x64 and smoke the published exe
+        timeout-minutes: 20
         run: |
           dotnet publish CCP.Avalonia/CCP.Avalonia.csproj -c Release -p:PublishProfile=win-x64
           $p = Start-Process -FilePath CCP.Avalonia\bin\publish\win-x64\CCP.Avalonia.exe -ArgumentList '--smoke' -Wait -PassThru -NoNewWindow

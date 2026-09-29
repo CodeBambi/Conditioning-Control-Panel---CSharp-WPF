@@ -64,4 +64,4 @@ here record where and why the port chose something, and who advised.
 | 2026-09-29 | Linux channels | AppImage; tarball | Tarball (`Properties/PublishProfiles/linux-x64.pubxml`, self-contained, not single-file) feeds Flatpak and AUR; Linux updater notifies only | user brief |
 | 2026-09-29 | Updater home | Avalonia copy; Core | Core logic, head does process and download work | oracle-deep |
 | 2026-09-29 | Where publish settings live | csproj; publish profiles | `CCP.Avalonia/Properties/PublishProfiles/{win-x64,linux-x64}.pubxml`; the csproj stays RID-less so test projects referencing it avoid NETSDK1151/1191 | oracle-deep |
-| 2026-09-29 | Second-instance signal on Avalonia | WPF named events (Windows only); named pipe on both OSes | Same mutex name as WPF; show/ack over a named pipe, since named EventWaitHandles are unsupported on Unix | oracle-deep |
+| 2026-09-29 | Second-instance signal on Avalonia | WPF named events (Windows only); named pipe on both OSes | Same mutex name as WPF; show/ack over a named pipe, since named EventWaitHandles are unsupported on Unix | worker |

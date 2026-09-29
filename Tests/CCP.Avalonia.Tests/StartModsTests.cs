@@ -25,19 +25,14 @@ public sealed class StartModsTests
     private static string CoreFixture(string name) => Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "..", "..", "..", "..", "CCP.Core.Tests", "Fixtures", name));
 
-    private static readonly FieldInfo[] Providers = typeof(CoreMods)
-        .GetFields(BindingFlags.Public | BindingFlags.Static)
-        .Where(f => f.Name.EndsWith("Provider", StringComparison.Ordinal)).ToArray();
-
     [Fact]
     public void StartModsSeedsCoreModsFromTheSavedActiveModAndMatchesTheGolden()
     {
         var root = CorePaths.UserData;
         Assert.Equal(TestUserDataProfile.Root, root);   // never the real profile
         File.WriteAllText(Path.Combine(root, "settings.json"), File.ReadAllText(CoreFixture("settings_mods_premove.json")));
-        var saved = Providers.Select(f => f.GetValue(null)).ToArray();
+        var mods = new CoreModsSnapshot();
         var oldSettings = CoreSettings.ServiceProvider;
-        var oldLinks = CoreModsHooks.KnownVideoLinksProvider;
         var runStart = DateTime.UtcNow;
         SettingsService? svc = null;
         try
@@ -76,8 +71,7 @@ public sealed class StartModsTests
             svc?.SaveImmediate();
             svc?.SealForReset();
             CoreSettings.ServiceProvider = oldSettings;
-            CoreModsHooks.KnownVideoLinksProvider = oldLinks;
-            for (var i = 0; i < Providers.Length; i++) Providers[i].SetValue(null, saved[i]);
+            mods.Dispose();
             foreach (var f in Directory.GetFiles(root, "settings*")) File.Delete(f);
             foreach (var dir in new[] { "mods", "builtin_mods" })
                 if (Directory.Exists(Path.Combine(root, dir))) Directory.Delete(Path.Combine(root, dir), recursive: true);
@@ -95,7 +89,7 @@ public sealed class StartModsTests
                     .SetupWithoutStarting();
             var root = CorePaths.UserData;
             Assert.Equal(TestUserDataProfile.Root, root);
-            var saved = Providers.Select(f => f.GetValue(null)).ToArray();
+            var mods = new CoreModsSnapshot();
             var oldSettings = CoreSettings.ServiceProvider;
             SettingsService? svc = null;
             try
@@ -121,7 +115,7 @@ public sealed class StartModsTests
                 svc?.SaveImmediate();
                 svc?.SealForReset();
                 CoreSettings.ServiceProvider = oldSettings;
-                for (var i = 0; i < Providers.Length; i++) Providers[i].SetValue(null, saved[i]);
+                mods.Dispose();
                 foreach (var f in Directory.GetFiles(root, "settings*")) File.Delete(f);
                 foreach (var dir in new[] { "mods", "builtin_mods" })
                     if (Directory.Exists(Path.Combine(root, dir))) Directory.Delete(Path.Combine(root, dir), recursive: true);

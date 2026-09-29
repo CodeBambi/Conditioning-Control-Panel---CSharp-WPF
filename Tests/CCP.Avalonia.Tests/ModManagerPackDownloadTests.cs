@@ -60,6 +60,7 @@ public sealed class ModManagerPackDownloadTests
         var handler = new LoopbackOnlyHandler();
         var oldSettings = CoreSettings.ServiceProvider;
         var oldVersion = CoreReleaseContent.AppVersionProvider;
+        var mods = new CoreModsSnapshot();
         var settings = new SettingsService();
         CoreSettings.ServiceProvider = () => settings;
         CoreReleaseContent.AppVersionProvider = () => "6.6.3";   // cycle v6.6.0
@@ -106,6 +107,7 @@ public sealed class ModManagerPackDownloadTests
             settings.SealForReset();
             CoreSettings.ServiceProvider = oldSettings;
             CoreReleaseContent.AppVersionProvider = oldVersion;
+            mods.Dispose();
             CoreReleaseContent.StampProvider = null;
             CoreReleaseContent.PackInfoProvider = null;
             CoreReleaseContent.UiInvoke = null;

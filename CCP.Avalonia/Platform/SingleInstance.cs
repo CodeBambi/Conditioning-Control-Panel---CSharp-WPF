@@ -27,7 +27,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
         {
             _mutex = mutex;
             _owned = owned;
-            _ = Task.Run(() => ListenAsync(pipe, show, _cts.Token));
+            // Only the mutex owner answers; an unowned run (wedged primary) would fight it for the pipe.
+            if (owned) _ = Task.Run(() => ListenAsync(pipe, show, _cts.Token));
         }
 
         /// <summary>A sandboxed profile (CCP_USERDATA_DIR) is a different instance, so kc and tests never
@@ -62,7 +63,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
         {
             try
             {
-                using var c = new NamedPipeClientStream(".", pipe, PipeDirection.InOut, PipeOptions.Asynchronous);
+                using var c = new NamedPipeClientStream(".", pipe, PipeDirection.InOut,
+                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 c.Connect(1000);
                 c.WriteByte(1);
                 c.Flush();
@@ -82,10 +84,12 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 try
                 {
                     await using var s = new NamedPipeServerStream(pipe, PipeDirection.InOut, 1,
-                        PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                        PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                     await s.WaitForConnectionAsync(ct);
                     await s.ReadExactlyAsync(new byte[1], ct);
-                    await show();                       // the ack proves the UI thread ran it (WPF 1985)
+                    // Ack even when showing fails: WPF acks after the attempt (App.xaml.cs:1985), and a
+                    // missing ack reads as "wedged" to the second launch.
+                    try { await show(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Single-instance show failed"); }
                     await s.WriteAsync(new byte[] { 1 }, ct);
                     await s.FlushAsync(ct);
                 }

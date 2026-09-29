@@ -26,5 +26,17 @@ namespace CCP.Avalonia.Tests
             Assert.Null(second);
             Assert.Equal(1, Volatile.Read(ref shown));
         }
+
+        [Fact]
+        public void AFailedShowStillAcksSoTheSecondLaunchExits()
+        {
+            var suffix = "_test_" + Guid.NewGuid().ToString("N")[..8];
+            using var primary = SingleInstance.Claim(suffix, () => throw new InvalidOperationException("show failed"));
+            SingleInstance? second = null;
+            var t = new Thread(() => second = SingleInstance.Claim(suffix, () => Task.CompletedTask));
+            t.Start();
+            Assert.True(t.Join(TimeSpan.FromSeconds(20)));
+            Assert.Null(second);
+        }
     }
 }
