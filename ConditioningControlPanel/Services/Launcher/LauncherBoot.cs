@@ -63,6 +63,15 @@ public static class LauncherBoot
         return skipToPanel ? BootDecision.PanelFirst : BootDecision.LauncherFirst;
     }
 
+    /// <summary>
+    /// True when the panel is built without ever reaching the screen: the boot goes to the
+    /// launcher or a game, so the launcher is the first window the player sees and the panel waits
+    /// in the tray until something asks for it. A Lockdown already in force keeps the panel on
+    /// screen as before, because Lockdown refuses to tuck it away (MainWindow.HideForLauncher).
+    /// </summary>
+    public static bool PanelStartsHidden(BootDecision boot, bool lockdownActive) =>
+        boot.Surface != BootSurface.Panel && !lockdownActive;
+
     /// <summary>The id after <c>--game</c>, in either the two-token or the <c>=</c> form. Null when absent.</summary>
     public static string? GameArg(string[]? args)
     {
