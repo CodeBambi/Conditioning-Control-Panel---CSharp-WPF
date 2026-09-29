@@ -73,3 +73,9 @@ here record where and why the port chose something, and who advised.
 - Finding: a bare 20-line undecorated Avalonia 12 window (no CCP code) shows the same line on KWin 6.7.5 over XWayland at 1.79x scaling.
 - Choice: (c). Native Wayland would conflict with the X11 override-redirect overlays, so it is out of scope for this port.
 - Advisor: supervisor, with the user's own reproduction.
+
+## 2026-09-29: profile cosmetics save skipped by the sync cooldown
+- Question: WPF drops a cosmetics push that lands inside the 30 s sync cooldown. Keep that?
+- Options: (a) drop like WPF; (b) keep it pending and send it with the next push.
+- Choice: (b). The user saved on purpose; losing it silently is a WPF bug, and the pending push is cleared on logout.
+- Advisor: reviewer (profile-wardrobe-live), supervisor.
