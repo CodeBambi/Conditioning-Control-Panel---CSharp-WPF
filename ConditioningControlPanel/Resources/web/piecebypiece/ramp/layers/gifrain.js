@@ -17,7 +17,7 @@ export function createGifRain(ctx) {
   const t = (ctx.tuning && ctx.tuning.gifRain) || { maxLive: 12, fallMsMin: 2400, fallMsMax: 3900 };
   let live = 0;
   let disposed = false;
-  const nodes = new Set();
+  const nodes = new Map();   // element -> the picture it shows
 
   function fire(opts = {}) {
     if (disposed || !ctx.hasRoot() || live >= t.maxLive) return;
@@ -39,10 +39,12 @@ export function createGifRain(ctx) {
     if (!clip) { img.decoding = 'async'; img.src = url; }
 
     live += 1;
-    nodes.add(img);
+    nodes.set(img, url);
+    ctx.hold(url);
     const kill = () => {
       if (!nodes.delete(img)) return;
       live = Math.max(0, live - 1);
+      ctx.release(url);
       if (clip) stopClip(img);
       else try { img.remove(); } catch { /* already gone */ }
     };
@@ -53,7 +55,7 @@ export function createGifRain(ctx) {
   }
 
   function clear() {
-    for (const n of [...nodes]) { nodes.delete(n); if (n.tagName === 'VIDEO') stopClip(n); else try { n.remove(); } catch { /* gone */ } }
+    for (const [n, u] of [...nodes]) { nodes.delete(n); ctx.release(u); if (n.tagName === 'VIDEO') stopClip(n); else try { n.remove(); } catch { /* gone */ } }
     live = 0;
   }
 

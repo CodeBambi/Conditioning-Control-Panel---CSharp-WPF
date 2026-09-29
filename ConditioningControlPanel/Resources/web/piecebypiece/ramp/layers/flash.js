@@ -7,6 +7,8 @@
  * live cap, and every node self-removes on animationend with a timer as a net.
  * ==========================================================================*/
 
+import { isClip } from './clip.js';
+
 /** Where a flash lands. Edge bands early, over the board once it is hot. */
 function place(ctx, heat) {
   const overBoard = ctx.rng() < 0.18 + 0.42 * heat;
@@ -38,13 +40,15 @@ export function createFlash(ctx) {
   const t = (ctx.tuning && ctx.tuning.flash) || { maxLive: 6 };
   let live = 0;
   let disposed = false;
-  const nodes = new Set();
+  const nodes = new Map();   // element -> the picture it shows
 
   function fire(opts = {}) {
     if (disposed || !ctx.hasRoot() || live >= t.maxLive) return;
     const heat = Math.min(1, Math.max(0, opts.heat == null ? 0.5 : opts.heat));
-    const url = ctx.image() || ctx.tile();
-    if (!url) return;                     // no pictures at all: nothing to pop
+    // every still up: a tile may still answer, but never a clip (an <img> cannot play one)
+    const tile = ctx.image() || ctx.tile();
+    const url = isClip(tile) ? null : tile;
+    if (!url) return;                     // no pictures free: nothing to pop
     const img = ctx.el('img', 'pbp-flash');
     if (!img) return;
     const at = place(ctx, heat);
@@ -60,10 +64,12 @@ export function createFlash(ctx) {
     img.src = url;
 
     live += 1;
-    nodes.add(img);
+    nodes.set(img, url);
+    ctx.hold(url);
     const kill = () => {
       if (!nodes.delete(img)) return;
       live = Math.max(0, live - 1);
+      ctx.release(url);
       try { img.remove(); } catch { /* already gone */ }
     };
     img.addEventListener('animationend', kill, { once: true });
@@ -73,7 +79,7 @@ export function createFlash(ctx) {
   }
 
   function clear() {
-    for (const n of [...nodes]) { nodes.delete(n); try { n.remove(); } catch { /* gone */ } }
+    for (const [n, u] of [...nodes]) { nodes.delete(n); ctx.release(u); try { n.remove(); } catch { /* gone */ } }
     live = 0;
   }
 
