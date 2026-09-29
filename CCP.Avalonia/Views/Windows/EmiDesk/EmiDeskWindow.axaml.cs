@@ -2084,12 +2084,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         // away, so she arrives and leaves with the smoke, the CRT and the sparkles but without the
         // little line either end. That degradation is visible and honest, not silent.
         //
-        // NOTHING ON THIS HEAD CALLS RunSummon OR RunDismiss YET. Both are EmiDeskService's to call
-        // (App.EmiDesk, which moves with the app shell), and the hover x's Dismiss() below is a stub
-        // for the same reason. What this region buys today is that _transiting and InputLocked are
-        // finally WRITTEN by something - every gate that reads them was already ported - and that
-        // FinishSummon and SweepFx stop being no-ops that the pat path and ShutDown called into the
-        // dark.
+        // EmiDeskService (this folder) is the only caller of RunSummon / RunDismiss: the dock chip,
+        // the hover x and the settings switch all go through it.
 
         private const int SmokeLeadMs = 380;      // smoke starts, she appears this long after
         private const int CrtOnMs = 220;          // the power-on stutter
@@ -2548,22 +2544,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: needs EmiSfx (Services/EmiDesk/EmiSfx.cs) - the pat sound.</summary>
         private void PlayPatSfx() { }
 
-        /// <summary>
-        /// ponytail: needs App.EmiDesk.Dismiss() - the hover x sends her away.
-        ///
-        /// <para>REFUSED as a view-local port, and the reason is written here so the next pass does
-        /// not re-open it. <c>RunDismiss</c> IS on this head (the FX region above), so the outro
-        /// itself could run from here - but that is the SMALLEST half of what the x does.
-        /// <c>EmiDeskService.Dismiss</c> also bumps <c>_summonGen</c> so a summon parked in a
-        /// nested pump cannot put her straight back, reconciles <c>IsOut</c> and raises
-        /// <c>OutChanged</c>, cancels the summon moment and the empty-library beat, stops the
-        /// nudges, and fires <c>dismissed</c> with the minutes she was out. A view-local dismissal
-        /// would take her off the screen while every one of those still believed she was on it -
-        /// a second, divergent copy of a service-owned behaviour, and the flag desync that
-        /// service's own code logs a warning about. It lands with EmiDeskService and nowhere
-        /// else.</para>
-        /// </summary>
-        private void Dismiss() { }
+        /// <summary>The hover x sends her away - through the service, never view-locally, so IsOut
+        /// and the dock chip cannot disagree with the screen.</summary>
+        private void Dismiss() => EmiDeskService.Instance.Dismiss();
 
         /// <summary>ponytail: needs App.EmiDesk.ResetOnboarding() - the QA gesture replay.</summary>
         private void ResetOnboarding() { }

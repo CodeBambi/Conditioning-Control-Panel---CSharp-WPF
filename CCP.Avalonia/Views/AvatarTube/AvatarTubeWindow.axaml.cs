@@ -1090,10 +1090,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         ///   <item>The lead-in timer and <paramref name="mood"/>. Both exist to time the avatar's
         ///         emotive-portrait pose swap against the voice; that system did not port, so a
         ///         lead-in would be a pause with nothing happening in it.</item>
-        ///   <item>EMI Desk's <c>NoteAvatarSpeaking</c> / <c>AvatarMuted</c>. Her service is
-        ///         head-side; her mute is a SECOND mute on top of the user's own, so leaving it out
-        ///         cannot silence a line that should sound, only fail to silence one she would
-        ///         have. Named in the blocked list.</item>
+        ///   <item>EMI Desk's <c>NoteAvatarSpeaking</c>: its only consumer is her line engine,
+        ///         which is not on this head. Her <c>AvatarMuted</c> IS honoured below, as WPF
+        ///         ShowGiggle (Speech.cs:461): the line still reaches the chat log, no bubble, no voice.</item>
         /// </list>
         ///
         /// <para><b>ponytail: two lines in quick succession can overlap.</b> WPF cuts the previous
@@ -1117,6 +1116,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
                     _speechTimer?.Stop();
                     AddToChatHistory(text, isUser: false);
+
+                    if (Windows.EmiDesk.EmiDeskService.Instance.AvatarMuted) { _isGiggling = false; return; }
 
                     // The chat log owns the bubble while it is up - take it back before rendering.
                     if (_isShowingChatHistory)

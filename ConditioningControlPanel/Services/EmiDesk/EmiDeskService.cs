@@ -1613,12 +1613,7 @@ public sealed partial class EmiDeskService : IDisposable
         {
             if (App.Autonomy?.IsEnabled == true) return true;
             var s = App.Settings?.Current;
-            if (s != null)
-            {
-                if (s.SpeechWakeWordEnabled) return true;
-                if (s.AiChatEnabled) return true;
-                if (s.AwarenessModeEnabled && s.AwarenessConsentGiven) return true;
-            }
+            if (s != null && EmiMuteRule.SettingsTalk(s)) return true;
             if (App.RemoteControl?.ControllerConnected == true) return true;
         }
         catch (Exception ex)
