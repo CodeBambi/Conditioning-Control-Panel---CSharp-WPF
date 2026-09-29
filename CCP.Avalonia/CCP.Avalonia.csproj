@@ -167,4 +167,13 @@
     <ProjectReference Include="..\CCP.Core\CCP.Core.csproj" />
   </ItemGroup>
 
+  <!-- Windows single-file publish bundles libvlc.dll and its plugins, where LibVLC cannot load them ("Dll was not
+       found"). Same fix as the WPF head (ConditioningControlPanel.csproj CopyLibVLCAfterPublish): the x64 natives go
+       loose into publish\libvlc\, which LibVlcAudio points Core.Initialize at. -->
+  <Target Name="CopyLibVLCAfterPublish" AfterTargets="Publish" Condition="$(RuntimeIdentifier.StartsWith('win'))">
+    <ItemGroup>
+      <LibVLCFiles Include="$(NuGetPackageRoot)videolan.libvlc.windows\3.0.24\build\x64\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(LibVLCFiles)" DestinationFolder="$(PublishDir)libvlc\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>
