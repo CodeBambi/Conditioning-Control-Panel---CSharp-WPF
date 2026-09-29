@@ -17,6 +17,63 @@
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.AchievementsTabView"
              x:DataType="vm:AchievementsTabViewModel"
              xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs">
+  <UserControl.Resources>
+    <!-- WPF Resources/Theme/MainWindow.xaml:585 AchievementCard and :627 AchievementFilterChip. -->
+    <ControlTheme x:Key="AchievementCard" TargetType="ToggleButton">
+      <Setter Property="Width" Value="210"/>
+      <Setter Property="Height" Value="306"/>
+      <Setter Property="Margin" Value="5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Template">
+        <ControlTemplate TargetType="ToggleButton">
+          <Border x:Name="Chrome" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="15" ClipToBounds="True">
+            <Grid>
+              <ContentPresenter Content="{TemplateBinding Content}"/>
+              <Border x:Name="FocusRing" CornerRadius="15" BorderThickness="2"
+                      BorderBrush="{DynamicResource PinkBrush}" Opacity="0" IsHitTestVisible="False"/>
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#Chrome">
+        <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+      </Style>
+      <Style Selector="^:focus-within /template/ Border#FocusRing">
+        <Setter Property="Opacity" Value="1"/>
+      </Style>
+    </ControlTheme>
+    <ControlTheme x:Key="AchievementFilterChip" TargetType="ToggleButton">
+      <Setter Property="Margin" Value="0,0,6,6"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Background" Value="#26FFFFFF"/>
+      <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Template">
+        <ControlTemplate TargetType="ToggleButton">
+          <Border x:Name="Chip" CornerRadius="13" Padding="12,5"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:checked /template/ Border#Chip">
+        <Setter Property="Background" Value="#335EC8F2"/>
+        <Setter Property="BorderBrush" Value="#5EC8F2"/>
+      </Style>
+    </ControlTheme>
+  </UserControl.Resources>
   <Border Theme="{StaticResource SectionPanel}">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
       <StackPanel>

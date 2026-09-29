@@ -122,6 +122,14 @@ internal sealed class AchievementEngine
     /// </summary>
     public static bool CanUnlockExclusive => CoreEntitlement.HasPremium;
 
+    /// <summary>Unlock every level milestone at or below <paramref name="level"/> (was WPF
+    /// AchievementService.CheckLevelAchievements; both heads call this one).</summary>
+    public void CheckLevelAchievements(int level)
+    {
+        foreach (var (id, milestone) in AchievementRules.LevelMilestones)
+            if (level >= milestone) TryUnlock(id);
+    }
+
     /// <summary>A bubble-count answer: the correct-answer streak (mathematicians_nightmare) and the totals.</summary>
     public void TrackBubbleCountResult(bool correct)
     {

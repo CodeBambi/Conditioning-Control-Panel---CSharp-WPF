@@ -349,6 +349,7 @@ namespace ConditioningControlPanel.Avalonia
                 Achievements.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+                SeedLevelAchievements(Achievements);
                 StartQuests();
 
                 // CoreProgram: its patreon, pack-video and roadmap providers stay unseeded - this head
@@ -466,6 +467,19 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>WPF App.OnAchievementUnlocked (App.xaml.cs:3815): one popup per unlock, shown at once.
         /// ponytail: no ItemUnlockedPopup - the reward map (WardrobeCatalog) is head-side in WPF;
         /// no sound, no Discord webhook - neither service exists on this head.</summary>
+        /// <summary>WPF ProgressionService.cs:285 (a level-up celebrates) and App.xaml.cs:3174 (retroactive,
+        /// silent). Returns the LevelUp handler so a test can detach it.</summary>
+        internal static Action<int> SeedLevelAchievements(AchievementEngine engine)
+        {
+            Action<int> onLevel = engine.CheckLevelAchievements;
+            ProgressionBank.LevelUp += onLevel;
+            var was = engine.SuppressPopups;
+            engine.SuppressPopups = true;
+            try { engine.CheckLevelAchievements(CoreSettings.Current.PlayerLevel); }
+            finally { engine.SuppressPopups = was; }
+            return onLevel;
+        }
+
         internal static void ShowAchievementPopup(Models.Achievement a)
         {
             try { new Views.Windows.AchievementPopup(a.Name, a.FlavorText, a.ImageName).Show(); }
