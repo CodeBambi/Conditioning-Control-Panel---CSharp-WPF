@@ -569,7 +569,7 @@
                              wrap with the chips. RefreshPresetsList inserts ahead of it rather
                              than clearing the panel. Do NOT "simplify" that to Children.Clear(). -->
                         <WrapPanel x:Name="PresetCardsPanel" Orientation="Horizontal">
-                            <Border Theme="{StaticResource SdPresetChipNew}"
+                            <Border x:Name="BtnNewPreset" Theme="{StaticResource SdPresetChipNew}"
                                     ToolTip.Tip="{loc:Str tooltip_create_a_new_preset_from_current_settings}">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="+" FontSize="15" FontWeight="Bold"

@@ -73,8 +73,8 @@
 //   internal void ToggleWallFeature(…)                 RESTORED
 //   internal static bool IsWallFeatureOn(…)            RESTORED
 //   internal void SetWallFeature(…)                    RESTORED
-//   private void OnSettingsPropertyChangedForWall(…)
-//   internal void RefreshWallActiveStates(…)
+//   private void OnSettingsPropertyChangedForWall(…)   RESTORED as HookWallRings
+//   internal void RefreshWallActiveStates(…)           RESTORED
 //   private static void SetTierBadge(…)
 //   internal void CardSystem_Click(…)
 //   internal void VelvetBtnWebcam_Click(…)
@@ -122,6 +122,8 @@
 // leaving it stubbed meant every one of them landed on whichever module the rack had selected last.
 
 using System;
+using Avalonia.Threading;
+using ConditioningControlPanel.Models;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -183,16 +185,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // overlay service on this head either, so the outcome is the same - write the flag, save -
         // but the reason differs, and it is the line to re-read when the overlays land.
         //
-        // ponytail: SettingsTabView's thirteen Card*_Toggle / Combo*_Toggle stubs are what call
-        // these on WPF, and they are still stubs (Views/Tabs/SettingsTabView.axaml.cs:270-295,
-        // each already carrying in a comment the mw.ToggleWallFeature("<key>") it wants). That
-        // view is not this layer's, so these three have no caller yet - one line per stub.
+        // Callers: SettingsTabView's Card*_Toggle / Combo*_Toggle (right-click on a wall tile) and
+        // the Studio rack's right-click QuickToggle. The rings repaint from HookWallRings.
         //
-        // Still missing from this group, and all for the same reason: RefreshWallActiveStates,
-        // RefreshMosaicTierBadges, RefreshMysteryTile, SetTierBadge and
-        // OnSettingsPropertyChangedForWall PAINT the tiles, so they need SettingsTabView's card
-        // controls (and the tier badges additionally need App.Patreon). The state is correct
-        // here; showing it stays with the view that owns the cards.
+        // ponytail: RefreshMosaicTierBadges, RefreshMysteryTile and SetTierBadge still need
+        // App.Patreon's tier state; NoteDashboardToggleUsed's caption counter is not ported.
 
         /// <summary>The persisted flag behind a wall key. Unknown key = false.</summary>
         internal static bool IsWallFeatureOn(string key)
@@ -255,6 +252,52 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (RefuseIfSessionFeatureLocked($"card:{key}")) return;
             SetWallFeature(key, !IsWallFeatureOn(key));
+        }
+
+        /// <summary>WPF RefreshWallActiveStates (MainWindow.Presets.cs:1404): the ring on every wall
+        /// tile whose feature is on, per half on the split tiles.</summary>
+        internal void RefreshWallActiveStates()
+        {
+            if (SettingsPage is not { } dash) return;
+            var s = CoreSettings.Current;
+            dash.CardFlash.IsActive = s.FlashEnabled;
+            dash.CardSubliminal.IsActive = s.SubliminalEnabled;
+            dash.CardBubblePop.IsActive = s.BubblesEnabled;
+            dash.CardLockCard.IsActive = s.LockCardEnabled;
+            dash.CardBouncingText.IsActive = s.BouncingTextEnabled;
+            dash.ComboVideoBubble.IsActiveA = s.MandatoryVideosEnabled;
+            dash.ComboVideoBubble.IsActiveB = s.BubbleCountEnabled;
+            dash.ComboSpiralPink.IsActiveA = s.SpiralEnabled;
+            dash.ComboSpiralPink.IsActiveB = s.PinkFilterEnabled;
+            dash.ComboMindDrain.IsActiveA = s.MindWipeEnabled;
+            dash.ComboMindDrain.IsActiveB = s.BrainDrainEnabled;
+        }
+
+        /// <summary>WPF OnSettingsPropertyChangedForWall (MainWindow.Presets.cs:1380): any flag
+        /// write - a card, a Studio panel, a preset load - repaints the rings. Re-pointed when a
+        /// cloud restore swaps the settings instance.</summary>
+        private void HookWallRings()
+        {
+            AppSettings? hooked = null;
+            void Rebind()
+            {
+                if (hooked != null) hooked.PropertyChanged -= OnFlag;
+                hooked = CoreSettings.Current;
+                hooked.PropertyChanged += OnFlag;
+                RefreshWallActiveStates();
+            }
+            void OnFlag(object? _, System.ComponentModel.PropertyChangedEventArgs e)
+            {
+                if (e.PropertyName != null && e.PropertyName.EndsWith("Enabled", StringComparison.Ordinal))
+                    Dispatcher.UIThread.Post(RefreshWallActiveStates);
+            }
+            void OnReplaced() => Dispatcher.UIThread.Post(Rebind);
+            Opened += (_, _) => { Rebind(); if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnReplaced; };
+            Closed += (_, _) =>
+            {
+                if (hooked != null) hooked.PropertyChanged -= OnFlag;
+                if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnReplaced;
+            };
         }
 
         // ---- still blocked -------------------------------------------------------------------
