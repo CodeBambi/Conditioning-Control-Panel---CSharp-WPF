@@ -125,6 +125,109 @@ public sealed class LeashHolderCard : Border
             line.Tag = "leash-result";
             _body.Children.Add(line);
         }
+        if (SentSection() is { } sent) _body.Children.Add(sent);
+    }
+
+    // ---- receipts: what was sent and how far it got ------------------------------------
+
+    /// <summary>True once the server has shown it speaks receipts (CONTRACT "Receipts").</summary>
+    private bool ReceiptsOn
+    {
+        get
+        {
+            try { return _svc()?.ReceiptsSupported == true; } catch { return false; }
+        }
+    }
+
+    /// <summary>The last few things sent to them, each with its steps: sent, arrived, seen, then
+    /// done / skipped / refused. Absent until the server speaks receipts, so an older server draws
+    /// exactly what it drew before.</summary>
+    private FrameworkElement? SentSection()
+    {
+        if (!ReceiptsOn) return null;
+        IReadOnlyList<LeashSentItem> items;
+        try { items = _svc()?.SentTo(_h.Who.Id) ?? Array.Empty<LeashSentItem>(); }
+        catch { return null; }
+        if (items.Count == 0) return null;
+        var now = DateTimeOffset.UtcNow;
+        var sp = new StackPanel { Margin = new Thickness(2, 10, 0, 0), Tag = "leash-sent" };
+        var head = LeashLook.Caption(Loc.Get("leash_sent_title"));
+        head.Margin = new Thickness(0, 0, 0, 3);
+        sp.Children.Add(head);
+        foreach (var i in items.Take(LeashUiRules.SentRows)) sp.Children.Add(SentRow(i, now));
+        return sp;
+    }
+
+    private static Brush StepBrush(LeashStep s) => s switch
+    {
+        LeashStep.Sent => FriendsLook.DimBrush,
+        LeashStep.Arrived or LeashStep.Skipped => FriendsLook.LilacBrush,
+        LeashStep.Seen => FriendsLook.GoldBrush,
+        LeashStep.Done or LeashStep.Accepted => FriendsLook.MintBrush,
+        _ => FriendsLook.RedBrush,
+    };
+
+    private static string ItemIcon(LeashSentItem i) => i.Kind switch
+    {
+        LeashItemKind.Punish => i.Punish is { } k ? PunishIcon(k) : "bolt",
+        LeashItemKind.Assign => "task",
+        LeashItemKind.Reward => "star",
+        LeashItemKind.Tug => "hand",
+        _ => "link",
+    };
+
+    private static FrameworkElement SentRow(LeashSentItem i, DateTimeOffset now)
+    {
+        var accent = StepBrush(i.Step);
+        var g = new Grid
+        {
+            Margin = new Thickness(0, 2, 0, 2),
+            Tag = $"leash-sent-row:{i.Kind.ToString().ToLowerInvariant()}:{i.Step.ToString().ToLowerInvariant()}",
+            ToolTip = LeashUiRules.Timeline(i, now, Loc.Get),
+            Background = Brushes.Transparent,
+        };
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var ic = LeashLook.Icon(ItemIcon(i), FriendsLook.MutedBrush, 12);
+        ic.Margin = new Thickness(0, 0, 6, 0);
+        ic.VerticalAlignment = VerticalAlignment.Center;
+        g.Children.Add(ic);
+
+        var what = FriendsLook.Label(LeashUiRules.ItemText(i, Loc.Get), 11.5, FriendsLook.TextBrush);
+        what.TextTrimming = TextTrimming.CharacterEllipsis;
+        what.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(what, 1);
+        g.Children.Add(what);
+
+        var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
+        var lit = LeashUiRules.Lit(i);
+        var dots = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Tag = "leash-steps" };
+        for (int k = 0; k < lit.Length; k++)
+        {
+            dots.Children.Add(new System.Windows.Shapes.Ellipse
+            {
+                Width = 6,
+                Height = 6,
+                Margin = new Thickness(k == 0 ? 0 : 3, 0, 0, 0),
+                Fill = lit[k] ? accent : Brushes.Transparent,
+                Stroke = lit[k] ? accent : FriendsLook.Line2Brush,
+                StrokeThickness = 1,
+                Tag = $"leash-step-dot:{k}:{(lit[k] ? "on" : "off")}",
+            });
+        }
+        right.Children.Add(dots);
+        var word = FriendsLook.Label(Loc.Get(LeashUiRules.StepKey(i.Step)), 10.5, accent, FriendsLook.Mono, FontWeights.SemiBold);
+        word.Margin = new Thickness(6, 0, 0, 0);
+        word.Tag = "leash-step-word";
+        right.Children.Add(word);
+        var when = FriendsLook.Label(LeashUiRules.StepTime(i.StepAt, now), 10, FriendsLook.DimBrush, FriendsLook.Mono);
+        when.Margin = new Thickness(5, 0, 0, 0);
+        right.Children.Add(when);
+        Grid.SetColumn(right, 2);
+        g.Children.Add(right);
+        return g;
     }
 
     private FrameworkElement Head(bool dnd)
@@ -584,7 +687,7 @@ public sealed class LeashHolderCard : Border
     {
         var r = await Guarded(s => s.AssignAsync(_h.Who.Id, k, size, w));
         if (LeashUiRules.IsGood(r.Status)) { _sheet = null; _videoFor = null; }
-        Word(r, Loc.GetF("leash_done_assign", _h.Who.Name));
+        Word(r, Honest("leash_done_assign"));
         return r.Status;
     }
 
@@ -592,9 +695,13 @@ public sealed class LeashHolderCard : Border
     {
         var r = await Guarded(s => s.RewardAsync(_h.Who.Id, k, stickerOrPoke, size));
         if (LeashUiRules.IsGood(r.Status)) _sheet = null;
-        Word(r, Loc.GetF("leash_done_reward", _h.Who.Name));
+        Word(r, Honest("leash_done_reward"));
         return r.Status;
     }
+
+    /// <summary>The line after a good send. With receipts the steps below say when they see it,
+    /// so the line only says it went; without them it keeps its old wording.</summary>
+    private string Honest(string oldKey) => ReceiptsOn ? Loc.Get("leash_res_sent") : Loc.GetF(oldKey, _h.Who.Name);
 
     /// <summary>One tug per friend every ten seconds, answered here before the wire.</summary>
     private static readonly LeashTugThrottle TugThrottle = new();
@@ -611,7 +718,7 @@ public sealed class LeashHolderCard : Border
         LeashFx.Tug(this);
         LeashFx.Jingle();
         var r = await Guarded(s => s.TugAsync(_h.Who.Id), sentCue: false);
-        Word(r, Loc.GetF("leash_done_tug", _h.Who.Name));
+        Word(r, Honest("leash_done_tug"));
         return r.Status;
     }
 

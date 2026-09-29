@@ -59,7 +59,7 @@ public static class LeashLocator
             {
                 if (Environment.GetEnvironmentVariable("CCP_LEASH_DEMO") == "1")
                 {
-                    var svc = FakeLeashService.Sample();
+                    var svc = FakeLeashService.Sample().WithSampleReceipts();
                     _demo = new DemoPair(svc, new FakeLeashTaskRunner());
                 }
             }

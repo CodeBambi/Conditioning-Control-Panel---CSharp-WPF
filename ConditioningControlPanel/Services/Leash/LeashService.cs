@@ -56,6 +56,14 @@ public sealed class LeashService : ILeashService
     private readonly HashSet<string> _completeUnsent = new(StringComparer.Ordinal);
     private readonly HashSet<string> _watchedAids = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _unplayableUntil = new(StringComparer.Ordinal);
+    private readonly LeashSentLog _sent = new();
+    private readonly HashSet<string> _shown = new(StringComparer.Ordinal);
+    private readonly Queue<string> _shownOrder = new();
+
+    /// <summary>Where a <c>seen</c> goes: the friends poll's shared receipt channel (the app wires
+    /// it in <see cref="CreateForApp"/>). Null = nowhere yet; the ids are still remembered, so an
+    /// item is never reported twice.</summary>
+    internal Action<string>? ReportSeen { get; set; }
 
     /// <summary>How long a punishment video that will not play (and that the server could not
     /// drop) stays off the gate before it may be tried again.</summary>
@@ -74,7 +82,8 @@ public sealed class LeashService : ILeashService
         ILeashTab? tab = null,
         Action? kick = null,
         ILeashCutStore? cutStore = null,
-        Action? cutSafety = null)
+        Action? cutSafety = null,
+        Action<string>? reportSeen = null)
     {
         _api = api;
         _account = account;
@@ -84,6 +93,7 @@ public sealed class LeashService : ILeashService
         _kick = kick ?? (() => { });
         _cutStore = cutStore ?? new MemoryCutStore();
         _cutSafety = cutSafety ?? (() => LeashCutSafety.Apply());
+        ReportSeen = reportSeen;
         CheckAccount();
     }
 
@@ -129,6 +139,57 @@ public sealed class LeashService : ILeashService
     /// <summary>The last report this client built (null when not leashed).</summary>
     public DayReport? LastReport { get; private set; }
 
+    // ---- receipts (CONTRACT "Receipts") ----
+
+    public event Action? ReceiptsChanged;
+
+    public bool ReceiptsSupported => _sent.Supported;
+
+    public IReadOnlyList<LeashSentItem> SentTo(string leashedId) =>
+        string.IsNullOrEmpty(leashedId) ? Array.Empty<LeashSentItem>() : _sent.For(leashedId, _now());
+
+    /// <summary>The newest offer this account sent <paramref name="friendId"/> (the Offer chip's steps).</summary>
+    public LeashSentItem? OfferTo(string friendId) => _sent.LatestOffer(friendId);
+
+    /// <summary>Leashed side: an item is on screen. Each id is reported once per session; the
+    /// server drops anything that is not an item addressed to this account.</summary>
+    public void NoteShown(string? id)
+    {
+        if (!LeashSteps.IsId(id) || !CheckAccount()) return;
+        if (!_shown.Add(id!)) return;
+        _shownOrder.Enqueue(id!);
+        while (_shownOrder.Count > SeenCap) _shown.Remove(_shownOrder.Dequeue());
+        try { ReportSeen?.Invoke(id!); }
+        catch (Exception ex) { App.Logger?.Debug("Leash seen report failed: {E}", ex.Message); }
+    }
+
+    /// <summary>Holder side: the sender receipts of a friends poll reply, leash kinds only
+    /// (anything else is ignored). <paramref name="present"/> = the reply carried a receipts
+    /// array at all, which alone proves the server speaks receipts.</summary>
+    public void ApplyReceipts(IEnumerable<LeashReceipt>? receipts, bool present = true)
+    {
+        if (!CheckAccount()) return;
+        bool changed = present && _sent.MarkSupported();
+        if (receipts != null)
+            foreach (var r in receipts) changed |= _sent.Apply(r);
+        if (changed) RaiseReceipts();
+    }
+
+    /// <summary>The same from the raw <c>receipts</c> JSON array (null = the key was absent).</summary>
+    public void ApplyReceiptsJson(JToken? receipts) => ApplyReceipts(LeashParse.Receipts(receipts), receipts is JArray);
+
+    private void RaiseReceipts()
+    {
+        try { ReceiptsChanged?.Invoke(); }
+        catch (Exception ex) { App.Logger?.Debug("Leash receipts handler failed: {E}", ex.Message); }
+    }
+
+    private void NoteSent(LeashItemKind kind, string to, LeashSendResult r,
+        PunishKind? punish = null, AssignKind? assign = null, RewardKind? reward = null, int? size = null, string? token = null)
+    {
+        if (_sent.NoteSent(kind, to, r, _now(), punish, assign, reward, size, token)) RaiseReceipts();
+    }
+
     // ---- the poll piggyback ----
 
     /// <summary>R for the next poll, or null: only while leashed, never while a cut is pending.</summary>
@@ -173,6 +234,8 @@ public sealed class LeashService : ILeashService
         // The leash went away from the other side (holder let go, block, remove, expiry, the
         // feature off): the same local safety as the sub's own cut, before anything redraws.
         if (wasLeashed && !_cutPending && snap.Me == null) LoseLeash();
+        // A punishment's pid and an assignment's aid reach the holder here, not in the send reply.
+        bool receipts = _sent.Bind(snap.Holding);
         Publish();
 
         foreach (var e in events)
@@ -181,9 +244,11 @@ public sealed class LeashService : ILeashService
             _seenOrder.Enqueue(e.Id);
             while (_seenOrder.Count > SeenCap) _seen.Remove(_seenOrder.Dequeue());
             Handle(e);
+            receipts |= _sent.ApplyEvent(e);
             try { EventArrived?.Invoke(e); }
             catch (Exception ex) { App.Logger?.Debug("Leash event handler failed: {E}", ex.Message); }
         }
+        if (receipts) RaiseReceipts();
 
         // A Chaster punishment should arrive as an event, never in the queue. If one ever sits
         // in the queue, it is booked and completed the same way, once.
@@ -201,8 +266,12 @@ public sealed class LeashService : ILeashService
 
     // ---- holder side ----
 
-    public Task<LeashSendResult> OfferAsync(string friendId) =>
-        SendAsync("offer", new JObject { ["to"] = friendId });
+    public async Task<LeashSendResult> OfferAsync(string friendId)
+    {
+        var r = await SendAsync("offer", new JObject { ["to"] = friendId });
+        NoteSent(LeashItemKind.Offer, friendId, r);
+        return r;
+    }
 
     public async Task<bool> ReleaseAsync(string leashedId)
     {
@@ -212,38 +281,48 @@ public sealed class LeashService : ILeashService
         return true;
     }
 
-    public Task<LeashSendResult> AssignAsync(string leashedId, AssignKind kind, int size, LeashWatch? watch = null)
+    public async Task<LeashSendResult> AssignAsync(string leashedId, AssignKind kind, int size, LeashWatch? watch = null)
     {
-        if (!LeashGrammar.ValidAssign(kind, size, watch)) return Task.FromResult(new LeashSendResult(LeashSendStatus.Refused));
+        if (!LeashGrammar.ValidAssign(kind, size, watch)) return new LeashSendResult(LeashSendStatus.Refused);
         var body = new JObject { ["who"] = leashedId, ["kind"] = LeashParse.AssignToWire(kind), ["size"] = size };
         if (watch != null) body["watch"] = LeashParse.WatchToWire(watch);
-        return SendAsync("assign", body);
+        var r = await SendAsync("assign", body);
+        NoteSent(LeashItemKind.Assign, leashedId, r, assign: kind, size: size);
+        return r;
     }
 
-    public Task<LeashSendResult> PunishAsync(string leashedId, PunishKind kind, int size, LeashWatch? watch = null)
+    public async Task<LeashSendResult> PunishAsync(string leashedId, PunishKind kind, int size, LeashWatch? watch = null)
     {
-        if (!LeashGrammar.ValidPunish(kind, size, watch)) return Task.FromResult(new LeashSendResult(LeashSendStatus.Refused));
+        if (!LeashGrammar.ValidPunish(kind, size, watch)) return new LeashSendResult(LeashSendStatus.Refused);
         // The holder side mirrors the server: a punishment above their intensity is not sent.
         var held = Snapshot.Holding.FirstOrDefault(h => h.Who.Id == leashedId);
         if (held != null && !LeashGrammar.Allowed(kind, held.Intensity))
-            return Task.FromResult(new LeashSendResult(LeashSendStatus.NotAllowed));
+            return new LeashSendResult(LeashSendStatus.NotAllowed);
         var body = new JObject { ["who"] = leashedId, ["kind"] = LeashParse.PunishToWire(kind), ["size"] = size };
         if (watch != null) body["watch"] = LeashParse.WatchToWire(watch);
-        return SendAsync("punish", body);
+        var r = await SendAsync("punish", body);
+        NoteSent(LeashItemKind.Punish, leashedId, r, punish: kind, size: size);
+        return r;
     }
 
-    public Task<LeashSendResult> RewardAsync(string leashedId, RewardKind kind, string? stickerOrPoke = null, int? size = null)
+    public async Task<LeashSendResult> RewardAsync(string leashedId, RewardKind kind, string? stickerOrPoke = null, int? size = null)
     {
-        if (!LeashGrammar.ValidReward(kind, stickerOrPoke, size)) return Task.FromResult(new LeashSendResult(LeashSendStatus.Refused));
+        if (!LeashGrammar.ValidReward(kind, stickerOrPoke, size)) return new LeashSendResult(LeashSendStatus.Refused);
         var body = new JObject { ["who"] = leashedId, ["kind"] = LeashParse.RewardToWire(kind) };
         if (kind == RewardKind.Sticker) body["sticker"] = stickerOrPoke;
         if (kind == RewardKind.Praise) body["poke"] = stickerOrPoke;
         if (kind == RewardKind.Credit) body["size"] = size;
-        return SendAsync("reward", body);
+        var r = await SendAsync("reward", body);
+        NoteSent(LeashItemKind.Reward, leashedId, r, reward: kind, size: size, token: stickerOrPoke);
+        return r;
     }
 
-    public Task<LeashSendResult> TugAsync(string leashedId) =>
-        SendAsync("tug", new JObject { ["who"] = leashedId });
+    public async Task<LeashSendResult> TugAsync(string leashedId)
+    {
+        var r = await SendAsync("tug", new JObject { ["who"] = leashedId });
+        NoteSent(LeashItemKind.Tug, leashedId, r);
+        return r;
+    }
 
     // ---- leashed side ----
 
@@ -476,7 +555,9 @@ public sealed class LeashService : ILeashService
         var ok = o.Value<bool?>("ok") == true;
         var status = LeashParse.SendFromWire(LeashParse.Str(ok ? o["status"] : o["reason"]));
         if (ok) _kick();
-        return new LeashSendResult(status, LeashParse.Time(o["dnd_until"]));
+        // A tug or a reward answers item_id, an offer offer_id (only with "sent"); older servers neither.
+        var itemId = ok ? LeashParse.ReceiptId(o["item_id"]) ?? LeashParse.ReceiptId(o["offer_id"]) : null;
+        return new LeashSendResult(status, LeashParse.Time(o["dnd_until"]), itemId);
     }
 
     private async Task<JObject?> CallAsync(string op, JObject body)
@@ -507,6 +588,9 @@ public sealed class LeashService : ILeashService
         _completeUnsent.Clear();
         _watchedAids.Clear();
         _unplayableUntil.Clear();
+        _sent.Clear();
+        _shown.Clear();
+        _shownOrder.Clear();
         LastReport = null;
         string? stored = null;
         try { stored = _cutStore.Read(); } catch (Exception ex) { App.Logger?.Debug("Leash cut store failed: {E}", ex.Message); }
@@ -538,14 +622,50 @@ public sealed class LeashService : ILeashService
     // ---- app wiring ----
 
     /// <summary>The app's own wiring: the real wire, the account off AppSettings, the real tab,
-    /// the day numbers off the services that already count them.</summary>
-    public static LeashService CreateForApp(Action kick) => new(
-        new LeashApi(),
-        () => BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
-        dayInputs: AppDayInputs,
-        tab: new ChasterLeashTab(),
-        kick: kick,
-        cutStore: new FileCutStore(Path.Combine(App.UserDataPath, "leash_cut_pending.txt")));
+    /// the day numbers off the services that already count them, and the friends poll's shared
+    /// receipt channel both ways (a <c>seen</c> rides the next poll out; the holder's sender
+    /// receipts come back on it).</summary>
+    public static LeashService CreateForApp(Action kick)
+    {
+        var svc = new LeashService(
+            new LeashApi(),
+            () => BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
+            dayInputs: AppDayInputs,
+            tab: new ChasterLeashTab(),
+            kick: kick,
+            cutStore: new FileCutStore(Path.Combine(App.UserDataPath, "leash_cut_pending.txt")));
+        if (App.Friends is { } friends) svc.Attach(friends);
+        return svc;
+    }
+
+    /// <summary>Hooks this service to the friends poll's receipt channel.</summary>
+    internal void Attach(Friends.IFriendsService friends) =>
+        Attach(friends.ReportReceipt, h => friends.ReceiptsArrived += h);
+
+    /// <summary>The same, by its two halves: <paramref name="report"/> queues a report for the
+    /// next poll; <paramref name="subscribe"/> takes the handler for the sender receipts.</summary>
+    internal void Attach(Action<Friends.ReceiptReport> report, Action<Action<IReadOnlyList<Friends.SenderReceipt>>> subscribe)
+    {
+        ReportSeen = id => report(Friends.ReceiptReport.Item(id, Friends.ReceiptState.Seen));
+        subscribe(list => ApplyReceipts(FromFriends(list)));
+    }
+
+    /// <summary>The friends channel's sender receipts, leash kinds only, in the leash's own shape.</summary>
+    internal static IReadOnlyList<LeashReceipt> FromFriends(IEnumerable<Friends.SenderReceipt>? list)
+    {
+        var mine = new List<LeashReceipt>();
+        if (list == null) return mine;
+        foreach (var r in list)
+        {
+            if (r == null || !Friends.ReceiptKind.IsLeash(r.Kind)) continue;
+            var kind = LeashSteps.KindFromWire(r.Kind);
+            var state = LeashSteps.StateFromWire(r.State);
+            if (kind == null || state == null || !LeashSteps.IsId(r.Id) || string.IsNullOrEmpty(r.To)) continue;
+            var at = new DateTimeOffset(DateTime.SpecifyKind(r.AtUtc, DateTimeKind.Utc));
+            mine.Add(new LeashReceipt(r.Id!, kind.Value, r.To, r.ToName, state.Value, at, r.Ref));
+        }
+        return mine;
+    }
 
     /// <summary>R's numbers, read fresh. Null when the services are not up yet.</summary>
     internal static LeashDayInputs? AppDayInputs()
