@@ -767,3 +767,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - WPF CatalogueLookupService logic moved to Core CatalogueLookup (lookup by HT URL, download, validate, save with the collision
   suffix; the UI-thread opener is a per-head callback); WPF keeps its Dispatcher behaviour. Avalonia uses the Core CatalogueEntry.
 - Evidence: CatalogueLookupTests + the SubmissionSucceeded once/never test, fake handler, no network, fail-proofed. Review: ACCEPT.
+
+## avalonia-port/catalogue-submit-wire: +296 (catalogue U3)
+- Deeper library 📤 -> CatalogueSubmitDialog -> Core CatalogueClient -> saved record -> WPF result toast; App.Catalogue built like
+  WPF; CCP_CATALOGUE_BASE_URL loopback-only, sandbox without it sends nothing (WPF unaffected).
+- Evidence: CatalogueSubmitWireTests (signed in/out) + base-URL theory, fail-proofed; live signed-out: 0 requests, 0 binding errors.
+  Signed-in submit not live (no sandbox token). Review: ACCEPT.
