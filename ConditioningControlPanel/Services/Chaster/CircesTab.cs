@@ -85,6 +85,10 @@ public sealed class TabState
     /// <summary>The same adds, for one UTC month ("yyyy-MM"). The ladder reads this.</summary>
     [JsonProperty("added_month")] public string? AddedMonth { get; set; }
     [JsonProperty("added_month_s")] public int AddedMonthSeconds { get; set; }
+
+    /// <summary>The raffle's day ledger: per UTC day, what CCP booked and what it put on the lock,
+    /// sent with the raffle verify. See <see cref="ChasterLadder.Claims"/>.</summary>
+    [JsonProperty("ladder")] public LadderLedger? Ladder { get; set; }
 }
 
 public enum TabRefusal

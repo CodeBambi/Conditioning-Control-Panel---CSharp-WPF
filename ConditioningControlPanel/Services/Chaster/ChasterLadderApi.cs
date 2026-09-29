@@ -17,6 +17,12 @@ public interface IChasterLadderApi
     /// history. The access token goes to our proxy for those reads and nothing else.</summary>
     Task<LadderVerify?> VerifyAsync(string lockId, string accessToken, CancellationToken ct = default);
 
+    /// <summary>The same read, with this PC's day ledger (<see cref="ChasterLadder.Claims"/>), so
+    /// the server can count added time a credit cancelled before it reached the lock. An API that
+    /// does not know the ledger makes the plain read.</summary>
+    Task<LadderVerify?> VerifyAsync(string lockId, string accessToken, IReadOnlyDictionary<string, LadderClaim>? claims, CancellationToken ct = default) =>
+        VerifyAsync(lockId, accessToken, ct);
+
     /// <summary>"Post my days in Discord". True when the server took it.</summary>
     Task<bool> OptInAsync(bool postDays, CancellationToken ct = default);
 
@@ -53,14 +59,37 @@ public sealed class ChasterLadderApi : IChasterLadderApi
         _baseUrl = baseUrl ?? BackRoomApi.BaseUrl;
     }
 
-    public async Task<LadderVerify?> VerifyAsync(string lockId, string accessToken, CancellationToken ct = default) =>
-        ParseVerify(await CallAsync("verify", new JObject { ["lock_id"] = lockId, ["access_token"] = accessToken }, ct).ConfigureAwait(false));
+    public Task<LadderVerify?> VerifyAsync(string lockId, string accessToken, CancellationToken ct = default) =>
+        VerifyAsync(lockId, accessToken, null, ct);
+
+    public async Task<LadderVerify?> VerifyAsync(string lockId, string accessToken, IReadOnlyDictionary<string, LadderClaim>? claims, CancellationToken ct = default) =>
+        ParseVerify(await CallAsync("verify", VerifyBody(lockId, accessToken, claims), ct).ConfigureAwait(false));
+
+    /// <summary>The verify body: the lock, the token, and the day ledger as
+    /// <c>claims: { "yyyy-MM-dd": { gross, pushed } }</c> when there is anything on it. An older
+    /// proxy ignores the field and reads the plain month, as before.</summary>
+    internal static JObject VerifyBody(string lockId, string accessToken, IReadOnlyDictionary<string, LadderClaim>? claims)
+    {
+        var body = new JObject { ["lock_id"] = lockId, ["access_token"] = accessToken };
+        if (claims is { Count: > 0 })
+        {
+            var days = new JObject();
+            foreach (var (day, claim) in claims)
+                days[day] = new JObject { ["gross"] = Math.Max(0, claim.Gross), ["pushed"] = Math.Max(0, claim.Pushed) };
+            body["claims"] = days;
+        }
+        return body;
+    }
 
     internal static LadderVerify? ParseVerify(JObject? o)
     {
         if (o == null) return null;
         if (o.Value<bool?>("ok") == true)
-            return new LadderVerify(true, Math.Max(0, o.Value<int?>("added_seconds") ?? 0), null, Math.Clamp(o.Value<int?>("days_counted") ?? 0, 0, 31));
+        {
+            var seconds = Math.Max(0, o.Value<int?>("added_seconds") ?? 0);
+            return new LadderVerify(true, seconds, null, Math.Clamp(o.Value<int?>("days_counted") ?? 0, 0, 31),
+                Math.Clamp(o.Value<int?>("claimed_seconds") ?? 0, 0, seconds));
+        }
         return new LadderVerify(false, 0, o.Value<string?>("reason") ?? "refused");
     }
 
