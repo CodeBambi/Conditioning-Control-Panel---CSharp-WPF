@@ -1566,14 +1566,15 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Arm the failure backoff. Keyed to the auth token and clock offset this attempt used, so a
-        /// sign-in, a 401 heal or a learned server clock opens the gate again at once.
+        /// sign-in, a 401 heal or a learned server clock opens the gate again at once. Pass
+        /// <paramref name="tokenUsed"/> when the token may have changed since the request went out.
         /// </summary>
-        private void NoteSyncFailureForBackoff(int? status)
+        private void NoteSyncFailureForBackoff(int? status, string? tokenUsed = null)
         {
             _syncBackoffFailures++;
             var wait = SyncFailureBackoff.Delay(_syncBackoffFailures);
             _syncBlockedUntilUtc = DateTime.UtcNow + wait;
-            _syncBackoffToken = App.Settings?.Current?.AuthToken;
+            _syncBackoffToken = tokenUsed ?? App.Settings?.Current?.AuthToken;
             _syncBackoffOffset = ServerClock.Offset;
             App.Logger?.Warning("Profile sync backing off {Seconds:F0}s after failure #{Count} (status {Status})",
                 wait.TotalSeconds, _syncBackoffFailures, status?.ToString() ?? "none");
@@ -1942,6 +1943,9 @@ namespace ConditioningControlPanel.Services
                             // data — the exact loss the deferral exists to prevent.
                             return false;
                         }
+                        // The token this attempt was refused with: a 401 heal below may store a
+                        // new one, and the backoff must not hold the new one to the old refusal.
+                        var tokenUsed = App.Settings?.Current?.AuthToken;
                         await HandleUnauthorizedAsync(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
                         // Status + size only: the error body echoes fields from the profile we
@@ -1949,7 +1953,7 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)",
                             (int)v2Response.StatusCode, error?.Length ?? 0);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
-                        NoteSyncFailureForBackoff((int)v2Response.StatusCode);
+                        NoteSyncFailureForBackoff((int)v2Response.StatusCode, tokenUsed);
                         // Settle a deferred streak break only on a DEFINITIVE rejection (4xx) —
                         // retrying cannot change those answers. A 5xx is transient like the 429
                         // above: leave it to the retry/timeout window rather than deciding the
