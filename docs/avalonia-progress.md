@@ -878,3 +878,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   (WPF delegates); startup clears in memory, events save (decision logged).
 - Evidence: PremiumGatesTests, EntitlementLapseTests, lapse write test, all fail-proven; live Awareness veil for a free user.
   Rows stay stub (veil FX, Intake band, FREE TODAY stamps). Review: ACCEPT + P2s fixed.
+
+## avalonia-port/exclusives-tab-live: +454
+- ExclusiveFeature moved to Core (gates via CoreEntitlement + IntakePassAvailableProvider; WPF seeds the same sources). Vault from
+  the real roster with live gates, art and FREE TODAY; cards route to their tabs (For You/Just Drop/Back Room inert with an honest
+  tooltip); rail stars read Core; vault and stars repaint on tier/day change. Programs lock from entitlement; enrol disabled.
+- Fixes: DailyFree never fetches the real override endpoint from a sandbox (since #1917). HoverPopTests leaked
+  CoreSettings.ServiceProvider (#1915), which flaked ShellTray/Quests/Awareness tests in full runs; restored in finally.
+- Evidence: ExclusivesVaultTests, rail stars, DailyFreeSandboxTests, all fail-proven; full Avalonia suite 5x green; live vault.
+  Rows stay stub (motion, sheens, tier plates). Review: ACCEPT + notes fixed.
