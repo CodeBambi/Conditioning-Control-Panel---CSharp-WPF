@@ -23,25 +23,23 @@ public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string
 }
 
 /// <summary>
-/// update-time adds to the lock's end date, so a push onto a lock whose timer already ran out
-/// lands in the past and the lock stays "ready to unlock". With the option on, the push carries
-/// a catch-up that brings the end up to now. That catch-up is not a price: it never touches the
-/// tab. It rides the priced write (<see cref="CircesTab.WithCatchUp"/>), so it counts against the
-/// day's push ceiling and never goes out on its own. A lock that ran out more than
-/// <see cref="MaxCatchUpSeconds"/> ago is left alone, so a lock forgotten for days is never
-/// pulled back shut.
+/// Chaster restarts a timer that has already run out FROM NOW: update-time on a lock whose end
+/// has passed sets the end to now plus the duration. Verified live on 2026-09-29 on a test lock:
+/// +60 s moved a Sep 26 end to now + 60 s. (The first build assumed the push landed in the past
+/// and added a catch-up on top, so a relock paid the time it was late twice.) So any push onto a
+/// run-out lock locks it again. Off (the default), a lock whose timer has run out is left ready to
+/// unlock and the balance waits on the tab. On, the push goes out and locks it again for the
+/// price, only for a lock that ran out in the last <see cref="MaxLateSeconds"/>, so a lock
+/// forgotten for days is never pulled back shut. An end CCP cannot see counts as running.
 /// </summary>
 public static class LockRelock
 {
-    public const int MaxCatchUpSeconds = 6 * 3600;
-    public const int MarginSeconds = 30;
+    public const int MaxLateSeconds = 6 * 3600;
 
-    public static int CatchUpSeconds(DateTime? endUtc, DateTime nowUtc)
+    public static bool MayPush(DateTime? endUtc, DateTime nowUtc, bool relockOptIn)
     {
-        if (endUtc is not { } end) return 0;
-        var late = (nowUtc - end).TotalSeconds;
-        if (late <= 0 || late > MaxCatchUpSeconds) return 0;
-        return (int)Math.Ceiling(late) + MarginSeconds;
+        if (endUtc is not { } end || end > nowUtc) return true;
+        return relockOptIn && (nowUtc - end).TotalSeconds <= MaxLateSeconds;
     }
 }
 
@@ -66,6 +64,9 @@ public enum SettleOutcome
     LinkExpired,
     /// <summary>Chaster did not take it this time. The balance waits; nothing is lost.</summary>
     TryLater,
+    /// <summary>The chosen lock's timer has run out and <see cref="LockRelock"/> says to leave it
+    /// ready to unlock. Nothing went out; the balance waits.</summary>
+    LockRanOut,
 }
 
 /// <summary>
@@ -436,12 +437,11 @@ public sealed partial class ChasterService : IDisposable
             var lockId = options.LockId;
             if (string.IsNullOrEmpty(lockId)) return SettleOutcome.NoLockChosen;
 
-            if (options.RelockPastEnd)
+            // A push onto a lock whose timer has run out locks it again from now (LockRelock).
+            if (await LockRanOutAsync(lockId!, options.RelockPastEnd, ct).ConfigureAwait(false))
             {
-                // The catch-up rides this one write, so it never goes out without the price and
-                // a run of failed pushes cannot stack catch-ups on the lock.
-                var catchUp = await CatchUpSecondsAsync(lockId!, ct).ConfigureAwait(false);
-                lock (_gate) plan = CircesTab.WithCatchUp(plan, catchUp, _tab, options.Caps, _localNow());
+                App.Logger?.Information("[Chaster] the chosen lock's timer has run out; the tab waits");
+                return SettleOutcome.LockRanOut;
             }
 
             lock (_gate)
@@ -471,7 +471,7 @@ public sealed partial class ChasterService : IDisposable
                 SaveTab();
             }
             if (!added.Ok) return Failed(added.Status);
-            App.Logger?.Information("[Chaster] settled {Seconds}s to the lock (catch-up {CatchUp}s)", plan.Seconds, plan.CatchUp);
+            App.Logger?.Information("[Chaster] settled {Seconds}s to the lock", plan.Seconds);
             LadderPushLanded();
             try { PushLanded?.Invoke(plan.Seconds); } catch (Exception ex) { Diag.Swallowed(ex, "chaster push landed listener"); }
             return SettleOutcome.Pushed;
@@ -479,15 +479,17 @@ public sealed partial class ChasterService : IDisposable
         finally { _settleGate.Release(); }
     }
 
-    /// <summary>Opt-in: how far a run-out lock's end is behind now, so the priced push can carry
-    /// it back up. Read only; best effort: any failure reads as 0 and the push goes as it was.</summary>
-    private async Task<int> CatchUpSecondsAsync(string lockId, CancellationToken ct)
+    /// <summary>True only when a fresh read shows the chosen lock's timer has run out and
+    /// <see cref="LockRelock.MayPush"/> says to leave it. A read that fails, a lock not in the list
+    /// or a frozen lock all answer false: the push goes out and Chaster's own answer decides.</summary>
+    private async Task<bool> LockRanOutAsync(string lockId, bool relockOptIn, CancellationToken ct)
     {
         var locks = await CallWithAccessAsync(a => _client.GetLocksAsync(a, ct), ct).ConfigureAwait(false);
-        if (locks is not { Ok: true } ok) return 0;
+        if (locks is not { Ok: true } ok) return false;
         var pick = ok.Value!.FirstOrDefault(l => l.Id == lockId);
-        var end = pick?.EndDate is { } e ? (e.Kind == DateTimeKind.Utc ? e : e.ToUniversalTime()) : (DateTime?)null;
-        return LockRelock.CatchUpSeconds(end, _utcNow());
+        if (pick == null || pick.IsFrozen) return false;
+        var end = pick.EndDate is { } e ? (e.Kind == DateTimeKind.Utc ? e : e.ToUniversalTime()) : (DateTime?)null;
+        return !LockRelock.MayPush(end, _utcNow(), relockOptIn);
     }
 
     /// <summary>One api.chaster.app call with the link's token. A 401 from the API is only that

@@ -455,7 +455,7 @@
   "chaster_limit_backlog": "Máximo na comanda",
   "chaster_limit_backlog_hint": "O máximo de tempo não pago que a comanda guarda enquanto não há cadeado ou o Chaster está fora do ar.",
   "chaster_relock": "Trancar de novo quando o timer acabou",
-  "chaster_relock_hint": "Se o fim do cadeado já passou, um envio primeiro o traz até agora e depois adiciona o preço. Só para um cadeado que acabou nas últimas 6 horas.",
+  "chaster_relock_hint": "Se o timer do cadeado já acabou, um envio o tranca de novo a partir de agora, pelo preço. Só nas 6 horas depois que acabou. Desligado: a conta espera.",
   "chaster_fact_push_launch": "Enviado na hora",
   "chaster_fact_floor_long": "Ela só tira o que ela deu",
   "chaster_menu_eyebrow": "O cardápio",

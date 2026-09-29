@@ -460,7 +460,7 @@
   "chaster_limit_backlog": "账上最多",
   "chaster_limit_backlog_hint": "没有锁或 Chaster 宕机时，账本最多能存下的未付时间。",
   "chaster_relock": "计时器到期后重新上锁",
-  "chaster_relock_hint": "如果锁的结束时间已经过了，发送时会先把它拉到现在，再加上价格。只适用于过去 6 小时内到期的锁。",
+  "chaster_relock_hint": "如果锁的计时器已经到期，发送时会从现在起按价格重新上锁。只在到期后 6 小时内。关闭时：记账会一直等着。",
   "chaster_fact_push_launch": "即时发送",
   "chaster_fact_floor_long": "她只拿回她给出的",
   "chaster_menu_eyebrow": "菜单",

@@ -455,7 +455,7 @@
   "chaster_limit_backlog": "장부 최대",
   "chaster_limit_backlog_hint": "잠금이 없거나 Chaster가 멈췄을 때 장부가 모아 둘 수 있는 미결제 시간의 최대치.",
   "chaster_relock": "타이머가 끝났으면 다시 잠그기",
-  "chaster_relock_hint": "잠금 종료 시각이 이미 지났다면, 보낼 때 먼저 지금으로 당긴 다음 가격을 더해요. 최근 6시간 안에 끝난 잠금만 해당해요.",
+  "chaster_relock_hint": "잠금 타이머가 이미 끝났다면, 보낼 때 지금부터 가격만큼 다시 잠가요. 끝난 뒤 6시간 안에만 해당해요. 끄면 시간 집계가 대신 기다려요.",
   "chaster_fact_push_launch": "그때그때 보냄",
   "chaster_fact_floor_long": "그녀는 자기가 준 것만 도로 가져가요",
   "chaster_menu_eyebrow": "메뉴",
