@@ -697,3 +697,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   relevant PR; the cross-commit zip-equality proof runs on demand.
 - Evidence: locally with pwsh + a path shim, the deletion list is byte-identical (fail-proofed) and all seven zips and the
   manifest match the pre-move build. The Windows job hasn't run yet. Review: ACCEPT, CI cost follow-ups applied.
+
+## avalonia-port/packs-mod-manager: +400 (content packs L2)
+- The Avalonia head builds the Core pack service at desktop startup (WPF's providers and baseline rule; sandboxed runs never
+  fetch from GitHub unless pointed at a loopback server) and the Mod Manager's pack rows download, show progress, end
+  Installed and refresh the list, as in WPF. The fake content server is shared by both test projects.
+- Evidence: ModManagerPackDownloadTests + the sandbox-fetch guard test (fail-proofed); live sandbox against a local fake
+  server: not downloaded -> 42% -> "Media downloaded". Review: ACCEPT, follow-ups applied.

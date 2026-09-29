@@ -51,6 +51,49 @@ namespace ConditioningControlPanel.Avalonia
             Mods.Initialize(CoreSettings.Current.ActiveModId);
         }
 
+        /// <summary>The release-content pack service (WPF App.ReleaseContent), or null on the headless render path.</summary>
+        internal static ReleaseContentService? ReleaseContent { get; private set; }
+
+        /// <summary>
+        /// WPF App.xaml.cs:346-356 (seams) and :2943-2951 (service + AttachReleaseContent): the pack
+        /// service the mod service reads stamps and sizes from. Install stamps are written on the UI
+        /// thread, blocking, and skipped once the dispatcher is shutting down (WPF HasShutdownStarted).
+        /// </summary>
+        private static volatile bool _exiting;
+
+        /// <summary>
+        /// Hard guard on top of WPF's rules: a sandboxed profile (CCP_USERDATA_DIR, i.e. tests and
+        /// Keincheck runs) never auto-fetches from GitHub. Only an honoured loopback
+        /// CCP_CONTENT_BASE_URL lets the startup check run there.
+        /// </summary>
+        internal static bool SkipStartupFetch(string? userDataDir, string? contentBaseUrl) =>
+            !string.IsNullOrEmpty(userDataDir)
+            && ReleaseContentService.ResolveBaseUrlFormat(contentBaseUrl) == ReleaseContentService.ResolveBaseUrlFormat(null);
+
+        /// <summary>Test-only: forget the pack service, the mod service and the exit flag.</summary>
+        internal static void ResetReleaseContent()
+        {
+            ReleaseContent = null;
+            Mods = null;
+            _exiting = false;
+        }
+
+        internal static void StartReleaseContent(ReleaseContentService service)
+        {
+            CoreReleaseContent.StampProvider = ReleaseContentService.GetStampFor;
+            CoreReleaseContent.PackInfoProvider = id => ReleaseContent?.GetPackInfo(id);
+            CoreReleaseContent.UiInvoke = apply =>
+            {
+                var ui = Dispatcher.UIThread;
+                if (_exiting) return false;
+                if (ui.CheckAccess()) apply();
+                else ui.Invoke(apply);
+                return true;
+            };
+            ReleaseContent = service;
+            Mods?.AttachReleaseContent();
+        }
+
         private AvaloniaCoreDispatch? _desktopDispatch;
         private int _exitHandled;
         private int _warnedMissingCustomAssetsPath;
@@ -197,6 +240,27 @@ namespace ConditioningControlPanel.Avalonia
                 }
                 // After the version seed: installing / loading a mod checks its MinAppVersion.
                 StartMods();
+                // WPF App.xaml.cs:2940-2968. EnsureBaselineAsync keeps WPF's rules: no-op on a full
+                // install, under a debugger, in offline mode, or when nothing is missing. A Linux dev
+                // build never reads as a full install (flashes_audio is not shipped here), so an
+                // undebugged run with Bambi Sleep active fetches; sandbox runs point it at a loopback
+                // server with CCP_CONTENT_BASE_URL.
+                try
+                {
+                    var releaseContent = new ReleaseContentService();
+                    StartReleaseContent(releaseContent);
+                    if (SkipStartupFetch(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable("CCP_CONTENT_BASE_URL")))
+                        Serilog.Log.Information("ReleaseContent: sandboxed profile without a loopback CCP_CONTENT_BASE_URL - startup fetch skipped");
+                    else _ = System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        try { await releaseContent.EnsureBaselineAsync(); }
+                        catch (Exception ex) { Serilog.Log.Warning(ex, "ReleaseContent: baseline check failed"); }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Error(ex, "Failed to initialize ReleaseContentService - downloaded content unavailable this session");
+                }
                 // Real audio through LibVLC, seeded only if libvlc loads. If it is missing,
                 // CoreAudio stays unseeded: every clip "finishes" at once and nothing plays.
                 // Console as well as Serilog: this head configures no Serilog sink yet.
@@ -401,12 +465,14 @@ namespace ConditioningControlPanel.Avalonia
         private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
         {
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
+            _exiting = true;
 
             try { (((IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!).MainWindow as Views.Windows.MainShellWindow)?.Tray?.Dispose(); } catch { }
 
             // Restore any app we ducked; a pending Unduck would otherwise die with the process.
             try { Platform.LibVlcAudio.Instance?.Shutdown(); } catch { }
             try { Platform.LayeredAudio.Instance?.Shutdown(); } catch { }
+            try { ReleaseContent?.Dispose(); } catch { }
 
             // WPF App.OnExit: a best-effort final push, capped at 2 s (off the UI thread, as WPF's Task.Run).
             try { if (Platform.AccountSeed.Sync is { Loaded: true } sync) System.Threading.Tasks.Task.Run(() => sync.PushAsync("shutdown")).Wait(TimeSpan.FromSeconds(2)); }

@@ -18,5 +18,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\CCP.Core\CCP.Core.csproj" />
+    <Compile Include="..\Shared\FakeContentServer.cs" Link="FakeContentServer.cs" />
   </ItemGroup>
 </Project>

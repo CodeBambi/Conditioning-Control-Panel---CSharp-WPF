@@ -31,7 +31,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    <see cref="ModPickerCatalog"/> on this head.
     ///  - Install, uninstall, activate and export go through the head's <c>App.Mods</c>
     ///    (Core ModService), exactly as WPF. Catalogue sharing is still a stub (no catalogue client).
-    ///  - Pack download progress plumbing is dropped; only ModAvailabilityChanged is listened to.
     ///  - <c>Visibility</c> -> <c>IsVisible</c>; <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>;
     ///    <c>ColorConverter.ConvertFromString</c> -> <c>Color.Parse</c>;
     ///    <c>BitmapImage</c> -> <c>Bitmap</c> (<c>DecodePixelWidth</c> becomes
@@ -111,7 +110,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnClose")!.Click += (_, _) => Close();
             this.FindControl<Button>("BtnBrowseCatalogue")!.Click += (_, _) => BtnBrowseCatalogue_Click();
             this.FindControl<Button>("BtnCreate")!.Click += (_, _) => BtnCreate_Click();
-            _btnDownloadPack.Click += (_, _) => BtnDownloadPack_Click();
+            _btnDownloadPack.Click += (_, _) => _ = BtnDownloadPack_Click();
             _btnActivate.Click += (_, _) => BtnActivate_Click();
             _btnShare.Click += (_, _) => BtnShare_Click();
             _btnTubeFit.Click += (_, _) => BtnTubeFit_Click();
@@ -121,14 +120,72 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             RefreshModList();
 
-            // WPF OnModAvailabilityChanged: a pack finishing extraction changes what a row can show.
-            if (App.Mods != null)
+            // WPF SubscribeToPackEvents. Two signals, deliberately. PackInstalled = the bytes are on
+            // disk (ends the progress bar); ModAvailabilityChanged = the .ccpmod has been extracted
+            // into the built-in slot, i.e. the mod is genuinely usable. Both handlers are idempotent.
+            var svc = App.ReleaseContent;
+            var mods = App.Mods;
+            if (svc != null)
             {
-                EventHandler<string> onAvailability = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshModList);
-                App.Mods.ModAvailabilityChanged += onAvailability;
-                Closed += (_, _) => App.Mods.ModAvailabilityChanged -= onAvailability;
+                svc.PackProgressChanged += OnPackProgressChanged;
+                svc.PackInstalled += OnPackInstalled;
             }
+            if (mods != null) mods.ModAvailabilityChanged += OnModAvailabilityChanged;
+            Closed += (_, _) =>
+            {
+                if (mods != null) mods.ModAvailabilityChanged -= OnModAvailabilityChanged;
+                if (svc == null) return;
+                svc.PackProgressChanged -= OnPackProgressChanged;
+                svc.PackInstalled -= OnPackInstalled;
+            };
         }
+
+        private static void MarshalToUi(Action action) => global::Avalonia.Threading.Dispatcher.UIThread.Post(action);
+
+        /// <summary>A downloaded pack finished extracting into its built-in slot (argument is a mod id,
+        /// pack id as a fallback): the list markers and the pack row are stale.</summary>
+        private void OnModAvailabilityChanged(object? sender, string modOrPackId) => MarshalToUi(() =>
+            OnPackInstalled(sender, ModService.PackIdForMod(modOrPackId) ?? modOrPackId));
+
+        private void OnPackInstalled(object? sender, string packId) => MarshalToUi(() =>
+        {
+            _packDownloads.Remove(packId);
+            _packsJustInstalled.Add(packId);
+            RefreshListKeepingSelection();
+        });
+
+        /// <summary>Raised on the download loop's background thread.</summary>
+        private void OnPackProgressChanged(object? sender, PackProgressEventArgs e) => MarshalToUi(() => ShowPackProgress(e.PackId, e.Percent));
+
+        private void ShowPackProgress(string packId, double percent)
+        {
+            if (!IsPackRowShowing(packId)) return;
+            _packPanel.IsVisible = true;
+            _packProgress.IsVisible = true;
+            _packProgress.Value = percent;
+            _txtPackState.Text = percent >= 100
+                ? Loc.Get("modmgr_pack_installing")
+                : Loc.GetF("modmgr_pack_downloading", (int)Math.Round(percent));
+        }
+
+        /// <summary>
+        /// Repaints the list without yanking the user back to the active mod (RefreshModList
+        /// auto-selects the active one).
+        /// </summary>
+        private void RefreshListKeepingSelection()
+        {
+            var keep = _selectedMod?.Id;
+            RefreshModList();
+            if (string.IsNullOrEmpty(keep)) return;
+            var item = _modList.Items.OfType<ListBoxItem>().FirstOrDefault(i => i.Tag as string == keep);
+            if (item == null) return;
+            // Re-select even when it is already selected: ShowModDetails repaints the pack row.
+            if (_modList.SelectedItem == item) ShowModDetails(CoreMods.InstalledMods[keep!]);
+            else _modList.SelectedItem = item;
+        }
+
+        /// <summary>Offline mode blocks every content-pack fetch; read live, as WPF does.</summary>
+        private static bool IsOfflineMode => CoreSettings.Service?.Current?.OfflineMode == true;
 
         // ------------------------------------------------------------------ content packs
         //
@@ -145,27 +202,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         }
 
         /// <summary>
-        /// Paints the pack row for the selected mod. Collapsed unless this is a built-in whose pack
-        /// is mapped, there is a pack service to fetch it with, and the pack is not stamped yet.
-        ///
-        /// <para>The no-pack-service branch is WPF's <c>svc == null</c> collapse, and it has to
-        /// agree with <see cref="ModPickerCatalog.NeedsDownload"/>: without it the list row says nothing is
-        /// missing while this panel says "not downloaded" over a button that cannot download.
-        /// <c>IsFullInstall</c> is the one condition with no Core seam, so a full/dev layout still
-        /// shows the row here where WPF hid it.</para>
+        /// Paints the pack row for the selected mod (WPF UpdatePackPanel). Collapsed unless this is a
+        /// built-in whose pack is mapped, the app is a modular install, and the pack is not stamped yet.
         /// </summary>
         private void UpdatePackPanel(ModPackage mod)
         {
             var entry = ModPickerCatalog.ForMod(mod.Id);
             var packId = entry?.PackId;
+            var svc = App.ReleaseContent;
 
-            if (string.IsNullOrEmpty(packId) || CoreReleaseContent.StampProvider is null)
+            if (string.IsNullOrEmpty(packId) || svc == null || svc.IsFullInstall)
             {
                 _packPanel.IsVisible = false;
                 return;
             }
 
-            if (ModPickerCatalog.IsInstalled(packId))
+            if (svc.IsInstalled(packId!))
             {
                 // Already on disk: show a confirmation only if it landed during this session,
                 // otherwise the row has no reason to exist.
@@ -189,12 +241,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             var inFlight = _packDownloads.Contains(packId!);
             _packProgress.IsVisible = inFlight;
             if (!inFlight) _packProgress.Value = 0;
+            SetDownloadPackLabel(entry!);
+
+            // Offline mode is a hard stop one rung below this button: say so BEFORE the press.
+            if (!inFlight && IsOfflineMode)
+            {
+                _txtPackState.Text = Loc.Get("modmgr_pack_offline");
+                _btnDownloadPack.IsEnabled = false;
+                return;
+            }
 
             _txtPackState.Text = inFlight
                 ? Loc.GetF("modmgr_pack_downloading", (int)Math.Round(_packProgress.Value))
                 : Loc.Get("modmgr_pack_not_downloaded");
 
-            SetDownloadPackLabel(entry!);
             _btnDownloadPack.IsEnabled = !inFlight;
         }
 
@@ -208,11 +268,52 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 Text = Loc.GetF("modmgr_btn_download_pack", ModPickerCatalog.FormatSize(ModPickerCatalog.SizeBytesFor(entry)))
             };
 
-        private void BtnDownloadPack_Click()
+        /// <summary>WPF BtnDownloadPack_Click. Internal so a test can await the whole download.</summary>
+        internal async Task BtnDownloadPack_Click()
         {
-            // ponytail: needs ReleaseContentService.RequestPackAsync, wired when it moves to Core.
-            // The WPF original marked the pack in-flight, drove PackProgress from the download's
-            // IProgress<double> and fell back to modmgr_pack_unavailable / modmgr_pack_failed.
+            var mod = _selectedMod;
+            if (mod == null) return;
+
+            var packId = ModPickerCatalog.ForMod(mod.Id)?.PackId;
+            var svc = App.ReleaseContent;
+            if (string.IsNullOrEmpty(packId) || svc == null) return;
+            if (!_packDownloads.Add(packId!)) return; // already running from this dialog
+
+            _btnDownloadPack.IsEnabled = false;
+            ShowPackProgress(packId!, 0);
+
+            var ok = false;
+            try
+            {
+                // No cancellation token, as WPF: closing the Mod Manager must not kill the download,
+                // and RequestPackAsync de-dupes so every caller shares one task. Progress<T> posts
+                // back to this (UI) thread; each write re-checks the row on screen is still this pack's.
+                ok = await svc.RequestPackAsync(packId!, new Progress<double>(p => ShowPackProgress(packId!, p)));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[ModManager] Pack {Pack} download threw", packId);
+            }
+            finally
+            {
+                _packDownloads.Remove(packId!);
+            }
+
+            if (ok)
+            {
+                _packsJustInstalled.Add(packId!);
+                RefreshListKeepingSelection();
+            }
+            else if (IsPackRowShowing(packId!))
+            {
+                _packProgress.IsVisible = false;
+                _txtPackState.Text = IsOfflineMode
+                    ? Loc.Get("modmgr_pack_offline")
+                    : svc.ManifestUnavailable
+                        ? Loc.Get("modmgr_pack_unavailable")
+                        : Loc.Get("modmgr_pack_failed");
+                _btnDownloadPack.IsEnabled = !IsOfflineMode;
+            }
         }
 
         private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
