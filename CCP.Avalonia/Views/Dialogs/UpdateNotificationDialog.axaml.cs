@@ -22,17 +22,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - The version/size/notes strings are English literals in the WPF original too - there are
     ///    no loc keys for them - so they are copied verbatim rather than invented.
     ///
-    /// <para>NO CALLER ON THIS HEAD, and both WPF call sites are out of reach rather than merely
-    /// unwritten. They are <c>ConditioningControlPanel/App.xaml.cs:ShowUpdateNotification</c> and
-    /// <c>CheckForUpdatesManuallyAsync</c>; both set <c>App.IsUpdateDialogActive</c> around the
-    /// modal and both route "Install" into <c>DownloadAndRunInstallerAsync</c>, which drives the
-    /// Inno Setup installer. The Avalonia twin of that file is <c>CCP.Avalonia/App.axaml.cs</c>,
-    /// off-limits to this layer. Two things would still be missing if it were not: there is no
-    /// <c>UpdateService</c> in Core, so nothing on this head can produce a real <see cref="UpdateInfo"/>
-    /// to show, and there is no installer to run - the manual "check for updates" button in
-    /// Views/Controls/AppSettings/UpdatesSettingsSection.axaml.cs is already a documented stub for
-    /// that reason. Wiring the dialog to a fabricated UpdateInfo would announce a release that
-    /// cannot be installed.</para>
+    /// <para>Caller: <c>Platform.AppUpdater.ManualCheckAsync</c> (the WPF CheckForUpdatesManuallyAsync twin).</para>
     /// </summary>
     public partial class UpdateNotificationDialog : Window
     {
@@ -74,7 +64,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             this.FindControl<HyperlinkButton>("LinkManualDownload")!.Click += (_, _) => LinkManualDownload_Click();
             this.FindControl<Button>("BtnLater")!.Click += (_, _) => BtnLater_Click();
-            this.FindControl<Button>("BtnInstall")!.Click += (_, _) => BtnInstall_Click();
+            var install = this.FindControl<Button>("BtnInstall")!;
+            install.Click += (_, _) => BtnInstall_Click();
+            // Off Windows the updater only notifies: the button opens the releases page.
+            if (!OperatingSystem.IsWindows() && install.Content is TextBlock label)
+                label.Bind(TextBlock.TextProperty,
+                    (global::Avalonia.Data.Binding)new Localization.StrExtension("btn_download_installer_manually").ProvideValue(null!));
         }
 
         /// <summary>

@@ -391,6 +391,8 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Serilog.Log.Warning(ex, "Tray icon unavailable; X closes the app"); }
                 // The panic key (WPF MainWindow.xaml.cs:363 installs its hook at startup the same way).
                 shell.StartPanicKey();
+                // WPF App.xaml.cs:4858: pending-outcome report + background update check.
+                Dispatcher.UIThread.Post(async () => await Platform.AppUpdater.StartupAsync(shell));
             }
             base.OnFrameworkInitializationCompleted();
         }

@@ -735,3 +735,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   until U8 (it seeds CoreReleaseContent).
 - Evidence: ReleaseFeedTests (20; a v6.11.3-shaped fixture; helper goldens recorded from the pre-move code), fail-proofed.
   Review: ACCEPT.
+
+## avalonia-port/avalonia-updater: +663 (installer/updater U4)
+- The Avalonia head's updater on Core ReleaseFeed: WPF's pending-outcome check at startup, update check (offline skip,
+  installed copies only on Windows, 24 h skip), the header pill and a one-time startup dialog after the first-run modals, the
+  manual check. Windows downloads and runs the Core helper like WPF (compile-only here); Linux/macOS only notify (open the
+  releases page). One Core LoopbackUrl rule guards CCP_CONTENT_BASE_URL and CCP_UPDATE_API_URL (fixed: "loopback" host).
+- Evidence: AppUpdaterTests (Linux never downloads, pill, pending outcome, startup dialog + 24 h skip, loopback rule),
+  fail-proofed; live sandbox against a loopback fake feed: pill "UPDATE TO v99.1.0", click opens the releases URL.
+  Not run: the Windows download/install path. Review: FIX -> r1 applied.
