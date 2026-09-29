@@ -78,6 +78,27 @@ namespace ConditioningControlPanel.Avalonia.Helpers
                 return null;
             }
         }
+        private static readonly System.Collections.Generic.Dictionary<string, Bitmap?> WardrobeCache = new();
+
+        /// <summary>WPF WardrobeArt.GetImage: a registry item's PNG off disk at 384px (Core
+        /// WardrobeCatalog.ArtPath), cached misses included; null when the id or its art is absent.</summary>
+        internal static Bitmap? Wardrobe(string? id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return null;
+            lock (WardrobeCache)
+            {
+                if (WardrobeCache.TryGetValue(id, out var cached)) return cached;
+                Bitmap? art = null;
+                try
+                {
+                    var path = ConditioningControlPanel.Services.WardrobeCatalog.ArtPath(id);
+                    if (path != null && File.Exists(path)) { using var file = File.OpenRead(path); art = Decode(file, 384); }
+                }
+                catch (Exception ex) { Log.Debug("WardrobeCatalog: art for {Id} failed to load: {E}", id, ex.Message); }
+                return WardrobeCache[id] = art;
+            }
+        }
+
             /// <summary>WPF's DecodePixelWidth: decode straight to the width a surface shows, never larger.</summary>
         private static Bitmap Decode(Stream stream, int? width)
             => width is int w ? Bitmap.DecodeToWidth(stream, w) : new Bitmap(stream);

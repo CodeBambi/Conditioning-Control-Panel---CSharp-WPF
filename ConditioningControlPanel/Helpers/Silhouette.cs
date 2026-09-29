@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Helpers
     ///     ImageBrush over the whole element, so a non-square host would letterbox the stencil and
     ///     the fill rectangle would paint the bars too.
     ///   * The mask cache is keyed by ITEM ID, never by ImageSource.
-    ///     <see cref="WardrobeCatalog.GetImage"/> decodes with BitmapCreateOptions.IgnoreImageCache,
+    ///     <see cref="WardrobeArt.GetImage"/> decodes with BitmapCreateOptions.IgnoreImageCache,
     ///     so the ImageSource instance it hands back is not a stable identity to key on - two calls
     ///     for the same id can be two different objects.
     ///
@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Helpers
         }
 
         /// <summary>
-        /// Drops every cached mask. Called from <see cref="WardrobeCatalog.Invalidate"/> - the art
+        /// Drops every cached mask. Called from <see cref="WardrobeArt.Invalidate"/> - the art
         /// stage can rewrite these PNGs under a running app, and a stale frozen brush would keep
         /// painting the old shape forever.
         /// </summary>
@@ -104,7 +104,7 @@ namespace ConditioningControlPanel.Helpers
                 ImageBrush? brush = null;
                 try
                 {
-                    var art = WardrobeCatalog.GetImage(itemId);
+                    var art = WardrobeArt.GetImage(itemId);
                     if (art != null)
                     {
                         brush = new ImageBrush(art) { Stretch = Stretch.Uniform };

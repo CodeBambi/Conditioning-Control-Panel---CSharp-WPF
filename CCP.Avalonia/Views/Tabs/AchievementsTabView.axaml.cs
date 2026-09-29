@@ -18,16 +18,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <summary>
     /// The achievement page, built in code as WPF MainWindow.AchievementsTab.cs builds it: one card per
     /// visible Achievement.All entry, free or patron grid, filter chips, meter, tooltip.
-    /// ponytail: no reward band text/art, reward count or Rewards chip (WardrobeCatalog is WPF-only) and no
-    /// tile FX (entrance stagger, holo tilt, unlock burst - MainWindow.EventFx.cs); both land with their ports.
+    /// ponytail: no tile FX (entrance stagger, holo tilt, unlock burst - MainWindow.EventFx.cs); lands with its port.
     /// </summary>
     public partial class AchievementsTabView : UserControl
     {
-        internal const string FilterAll = "all", FilterUnlocked = "unlocked", FilterLocked = "locked";
+        internal const string FilterAll = "all", FilterUnlocked = "unlocked", FilterLocked = "locked", FilterRewards = "rewards";
+        private const double RewardIconPx = 40; // WPF AchvRewardIconPx
 
         private static readonly IBrush Muted = Brush.Parse("#9A93B8"), Dim = Brush.Parse("#8079A3"),
             Tick = Brush.Parse("#5EC8F2"), Rule = Brush.Parse("#33FFFFFF"), MeterFill = Brush.Parse("#FF69B4"),
-            MeterTrack = Brush.Parse("#CC1A1A2E"), BandBg = Brush.Parse("#F2252542"),
+            MeterTrack = Brush.Parse("#CC1A1A2E"), BandBg = Brush.Parse("#F2252542"), SilhouetteFill = Brush.Parse("#0F0F1C"),
             PatreonFill = Brush.Parse("#3DFF69B4"), PatreonEdge = Brush.Parse("#8CFF69B4"), PatreonInk = Brush.Parse("#FFC9E3");
 
         private readonly AchievementEngine _engine;
@@ -41,9 +41,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private sealed class Tile
         {
             public Achievement A = null!;
+            public WardrobeItem? Reward;
             public ToggleButton Card = null!;
             public Image Badge = null!;
-            public TextBlock Name = null!, Info = null!, State = null!;
+            public TextBlock Name = null!, Info = null!;
+            public Border Band = null!;
             public StackPanel InfoStack = null!;
             public Control? Meter;
         }
@@ -81,9 +83,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         internal IEnumerable<ToggleButton> Cards => _tiles.Values.Select(t => t.Card);
 
-        /// <summary>WPF PopulateAchievementGrid, minus the reward map. Runs once.</summary>
+        /// <summary>WPF PopulateAchievementGrid. Runs once.</summary>
         private void Build()
         {
+            var rewards = WardrobeCatalog.AchievementRewards();
             var free = this.FindControl<WrapPanel>("AchievementGrid")!;
             var patron = this.FindControl<WrapPanel>("PatronAchievementGrid")!;
             var theme = this.FindResource("AchievementCard") as ControlTheme;
@@ -91,6 +94,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 if (a.IsHidden) continue; // parked: no reachable unlock path
                 var tile = BuildCard(a, theme);
+                tile.Reward = rewards.TryGetValue(a.Id, out var r) ? r : null;
                 _tiles[a.Id] = tile;
                 (a.IsExclusive ? patron : free).Children.Add(tile.Card);
             }
@@ -156,15 +160,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 TextTrimming = TextTrimming.CharacterEllipsis, LineHeight = 14, MaxHeight = 42, Margin = new Thickness(12, 4, 12, 4) };
             t.InfoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { t.Info } };
 
-            // Bottom band: the category glyph WPF falls back to without reward art, and the state mark.
-            var band = new Grid { Margin = new Thickness(10, 0), VerticalAlignment = VerticalAlignment.Center, ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
-            band.Children.Add(new TextBlock { Text = Glyph(a.Category), FontSize = 22, Foreground = Brushes.White, Opacity = 0.3, Width = 40,
-                TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
-            t.State = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(t.State, 2);
-            band.Children.Add(t.State);
-            var bandChrome = new Border { Height = 56, Background = BandBg, BorderBrush = Rule, BorderThickness = new Thickness(0, 1, 0, 0),
-                CornerRadius = new CornerRadius(0, 0, 14, 14), Child = band };
+            // Bottom band: filled per state by BuildRewardBand.
+            var bandChrome = t.Band = new Border { Height = 56, Background = BandBg, BorderBrush = Rule, BorderThickness = new Thickness(0, 1, 0, 0),
+                CornerRadius = new CornerRadius(0, 0, 14, 14) };
 
             var content = new Grid { RowDefinitions = new RowDefinitions("164,Auto,*,Auto") };
             Grid.SetRow(t.Name, 1);
@@ -223,18 +221,64 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 t.InfoStack.Children.Add(t.Meter);
             }
 
-            t.State.Text = unlocked ? "✓" : "🔒";
-            t.State.FontSize = unlocked ? 16 : 13;
-            t.State.FontWeight = unlocked ? FontWeight.Bold : FontWeight.Normal;
-            t.State.Foreground = unlocked ? Tick : Muted;
+            BuildRewardBand(t, unlocked);
 
-            // ponytail: WPF's unlocked tooltip names the reward item; without WardrobeCatalog only the locked,
-            // no-reward template is honest, so unlocked cards carry no tooltip yet.
-            ToolTip.SetTip(t.Card, unlocked ? null : Loc.GetF("achv_tooltip_locked_no_reward", Req(a)));
-            // The reward arg is "???": the item is unknown here (WardrobeCatalog), and "No item" would be false for gated ones.
+            // WPF ApplyAchievementCardTooltip: one localized template per state.
+            ToolTip.SetTip(t.Card, unlocked
+                ? Loc.GetF("achv_tooltip_unlocked", Name(a), Flavor(a), t.Reward?.Name ?? Loc.Get("achv_reward_none"))
+                : Loc.GetF(t.Reward != null ? "achv_tooltip_locked" : "achv_tooltip_locked_no_reward", Req(a)));
             AutomationProperties.SetName(t.Card, unlocked
-                ? Loc.GetF("achv_automation_unlocked", Name(a), Loc.Get("achv_card_locked_name"))
+                ? Loc.GetF("achv_automation_unlocked", Name(a), t.Reward?.Name ?? Loc.Get("achv_reward_none"))
                 : Loc.GetF("achv_automation_locked", Req(a)));
+        }
+
+        /// <summary>WPF BuildRewardBand: [reward art] "Reward" + item name ...... [lock / tick]. Locked rewards
+        /// are a flat silhouette and "???" - the shape, not the goods.</summary>
+        private static void BuildRewardBand(Tile t, bool unlocked)
+        {
+            var reward = t.Reward;
+            var row = new Grid { Margin = new Thickness(10, 0), VerticalAlignment = VerticalAlignment.Center, ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+
+            // 1. the goods (or the shape of them). Earned items glow - the band is the payoff.
+            var icon = RewardIcon(reward, unlocked) ?? new TextBlock { Text = Glyph(t.A.Category), FontSize = 22, Foreground = Brushes.White,
+                Opacity = 0.3, Width = RewardIconPx, TextAlignment = TextAlignment.Center };
+            icon.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(icon);
+
+            // 2. "Reward" over the item's name. Registry names are plain English and never localized.
+            var (rewardName, rewardInk) = reward == null ? (Loc.Get("achv_reward_none"), Dim)
+                : unlocked ? (reward.Name, Brushes.White) : (Loc.Get("achv_card_locked_name"), Muted);
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 6, 0), Children =
+            {
+                new TextBlock { Text = Loc.Get("achv_reward_header"), FontSize = 9.5, Foreground = Dim, TextTrimming = TextTrimming.CharacterEllipsis },
+                new TextBlock { Text = rewardName, FontSize = 11.5, FontWeight = FontWeight.SemiBold, Foreground = rewardInk, TextTrimming = TextTrimming.CharacterEllipsis },
+            } };
+            Grid.SetColumn(text, 1);
+            row.Children.Add(text);
+
+            // 3. the state
+            var state = new TextBlock { Text = unlocked ? "✓" : "🔒", FontSize = unlocked ? 16 : 13,
+                FontWeight = unlocked ? FontWeight.Bold : FontWeight.Normal, Foreground = unlocked ? Tick : Muted, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(state, 2);
+            row.Children.Add(state);
+            t.Band.Child = row;
+        }
+
+        /// <summary>WPF BuildRewardIcon + Helpers/Silhouette.Build: full colour with a pink drop shadow once
+        /// unlocked, a flat cut-out over a blurred pink bloom while locked; null without a reward or art.</summary>
+        private static Control? RewardIcon(WardrobeItem? reward, bool unlocked)
+        {
+            var art = reward == null ? null : Helpers.ModArt.Wardrobe(reward.Id);
+            if (art == null) return null;
+            if (unlocked)
+                return new Image { Width = RewardIconPx, Height = RewardIconPx, Stretch = Stretch.Uniform, Source = art, IsHitTestVisible = false,
+                    Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x69, 0xB4), BlurRadius = 12, OffsetX = 0, OffsetY = 0, Opacity = 0.55 } };
+            IBrush Mask() => new ImageBrush(art) { Stretch = Stretch.Uniform };
+            return new Grid { Width = RewardIconPx, Height = RewardIconPx, IsHitTestVisible = false, Children =
+            {
+                new global::Avalonia.Controls.Shapes.Rectangle { Fill = MeterFill, OpacityMask = Mask(), Opacity = 0.25, Effect = new BlurEffect { Radius = 8 } },
+                new global::Avalonia.Controls.Shapes.Rectangle { Fill = SilhouetteFill, OpacityMask = Mask() },
+            } };
         }
 
         private static string Glyph(AchievementCategory c) => c switch
@@ -253,7 +297,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var host = this.FindControl<WrapPanel>("AchievementFilters")!;
             if (host.Children.Count > 0) return;
             var theme = this.FindResource("AchievementFilterChip") as ControlTheme;
-            foreach (var (key, locKey) in new[] { (FilterAll, "achv_filter_all"), (FilterUnlocked, "achv_filter_unlocked"), (FilterLocked, "achv_filter_locked") })
+            foreach (var (key, locKey) in new[] { (FilterAll, "achv_filter_all"), (FilterUnlocked, "achv_filter_unlocked"), (FilterLocked, "achv_filter_locked"), (FilterRewards, "achv_filter_rewards") })
             {
                 var chip = new ToggleButton { Theme = theme, Tag = key, IsChecked = key == Filter,
                     Content = new TextBlock { Text = Loc.Get(locKey) } };
@@ -286,6 +330,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 {
                     FilterUnlocked => IsUnlocked(t.A.Id),
                     FilterLocked => !IsUnlocked(t.A.Id),
+                    FilterRewards => t.Reward != null,
                     _ => true,
                 };
         }
@@ -312,11 +357,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public int PatronUnlocked => _engine.GetUnlockedCount(exclusive: true);
         public int PatronTotal => _engine.GetTotalCount(exclusive: true);
 
-        // ponytail: reward count needs WardrobeCatalog.AchievementGates (WPF head only); WPF collapses
-        // the line when it has no gates, so it is hidden here until the catalog reaches Core.
-        public bool RewardCountVisible => false;
-        public int RewardsEarned => 0;
-        public int RewardsTotal => 0;
+        // WPF UpdateRewardCount: counted off the registry gates (an achievement gating two items counts twice);
+        // collapsed when nothing is gated, so it never reads "0 / 0".
+        private static IReadOnlyDictionary<string, string>? Gates => WardrobeCatalog.AchievementGates();
+        public bool RewardCountVisible => Gates is { Count: > 0 };
+        public int RewardsEarned => Gates?.Count(g => _engine.Progress.IsUnlocked(g.Value)) ?? 0;
+        public int RewardsTotal => Gates?.Count ?? 0;
 
         /// <summary>Free users see the locked collection behind an overlay; content stays in
         /// the tree, just covered - same contract as the WPF view.</summary>

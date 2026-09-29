@@ -157,7 +157,7 @@ public partial class ItemUnlockedPopup : Window
         ImageSource? art = null;
         try
         {
-            art = WardrobeCatalog.GetImage(item.Id);
+            art = WardrobeArt.GetImage(item.Id);
         }
         catch (Exception ex)
         {

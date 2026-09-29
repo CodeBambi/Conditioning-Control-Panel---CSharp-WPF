@@ -23,9 +23,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// unlock, and a second pattern only stacks two overlapping copies on the toy.
     ///
     /// PORTED from ConditioningControlPanel/Windows/ItemUnlockedPopup.xaml.cs. Deviations:
-    ///  - The constructor takes the item's name and mod instead of a <c>WardrobeItem</c>: that type
-    ///    lives in the WPF head (Services/Profile/WardrobeCatalog.cs) and this project may not
-    ///    reference it. Call shape is <c>new ItemUnlockedPopup(item.Name, item.Mod, stackIndex)</c>.
     ///  - <c>DoubleAnimation</c> on Opacity becomes a <see cref="DoubleTransition"/>.
     ///  - <c>SystemParameters.WorkArea</c> becomes <c>Screens.Primary.WorkingArea</c>, populated only
     ///    once the window has a handle, so placement moves to OnOpened.
@@ -66,7 +63,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// 0 for the first toast of this unlock, 1/2/... for extra items on the same achievement -
         /// each one is pushed a further (Height + gap) upward so they never overlap.
         /// </param>
-        public ItemUnlockedPopup(string itemName, string? mod = null, int stackIndex = 0)
+        public ItemUnlockedPopup(ConditioningControlPanel.Services.WardrobeItem item, int stackIndex = 0)
+            : this(item.Name, item.Mod, stackIndex, item.Id) { }
+
+        private ItemUnlockedPopup(string itemName, string? mod, int stackIndex = 0, string? itemId = null)
         {
             if (itemName == null) throw new ArgumentNullException(nameof(itemName));
 
@@ -86,7 +86,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             txtItemName.Text = itemName;
             txtItemName.Foreground = new SolidColorBrush(accent);
 
-            LoadItemArt();
+            LoadItemArt(itemId);
 
             // Never take the foreground - same focus-theft gap as the Pink Rush toast (ccp-bugs
             // #1000). ponytail: needs Helpers.PassiveToastWindow (Win32 WS_EX_NOACTIVATE), wired
@@ -139,23 +139,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// Paints the item art, or a gift glyph when the PNG never landed. "No art" is a normal
         /// path, not an error - what must never happen is a broken-image box in the toast.
-        ///
-        /// ponytail: the note that stood here said WardrobeCatalog resolves pack:// art. It does
-        /// not - ConditioningControlPanel/Services/Profile/WardrobeCatalog.cs reads
-        /// Resources/cosmetics/&lt;mod&gt;/&lt;id&gt;.png OFF DISK from AppContext.BaseDirectory, on
-        /// purpose, so art that never shipped degrades instead of throwing a resource URI. Two real
-        /// blockers follow from that. The registry half (registry.json parsing, Find, the unlock
-        /// gates) is portable and belongs in Core; the same file's GetImage is WPF - BitmapImage,
-        /// DecodePixelWidth, Freeze - so the type has to be SPLIT, not moved. And the art itself is
-        /// linked only by ConditioningControlPanel.csproj (Assets/cosmetics -&gt; Resources/cosmetics
-        /// as Content); CCP.Avalonia.csproj links no cosmetics at all, so even a ported GetImage
-        /// would find nothing on this head. Until both, every toast takes the gift-glyph branch,
-        /// which is the WPF null path rather than a broken-image box.
         /// </summary>
-        private void LoadItemArt()
+        private void LoadItemArt(string? itemId)
         {
-            this.FindControl<Image>("ItemImage")!.IsVisible = false;
-            this.FindControl<TextBlock>("FallbackGlyphText")!.IsVisible = true;
+            var art = Helpers.ModArt.Wardrobe(itemId);
+            var image = this.FindControl<Image>("ItemImage")!;
+            image.Source = art;
+            image.IsVisible = art != null;
+            this.FindControl<TextBlock>("FallbackGlyphText")!.IsVisible = art == null;
         }
 
         /// <summary>

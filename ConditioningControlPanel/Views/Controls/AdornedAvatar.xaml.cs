@@ -133,7 +133,7 @@ namespace ConditioningControlPanel.Views.Controls
             {
                 if (DecoLayer == null) return;
 
-                var art = WardrobeCatalog.GetImage(DecorationId);
+                var art = WardrobeArt.GetImage(DecorationId);
                 if (art == null)
                 {
                     // Also clears the Source, so switching from a good id to a broken one does not

@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -92,16 +92,10 @@ namespace ConditioningControlPanel.Services
         public static readonly IReadOnlyList<(double X, double Y)> DefaultCharmAnchors =
             new (double, double)[] { (0.90, 0.76), (0.965, 0.90) };
 
-        /// <summary>
-        /// Decode cap for wardrobe art. The 512 canvases are only ever drawn at 148px (the hero's
-        /// 104/0.70 decoration) or smaller, so decoding them at full size would hold ~1MB per item
-        /// - 60MB once someone browses the whole picker. 384 stays crisp at 200% DPI and costs a
-        /// third of that.
-        /// </summary>
-        private const int ArtDecodePixels = 384;
+        /// <summary>The current user's achievement progress, set by each head (null = not loaded yet).</summary>
+        public static volatile Func<AchievementProgress?>? ProgressProvider;
 
         private static readonly object _gate = new();
-        private static readonly Dictionary<string, ImageSource?> _imageCache = new(StringComparer.Ordinal);
         private static readonly Dictionary<string, bool> _artExistsCache = new(StringComparer.Ordinal);
 
         private static List<WardrobeItem>? _items;
@@ -174,6 +168,23 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// achievement id → wardrobe item, reversed out of the registry's item → achievement gates.
+        /// Walked in REGISTRY order (not the gate dictionary's) so "first wins" is deterministic:
+        /// two items gated on one achievement always resolve to the same one across launches.
+        /// Empty when there is no registry or it gates nothing.
+        /// </summary>
+        public static IReadOnlyDictionary<string, WardrobeItem> AchievementRewards()
+        {
+            var rewards = new Dictionary<string, WardrobeItem>(StringComparer.Ordinal);
+            foreach (var item in Items)
+            {
+                var gate = item.RequiredAchievementId;
+                if (gate != null && !rewards.ContainsKey(gate)) rewards[gate] = item;
+            }
+            return rewards;
+        }
+
+        /// <summary>
         /// Live unlock check for the CURRENT user: true for ungated items, and for gated items
         /// whose achievement is earned. Defaults to UNLOCKED when achievement progress is not
         /// loadable (early boot / tests) - gating must never brick the picker.
@@ -184,7 +195,7 @@ namespace ConditioningControlPanel.Services
             if (gate == null) return true;
             try
             {
-                var progress = App.Achievements?.Progress;
+                var progress = ProgressProvider?.Invoke();
                 return progress == null || progress.IsUnlocked(gate);
             }
             catch
@@ -212,53 +223,14 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// The 512x512 art for an id, or null when the id is unknown or its PNG is missing or
-        /// unreadable. Callers render nothing in that case - never a placeholder, never a throw.
+        /// Absolute path of an id's PNG, or null when the id is unknown or its path escapes the
+        /// cosmetics folder. Existence is not checked - decoding is the head's job.
         /// </summary>
-        public static ImageSource? GetImage(string? id)
+        public static string? ArtPath(string? id)
         {
-            if (string.IsNullOrWhiteSpace(id)) return null;
-
-            lock (_gate)
-            {
-                if (_imageCache.TryGetValue(id!, out var cached)) return cached;
-
-                ImageSource? built = null;
-                try
-                {
-                    var item = Find(id);
-                    if (item != null)
-                    {
-                        var path = ResolveArtPath(item.File);
-                        if (path != null && System.IO.File.Exists(path))
-                        {
-                            var bitmap = new BitmapImage();
-                            bitmap.BeginInit();
-                            bitmap.UriSource = new Uri(path, UriKind.Absolute);
-                            // OnLoad so the file handle is released immediately: the art stage may
-                            // still be rewriting these PNGs while the app is open.
-                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-                            bitmap.DecodePixelWidth = ArtDecodePixels;
-                            bitmap.EndInit();
-                            if (bitmap.CanFreeze) bitmap.Freeze();
-                            built = bitmap;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("WardrobeCatalog: art for {Id} failed to load: {E}", id, ex.Message);
-                    built = null;
-                }
-
-                _imageCache[id!] = built;
-                return built;
-            }
+            var item = Find(id);
+            return item == null ? null : ResolveArtPath(item.File);
         }
-
-        /// <summary>True when this id has art we can actually paint (decodes it).</summary>
-        public static bool HasArt(string? id) => GetImage(id) != null;
 
         /// <summary>
         /// True when this id's PNG is on disk - existence only, no decode. The picker uses this to
@@ -298,7 +270,6 @@ namespace ConditioningControlPanel.Services
         {
             lock (_gate)
             {
-                _imageCache.Clear();
                 _artExistsCache.Clear();
                 _items = null;
                 _byId = null;
@@ -309,11 +280,6 @@ namespace ConditioningControlPanel.Services
                 _mods = null;
                 _loadAttempted = false;
             }
-
-            // The silhouette masks are frozen ImageBrushes built off this cache; a stale one would
-            // keep stencilling the OLD art after a mid-session asset drop.
-            try { Helpers.Silhouette.InvalidateCache(); }
-            catch (Exception ex) { App.Logger?.Debug("WardrobeCatalog: silhouette cache flush failed: {E}", ex.Message); }
         }
 
         // ---------------------------------------------------------------------------------
@@ -374,7 +340,7 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("WardrobeCatalog: registry unreadable: {E}", ex.Message);
+                    Log.Debug("WardrobeCatalog: registry unreadable: {E}", ex.Message);
                     _items = null;
                     _byId = null;
                     _ids = null;
