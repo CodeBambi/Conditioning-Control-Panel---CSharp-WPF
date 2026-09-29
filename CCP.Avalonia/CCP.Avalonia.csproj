@@ -127,6 +127,8 @@
                       Link="Resources\exclusives\%(RecursiveDir)%(Filename)%(Extension)" />
     <AvaloniaResource Include="..\Assets\features\*.png"
                       Link="Resources\features\%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\BlinkTrainer\Demo\*.png"
+                      Link="Resources\BlinkTrainer\Demo\%(Filename)%(Extension)" />
     <AvaloniaResource Include="..\Assets\app.ico" Link="Resources\app.ico" />
     <AvaloniaResource Include="..\Assets\*.png"
                       Link="Resources\%(Filename)%(Extension)" />

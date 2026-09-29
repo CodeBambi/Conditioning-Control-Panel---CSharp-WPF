@@ -1,54 +1,458 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using ConditioningControlPanel.Lab.GazeMinigame;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Webcam;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// BLINK TRAINER tab, ported from the WPF head.
-    ///
-    /// On WPF every handler in this file is a one-line hop to the identically named
-    /// <c>MainWindow</c> method (<c>MainWindow.BlinkTrainer.cs</c>), which owns the webcam
-    /// tracker, the gaze calibration, the overlay session and the premium gate. None of that
-    /// is on this head, so all of them are stubs. The state-driven surfaces - status text,
-    /// consent card colours, tracker button label, folder cards, mix-mode selection - keep
-    /// their authored starting state from the markup, exactly as WPF does before the host's
-    /// first refresh pass.
+    /// BLINK TRAINER tab, ported from the WPF head. On WPF these handlers hop to
+    /// <c>MainWindow.BlinkTrainer.cs</c>; here the view owns the parts that need no camera:
+    /// the tab-show refresh (<c>MainWindow.TabNavigation.cs RefreshBlinkTrainerTab</c>), the demo
+    /// stage loop, the premium gate, the status row (decided by Core <see cref="BlinkTrainerState"/>,
+    /// which WPF also calls), the folder library and the session settings editors.
     /// </summary>
     public partial class BlinkTrainerTabView : UserControl
     {
+        private static readonly IBrush Amber = new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x80));
+        private static readonly IBrush Green = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80));
+
+        private DispatcherTimer? _demoTimer;
+        private List<Bitmap>? _demoAssets;
+        private int _demoIndex;
+        private bool _demoUsingA = true;
+        private Action? _statusAction;
+
+        /// <summary>The status row's current state; read by tests and by nothing else yet.</summary>
+        internal BlinkTrainerStatusState StatusState { get; private set; }
+
         public BlinkTrainerTabView()
         {
-            InitializeComponent(); // generated: fills HeroArt/SideArt (AvaloniaXamlLoader.Load would not)
+            InitializeComponent(); // generated: fills the x:Name fields (AvaloniaXamlLoader.Load would not)
             Helpers.ModArt.BindFeaturePlates(this, "features/blink_trainer.png", HeroArt, SideArt);
+
+            // WPF fades with a 200ms QuadraticEase InOut storyboard per swap.
+            foreach (var img in new[] { BlinkTrainerStageImageA, BlinkTrainerStageImageB })
+                img.Transitions = new Transitions { new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(200), Easing = new QuadraticEaseInOut() } };
+
+            // WPF listens on PreviewMouseLeftButtonDown; Slider handles the bubbling press itself.
+            foreach (var s in new[] { SliderBlinkTrainerDurationNew, SliderBlinkTrainerOpacityNew })
+                s.AddHandler(PointerPressedEvent, BlinkTrainerSlider_DragStart, RoutingStrategies.Tunnel);
+
+            BlinkTrainerStatusAction.Click += (_, _) => _statusAction?.Invoke();
+
+            // Camera-only actions: visibly off, with the reason on hover, until a tracker lands.
+            foreach (var b in new[] { BtnBlinkTrainerStartSession, BtnBlinkTrainerStartStopTracker, BtnBlinkTrainerCalibrate, BtnBlinkTrainerQuickRecal })
+            {
+                b.IsEnabled = false;
+                ToolTip.SetShowOnDisabled(b, true);
+                b.Bind(ToolTip.TipProperty, new Binding("[deeper_player_eye_tracking_unavailable]") { Source = LocalizationManager.Instance });
+            }
+
+            // WPF ShowTab: RefreshBlinkTrainerTab on entry, StopBlinkTrainerDemoLoop on exit.
+            PropertyChanged += (_, e) =>
+            {
+                if (e.Property != IsVisibleProperty) return;
+                if (IsVisible) Refresh(); else StopDemoLoop();
+            };
         }
 
-        // ponytail: needs MainWindow's blink-trainer handlers -
-        // ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs, the gaze calibration
-        // window and the overlay session. TierGate is NO LONGER a blocker here - it is in Core
-        // (CCP.Core/Services/TierGate.cs) over the CoreEntitlement seam; the other three are still
-        // WPF-head with no Core seam. This is the same refusal the gaze minigame took in
-        // d5f2ac87 and BubblePopFeatureControl takes at its own site: a trainer that looks started
-        // while nothing tracks the eyes is worse than a gesture that does nothing.
-        private void BlinkTrainerMixOptionMix_Click(object? sender, PointerReleasedEventArgs e) { }
-        private void BlinkTrainerMixOptionSame_Click(object? sender, PointerReleasedEventArgs e) { }
-        private void BlinkTrainerSlider_DragStart(object? sender, PointerPressedEventArgs e) { }
-        private void BlinkTrainerSlider_DragEnd(object? sender, PointerReleasedEventArgs e) { }
-        private void BlinkTrainerSlider_LostCapture(object? sender, PointerCaptureLostEventArgs e) { }
-        private void BtnBlinkTrainerAddFolderCard_Click(object? sender, RoutedEventArgs e) { }
+        internal void Refresh()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                // A programmatic set raises Changed, which writes back the value just read - as on
+                // WPF. The markup defaults never land: XAML assigns Value before ValueChanged is hooked
+                // (BlinkTrainerTabLiveTests proves a saved 42 survives construction).
+                {
+                    ToggleBlinkTrainerIncludeVideos.IsChecked = s.BlinkTrainerIncludeVideos;
+                    SliderBlinkTrainerDurationNew.Value = s.BlinkTrainerDurationMinutes;
+                    TxtBlinkTrainerDurationValue.Text = $"{s.BlinkTrainerDurationMinutes} min";
+                    SliderBlinkTrainerOpacityNew.Value = s.BlinkTrainerOpacity;
+                    TxtBlinkTrainerOpacityValue.Text = $"{s.BlinkTrainerOpacity}%";
+                    ApplyOpacityFill(s.BlinkTrainerOpacity);
+                    SetMixModeSelection(s.BlinkTrainerMixImages);
+                }
+
+                RebuildFolderCards();
+                RefreshWebcamColumn();
+                RefreshGate();
+                RefreshStatusRow();
+                ApplyStageMode();
+            }
+            catch (Exception ex) { Log.Warning(ex, "RefreshBlinkTrainerTab failed"); }
+        }
+
+        // ---- gate + stage ----------------------------------------------------------------
+
+        private void RefreshGate()
+        {
+            bool premium = CoreEntitlement.HasPremium;
+            BlinkTrainerGate.IsVisible = !premium;
+            BlinkTrainerGatedContent.IsEnabled = premium;
+            BlinkTrainerStageActions.IsEnabled = premium;
+        }
+
+        /// <summary>WPF DetermineBlinkTrainerStageMode: non-premium always sees the demo; consent +
+        /// folders is live preview, which parks the stage blank until a blink arrives.</summary>
+        private void ApplyStageMode()
+        {
+            var s = CoreSettings.Current;
+            bool live = CoreEntitlement.HasPremium && WebcamConsent.IsCurrent(s) && s.BlinkTrainerFolders.Count > 0;
+            if (!live) { StartDemoLoop(); return; }
+            StopDemoLoop();
+            // ponytail: live preview swaps on WebcamTrackingService.OnBlink, which has no Linux twin;
+            // the stage stays parked (WPF ResetBlinkTrainerStageForLive) because no blink ever comes.
+            SetOpacityNow(BlinkTrainerStageImageA, 0);
+            SetOpacityNow(BlinkTrainerStageImageB, 0);
+            _demoUsingA = true;
+        }
+
+        internal bool DemoRunning => _demoTimer != null;
+
+        private void StartDemoLoop()
+        {
+            if (_demoTimer != null) return;
+            if (_demoAssets == null)
+            {
+                _demoAssets = Enumerable.Range(1, 4)
+                    .Select(i => Helpers.ModArt.TryLoad($"BlinkTrainer/Demo/demo_{i:00}.png"))
+                    .OfType<Bitmap>().OrderBy(_ => Random.Shared.Next()).ToList();
+            }
+            if (_demoAssets.Count == 0) { Log.Warning("BlinkTrainer: demo loop skipped — no demo assets loaded"); return; }
+
+            _demoIndex = 0;
+            _demoUsingA = true;
+            BlinkTrainerStageImageA.Source = _demoAssets[0];
+            SetOpacityNow(BlinkTrainerStageImageA, 1);
+            BlinkTrainerStageImageB.Source = null;
+            SetOpacityNow(BlinkTrainerStageImageB, 0);
+
+            _demoTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.0) };
+            _demoTimer.Tick += (_, _) => AdvanceDemo();
+            _demoTimer.Start();
+        }
+
+        private void StopDemoLoop()
+        {
+            _demoTimer?.Stop();
+            _demoTimer = null;
+        }
+
+        internal void AdvanceDemo()
+        {
+            if (_demoAssets is not { Count: > 0 }) return;
+            _demoIndex = (_demoIndex + 1) % _demoAssets.Count;
+            var incoming = _demoUsingA ? BlinkTrainerStageImageB : BlinkTrainerStageImageA;
+            var outgoing = _demoUsingA ? BlinkTrainerStageImageA : BlinkTrainerStageImageB;
+            incoming.Source = _demoAssets[_demoIndex];
+            incoming.Opacity = 1;
+            outgoing.Opacity = 0;
+            _demoUsingA = !_demoUsingA;
+        }
+
+        /// <summary>A hard set, like WPF's BeginAnimation(null) + assign: no 200ms fade.</summary>
+        private static void SetOpacityNow(Image img, double value)
+        {
+            var t = img.Transitions;
+            img.Transitions = null;
+            img.Opacity = value;
+            img.Transitions = t;
+        }
+
+        // ---- status row --------------------------------------------------------------------
+
+        private void RefreshStatusRow()
+        {
+            var s = CoreSettings.Current;
+            bool multiMonitor = TopLevel.GetTopLevel(this) is Window w && w.Screens.ScreenCount > 1;
+            // No tracker on this head, so there is no calibration: WPF's HasUsableCalibration with
+            // App.Webcam null. Nothing runs and nothing errors, for the same reason.
+            StatusState = BlinkTrainerState.Status(false, null, WebcamConsent.IsCurrent(s),
+                s.BlinkTrainerFolders.Count, multiMonitor, calibrationUsable: false);
+
+            BlinkTrainerStatusDot.Fill = StatusState == BlinkTrainerStatusState.IdleReady
+                ? (this.FindResource("PinkBrush") as IBrush ?? Brushes.HotPink) : Amber;
+            BindLoc(BlinkTrainerStatusText, StatusState switch
+            {
+                BlinkTrainerStatusState.NeedsConsent => "blink_trainer_status_needs_consent",
+                BlinkTrainerStatusState.NeedsFolders => "blink_trainer_status_needs_folders",
+                BlinkTrainerStatusState.NeedsCalibration => "blink_trainer_status_needs_calibration",
+                _ => "blink_trainer_status_ready",
+            });
+            switch (StatusState)
+            {
+                case BlinkTrainerStatusState.NeedsConsent: WireStatusAction("blink_trainer_consent_grant", GrantConsent); break;
+                case BlinkTrainerStatusState.NeedsFolders: WireStatusAction("blink_trainer_add_folder", () => BtnBlinkTrainerAddFolderCard_Click(null, new RoutedEventArgs())); break;
+                // ponytail: calibration is WebcamCalibrationWindow over the tracker; with no camera
+                // there is nothing to calibrate, so the fix-it button is not offered.
+                default: WireStatusAction(null, null); break;
+            }
+            // WPF SetStartButtonState enables Start outside the consent/folder states; here it stays
+            // off (see the constructor) because there is no BlinkTrainerService to start.
+        }
+
+        private void WireStatusAction(string? key, Action? action)
+        {
+            _statusAction = action;
+            BlinkTrainerStatusAction.IsVisible = key != null;
+            if (key != null) BlinkTrainerStatusAction.Content = BindLoc(new TextBlock(), key);
+        }
+
+        private static TextBlock BindLoc(TextBlock tb, string key)
+        {
+            tb.Bind(TextBlock.TextProperty, new Binding($"[{key}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
+            return tb;
+        }
+
+        private async void GrantConsent()
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            await new Dialogs.WebcamConsentDialog().ShowDialog(owner);
+            Refresh();
+        }
+
+        /// <summary>WPF RefreshBlinkTrainerWebcamColumn's consent card and calibration line.</summary>
+        private void RefreshWebcamColumn()
+        {
+            bool consented = WebcamConsent.IsCurrent(CoreSettings.Current);
+            BlinkTrainerConsentCard.Background = new SolidColorBrush(consented ? Color.FromArgb(0x1A, 0x4A, 0xDE, 0x80) : Color.FromArgb(0x1A, 0xFF, 0xD0, 0x80));
+            BlinkTrainerConsentCard.BorderBrush = consented ? Green : Amber;
+            BindLoc(BlinkTrainerConsentStatus, consented ? "blink_trainer_consent_granted" : "blink_trainer_consent_required");
+            BtnBlinkTrainerManageConsent.Content = BindLoc(new TextBlock { FontSize = 11 }, consented ? "blink_trainer_consent_manage" : "blink_trainer_consent_grant");
+            BtnBlinkTrainerRevokeConsent.IsVisible = consented;
+            BindLoc(BlinkTrainerCalibrationStatus, "blink_trainer_calibration_none");
+        }
+
+        // ---- folder library ----------------------------------------------------------------
+
+        private void RebuildFolderCards()
+        {
+            BlinkTrainerFolderCardsHost.Children.Clear();
+            var s = CoreSettings.Current;
+            foreach (var folder in s.BlinkTrainerFolders.ToList())
+                BlinkTrainerFolderCardsHost.Children.Add(BuildFolderCard(folder, s.BlinkTrainerIncludeVideos));
+        }
+
+        private Border BuildFolderCard(string folder, bool includeVideos)
+        {
+            var pink = this.FindResource("PinkBrush") as IBrush ?? Brushes.HotPink;
+            var rest = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4), 0.3);
+            var muted = this.FindResource("TextMutedBrush") as IBrush ?? Brushes.Gray;
+
+            var countLine = BlinkTrainerState.FolderCountLine(AssetPack.FromFolder(folder), includeVideos);
+            var info = new StackPanel();
+            info.Children.Add(new TextBlock
+            {
+                Text = BlinkTrainerState.FolderDisplayName(folder), Foreground = Brushes.White,
+                FontWeight = FontWeight.Medium, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis,
+                [ToolTip.TipProperty] = folder,
+            });
+            info.Children.Add(new TextBlock
+            {
+                Text = countLine ?? Loc.Get("blink_trainer_folder_empty_or_invalid"),
+                Foreground = countLine == null ? (this.FindResource("TextDimBrush") as IBrush ?? muted) : muted,
+                FontSize = 11, Margin = new Thickness(0, 2, 0, 0),
+            });
+
+            var remove = new Button
+            {
+                Content = new TextBlock { Text = "×", FontSize = 16 }, Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0), Foreground = muted, Padding = new Thickness(6, 0),
+                Cursor = new Cursor(StandardCursorType.Hand), VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
+                Tag = folder,
+            };
+            remove.Click += BtnBlinkTrainerRemoveFolderCard_Click;
+            Grid.SetColumn(remove, 1);
+
+            var card = new Border
+            {
+                CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Color.FromArgb(0x11, 0, 0, 0)),
+                BorderBrush = rest, BorderThickness = new Thickness(1), Padding = new Thickness(10, 8),
+                Margin = new Thickness(0, 0, 0, 8),
+                Child = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Children = { info, remove } },
+            };
+            card.PointerEntered += (_, _) => card.BorderBrush = pink;
+            card.PointerExited += (_, _) => card.BorderBrush = rest;
+            return card;
+        }
+
+        private async void BtnBlinkTrainerAddFolderCard_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } sp) return;
+                var picked = await sp.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Pick a folder of images / GIFs for Blink Trainer" });
+                AddFolder(picked.FirstOrDefault()?.TryGetLocalPath());
+            }
+            catch (Exception ex) { Log.Warning(ex, "BtnBlinkTrainerAddFolderCard_Click failed"); }
+        }
+
+        internal void AddFolder(string? folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder)) return;
+            var s = CoreSettings.Current;
+            if (s.BlinkTrainerFolders.Any(f => string.Equals(f, folder, StringComparison.OrdinalIgnoreCase))) return;
+            s.BlinkTrainerFolders.Add(folder);
+            CoreSettings.Save();
+            AfterFoldersChanged();
+        }
+
+        private void BtnBlinkTrainerRemoveFolderCard_Click(object? sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.Tag is not string folder) return;
+            CoreSettings.Current.BlinkTrainerFolders.RemoveAll(f => string.Equals(f, folder, StringComparison.OrdinalIgnoreCase));
+            CoreSettings.Save();
+            AfterFoldersChanged();
+        }
+
+        private void AfterFoldersChanged()
+        {
+            RebuildFolderCards();
+            RefreshStatusRow();
+            ApplyStageMode();
+        }
+
+        // ---- session settings --------------------------------------------------------------
+
+        private void ToggleBlinkTrainerIncludeVideos_Changed(object? sender, RoutedEventArgs e)
+        {
+            var s = CoreSettings.Current;
+            bool v = ToggleBlinkTrainerIncludeVideos.IsChecked == true;
+            if (s.BlinkTrainerIncludeVideos == v) return;
+            s.BlinkTrainerIncludeVideos = v;
+            CoreSettings.Save();
+            RebuildFolderCards();
+        }
+
+        // WPF writes the value and does not Save here; the next save (or exit) persists it.
+        private void SliderBlinkTrainerDurationNew_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            int v = (int)Math.Round(e.NewValue);
+            TxtBlinkTrainerDurationValue.Text = $"{v} min";
+            CoreSettings.Current.BlinkTrainerDurationMinutes = v;
+        }
+
+        private void SliderBlinkTrainerOpacityNew_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            int v = (int)Math.Round(e.NewValue);
+            TxtBlinkTrainerOpacityValue.Text = $"{v}%";
+            ApplyOpacityFill(v);
+            CoreSettings.Current.BlinkTrainerOpacity = v;
+        }
+
+        private void SliderBlinkTrainerOpacityNew_Loaded(object? sender, RoutedEventArgs e)
+            => ApplyOpacityFill((int)Math.Round(SliderBlinkTrainerOpacityNew.Value));
+
+        /// <summary>WPF H.7: the opacity slider's fill fades with its value, 1-100 -> 0.109-1.0.</summary>
+        private void ApplyOpacityFill(int value)
+        {
+            var track = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(SliderBlinkTrainerOpacityNew).OfType<Track>().FirstOrDefault();
+            if (track?.DecreaseButton is { } fill) fill.Opacity = Math.Clamp(value, 1, 100) / 100.0 * 0.9 + 0.1;
+        }
+
+        private void BlinkTrainerSlider_DragStart(object? sender, PointerPressedEventArgs e) => ScaleLabel(sender, 1.15, 100, new BackEaseOut());
+        private void BlinkTrainerSlider_DragEnd(object? sender, PointerReleasedEventArgs e) => ScaleLabel(sender, 1.0, 150, new QuadraticEaseOut());
+        private void BlinkTrainerSlider_LostCapture(object? sender, PointerCaptureLostEventArgs e) => ScaleLabel(sender, 1.0, 150, new QuadraticEaseOut());
+
+        private void ScaleLabel(object? slider, double to, int ms, Easing easing)
+        {
+            var label = slider == SliderBlinkTrainerDurationNew ? TxtBlinkTrainerDurationValue
+                : slider == SliderBlinkTrainerOpacityNew ? TxtBlinkTrainerOpacityValue : null;
+            if (label?.RenderTransform is not ScaleTransform st) return;
+            var d = TimeSpan.FromMilliseconds(ms);
+            st.Transitions = new Transitions
+            {
+                new DoubleTransition { Property = ScaleTransform.ScaleXProperty, Duration = d, Easing = easing },
+                new DoubleTransition { Property = ScaleTransform.ScaleYProperty, Duration = d, Easing = easing },
+            };
+            st.ScaleX = st.ScaleY = to;
+        }
+
+        private void BlinkTrainerMixOptionSame_Click(object? sender, PointerReleasedEventArgs e) => SetMixMode(false);
+        private void BlinkTrainerMixOptionMix_Click(object? sender, PointerReleasedEventArgs e) => SetMixMode(true);
+
+        private void SetMixMode(bool isMix)
+        {
+            if (!BlinkTrainerGatedContent.IsEnabled) return; // WPF: a disabled panel gets no mouse input
+            var s = CoreSettings.Current;
+            if (s.BlinkTrainerMixImages != isMix) { s.BlinkTrainerMixImages = isMix; CoreSettings.Save(); }
+            SetMixModeSelection(isMix);
+        }
+
+        /// <summary>Selected option: full pink border + a pink 16px glow at 0.6; the other clear.</summary>
+        private void SetMixModeSelection(bool isMix)
+        {
+            var pink = this.FindResource("PinkBrush") as IBrush ?? Brushes.HotPink;
+            foreach (var (b, on) in new[] { (BlinkTrainerMixOptionSame, !isMix), (BlinkTrainerMixOptionMix, isMix) })
+            {
+                b.BorderBrush = on ? pink : Brushes.Transparent;
+                b.BoxShadow = on ? BoxShadows.Parse("0 0 16 0 #99FF69B4") : default;
+            }
+        }
+
+        private void BtnBlinkTrainerGateUnlock_Click(object? sender, RoutedEventArgs e)
+            => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OpenAppSettingsSection("account");
+
+        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e)
+            => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OpenAppSettingsSection("devices");
+
+        /// <summary>WPF: the same consent dialog both ways (grant, or review when granted).</summary>
+        private void BtnBlinkTrainerManageConsent_Click(object? sender, RoutedEventArgs e) => GrantConsent();
+
+        /// <summary>WPF BtnBlinkTrainerRevokeConsent_Click: confirm (Cancel default), then
+        /// WebcamTrackingService.RevokeConsent's settings half. Its Stop/ClearCalibration half is
+        /// CoreWebcam.RevokeConsent, a no-op while no tracker is seeded - and with none there is
+        /// no running camera and no calibration to clear.</summary>
+        private async void BtnBlinkTrainerRevokeConsent_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                if (!await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get("blink_trainer_consent_revoke_confirm_title"),
+                        Loc.Get("blink_trainer_consent_revoke_confirm_body"), defaultToCancel: true)) return;
+                RevokeConsent();
+            }
+            catch (Exception ex) { Log.Warning(ex, "BtnBlinkTrainerRevokeConsent_Click failed"); }
+        }
+
+        internal void RevokeConsent()
+        {
+            CoreWebcam.RevokeConsent();
+            var s = CoreSettings.Current;
+            s.WebcamConsentGiven = false;
+            s.WebcamConsentVersion = "";
+            s.WebcamConsentDate = null;
+            s.WebcamCalibrated = false;
+            s.WebcamCalibrationMode = "";
+            s.WebcamTriggersEnabled = false;
+            s.FocusGameEnabled = false;
+            CoreSettings.Save();
+            Refresh();
+        }
+
+        // Disabled in the constructor: WebcamTrackingService, BlinkTrainerService and
+        // WebcamCalibrationWindow have no Linux twin (see MainShellWindow.BlinkTrainer.cs).
         private void BtnBlinkTrainerCalibrate_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnBlinkTrainerGateUnlock_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnBlinkTrainerManageConsent_Click(object? sender, RoutedEventArgs e) { }
         private void BtnBlinkTrainerQuickRecal_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnBlinkTrainerRevokeConsent_Click(object? sender, RoutedEventArgs e) { }
         private void BtnBlinkTrainerStartSession_Click(object? sender, RoutedEventArgs e) { }
         private void BtnBlinkTrainerStartStopTracker_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) { }
-        private void SliderBlinkTrainerDurationNew_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderBlinkTrainerOpacityNew_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderBlinkTrainerOpacityNew_Loaded(object? sender, RoutedEventArgs e) { }
-        private void ToggleBlinkTrainerIncludeVideos_Changed(object? sender, RoutedEventArgs e) { }
     }
 }

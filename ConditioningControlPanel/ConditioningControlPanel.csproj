@@ -440,8 +440,9 @@
     <!-- Blink Trainer stage demo assets — SFW abstract gradients shown on the
          dedicated Blink Trainer page when no live preview is running, and to
          non-premium users behind the gate. Regenerate via
-         assets\BlinkTrainer\Demo\generate_demos.ps1. -->
-    <Resource Include="assets\BlinkTrainer\Demo\*.png" />
+         Assets\BlinkTrainer\Demo\generate_demos.ps1 (shared root; linked back to the old
+         pack:// path so MainWindow.BlinkTrainer.cs is unchanged). -->
+    <Resource Include="..\Assets\BlinkTrainer\Demo\*.png" Link="assets\BlinkTrainer\Demo\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

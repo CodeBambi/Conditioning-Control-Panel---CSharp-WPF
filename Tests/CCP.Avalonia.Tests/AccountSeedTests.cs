@@ -40,6 +40,7 @@ public sealed partial class AccountSeedTests : IDisposable
         CoreAccount.IsLoggedInProvider = CoreAccount.HasPremiumAccessProvider = CoreAccount.HasLabAccessProvider = CoreAccount.IsWhitelistedProvider = null;
         CoreAccount.DisplayNameProvider = null;
         CoreAccount.UnifiedUserId = null;
+        CoreEntitlement.HasPremiumProvider = CoreEntitlement.HasLabProvider = null;
     }
 
     private static ProviderSubscription Make(string prefix) => new(prefix, () => new AppSettings());
@@ -50,6 +51,8 @@ public sealed partial class AccountSeedTests : IDisposable
         Assert.False(CoreAccount.IsWhitelisted);
         Assert.False(CoreAccount.HasPremiumAccess);
         Assert.False(CoreAccount.HasLabAccess);
+        Assert.False(CoreEntitlement.HasPremium); // TierGate's seam
+        Assert.False(CoreEntitlement.HasLab);
     }
 
     [Fact]
@@ -64,6 +67,9 @@ public sealed partial class AccountSeedTests : IDisposable
         Assert.True(CoreAccount.IsLoggedIn);
         Assert.True(CoreAccount.HasPremiumAccess);
         Assert.True(CoreAccount.HasLabAccess);
+        // TierGate reads CoreEntitlement, not CoreAccount: the seed must feed both (WPF App.xaml.cs:487).
+        Assert.True(CoreEntitlement.HasPremium);
+        Assert.True(CoreEntitlement.HasLab);
         Assert.Equal("Bambi", CoreAccount.DisplayName);
     }
 
