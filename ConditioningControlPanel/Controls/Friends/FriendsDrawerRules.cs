@@ -95,13 +95,14 @@ internal static class FriendsDrawerRules
         return ("friends_seen_long", null);
     }
 
-    /// <summary>How long ago a request came in, as the seen buckets word it. Null key for a request
-    /// with no time (an old server), which then shows none.</summary>
+    /// <summary>How long ago a request came in, short like the feed ("now", "15m", "3h", "2d"): it
+    /// leads a subline beside three buttons in a 300 px drawer. Null key for a request with no time
+    /// (an old server), which then shows none.</summary>
     public static (string? Key, int? Arg) RequestAgo(DateTimeOffset at, DateTimeOffset now)
     {
         if (at == DateTimeOffset.MinValue || at == default) return (null, null);
         if (at > now) at = now;
-        var (key, arg) = SeenKey(at, now);
+        var (key, arg) = FriendsFeedRules.Ago(at.UtcDateTime, now.UtcDateTime);
         return (key, arg);
     }
 

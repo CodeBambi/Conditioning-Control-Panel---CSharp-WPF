@@ -698,7 +698,9 @@ public sealed partial class FriendsDrawer : Border
             : !string.IsNullOrEmpty(r.Via) ? Loc.GetF("friends_request_via", r.Via!)
             : Loc.Get("friends_request_new");
         var (agoKey, agoArg) = FriendsDrawerRules.RequestAgo(r.At, DateTimeOffset.UtcNow);
-        if (agoKey != null) sub += " \u00B7 " + (agoArg is int n ? Loc.GetF(agoKey, n) : Loc.Get(agoKey));
+        var age = agoKey == null ? null : agoArg is int n ? Loc.GetF(agoKey, n) : Loc.Get(agoKey);
+        // The age leads (DESK-RUN 31, "15m"): the trimming takes the words, never the age.
+        if (age != null) sub = age + " \u00B7 " + sub;
         var subLine = FriendsLook.Label(sub, 11.5, FriendsLook.MutedBrush);
         subLine.Tag = "friends-request-sub";
         mid.Children.Add(subLine);
@@ -750,6 +752,28 @@ public sealed partial class FriendsDrawer : Border
             buttons.Children.Add(accept);
             buttons.Children.Add(decline);
             buttons.Children.Add(more);
+            // The name and the age share what the pills leave. A long "Accept" (German) would
+            // leave the age no room, so then the two pills go tight. Judged on the widest age
+            // ("59m" and the trim's dots), so every row in the list looks the same.
+            if (age != null)
+            {
+                var any = new Size(double.PositiveInfinity, double.PositiveInfinity);
+                var need = FriendsLook.Label(Loc.GetF("friends_notice_minutes", 59) + "…", subLine.FontSize, FriendsLook.MutedBrush);
+                need.Measure(any);
+                buttons.Measure(any);
+                var room = DrawerWidth - BorderThickness.Left - BorderThickness.Right
+                    - _scroll.Padding.Left - _scroll.Padding.Right - SystemParameters.VerticalScrollBarWidth
+                    - row.Padding.Left - row.Padding.Right - g.ColumnDefinitions[0].Width.Value
+                    - mid.Margin.Left - mid.Margin.Right;
+                if (buttons.DesiredSize.Width + need.DesiredSize.Width > room)
+                {
+                    accept.Padding = decline.Padding = new Thickness(5, 3, 5, 3);
+                    // Measured once above: without a fresh measure the pills keep their old size.
+                    accept.InvalidateMeasure();
+                    decline.InvalidateMeasure();
+                    buttons.InvalidateMeasure();
+                }
+            }
         }
         else
         {
@@ -770,7 +794,6 @@ public sealed partial class FriendsDrawer : Border
     private void RenderFoot(FriendsSnapshot snap)
     {
         var g = new Grid();
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
@@ -809,6 +832,7 @@ public sealed partial class FriendsDrawer : Border
 
         var add = FootButton("", Loc.Get("friends_add_title"));
         add.Tag = "friends-add-open";
+        add.HorizontalAlignment = HorizontalAlignment.Right;
         add.IsEnabled = _svc?.Available == true;
         add.Click += (_, _) =>
         {
@@ -824,11 +848,31 @@ public sealed partial class FriendsDrawer : Border
         Grid.SetColumn(add, 1);
         g.Children.Add(add);
 
+        // "Add friend" keeps its words while they fit beside the buttons on the left. In a longer
+        // language it is the glyph alone, with the words as its tooltip.
+        var room = DrawerWidth - BorderThickness.Left - BorderThickness.Right - _foot.Padding.Left - _foot.Padding.Right;
+        var any = new Size(double.PositiveInfinity, double.PositiveInfinity);
+        left.Measure(any);
+        add.Measure(any);
+        if (left.DesiredSize.Width + add.DesiredSize.Width > room
+            && add.Content is StackPanel addParts && addParts.Children.Count == 2
+            && addParts.Children[0] is FrameworkElement addGlyph)
+        {
+            addGlyph.Margin = new Thickness(0);
+            addParts.Children[1].Visibility = Visibility.Collapsed;
+            add.ToolTip = Loc.Get("friends_add_title");
+        }
+
+        var foot = new StackPanel();
         var code = string.IsNullOrEmpty(snap.MyCode) ? "" : snap.MyCode;
         if (code.Length > 0)
         {
-            var mine = new StackPanel { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-            var top = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            // Your code gets a row of its own, whole: it is what a friend types to add you, and
+            // the only place it is drawn, so the buttons below can never squeeze it out.
+            var mine = new Grid { Margin = new Thickness(8, 0, 2, 4) };
+            mine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            mine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var top = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             var codeText = FriendsLook.Label(code, 12, FriendsLook.LilacBrush, FriendsLook.Mono, FontWeights.SemiBold);
             codeText.Tag = "friends-my-code";
             top.Children.Add(codeText);
@@ -844,14 +888,14 @@ public sealed partial class FriendsDrawer : Border
             copy.ToolTip = Loc.Get("friends_copy");
             copy.Click += (_, _) => CopyCode(code, copy);
             top.Children.Add(copy);
-            mine.Children.Add(top);
             _copied = FriendsLook.Label(Loc.Get("friends_my_code"), 9, FriendsLook.DimBrush, FriendsLook.Mono);
-            _copied.HorizontalAlignment = HorizontalAlignment.Right;
             mine.Children.Add(_copied);
-            Grid.SetColumn(mine, 2);
-            g.Children.Add(mine);
+            Grid.SetColumn(top, 1);
+            mine.Children.Add(top);
+            foot.Children.Add(mine);
         }
-        _foot.Child = g;
+        foot.Children.Add(g);
+        _foot.Child = foot;
     }
 
     private static Button FootButton(string glyph, string text)
