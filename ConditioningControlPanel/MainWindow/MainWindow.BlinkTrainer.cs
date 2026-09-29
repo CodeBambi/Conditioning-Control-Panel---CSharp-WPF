@@ -606,40 +606,19 @@ namespace ConditioningControlPanel
         // Status row state machine
         // ──────────────────────────────────────────────────────────────────
 
-        private enum BlinkTrainerStatusState
-        {
-            IdleReady,
-            Running,
-            NeedsConsent,
-            NeedsFolders,
-            NeedsCalibration,
-            Error,
-        }
+        // BlinkTrainerStatusState and its priority order live in Core (Services/BlinkTrainerState.cs).
 
         private BlinkTrainerStatusState _currentBlinkTrainerStatusState = BlinkTrainerStatusState.IdleReady;
         private RoutedEventHandler? _blinkTrainerStatusActionHandler;
 
         private BlinkTrainerStatusState DetermineBlinkTrainerStatusState()
-        {
-            if (App.BlinkTrainer?.IsRunning == true)
-                return BlinkTrainerStatusState.Running;
-
-            // Service exposes LastError as a non-empty string after a failure.
-            if (!string.IsNullOrEmpty(App.BlinkTrainer?.LastError))
-                return BlinkTrainerStatusState.Error;
-
-            if (!WebcamTrackingService.IsConsentCurrent())
-                return BlinkTrainerStatusState.NeedsConsent;
-
-            var folderCount = App.Settings?.Current?.BlinkTrainerFolders?.Count ?? 0;
-            if (folderCount == 0)
-                return BlinkTrainerStatusState.NeedsFolders;
-
-            if (IsMultiMonitorEnvironment() && !HasUsableCalibration())
-                return BlinkTrainerStatusState.NeedsCalibration;
-
-            return BlinkTrainerStatusState.IdleReady;
-        }
+            => BlinkTrainerState.Status(
+                App.BlinkTrainer?.IsRunning == true,
+                App.BlinkTrainer?.LastError,
+                WebcamTrackingService.IsConsentCurrent(),
+                App.Settings?.Current?.BlinkTrainerFolders?.Count ?? 0,
+                IsMultiMonitorEnvironment(),
+                HasUsableCalibration());
 
         private static bool IsMultiMonitorEnvironment()
         {
@@ -911,15 +890,7 @@ namespace ConditioningControlPanel
 
             // Display name: folder basename, falling back to parent if blank
             // (e.g. trailing-slash paths). Tooltip carries the full path.
-            string displayName = "";
-            try
-            {
-                displayName = System.IO.Path.GetFileName(folder);
-                if (string.IsNullOrWhiteSpace(displayName))
-                    displayName = new System.IO.DirectoryInfo(folder).Name;
-            }
-            catch { displayName = folder; }
-            if (string.IsNullOrWhiteSpace(displayName)) displayName = folder;
+            string displayName = BlinkTrainerState.FolderDisplayName(folder);
 
             info.Children.Add(new TextBlock
             {
@@ -933,29 +904,12 @@ namespace ConditioningControlPanel
 
             // Count summary via AssetPack.FromFolder. Null pack = invalid/empty.
             var pack = Lab.GazeMinigame.AssetPack.FromFolder(folder);
-            string countLine;
             Brush countBrush = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
-            if (pack == null)
+            string? countLine = BlinkTrainerState.FolderCountLine(pack, includeVideos);
+            if (countLine == null)
             {
                 countLine = Localization.Loc.Get("blink_trainer_folder_empty_or_invalid");
                 countBrush = FindResource("TextDimBrush") as Brush ?? countBrush;
-            }
-            else
-            {
-                int gifCount = pack.ImagePaths.Count(p =>
-                    System.IO.Path.GetExtension(p).Equals(".gif", StringComparison.OrdinalIgnoreCase));
-                int nonGifImages = pack.ImagePaths.Count - gifCount;
-
-                if (includeVideos)
-                {
-                    countLine = $"{pack.ImagePaths.Count} images, {pack.VideoPaths.Count} videos";
-                }
-                else
-                {
-                    countLine = gifCount > 0
-                        ? $"{nonGifImages} images, {gifCount} GIFs"
-                        : $"{pack.ImagePaths.Count} images";
-                }
             }
             info.Children.Add(new TextBlock
             {

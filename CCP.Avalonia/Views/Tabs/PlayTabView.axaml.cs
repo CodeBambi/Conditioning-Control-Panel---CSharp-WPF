@@ -298,9 +298,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// OFF is never gated on WPF either, but there is no consumer here to release.</summary>
         private void ChkFocusGaze_Changed(object? sender, RoutedEventArgs e) { }
 
-        /// <summary>ponytail: needs MainWindow.BtnLabBlinkTrainerOpenNew_Click; the Blink Trainer
-        /// page exists here but its host service does not.</summary>
-        private void BtnLabBlinkTrainerOpenNew_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF MainWindow.LabTab.cs:1061 is ShowTab("blinktrainer"); the page owns its gate.</summary>
+        private void BtnLabBlinkTrainerOpenNew_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("blinktrainer");
 
         // ---- SESSIONS --------------------------------------------------------------------
 
