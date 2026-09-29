@@ -154,6 +154,7 @@ public sealed partial class FriendsDrawer
         {
             var l = lines[i];
             var row = FeedRow(l.Event, IsNew(l), friends, now);
+            if (friends.Any(f => f.Id == l.Event.FriendId)) MakeOpener(row, l.Event.FriendId);
             _feedBox.Children.Add(row);
             if (!l.Read) shownUnread.Add(l.Key);
             if (i == 0 && _isOpen && _feedTop != null && _feedTop != l.Key) LandLine(row);
@@ -196,7 +197,7 @@ public sealed partial class FriendsDrawer
     {
         var g = new Grid { Margin = new Thickness(8, 10, 8, 4), Tag = "friends-feed-head" };
         var t = FriendsLook.Label(Loc.Get("friends_feed_title"), 10, FriendsLook.DimBrush, FriendsLook.Mono);
-        t.Tag = "friends-section";
+        t.Tag = "friends-feed-title";
         g.Children.Add(t);
         if (fresh > 0)
         {
@@ -208,9 +209,18 @@ public sealed partial class FriendsDrawer
         return g;
     }
 
-    private static FrameworkElement FeedRow(FriendEvent e, bool isNew, IReadOnlyList<Friend> friends, DateTime nowUtc)
+    private static Border FeedRow(FriendEvent e, bool isNew, IReadOnlyList<Friend> friends, DateTime nowUtc)
     {
-        var g = new Grid { Margin = new Thickness(8, 1, 8, 1), MinHeight = 22, Tag = "friends-feed-line:" + e.Key };
+        var g = new Grid { MinHeight = 22 };
+        var row = new Border
+        {
+            Margin = new Thickness(4, 0, 4, 0),
+            Padding = new Thickness(4, 0, 4, 0),
+            CornerRadius = new CornerRadius(8),
+            Background = Brushes.Transparent,
+            Tag = "friends-feed-line:" + e.Key,
+            Child = g,
+        };
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -251,8 +261,8 @@ public sealed partial class FriendsDrawer
         g.Children.Add(ago);
 
         // A long name trims; the whole line is one hover away.
-        g.ToolTip = plain;
-        return g;
+        row.ToolTip = plain;
+        return row;
     }
 
     /// <summary>Fills <paramref name="t"/> with the line, the name in its own weight, and returns
@@ -285,6 +295,35 @@ public sealed partial class FriendsDrawer
             }
         }
         return plain.ToString();
+    }
+
+    /// <summary>A line about someone on the list opens their card (Poke back is one press away).</summary>
+    private void MakeOpener(Border row, string friendId)
+    {
+        row.Cursor = System.Windows.Input.Cursors.Hand;
+        row.MouseEnter += (_, _) => row.Background = FriendsLook.HoverBrush;
+        row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+        row.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            FriendsSfx.Click();
+            OpenFromFeed(friendId);
+        };
+    }
+
+    /// <summary>Opens <paramref name="friendId"/>'s card and scrolls it into view.</summary>
+    internal void OpenFromFeed(string friendId)
+    {
+        try
+        {
+            OpenOn(friendId);
+            if (RowFor(friendId) is { } row)
+            {
+                _list.UpdateLayout();
+                row.BringIntoView();
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] feed open failed: {E}", ex.Message); }
     }
 
     /// <summary>A line that just landed slides in from the left with its dot. Still under Motion Off.</summary>

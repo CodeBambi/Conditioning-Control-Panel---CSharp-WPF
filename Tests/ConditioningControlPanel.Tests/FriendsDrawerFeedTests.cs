@@ -138,6 +138,29 @@ public partial class FriendsDrawerTests
     }
 
     [Fact]
+    public void A_line_about_a_friend_opens_their_card()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var feed = new FriendsFeed(() => "me");
+            feed.Add(new FriendEvent(FriendEventKind.PokeReceived, "sam", "Sam", FeedT0, "p1", null, "hi"));
+            feed.Add(new FriendEvent(FriendEventKind.RequestReceived, "dee", "Dee", FeedT0.AddMinutes(1), "r1"));
+            WithFeed(feed, () =>
+            {
+                var d = NewDrawer(new FakeFriends(Sample()));
+                var samLine = (Border)Find(d.FeedSection, "friends-feed-line:p1")!;
+                var deeLine = (Border)Find(d.FeedSection, "friends-feed-line:r1")!;
+                Assert.Equal(System.Windows.Input.Cursors.Hand, samLine.Cursor);
+                Assert.Null(deeLine.Cursor);   // not on the list (a request): nothing to open
+
+                d.OpenFromFeed("sam");
+                Assert.Equal("sam", d.OpenFriendId);
+                Assert.NotNull(Find(d.RowFor("sam")!, "friends-card"));
+            });
+        });
+    }
+
+    [Fact]
     public void An_empty_or_missing_feed_draws_no_section()
     {
         WpfRenderHarness.OnStaThread(() =>
