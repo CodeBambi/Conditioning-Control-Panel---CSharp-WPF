@@ -21,10 +21,6 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>In-app corner toasts (WPF App.Notifications). Queues until the shell attaches it.</summary>
         public static Helpers.NotificationService Notifications { get; } = new();
 
-        /// <summary>The cclabs catalogue client (WPF App.Catalogue). Settable so tests inject a fake handler.</summary>
-        internal static CatalogueClient Catalogue { get; set; } = new(
-            () => CoreSettings.Current.AuthToken, () => CoreAccount.UnifiedUserId, CoreReleaseContent.AppVersion);
-
         /// <summary>HT-URL lookup + download (WPF App.CatalogueLookup). The shell registers the opener.</summary>
         internal static CatalogueLookup CatalogueLookup { get; set; } = new(
             () => Services.Deeper.DeeperLocalLibrary.DefaultFolder, CoreReleaseContent.AppVersion, OnUiThread);
@@ -63,6 +59,11 @@ namespace ConditioningControlPanel.Avalonia
             CoreMods.Attach(Mods);
             Mods.Initialize(CoreSettings.Current.ActiveModId);
         }
+
+        /// <summary>The cclabs catalogue client (WPF App.Catalogue): the same Core client and inputs as WPF's
+        /// CatalogueService. Settable so a test can hand in a fake-handler client.</summary>
+        internal static CatalogueClient Catalogue { get; set; } = new(
+            () => CoreSettings.Current.AuthToken, () => CoreAccount.UnifiedUserId, CoreReleaseContent.AppVersion);
 
         /// <summary>The release-content pack service (WPF App.ReleaseContent), or null on the headless render path.</summary>
         internal static ReleaseContentService? ReleaseContent { get; private set; }

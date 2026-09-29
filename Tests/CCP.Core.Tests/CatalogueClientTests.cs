@@ -151,4 +151,14 @@ public sealed class CatalogueClientTests
         Assert.Null(await c.FetchMySubmissionsAsync(CancellationToken.None));
         Assert.Empty(f.Seen);
     }
+
+    [Theory]
+    [InlineData(null, false, "https://app.cclabs.app")]
+    [InlineData("http://127.0.0.1:5055/", false, "http://127.0.0.1:5055")]
+    [InlineData("http://127.0.0.1:5055/", true, "http://127.0.0.1:5055")]
+    [InlineData(null, true, null)]
+    [InlineData("https://evil.example", true, null)]
+    [InlineData("https://evil.example", false, "https://app.cclabs.app")]
+    public void BaseUrlOverrideIsLoopbackOnlyAndASandboxNeverReachesTheRealServer(string? overrideUrl, bool sandboxed, string? expected) =>
+        Assert.Equal(expected, CatalogueClient.ResolveBaseUrl(overrideUrl, sandboxed));
 }

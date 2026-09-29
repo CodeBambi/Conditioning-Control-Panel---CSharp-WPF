@@ -11,14 +11,10 @@
 // Callers: MainShellWindow.CatalogueStatus.cs (CreateCatalogueStatusBadge, the /mine polls), which
 // paints the preset detail pill and session rack pill (PresetsTabView) and the Mod Manager row pill.
 //
-// THE WRITE HALF IS STILL OUT:
-//   RecordCatalogueSubmission(kind, key, SubmissionResult)
-//       Its persistence body is portable line for line, but its parameter type is not:
-//       SubmissionResult was head-only; it is Core's since catalogue U1
-//       (CCP.Core/Services/Catalogue/CatalogueClient.cs), so this is now unblocked (U3 wires it).
-//       It also ends by calling RefreshCatalogueShareBadges (MainShellWindow.CatalogueStatus.cs).
-//   (The status polls - CheckCatalogueSubmissionStatusesAsync, the accepted toast and the badge -
-//   are in MainShellWindow.CatalogueStatus.cs.)
+// THE WRITE HALF: RecordCatalogueSubmission is ported (catalogue U3). Its callers, the preset/session/
+// mod Share buttons, are split out of U4 and not wired yet; whoever wires them repaints through
+// RefreshCatalogueShareBadges (MainShellWindow.CatalogueStatus.cs) as WPF does. The status polls, accepted toast
+// (15 s, not WPF's sticky one) and ResolveCatalogueDisplayName are in MainShellWindow.CatalogueStatus.cs.
 //
 // Checked and NOT the blocker: CoreReleaseContent. It answers pack ids, install stamps and pack
 // info; the catalogue submission flow reads none of those.
@@ -26,6 +22,8 @@
 using System;
 using System.Collections.Generic;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -77,6 +75,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var dict = GetCatalogueDict(kind);
             if (dict == null || string.IsNullOrEmpty(key)) return null;
             dict.TryGetValue(key, out var rec);
+            return rec;
+        }
+
+        /// <summary>WPF MainWindow.CatalogueSubmissions.cs:63: remember a share's server id/status. Only
+        /// Success/Duplicate carry one; other outcomes are no-ops. WPF ends with RefreshCatalogueShareBadges
+        /// (MainShellWindow.CatalogueStatus.cs, instance); the Share caller does that when it lands.</summary>
+        internal static void RecordCatalogueSubmission(string kind, string key, SubmissionResult result)
+        {
+            try
+            {
+                if (ToRecordFields(result) is not var (id, status) || string.IsNullOrEmpty(key)) return;
+                var dict = GetCatalogueDict(kind);
+                if (dict == null) return;
+                dict.TryGetValue(key, out var existing);
+                dict[key] = UpdateRecord(existing, id, status);
+                CoreSettings.Save();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[Catalogue] RecordCatalogueSubmission failed: {Error}", ex.Message);
+            }
+        }
+
+        private static (string Id, string Status)? ToRecordFields(SubmissionResult result)
+        {
+            var (id, status) = result switch
+            {
+                SubmissionResult.Success s => (s.Id, s.Status),
+                SubmissionResult.Duplicate d => (d.ExistingId, d.ExistingStatus),
+                _ => (null, null),
+            };
+            if (string.IsNullOrEmpty(id)) return null;
+            return (id, string.IsNullOrEmpty(status) ? "pending" : status);
+        }
+
+        private static DeeperSubmissionRecord UpdateRecord(DeeperSubmissionRecord? existing, string id, string status)
+        {
+            var rec = existing ?? new DeeperSubmissionRecord { SubmittedUtc = DateTime.UtcNow };
+            rec.CatalogueId = id;
+            rec.Status = status;
+            rec.LastCheckedUtc = DateTime.UtcNow;
+            // A re-submit that reports it is already accepted must not fire a retroactive "published"
+            // toast later - the duplicate toast already said so.
+            if (IsCatalogueAcceptedStatus(status)) rec.AcceptedNotified = true;
             return rec;
         }
     }

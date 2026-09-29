@@ -40,8 +40,8 @@
 //   The tutorial - StartDeeperTabTutorial, BtnDeeperTutorial_Click, BtnDeeperWelcomeTour_Click.
 //   StartTutorial(TutorialType.Deeper) is not on this head.
 //   The rail pulse - StartDeeperTabPulse / StopDeeperTabPulse, a WPF storyboard on BtnDeeper.
-//   The catalogue SUBMIT side - SubmitDeeperLibraryEntryAsync, ShowCatalogueSubmissionResultToast,
-//   IsCatalogueEligible (catalogue U3). The LOOKUP side is restored at the bottom of this file.
+//   (Not out any more: the catalogue. The submit half is in MainShellWindow.DeeperSubmissions.cs
+//   (U3); the lookup -> toast -> picker -> download -> player chain is at the bottom of this file.)
 //   IsImportableEnhancementPath is pure and would compile, and is held back with
 //   ImportEnhancementFiles, its only caller.
 //   SwitchToDeeperLibraryTab, MaybePromptMandatoryVideoEnhancement, BtnDeeperOpenPlayer_Click,

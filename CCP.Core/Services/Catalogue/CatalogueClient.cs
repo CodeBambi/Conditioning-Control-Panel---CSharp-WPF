@@ -38,7 +38,16 @@ namespace ConditioningControlPanel.Services
     /// WPF's token-and-unified-id check in <see cref="GetSupabaseTokenAsync"/>, shared by every head.</remarks>
     public class CatalogueClient
     {
-        private const string CclabsBaseUrl = "https://app.cclabs.app";
+        private const string RealBaseUrl = "https://app.cclabs.app";
+
+        /// <summary>Where the catalogue lives, or null for "no network". CCP_CATALOGUE_BASE_URL is honoured
+        /// only for a loopback host (the Core LoopbackUrl rule); a CCP_USERDATA_DIR sandbox without one never
+        /// reaches the real server - so tests and Keincheck cannot write to it.</summary>
+        internal static string? ResolveBaseUrl(string? overrideUrl, bool sandboxed) =>
+            LoopbackUrl.IsHonoured(overrideUrl, out var u) ? u.GetLeftPart(UriPartial.Path).TrimEnd('/')
+            : sandboxed ? null : RealBaseUrl;
+
+        private readonly string? CclabsBaseUrl;
         private const string GuidelinesVersion = "1.0";
 
         // Refresh when the cached token is within this many seconds of expiry.
@@ -71,6 +80,10 @@ namespace ConditioningControlPanel.Services
         public CatalogueClient(Func<string?> ccpToken, Func<string?> unifiedId, string appVersion, HttpMessageHandler? handler = null)
         {
             (_ccpToken, _unifiedId) = (ccpToken, unifiedId);
+            // A test handler never reaches the network, so it keeps the real route shape.
+            CclabsBaseUrl = handler != null ? RealBaseUrl : ResolveBaseUrl(
+                Environment.GetEnvironmentVariable("CCP_CATALOGUE_BASE_URL"),
+                !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")));
             _http = handler != null ? BuildHttpClient(new HttpClient(handler), appVersion)
                 : _shared ??= BuildHttpClient(new HttpClient(), appVersion);
         }
@@ -460,6 +473,7 @@ namespace ConditioningControlPanel.Services
 
                 var ccpToken = _ccpToken();
                 var unifiedId = _unifiedId();
+                if (CclabsBaseUrl == null) { Log.Warning("[CatalogueService] Sandboxed without a loopback CCP_CATALOGUE_BASE_URL: no network"); return null; }
                 if (string.IsNullOrEmpty(ccpToken) || string.IsNullOrEmpty(unifiedId))
                 {
                     Log.Warning("[CatalogueService] Token exchange skipped: missing CCP auth state");

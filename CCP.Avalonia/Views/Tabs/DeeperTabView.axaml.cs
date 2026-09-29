@@ -152,7 +152,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void DeeperRowDelete_Click(object? sender, RoutedEventArgs e) { }
         private void DeeperRowPlay_Click(object? sender, RoutedEventArgs e) { }
-        private void DeeperRowSubmit_Click(object? sender, RoutedEventArgs e) { }
+        // WPF MainWindow.DeeperHub.cs:704.
+        private void DeeperRowSubmit_Click(object? sender, RoutedEventArgs e)
+        {
+            if ((sender as Control)?.DataContext is not DeeperLibraryRowVm row || Owner is not { } shell) return;
+            e.Handled = true;
+            _ = shell.SubmitDeeperLibraryEntryAsync(row.Entry);
+        }
         private void DeeperSearch_TextChanged(object? sender, TextChangedEventArgs e)
         {
             var text = sender is TextBox box ? box.Text : TxtDeeperSearch?.Text;
@@ -301,8 +307,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Foreground = new SolidColorBrush(Color.FromRgb(0xB8, 0xA6, 0xFF)),
             }).ToList();
             var source = DescribeSource(entry.MediaSource);
+            // WPF MainWindow.DeeperHub.cs:225,262-266.
+            var eligible = MainShellWindow.IsCatalogueEligible(entry);
+            var hasAuth = !string.IsNullOrEmpty(CoreSettings.Current.AuthToken);
             return new DeeperLibraryRowVm
             {
+                ShowSubmitButton = eligible,
+                SubmitEnabled = eligible && hasAuth,
+                SubmitTooltip = Loc.Get(hasAuth
+                    ? "deeper_library_submit_tooltip"
+                    : "deeper_library_submit_button_disabled_tooltip"),
                 Entry = entry,
                 Name = entry.Name,
                 MediaTypeIcon = isAudio ? "🎵" : "🎬",
