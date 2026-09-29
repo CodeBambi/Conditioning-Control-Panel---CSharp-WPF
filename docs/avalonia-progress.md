@@ -704,3 +704,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   Installed and refresh the list, as in WPF. The fake content server is shared by both test projects.
 - Evidence: ModManagerPackDownloadTests + the sandbox-fetch guard test (fail-proofed); live sandbox against a local fake
   server: not downloaded -> 42% -> "Media downloaded". Review: ACCEPT, follow-ups applied.
+
+## avalonia-port/packs-mod-choice: +709 (content packs L3)
+- The header mod combo switches mods live like WPF (activate, save, pending clear, audio-base fetch, palette repaint, selector
+  rebuilt outside its own handler); the saved palette applies at startup; Mod Manager switches repaint on close. A chosen mod
+  activates when its pack lands or on the next launch. The first-run mod step activates or records + downloads like WPF.
+- Evidence: ModChoiceTests (5, fail-proofed); live sandbox against a local fake server: CCP Default -> Dronification re-themes
+  with the chip named, a pending Bambi choice auto-activated after its download. Not repainted yet (noted): logo/feature art,
+  achievements, skill tree, BambiCloud radio, per-mod presets. Review: FIX -> r1 applied.
