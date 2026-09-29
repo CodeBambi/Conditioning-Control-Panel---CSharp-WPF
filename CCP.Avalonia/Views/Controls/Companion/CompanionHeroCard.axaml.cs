@@ -357,7 +357,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 var s = CoreSettings.Current;
                 var def = CompanionDefinition.GetById(s.ActiveCompanionId);
                 var display = def.GetDisplayName(s.SlutModeEnabled);
-                var neutral = CoreMods.IsCCPDefault ? global::ConditioningControlPanel.Avalonia.App.Mods?.GetCompanionName() : null;
+                var neutral = CoreMods.IsCCPDefault ? CoreMods.ActiveModPackage?.Manifest.Identity?.CompanionName : null;
                 Name = !string.IsNullOrWhiteSpace(neutral) ? neutral! : CoreMods.MakeModAware(display);
                 ModName = CoreMods.ActiveModPackage?.Manifest.Name ?? string.Empty;
                 Flavor = CoreMods.MakeModAware(def.Description);
