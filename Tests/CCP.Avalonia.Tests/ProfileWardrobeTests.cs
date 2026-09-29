@@ -84,6 +84,15 @@ public sealed class ProfileWardrobeTests
                     Assert.Equal(size, page.ProfileCharmSlot2.Width, 3);
                     Assert.NotNull(page.ProfileCharmSlot2.RenderTransform);
 
+                    // A card resize re-places the charms on its own (WPF SizeChanged hook), no re-apply.
+                    page.ProfileHeroCard.Width = card.Width - 400;
+                    shell.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+                    var wider = page.ProfileHeroCard.Bounds;
+                    Assert.True(wider.Width < card.Width, $"{wider.Width} vs {card.Width}");
+                    var moved = WardrobeStageGeometry.CharmRect(wider.Width, wider.Height, 0.5, 0.5, 1.0);
+                    Assert.Equal(moved.Left, Canvas.GetLeft(page.ProfileCharmSlot2), 3);
+
                     // Someone else's card with no cosmetics: nothing of yours is left on it.
                     shell.ApplyViewedProfileWardrobe(null);
                     Assert.False(deco.IsVisible);

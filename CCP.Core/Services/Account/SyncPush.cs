@@ -37,6 +37,7 @@ namespace ConditioningControlPanel.Services
         private string[]? _serverAchievements;   // null: the profile carried none, so achievements are not known
         private Timer? _heartbeat;
         private int _nudgePending;
+        private ProfileCosmetics? _pendingCosmetics;   // an explicit Customize save not yet accepted by the server
 
         /// <summary>Tests only.</summary>
         public Func<DateTime> UtcNow = () => DateTime.UtcNow;
@@ -66,6 +67,7 @@ namespace ConditioningControlPanel.Services
             StopHeartbeat();
             Loaded = false;
             _serverAchievements = null;
+            _pendingCosmetics = null;
             LastSyncTime = null;
         }
 
@@ -73,15 +75,27 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>The body: known fields only (achievements only when <paramref name="achievements"/> is known, never
         /// shrunk to local-only). Xp is the TOTAL, as WPF sends it.</summary>
-        public static SyncBody Body(AppSettings s, IEnumerable<string>? achievements) => new()
+        /// <param name="cosmetics">An explicit loadout save (WPF BuildCosmeticsPayload after a load: the sanitized
+        /// loadout, the empty one included - that is the unequip-everything clear). Null leaves the key out.</param>
+        public static SyncBody Body(AppSettings s, IEnumerable<string>? achievements, ProfileCosmetics? cosmetics = null) => new()
         {
-            Known = achievements == null ? Sent & ~SyncBody.Field.Achievements : Sent,
+            Known = (achievements == null ? Sent & ~SyncBody.Field.Achievements : Sent)
+                    | (cosmetics == null ? SyncBody.Field.None : SyncBody.Field.Cosmetics),
             UnifiedId = s.UnifiedId,
             Xp = (int)ProfileAdopt.TotalXp(s),
             Level = s.PlayerLevel,
             DescentEpoch = Descent.DescentEpochs.ClientEpoch,
             Achievements = achievements?.Distinct().OrderBy(a => a, StringComparer.Ordinal).ToList(),
+            Cosmetics = cosmetics,
         };
+
+        /// <summary>WPF PersistOwnCosmetics' push: <paramref name="chosen"/> (already sanitized) rides this and every
+        /// later push until one succeeds - so a cooldown skip still delivers it on the next sync.</summary>
+        public Task<bool> PushCosmeticsAsync(ProfileCosmetics chosen)
+        {
+            _pendingCosmetics = chosen;
+            return PushAsync("cosmetics");
+        }
 
         /// <param name="waitForGate">Logout: wait (bounded) for an in-flight push instead of skipping.</param>
         public async Task<bool> PushAsync(string reason, bool waitForGate = false)
@@ -102,7 +116,8 @@ namespace ConditioningControlPanel.Services
                 var id = s.UnifiedId!;
                 if (!Loaded || !SignedIn(s)) return false;   // a logout between the check above and the gate
                 var server = _serverAchievements;
-                var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>())));
+                var cosmetics = _pendingCosmetics;
+                var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics));
                 using var request = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/sync");
                 if (!string.IsNullOrEmpty(s.AuthToken)) request.Headers.Add("X-Auth-Token", s.AuthToken);
                 request.Content = new StringContent(body, Encoding.UTF8, "application/json");
@@ -131,6 +146,8 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
                 LastSyncTime = UtcNow();
+                // Delivered (the clear included); a newer save made meanwhile stays pending.
+                if (cosmetics != null) Interlocked.CompareExchange(ref _pendingCosmetics, null, cosmetics);
                 Log.Information("V2 Profile synced successfully ({Bytes} bytes)", json.Length);
                 try { ProfileAdopt.ApplySyncResponse(s, JObject.Parse(json), UtcNow()); }
                 catch (Exception ex) { Log.Debug("V2 Sync: Could not parse server flags: {Error}", ex.Message); }

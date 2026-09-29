@@ -18,9 +18,8 @@
 //   ResolveAchievementTitle      (ConditioningControlPanel/Models/Achievement.cs). CoreMods
 //                                .MakeModAware answers the mod-aware half; the roster does not
 //                                exist here, so every id would resolve to null.
-//   OpenProfileCustomizeDialog - PORTED to MainShellWindow.ProfileWardrobe.cs with the settings
-//   PersistOwnCosmetics          save + wardrobe repaint; the server push (App.ProfileSync
-//                                .SyncProfileAsync / PendingCosmeticsClear) is not in Core yet.
+//   OpenProfileCustomizeDialog - PORTED to MainShellWindow.ProfileWardrobe.cs: settings save,
+//   PersistOwnCosmetics          wardrobe repaint and the push (Core SyncPush.PushCosmeticsAsync).
 //   ToggleOwnAchievementPin    - App.Achievements again, plus CosmeticsCatalog's pin cap.
 //   FlashPinCapNotice          - portable, but only ever fires from ToggleOwnAchievementPin.
 //   SetProfilePictureLoad      - clears _appliedPresetAvatar, an ImageSource only

@@ -216,7 +216,9 @@
                                         <Grid Grid.Row="0">
                                             <!-- AdornedAvatar owns avatar + decoration + presence
                                                  dot. It deliberately does not clip: a hat has to
-                                                 overflow the portrait. -->
+                                                 overflow the portrait.
+                                                 ponytail: WPF adds hover:HoverPop.IsEnabled (DiscordTabView.xaml:242);
+                                                 no reusable HoverPop behaviour on this head yet (behavior-hover-pop). -->
                                             <ctrl:AdornedAvatar x:Name="ProfileHeroAvatar"
                                                                 AvatarSize="104"
                                                                 HorizontalAlignment="Left" VerticalAlignment="Top"

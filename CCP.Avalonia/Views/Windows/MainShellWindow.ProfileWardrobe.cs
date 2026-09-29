@@ -163,10 +163,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// WPF OpenProfileCustomizeDialog + PersistOwnCosmetics: edits YOUR loadout only, saves it to
-        /// settings and repaints your card. ponytail: WPF then pushes it with
-        /// App.ProfileSync.SyncProfileAsync (and PendingCosmeticsClear for an empty save); no profile
-        /// sync push exists in Core yet, so other people see the change only once that lands.
+        /// WPF OpenProfileCustomizeDialog: edits YOUR loadout only, then <see cref="PersistOwnCosmetics"/>.
         /// </summary>
         internal async void OpenProfileCustomizeDialog()
         {
@@ -184,16 +181,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var dialog = new ProfileCustomizeDialog(current, unlocked, avatar, card?.Width ?? 0, card?.Height ?? 0);
                 if (await dialog.ShowDialog<bool>(this) != true) return;
 
-                var chosen = SanitizeOwnWardrobe(dialog.Result);
-                CoreSettings.Current.ProfileCosmetics = chosen;
-                CoreSettings.Save();
-                Log.Information(
-                    "Profile cosmetics saved: banner={Banner}, accent={Accent}, title={Title}, pins={Pins}, deco={Deco}, charms={Charms}",
-                    chosen.BannerId ?? "none", chosen.Accent ?? "none", chosen.TitleId ?? "none",
-                    chosen.PinnedAchievements.Count, chosen.AvatarDeco ?? "none", chosen.Charms.Count);
-                ApplyOwnProfileWardrobe();
+                PersistOwnCosmetics(SanitizeOwnWardrobe(dialog.Result));
             }
             catch (Exception ex) { Log.Error(ex, "OpenProfileCustomizeDialog failed"); }
+        }
+
+        /// <summary>WPF PersistOwnCosmetics: saves, repaints your card and pushes the loadout so other people see
+        /// it. <paramref name="chosen"/> must already be sanitized. The push carries it until one succeeds (an empty
+        /// loadout is WPF's explicit unequip-everything clear); fire-and-forget, as WPF.</summary>
+        internal void PersistOwnCosmetics(ProfileCosmetics chosen)
+        {
+            CoreSettings.Current.ProfileCosmetics = chosen;
+            CoreSettings.Save();
+            Log.Information(
+                "Profile cosmetics saved: banner={Banner}, accent={Accent}, title={Title}, pins={Pins}, deco={Deco}, charms={Charms}",
+                chosen.BannerId ?? "none", chosen.Accent ?? "none", chosen.TitleId ?? "none",
+                chosen.PinnedAchievements.Count, chosen.AvatarDeco ?? "none", chosen.Charms.Count);
+            ApplyOwnProfileWardrobe();
+            if (Platform.AccountSeed.Sync is { } sync) _ = sync.PushCosmeticsAsync(chosen);
         }
     }
 }
