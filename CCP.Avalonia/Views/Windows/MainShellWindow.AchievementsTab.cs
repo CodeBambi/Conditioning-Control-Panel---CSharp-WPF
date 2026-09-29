@@ -1,6 +1,6 @@
 // PARTLY PORTED from ConditioningControlPanel/MainWindow/MainWindow.AchievementsTab.cs (875 lines).
 // UPDATE: the card grid, meter, filters and unlock refresh are now built by AchievementsTabView.axaml.cs
-// on the Core AchievementEngine; the notes below predate that. Still blocked: reward map (WardrobeCatalog),
+// on the Core AchievementEngine; the notes below predate that. Reward band, Rewards chip and counter now read Core WardrobeCatalog. Still blocked:
 // tile FX, season-recap re-view.
 //
 // THE THREE NAV HANDLERS WERE NEVER BLOCKED. BtnAchievements_Click, BtnCompanion_Click and

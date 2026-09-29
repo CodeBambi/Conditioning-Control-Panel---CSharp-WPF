@@ -31,4 +31,9 @@
     <ProjectReference Include="..\..\CCP.Core\CCP.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The wardrobe registry at the heads' path, for WardrobeCatalogTests (art not needed). -->
+    <Content Include="..\..\Assets\cosmetics\registry.json" Link="Resources\cosmetics\registry.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

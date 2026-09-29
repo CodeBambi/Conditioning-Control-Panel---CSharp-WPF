@@ -155,6 +155,13 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Wardrobe registry + art, read off disk by Core WardrobeCatalog; as WPF ConditioningControlPanel.csproj:236. -->
+    <Content Include="..\Assets\cosmetics\**\*.png;..\Assets\cosmetics\*.json" Link="Resources\cosmetics\%(RecursiveDir)%(Filename)%(Extension)"
+             Exclude="..\Assets\cosmetics\**\*_28.png;..\Assets\cosmetics\**\*_104.png;..\Assets\cosmetics\**\*_guide.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Awareness Engine preset packs, as WPF ConditioningControlPanel.csproj:658. -->
     <Content Include="..\Assets\AwarenessPresets\**\*" Link="Resources\AwarenessPresets\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

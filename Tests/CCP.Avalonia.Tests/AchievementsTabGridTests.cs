@@ -67,6 +67,30 @@ public sealed class AchievementsTabGridTests
                 Assert.Equal(Loc.GetF("label_0_1_achievements_unlocked", 1, engine.GetTotalCount(false)),
                     view.FindControl<TextBlock>("TxtAchievementCount")!.Text);
 
+                // Reward band, automation name and counter off the Core WardrobeCatalog (WPF BuildRewardBand,
+                // ApplyAchievementCardTooltip, UpdateRewardCount).
+                var rewards = WardrobeCatalog.AchievementRewards();
+                Assert.Contains("Bubblegum Scarf", Texts(earned));
+                Assert.Equal(Loc.GetF("achv_automation_unlocked", Loc.Get("achievement_plastic_initiation_name"), "Bubblegum Scarf"),
+                    global::Avalonia.Automation.AutomationProperties.GetName(earned));
+                Assert.NotNull(ConditioningControlPanel.Avalonia.Helpers.ModArt.Wardrobe("bambi_bubblegum_scarf"));
+                Assert.Equal(2, earned.GetVisualDescendants().OfType<Image>().Count()); // badge + reward art
+                var gatedLocked = view.Cards.First(c => rewards.ContainsKey((string)c.Tag!) && (string)c.Tag! != "plastic_initiation");
+                Assert.DoesNotContain(rewards[(string)gatedLocked.Tag!].Name, Texts(gatedLocked));
+                var gates = WardrobeCatalog.AchievementGates()!;
+                var rewardCount = view.FindControl<TextBlock>("TxtRewardCount")!;
+                Assert.True(rewardCount.IsVisible);
+                Assert.Equal(Loc.GetF("achv_reward_count", gates.Count(g => g.Value == "plastic_initiation"), gates.Count), rewardCount.Text);
+                view.SelectFilter(AchievementsTabView.FilterRewards);
+                Assert.Equal(view.Cards.Where(c => rewards.ContainsKey((string)c.Tag!)).Select(c => (string)c.Tag!),
+                    view.Cards.Where(c => c.IsVisible).Select(c => (string)c.Tag!));
+                Assert.Contains(view.Cards, c => c.IsVisible);
+
+                // The reward toast paints the item's art (WPF ItemUnlockedPopup.LoadItemArt), not the gift fallback.
+                var toast = new ConditioningControlPanel.Avalonia.Views.Windows.ItemUnlockedPopup(rewards["plastic_initiation"]);
+                Assert.True(toast.FindControl<Image>("ItemImage")!.IsVisible);
+                Assert.Equal("Bubblegum Scarf", toast.FindControl<TextBlock>("TxtItemName")!.Text);
+
                 view.SelectFilter(AchievementsTabView.FilterUnlocked);
                 Assert.Equal(new[] { "plastic_initiation" }, view.Cards.Where(c => c.IsVisible).Select(c => (string)c.Tag!));
                 view.SelectFilter(AchievementsTabView.FilterLocked);

@@ -84,7 +84,7 @@ namespace ConditioningControlPanel
                     if (slot == null) continue;
 
                     var id = i < ids.Count ? ids[i] : null;
-                    var art = WardrobeCatalog.GetImage(id);
+                    var art = WardrobeArt.GetImage(id);
                     var item = WardrobeCatalog.Find(id);
 
                     if (art == null)
