@@ -110,7 +110,9 @@ public class AwarenessConsentTests
         {
             "ConditioningControlPanel/Models/AppSettings.cs",
             "ConditioningControlPanel/MainWindow/MainWindow.CompanionRoom.cs",
-            "ConditioningControlPanel/MainWindow/MainWindow.Patreon.cs",
+            // The lapse shutoff's flag half moved to Core (shared by both heads); it still only writes false,
+            // asserted below. MainWindow.Patreon.cs no longer writes the flag and lost its exemption.
+            "CCP.Core/Services/EntitlementLapse.cs",
             "CCP.Avalonia/Views/Windows/MainShellWindow.CompanionRoom.cs"
         };
 
@@ -124,7 +126,7 @@ public class AwarenessConsentTests
     {
         // The shutoff shares the allow list above with the consent gate, so its one privilege has
         // to be pinned: it may write the enable false, and it may never write it true.
-        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.Patreon.cs");
+        var source = SourceRoots.ReadProductFile("Services", "EntitlementLapse.cs");
 
         // (char)10 is the line feed, spelled without an escape so the split survives however this
         // file's own line endings land.
@@ -192,14 +194,17 @@ public class AwarenessConsentTests
         // Flipping the setting without stopping the service would leave the poll running until the
         // next relaunch — the half-fix that would make #1047 look repaired while the eyes stayed open.
         // Stop() on the legacy service is what chains through to the observer's Stop() and the ledger.
-        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.Patreon.cs");
-
-        var write = source.IndexOf("settings.AwarenessModeEnabled = false;", StringComparison.Ordinal);
+        // The flag half is Core (EntitlementLapse); it reports the cleared feature and each head stops its engine.
+        var core = SourceRoots.ReadProductFile("Services", "EntitlementLapse.cs");
+        var write = core.IndexOf("s.AwarenessModeEnabled = false; cleared.Add(\"awareness-mode\");", StringComparison.Ordinal);
         Assert.True(write > 0, "the lapse shutoff no longer switches Awareness Mode off");
 
-        var block = source.Substring(write, Math.Min(400, source.Length - write));
-        Assert.Contains("App.WindowAwareness?.Stop()", block, StringComparison.Ordinal);
-        Assert.Contains("Entitlement lapsed: Awareness Mode", block, StringComparison.Ordinal);
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.Patreon.cs");
+        var enforce = source.IndexOf("Services.EntitlementLapse.Enforce(settings)", StringComparison.Ordinal);
+        Assert.True(enforce > 0, "the WPF lapse shutoff no longer runs the Core flag pass");
+        var block = source.Substring(enforce, Math.Min(900, source.Length - enforce));
+        Assert.Contains("if (cleared.Contains(\"awareness-mode\")) App.WindowAwareness?.Stop();", block, StringComparison.Ordinal);
+        Assert.Contains("Entitlement lapsed: {Feature} switched off", block, StringComparison.Ordinal);
     }
 
     [Fact]

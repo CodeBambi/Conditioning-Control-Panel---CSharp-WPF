@@ -85,3 +85,12 @@ here record where and why the port chose something, and who advised.
 - Options: (a) drop like WPF; (b) keep it pending and send it with the next push.
 - Choice: (b). The user saved on purpose; losing it silently is a WPF bug, and the pending push is cleared on logout.
 - Advisor: reviewer (profile-wardrobe-live), supervisor.
+
+## 2026-09-29: awareness consent guard tests after the lapse move to Core
+- Question: moving the flag half of EnforceEntitlementLapse into Core (#1917) tripped the WPF consent guard tests, which pin the
+  lapse door to MainWindow.Patreon.cs and say a move must fail loudly for re-review. Re-reviewed: is the new door still safe?
+- Finding: Core EntitlementLapse is the only new writer and only ever writes false; WPF still stops the awareness engine for the
+  reported key and logs it; MainWindow.Patreon.cs no longer writes the flag at all.
+- Choice: retarget the three tests to the new location with the same assertions; drop MainWindow.Patreon.cs from the allow list
+  (narrower than before).
+- Advisor: supervisor (reviewer on #1917 accepted the Core move).
