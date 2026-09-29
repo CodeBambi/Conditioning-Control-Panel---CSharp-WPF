@@ -208,7 +208,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;
 
                     // WPF MainWindow.Exclusives.cs RefreshExclusivesTab "on tab show": gates can move between visits.
-                    case "exclusives": Named<Tabs.ExclusivesTabView>("ExclusivesTab")?.RefreshVault(); break;
+                    case "exclusives": RefreshExclusivesTab(); break;
 
                     // WPF MainWindow.TabNavigation.cs:324-337: spend the tab's seen-flag on any
                     // route in, then the one-time explainer on top of the tab just shown.

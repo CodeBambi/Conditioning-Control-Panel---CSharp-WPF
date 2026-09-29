@@ -413,7 +413,13 @@ namespace ConditioningControlPanel.Avalonia
                         Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
                 // WPF MainWindow.xaml.cs:484 (the ? box rolled over or its override landed) and
                 // OnPatreonTierChanged: both move the veils, the Play bands and the lapse pass.
-                void RepaintVeils() => Dispatcher.UIThread.Post(() => shell.RefreshEntitlementVeils(persist: true));
+                // WPF MainWindow.xaml.cs:486 / UpdatePatreonUI also repaint the vault (RefreshExclusivesTab).
+                void RepaintVeils() => Dispatcher.UIThread.Post(() =>
+                {
+                    shell.RefreshEntitlementVeils(persist: true);
+                    shell.RefreshExclusivesTab();
+                    shell.RefreshNavPremiumTags();
+                });
                 dailyFree.TodayChanged += RepaintVeils;
                 if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
                 if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();

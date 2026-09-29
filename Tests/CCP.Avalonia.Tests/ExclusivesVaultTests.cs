@@ -25,6 +25,11 @@ public sealed class ExclusivesVaultTests
         {
             EnsureAvalonia();
             Window? host = null;
+            var (premium, free, pass) = (CoreEntitlement.HasPremiumProvider, CoreEntitlement.IsFreeTodayProvider,
+                                         CoreEntitlement.IntakePassAvailableProvider);
+            CoreEntitlement.HasPremiumProvider = null;
+            CoreEntitlement.IsFreeTodayProvider = null;
+            CoreEntitlement.IntakePassAvailableProvider = null;
             try
             {
                 var view = new ExclusivesTabView { Width = 1400, Height = 900 };
@@ -70,9 +75,9 @@ public sealed class ExclusivesVaultTests
             }
             finally
             {
-                CoreEntitlement.HasPremiumProvider = null;
-                CoreEntitlement.IsFreeTodayProvider = null;
-                CoreEntitlement.IntakePassAvailableProvider = null;
+                CoreEntitlement.HasPremiumProvider = premium;
+                CoreEntitlement.IsFreeTodayProvider = free;
+                CoreEntitlement.IntakePassAvailableProvider = pass;
                 host?.Close();
                 Dispatcher.UIThread.RunJobs();
             }
@@ -89,6 +94,8 @@ public sealed class ExclusivesVaultTests
         {
             EnsureAvalonia();
             var library = BuiltInPrograms.All();
+            var premium = CoreEntitlement.HasPremiumProvider;
+            CoreEntitlement.HasPremiumProvider = null;
             try
             {
                 Assert.Contains(MainShellWindow.BuildProgramBrowseItems(library), r => r.IsLocked);
@@ -97,9 +104,31 @@ public sealed class ExclusivesVaultTests
                 Assert.All(rows, r => Assert.False(r.IsLocked));
                 Assert.All(rows, r => Assert.False(r.IsActionEnabled));
             }
-            finally { CoreEntitlement.HasPremiumProvider = null; }
+            finally { CoreEntitlement.HasPremiumProvider = premium; }
             return Task.CompletedTask;
         });
+    }
+
+    [Fact]
+    public void RailStarFollowsTheCoreGate()
+    {
+        var locked = typeof(MainShellWindow).GetMethod("IsNavEntryLocked",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        bool Star(string key) => (bool)locked.Invoke(null, new object[] { key })!;
+        var (premium, free) = (CoreEntitlement.HasPremiumProvider, CoreEntitlement.IsFreeTodayProvider);
+        CoreEntitlement.HasPremiumProvider = null;
+        CoreEntitlement.IsFreeTodayProvider = null;
+        try
+        {
+            // lockdown has no DailyFreeKey, so the live ? box cannot race this assertion.
+            Assert.True(Star("lockdown"));
+            Assert.False(Star("nosuchkey"));
+            CoreEntitlement.IsFreeTodayProvider = key => key == "haptics";
+            Assert.False(Star("haptics"));
+            CoreEntitlement.HasPremiumProvider = () => true;
+            Assert.False(Star("lockdown"));
+        }
+        finally { CoreEntitlement.HasPremiumProvider = premium; CoreEntitlement.IsFreeTodayProvider = free; }
     }
 
     private static ExclusiveCardRow[] Rows(ExclusivesTabView view) =>

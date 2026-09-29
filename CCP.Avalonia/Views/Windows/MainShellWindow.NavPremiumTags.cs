@@ -9,22 +9,14 @@
 // The pills are reached with Named<Border>() because this window's generated x:Name fields are
 // never assigned (see MainShellWindow.TabNavigation.cs).
 //
-// WHAT DOES NOT: the ANSWER. IsNavEntryLocked asks Models.ExclusiveFeature.All /
-// ExclusiveFeature.GateState (ConditioningControlPanel/Models/ExclusiveFeature.cs) and
-// DailyFreeService.IsFreeToday through App.DailyFree; the roster type is still WPF-side and this
-// head seeds no DailyFreeService instance, so there is no entitlement to read. That is NOT a
-// reason to invent one: the WPF original already fails to NO TAG on anything it cannot answer,
-// deliberately, because "an un-starred row that turns out to be locked costs a TierGate toast the
-// user was going to see anyway, while a starred row that is actually open is the rail lying about
-// what somebody already paid for". A head with no entitlement service is exactly that case, so
-// the honest answer here is the original's own fallback and the pills stay as authored
-// (IsVisible=False on the NavEntryPremiumTag theme).
+// THE ANSWER comes from Core: IsNavEntryLocked asks Models.ExclusiveFeature.All / GateState
+// (CCP.Core/Models/ExclusiveFeature.cs) and ExclusiveFeature.IsFreeToday, i.e. CoreEntitlement,
+// which App.axaml.cs seeds (account providers + DailyFreeService). On anything it cannot answer it
+// fails to NO TAG, as the WPF original does.
 //
-// Also head-side: HookNavPremiumTags and QueueNavPremiumTagRefresh, whose four subscriptions are
-// App.Patreon.TierChanged, App.SubscribeStar.TierChanged, App.DailyFree.TodayChanged and
-// App.IntakePass.PassStateChanged - four services, none of them on this head. The marshal they
-// wrap is CoreDispatch/Dispatcher.UIThread.Post here, one line, once there is something to
-// subscribe to.
+// Repaint triggers: the rail init (MainShellWindow.NavRail.cs) and App.axaml.cs RepaintVeils (either
+// provider's TierChanged + DailyFreeService.TodayChanged), WPF HookNavPremiumTags' subscriptions.
+// ponytail: no IntakePass.PassStateChanged - Core has no IntakePassService.
 //
 // Callers this layer does not own: InitializeNavRail and RefreshNavPremiumTags' repaint callers
 // live in MainShellWindow.NavRail.cs / MainShellWindow.PremiumRail.cs, and the collapse fade that
@@ -80,19 +72,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        /// <summary>
-        /// "Is this door shut to this account right now?" - see the header for why this head can
-        /// only answer no. Kept as its own member rather than folded into the loop above so the
-        /// roster lookup lands in one place when ExclusiveFeature crosses.
-        /// </summary>
+        /// <summary>WPF MainWindow.NavPremiumTags.cs:178, over Core's roster and the entitlement seam.
+        /// Fails to NO TAG on anything unexpected, as WPF does.</summary>
         private static bool IsNavEntryLocked(string exclusiveKey)
         {
-            // ponytail: needs Models.ExclusiveFeature.All + GateState
-            // (ConditioningControlPanel/Models/ExclusiveFeature.cs) and DailyFreeService.IsFreeToday
-            // for the feature's DailyFreeKey. WPF's own fallback for an unanswerable key is "not
-            // locked", which is what an entitlement-less head is.
-            _ = exclusiveKey;
-            return false;
+            try
+            {
+                var feature = Models.ExclusiveFeature.All.FirstOrDefault(f => f.Key == exclusiveKey);
+                if (feature == null) return false;
+                var state = feature.GateState();
+                return state == Models.ExclusiveGateState.Locked && !feature.IsFreeToday(state);
+            }
+            catch { return false; }
         }
     }
 }
