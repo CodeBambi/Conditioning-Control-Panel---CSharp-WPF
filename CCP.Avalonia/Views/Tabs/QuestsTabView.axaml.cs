@@ -105,12 +105,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- STUBS ----------------------------------------------------------------
 
-        // ponytail: needs ConditioningControlPanel/Services/Progression/QuestService.cs
-        // (RerollDailyQuest) plus the reroll budget, which stays head-side in
-        // ConditioningControlPanel/Models/QuestProgressRerolls.cs (it reads App.SkillTree).
+        // ponytail: QuestService (RerollDailyQuest) and the reroll budget are in Core now
+        // (CCP.Core/Services/Progression/QuestService.cs, CCP.Core/Models/QuestProgressRerolls.cs);
+        // this head does not construct the service yet (next layer).
         private void OnDailyCardRerollRequested(object? sender, EventArgs e) { }
 
-        // ponytail: needs ConditioningControlPanel/Services/Progression/QuestService.cs
+        // ponytail: needs CCP.Core/Services/Progression/QuestService.cs
         // (RerollWeeklyQuest), as MainWindow.QuestsTab.cs:62 calls it.
         private void RerollWeekly() { }
 
@@ -131,7 +131,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// ponytail: half of the real calendar is reachable - AppSettings.StreakShieldUsedDates is
         /// in Core. The completion dates are not: they are QuestService.Progress
         /// .DailyQuestCompletionDates from
-        /// ConditioningControlPanel/Services/Progression/QuestService.cs. WPF paints the whole
+        /// CCP.Core/Services/Progression/QuestService.cs. WPF paints the whole
         /// CURRENT MONTH day by day (MainWindow.QuestsTab.cs:563), not seven pips, so this
         /// placeholder is a different shape as well as different data.
         /// </summary>

@@ -4,9 +4,8 @@ using ConditioningControlPanel.Models;
 namespace ConditioningControlPanel;
 
 /// <summary>
-/// The reroll budget of <see cref="QuestProgress"/>. The data lives in CCP.Core; these read
-/// App.SkillTree / App.Settings, so they stay in the head as extension methods and every call
-/// site keeps its old syntax (same split as AchievementProgressStreak).
+/// The reroll budget of <see cref="QuestProgress"/>, as extension methods so every call site
+/// keeps its old syntax. Skill-tree and bonus rerolls come from the live settings.
 /// </summary>
 public static class QuestProgressRerolls
 {
@@ -23,8 +22,8 @@ public static class QuestProgressRerolls
         }
 
         int maxRerolls = hasPatreon ? 3 : 1;
-        maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
-        maxRerolls += App.Settings?.Current?.BonusDailyRerolls ?? 0;
+        maxRerolls += (CoreSettings.Service?.Current is { } s ? SkillTreeRules.GetDailyFreeRerolls(s) : 0);
+        maxRerolls += CoreSettings.Service?.Current?.BonusDailyRerolls ?? 0;
         return Math.Max(0, maxRerolls - p.DailyRerollsUsed);
     }
 
@@ -52,8 +51,8 @@ public static class QuestProgressRerolls
         // would take rerolls off everyone who spent 15 and 20 skill points on those nodes and make
         // nine translated strings wrong, which is not a thing to do quietly in a patch. If the
         // weekly allowance is ever meant to be flat, the tooltip has to change with it.
-        maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
-        maxRerolls += App.Settings?.Current?.BonusWeeklyRerolls ?? 0;
+        maxRerolls += (CoreSettings.Service?.Current is { } s ? SkillTreeRules.GetDailyFreeRerolls(s) : 0);
+        maxRerolls += CoreSettings.Service?.Current?.BonusWeeklyRerolls ?? 0;
         return Math.Max(0, maxRerolls - p.WeeklyRerollsUsed);
     }
 

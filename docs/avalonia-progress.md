@@ -799,3 +799,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   pauses on hidden tabs (improvement over WPF, also fixed a headless double-click flake).
 - Evidence: StudioPresetsWireTests (2), CoreEngineTests.Reconcile_*, fail-proven; live: presets saved/loaded/deleted, loading
   "Quiet" stopped Subliminal and cleared its ring, 0 binding errors. Rows stay stub. Review: ACCEPT.
+
+## avalonia-port/quest-service-core: +294
+- QuestService, QuestHardwareGate and QuestProgressRerolls moved into Core (git mv, 91/94/83% similar); head-only needs behind
+  CoreQuests (provider verifying, streak shield, perfect-week bonus, program verifier, completion sound/haptics, camera/mic probes);
+  timers post to the UI thread; WPF seeds the seam in App's static ctor and behaves the same. Avalonia tab wiring is next.
+- Evidence: QuestServiceTests (roll, reroll, progress+completion; 4 fail-proofs); full gate; WPF tests compile-only here. Review: ACCEPT.
