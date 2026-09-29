@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -243,6 +244,192 @@ public class ChasterLadderTests : IDisposable
         Assert.Equal("test_lock", ChasterLadderApi.ParseVerify(new JObject { ["ok"] = false, ["reason"] = "test_lock" })!.Reason);
     }
 
+    [Fact]
+    public void A_verify_reply_says_what_the_ledger_added_and_never_more_than_the_total()
+    {
+        Assert.Equal(20, ChasterLadderApi.ParseVerify(new JObject { ["ok"] = true, ["added_seconds"] = 60, ["claimed_seconds"] = 20 })!.ClaimedSeconds);
+        Assert.Equal(60, ChasterLadderApi.ParseVerify(new JObject { ["ok"] = true, ["added_seconds"] = 60, ["claimed_seconds"] = 999 })!.ClaimedSeconds);
+        Assert.Equal(0, ChasterLadderApi.ParseVerify(new JObject { ["ok"] = true, ["added_seconds"] = 60, ["claimed_seconds"] = -5 })!.ClaimedSeconds);
+    }
+
+    // ---- the day ledger: only added time counts (owner, 2026-09-29) ----
+
+    // What the service does on every booking: the tab books, then Booked hands it to the ledger.
+    private static int BookAt(TabState s, int seconds, DateTime utc)
+    {
+        var booking = CircesTab.Book(s, "typo", seconds, utc, utc, utc, safetyExit: false);
+        ChasterLadder.NoteBooked(s, booking.AppliedSeconds, utc);
+        return booking.AppliedSeconds;
+    }
+
+    // What a settle does once Chaster said yes.
+    private static int PushAt(TabState s, DateTime utc)
+    {
+        var plan = CircesTab.PlanPush(s, canRemove: false, TabLimits.Default, utc);
+        CircesTab.ApplyPush(s, plan, utc, utc);
+        return plan.Seconds;
+    }
+
+    private static readonly DateTime Oct5 = new(2026, 10, 5, 9, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void The_owner_scenario_claims_the_whole_minute()
+    {
+        // +1:00 slip-up, -0:20 good-behaviour credit before the push, the lock gets +0:40.
+        var s = new TabState();
+        BookAt(s, 60, Oct5);
+        BookAt(s, -20, Oct5.AddSeconds(5));
+        Assert.Equal(40, PushAt(s, Oct5.AddSeconds(30)));
+
+        var claim = Assert.Single(ChasterLadder.Claims(s, Oct5.AddMinutes(1)));
+        Assert.Equal("2026-10-05", claim.Key);
+        Assert.Equal(new LadderClaim(60, 40), claim.Value);
+        // The server counts verified 0:40 + clamp(1:00 - 0:40, 0, min(0:40, 0:40)) = 1:00.
+    }
+
+    [Fact]
+    public void A_credit_waiting_on_the_tab_cancels_the_same_way()
+    {
+        var s = new TabState { PushedNetSeconds = 3600 };
+        BookAt(s, -20, Oct5);
+        BookAt(s, 60, Oct5.AddSeconds(5));
+        Assert.Equal(40, PushAt(s, Oct5.AddSeconds(30)));
+
+        Assert.Equal(new LadderClaim(60, 40), ChasterLadder.Claims(s, Oct5.AddMinutes(1))["2026-10-05"]);
+    }
+
+    [Fact]
+    public void Credits_the_jackpot_wipe_and_forgiven_misses_never_lower_gross()
+    {
+        var s = new TabState();
+        BookAt(s, 600, Oct5);
+        BookAt(s, -100, Oct5.AddSeconds(1));
+        var wipe = CircesTab.Wipe(s, Oct5.AddSeconds(2), Oct5);
+        ChasterLadder.NoteBooked(s, wipe.AppliedSeconds, Oct5.AddSeconds(2));
+        BookAt(s, -300, Oct5.AddSeconds(3)); // forgiven misses: a credit like any other
+
+        Assert.Equal(-500, wipe.AppliedSeconds);
+        Assert.Equal(600, s.Ladder!.Days["2026-10-05"].Gross);
+        Assert.Equal(new LadderClaim(600, 0), ChasterLadder.Claims(s, Oct5)["2026-10-05"]);
+    }
+
+    [Fact]
+    public void A_refused_add_is_not_gross()
+    {
+        var s = new TabState();
+        var refused = CircesTab.Book(s, "typo", 600, Oct5, Oct5, Oct5, safetyExit: true);
+        ChasterLadder.NoteBooked(s, refused.AppliedSeconds, Oct5);
+
+        Assert.Equal(TabRefusal.SafetyExit, refused.Refusal);
+        Assert.Empty(ChasterLadder.Claims(s, Oct5));
+        Assert.Null(s.Ladder);
+    }
+
+    [Fact]
+    public void Days_are_utc_days()
+    {
+        var s = new TabState();
+        BookAt(s, 60, new DateTime(2026, 10, 5, 23, 59, 30, DateTimeKind.Utc));
+        PushAt(s, new DateTime(2026, 10, 5, 23, 59, 50, DateTimeKind.Utc));
+        BookAt(s, 90, new DateTime(2026, 10, 6, 0, 0, 30, DateTimeKind.Utc));
+        PushAt(s, new DateTime(2026, 10, 6, 0, 0, 50, DateTimeKind.Utc));
+
+        var claims = ChasterLadder.Claims(s, new DateTime(2026, 10, 6, 1, 0, 0, DateTimeKind.Utc));
+        Assert.Equal(new[] { "2026-10-05", "2026-10-06" }, claims.Keys);
+        Assert.Equal(new LadderClaim(60, 60), claims["2026-10-05"]);
+        Assert.Equal(new LadderClaim(90, 90), claims["2026-10-06"]);
+    }
+
+    [Fact]
+    public void Time_still_owed_at_midnight_counts_on_the_day_it_lands_never_twice()
+    {
+        // An hour lands in the morning; two more are booked while Chaster is down and land tomorrow.
+        var s = new TabState();
+        BookAt(s, 3600, Oct5);
+        PushAt(s, Oct5.AddSeconds(30));
+        BookAt(s, 7200, Oct5.AddHours(11));
+        var oct6 = Oct5.AddDays(1);
+        Assert.Equal(7200, PushAt(s, oct6));
+
+        var claims = ChasterLadder.Claims(s, oct6);
+        Assert.Equal(new LadderClaim(3600, 3600), claims["2026-10-05"]);
+        Assert.Equal(new LadderClaim(7200, 7200), claims["2026-10-06"]);
+
+        // The raw bookings would claim the owed two hours on the 5th as "cancelled", and the server
+        // would count them there (up to that day's hour) and again as verified on the 6th.
+        Assert.Equal(new LadderClaim(10800, 3600), ChasterLadder.Claims(s, oct6, settled: false)["2026-10-05"]);
+    }
+
+    [Fact]
+    public void An_unanswered_push_counted_as_landed_is_pushed_in_the_ledger()
+    {
+        var s = new TabState();
+        BookAt(s, 60, Oct5);
+        BookAt(s, -20, Oct5.AddSeconds(5));
+        CircesTab.MarkPending(s, CircesTab.PlanPush(s, false, TabLimits.Default, Oct5), Oct5);
+        CircesTab.ResolvePending(s, Oct5.AddMinutes(10));
+
+        Assert.Equal(new LadderClaim(60, 40), ChasterLadder.Claims(s, Oct5.AddMinutes(10))["2026-10-05"]);
+    }
+
+    [Fact]
+    public void The_ledger_keeps_this_month_and_last()
+    {
+        var s = new TabState();
+        foreach (var day in new[] { new DateTime(2026, 8, 20, 9, 0, 0, DateTimeKind.Utc), new DateTime(2026, 9, 10, 9, 0, 0, DateTimeKind.Utc) })
+        {
+            BookAt(s, 60, day);
+            PushAt(s, day.AddSeconds(30));
+        }
+        var oct2 = new DateTime(2026, 10, 2, 9, 0, 0, DateTimeKind.Utc);
+        BookAt(s, 60, oct2);
+        PushAt(s, oct2);
+
+        Assert.Equal(new[] { "2026-09-10", "2026-10-02" }, s.Ladder!.Days.Keys.OrderBy(k => k, StringComparer.Ordinal));
+        Assert.Equal(new[] { "2026-09-10", "2026-10-02" }, ChasterLadder.Claims(s, oct2).Keys);
+        // On the 1st of November only October is sent (the server reads a month and the one before).
+        Assert.Equal(new[] { "2026-10-02" }, ChasterLadder.Claims(s, new DateTime(2026, 11, 1, 0, 30, 0, DateTimeKind.Utc)).Keys);
+        Assert.Equal(new[] { "2026-12-31", "2027-01-01" }, YearTurn().Keys);
+    }
+
+    private static IReadOnlyDictionary<string, LadderClaim> YearTurn()
+    {
+        var s = new TabState();
+        BookAt(s, 60, new DateTime(2026, 12, 31, 23, 0, 0, DateTimeKind.Utc));
+        PushAt(s, new DateTime(2026, 12, 31, 23, 1, 0, DateTimeKind.Utc));
+        BookAt(s, 60, new DateTime(2027, 1, 1, 1, 0, 0, DateTimeKind.Utc));
+        PushAt(s, new DateTime(2027, 1, 1, 1, 1, 0, DateTimeKind.Utc));
+        return ChasterLadder.Claims(s, new DateTime(2027, 1, 1, 2, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void The_ledger_round_trips_through_the_tab_file()
+    {
+        var s = new TabState();
+        BookAt(s, 60, Oct5);
+        BookAt(s, -20, Oct5.AddSeconds(5));
+        var back = Newtonsoft.Json.JsonConvert.DeserializeObject<TabState>(Newtonsoft.Json.JsonConvert.SerializeObject(s))!;
+        PushAt(back, Oct5.AddSeconds(30));
+
+        Assert.Equal(new LadderClaim(60, 40), ChasterLadder.Claims(back, Oct5.AddMinutes(1))["2026-10-05"]);
+    }
+
+    [Fact]
+    public void A_mangled_ledger_never_claims_below_zero()
+    {
+        var s = new TabState { Ladder = new LadderLedger { Days = { ["2026-10-05"] = new LadderDay { Gross = -50, Pushed = -9, OpenAtStart = -3, Open = 400 }, ["junk"] = new LadderDay { Gross = 60, Pushed = 40 } } } };
+        Assert.Empty(ChasterLadder.Claims(s, Oct5));
+    }
+
+    [Fact]
+    public void The_verify_body_carries_the_ledger_only_when_it_has_something()
+    {
+        var body = ChasterLadderApi.VerifyBody("lock1", "AT", new Dictionary<string, LadderClaim> { ["2026-10-05"] = new(60, 40) });
+        Assert.Equal("{\"lock_id\":\"lock1\",\"access_token\":\"AT\",\"claims\":{\"2026-10-05\":{\"gross\":60,\"pushed\":40}}}", body.ToString(Newtonsoft.Json.Formatting.None));
+        Assert.Null(ChasterLadderApi.VerifyBody("lock1", "AT", new Dictionary<string, LadderClaim>())["claims"]);
+        Assert.Null(ChasterLadderApi.VerifyBody("lock1", "AT", null)["claims"]);
+    }
+
     // ---- the wire ----
 
     private sealed class Handler : HttpMessageHandler
@@ -286,6 +473,21 @@ public class ChasterLadderTests : IDisposable
         Assert.Empty(h.Seen);
     }
 
+    [Fact]
+    public async Task The_wire_sends_the_ledger_with_the_verify()
+    {
+        var h = new Handler();
+        var api = new ChasterLadderApi(new HttpClient(h), () => ("u_test0001", "tok"), "https://proxy.test");
+
+        await api.VerifyAsync("lock1", "AT", new Dictionary<string, LadderClaim> { ["2026-10-05"] = new(60, 40) });
+        await api.VerifyAsync("lock1", "AT");
+
+        Assert.Equal("/chaster/raffle/verify", h.Seen[0].Path);
+        Assert.Contains("\"claims\":{\"2026-10-05\":{\"gross\":60,\"pushed\":40}}", h.Seen[0].Body);
+        Assert.Contains("\"lock_id\":\"lock1\"", h.Seen[0].Body);
+        Assert.DoesNotContain("claims", h.Seen[1].Body);
+    }
+
     // ---- the service ----
 
     private sealed class Store : IChasterTokenStore
@@ -306,6 +508,12 @@ public class ChasterLadderTests : IDisposable
         {
             Verifies.Add((lockId, accessToken));
             return Task.FromResult<LadderVerify?>(new LadderVerify(true, 42, null));
+        }
+        public readonly List<IReadOnlyDictionary<string, LadderClaim>?> Claims = new();
+        public Task<LadderVerify?> VerifyAsync(string lockId, string accessToken, IReadOnlyDictionary<string, LadderClaim>? claims, CancellationToken ct = default)
+        {
+            Claims.Add(claims);
+            return VerifyAsync(lockId, accessToken, ct);
         }
         public Task<bool> OptInAsync(bool postDays, CancellationToken ct = default)
         {
@@ -352,13 +560,64 @@ public class ChasterLadderTests : IDisposable
         try { Directory.Delete(_dir, true); } catch (IOException) { } // swallow: temp dir, best effort
     }
 
-    private ChasterService Make(FakeLadder ladder) =>
-        new(new ChasterClient(new Handler()), _store, Path.Combine(_dir, "tab.json"), () => _options, () => _utc, () => _utc.ToLocalTime())
+    private ChasterService Make(FakeLadder ladder, Handler? chaster = null) =>
+        new(new ChasterClient(chaster ?? new Handler()), _store, Path.Combine(_dir, "tab.json"), () => _options, () => _utc, () => _utc.ToLocalTime())
         {
             LadderApi = ladder,
             RafflePostDays = () => _postDays,
             LadderShowName = () => _showName,
         };
+
+    [Fact]
+    public async Task The_owner_scenario_reaches_the_server_through_the_service()
+    {
+        // +1:00, then -0:20 before the push; the lock gets +0:40; the push that lands verifies with
+        // the ledger, and the ledger says a minute was added.
+        var ladder = new FakeLadder();
+        var chaster = new Handler { Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent) };
+        using var service = Make(ladder, chaster);
+
+        service.NoteSeconds("typo", 60);
+        service.NoteSeconds("typo", -20);
+        Assert.Equal(SettleOutcome.Pushed, await service.SettleAsync());
+        await service.VerifyLadderAsync(CancellationToken.None); // the push already verified; this one is throttled
+
+        Assert.Contains("\"duration\":40", Assert.Single(chaster.Seen, s => s.Path.EndsWith("update-time")).Body);
+        var sent = Assert.Single(ladder.Claims);
+        Assert.Equal(new LadderClaim(60, 40), Assert.Single(sent!).Value);
+        Assert.Equal("2026-09-26", sent!.Keys.Single());
+    }
+
+    [Fact]
+    public async Task A_refused_add_never_reaches_the_ledger()
+    {
+        var ladder = new FakeLadder();
+        using var service = Make(ladder);
+
+        service.NoteSafetyExit();
+        Assert.Equal(TabRefusal.SafetyExit, service.NoteSeconds("typo", 600).Refusal);
+        await service.VerifyLadderAsync(CancellationToken.None);
+
+        Assert.Empty(Assert.Single(ladder.Claims)!);
+    }
+
+    [Fact]
+    public async Task The_ledger_survives_a_restart()
+    {
+        var ladder = new FakeLadder();
+        var chaster = new Handler { Answer = _ => new HttpResponseMessage(HttpStatusCode.NoContent) };
+        using (var first = Make(ladder, chaster))
+        {
+            first.NoteSeconds("typo", 60);
+            first.NoteSeconds("typo", -20);
+        }
+        _utc = _utc.AddMinutes(1);
+        using var second = Make(ladder, chaster);
+        Assert.Equal(SettleOutcome.Pushed, await second.SettleAsync());
+        await second.VerifyLadderAsync(CancellationToken.None); // throttled when the push already verified
+
+        Assert.Equal(new LadderClaim(60, 40), ladder.Claims.Last()!["2026-09-26"]);
+    }
 
     [Fact]
     public async Task Verify_sends_the_picked_lock_and_the_live_token_at_most_every_fifteen_minutes()
