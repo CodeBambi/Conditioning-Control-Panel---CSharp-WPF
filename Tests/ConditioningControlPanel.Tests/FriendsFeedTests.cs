@@ -406,7 +406,7 @@ public class FriendsFeedTests
             foreach (var k in FriendsFeedRules.AllKeys)
             {
                 var v = (string)json[k]!;
-                Assert.DoesNotContain("—", v);
+                Assert.DoesNotContain(char.ConvertFromUtf32(0x2014), v);
                 Assert.DoesNotContain("!", v);
             }
         }

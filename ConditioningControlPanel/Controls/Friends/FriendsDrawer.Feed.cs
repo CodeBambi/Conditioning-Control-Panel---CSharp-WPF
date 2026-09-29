@@ -56,8 +56,7 @@ public sealed partial class FriendsDrawer
             IsVisibleChanged += OnFeedVisibility;
         }
         _list.Children.Add(_feedBox);
-        try { FillFeed(); }
-        catch (Exception ex) { App.Logger?.Debug("[Friends] feed paint failed: {E}", ex.Message); }
+        SafeFillFeed();
     }
 
     /// <summary>The keys of the lines drawn, top to bottom. The suite reads it.</summary>
@@ -74,14 +73,20 @@ public sealed partial class FriendsDrawer
     internal void ShowMoreFeed()
     {
         _feedExtra += FriendsFeedRules.MoreStep;
-        FillFeed();
+        SafeFillFeed();
     }
 
     /// <summary>"less": back to the fold.</summary>
     internal void ShowLessFeed()
     {
         _feedExtra = 0;
-        FillFeed();
+        SafeFillFeed();
+    }
+
+    private void SafeFillFeed()
+    {
+        try { FillFeed(); }
+        catch (Exception ex) { App.Logger?.Debug("[Friends] feed paint failed: {E}", ex.Message); }
     }
 
     /// <summary>The drawer folded: the next open starts folded, and what was new this time is not.</summary>
@@ -123,8 +128,7 @@ public sealed partial class FriendsDrawer
         }
         if (!_isOpen) { Listen(null); return; }
         if (!_list.Children.Contains(_feedBox)) return;
-        try { FillFeed(); }
-        catch (Exception ex) { App.Logger?.Debug("[Friends] feed repaint failed: {E}", ex.Message); }
+        SafeFillFeed();
     }
 
     private bool IsNew(FeedEntry l) => !l.Read || _feedFresh.Contains(l.Key);
