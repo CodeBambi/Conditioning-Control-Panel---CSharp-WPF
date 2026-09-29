@@ -7,3 +7,6 @@ Assets/Audio/backroom/words/*.mp3 filter=lfs diff=lfs merge=lfs -text
 Assets/web/backroom/music/*.mp3 filter=lfs diff=lfs merge=lfs -text
 
 tools/blender/breakout-office/assets/rough-linen/*.jpg filter=lfs diff=lfs merge=lfs -text
+
+# Byte goldens of the update helper .cmd (CRLF on purpose)
+Tests/CCP.Core.Tests/Fixtures/Update/*.cmd.txt -text

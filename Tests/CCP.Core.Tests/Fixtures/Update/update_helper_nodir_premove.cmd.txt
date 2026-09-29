@@ -1,0 +1,32 @@
+@echo off
+setlocal enableextensions
+set "LOG=C:\Users\u\AppData\Local\ConditioningControlPanel\logs\update-helper.log"
+set "APPEXE=C:\Program Files\Conditioning Control Panel\ConditioningControlPanel.exe"
+set "INSTALLER={INSTALLER}"
+set "RESULT=C:\Users\u\AppData\Local\ConditioningControlPanel\update_result.txt"
+echo [update-helper] start pid=4242 elevated=0 > "%LOG%"
+set /a tries=0
+:waitloop
+tasklist /FI "PID eq 4242" /NH 2>nul | find "4242" >nul
+if errorlevel 1 goto gone
+set /a tries+=1
+if %tries% GEQ 30 (
+  echo [update-helper] wait timed out, proceeding anyway >> "%LOG%"
+  goto gone
+)
+ping 127.0.0.1 -n 2 >nul
+goto waitloop
+:gone
+echo [update-helper] old app exited (tries=%tries%), running installer >> "%LOG%"
+"%INSTALLER%" /SILENT /SUPPRESSMSGBOXES /NORESTART
+set RC=%errorlevel%
+>"%RESULT%" echo %RC%
+if "%RC%"=="0" (
+  echo [update-helper] installer reported success >> "%LOG%"
+) else (
+  echo [update-helper] installer FAILED exit=%RC% >> "%LOG%"
+)
+echo [update-helper] relaunching app >> "%LOG%"
+start "" "%APPEXE%"
+echo [update-helper] done >> "%LOG%"
+endlocal
