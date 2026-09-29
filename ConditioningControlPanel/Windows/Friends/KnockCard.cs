@@ -61,7 +61,7 @@ internal sealed class KnockCard : Window
         _item = item;
         _done = done;
         _shown = shown;
-        var now = DateTimeOffset.UtcNow;
+        var now = ServerClock.UtcNow;
         _start = LandingRules.KnockStarts(item, now);
         _end = LandingRules.KnockEnds(item, now);
         _shownAt = now;
@@ -168,7 +168,7 @@ internal sealed class KnockCard : Window
         MouseEnter += (_, _) => { _hovered = true; ApplyTuck(); };
         MouseLeave += (_, _) => { _hovered = false; ApplyTuck(); };
         SizeChanged += (_, _) => Restack();
-        UpdateCountdown(DateTimeOffset.UtcNow);
+        UpdateCountdown(ServerClock.UtcNow);
     }
 
     private static Button MakeButton(string label, bool primary)
@@ -220,7 +220,7 @@ internal sealed class KnockCard : Window
         _arc.StrokeStartLineCap = PenLineCap.Round;
         _arc.StrokeEndLineCap = PenLineCap.Round;
         grid.Children.Add(_arc);
-        DrawArc(LandingRules.RingFraction(_start, _end, DateTimeOffset.UtcNow));
+        DrawArc(LandingRules.RingFraction(_start, _end, ServerClock.UtcNow));
         return grid;
     }
 
@@ -255,7 +255,7 @@ internal sealed class KnockCard : Window
 
     private void Advance()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = ServerClock.UtcNow;
         var f = LandingRules.RingFraction(_start, _end, now);
         DrawArc(f);
         UpdateCountdown(now);
@@ -299,7 +299,7 @@ internal sealed class KnockCard : Window
 
     private void Enter()
     {
-        _shownAt = DateTimeOffset.UtcNow;
+        _shownAt = ServerClock.UtcNow;
         if (MotionFx.Level != MotionLevel.Off)
         {
             var dur = TimeSpan.FromMilliseconds(MotionFx.Level == MotionLevel.Full ? 250 : 125);
