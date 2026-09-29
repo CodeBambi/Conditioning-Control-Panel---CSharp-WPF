@@ -42,6 +42,7 @@ internal static class PortalPanicShortcut
             // makes the portal close the session, so no grab can outlive this connection.
             var bus = _bus = new DBusConnection(DBusAddress.Session!);
             await bus.ConnectAsync();
+            await RegisterAsync(bus);
 
             var (code, results) = await RequestAsync(bus, "CreateSession", "a{sv}", (ref MessageWriter w, string token) =>
                 w.WriteDictionary(new Dictionary<string, VariantValue>
@@ -103,6 +104,7 @@ internal static class PortalPanicShortcut
         using var bus = new DBusConnection(DBusAddress.Session!);
         await bus.ConnectAsync();
         Console.WriteLine($"connected as {bus.UniqueName}");
+        Console.WriteLine($"Registry.Register {(await RegisterAsync(bus) ? "ok" : "refused or absent")}");
         var (code, results) = await RequestAsync(bus, "CreateSession", "a{sv}", (ref MessageWriter w, string token) =>
             w.WriteDictionary(new Dictionary<string, VariantValue>
             {
@@ -117,6 +119,25 @@ internal static class PortalPanicShortcut
         await bus.CallMethodAsync(CallHeader(bus, session, "org.freedesktop.portal.Session", "Close", null));
         Console.WriteLine("Session.Close ok");
         return 0;
+    }
+
+    /// <summary>org.freedesktop.host.portal.Registry.Register: tells the portal this (unsandboxed)
+    /// connection is <see cref="Program.AppId"/>, so KDE files the panic shortcut under the app rather
+    /// than the launching terminal. Must precede every other portal call on the connection. False when
+    /// refused (Flatpak: the portal already knows the id) or absent (xdg-desktop-portal before 1.19).</summary>
+    private static async Task<bool> RegisterAsync(DBusConnection bus)
+    {
+        try
+        {
+            await bus.CallMethodAsync(CallHeader(bus, DesktopPath, "org.freedesktop.host.portal.Registry", "Register", "sa{sv}",
+                (ref MessageWriter w) => { w.WriteString(Program.AppId); w.WriteDictionary(new Dictionary<string, VariantValue>()); }));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Information("Portal: Registry.Register not accepted ({Why}); shortcuts may be filed under the launcher", ex.Message);
+            return false;
+        }
     }
 
     /// <summary>trigger_description of our shortcut in a BindShortcuts result (a(sa{sv})).</summary>
