@@ -24,14 +24,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// those head-owned dependencies out of the view; the built-in Core session rack is the one
     /// honest read-only slice restored here, including pointer and keyboard selection.
     ///
-    /// ponytail: needs MainWindow (preset CRUD, JustDropOrdersService, and the
-    /// tab FX clock), wired when those services move to Core. The remaining wiring points, all
-    /// named in the XAML, are:
-    ///   BtnRevealSpoilers /
-    ///   BtnLoadPreset / BtnSaveOverPreset / BtnDeletePreset / BtnSharePreset /
+    /// Preset Load / New / Save-over / Delete are wired (WPF MainWindow.Presets.cs:2202-2381).
+    /// ponytail: needs JustDropOrdersService and the tab FX clock, wired when those move to
+    /// Core. The remaining wiring points, all named in the XAML, are:
+    ///   BtnRevealSpoilers / BtnSharePreset /
     ///   BtnExportSession / BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
-    ///   TxtRackSearch.TextChanged / the "+ New" preset chip / SessionDropZone (catalogue) /
+    ///   TxtRackSearch.TextChanged / SessionDropZone (catalogue) /
     ///   preset chip clicks and IsVisibleChanged -> OnPresetsTabVisibilityChanged (the card-sheen
     ///   clock, started on show, dropped on hide).
     ///
@@ -53,6 +52,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CmbRackSort.SelectionChanged += CmbRackSort_SelectionChanged;
             TxtRackSearch.TextChanged += TxtRackSearch_TextChanged;
             BtnExportPreset.Click += BtnExportPreset_Click;
+            BtnLoadPreset.Click += BtnLoadPreset_Click;
+            BtnSaveOverPreset.Click += BtnSaveOverPreset_Click;
+            BtnDeletePreset.Click += BtnDeletePreset_Click;
+            BtnNewPreset.PointerReleased += BtnNewPreset_Click;   // WPF MouseLeftButtonUp (PresetsTabView.xaml:720)
             BtnSessionHistory.Click += BtnSessionHistory_Click;
             BtnCreateSession.Click += BtnCreateSession_Click;
             _startSessionLabel = BtnStartSession.Content;
@@ -307,8 +310,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 PresetCardsPanel.Children.Insert(at++, PresetChip(preset));
         }
 
-        /// <summary>WPF's SelectPreset. Only Export is enabled: Load / Save / Delete / Share need
-        /// MainWindow's preset CRUD and the catalogue service, which are head-side.</summary>
+        /// <summary>WPF's SelectPreset (MainWindow.Presets.cs:461). Share stays disabled: the
+        /// preset Share-to-catalogue submission is split out (shell-preset-io).</summary>
         private void SelectPreset(Preset preset)
         {
             _selectedPreset = preset;
@@ -335,6 +338,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtDetailOverlays.Text = $"Spiral: {(preset.SpiralEnabled ? "Yes" : "No")} | Pink: {(preset.PinkFilterEnabled ? "Yes" : "No")}";
             TxtDetailAdvanced.Text = $"Bubbles: {(preset.BubblesEnabled ? "Yes" : "No")} | Lock Card: {(preset.LockCardEnabled ? "Yes" : "No")}";
 
+            BtnLoadPreset.IsEnabled = true;
+            BtnSaveOverPreset.IsEnabled = !preset.IsDefault;
+            BtnDeletePreset.IsEnabled = !preset.IsDefault;
             BtnExportPreset.IsEnabled = true;
             UpdatePresetShareStatusBadge(preset);
             RefreshSessionRackSelection();
@@ -356,6 +362,112 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (_selectedPreset != null) UpdatePresetShareStatusBadge(_selectedPreset);
             RepaintSessionRack();
+        }
+
+        // ---- preset CRUD: WPF MainWindow.Presets.cs:2202-2381. The ops are split from their
+        // dialogs so a test can drive them; the handlers below are WPF's click flow.
+
+        private Windows.MainShellWindow? Shell => TopLevel.GetTopLevel(this) as Windows.MainShellWindow;
+
+        /// <summary>WPF LoadPreset: refused mid-session (the chokepoint), apply, save, and stop the
+        /// running features the preset cleared (#872). Open editors re-seed from settings INPC.
+        /// ponytail: WPF keeps the strict flags on mid-Lockdown (LockdownStrictHold); no Lockdown
+        /// on this head yet, add it with the Lockdown port.</summary>
+        internal bool LoadPreset(Preset preset)
+        {
+            if (Shell?.RefuseActionIfSessionLocked($"load-preset:{preset.Name}") ?? CoreSession.IsSessionRunning) return false;
+            preset.ApplyTo(CoreSettings.Current);
+            CoreSettings.Save();
+            CoreEngine.Reconcile();
+            RefreshPresetsList();
+            Serilog.Log.Information("Loaded preset: {Name}", preset.Name);
+            return true;
+        }
+
+        /// <summary>WPF PromptSaveNewPreset minus the prompt. Null when the name is taken.</summary>
+        internal Preset? SaveNewPreset(string name)
+        {
+            var s = CoreSettings.Current;
+            if (Preset.GetDefaultPresets().Concat(s.UserPresets)
+                .Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) return null;
+            var preset = Preset.FromSettings(s, name, "Custom preset created by user");
+            s.UserPresets.Add(preset);
+            s.CurrentPresetName = name;
+            CoreSettings.Save();
+            SelectPreset(preset);
+            Serilog.Log.Information("Created new preset: {Name}", name);
+            return preset;
+        }
+
+        /// <summary>WPF BtnSaveOverPreset_Click's write: current settings under the same id.</summary>
+        internal Preset? SaveOverPreset(Preset old)
+        {
+            var s = CoreSettings.Current;
+            var index = s.UserPresets.FindIndex(p => p.Id == old.Id);
+            if (old.IsDefault || index < 0) return null;
+            var updated = Preset.FromSettings(s, old.Name, old.Description);
+            updated.Id = old.Id;
+            updated.CreatedAt = old.CreatedAt;
+            s.UserPresets[index] = updated;
+            CoreSettings.Save();
+            SelectPreset(updated);
+            Serilog.Log.Information("Updated preset: {Name}", updated.Name);
+            return updated;
+        }
+
+        /// <summary>WPF BtnDeletePreset_Click's write.</summary>
+        internal void DeletePreset(Preset preset)
+        {
+            if (preset.IsDefault) return;
+            CoreSettings.Current.UserPresets.RemoveAll(p => p.Id == preset.Id);
+            CoreSettings.Save();
+            _selectedPreset = null;
+            RefreshPresetsList();
+            Serilog.Log.Information("Deleted preset");
+        }
+
+        private async void BtnLoadPreset_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_selectedPreset is not { } preset || Shell is not { } owner) return;
+            // Checked before the confirm too, so the user is never asked to approve a refusal.
+            if (owner.RefuseActionIfSessionLocked("load-preset-click")) return;
+            if (!await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get("title_load_preset"),
+                    Loc.GetF("msg_load_preset_confirm_0", PresetNaming.DisplayName(preset)))) return;
+            if (LoadPreset(preset))
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_preset_loaded"),
+                    Loc.GetF("msg_preset_0_loaded", PresetNaming.DisplayName(preset)));
+        }
+
+        private async void BtnNewPreset_Click(object? sender, PointerReleasedEventArgs e)
+        {
+            if (e.InitialPressMouseButton != MouseButton.Left) return;
+            e.Handled = true;
+            if (Shell is not { } owner) return;
+            var dialog = new Dialogs.InputDialog(Loc.Get("title_new_preset"),
+                Loc.Get("msg_enter_a_name_for_your_preset"), Loc.Get("label_my_custom_preset"));
+            if (await dialog.ShowDialog<bool?>(owner) != true || string.IsNullOrWhiteSpace(dialog.ResultText)) return;
+            var name = dialog.ResultText.Trim();
+            if (SaveNewPreset(name) == null)
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_name_taken"), Loc.Get("msg_a_preset_with_this_name_already_exists"));
+            else
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_preset_saved"), Loc.GetF("msg_preset_0_saved", name));
+        }
+
+        private async void BtnSaveOverPreset_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_selectedPreset is not { IsDefault: false } preset || Shell is not { } owner) return;
+            if (!await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get("title_overwrite_preset"),
+                    Loc.GetF("msg_overwrite_preset_confirm_0", preset.Name))) return;
+            if (SaveOverPreset(preset) is { } updated)
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_preset_updated"), Loc.GetF("msg_preset_0_updated", updated.Name));
+        }
+
+        private async void BtnDeletePreset_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_selectedPreset is not { IsDefault: false } preset || Shell is not { } owner) return;
+            if (await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get("title_delete_preset"),
+                    Loc.GetF("msg_delete_preset_confirm_0", preset.Name)))
+                DeletePreset(preset);
         }
 
         /// <summary>WPF's BtnExportPreset_Click (MainWindow.PresetIO.cs), save picker via StorageProvider.</summary>

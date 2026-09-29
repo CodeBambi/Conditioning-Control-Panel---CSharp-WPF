@@ -23,9 +23,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// so a dashboard can be written against either.
     ///
     /// FX: hover = a 1.02 lift + 150ms rim-light, active = the glow and the ring breathing on one
-    /// 3.5s clock. The WPF gates (MotionFx, PerformanceProfile, window focus, tab visibility)
-    /// live in the head, so this card always animates.
-    /// ponytail: needs MotionFx/PerformanceProfile, gate the breath when they move to Core
+    /// 3.5s clock. The breath pauses while the tile is not effectively visible (a hidden tab,
+    /// via EffectiveVisibility), which WPF does not do.
+    /// ponytail: needs MotionFx/PerformanceProfile/window focus, gate the breath when they move to Core
     /// </summary>
     public partial class FeatureCard : UserControl
     {
@@ -92,6 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private readonly DropShadowEffect _activeGlow;
         private readonly ScaleTransform _rootScale = new(1, 1), _artScale = new(1, 1);
         private CancellationTokenSource? _breath;
+        private IDisposable? _visibilityWatch;
         private bool _hovered;
 
         public FeatureCard()
@@ -132,11 +133,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             PointerReleased += OnPointerReleased;
             Unloaded += (_, _) =>
             {
+                _visibilityWatch?.Dispose();
+                _visibilityWatch = null;
                 ApplyActiveBreath(false);
                 HelpPopover.Clear(_btnHelp);
             };
             Loaded += (_, _) =>
             {
+                // Improvement over WPF: the breath parks while a hidden tab holds the tile.
+                _visibilityWatch = global::ConditioningControlPanel.Avalonia.Controls.EffectiveVisibility.Watch(this, ApplyActiveState);
                 ApplyActiveState(); // re-arm the breath after a detach/re-attach (tab switch)
                 RefreshHelpTooltip();
             };
@@ -263,7 +268,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             _breath?.Cancel();
             _breath = null;
-            if (!active)
+            if (!active || !IsEffectivelyVisible)
             {
                 _activeGlow.Opacity = 0;
                 _activeBorder.Opacity = 1;

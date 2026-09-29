@@ -792,3 +792,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   scroll the room, the plate opens Patreon; the room re-reads the hero on tab return. Rows stay stub (Tutorial chip placeholder).
 - Evidence: CompanionHeroSyncTests (fail-proven; order-independent after the StartModsTests reset); live mute saved, 0 binding errors.
   Review: FIX -> fixed.
+
+## avalonia-port/studio-presets-wire: +367
+- Presets New/Save-over/Load/Delete (WPF Presets.cs:2202-2381) with Core CoreEngine.Reconcile (#872: stops what the preset turned
+  off, never starts); Studio rack right-click -> ToggleWallFeature; dashboard tile rings follow the saved flags; tile breathing
+  pauses on hidden tabs (improvement over WPF, also fixed a headless double-click flake).
+- Evidence: StudioPresetsWireTests (2), CoreEngineTests.Reconcile_*, fail-proven; live: presets saved/loaded/deleted, loading
+  "Quiet" stopped Subliminal and cleared its ring, 0 binding errors. Rows stay stub. Review: ACCEPT.

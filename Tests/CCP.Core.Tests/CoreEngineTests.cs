@@ -80,4 +80,25 @@ public sealed class CoreEngineTests
             CoreBouncingText.StartAction = null;
         }
     }
+
+    // #872: a preset load stops what it switched off and never starts what it switched on.
+    [Fact]
+    public void Reconcile_stops_cleared_features_and_starts_nothing()
+    {
+        var s = CoreSettings.Current;
+        s.FlashEnabled = s.LockCardEnabled = true;
+        s.SubliminalEnabled = s.BouncingTextEnabled = false;
+        try
+        {
+            CoreEngine.Start();
+            Assert.True(CoreFlash.IsRunning && LockCardScheduler.Instance.IsRunning);
+            s.FlashEnabled = false;          // the preset cleared flash...
+            s.SubliminalEnabled = true;      // ...and set subliminal
+            CoreEngine.Reconcile();
+            Assert.False(CoreFlash.IsRunning);
+            Assert.True(LockCardScheduler.Instance.IsRunning);
+            Assert.False(CoreSubliminal.IsRunning);
+        }
+        finally { CoreEngine.Stop(); }
+    }
 }
