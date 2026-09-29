@@ -66,13 +66,27 @@ internal sealed class KnockCard : Window
         _end = LandingRules.KnockEnds(item, now);
         _shownAt = now;
 
+        // The clock (countdown and ring) sits beside the name, so no button label, in any language,
+        // can push it off the card. The line under the name keeps the whole width.
+        var clock = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) };
+        _countdown.FontFamily = new FontFamily("Consolas, Courier New");
+        _countdown.FontSize = 11;
+        _countdown.Foreground = LandingChrome.Brush(LandingChrome.Muted);
+        _countdown.VerticalAlignment = VerticalAlignment.Center;
+        _countdown.Margin = new Thickness(0, 0, 6, 0);
+        clock.Children.Add(_countdown);
+        clock.Children.Add(BuildRing());
+        DockPanel.SetDock(clock, Dock.Right);
+
         var top = new Grid();
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         top.Children.Add(LandingChrome.Avatar(item.FromName, item.FromAvatarUrl, 28));
         var words = new StackPanel { Margin = new Thickness(8, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
-        words.Children.Add(new TextBlock
+        var head = new DockPanel();
+        head.Children.Add(clock);
+        head.Children.Add(new TextBlock
         {
             Text = item.FromName,
             FontFamily = LandingChrome.Display,
@@ -81,7 +95,9 @@ internal sealed class KnockCard : Window
             Foreground = LandingChrome.Brush(LandingChrome.Text),
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxWidth = CardWidth - 84,
+            VerticalAlignment = VerticalAlignment.Center,
         });
+        words.Children.Add(head);
         var lineText = new TextBlock
         {
             Text = line,
@@ -131,16 +147,6 @@ internal sealed class KnockCard : Window
         DockPanel.SetDock(notNow, Dock.Left);
         buttons.Children.Add(go);
         buttons.Children.Add(notNow);
-        var clock = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        _countdown.FontFamily = new FontFamily("Consolas, Courier New");
-        _countdown.FontSize = 11;
-        _countdown.Foreground = LandingChrome.Brush(LandingChrome.Muted);
-        _countdown.VerticalAlignment = VerticalAlignment.Center;
-        _countdown.Margin = new Thickness(0, 0, 6, 0);
-        clock.Children.Add(_countdown);
-        clock.Children.Add(BuildRing());
-        DockPanel.SetDock(clock, Dock.Right);
-        buttons.Children.Add(clock);
         stack.Children.Add(buttons);
 
         _card = new Border
