@@ -205,7 +205,10 @@ namespace ConditioningControlPanel.Avalonia
             // (Platform/X11Overlay.cs), and under a future native Wayland backend those calls would
             // silently no-op. On a Wayland session this runs through XWayland.
             // See docs/avalonia-decisions.md (desktop overlays).
-            return OperatingSystem.IsLinux() ? builder.UseX11() : builder;
+            // WM_CLASS = the app id, so desktops match windows to the .desktop file (StartupWMClass).
+            return OperatingSystem.IsLinux()
+                ? builder.UseX11().With(new X11PlatformOptions { WmClass = "io.github.CodeBambi.ConditioningControlPanel" })
+                : builder;
         }
     }
 

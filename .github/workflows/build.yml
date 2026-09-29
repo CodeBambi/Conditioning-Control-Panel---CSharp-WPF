@@ -28,7 +28,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/ccp-test/vosk
-          key: vosk-model-small-en-us-0.15
+          key: vosk-model-small-en-us-0.15-30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498
       - run: bash .github/scripts/fetch-vosk-model.sh
       - run: dotnet test Tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release
         env:

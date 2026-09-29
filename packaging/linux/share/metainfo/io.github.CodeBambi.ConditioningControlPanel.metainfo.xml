@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.CodeBambi.ConditioningControlPanel</id>
+  <name>Conditioning Control Panel</name>
+  <summary>A visual conditioning application with gamification features</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.codebambi">
+    <name>CodeBambi</name>
+  </developer>
+  <description>
+    <p>Adult (18+) visual conditioning sessions with overlays, audio, video and achievements.</p>
+  </description>
+  <content_rating type="oars-1.1">
+    <content_attribute id="sex-themes">intense</content_attribute>
+  </content_rating>
+  <launchable type="desktop-id">io.github.CodeBambi.ConditioningControlPanel.desktop</launchable>
+  <url type="homepage">https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF</url>
+</component>
