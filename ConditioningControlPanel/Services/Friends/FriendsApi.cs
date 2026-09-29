@@ -12,8 +12,10 @@ using Newtonsoft.Json.Linq;
 namespace ConditioningControlPanel.Services.Friends;
 
 /// <summary>What one <c>poll</c> came back with: who is online, and the drained inbox.
-/// <paramref name="Leash"/> is the leash block (Leash CONTRACT), null when the key was absent.</summary>
-public sealed record FriendsPollReply(IReadOnlyList<string> Online, IReadOnlyList<InboxItem> Inbox, JObject? Leash = null);
+/// <paramref name="Leash"/> is the leash block (Leash CONTRACT), null when the key was absent.
+/// <paramref name="Receipts"/> are the sender receipts (FRIENDS-RECEIPTS.md), null or empty when none.</summary>
+public sealed record FriendsPollReply(IReadOnlyList<string> Online, IReadOnlyList<InboxItem> Inbox, JObject? Leash = null,
+    IReadOnlyList<SenderReceipt>? Receipts = null);
 
 /// <summary>The wire as the service sees it. <see cref="FriendsApi"/> is the only real one; tests hand in a fake.
 /// Nothing here throws: a fault is a null reply, <see cref="SendResult.TryLater"/> or false.</summary>
@@ -29,6 +31,11 @@ public interface IFriendsApi
     /// report sends nothing extra. Default: the plain poll (fakes that know nothing of the leash).</summary>
     Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
         CancellationToken ct = default) => PollAsync(activity, lockDay, shared, ct);
+
+    /// <summary>The same poll carrying recipient receipts (FRIENDS-RECEIPTS.md RQ list). A null or
+    /// empty list sends nothing extra. Default: the leash poll (fakes that know nothing of receipts).</summary>
+    Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
+        JArray? receipts, CancellationToken ct = default) => PollAsync(activity, lockDay, shared, leashReport, ct);
 
     Task<AddResult> RequestAsync(string code, CancellationToken ct = default);
 
@@ -170,11 +177,16 @@ public sealed class FriendsApi : IFriendsApi
     public Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, CancellationToken ct = default) =>
         PollAsync(activity, lockDay, shared, null, ct);
 
+    public Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
+        CancellationToken ct = default) =>
+        PollAsync(activity, lockDay, shared, leashReport, null, ct);
+
     public async Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
-        CancellationToken ct = default)
+        JArray? receipts, CancellationToken ct = default)
     {
         var body = new JObject { ["shared"] = shared };
         if (leashReport != null) body["leash_report"] = leashReport;
+        if (receipts is { Count: > 0 }) body["receipts"] = receipts;
         if (shared)
         {
             var wire = activity is { } a ? ActivityToWire(a) : null;
@@ -344,7 +356,7 @@ public sealed class FriendsApi : IFriendsApi
         if (o["inbox"] is JArray ia)
             foreach (var t in ia)
                 if (t is JObject io && ParseItem(io) is { } item) inbox.Add(item);
-        return new FriendsPollReply(online, inbox, o["leash"] as JObject);
+        return new FriendsPollReply(online, inbox, o["leash"] as JObject, FriendReceipts.Parse(o["receipts"]));
     }
 
     /// <summary>One inbox item, or null when it does not fit the grammar (the server should never

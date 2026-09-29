@@ -72,6 +72,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             try { App.Settings?.Save(); } catch { }
         });
         _lockDay = lockDay ?? (() => null);
+        WireFeed();
     }
 
     /// <summary>The app's own wiring: the real wire, the account off AppSettings.</summary>
@@ -246,14 +247,18 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             JObject? report = null;
             try { report = LeashReportProvider?.Invoke(); }
             catch (Exception ex) { App.Logger?.Debug("Leash report failed: {E}", ex.Message); }
-            var reply = await _api.PollAsync(shared ? _activities.Top : null, shared ? _lockDay() : null, shared, report);
+            var reports = TakeReports();
+            JArray? receipts = reports.Count > 0 ? FriendReceipts.ToWire(reports) : null;
+            var reply = await _api.PollAsync(shared ? _activities.Top : null, shared ? _lockDay() : null, shared, report, receipts);
             if (_account() != sentFor) return;
             if (reply != null)
             {
+                ReportsSent(reports);
                 ApplyOnline(reply.Online);
                 Deliver(reply.Inbox);
                 try { LeashBlockArrived?.Invoke(reply.Leash); }
                 catch (Exception ex) { App.Logger?.Debug("Leash block handler failed: {E}", ex.Message); }
+                RaiseReceipts(reply.Receipts);
             }
 
             if (wantState)
@@ -280,6 +285,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
         {
             _lastAccount = now;
             _pollIndex = 0;
+            ClearReports();
             _online = new HashSet<string>(StringComparer.Ordinal);
             _seen.Clear();
             _seenOrder.Clear();

@@ -365,6 +365,7 @@ public sealed partial class FriendsDrawer : Border
         }
 
         _list.Children.Add(_leash);
+        AddFeed();
         var (online, offline) = FriendsDrawerRules.Split(snap);
         (online, offline) = FriendsDrawerRules.HostingFirst(online, offline, f => TableFor(f) != null);
         if (_openId != null && !ContainsFriend(snap, _openId)) { _openId = null; _picker = null; }

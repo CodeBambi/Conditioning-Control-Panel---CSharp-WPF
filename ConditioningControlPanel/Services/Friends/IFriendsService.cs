@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ConditioningControlPanel.Services.Friends;
@@ -79,4 +80,21 @@ public interface IFriendsService
     /// <summary>The drawer calls this with true while open, false when it folds: it is one of
     /// the two things that put the poll on its fast cadence (the other is a friend online).</summary>
     void SetDrawerOpen(bool open);
+
+    // ---- receipts and the feed (CCP-Server proxy/FRIENDS-RECEIPTS.md v1) ----
+
+    /// <summary>Queue a recipient receipt for the next poll: an item reached seen, joined or declined,
+    /// or a friend request waiting for me was seen. Folded per item (the furthest state wins), at most
+    /// 50 go per poll, kept for the next poll when one fails. Report seen only when the thing is on
+    /// screen, not when it was polled. Never throws. The default does nothing, for fakes.</summary>
+    void ReportReceipt(ReceiptReport report) { }
+
+    /// <summary>Raised on the UI thread after a poll whose reply carried sender receipts (items this
+    /// account sent moved on), oldest first, each delivered once. Friends kinds and leash_* kinds both
+    /// ride here; each surface takes the kinds it owns. Never raised by the default, for fakes.</summary>
+    event Action<IReadOnlyList<SenderReceipt>>? ReceiptsArrived { add { } remove { } }
+
+    /// <summary>Raised on the UI thread for every line the friends feed can show (see
+    /// <see cref="FriendEvent"/>). Never raised by the default, for fakes.</summary>
+    event Action<FriendEvent>? Happened { add { } remove { } }
 }
