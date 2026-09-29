@@ -54,8 +54,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 if (FirstRunWizard.ShouldRunAndClaim()) Opened += OnFirstRunShellOpened;
                 // WPF's else branch (MainWindow.xaml.cs:618-624): the upgrader gets the picker,
-                // pre-ticked with the mod they were running. Its own guards decide; on this head
-                // there is no pack service, so it declines exactly as WPF does without one.
+                // pre-ticked with the mod they were running. Its own guards decide
+                // (ModPickerDialog.ShouldShow, WPF ModPickerDialog.xaml.cs:631-647).
                 else if (CoreSettings.Service != null && CoreSettings.Current.Welcomed
                          && !CoreSettings.Current.HasAcceptedAgeVerification)
                     Opened += OnAgeGateShellOpened;

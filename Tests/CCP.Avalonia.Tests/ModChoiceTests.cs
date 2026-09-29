@@ -13,6 +13,7 @@ using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using CCP.Tests.Shared;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -135,6 +136,55 @@ public sealed class ModChoiceTests
         Assert.Equal(BuiltInMods.CCPDefaultId, AvApp.Mods!.ActiveModId);
         wizard.Close();
         await Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task UpgraderStartupOpensThePickerWhichDownloadsShowsProgressAndActivates() => Run(async (shell, svc, server) =>
+    {
+        // Run's profile is an upgrader (Welcomed, age accepted, ModPickerShown=false): Opened shows it.
+        var picker = await Owned<ModPickerDialog>(shell);
+        Assert.True(CoreSettings.Current.ModPickerShown);   // latched before showing
+        var card = picker.FindControl<ItemsControl>("CardsList")!.ItemsSource!.Cast<ModPickerCard>()
+            .Single(c => c.PackId == "mod-bambi");
+        await WaitFor(() => card.SizeText != "" && picker.FindControl<Button>("BtnDownload")!.IsEnabled);
+        var seen = new System.Collections.Generic.List<double>();
+        card.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ModPickerCard.Percent)) seen.Add(card.Percent); };
+        card.IsSelected = true;
+
+        await picker.BtnDownload_Click();
+        await WaitFor(() => AvApp.Mods!.ActiveModId == BuiltInMods.BambiSleepId);
+
+        Assert.Contains(seen, p => p > 0 && p < 100);   // progress shown
+        Assert.True(card.IsInstalled);
+        Assert.True(svc.IsInstalled("mod-bambi"));
+        Assert.Equal(BuiltInMods.BambiSleepId, CoreSettings.Current.ActiveModId);
+        Assert.Null(PendingModChoice.Pending);
+        Assert.Equal(1, server.PackGets);
+        picker.Close();
+    });
+
+    [Fact]
+    public Task ShowIfNeededFollowsTheLiveServiceRules() => Run(async (shell, svc, server) =>
+    {
+        (await Owned<ModPickerDialog>(shell)).Close();   // the startup showing
+        Assert.True(ModPickerDialog.HasPackService);
+        Assert.False(svc.IsFullInstall);
+
+        CoreSettings.Current.ModPickerShown = false;
+        server.Handle = c => FakeServer.Send(c, Array.Empty<byte>(), 404);   // manifest gone
+        Assert.Null(await svc.FetchManifestAsync());
+        Assert.True(svc.ManifestUnavailable);
+        var shown = ModPickerDialog.ShowIfNeeded(shell);   // a regression opens a modal: fail, never hang
+        await Task.Delay(300);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(shown.IsCompleted);
+        Assert.False(await shown);   // guard 1: deferred, offer kept
+        Assert.False(CoreSettings.Current.ModPickerShown);
+
+        AvApp.ResetReleaseContent();
+        Assert.False(ModPickerDialog.HasPackService);
+        Assert.False(await ModPickerDialog.ShowIfNeeded(shell));   // no service
+        Assert.Empty(shell.OwnedWindows.OfType<ModPickerDialog>());
     });
 
     // ---- helpers ----

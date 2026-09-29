@@ -11,6 +11,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -377,16 +378,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// </list>
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/ModPickerDialog.xaml.cs. Deviations:
-    ///  - what <c>App.ReleaseContent</c> exposes through <see cref="CoreReleaseContent"/> is wired:
-    ///    the install stamps behind <c>IsPackInstalled</c>, the manifest's real sizes behind
-    ///    <c>SizeBytesFor</c>, and the <c>PackInstalled</c> event, so a card flips to Installed the
-    ///    moment a pack lands however it was requested. What that seam does NOT carry is still a
-    ///    stub: the download itself (<see cref="BtnDownload_Click"/> needs <c>RequestPackAsync</c>
-    ///    and <c>PendingModActivation</c>), per-pack progress, and <see cref="ShowIfNeeded"/>'s two
-    ///    service reads. Each says so at its own site.
-    ///  - <c>OnPackProgressChanged</c> took a WPF-head <c>PackProgressEventArgs</c>, so it goes with
-    ///    the progress seam; <c>MarshalToUi</c> and <c>FindCard</c> came back with
-    ///    <c>PackInstalled</c> and now hop through <c>Dispatcher.UIThread</c>.
+    ///  - <c>App.ReleaseContent</c> is this head's <see cref="App.ReleaseContent"/>; PendingModActivation
+    ///    is Core's <see cref="PendingModChoice"/> plus <c>MainShellWindow.ApplyPendingModChoice</c>.
+    ///    <c>MarshalToUi</c> hops through <c>Dispatcher.UIThread</c>.
     ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>; <c>MouseLeftButtonDown</c> ->
     ///    <c>PointerPressed</c>, wired in the constructor.
     ///  - the download button's caption is re-BOUND, not assigned: assigning <c>.Text</c> over a
@@ -402,7 +396,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private readonly TextBlock _txtHint;
         private readonly TextBlock _txtDownload;
         private readonly Button _btnDownload;
+        private readonly string? _preselectModId;
         private bool _offline;
+        private bool _downloading;
         private bool _finished;
         private bool _closed;
 
@@ -427,6 +423,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         public ModPickerDialog(string? preselectModId)
         {
             AvaloniaXamlLoader.Load(this);
+            _preselectModId = preselectModId;
 
             _txtHint = this.FindControl<TextBlock>("TxtHint")!;
             _txtDownload = this.FindControl<TextBlock>("TxtDownload")!;
@@ -439,19 +436,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Border>("TitleBar")!.PointerPressed += TitleBar_PointerPressed;
             this.FindControl<Button>("BtnCloseX")!.Click += (_, _) => BtnSkip_Click();
             this.FindControl<Button>("BtnSkip")!.Click += (_, _) => BtnSkip_Click();
-            _btnDownload.Click += (_, _) => BtnDownload_Click();
+            _btnDownload.Click += async (_, _) => await BtnDownload_Click();
 
             // Fires once a pack's bytes are on disk and its .ccpmod has been extracted into its
             // built-in slot — the moment the mod is genuinely usable. Raised on the download
             // thread, so the handler marshals.
             CoreReleaseContent.PackInstalled += OnPackInstalled;
-
-            // ponytail: per-pack DOWNLOAD PROGRESS has no seam yet - the WPF original also
-            // subscribes ReleaseContentService.PackProgressChanged
-            // (ConditioningControlPanel/Services/Content/ReleaseContentService.cs) and
-            // ModService.ModAvailabilityChanged (CCP.Core/Services/ModService.cs);
-            // neither is on CoreReleaseContent / CoreMods, so the cards' progress bars are driven
-            // only by the download loop below once that lands.
+            if (App.ReleaseContent is { } svc) svc.PackProgressChanged += OnPackProgressChanged;
+            if (App.Mods is { } mods) mods.ModAvailabilityChanged += OnModAvailabilityChanged;
 
             Loaded += OnDialogLoaded;
             Closed += OnDialogClosed;
@@ -506,37 +498,57 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
         }
 
-        /// <summary>
-        /// The install stamp is the seam Core exposes, and it is the WPF original's own
-        /// "manifest not fetched — trust the stamp" answer. Unseeded there is no stamp, so this is
-        /// false, which is the WPF path for a missing service.
-        ///
-        /// ponytail: the WPF original also short-circuits on ReleaseContentService.IsFullInstall
-        /// and re-probes the extracted payload on disk (HasInstalledPayload), both in
-        /// ConditioningControlPanel/Services/Content/ReleaseContentService.cs. Neither is on
-        /// CoreReleaseContent, so a stamped-but-deleted pack still reads as installed here.
-        /// </summary>
         private static bool IsPackInstalled(string? packId)
         {
             try
             {
                 if (string.IsNullOrEmpty(packId)) return false;
-                return CoreReleaseContent.GetStampFor(packId!) != null;
+                var svc = App.ReleaseContent;
+                if (svc == null) return false;
+                return svc.IsFullInstall || svc.IsInstalled(packId!);
             }
             catch { return false; }
         }
 
         // ------------------------------------------------------------------ manifest
 
-        private void OnDialogLoaded(object? sender, EventArgs e)
+        private async void OnDialogLoaded(object? sender, EventArgs e)
         {
-            // ponytail: needs ReleaseContentService.IsFullInstall / FetchManifestAsync
-            // (ConditioningControlPanel/Services/Content/ReleaseContentService.cs); CoreReleaseContent
-            // exposes only the already-fetched pack info. So this takes the WPF original's
-            // manifest-already-fetched branch: sizes come from GetPackInfo where a head seeded one and
-            // from the baked-in approximations otherwise, and nothing here can fall to SetOfflineState.
-            RefreshSizes();
-            UpdateDownloadButton();
+            try
+            {
+                var svc = App.ReleaseContent;
+                if (svc == null)
+                {
+                    // No pack service (render / --render-all): the cards show approximate sizes and
+                    // nothing can be downloaded from here.
+                    if (CoreSettings.HasProvider) SetOfflineState();
+                    else UpdateDownloadButton();
+                    return;
+                }
+                if (svc.IsFullInstall)
+                {
+                    foreach (var card in _cards) card.MarkInstalled();
+                    UpdateDownloadButton();
+                    return;
+                }
+
+                // Startup usually fetched the manifest already; only pay for a round trip when a
+                // pack is genuinely unknown.
+                if (ModPickerCatalog.Optional.Any(en => svc.GetPackInfo(en.PackId!) == null)
+                    && await svc.FetchManifestAsync() == null)
+                {
+                    SetOfflineState();
+                    return;
+                }
+
+                RefreshSizes();
+                UpdateDownloadButton();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[ModPicker] Manifest refresh failed - falling back to offline copy");
+                SetOfflineState();
+            }
         }
 
         private void RefreshSizes()
@@ -573,6 +585,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         }
 
         // ------------------------------------------------------------------ events
+
+        private void OnPackProgressChanged(object? sender, PackProgressEventArgs e) =>
+            MarshalToUi(() => FindCard(e.PackId)?.MarkProgress(e.Percent));
+
+        /// <summary>Argument is a mod id (pack id as a fallback) - map it back to this screen's cards.</summary>
+        private void OnModAvailabilityChanged(object? sender, string modOrPackId) =>
+            MarshalToUi(() =>
+            {
+                FindCard(ModService.PackIdForMod(modOrPackId) ?? modOrPackId)?.MarkInstalled();
+                UpdateDownloadButton();
+            });
 
         private void OnPackInstalled(object? sender, string packId)
         {
@@ -621,29 +644,89 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             Close();
         }
 
-        private void BtnDownload_Click()
+        /// <summary>WPF BtnDownload_Click (ModPickerDialog.xaml.cs:443-532). Returns when the queue is done.</summary>
+        internal async Task BtnDownload_Click()
         {
             if (_finished)
             {
                 Close();
                 return;
             }
-            if (_offline) return;
+            if (_downloading || _offline) return;
 
-            // ponytail: needs ReleaseContentService.RequestPackAsync
-            // (ConditioningControlPanel/Services/Content/ReleaseContentService.cs) and
-            // PendingModActivation.Record / ApplyIfReady
-            // (ConditioningControlPanel/Services/PendingModActivation.cs); neither has a Core seam.
-            // That branch is also where the WPF original's `_preselectModId` and `_downloading`
-            // fields are read - both are dropped here rather than kept as dead state, so re-add
-            // them with the queue. Without a pack service there is nothing to download, which is
-            // exactly the WPF original's `svc == null` branch.
-            SetOfflineState();
+            var svc = App.ReleaseContent;
+            if (svc == null)
+            {
+                SetOfflineState();
+                return;
+            }
+
+            var queue = _cards.Where(c => c.HasPack && c.IsSelected && !c.IsInstalled).ToList();
+            if (queue.Count == 0)
+            {
+                Close();
+                return;
+            }
+
+            // Choosing a mod here MEANS choosing to run it (first one in catalogue order). Upgraders
+            // (preselect set) only re-download their own mod's media, so their intent is not recorded.
+            if (_preselectModId == null)
+            {
+                PendingModChoice.Record(queue[0].ModId, App.Mods?.ActiveModId);
+                Windows.MainShellWindow.ApplyPendingModChoice(Windows.MainShellWindow.ModChoiceTrigger.Immediate);
+            }
+
+            _downloading = true;
+            _btnDownload.IsEnabled = false;
+            _btnDownload.Opacity = 0.45;
+            foreach (var card in queue)
+            {
+                card.CanSelect = false;
+                card.MarkQueued();
+            }
+
+            // Sequential: one saturated connection beats several fighting over the same line.
+            foreach (var card in queue)
+            {
+                card.MarkProgress(0);
+                var ok = false;
+                try
+                {
+                    // CancellationToken.None on purpose: closing this dialog must not kill the download.
+                    ok = await svc.RequestPackAsync(card.PackId!, new Progress<double>(card.MarkProgress), CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "[ModPicker] Pack {Pack} download threw", card.PackId);
+                }
+                if (ok) card.MarkInstalled();
+                else card.MarkFailed();
+            }
+
+            _downloading = false;
+
+            // Failed cards stay ticked and selectable, and the button stays "Download selected":
+            // RequestPackAsync resumes from the .partial, so a second press is the retry.
+            var failed = queue.Where(c => c.State == ModPickerCard.CardState.Failed).ToList();
+            foreach (var card in failed)
+            {
+                card.IsSelected = true;
+                card.CanSelect = true;
+            }
+            _finished = failed.Count == 0;
+            UpdateDownloadButton();
         }
 
         private void UpdateDownloadButton()
         {
             if (_closed || _offline) return;
+
+            if (_downloading)
+            {
+                _btnDownload.IsEnabled = false;
+                _btnDownload.Opacity = 0.45;
+                return;
+            }
 
             _btnDownload.IsEnabled = true;
             _btnDownload.Opacity = 1.0;
@@ -671,7 +754,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private void OnDialogClosed(object? sender, EventArgs e)
         {
             _closed = true;
-            try { CoreReleaseContent.PackInstalled -= OnPackInstalled; } catch { }
+            try
+            {
+                CoreReleaseContent.PackInstalled -= OnPackInstalled;
+                if (App.ReleaseContent is { } svc) svc.PackProgressChanged -= OnPackProgressChanged;
+                if (App.Mods is { } mods) mods.ModAvailabilityChanged -= OnModAvailabilityChanged;
+            }
+            catch { }
         }
 
         /// <summary>
@@ -707,13 +796,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                && !isFullInstall
                && !ShouldDeferForOffline(settings.OfflineMode, manifestUnavailable, settings.ModPickerOfflineOffers);
 
-        /// <summary>
-        /// This head has no content-pack service: ReleaseContentService is not ported (oracle §5,
-        /// downloads deferred). WPF's <c>App.ReleaseContent == null</c> branch therefore always
-        /// applies and the picker never opens here, exactly as WPF behaves without the service.
-        /// IsFullInstall / ManifestUnavailable are read from that same service, so both are false.
-        /// </summary>
-        internal static bool HasPackService => false;
+        /// <summary>WPF <c>App.ReleaseContent != null</c>: null on render / headless paths.</summary>
+        internal static bool HasPackService => App.ReleaseContent != null;
 
         /// <summary>
         /// PORTED from ConditioningControlPanel/Dialogs/ModPickerDialog.xaml.cs:631. Deviation:
@@ -725,8 +809,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             {
                 if (!CoreSettings.HasProvider) return false;   // render / nav-check: no profile
                 var settings = CoreSettings.Current;
-                if (!ShouldShow(settings, HasPackService, isFullInstall: false, manifestUnavailable: false))
+                var svc = App.ReleaseContent;
+                if (!ShouldShow(settings, HasPackService, svc?.IsFullInstall == true, svc?.ManifestUnavailable == true))
+                {
+                    Log.Debug("[ModPicker] Not showing (shown {Shown}, service {Svc}, offline {Offline}, manifest unavailable {Unavail})",
+                        settings.ModPickerShown, svc != null, settings.OfflineMode, svc?.ManifestUnavailable);
                     return false;
+                }
 
                 var preselect = preselectActiveMod ? settings.ActiveModId : null;
                 if (!string.IsNullOrEmpty(preselect) && ModService.PackIdForMod(preselect) == null)
