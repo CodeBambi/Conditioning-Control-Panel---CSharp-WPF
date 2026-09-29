@@ -56,6 +56,13 @@ jobs:
       # --smoke plays a clip through LibVLC (dummy output); Linux uses the system libvlc.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvlc-dev vlc-plugin-base
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --smoke
+      # The shipped shape (Properties/PublishProfiles/linux-x64.pubxml): self-contained, loose files.
+      # Never a release; nothing here uploads the publish folder.
+      - name: Publish linux-x64 and smoke the published app
+        run: |
+          dotnet publish CCP.Avalonia/CCP.Avalonia.csproj -c Release -p:PublishProfile=linux-x64
+          test -f CCP.Avalonia/bin/publish/linux-x64/libvosk.so
+          CCP.Avalonia/bin/publish/linux-x64/CCP.Avalonia --smoke
       # Consent runs in its own testhost: CorePaths is process-global and the headless Avalonia
       # lifetime must not share state with the language/notification/scheduler suites.
       - run: dotnet test Tests/CCP.Avalonia.Consent.Tests/CCP.Avalonia.Consent.Tests.csproj -c Release
@@ -158,6 +165,14 @@ jobs:
         continue-on-error: true
         timeout-minutes: 5
         run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --overlay-check
+      # The installer's input (Properties/PublishProfiles/win-x64.pubxml, WPF's settings). WinExe has no
+      # console, so Start-Process -Wait is what makes the exit code reach the step.
+      - name: Publish win-x64 and smoke the published exe
+        timeout-minutes: 20
+        run: |
+          dotnet publish CCP.Avalonia/CCP.Avalonia.csproj -c Release -p:PublishProfile=win-x64
+          $p = Start-Process -FilePath CCP.Avalonia\bin\publish\win-x64\CCP.Avalonia.exe -ArgumentList '--smoke' -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "--smoke exited $($p.ExitCode)" }
 
   # build-content-packs.ps1 is Windows-only (\\?\ long paths), so its proof runs here.
   # (a) The committed install-relative [InstallDelete] list must regenerate unchanged.

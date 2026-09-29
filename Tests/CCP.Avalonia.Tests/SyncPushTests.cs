@@ -33,7 +33,8 @@ public sealed partial class AccountSeedTests
         public HttpStatusCode SyncStatus = HttpStatusCode.OK;
         public string SyncReply = "{\"success\":true}";
         public TaskCompletionSource? Hold;   // a sync answer that waits until released
-        public IEnumerable<JObject> Syncs => Seen.Where(r => r.Path == "POST /v2/user/sync").Select(r => r.Body!);
+        // A snapshot under the lock: the heartbeat LoadProfile starts can still be adding while a test reads.
+        public IEnumerable<JObject> Syncs { get { lock (Seen) return Seen.Where(r => r.Path == "POST /v2/user/sync").Select(r => r.Body!).ToList(); } }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
@@ -182,7 +183,8 @@ public sealed partial class AccountSeedTests
     {
         var (wire, sync, _) = SignIn("u1", profile: null);
         Assert.True(await sync.HeartbeatAsync());
-        var body = wire.Seen.Single(r => r.Path == "POST /v2/user/heartbeat").Body!;
+        JObject body;
+        lock (wire.Seen) body = wire.Seen.Single(r => r.Path == "POST /v2/user/heartbeat").Body!;
         Assert.Equal(new[] { "unified_id", "is_active", "in_session", "app_version" }, body.Properties().Select(p => p.Name));
         Assert.Equal("u1", (string?)body["unified_id"]);
         Assert.True((bool)body["is_active"]!);

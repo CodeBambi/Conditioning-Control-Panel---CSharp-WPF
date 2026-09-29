@@ -719,3 +719,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   superseded); mods are offered via the first-run wizard and Mod Manager. No unprompted manifest fetch in sandboxed runs.
 - Evidence: ModChoiceTests (dialog download -> activate; returning-user startup opens nothing and fetches nothing), fail-proofed.
   Review: FIX -> r1 applied.
+
+## avalonia-port/publish-profiles: +265 (installer/updater U2)
+- Publish profiles: win-x64 with WPF's settings (self-contained, single-file, native libs bundled, R2R, no trimming) and linux-x64
+  (self-contained, loose). Assets/Models copied like WPF. WPF's single-instance mutex name with a named-pipe show/ack (sandboxed
+  runs use suffixed names). CI publishes both and runs --smoke from the publish folder. Decision rows: exe name, upgrade in
+  place, Linux channels (user brief), updater home, profiles, signal transport.
+- Also fixed a test leak: ModChoiceTests left CoreMods pointing at its mod service, so shuffled test order made later tests
+  see drone-mode active (10 consecutive green runs after the fix, no retries). Review: pending.

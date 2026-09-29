@@ -148,6 +148,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Webcam/wake-word/Vosk models, as WPF ConditioningControlPanel.csproj:680. -->
+    <Content Include="..\Assets\Models\**\*" Link="Resources\Models\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Awareness Engine preset packs, as WPF ConditioningControlPanel.csproj:658. -->
     <Content Include="..\Assets\AwarenessPresets\**\*" Link="Resources\AwarenessPresets\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
