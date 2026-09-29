@@ -757,3 +757,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   notice and in the web view panel, with Copy command; portal Registry.Register with the app id before the panic-key bind.
 - Evidence: LinuxDependenciesTests (fail-proofed); dbus-monitor: KDE files the shortcut under our id once the .desktop is
   installed. Not live: a really missing library. Review: ACCEPT.
+
+## avalonia-port/catalogue-client-core: +694 (catalogue U1)
+- WPF CatalogueService logic moved verbatim to Core CatalogueClient (HTTP, token exchange + per-instance cache, SubmissionResult,
+  status mapping incl. 429 Retry-After); WPF is a thin subclass; write gate stays WPF's token + unified id (decision logged).
+- Evidence: CatalogueClientTests (15, fake handler, no network), fail-proofed 4 ways. Avalonia wiring is U3. Review: ACCEPT.
