@@ -74,7 +74,7 @@ namespace ConditioningControlPanel.Services
             var moved = (next.Value - previous).Duration() > Deadband;
             if (moved)
             {
-                App.Logger?.Information("[Clock] Server clock offset now {Seconds:F0}s (was {Was:F0}s)",
+                Serilog.Log.Information("[Clock] Server clock offset now {Seconds:F0}s (was {Was:F0}s)",
                     next.Value.TotalSeconds, previous.TotalSeconds);
             }
             return moved;

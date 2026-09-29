@@ -33,6 +33,7 @@ public sealed class ProviderSubscriptionTests : IDisposable
         CoreSecrets.RetrieveProvider = n => _secrets.GetValueOrDefault(n);
         CoreSecrets.StoreProvider = (n, v) => _secrets[n] = v;
         _settings.AuthToken = "ccp-tok";   // CoreSecrets-backed, so after the seed
+        DeadRefreshTokens.ResetForTests();   // process-global since release/6.11.5: a refused token must not leak between tests
         CoreAccount.UnifiedUserId = null;
     }
 
@@ -41,6 +42,7 @@ public sealed class ProviderSubscriptionTests : IDisposable
         CoreSecrets.RetrieveProvider = _oldGet;
         CoreSecrets.StoreProvider = _oldSet;
         CoreAccount.UnifiedUserId = null;
+        DeadRefreshTokens.ResetForTests();
     }
 
     /// <summary>A scripted proxy: path -> (status, body), or a throw.</summary>
@@ -192,6 +194,13 @@ public sealed class ProviderSubscriptionTests : IDisposable
         Assert.True(p.GrantLooksDead);
         _proxy.Routes["/patreon/refresh"] = (HttpStatusCode.OK, Refreshed);
         _proxy.Routes["/patreon/validate"] = (HttpStatusCode.OK, Validate(true, 1));
+        // release/6.11.5 DeadRefreshTokens: the refused token is not sent again this session...
+        await p.ValidateSubscriptionAsync(forceRefresh: true);
+        Assert.True(p.GrantLooksDead);
+        Assert.Single(_proxy.Seen, x => x.Contains("/patreon/refresh"));
+        // ...the reconnect's new token is, and a good answer clears the flag.
+        _secrets["patreon_auth"] = JsonConvert.SerializeObject(new PatreonTokenData
+        { AccessToken = "access-9", RefreshToken = "refresh-9", ExpiresAt = DateTime.UtcNow.AddDays(-5) });
         await p.ValidateSubscriptionAsync(forceRefresh: true);
         Assert.False(p.GrantLooksDead);
     }

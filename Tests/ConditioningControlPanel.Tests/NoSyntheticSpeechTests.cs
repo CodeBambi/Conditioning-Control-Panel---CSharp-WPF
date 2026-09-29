@@ -68,10 +68,11 @@ public class NoSyntheticSpeechTests
     [Fact]
     public void NoClientCodeUsesASpeechSynthesiser()
     {
-        var root = Path.Combine(FindRepoRoot(), "ConditioningControlPanel");
+        // Every product root plus the shared web assets (moved out of the WPF head to /Assets).
+        var root = SourceRoots.RepoRoot;
         var hits = new List<string>();
         int scanned = 0;
-        foreach (var file in Walk(root))
+        foreach (var file in SourceRoots.ProductDirectories.Append(Path.Combine(root, "Assets")).SelectMany(Walk))
         {
             scanned++;
             string text;
@@ -103,16 +104,5 @@ public class NoSyntheticSpeechTests
             if (SkippedDirs.Contains(Path.GetFileName(sub))) continue;
             foreach (var f in Walk(sub)) yield return f;
         }
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        for (int i = 0; i < 10 && dir != null; i++)
-        {
-            if (Directory.Exists(Path.Combine(dir, "ConditioningControlPanel", "Resources"))) return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new DirectoryNotFoundException("repo root not found from " + AppContext.BaseDirectory);
     }
 }

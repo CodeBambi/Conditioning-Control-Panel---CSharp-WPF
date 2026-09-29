@@ -96,7 +96,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>Adds X-CCP-Timestamp and X-CCP-Signature. The caller refuses to send without a unified id (#894).</summary>
         public static void SignRequest(HttpRequestMessage request, string unifiedId, string body)
         {
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+            var timestamp = ServerClock.UtcNow.ToUnixTimeSeconds().ToString(); // server-corrected: a skewed PC clock 403s every sync (release/6.11.5)
             request.Headers.Add("X-CCP-Timestamp", timestamp);
             request.Headers.Add("X-CCP-Signature", Signature(unifiedId, timestamp, body));
         }
