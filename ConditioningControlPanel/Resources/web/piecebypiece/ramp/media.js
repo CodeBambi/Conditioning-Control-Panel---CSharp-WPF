@@ -104,16 +104,26 @@ function createPool(entries, { rnd, label, lowWater = 0, onLow } = {}) {
     return all.length - before;
   }
 
-  /** One url, non-repeating across a deck, echo-guarded on tiny pools. */
-  function draw(kind) {
+  /**
+   * One url, non-repeating across a deck, echo-guarded on tiny pools.
+   * `avoid` (anything with has(url)) holds the pictures on screen now: they are
+   * skipped and stay in the deck for later, and when every picture of the kind
+   * is up the answer is null, so the caller shows one fewer instead of a copy.
+   */
+  function draw(kind, avoid) {
     const k = KINDS.includes(kind) ? kind : 'image';
     const pool = poolFor(k);
     if (!pool.length) return null;
     let deck = decks[k];
     if (!deck || !deck.length) deck = decks[k] = shuffle(pool.slice(), rnd);
-    let idx = deck.pop();
+    const nextFree = () => { for (let i = deck.length - 1; i >= 0; i--) if (!(avoid && avoid.has(all[deck[i]].url))) return i; return -1; };
+    let at = nextFree();
+    // what is left of this deal is all on screen: a fresh deal may hold one that is not
+    if (at < 0) { deck = decks[k] = shuffle(pool.slice(), rnd); at = nextFree(); }
+    if (at < 0) return null;
+    let idx = deck.splice(at, 1)[0];
     // echo guard: on a pool bigger than the guard, skip a url we just used
-    if (pool.length > NO_ECHO && recent.includes(all[idx].url) && deck.length) idx = deck.pop();
+    if (pool.length > NO_ECHO && recent.includes(all[idx].url)) { const alt = nextFree(); if (alt >= 0) idx = deck.splice(alt, 1)[0]; }
     const url = all[idx].url;
     recent.push(url);
     while (recent.length > NO_ECHO) recent.shift();
@@ -123,8 +133,11 @@ function createPool(entries, { rnd, label, lowWater = 0, onLow } = {}) {
     return url;
   }
 
-  /** A gif url, or a generated pink noise tile when the pool has none. */
-  function drawTile() { return draw('gif') || draw('image') || noiseTileUrl(2 + ((Math.random() * 3) | 0)); }
+  /** A gif url, else a still; a generated pink noise tile only when the pool has neither. */
+  function drawTile(avoid) {
+    return draw('gif', avoid) || draw('image', avoid)
+      || (has('gif') || has('image') ? null : noiseTileUrl(2 + ((Math.random() * 3) | 0)));
+  }
 
   function stats() {
     const out = { label: label || 'pool', total: all.length };
@@ -337,13 +350,15 @@ export function createHostMedia(entries, opts = {}) {
     try { if (bridge && typeof bridge.postMessage === 'function') bridge.postMessage({ type: HOST_MSG.more }); } catch { /* host gone */ }
   }
 
-  pool.draw = (kind) => {
+  pool.draw = (kind, avoid) => {
     const k = KINDS.includes(kind) ? kind : 'image';
-    const fromOnline = rnd() < onlineChance(share, online.count(k), local.has(k));
-    let url = fromOnline ? online.draw(k) : local.draw(k);
+    let fromOnline = rnd() < onlineChance(share, online.count(k), local.has(k));
+    let url = fromOnline ? online.draw(k, avoid) : local.draw(k, avoid);
+    // every picture on that side is on screen already: the other side may have one that is not
+    if (!url) { fromOnline = !fromOnline; url = fromOnline ? online.draw(k, avoid) : local.draw(k, avoid); }
     // the same picture twice in a row takes the other side when it can
     if (url && url === last[k]) {
-      const alt = fromOnline ? (local.has(k) ? local.draw(k) : null) : (online.count(k) ? online.draw(k) : null);
+      const alt = fromOnline ? (local.has(k) ? local.draw(k, avoid) : null) : (online.count(k) ? online.draw(k, avoid) : null);
       if (alt && alt !== url) { url = alt; if (!fromOnline) noteShown(alt); }
     } else if (url && fromOnline) noteShown(url);
     last[k] = url;
@@ -352,7 +367,8 @@ export function createHostMedia(entries, opts = {}) {
   pool.has = (kind) => local.has(kind) || online.has(kind);
   pool.unused = (kind) => local.unused(kind) + online.unused(kind);
   pool.count = (kind) => local.count(kind) + online.count(kind);
-  pool.drawTile = () => pool.draw('gif') || pool.draw('image') || noiseTileUrl(2 + ((Math.random() * 3) | 0));
+  pool.drawTile = (avoid) => pool.draw('gif', avoid) || pool.draw('image', avoid)
+    || (pool.has('gif') || pool.has('image') ? null : noiseTileUrl(2 + ((Math.random() * 3) | 0)));
   pool.stats = () => ({ ...local.stats(), label: 'host', online: online.stats().total, share });
   Object.defineProperty(pool, 'size', { get: () => localSize() + online.size, configurable: true });
   pool.online = online;

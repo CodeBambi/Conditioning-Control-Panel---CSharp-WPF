@@ -69,19 +69,23 @@ export function stopClip(v) {
  * Dress a box that used to take a background-image: a still stays a
  * background-image, a clip becomes a <video class="pbp-clip-fill"> child that
  * covers the box. The previous clip child, if any, is stopped first.
+ * Answers the url the box shows now, or null: with nothing to show the box is
+ * left empty, never wearing its old picture (the pool may hand that one out again).
  */
 export function dressBox(ctx, el, url, fallback) {
-  if (!el) return;
+  if (!el) return null;
   const shown = stillOr(url, fallback);
   if (el.__pbpClip) { stopClip(el.__pbpClip); el.__pbpClip = null; }
   if (isClip(shown)) {
     const v = makeClip(ctx, shown, 'pbp-clip-fill');
     if (v) {
-      try { el.style.backgroundImage = ''; el.appendChild(v); el.__pbpClip = v; return; } catch { stopClip(v); }
+      try { el.style.backgroundImage = ''; el.appendChild(v); el.__pbpClip = v; return shown; } catch { stopClip(v); }
     }
-    return;
+    try { el.style.backgroundImage = ''; } catch { /* gone */ }
+    return null;
   }
-  try { if (shown) el.style.backgroundImage = `url("${shown}")`; } catch { /* gone */ }
+  try { el.style.backgroundImage = shown ? `url("${shown}")` : ''; } catch { /* gone */ }
+  return shown || null;
 }
 
 /** Drop a box's clip child (the box is being cleared or disposed). */

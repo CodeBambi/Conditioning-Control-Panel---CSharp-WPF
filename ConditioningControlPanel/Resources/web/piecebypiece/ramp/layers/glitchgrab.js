@@ -25,6 +25,7 @@ export function createGlitchGrab(ctx) {
   let holding = false;
   let raf = 0;
   let pending = null;
+  let shown = null;   // the picture on the sticker, held while it is stuck on a piece
 
   /**
    * How wide the sticker should be right now. A piece is about one square
@@ -67,11 +68,13 @@ export function createGlitchGrab(ctx) {
     if (disposed) return;
     const node = ensure();
     if (!node) return;
+    ctx.release(shown); shown = null;   // a grab with no drop between keeps one picture, not two
     const url = ctx.tile();
     try {
       // re-measured every grab: the camera swings between turns
       node.style.setProperty('--pbp-grab-size', sizePx() + 'px');
-      dressBox(ctx, node, url, ctx.image);   // a clip plays, a still stays a background
+      shown = dressBox(ctx, node, url, ctx.image);   // a clip plays, a still stays a background
+      ctx.hold(shown);
       node.style.opacity = String(t.alpha == null ? 0.85 : t.alpha);
       node.classList.add('is-on');
     } catch { /* gone */ }
@@ -85,6 +88,7 @@ export function createGlitchGrab(ctx) {
     holding = false;
     if (el) { try { el.classList.remove('is-on'); el.style.opacity = '0'; } catch { /* gone */ } }
     undressBox(el);
+    ctx.releaseLater(shown, 160); shown = null;   // after the 140ms fade
   }
 
   function clear() { drop(); }
@@ -92,6 +96,7 @@ export function createGlitchGrab(ctx) {
   function dispose() {
     disposed = true;
     if (raf) { try { cancelAnimationFrame(raf); } catch { /* ignore */ } raf = 0; }
+    ctx.release(shown); shown = null;
     undressBox(el);
     if (el) { try { el.remove(); } catch { /* gone */ } el = null; }
   }

@@ -53,6 +53,7 @@ export function createVideoCard(ctx) {
     frame.appendChild(vid);
     wrap.appendChild(frame);
     ctx.mountFront(wrap);
+    ctx.hold(url);
     card = wrap;
 
     const play = () => { try { const p = vid.play(); if (p && p.catch) p.catch(() => {}); } catch { /* blocked */ } };
@@ -64,6 +65,8 @@ export function createVideoCard(ctx) {
       removed = true;
       try { wrap.classList.remove('is-in'); wrap.classList.add('is-out'); } catch { /* gone */ }
       try { vid.pause(); } catch { /* gone */ }
+      // the clip is on screen until the slide out is over; untracked, so a clear cannot drop it
+      ctx.releaseLater(url, 760);
       // explicit unload: a removed element's decoder counts against Chromium's
       // per-page media cap until GC, and this card fires every single turn
       track(setTimeout(() => {
