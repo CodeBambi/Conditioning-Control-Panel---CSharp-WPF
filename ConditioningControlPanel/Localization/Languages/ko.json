@@ -319,6 +319,8 @@
   "chaster_costs_header": "시간이 늘어남",
   "chaster_earns_header": "시간이 돌아옴",
   "chaster_each": "회당 {0}",
+  "chaster_price_edit_tip": "클릭해서 시간을 직접 정하세요. 비워 두면 {0}.",
+  "chaster_price_edit_locked": "활성 잠금이 없을 때 시간을 바꿀 수 있어요.",
   "chaster_bill_header": "이번 판",
   "chaster_bill_empty": "아직 없어요.",
   "chaster_bill_pushed": "잠금으로 보냄: {0}",

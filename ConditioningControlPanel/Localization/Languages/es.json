@@ -319,6 +319,8 @@
   "chaster_costs_header": "Cuesta tiempo",
   "chaster_earns_header": "Lo devuelve",
   "chaster_each": "{0} cada uno",
+  "chaster_price_edit_tip": "Haz clic para poner tu propio tiempo. Déjalo vacío para {0}.",
+  "chaster_price_edit_locked": "Los tiempos se pueden cambiar mientras no haya un candado activo.",
   "chaster_bill_header": "Esta ronda",
   "chaster_bill_empty": "Nada todavía.",
   "chaster_bill_pushed": "Enviado al candado: {0}",

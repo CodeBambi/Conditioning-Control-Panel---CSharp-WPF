@@ -5294,6 +5294,18 @@ namespace ConditioningControlPanel.Models
             set { _chasterPrices = value ?? new List<string>(); OnPropertyChanged(); }
         }
 
+        private Dictionary<string, int> _chasterPriceOverrides = new();
+
+        /// <summary>The player's own figures for price rows, id to unsigned seconds (TabPriceEdit).
+        /// Empty = the table's defaults. Set on the tab page only while no lock runs; read through
+        /// TabPriceEdit, which keeps each row's sign and clamps the size.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, int> ChasterPriceOverrides
+        {
+            get => _chasterPriceOverrides;
+            set { _chasterPriceOverrides = value ?? new Dictionary<string, int>(); OnPropertyChanged(); }
+        }
+
         private bool _chasterFlashDodge;
 
         /// <summary>Natasha's favourite on flashes. Off (the default): flashes are never red, only

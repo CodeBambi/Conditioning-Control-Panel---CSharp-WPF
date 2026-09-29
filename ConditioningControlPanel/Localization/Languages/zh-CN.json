@@ -324,6 +324,8 @@
   "chaster_costs_header": "加时",
   "chaster_earns_header": "减时",
   "chaster_each": "每次 {0}",
+  "chaster_price_edit_tip": "点击设置你自己的时间。留空则为{0}。",
+  "chaster_price_edit_locked": "没有生效的锁时可以修改时间。",
   "chaster_bill_header": "本轮",
   "chaster_bill_empty": "还没有。",
   "chaster_bill_pushed": "已发到锁上：{0}",
