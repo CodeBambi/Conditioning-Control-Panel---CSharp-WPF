@@ -124,13 +124,16 @@ namespace ConditioningControlPanel
         private (Punishment? Due, bool Unplayable) PickLeashGate(ILeashService? svc)
         {
             if (svc == null) { _leashUnplayablePid = null; return (null, false); }
+            // Read first: GateDue is where a sign-out is noticed, and it clears the snapshot the
+            // unplayable card below reads.
+            var due = svc.GateDue;
             if (_leashUnplayablePid is { } pid)
             {
                 var p = svc.Snapshot.Me?.Pending.FirstOrDefault(x => x.Pid == pid);
                 if (p != null && svc.IsUnplayable(pid)) return (p, true);
                 _leashUnplayablePid = null;
             }
-            return (svc.GateDue, false);
+            return (due, false);
         }
 
         /// <summary>The task behind the runner went away (the leash ended from the other side, the
