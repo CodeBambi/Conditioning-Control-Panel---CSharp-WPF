@@ -159,6 +159,11 @@ jobs:
         timeout-minutes: 5
         run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --overlay-check
 
+  # build-content-packs.ps1 is Windows-only (\\?\ long paths), so its proof runs here.
+  # (a) The committed install-relative [InstallDelete] list must regenerate unchanged.
+  # (b) Today's script on the Assets-move commit must zip byte-for-byte what the old script zipped
+  #     on its parent. .ccpmod files are LFS pointers on both sides (no LFS pull), so those three
+  #     zips prove the entry layout, not the archive bytes.
   # Greps the compiler cannot do: APIs that compile fine in a net10.0 library and only fail at
   # runtime, plus the XAML clr-namespace tripwire. See the script for what and why.
   core-guards:

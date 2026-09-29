@@ -690,3 +690,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: new Tests/CCP.Core.Content.Tests (20; loopback fake server that refuses other hosts: happy path, fallback cycle,
   ranged resume, range ignored, hash retry/failure, offline, space, target escape), fail-proofed 12 ways; added to CI.
   Nothing on the Avalonia head uses it yet (L2-L4). Review: ACCEPT.
+
+## avalonia-port/content-pack-script: +94 (content packs L5)
+- build-content-packs.ps1 reads pack sources from <repo>/Assets; zip entries and installer deletions use an install-relative
+  path (no ../Assets entries). New content-packs workflow (path-filtered): -DeletionsOnly + git diff --exit-code on every
+  relevant PR; the cross-commit zip-equality proof runs on demand.
+- Evidence: locally with pwsh + a path shim, the deletion list is byte-identical (fail-proofed) and all seven zips and the
+  manifest match the pre-move build. The Windows job hasn't run yet. Review: ACCEPT, CI cost follow-ups applied.
