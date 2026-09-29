@@ -9,6 +9,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
@@ -20,13 +21,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/ProfileCustomizeDialog.xaml.cs. The tile
     /// builders, selection rules, pin cap and reset are the original's; <see cref="ProfileCosmetics"/>
-    /// is already in Core. What is not: Achievement, CosmeticsCatalog and WardrobeCatalog live in
-    /// the WPF head (the mod-art resolver does NOT block anything here any more - see
+    /// is already in Core, and so is WardrobeCatalog (the wardrobe section is the original's). What
+    /// is not: CosmeticsCatalog lives in the WPF head (the mod-art resolver does NOT block anything here any more - see
     /// <c>BuildPinTile</c> for the two things that do), so
     ///  - unlocked achievements arrive as (id, name) pairs instead of being resolved from Achievement.All,
     ///  - banners are the catalog's three generated gradients (no art file needed), avatar presets
     ///    are none (art needed), pins draw a trophy glyph where the achievement PNG would be,
-    ///  - the wardrobe takes the original's "no registry" branch.
     /// WPF's DialogResult becomes Close(bool).
     /// </summary>
     public partial class ProfileCustomizeDialog : Window
@@ -50,6 +50,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private static readonly IBrush SelectedBg = Brush.Parse("#33FF69B4");
         private static readonly IBrush Muted = Brush.Parse("#8079A3");
         private static readonly IBrush Alert = Brush.Parse("#FF5C7A");
+        private static readonly IBrush SelectedCyan = Brush.Parse("#5EC8F2");
+        private static readonly IBrush SelectedCyanBg = Brush.Parse("#335EC8F2");
+        private static readonly IBrush SilhouetteFill = Brush.Parse("#E60D0A1A");
+
+        private readonly Dictionary<string, Border> _wardrobeTiles = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Border> _modTabs = new(StringComparer.OrdinalIgnoreCase);
+        private string? _selectedMod;
 
         // ponytail: CosmeticsCatalog.Banners lives in the WPF head. These are its three generated
         // gradients (id, name, stops), which need no art file; the scene banners come with it.
@@ -74,13 +81,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 BannerId = "gradient_bloom",
                 Accent = "#B478FF",
                 TitleId = "first_session",
+                AvatarDeco = "bambi_silk_bow",
+                Charms = new List<string> { "bambi_plush_bunny" },
                 PinnedAchievements = new List<string> { "first_session", "night_owl" }
             },
             new[] { ("first_session", "First Session"), ("night_owl", "Night Owl"), ("marathon", "Marathon") })
         { }
 
-        public ProfileCustomizeDialog(ProfileCosmetics current, IEnumerable<(string Id, string Name)>? unlocked)
+        private readonly IImageBrushSource? _editorAvatar;
+        private readonly double _cardWidth, _cardHeight;
+
+        public ProfileCustomizeDialog(ProfileCosmetics current, IEnumerable<(string Id, string Name)>? unlocked,
+                                      IImageBrushSource? editorAvatar = null, double cardWidth = 0, double cardHeight = 0)
         {
+            _editorAvatar = editorAvatar;
+            _cardWidth = cardWidth;
+            _cardHeight = cardHeight;
             AvaloniaXamlLoader.Load(this);
 
             T C<T>(string name) where T : Control => this.FindControl<T>(name)!;
@@ -470,13 +486,203 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         // ============================== wardrobe (Phase 3) ==============================
 
+        /// <summary>
+        /// Mod tabs + the two slot groups from Core WardrobeCatalog (WPF BuildWardrobe). Items whose
+        /// PNG did not ship are not offered.
+        /// </summary>
         private void BuildWardrobe()
         {
-            // ponytail: needs WardrobeCatalog (registry.json + per-item PNGs, WPF head), wired when it
-            // moves to Core. This is the original's "no registry, or no art installed" branch verbatim.
-            this.FindControl<WrapPanel>("WardrobeModTabs")!.IsVisible = false;
-            this.FindControl<StackPanel>("WardrobeGroups")!.IsVisible = false;
-            _txtWardrobeEmpty.IsVisible = true;
+            try
+            {
+                var mods = WardrobeCatalog.Mods
+                    .Where(m => WardrobeCatalog.ItemsFor(m, true).Any(i => WardrobeCatalog.HasArtFile(i.Id))
+                             || WardrobeCatalog.ItemsFor(m, false).Any(i => WardrobeCatalog.HasArtFile(i.Id)))
+                    .ToList();
+
+                if (mods.Count == 0)
+                {
+                    this.FindControl<WrapPanel>("WardrobeModTabs")!.IsVisible = false;
+                    this.FindControl<StackPanel>("WardrobeGroups")!.IsVisible = false;
+                    _txtWardrobeEmpty.IsVisible = true;
+                    RefreshWardrobeSlots();
+                    return;
+                }
+
+                foreach (var mod in mods)
+                    this.FindControl<WrapPanel>("WardrobeModTabs")!.Children.Add(BuildModTab(mod));
+
+                // Open on the mod the app is actually running, when it has a tab.
+                var active = CoreMods.ActiveModId;
+                SelectMod(mods.FirstOrDefault(m => string.Equals(m, active, StringComparison.OrdinalIgnoreCase)) ?? mods[0]);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("ProfileCustomizeDialog: wardrobe build failed: {E}", ex.Message);
+                this.FindControl<Border>("WardrobeSection")!.IsVisible = false;
+            }
+        }
+
+        private Border BuildModTab(string mod)
+        {
+            var tab = new Border
+            {
+                Margin = new Thickness(0, 0, 6, 6),
+                Padding = new Thickness(12, 5, 12, 5),
+                CornerRadius = new CornerRadius(13),
+                Background = TileBg,
+                BorderBrush = IdleBorder,
+                BorderThickness = new Thickness(1),
+                Cursor = new Cursor(StandardCursorType.Hand),
+                // Registry mod ids are plain English buckets - displayed, not localized.
+                Child = new TextBlock
+                {
+                    Text = mod.Length > 0 ? char.ToUpperInvariant(mod[0]) + mod.Substring(1) : mod,
+                    Foreground = Brushes.White, FontSize = 11, FontWeight = FontWeight.SemiBold
+                }
+            };
+            tab.PointerReleased += (_, _) => SelectMod(mod);
+            _modTabs[mod] = tab;
+            return tab;
+        }
+
+        private void SelectMod(string mod)
+        {
+            if (string.Equals(_selectedMod, mod, StringComparison.OrdinalIgnoreCase)) return;
+            _selectedMod = mod;
+
+            foreach (var (id, tab) in _modTabs)
+            {
+                var on = string.Equals(id, mod, StringComparison.OrdinalIgnoreCase);
+                tab.BorderBrush = on ? SelectedCyan : IdleBorder;
+                tab.Background = on ? SelectedCyanBg : TileBg;
+            }
+
+            var decoHost = this.FindControl<WrapPanel>("WardrobeDecoHost")!;
+            var charmHost = this.FindControl<WrapPanel>("WardrobeCharmHost")!;
+            _wardrobeTiles.Clear();
+            decoHost.Children.Clear();
+            charmHost.Children.Clear();
+
+            FillWardrobeHost(decoHost, WardrobeCatalog.ItemsFor(mod, true));
+            FillWardrobeHost(charmHost, WardrobeCatalog.ItemsFor(mod, false));
+
+            this.FindControl<TextBlock>("TxtWardrobeDecoHeader")!.IsVisible = decoHost.Children.Count > 0;
+            this.FindControl<TextBlock>("TxtWardrobeCharmHeader")!.IsVisible = charmHost.Children.Count > 0;
+            _txtWardrobeEmpty.IsVisible = decoHost.Children.Count == 0 && charmHost.Children.Count == 0;
+
+            RefreshWardrobeVisuals();
+        }
+
+        private void FillWardrobeHost(WrapPanel host, IReadOnlyList<WardrobeItem> items)
+        {
+            foreach (var item in items)
+                if (Helpers.ModArt.Wardrobe(item.Id) is { } art)   // art never shipped - not on offer
+                    host.Children.Add(BuildWardrobeTile(item, art));
+        }
+
+        private Border BuildWardrobeTile(WardrobeItem item, IImage art)
+        {
+            var locked = !WardrobeCatalog.IsUnlockedForCurrentUser(item);
+
+            var content = new Grid();
+            if (locked)
+            {
+                // Silhouette: the art's alpha as an opacity mask over a near-black fill.
+                content.Children.Add(new global::Avalonia.Controls.Shapes.Rectangle
+                {
+                    Fill = SilhouetteFill,
+                    OpacityMask = new ImageBrush((IImageBrushSource)art) { Stretch = Stretch.Uniform },
+                    Margin = new Thickness(4),
+                    IsHitTestVisible = false
+                });
+                content.Children.Add(new TextBlock
+                {
+                    Text = "🔒", FontSize = 11, Opacity = 0.85, IsHitTestVisible = false,
+                    HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(0, 0, 3, 2)
+                });
+            }
+            else
+            {
+                content.Children.Add(new Image { Source = art, Stretch = Stretch.Uniform, Margin = new Thickness(4), IsHitTestVisible = false });
+            }
+            content.Children.Add(new TextBlock
+            {
+                Text = "✓", Foreground = SelectedCyan, FontSize = 12, FontWeight = FontWeight.Bold,
+                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 2, 4, 0), IsVisible = false, Tag = "check", IsHitTestVisible = false
+            });
+
+            var tile = new Border
+            {
+                Width = 72, Height = 72,
+                Margin = new Thickness(0, 0, 7, 7),
+                CornerRadius = new CornerRadius(8),
+                Background = TileBg,
+                BorderBrush = IdleBorder,
+                BorderThickness = new Thickness(2),
+                Cursor = new Cursor(StandardCursorType.Hand),
+                Child = content
+            };
+            // Item names are plain English proper nouns in the registry - not localized.
+            // A locked tile teases the gate instead of naming the item.
+            ToolTip.SetTip(tile, locked ? Loc.GetF("profile_customize_wardrobe_locked_tip", GateName(item)) : item.Name);
+            tile.PointerReleased += (_, _) => ToggleWardrobeItem(item);
+
+            _wardrobeTiles[item.Id] = tile;
+            return tile;
+        }
+
+        /// <summary>Localized name of the achievement gating an item, for lock copy.</summary>
+        private static string GateName(WardrobeItem item)
+        {
+            var gate = item.RequiredAchievementId;
+            return gate != null && Achievement.All.TryGetValue(gate, out var ach) ? ach.LocalizedName : gate ?? string.Empty;
+        }
+
+        /// <summary>Equip, or unequip when it is already worn (WPF ToggleWardrobeItem).</summary>
+        internal void ToggleWardrobeItem(WardrobeItem item)
+        {
+            if (!WardrobeCatalog.IsUnlockedForCurrentUser(item))
+            {
+                _txtWardrobeSlots.Text = Loc.Get("profile_customize_wardrobe_locked_click");
+                _txtWardrobeSlots.Foreground = Alert;
+                return;
+            }
+
+            if (item.IsCharm)
+            {
+                if (_draft.Charms.Contains(item.Id))
+                    _draft.Charms.Remove(item.Id);
+                else if (_draft.Charms.Count >= ProfileCosmetics.MaxCharms)
+                {
+                    _txtWardrobeSlots.Text = Loc.GetF("profile_customize_wardrobe_charms_full", ProfileCosmetics.MaxCharms);
+                    _txtWardrobeSlots.Foreground = Alert;
+                    return;
+                }
+                else
+                    _draft.Charms.Add(item.Id);
+            }
+            else
+            {
+                _draft.AvatarDeco = string.Equals(_draft.AvatarDeco, item.Id, StringComparison.Ordinal) ? null : item.Id;
+            }
+
+            RefreshWardrobeVisuals();
+        }
+
+        private void RefreshWardrobeVisuals()
+        {
+            foreach (var (id, tile) in _wardrobeTiles)
+            {
+                var on = string.Equals(_draft.AvatarDeco, id, StringComparison.Ordinal) || _draft.Charms.Contains(id);
+                tile.BorderBrush = on ? SelectedCyan : IdleBorder;
+                tile.Background = on ? SelectedCyanBg : TileBg;
+                if (tile.Child is Grid grid
+                    && grid.Children.OfType<TextBlock>().FirstOrDefault(t => (t.Tag as string) == "check") is { } check)
+                    check.IsVisible = on;
+            }
+
             RefreshWardrobeSlots();
         }
 
@@ -498,19 +704,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// transform fields in place and snapshots them on open, so its own Cancel is the undo and
         /// this method has nothing to write back.
         ///
-        /// WPF also handed it the hero card's measured avatar and pixel size; this head has neither
-        /// on the dialog, so the editor takes its documented fallbacks (no avatar art, a typical
-        /// windowed hero for the stage). ponytail: pass the live values through if
-        /// ProfileCustomizeDialog ever measures the card. The sprites are still placeholder Borders
-        /// there until <c>Services/Profile/WardrobeCatalog</c> crosses — the arrangement is real,
-        /// the picture is not.
+        /// Hands it the hero card's avatar and measured size, as WPF does (zero = the editor's
+        /// documented fallback stage).
         /// </summary>
         private async void BtnArrange_Click()
         {
             try
             {
                 if (!IsVisible) return;   // ShowDialog throws on an owner that is not on screen
-                await new WardrobeEditorDialog(_draft, null).ShowDialog(this);
+                await new WardrobeEditorDialog(_draft, _editorAvatar, _cardWidth, _cardHeight).ShowDialog(this);
             }
             catch (Exception ex)
             {
@@ -529,7 +731,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             RefreshPinVisuals();
             _draft.AvatarDeco = null;
             _draft.Charms.Clear();
-            RefreshWardrobeSlots();
+            RefreshWardrobeVisuals();
         }
     }
 }

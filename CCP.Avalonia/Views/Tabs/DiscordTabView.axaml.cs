@@ -183,6 +183,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var total = FreeTotal();
             TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
             Host?.SetProfileViewingSelf(true);
+            Host?.ApplyOwnProfileWardrobe();
             SetXpMeter(s.PlayerLevel, s.PlayerXP);
             Host?.UpdateProfileShowcase(unlocked, total, progress?.UnlockedAchievements);
             ShowAchievements(progress?.UnlockedAchievements, Loc.Get("label_no_achievements_yet"));
@@ -208,6 +209,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ShowAchievements(null, $"{entry.AchievementsCount} achievements unlocked");
             // entry.Xp is lifetime; the meter wants progress inside the level.
             Host?.SetProfileViewingSelf(isOwn);
+            // WPF Browser.cs:2290: the board row carries no cosmetics - yours from settings, theirs stripped until the lookup.
+            if (isOwn) Host?.ApplyOwnProfileWardrobe();
+            else Host?.ApplyViewedProfileWardrobe(null);
             SetXpMeter(entry.Level, XpCurve.GetCurrentLevelXP(entry.Level, entry.Xp, s.DescentEpoch));
             Host?.UpdateProfileShowcase(entry.AchievementsCount, FreeTotal(),
                 isOwn ? App.Achievements?.Progress?.UnlockedAchievements : null);
@@ -221,8 +225,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (lookup == null || TxtProfileViewerName.Text != name) return;
             SetOnline(lookup.IsOnline, lookup.IsOnline ? "Online" : "Offline");
             if (string.Equals(name, CoreSettings.Current.UserDisplayName, StringComparison.OrdinalIgnoreCase))
+            {
                 ApplyIdentityBadges(false, null, CoreAccount.IsWhitelisted);
-            else ApplyIdentityBadges(lookup.IsStaff, lookup.StaffRole, lookup.IsWhitelisted);
+                Host?.ApplyOwnProfileWardrobe();
+            }
+            else
+            {
+                ApplyIdentityBadges(lookup.IsStaff, lookup.StaffRole, lookup.IsWhitelisted);
+                Host?.ApplyViewedProfileWardrobe(lookup.Cosmetics);   // WPF Browser.cs:2437
+            }
             if (lookup.Achievements is { Count: > 0 }) ShowAchievements(lookup.Achievements, "");
             else if (lookup.AchievementsCount > 0) ShowAchievements(null, $"{lookup.AchievementsCount} achievements unlocked");
         }
@@ -331,9 +342,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnProfilePrivacy_Click(object? sender, RoutedEventArgs e) =>
             Host?.OpenProfilePrivacyDialog();
 
-        // ponytail: MainWindow.ProfileCosmetics.cs:OpenProfileCustomizeDialog - the wardrobe, still
-        // a stub on the shell (MainShellWindow.ProfileWardrobe.cs).
-        private void BtnProfileCustomize_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF: <c>mw.OpenProfileCustomizeDialog()</c> (MainShellWindow.ProfileWardrobe.cs).</summary>
+        private void BtnProfileCustomize_Click(object? sender, RoutedEventArgs e) =>
+            Host?.OpenProfileCustomizeDialog();
 
         /// <summary>The hero's Share Profile CTA. Same door as the header account menu's
         /// "Public profile" row — MainWindow owns the URL and the launcher.</summary>

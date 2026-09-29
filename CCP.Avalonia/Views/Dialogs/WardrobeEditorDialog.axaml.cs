@@ -9,6 +9,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -18,12 +19,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// dialog handed in (same instance), snapshotting them on open so Cancel really cancels.
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/WardrobeEditorDialog.xaml.cs. Deviations:
-    ///  - <c>WardrobeStageGeometry</c> and the <c>WardrobeCatalog</c> constants live in the WPF
-    ///    head; the handful of numbers and the three rect functions are inlined below (ponytail).
-    ///  - Sprite art comes from <c>WardrobeCatalog.GetImage</c> (pack:// URIs, WPF ImageSource).
-    ///    Sprites here are placeholder Borders until the catalogue is portable; the transform
-    ///    maths is identical and applies to whatever control stands in.
-    ///  - The selection glow (DropShadowEffect) is a cyan border on the sprite instead.
+    ///  - Geometry is Core <c>WardrobeStageGeometry</c>; art is Core <c>WardrobeCatalog</c> decoded
+    ///    by <c>Helpers.ModArt.Wardrobe</c> (WPF WardrobeArt).
     ///  - Mouse events -> Pointer events; CaptureMouse -> e.Pointer.Capture(Stage).
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>.
     /// </summary>
@@ -33,50 +30,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private const double StageMaxWidth = 660;
         private const double StageMaxHeight = 250;
 
-        // ponytail: WardrobeStageGeometry + WardrobeCatalog constants, inlined. Delete this block and
-        // call the originals when Services/Profile/WardrobeStageGeometry.cs moves to Core.
-        private const double CardAvatarSize = 104d, CardAvatarLeft = 24d, CardAvatarTop = 22d;
-        private const double FallbackCardWidth = 1200d, FallbackCardHeight = 250d;
-        private const double AvatarCircleRatio = 0.70, CharmBaseHeightFraction = 0.35;
-        private static readonly (double X, double Y)[] DefaultCharmAnchors = { (0.90, 0.76), (0.965, 0.90) };
-
-        private readonly struct StageBox
-        {
-            public StageBox(double w, double h, double s) { Width = w; Height = h; Scale = s; }
-            public double Width { get; }
-            public double Height { get; }
-            public double Scale { get; }
-            public double AvatarSize => CardAvatarSize * Scale;
-            public double AvatarLeft => CardAvatarLeft * Scale;
-            public double AvatarTop => CardAvatarTop * Scale;
-        }
-
-        private static bool IsUsable(double v) => !double.IsNaN(v) && !double.IsInfinity(v) && v > 0d;
-
-        private static StageBox ForCard(double cardWidth, double cardHeight, double maxWidth, double maxHeight)
-        {
-            if (!IsUsable(cardWidth) || !IsUsable(cardHeight)) { cardWidth = FallbackCardWidth; cardHeight = FallbackCardHeight; }
-            var scale = Math.Min(maxWidth / cardWidth, maxHeight / cardHeight);
-            if (!IsUsable(scale)) scale = 1d;
-            return new StageBox(cardWidth * scale, cardHeight * scale, scale);
-        }
-
-        private static (double Left, double Top, double Size) CharmRect(double w, double h, double x, double y, double scale)
-        {
-            var size = Math.Max(1d, CharmBaseHeightFraction * h * (IsUsable(scale) ? scale : 1d));
-            return (x * w - size / 2d, y * h - size / 2d, size);
-        }
-
-        private static (double Left, double Top, double Canvas) DecorationRect(double avatarSize, double avatarLeft, double avatarTop)
-        {
-            var canvas = avatarSize / AvatarCircleRatio;
-            return (avatarLeft + avatarSize / 2d - canvas / 2d, avatarTop + avatarSize / 2d - canvas / 2d, canvas);
-        }
+        private static readonly IReadOnlyList<(double X, double Y)> DefaultCharmAnchors = WardrobeCatalog.DefaultCharmAnchors;
 
         /// <summary>The live card, scaled down. Every number on the stage comes from this.</summary>
-        private readonly StageBox _stage;
+        private readonly WardrobeStageGeometry.Stage _stage;
 
-        private double DecoCanvas => _stage.AvatarSize / AvatarCircleRatio;
+        private double DecoCanvas => _stage.AvatarSize / WardrobeCatalog.AvatarCircleRatio;
 
         private sealed class Sprite
         {
@@ -84,7 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             public bool IsDeco;
             public int CharmSlot;                      // default-anchor index for charms
             public string Name = string.Empty;
-            public Border Image = null!;
+            public Image Image = null!;
             public Border Chip = null!;
         }
 
@@ -116,11 +75,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// something to lay out.</summary>
         public WardrobeEditorDialog() : this(new ProfileCosmetics
         {
-            AvatarDeco = "sample-deco",
-            Charms = { "sample-charm-1", "sample-charm-2" },
+            AvatarDeco = "bambi_silk_bow",
+            Charms = { "bambi_plush_bunny", "bambi_bubble_wand" },
             CharmTransforms = new Dictionary<string, CosmeticTransform>(StringComparer.Ordinal)
             {
-                ["sample-charm-2"] = new CosmeticTransform { X = 0.75, Y = 0.5, Scale = 1.2, Rotation = 20, Flip = true }
+                ["bambi_bubble_wand"] = new CosmeticTransform { X = 0.75, Y = 0.5, Scale = 1.2, Rotation = 20, Flip = true }
             }
         }, null) { }
 
@@ -150,7 +109,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => BtnCancel_Click();
             this.FindControl<Button>("BtnSave")!.Click += (_, _) => Close(true);
 
-            _stage = ForCard(cardWidth, cardHeight, StageMaxWidth, StageMaxHeight);
+            _stage = WardrobeStageGeometry.ForCard(cardWidth, cardHeight, StageMaxWidth, StageMaxHeight);
             _stageFrame.Width = _stage.Width;
             _stageFrame.Height = _stage.Height;
 
@@ -209,36 +168,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void BuildSprites()
         {
-            // ponytail: needs WardrobeCatalog.GetImage/Find (WPF head) for real art and names;
-            // wired when the catalogue moves to Core. Every equipped id gets a placeholder sprite.
-            if (!string.IsNullOrWhiteSpace(_draft.AvatarDeco))
+            // WPF BuildSprites: an id whose art is missing gets no sprite at all.
+            if (!string.IsNullOrWhiteSpace(_draft.AvatarDeco) && Helpers.ModArt.Wardrobe(_draft.AvatarDeco) is { } decoArt)
                 AddSprite("deco", isDeco: true, 0,
-                    $"{Loc.Get("wardrobe_editor_decoration")} · {_draft.AvatarDeco}");
+                    $"{Loc.Get("wardrobe_editor_decoration")} · {WardrobeCatalog.Find(_draft.AvatarDeco)?.Name ?? _draft.AvatarDeco}", decoArt);
 
             for (var i = 0; i < _draft.Charms.Count && i < ProfileCosmetics.MaxCharms; i++)
-                AddSprite(_draft.Charms[i], isDeco: false, i, _draft.Charms[i]);
+            {
+                var id = _draft.Charms[i];
+                if (Helpers.ModArt.Wardrobe(id) is { } art)
+                    AddSprite(id, isDeco: false, i, WardrobeCatalog.Find(id)?.Name ?? id, art);
+            }
         }
 
-        private void AddSprite(string key, bool isDeco, int charmSlot, string name)
+        private void AddSprite(string key, bool isDeco, int charmSlot, string name, IImage art)
         {
-            // Placeholder art: a soft disc with the first letter. Replaced by an Image when the
-            // catalogue is portable; the drag/transform code does not care which.
-            var image = new Border
+            var image = new Image
             {
-                Background = Brush.Parse(isDeco ? "#66B478FF" : "#66FFD166"),
-                BorderBrush = Brushes.Transparent,
-                BorderThickness = new Thickness(2),
-                CornerRadius = new CornerRadius(999),
+                Source = art,
+                Stretch = Stretch.Uniform,
                 Cursor = new Cursor(StandardCursorType.SizeAll),
-                RenderTransformOrigin = RelativePoint.Center,
-                Child = new TextBlock
-                {
-                    Text = name.Substring(0, 1).ToUpperInvariant(),
-                    Foreground = Brushes.White,
-                    FontWeight = FontWeight.Bold,
-                    HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center,
-                    VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center
-                }
+                RenderTransformOrigin = RelativePoint.Center
             };
 
             var sprite = new Sprite { Key = key, IsDeco = isDeco, CharmSlot = charmSlot, Name = name, Image = image };
@@ -279,7 +229,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _draft.CharmTransforms ??= new Dictionary<string, CosmeticTransform>(StringComparer.Ordinal);
             if (!_draft.CharmTransforms.TryGetValue(sprite.Key, out var t))
             {
-                var anchor = sprite.CharmSlot < DefaultCharmAnchors.Length ? DefaultCharmAnchors[sprite.CharmSlot] : DefaultCharmAnchors[0];
+                var anchor = sprite.CharmSlot < DefaultCharmAnchors.Count ? DefaultCharmAnchors[sprite.CharmSlot] : DefaultCharmAnchors[0];
                 t = new CosmeticTransform { X = anchor.X, Y = anchor.Y, Scale = 0.8 };
                 _draft.CharmTransforms[sprite.Key] = t;
             }
@@ -307,7 +257,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
                 if (sprite.IsDeco)
                 {
-                    var (left, top, canvas) = DecorationRect(_stage.AvatarSize, _stage.AvatarLeft, _stage.AvatarTop);
+                    var (left, top, canvas) = WardrobeStageGeometry.DecorationRect(_stage.AvatarSize, _stage.AvatarLeft, _stage.AvatarTop);
                     sprite.Image.Width = canvas;
                     sprite.Image.Height = canvas;
                     Canvas.SetLeft(sprite.Image, left);
@@ -329,8 +279,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 }
                 else
                 {
-                    var anchor = sprite.CharmSlot < DefaultCharmAnchors.Length ? DefaultCharmAnchors[sprite.CharmSlot] : DefaultCharmAnchors[0];
-                    var (left, top, size) = CharmRect(stageW, stageH, t?.X ?? anchor.X, t?.Y ?? anchor.Y, t?.Scale ?? 0.8);
+                    var anchor = sprite.CharmSlot < DefaultCharmAnchors.Count ? DefaultCharmAnchors[sprite.CharmSlot] : DefaultCharmAnchors[0];
+                    var (left, top, size) = WardrobeStageGeometry.CharmRect(stageW, stageH, t?.X ?? anchor.X, t?.Y ?? anchor.Y, t?.Scale ?? 0.8);
 
                     sprite.Image.Width = size;
                     sprite.Image.Height = size;
@@ -361,7 +311,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             foreach (var s in _sprites)
             {
                 var on = ReferenceEquals(s, sprite);
-                s.Image.BorderBrush = on ? ChipOnBorder : Brushes.Transparent;
+                s.Image.Effect = on
+                    ? new DropShadowEffect { Color = Color.Parse("#5EC8F2"), BlurRadius = 18, OffsetX = 0, OffsetY = 0, Opacity = 0.9 }
+                    : null;
                 s.Chip.Background = on ? ChipOn : ChipIdle;
                 s.Chip.BorderBrush = on ? ChipOnBorder : ChipIdleBorder;
             }
