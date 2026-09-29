@@ -15,8 +15,8 @@ public sealed record BlockedEntry(string Account, string Id, string Name, DateTi
 /// What this PC remembers of the accounts this player blocked. Since FRIENDS-RECEIPTS v1 the
 /// server lists them back (<c>state.blocked</c>, <see cref="FriendsSnapshot.Blocked"/>) and that
 /// list is the truth; this file is only (a) the fallback for a server that predates it and (b) a
-/// one-time move (<see cref="MigrateIfDue"/>): the blocks the server lacks are sent once, then this
-/// PC's entries for that account are dropped. Kept per signed-in account so a shared PC never shows
+/// one-time move (<see cref="MigrateIfDue"/>): once the server lists blocks, this PC's entries for
+/// that account are dropped, never sent again. Kept per signed-in account so a shared PC never shows
 /// one account's blocks to another. Pure over a load and a save, so the suite holds it without a disk.
 /// </summary>
 public sealed class FriendsBlockList
@@ -70,9 +70,8 @@ public sealed class FriendsBlockList
     private static bool _moving;
 
     /// <summary>The landing tick calls this. Once the server lists blocks for the signed-in account,
-    /// the blocks this PC remembers and the server lacks are sent once, and the account's local
-    /// entries go: from then on the file is never read for that account. An old server (no list)
-    /// leaves everything as it was.</summary>
+    /// the account's local entries go: from then on the file is never read for that account. An old
+    /// server (no list) leaves everything as it was.</summary>
     internal static async void MigrateIfDue(IFriendsService svc)
     {
         if (_moving || svc == null) return;
@@ -90,29 +89,16 @@ public sealed class FriendsBlockList
         finally { _moving = false; }
     }
 
-    /// <summary>The move itself (the suite drives it): each remembered block the server's list lacks
-    /// is sent; every entry the server now has, or will never take, is forgotten; one that hit a
-    /// network fault stays for the next try. True when nothing is left to move. The service sends as
-    /// whoever is signed in, so a sign-in swap mid-move (<paramref name="stillOn"/> false) stops it
-    /// before another account's block goes out under the new one.</summary>
-    internal static async Task<bool> MigrateAsync(IFriendsService svc, FriendsBlockList list, string account,
+    /// <summary>The move itself (the suite drives it): every entry this PC remembers for the account
+    /// is forgotten and nothing is sent. The server has kept every block since its first day
+    /// (<c>friend_block:&lt;uid&gt;</c>), and this PC only remembered a block after the server took it,
+    /// so a remembered block the server's list lacks was taken off there: an Unblock on another PC.
+    /// Sending it again would block that player again on every device. Always true.</summary>
+    internal static Task<bool> MigrateAsync(IFriendsService svc, FriendsBlockList list, string account,
         IReadOnlyList<BlockedFriend> server, Func<bool>? stillOn = null)
     {
-        var onServer = new HashSet<string>(server.Select(b => b.Id), StringComparer.Ordinal);
-        bool left = false;
-        foreach (var e in list.For(account))
-        {
-            if (stillOn != null && !stillOn()) return false;
-            if (!onServer.Contains(e.Id))
-            {
-                ActResult r;
-                try { r = await svc.BlockAsync(e.Id); }
-                catch { r = ActResult.TryLater; }
-                if (r is ActResult.TryLater or ActResult.TooFast) { left = true; continue; }
-            }
-            list.Remove(account, e.Id);
-        }
-        return !left;
+        foreach (var e in list.For(account)) list.Remove(account, e.Id);
+        return Task.FromResult(true);
     }
 
     // ---- the app's own store: one small file beside the settings ----

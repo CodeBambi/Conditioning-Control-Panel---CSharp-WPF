@@ -229,8 +229,12 @@ public class FriendsKnockTests
 
     // ---------------------------------------------------------------- the blocked move
 
+    // The server has kept every block since its first day, and a PC only remembered a block after the
+    // server took it. So once the server lists blocks, its list is the truth: this PC's old copy is
+    // dropped and nothing is sent again (a local entry the list lacks was unblocked on another PC).
+
     [Fact]
-    public async Task The_old_block_list_moves_to_the_server_once()
+    public async Task The_old_block_list_is_dropped_once_the_server_lists_blocks()
     {
         var store = new List<BlockedEntry>
         {
@@ -240,42 +244,39 @@ public class FriendsKnockTests
             new("other", "u_z", "Zed", T0),
         };
         var list = new FriendsBlockList(() => store.ToList(), l => { store.Clear(); store.AddRange(l); });
-        var svc = new RecordingService { BlockAnswers = { ["u_b"] = ActResult.Done, ["u_c"] = ActResult.TryLater } };
+        var svc = new RecordingService();
 
-        // u_a is on the server already; u_b is sent and lands; u_c hits a fault and waits.
-        var done = await FriendsBlockList.MigrateAsync(svc, list, "me", new[] { new BlockedFriend("u_a", "Ann") });
-        Assert.False(done);
-        Assert.Equal(new[] { "u_b", "u_c" }, svc.Blocks.OrderBy(x => x));
-        Assert.Equal(new[] { "u_c" }, list.For("me").Select(e => e.Id));
-        Assert.Single(list.For("other"));   // another account's list is never touched
-
-        svc.BlockAnswers["u_c"] = ActResult.Done;
         Assert.True(await FriendsBlockList.MigrateAsync(svc, list, "me", new[] { new BlockedFriend("u_a", "Ann") }));
+        Assert.Empty(svc.Blocks);
         Assert.Empty(list.For("me"));
+        Assert.Single(list.For("other"));   // another account's list is never touched
     }
 
     [Fact]
-    public async Task A_block_the_server_will_never_take_is_dropped_not_retried()
+    public async Task An_unblock_on_another_pc_is_not_undone_by_the_old_list_move()
     {
-        var store = new List<BlockedEntry> { new("me", "u_gone", "Gone", T0) };
+        // PC A blocked Xan under 6.11.3 (local entry + server set); PC B unblocked Xan (server set empty).
+        var store = new List<BlockedEntry> { new("me", "u_x", "Xan", T0.AddDays(-3)) };
         var list = new FriendsBlockList(() => store.ToList(), l => { store.Clear(); store.AddRange(l); });
-        var svc = new RecordingService { BlockAnswers = { ["u_gone"] = ActResult.NotFound } };
+        var svc = new RecordingService();
+
         Assert.True(await FriendsBlockList.MigrateAsync(svc, list, "me", Array.Empty<BlockedFriend>()));
+        Assert.True(svc.Blocks.Count == 0,
+            $"the move sent {string.Join(", ", svc.Blocks)}: Xan is blocked again although the player unblocked them on the other PC");
         Assert.Empty(store);
     }
 
     [Fact]
-    public async Task A_sign_in_swap_stops_the_move_before_the_next_block()
+    public async Task A_sign_in_swap_sends_nothing_under_the_new_account()
     {
         var store = new List<BlockedEntry> { new("me", "u_a", "Ann", T0), new("me", "u_b", "Bo", T0) };
         var list = new FriendsBlockList(() => store.ToList(), l => { store.Clear(); store.AddRange(l); });
-        var svc = new RecordingService { BlockAnswers = { ["u_a"] = ActResult.Done, ["u_b"] = ActResult.Done } };
+        var svc = new RecordingService();
         var signedIn = "me";
-        svc.OnBlock = _ => signedIn = "someone_else";   // the swap lands while the first block is out
+        svc.OnBlock = _ => signedIn = "someone_else";
 
-        Assert.False(await FriendsBlockList.MigrateAsync(svc, list, "me", Array.Empty<BlockedFriend>(), () => signedIn == "me"));
-        Assert.Single(svc.Blocks);                                   // u_b never went out as the new account
-        Assert.Equal(new[] { "u_b" }, list.For("me").Select(e => e.Id));   // and waits for "me" to come back
+        await FriendsBlockList.MigrateAsync(svc, list, "me", Array.Empty<BlockedFriend>(), () => signedIn == "me");
+        Assert.Empty(svc.Blocks);
     }
 
     // ---------------------------------------------------------------- fakes
