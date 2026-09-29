@@ -548,6 +548,13 @@ public class BlinkTrainerService : IDisposable
         return (int)Math.Clamp(cell, 64, 1280);
     }
 
+    /// <summary>
+    /// A GIF tile decodes at no more than 400 px. Every frame is kept resident within a 24 MB
+    /// budget, so a full-screen tile at 1280 kept 10 frames of a 60-frame 720p GIF (a slideshow);
+    /// at 400 about 60 frames of 16:9 fit. GIFs are rarely bigger than that anyway.
+    /// </summary>
+    internal static int GifDecodeDim(int tileDim) => Math.Min(tileDim, 400);
+
     private static Image BuildTile(string path, bool isGif, bool isAnimatedWebp, BitmapImage? sharedBmp,
         Stretch stretch, int decodeDim)
     {
@@ -557,17 +564,15 @@ public class BlinkTrainerService : IDisposable
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
         };
-        if (isGif)
+        if (isGif || isAnimatedWebp)
         {
-            AnimationBehavior.SetRepeatBehavior(img, RepeatBehavior.Forever);
-            AnimationBehavior.SetSourceUri(img, new Uri(path));
-        }
-        else if (isAnimatedWebp)
-        {
+            // GIFs ride the same path as animated webp (ccp-bugs #1295 / #1310): XamlAnimatedGif's
+            // frame loop takes an unbounded WriteableBitmap.Lock() on the UI thread, which hangs
+            // the app whenever the render thread stalls. SKCodec decodes GIFs too.
             // Decodes off-thread and loops via a keyframe animation on Image.Source.
             // TeardownHostChildren's Detach is load-bearing: the Forever clock pins
             // the Image until the animation is cleared.
-            AnimatedWebp.AttachAnimation(img, path, decodeDim);
+            AnimatedWebp.AttachAnimation(img, path, isGif ? GifDecodeDim(decodeDim) : decodeDim, AnimatedWebp.GifMaxFrames);
         }
         else if (sharedBmp != null)
         {

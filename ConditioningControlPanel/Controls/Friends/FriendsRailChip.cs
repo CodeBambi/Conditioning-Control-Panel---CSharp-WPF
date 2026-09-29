@@ -38,9 +38,16 @@ public sealed class FriendsRailChip : UserControl
     private IFriendsService? _svc;
     private bool _wired;
 
+    /// <summary>The friends feed the unread badge counts (<c>App.FriendsFeed</c> in the app).</summary>
+    private readonly Func<FriendsFeed?> _resolveFeed;
+    private FriendsFeed? _feed;
+    private int _lastUnread = -1;
+
     private readonly Grid _avatarHost = new() { Width = 40, Height = 40 };
     private readonly Border _pill = new();
     private readonly TextBlock _pillText = new();
+    private readonly Border _badge = new();
+    private readonly TextBlock _badgeText = new();
     private readonly TextBlock _name = new();
     private readonly StackPanel _nameLine = new() { Orientation = Orientation.Horizontal };
     private readonly Border _face = new();
@@ -51,13 +58,14 @@ public sealed class FriendsRailChip : UserControl
     private DateTime _closedAt = DateTime.MinValue;
     private int _lastCount = -1;
 
-    /// <summary>The chip. <paramref name="service"/> is for the suite; the app passes nothing
-    /// and the chip reads <c>App.Friends</c>.</summary>
+    /// <summary>The chip. <paramref name="service"/> and <paramref name="feed"/> are for the suite;
+    /// the app passes nothing and the chip reads <c>App.Friends</c> and <c>App.FriendsFeed</c>.</summary>
     public FriendsRailChip() : this(null) { }
 
-    internal FriendsRailChip(IFriendsService? service)
+    internal FriendsRailChip(IFriendsService? service, FriendsFeed? feed = null)
     {
         _resolve = service != null ? () => service : () => App.Friends;
+        _resolveFeed = feed != null ? () => feed : () => App.FriendsFeed;
         Margin = new Thickness(0, 2, 0, 4);
         Focusable = false;
 
@@ -98,6 +106,29 @@ public sealed class FriendsRailChip : UserControl
         _pill.RenderTransform = new ScaleTransform(1, 1);
         _pill.Effect = FriendsLook.Glow(FriendsLook.Mint, 8, 0.7);
         faceGrid.Children.Add(_pill);
+
+        // Unread feed lines: pink, bottom right, under the mint online count.
+        _badgeText.FontFamily = FriendsLook.Display;
+        _badgeText.FontWeight = FontWeights.SemiBold;
+        _badgeText.FontSize = 11;
+        _badgeText.HorizontalAlignment = HorizontalAlignment.Center;
+        _badgeText.Foreground = FriendsLook.Frozen(FriendsLook.Rgb(0x2A, 0x06, 0x1A));
+        _badge.Child = _badgeText;
+        _badge.Background = FriendsLook.PinkBrush;
+        _badge.CornerRadius = new CornerRadius(999);
+        _badge.Padding = new Thickness(5, 0, 5, 0);
+        _badge.MinWidth = 18;
+        _badge.BorderThickness = new Thickness(2);
+        _badge.BorderBrush = FriendsLook.Frozen(FriendsLook.Rgb(0x0E, 0x09, 0x19));
+        _badge.HorizontalAlignment = HorizontalAlignment.Right;
+        _badge.VerticalAlignment = VerticalAlignment.Bottom;
+        _badge.Margin = new Thickness(0, 0, -4, -2);
+        _badge.Visibility = Visibility.Collapsed;
+        _badge.RenderTransformOrigin = new Point(0.5, 0.5);
+        _badge.RenderTransform = new ScaleTransform(1, 1);
+        _badge.Effect = FriendsLook.Glow(FriendsLook.Pink, 8, 0.7);
+        _badge.Tag = "friends-chip-unread";
+        faceGrid.Children.Add(_badge);
         _face.Child = faceGrid;
         grid.Children.Add(_face);
 
@@ -177,6 +208,7 @@ public sealed class FriendsRailChip : UserControl
             _popup.IsOpen = false;
             if (_host != null) _host.Activated -= OnHostActivated;
             Unwire();
+            UnwireFeed();
             _drawer.Unsubscribe();
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] chip unload failed: {E}", ex.Message); }
@@ -213,6 +245,7 @@ public sealed class FriendsRailChip : UserControl
 
     internal void Rebind()
     {
+        RebindFeed();
         var next = _resolve();
         if (ReferenceEquals(next, _svc) && _wired) return;
         Unwire();
@@ -260,15 +293,66 @@ public sealed class FriendsRailChip : UserControl
         try { if (_svc?.Available == true) n = _svc.Snapshot?.OnlineCount ?? 0; } catch { }
         _pillText.Text = n.ToString();
         _pill.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (animate && n > _lastCount && _lastCount >= 0 && n > 0) Bump();
+        if (animate && n > _lastCount && _lastCount >= 0 && n > 0) Bump(_pill);
         _lastCount = n;
+        // A snapshot change can be an account change: the feed then counts another account's lines.
+        UpdateBadge(animate);
     }
 
-    /// <summary>The pill bumps when the count goes up.</summary>
-    private void Bump()
+    // ---- the unread badge (the friends feed) ------------------------------------------
+
+    /// <summary>The number the pink unread badge shows, 0 while it is hidden, 10 for "9+".</summary>
+    internal int UnreadBadge => _badge.Visibility != Visibility.Visible ? 0
+        : _badgeText.Text == "9+" ? 10
+        : int.TryParse(_badgeText.Text, out var n) ? n : 0;
+
+    /// <summary>Follows <c>App.FriendsFeed</c>, which exists from startup on; re-read on every
+    /// rebind in case the chip was built before it.</summary>
+    private void RebindFeed()
+    {
+        FriendsFeed? next;
+        try { next = _resolveFeed(); } catch { next = null; }
+        if (ReferenceEquals(next, _feed)) return;
+        UnwireFeed();
+        _feed = next;
+        if (_feed != null) _feed.Changed += OnFeedChanged;
+        UpdateBadge(animate: false);
+    }
+
+    private void UnwireFeed()
+    {
+        if (_feed != null) _feed.Changed -= OnFeedChanged;
+        _feed = null;
+    }
+
+    private void OnFeedChanged()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(new Action(OnFeedChanged));
+            return;
+        }
+        UpdateBadge(animate: true);
+    }
+
+    internal void UpdateBadge(bool animate)
+    {
+        int n = 0;
+        try { if (_svc?.Available != false) n = _feed?.Unread ?? 0; } catch { }
+        _badgeText.Text = FriendsFeedRules.BadgeText(n);
+        _badge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ToolTip = n > 0
+            ? Loc.Get("friends_chip_tooltip") + "\n" + Loc.GetF("friends_feed_new", n)
+            : Loc.Get("friends_chip_tooltip");
+        if (animate && n > _lastUnread && _lastUnread >= 0 && n > 0) Bump(_badge);
+        _lastUnread = n;
+    }
+
+    /// <summary>A pill bumps when its count goes up.</summary>
+    private static void Bump(Border pill)
     {
         double k = FriendsDrawer.Amount;
-        if (k <= 0 || _pill.RenderTransform is not ScaleTransform s) return;
+        if (k <= 0 || pill.RenderTransform is not ScaleTransform s) return;
         var a = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(420) };
         a.KeyFrames.Add(new EasingDoubleKeyFrame(1 + 0.45 * k, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(120))));
         a.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)),

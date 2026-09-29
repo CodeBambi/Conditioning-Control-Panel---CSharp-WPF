@@ -93,26 +93,26 @@ public class ChasterSecurityTests
         Assert.False(restored.ChasterLadderShowName);
     }
 
+    /// <summary>Both are documented as local only: a restore on another PC must not switch presence
+    /// sharing on there, and must not wipe this PC's per-mod personality picks.</summary>
     [Fact]
-    public void A_catch_up_rides_the_price_inside_the_days_room()
+    public void Presence_sharing_and_personality_picks_stay_on_this_machine()
     {
-        var s = new TabState { BalanceSeconds = 900 };
-        var limits = TabLimits.FromMinutes(20, 120); // 1200 s a day
-        var plan = CircesTab.PlanPush(s, canRemove: false, limits, Noon);
+        Assert.True(ProfileSyncService.IsExcludedFromBackup(nameof(AppSettings.FriendsPresenceShared)));
+        Assert.True(ProfileSyncService.IsExcludedFromBackup(nameof(AppSettings.ModPersonalityPreset)));
 
-        var fits = CircesTab.WithCatchUp(plan, 200, s, limits, Noon);
-        Assert.Equal(new TabPush(TabPushKind.Add, 900, 200), fits);
-        Assert.Equal(1100, fits.Total);
+        var current = new AppSettings
+        {
+            FriendsPresenceShared = false,
+            ModPersonalityPreset = new Dictionary<string, string> { ["mod-bambi"] = "pushy" },
+        };
+        var restored = new AppSettings { FriendsPresenceShared = true };
 
-        var shrinks = CircesTab.WithCatchUp(plan, 600, s, limits, Noon);
-        Assert.Equal(new TabPush(TabPushKind.Add, 600, 600), shrinks);
+        ProfileSyncService.PreserveLocalOnlyFields(current, restored);
 
-        // A catch-up with no room left for a price is dropped, not sent on its own.
-        Assert.Equal(new TabPush(TabPushKind.Add, 900, 0), CircesTab.WithCatchUp(plan, 1200, s, limits, Noon));
-        Assert.Equal(new TabPush(TabPushKind.None, 0), CircesTab.WithCatchUp(new TabPush(TabPushKind.None, 0), 300, s, limits, Noon));
-        // Never more than a lock's own run-out limit, whatever the caller hands in.
-        var big = CircesTab.WithCatchUp(new TabPush(TabPushKind.Add, 60), 99999, new TabState(), TabLimits.FromMinutes(720, 2880), Noon);
-        Assert.Equal(LockRelock.MaxCatchUpSeconds + LockRelock.MarginSeconds, big.CatchUp);
+        Assert.False(restored.FriendsPresenceShared);
+        Assert.Equal("pushy", restored.ModPersonalityPreset["mod-bambi"]);
+        Assert.NotSame(current.ModPersonalityPreset, restored.ModPersonalityPreset);
     }
 
     [Fact]

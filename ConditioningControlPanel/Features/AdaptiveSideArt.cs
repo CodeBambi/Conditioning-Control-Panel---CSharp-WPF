@@ -50,6 +50,12 @@ namespace ConditioningControlPanel.Features
                 "OriginalWidth", typeof(object), typeof(AdaptiveSideArt),
                 new PropertyMetadata(null));
 
+        /// <summary>A settings column's authored MaxWidth, stashed so the restore is exact.</summary>
+        private static readonly DependencyProperty OriginalMaxWidthProperty =
+            DependencyProperty.RegisterAttached(
+                "OriginalMaxWidth", typeof(object), typeof(AdaptiveSideArt),
+                new PropertyMetadata(null));
+
         private static void OnCollapseBelowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is not Grid grid) return;
@@ -99,6 +105,20 @@ namespace ConditioningControlPanel.Features
                     : (col.GetValue(OriginalWidthProperty) is GridLength stashed ? stashed : new GridLength(2, GridUnitType.Star));
 
                 if (col.Width != target) col.Width = target;
+
+                // The settings column's MaxWidth (780) exists to give width BACK to the art. With the
+                // art gone that cap only leaves the settings narrower than the full-width cards below
+                // them (tester report 2026-09-27, Haptics). Lift it while collapsed, restore after.
+                for (int i = 0; i < cols.Count - 1; i++)
+                {
+                    var c = cols[i];
+                    if (c == null) continue;
+                    if (c.GetValue(OriginalMaxWidthProperty) is not double)
+                        c.SetValue(OriginalMaxWidthProperty, c.MaxWidth);
+                    double wantMax = collapse ? double.PositiveInfinity
+                        : (c.GetValue(OriginalMaxWidthProperty) is double m ? m : double.PositiveInfinity);
+                    if (!c.MaxWidth.Equals(wantMax)) c.MaxWidth = wantMax;
+                }
 
                 int index = cols.Count - 1;
                 foreach (var child in grid.Children)

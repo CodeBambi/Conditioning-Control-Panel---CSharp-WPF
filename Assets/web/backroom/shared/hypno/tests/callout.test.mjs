@@ -233,7 +233,7 @@ test('cancel drops the text, every word, the tunnel and the speech at once (Law 
     assert.equal(all(layer, 'br-callout-text').length, 0);
     assert.equal(all(layer, 'br-callout-bark').length, 0);
     assert.equal(tunnel.at(-1), 0, 'tunnel 0 on the cancel frame');
-    assert.equal(sp.cancels, before + 1, 'speech cancelled');
+    assert.equal(sp.cancels, before, 'the browser speech engine is never touched, not even to cancel');
     assert.equal(c.debug().live.timers, 0, 'no timer left to bring a third word back');
     mock.timers.tick(3000);
     assert.equal(all(layer, 'br-callout-text').length, 0, 'the third word never comes');

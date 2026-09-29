@@ -232,7 +232,8 @@ export function createPromote({ view, pieces, anim, bus, game, drag = null, jigg
     if (!['escape', 'tab', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown', ...KINDS].includes(key)) return;
     ev.preventDefault();
     ev.stopImmediatePropagation();
-    if (key === 'escape') { close(); return; }
+    // Escape takes the pawn back AND pauses: the panel has already spent it as the game's pause.
+    if (key === 'escape') { close(); window.PBP?.escapePause?.(); return; }
     if (KINDS.includes(key)) { choose(key); return; }
     const current = Math.max(0, buttons.indexOf(document.activeElement));
     const backwards = key === 'arrowleft' || key === 'arrowup' || (key === 'tab' && ev.shiftKey);

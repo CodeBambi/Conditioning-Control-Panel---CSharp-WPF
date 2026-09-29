@@ -145,6 +145,22 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// How a flash leaves when it is clicked or popped (owner, 2026-09-28; Mix is the default).
+    /// Compositor flashes only; a timed-out flash keeps its soft fade and an owned Shatter still
+    /// wins. None is the old plain cut. See Services/Flash/FlashExit.cs.
+    /// </summary>
+    public enum FlashExitStyle
+    {
+        Mix,
+        Pop,
+        TvOff,
+        Spiral,
+        Melt,
+        Glitch,
+        None
+    }
+
+    /// <summary>
     /// How the ambient dashboard bubbles travel (Back Room prize styles). FloatUp is the free
     /// base; Rain and SpiralIn are owned styles; Mix rolls per bubble among FloatUp plus the
     /// owned styles. Ownership is never read from here: an unowned pick behaves as FloatUp
@@ -1112,6 +1128,26 @@ namespace ConditioningControlPanel.Models
         {
             get => _flashGazeDisabledByDecoupling;
             set { _flashGazeDisabledByDecoupling = value; OnPropertyChanged(); }
+        }
+
+        private FlashExitStyle _flashExitStyle = FlashExitStyle.Mix;
+        /// <summary>How a clicked or popped flash leaves (compositor path). Mix by default. See FlashExit.</summary>
+        [JsonProperty("FlashExitStyle")]
+        public FlashExitStyle FlashExitStyle
+        {
+            get => _flashExitStyle;
+            set { _flashExitStyle = value; OnPropertyChanged(); }
+        }
+
+        private bool _flashStayUntilPopped = false;
+        /// <summary>
+        /// Ambient flashes stay on screen until clicked (or popped by a stare), up to a 10-minute
+        /// safety lifetime and 40 on screen. Needs <see cref="FlashClickable"/>. See FlashStayRule.
+        /// </summary>
+        public bool FlashStayUntilPopped
+        {
+            get => _flashStayUntilPopped;
+            set { _flashStayUntilPopped = value; OnPropertyChanged(); }
         }
 
         private bool _corruptionMode = false; // Hydra effect
@@ -2313,6 +2349,19 @@ namespace ConditioningControlPanel.Models
         {
             get => _modAvatarSet;
             set { _modAvatarSet = new Dictionary<string, int>(value ?? new Dictionary<string, int>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modPersonalityPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Per mod id, the companion personality (PersonalityPreset.Id) last picked in that mod,
+        /// put back when the mod is switched to again. A missing key = never picked there; the
+        /// mod's own default applies. Local only. See Services/Companion/ModPersonalityPicks.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModPersonalityPreset
+        {
+            get => _modPersonalityPreset;
+            set { _modPersonalityPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
         }
 
         private string? _currentAssetPresetId = null;
@@ -5024,6 +5073,20 @@ namespace ConditioningControlPanel.Models
             set { _brainDrainMeltEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _brainDrainKeepPicturesClear = false;
+        /// <summary>
+        /// Brain Drain blurs everything EXCEPT the app's own pictures: flashes, videos, lock cards,
+        /// subliminals and bubbles stay sharp over the blurred desktop. The blur window is tucked
+        /// under the lowest CCP window in the topmost band (OverlayService, BrainDrainKeepClear).
+        /// Off by default so the classic look does not change under anyone.
+        /// </summary>
+        [JsonProperty]
+        public bool BrainDrainKeepPicturesClear
+        {
+            get => _brainDrainKeepPicturesClear;
+            set { _brainDrainKeepPicturesClear = value; OnPropertyChanged(); }
+        }
+
         private bool _allowOverlayCapture = false;
         /// <summary>
         /// Opt-in: let the Brain Drain screen effect appear in screenshots, recordings and screen
@@ -5229,6 +5292,30 @@ namespace ConditioningControlPanel.Models
         {
             get => _chasterPrices;
             set { _chasterPrices = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, int> _chasterPriceOverrides = new();
+
+        /// <summary>The player's own figures for price rows, id to unsigned seconds (TabPriceEdit).
+        /// Empty = the table's defaults. Set on the tab page only while no lock runs; read through
+        /// TabPriceEdit, which keeps each row's sign and clamps the size.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, int> ChasterPriceOverrides
+        {
+            get => _chasterPriceOverrides;
+            set { _chasterPriceOverrides = value ?? new Dictionary<string, int>(); OnPropertyChanged(); }
+        }
+
+        private bool _chasterFlashDodge;
+
+        /// <summary>Natasha's favourite on flashes. Off (the default): flashes are never red, only
+        /// bubbles are. On: about one flash in ten is red with a 4 s ring; dismiss or fling it in
+        /// time and nothing books, let the ring empty and it is +5:00.</summary>
+        [JsonProperty]
+        public bool ChasterFlashDodge
+        {
+            get => _chasterFlashDodge;
+            set { _chasterFlashDodge = value; OnPropertyChanged(); }
         }
 
         private int _chasterDailyLimitMinutes = 180;
@@ -8230,6 +8317,52 @@ namespace ConditioningControlPanel.Models
         {
             get => _goonMediaOnline;
             set { _goonMediaOnline = value; OnPropertyChanged(); }
+        }
+
+        // ---- Piece by Piece pictures (2026-09-28) ----
+        // The chess game's Distraction pictures: the Goon Game's flavour model, host-owned.
+
+        private string _pbpMediaFlavour = "";
+        /// <summary>
+        /// Piece by Piece's picture flavour (trance, pink, frills, shiny, censored, mine), or ""
+        /// when never picked. Remembered as a preselection only: a pick counts as the online
+        /// opt-in for the window it was made in, unless the app-wide online source is already
+        /// consented (MediaSource not local and HasRemoteMediaConsent).
+        /// </summary>
+        [JsonProperty("pbpMediaFlavour")]
+        public string PbpMediaFlavour
+        {
+            get => _pbpMediaFlavour;
+            set { _pbpMediaFlavour = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _pbpMediaCustom = "";
+        /// <summary>The chess page's per-flavour niche edits as a JSON object string, same shape
+        /// and caps as <see cref="GoonMediaCustom"/>. "" = no edits.</summary>
+        [JsonProperty("pbpMediaCustom")]
+        public string PbpMediaCustom
+        {
+            get => _pbpMediaCustom;
+            set { _pbpMediaCustom = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _pbpMediaSubs = "";
+        /// <summary>The validated niche list the page computed for the pick (comma-joined, max 8).</summary>
+        [JsonProperty("pbpMediaSubs")]
+        public string PbpMediaSubs
+        {
+            get => _pbpMediaSubs;
+            set { _pbpMediaSubs = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _pbpMediaOnline = true;
+        /// <summary>Online pictures for Piece by Piece. Off ("Own pictures only") = the host fetches
+        /// nothing and the Distraction effects draw from the player's own library, as before.</summary>
+        [JsonProperty("pbpMediaOnline")]
+        public bool PbpMediaOnline
+        {
+            get => _pbpMediaOnline;
+            set { _pbpMediaOnline = value; OnPropertyChanged(); }
         }
 
         #endregion

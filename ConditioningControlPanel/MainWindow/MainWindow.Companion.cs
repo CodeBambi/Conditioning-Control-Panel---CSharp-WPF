@@ -160,7 +160,9 @@ namespace ConditioningControlPanel
                 // #888: never auto-show a companion the user has dismissed. Callers that mean to
                 // show it anyway (WakeBambiUp, the Companion room toggle) show it explicitly after
                 // flipping AvatarEnabled back on.
-                bool showNow = IsVisible && WindowState != WindowState.Minimized
+                // A panel built hidden for the launcher (ShowHiddenForBoot) is not on screen, so
+                // neither is the tube; it follows the panel up when the panel is opened.
+                bool showNow = IsVisible && !BuildingHiddenForBoot && WindowState != WindowState.Minimized
                                && App.Settings?.Current?.AvatarEnabled == true;
 
                 if (ownThread)

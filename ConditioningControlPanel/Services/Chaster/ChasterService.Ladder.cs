@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -7,15 +8,39 @@ namespace ConditioningControlPanel.Services.Chaster;
 /// <summary>The Locktober raffle on Circe's Tab. The "time CCP added" totals shown on the page are
 /// this machine's own count (display only); the raffle's days and total are the ones the server
 /// reads off the lock's Chaster history after a push lands and when the page opens
-/// (<see cref="ChasterRaffle"/>). Every failure is quiet: no raffle is a page with no card.</summary>
+/// (<see cref="ChasterRaffle"/>). Every failure is quiet: no raffle is a page with no card.
+///
+/// <para>Only added time counts (owner, 2026-09-29): every booking also lands in the tab's day
+/// ledger (<see cref="ChasterLadder.NoteBooked"/>), and the verify carries it
+/// (<see cref="ChasterLadder.Claims"/>), so a credit that cancelled part of a slip-up before the
+/// push does not take that part out of the raffle.</para></summary>
 public sealed partial class ChasterService
 {
     private readonly SemaphoreSlim _ladderGate = new(1, 1);
+    private readonly IChasterLadderApi? _ladderApi;
     private DateTime? _ladderVerifiedAtUtc;
     private Timer? _ladderRetry;
 
-    /// <summary>Null = no ladder (tests, the DEBUG demo).</summary>
-    public IChasterLadderApi? LadderApi { get; init; }
+    /// <summary>Null = no ladder (tests). Setting one also starts the raffle's day ledger: every
+    /// booking's gross goes into it as it is raised (<see cref="Booked"/>).</summary>
+    public IChasterLadderApi? LadderApi
+    {
+        get => _ladderApi;
+        init
+        {
+            _ladderApi = value;
+            if (value != null) Booked += NoteLadderBooking;
+        }
+    }
+
+    // Booked is raised outside the tab lock, on whatever thread booked. Not saved here: the push the
+    // booking arms saves the tab within half a minute, and a line lost to a crash only ever claims less.
+    private void NoteLadderBooking(string eventId, TabBooking booking)
+    {
+        if (booking.AppliedSeconds == 0) return;
+        try { lock (_gate) ChasterLadder.NoteBooked(_tab, booking.AppliedSeconds, _utcNow()); }
+        catch (Exception ex) { Diag.Swallowed(ex, "ladder ledger skipped a booking"); }
+    }
 
     /// <summary>The player's "post my days in Discord" switch, read at each refresh.</summary>
     public Func<bool>? RafflePostDays { get; init; }
@@ -53,7 +78,9 @@ public sealed partial class ChasterService
             var access = await AccessTokenAsync(ct).ConfigureAwait(false);
             if (access == null) return;
             _ladderVerifiedAtUtc = now;
-            var verdict = await LadderApi.VerifyAsync(lockId!, access, ct).ConfigureAwait(false);
+            IReadOnlyDictionary<string, LadderClaim> claims;
+            lock (_gate) claims = ChasterLadder.Claims(_tab, _utcNow());
+            var verdict = await LadderApi.VerifyAsync(lockId!, access, claims, ct).ConfigureAwait(false);
             if (verdict != null) LastLadderVerify = verdict;
         }
         catch (Exception ex) { Diag.Swallowed(ex, "ladder verify skipped"); }

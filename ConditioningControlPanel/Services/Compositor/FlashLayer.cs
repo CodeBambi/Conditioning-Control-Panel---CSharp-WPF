@@ -66,6 +66,12 @@ public sealed class FlashLayer : BaseLayer
         /// </summary>
         public FlashShatterState? Shatter;
 
+        /// <summary>
+        /// Non-null once a pop hands this flash to its leave animation (FlashExit). Like
+        /// <see cref="Shatter"/>, the layer owns the rest of its life and drops it when done.
+        /// </summary>
+        public FlashExitState? Exit;
+
         // Glow (lucky / sparkle-boost tiers). Sigma is the WPF DropShadow blur radius / 3
         // (same conversion as the brain-drain layer). LuckyPulse replicates the 400ms
         // auto-reverse radius x1.6 / opacity 0.7->1.0 forever-animation.
@@ -75,6 +81,8 @@ public sealed class FlashLayer : BaseLayer
         internal double GlowOpacity;
         /// <summary>Natasha's favourite: a short red blink across the picture now and then.</summary>
         internal bool NatashaCue;
+        /// <summary>Natasha's dodge: Environment.TickCount64 when the ring empties (0 = no ring).</summary>
+        internal long DodgeUntilMs;
         internal bool LuckyPulse;
 
         internal double ElapsedSec;          // pulse clock, advanced by Update
@@ -116,6 +124,7 @@ public sealed class FlashLayer : BaseLayer
     // Reused paints (no per-frame allocations).
     private readonly SKPaint _imagePaint = new() { FilterQuality = SKFilterQuality.Low };
     private readonly SKPaint _fillPaint = new();
+    private readonly SKPaint _ringPaint = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeCap = SKStrokeCap.Round };
 
     public FlashLayer(CompositorEngine engine) : base(engine) { }
 
@@ -179,6 +188,26 @@ public sealed class FlashLayer : BaseLayer
                 pend.AngleRad, pend.MediaW, pend.MediaH);
         else
             FlashShatter.TakeOverDrawnRect(shatter, item.X, item.Y, item.W, item.H);
+        _dirty = true;
+        SetActive(true);
+    }
+
+    /// <summary>
+    /// Hand a popped item to its leave animation instead of removing it. Same ownership contract
+    /// as <see cref="BeginShatter"/>: frames live until the exit ends, then the layer drops them.
+    /// </summary>
+    public void BeginExit(FlashItem item, FlashExitState exit)
+    {
+        if (item.Frames is not { Length: > 0 } || item.Opacity <= 0)
+        {
+            Remove(item);
+            return;
+        }
+        item.Exit = exit;
+        // A picture popped mid-entrance leaves from where it is, fully formed.
+        item.BubbleOriginPx = null;
+        item.EntranceProgress = 1;
+        item.EntranceAlpha = 1;
         _dirty = true;
         SetActive(true);
     }
@@ -247,6 +276,21 @@ public sealed class FlashLayer : BaseLayer
                 continue;
             }
 
+            if (item.Exit is { } exit)
+            {
+                if (FlashExit.Step(exit, delta.TotalSeconds)) _dirty = true;
+                if (exit.Done)
+                {
+                    item.Exit = null;
+                    item.ReleaseFrames();
+                    _items.RemoveAt(i);
+                    _dirty = true;
+                    if (_items.Count == 0) SetActive(false);
+                }
+                // Frozen where it was popped: no drift or pendulum swing while it leaves.
+                continue;
+            }
+
             // Flashes v2: step the motion here (the one place with delta time). Step answers
             // false for a Still item and for a zero delta, so a held flash stays clean.
             if (item.Motion != null && FlashMotion.Step(item.Motion, delta.TotalSeconds))
@@ -260,6 +304,7 @@ public sealed class FlashLayer : BaseLayer
             // whereas a state compare self-heals on the next tick. A lucky pulse animates its
             // glow off ElapsedSec every frame, so it is legitimately dirty throughout.
             if ((item.HasGlow && item.LuckyPulse)
+                || (item.DodgeUntilMs > 0 && Environment.TickCount64 <= item.DodgeUntilMs + 50)
                 || item.Opacity != item.LastOpacity
                 || item.FrameIndex != item.LastFrameIndex
                 || item.DwellScale != item.LastDwellScale)
@@ -292,9 +337,13 @@ public sealed class FlashLayer : BaseLayer
                 continue;
             }
 
-            if (!rect.IntersectsWith(boundsPx)) continue;   // cull to this monitor (the AABB)
+            // An exit can grow past its box (a swell, a melt), so it skips the AABB cull.
+            if (item.Exit == null && !rect.IntersectsWith(boundsPx)) continue;   // cull to this monitor (the AABB)
 
-            var alpha = (byte)Math.Clamp(item.Opacity * item.EntranceAlpha * 255, 0, 255);
+            FlashExitSample? exit = item.Exit is { } exitState ? FlashExit.Sample(exitState) : null;
+            var exitAlpha = exit?.Alpha ?? 1.0;
+            var alpha = (byte)Math.Clamp(item.Opacity * item.EntranceAlpha * exitAlpha * 255, 0, 255);
+            if (alpha == 0 && item.Exit != null) { DrawSparks(canvas, item); continue; }
             var image = frames[Math.Clamp(item.FrameIndex, 0, frames.Length - 1)];
 
             int saves = canvas.Save();
@@ -317,6 +366,16 @@ public sealed class FlashLayer : BaseLayer
                 canvas.Translate(rect.MidX, rect.MidY);
                 canvas.Scale(s, s);
                 canvas.Translate(-rect.MidX, -rect.MidY);
+            }
+            // Leave animation: scale / spin / slide about the pivot the style asks for.
+            if (exit is { } ex)
+            {
+                var px = rect.MidX;
+                var py = rect.Top + (float)(rect.Height * ex.PivotY);
+                canvas.Translate(px, py + (float)(ex.OffsetY * rect.Height));
+                if (ex.RotationDeg != 0) canvas.RotateDegrees((float)ex.RotationDeg);
+                canvas.Scale((float)Math.Max(0.0001, ex.ScaleX), (float)Math.Max(0.0001, ex.ScaleY));
+                canvas.Translate(-px, -py);
             }
 
             // The image sits PaddingPx inside the bookkeeping rect (glow inset), letterboxed
@@ -391,7 +450,17 @@ public sealed class FlashLayer : BaseLayer
             }
 
             _imagePaint.Color = new SKColor(255, 255, 255, alpha);
-            canvas.DrawImage(image, fit, _imagePaint);
+            if (exit is { Glitch: > 0 } && item.Exit is { } glitchState)
+                DrawGlitch(canvas, image, fit, alpha, glitchState, exit.Value.Glitch);
+            else
+                canvas.DrawImage(image, fit, _imagePaint);
+            if (exit is { Whiten: > 0 } lit)
+            {
+                // TV off: the picture burns bright as it collapses to its line.
+                _fillPaint.MaskFilter = null;
+                _fillPaint.Color = new SKColor(255, 255, 255, (byte)Math.Clamp(lit.Whiten * alpha, 0, 255));
+                canvas.DrawRoundRect(new SKRoundRect(fit, item.CornerRadiusPx), _fillPaint);
+            }
             if (item.NatashaCue)
             {
                 var wash = Chaster.NatashasFavourite.WashAlphaAt(item.ElapsedSec);
@@ -403,7 +472,76 @@ public sealed class FlashLayer : BaseLayer
                     canvas.DrawRoundRect(new SKRoundRect(fit, item.CornerRadiusPx), _fillPaint);
                 }
             }
+            if (item.DodgeUntilMs > 0 && item.Exit == null) DrawDodgeRing(canvas, fit, alpha, item.DodgeUntilMs);
             canvas.RestoreToCount(saves);
+            if (item.Exit != null) DrawSparks(canvas, item);
+        }
+    }
+
+    private static readonly SKColor SparkPink = new(0xFF, 0x69, 0xB4);
+
+    /// <summary>Natasha's dodge: a small red dial in the picture's top-right corner, draining
+    /// clockwise from twelve as the ring runs out.</summary>
+    private void DrawDodgeRing(SKCanvas canvas, SKRect fit, byte alpha, long untilMs)
+    {
+        var left = Chaster.NatashasFavourite.DodgeLeft(Chaster.NatashasFavourite.DodgeMs - (untilMs - Environment.TickCount64));
+        if (left <= 0.001) return;
+        float r = Math.Clamp(Math.Min(fit.Width, fit.Height) * 0.06f, 12f, 22f);
+        float cx = fit.Right - r - 10f, cy = fit.Top + r + 10f;
+        _fillPaint.MaskFilter = null;
+        _fillPaint.Color = new SKColor(0x10, 0x06, 0x0C, (byte)(0.6 * alpha));
+        canvas.DrawCircle(cx, cy, r + 3f, _fillPaint);
+        _ringPaint.StrokeWidth = Math.Max(3f, r * 0.24f);
+        _ringPaint.Color = new SKColor(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B, alpha);
+        canvas.DrawArc(new SKRect(cx - r, cy - r, cx + r, cy + r), -90f, 360f * (float)left, false, _ringPaint);
+    }
+
+    /// <summary>Pop's spray of pink sparks, in world space around the flash's box.</summary>
+    private void DrawSparks(SKCanvas canvas, FlashItem item)
+    {
+        if (item.Exit is not { } exit) return;
+        int n = FlashExit.SparkCount(exit);
+        if (n == 0) return;
+        float cx = item.X + item.W / 2, cy = item.Y + item.H / 2;
+        float half = Math.Max(item.W, item.H) / 2;
+        _fillPaint.MaskFilter = null;
+        for (int i = 0; i < n; i++)
+        {
+            var sp = FlashExit.Spark(exit, i);
+            if (sp.Alpha <= 0 || sp.RadiusPx <= 0.2) continue;
+            _fillPaint.Color = SparkPink.WithAlpha((byte)Math.Clamp(sp.Alpha * 255, 0, 255));
+            canvas.DrawCircle(cx + (float)(sp.Dx * sp.Distance * half), cy + (float)(sp.Dy * sp.Distance * half),
+                (float)sp.RadiusPx, _fillPaint);
+        }
+    }
+
+    /// <summary>
+    /// Glitch exit: the picture in horizontal slices knocked sideways, plus a red and a cyan ghost
+    /// pulled apart. Everything stays inside one frame of the image, so it costs a handful of
+    /// sub-rect blits and no extra surfaces.
+    /// </summary>
+    private void DrawGlitch(SKCanvas canvas, SKImage image, SKRect fit, byte alpha, FlashExitState state, double amount)
+    {
+        const int slices = 7;
+        float split = (float)(amount * 0.04 * fit.Width);
+        if (split > 0.5f)
+        {
+            using var red = SKColorFilter.CreateBlendMode(new SKColor(255, 40, 90, (byte)(alpha / 2)), SKBlendMode.Modulate);
+            using var cyan = SKColorFilter.CreateBlendMode(new SKColor(40, 230, 255, (byte)(alpha / 2)), SKBlendMode.Modulate);
+            _imagePaint.ColorFilter = red;
+            canvas.DrawImage(image, new SKRect(fit.Left - split, fit.Top, fit.Right - split, fit.Bottom), _imagePaint);
+            _imagePaint.ColorFilter = cyan;
+            canvas.DrawImage(image, new SKRect(fit.Left + split, fit.Top, fit.Right + split, fit.Bottom), _imagePaint);
+            _imagePaint.ColorFilter = null;
+        }
+        _imagePaint.Color = new SKColor(255, 255, 255, alpha);
+        for (int k = 0; k < slices; k++)
+        {
+            float t0 = (float)k / slices, t1 = (float)(k + 1) / slices;
+            var src = new SKRect(0, image.Height * t0, image.Width, image.Height * t1);
+            float dx = (float)(FlashExit.SliceOffset(state, k) * fit.Width);
+            var dst = new SKRect(fit.Left + dx, fit.Top + fit.Height * t0, fit.Right + dx, fit.Top + fit.Height * t1);
+            canvas.DrawImage(image, src, dst, _imagePaint);
         }
     }
 

@@ -115,11 +115,8 @@ namespace ConditioningControlPanel.Services.Awareness
                 }
 
                 // Populated upstream ONLY for user-allow-listed apps; the shipped allow list is empty.
-                if (!adult && !string.IsNullOrWhiteSpace(frame.PageTitleSanitized))
-                {
-                    var scrubbed = ScrubTitle(frame.PageTitleSanitized);
-                    if (scrubbed.Length > 0) w.WriteString("title", scrubbed);
-                }
+                var title = TitleFor(frame, cloud);
+                if (title != null) w.WriteString("title", title);
 
                 w.WriteString("transition", frame.Transition.ToString());
                 w.WriteString("dwell", DwellBand(frame.DwellSeconds));
@@ -235,6 +232,20 @@ namespace ConditioningControlPanel.Services.Awareness
             }
 
             return Encoding.UTF8.GetString(stream.ToArray());
+        }
+
+        /// <summary>
+        /// The <c>"title"</c> field the projection carries for this frame, or null when it carries
+        /// none (no allow-listed title upstream, nothing left after scrubbing, or an adult frame bound
+        /// for a cloud provider). The prompt tail asks the same question, so the model is told it may
+        /// talk about a title exactly when one is in front of it (ccp-bugs #1306).
+        /// </summary>
+        public static string? TitleFor(ContextFrame? frame, bool cloud)
+        {
+            if (frame == null || string.IsNullOrWhiteSpace(frame.PageTitleSanitized)) return null;
+            if (cloud && frame.IsAdultCluster) return null;
+            var scrubbed = ScrubTitle(frame.PageTitleSanitized);
+            return scrubbed.Length > 0 ? scrubbed : null;
         }
 
         /// <summary>

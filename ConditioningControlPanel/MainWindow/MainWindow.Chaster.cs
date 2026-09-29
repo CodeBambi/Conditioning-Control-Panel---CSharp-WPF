@@ -48,6 +48,7 @@ namespace ConditioningControlPanel
                 if (chaster is null) return;
 
                 chaster.BookedAt += OnChasterBooked;
+                InitializeCirceLines(); // MainWindow.CirceLines.cs
                 Closed += (_, _) =>
                 {
                     try { chaster.BookedAt -= OnChasterBooked; } catch (Exception ex) { Diag.Swallowed(ex); }

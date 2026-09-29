@@ -1971,7 +1971,7 @@
                             </ControlTheme>
                         </ComboBox.ItemContainerTheme>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_11_3_is_out}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_11_5_is_out}"
                             Click="BtnUpdateAvailable_Click" ToolTip.Tip="{loc:Str tooltip_v6_11_3_locktober}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Theme>

@@ -555,6 +555,8 @@
          harness pages come straight back into the publish tree (and so the installer). -->
     <!-- Breakout ships in the desktop. Exclude only its tests, notes and browser showcases;
          the direct play page, engine and ending assets must reach both output and publish. -->
+    <!-- Piece by Piece: its node smokes, the dev pages (only ever opened with ?media=fixture
+         from a checkout), its design notes and the node-only package.json. -->
     <ArcademyHarnessExclude>
       ..\Assets\web\arcademy\annex\demo.html;
       ..\Assets\web\arcademy\vn\demo.html;
@@ -568,6 +570,10 @@
       ..\Assets\web\backroom\stations\breakout\**\*.md;
       ..\Assets\web\backroom\stations\breakout\dev.html;
       ..\Assets\web\backroom\stations\breakout\showcase*;
+      ..\Assets\web\piecebypiece\smoke\**\*;
+      ..\Assets\web\piecebypiece\dev\**\*;
+      ..\Assets\web\piecebypiece\**\*.md;
+      ..\Assets\web\piecebypiece\package.json;
       ..\Assets\web\dtrh\tests\**\*
     </ArcademyHarnessExclude>
     <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
@@ -592,6 +598,10 @@
       $(MSBuildProjectDirectory)\..\Assets\web\backroom\stations\breakout\**\*.md;
       $(MSBuildProjectDirectory)\..\Assets\web\backroom\stations\breakout\dev.html;
       $(MSBuildProjectDirectory)\..\Assets\web\backroom\stations\breakout\showcase*;
+      $(MSBuildProjectDirectory)\..\Assets\web\piecebypiece\smoke\**\*;
+      $(MSBuildProjectDirectory)\..\Assets\web\piecebypiece\dev\**\*;
+      $(MSBuildProjectDirectory)\..\Assets\web\piecebypiece\**\*.md;
+      $(MSBuildProjectDirectory)\..\Assets\web\piecebypiece\package.json;
       $(MSBuildProjectDirectory)\..\Assets\web\dtrh\tests\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>

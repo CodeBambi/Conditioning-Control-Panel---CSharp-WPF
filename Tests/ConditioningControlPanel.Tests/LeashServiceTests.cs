@@ -224,6 +224,68 @@ public class LeashServiceTests
         Assert.False(r.Svc.CutPending);
     }
 
+    // Bug hunt 2026-09-29, SOCIAL-6: the friends poll stops at its own account check, so nothing
+    // re-checked the leash after a sign-out and the gate kept standing up every 2 s.
+    [Fact]
+    public void Signed_out_the_gate_stands_down_and_the_leash_goes_with_the_account()
+    {
+        var r = new Rig().Build();
+        var flips = new List<bool>();
+        r.Svc.LeashedChanged += flips.Add;
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p1", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Equal("p1", r.Svc.GateDue!.Pid);
+
+        r.Account = null;
+        Assert.Null(r.Svc.GateDue);
+        Assert.Null(r.Svc.Snapshot.Me);
+        Assert.Equal(new[] { true, false }, flips);
+        Assert.Equal(0, r.Safety);                         // a sign-out is not a cut
+
+        // Back in: the leash is still on the server, the next poll brings it and its gate back.
+        r.Account = "u_me";
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p1", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Equal("p1", r.Svc.GateDue!.Pid);
+        Assert.Equal(0, r.Api.Count("cut"));
+    }
+
+    [Fact]
+    public async Task A_cut_pressed_while_signed_out_sticks_and_reaches_the_server_on_the_next_sign_in()
+    {
+        var r = new Rig().Build();
+        var flips = new List<bool>();
+        r.Svc.LeashedChanged += flips.Add;
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p1", "lines", 3, T0.AddHours(-1)) })));
+
+        r.Account = null;                                  // the token dropped, no poll has noticed yet
+        await r.Svc.CutAsync();
+
+        Assert.Equal(1, r.Safety);
+        Assert.Null(r.Svc.Snapshot.Me);
+        Assert.Null(r.Svc.GateDue);
+        Assert.Equal(new[] { true, false }, flips);
+        Assert.Equal("u_me", r.Store.V);                   // kept for that account
+        Assert.Equal(0, r.Api.Count("cut"));               // nothing goes out signed out
+
+        // Another account signing in on this PC is not cut by it.
+        r.Account = "u_other";
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p9", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Equal("p9", r.Svc.GateDue!.Pid);
+        Assert.Equal(0, r.Api.Count("cut"));
+        Assert.Equal("u_me", r.Store.V);
+
+        // The account that cut signs back in: still cut here, and the server hears it on the first poll.
+        r.Account = "u_me";
+        Assert.Null(r.Svc.GateDue);
+        Assert.True(r.Svc.CutPending);
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { Pun("p1", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Null(r.Svc.Snapshot.Me);
+        Assert.Null(r.Svc.GateDue);
+        Assert.Equal(1, r.Api.Count("cut"));
+        Assert.False(r.Svc.CutPending);
+        Assert.Null(r.Store.V);
+        Assert.Equal(1, r.Safety);
+    }
+
     [Fact]
     public async Task Complete_hides_the_gate_and_is_resent_until_it_lands()
     {
@@ -305,7 +367,7 @@ public class LeashServiceTests
     {
         var r = new Rig().Build();
         r.Api.Answer("answer", new JObject { ["ok"] = true, ["status"] = "on" });
-        Assert.True(await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
+        Assert.Equal(LeashAnswerResult.Done, await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
         Assert.Equal("standard", (string?)r.Api.Calls.Last().Body["intensity"]);
         await r.Svc.AnswerAsync("u_vex", false, LeashIntensity.Strict);
         Assert.Null(r.Api.Calls.Last().Body["intensity"]);
@@ -340,6 +402,162 @@ public class LeashServiceTests
         Assert.Equal(new[] { "x3" }, events.Select(e => e.Id));
         Assert.True(events[0].Accepted);
         Assert.False(snap.Active);
+    }
+
+    // ---- 2026-09-28 safety pass --------------------------------------------------------
+
+    [Theory]
+    [InlineData(true, "on", LeashAnswerResult.Done)]
+    [InlineData(false, "declined", LeashAnswerResult.Done)]
+    [InlineData(true, "gone", LeashAnswerResult.Gone)]
+    [InlineData(false, "gone", LeashAnswerResult.Gone)]
+    [InlineData(true, "declined", LeashAnswerResult.Failed)]
+    [InlineData(true, "mystery", LeashAnswerResult.Failed)]
+    public async Task An_answer_is_a_success_only_when_the_status_says_so(bool accept, string status, LeashAnswerResult expected)
+    {
+        var r = new Rig().Build();
+        r.Api.Answer("answer", new JObject { ["ok"] = true, ["status"] = status });
+        Assert.Equal(expected, await r.Svc.AnswerAsync("u_vex", accept, LeashIntensity.Standard));
+    }
+
+    [Fact]
+    public async Task A_failed_or_refused_answer_is_not_a_success()
+    {
+        var r = new Rig().Build();
+        r.Api.Answer("answer", null);
+        Assert.Equal(LeashAnswerResult.Failed, await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
+        r.Api.Answer("answer", new JObject { ["ok"] = false, ["reason"] = "off" });
+        Assert.Equal(LeashAnswerResult.Off, await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
+        r.Api.Answer("answer", new JObject { ["ok"] = false, ["reason"] = "gone" });
+        Assert.Equal(LeashAnswerResult.Gone, await r.Svc.AnswerAsync("u_vex", true, LeashIntensity.Standard));
+    }
+
+    [Fact]
+    public async Task Release_says_whether_the_server_took_it()
+    {
+        var r = new Rig().Build();
+        r.Api.Answer("release", null);
+        Assert.False(await r.Svc.ReleaseAsync("u_sub"));
+        r.Api.Answer("release", new JObject { ["ok"] = false, ["reason"] = "refused" });
+        Assert.False(await r.Svc.ReleaseAsync("u_sub"));
+        Assert.Equal(0, r.Kicks);
+        Assert.True(await r.Svc.ReleaseAsync("u_sub"));
+        Assert.Equal(1, r.Kicks);
+    }
+
+    [Fact]
+    public void A_leash_ended_from_the_other_side_runs_the_cut_safety_once()
+    {
+        var r = new Rig().Build();
+        var lost = 0;
+        r.Svc.LeashLost += () => lost++;
+        r.Svc.ApplyBlock(Block(Me()));
+        Assert.Equal(0, r.Safety);
+
+        // The holder let go (or a block, an expiry): the next block has no leash.
+        r.Svc.ApplyBlock(Block(null, new JArray { Ev("e9", "ended") }));
+        Assert.Equal(1, r.Safety);
+        Assert.Equal(1, lost);
+        Assert.Null(r.Svc.Snapshot.Me);
+
+        // Still not leashed: nothing runs again.
+        r.Svc.ApplyBlock(Block());
+        r.Svc.ApplyBlock(null);
+        Assert.Equal(1, r.Safety);
+    }
+
+    [Fact]
+    public void A_block_that_was_never_leashed_or_a_new_account_runs_no_safety()
+    {
+        var r = new Rig().Build();
+        r.Svc.ApplyBlock(Block());
+        r.Svc.ApplyBlock(null);
+        Assert.Equal(0, r.Safety);
+
+        r.Svc.ApplyBlock(Block(Me()));
+        r.Account = "u_other";
+        r.Svc.ApplyBlock(null);
+        Assert.Equal(0, r.Safety);
+    }
+
+    [Fact]
+    public async Task The_own_cut_runs_the_safety_once_even_when_the_server_then_agrees()
+    {
+        var r = new Rig().Build();
+        var lost = 0;
+        r.Svc.LeashLost += () => lost++;
+        r.Svc.ApplyBlock(Block(Me()));
+        await r.Svc.CutAsync();
+        r.Svc.ApplyBlock(Block(null, new JArray { Ev("e1", "ended") }));
+        Assert.Equal(1, r.Safety);
+        Assert.Equal(0, lost);
+    }
+
+    [Fact]
+    public async Task A_video_that_will_not_play_is_skipped_on_the_server_when_it_can_be()
+    {
+        var r = new Rig().Build();
+        var w = new JObject { ["kind"] = "ht", ["id"] = "123" };
+        var vid = Pun("p1", "video", 5, T0.AddHours(-2));
+        vid["watch"] = w;
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { vid, Pun("p2", "lines", 3, T0.AddHours(-1)) })));
+        Assert.Equal("p1", r.Svc.GateDue!.Pid);
+
+        r.Api.Answer("punish_skip", new JObject { ["ok"] = true, ["status"] = "skipped" });
+        Assert.Equal(LeashSkipResult.Skipped, await r.Svc.SkipUnplayableAsync("p1"));
+        var call = r.Api.Calls.Last();
+        Assert.Equal("punish_skip", call.Op);
+        Assert.Equal("p1", (string?)call.Body["pid"]);
+        Assert.Equal("unplayable", (string?)call.Body["reason"]);
+        Assert.Equal("p2", r.Svc.GateDue!.Pid);
+        Assert.False(r.Svc.IsUnplayable("p1"));
+        Assert.Equal(0, r.Api.Count("complete"));
+    }
+
+    [Fact]
+    public async Task A_video_the_server_cannot_skip_stays_pending_but_off_the_gate_for_a_day()
+    {
+        var now = T0;
+        var r = new Rig();
+        r.Svc = new LeashService(r.Api, () => r.Account, () => now, () => r.Inputs, r.Tab, () => r.Kicks++, r.Store, () => r.Safety++);
+        var vid = Pun("p1", "video", 5, T0.AddHours(-2));
+        vid["watch"] = new JObject { ["kind"] = "ht", ["id"] = "123" };
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { vid })));
+
+        r.Api.Answer("punish_skip", new JObject { ["ok"] = false, ["reason"] = "refused" });
+        Assert.Equal(LeashSkipResult.Marked, await r.Svc.SkipUnplayableAsync("p1"));
+        Assert.True(r.Svc.IsUnplayable("p1"));
+        Assert.Null(r.Svc.GateDue);
+        Assert.Contains(r.Svc.Snapshot.Me!.Pending, p => p.Pid == "p1");
+
+        // A worded refusal rides ok:true on this server (cap, refused): still not a skip.
+        r.Api.Answer("punish_skip", new JObject { ["ok"] = true, ["status"] = "cap" });
+        Assert.Equal(LeashSkipResult.Marked, await r.Svc.SkipUnplayableAsync("p1"));
+        r.Api.Answer("punish_skip", new JObject { ["ok"] = true, ["status"] = "refused" });
+        Assert.Equal(LeashSkipResult.Marked, await r.Svc.SkipUnplayableAsync("p1"));
+
+        // Unknown op / offline: the same.
+        r.Api.Answer("punish_skip", null);
+        Assert.Equal(LeashSkipResult.Marked, await r.Svc.SkipUnplayableAsync("p1"));
+
+        now = T0 + LeashService.UnplayableHold - TimeSpan.FromMinutes(1);
+        Assert.Null(r.Svc.GateDue);
+        now = T0 + LeashService.UnplayableHold + TimeSpan.FromMinutes(1);
+        Assert.False(r.Svc.IsUnplayable("p1"));
+        Assert.Equal("p1", r.Svc.GateDue!.Pid);
+    }
+
+    [Fact]
+    public async Task An_unplayable_mark_goes_with_its_punishment()
+    {
+        var r = new Rig().Build();
+        var vid = Pun("p1", "video", 5, T0.AddHours(-2));
+        vid["watch"] = new JObject { ["kind"] = "ht", ["id"] = "123" };
+        r.Svc.ApplyBlock(Block(Me(pending: new JArray { vid })));
+        r.Api.Answer("punish_skip", null);
+        await r.Svc.SkipUnplayableAsync("p1");
+        r.Svc.ApplyBlock(Block(Me()));
+        Assert.False(r.Svc.IsUnplayable("p1"));
     }
 }
 
@@ -405,4 +623,5 @@ public class LeashPiggybackTests
         active = false;
         Assert.Equal(FriendsPollRule.SlowSeconds, svc.NextIntervalSeconds());
     }
+
 }

@@ -168,6 +168,7 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             RefreshHero();
             if (App.Chaster?.IsLinked == true) RefreshNumbers(animate: false);
+            PaintStamps();
         }));
 
         private void Refresh()
@@ -214,6 +215,7 @@ namespace ConditioningControlPanel.Views.Tabs
             RefreshDay(animate);
             RefreshRun();
             RefreshAdded();
+            RefreshMood();
             if (_billOpen) BuildBill();
         }
 
@@ -229,6 +231,7 @@ namespace ConditioningControlPanel.Views.Tabs
             var lookup = chaster?.LockLookup ?? LockLookup.Unlinked;
             var linked = chaster?.IsLinked == true;
             PaintChasterChip(chaster);
+            RefreshMood(); // a new local day cools her to calm with no booking to say so
 
             if (!linked)
             {
@@ -1117,14 +1120,8 @@ namespace ConditioningControlPanel.Views.Tabs
             Stakes(TxtStakesGentle, TabPresets.Gentle);
             Stakes(TxtStakesStrict, TabPresets.Strict);
             Stakes(TxtStakesCirce, TabPresets.Circe);
-        }
-
-        /// <summary>"Worst month +4 days": what the preset can cost past the lock end.</summary>
-        private static void Stakes(TextBlock line, string presetId)
-        {
-            if (TabPresets.Find(presetId) is not { } preset) return;
-            var (value, days) = TabPresets.WorstMonth(preset);
-            line.Text = Loc.GetF(days ? "chaster_preset_stakes_days" : "chaster_preset_stakes_hours", value);
+            RefreshMood(); // the heat row may have just gone on or off
+            PaintMenuHelp(); // Natasha's row may have just gone on or off
         }
 
         /// <summary>Push the saved set onto the rows. Never the other way round: the settings
@@ -1141,8 +1138,18 @@ namespace ConditioningControlPanel.Views.Tabs
                     row.IsChecked = on.Contains(id);
                     PaintRowLit(id, on.Contains(id));
                 }
+                ChkFlashDodge.IsChecked = App.Settings?.Current?.ChasterFlashDodge == true;
             }
             finally { _loading = false; }
+        }
+
+        /// <summary>Red flashes, with a 4 s ring to dodge them, or no red flashes at all (the
+        /// default). Sits under the costs board, beside Natasha's row.</summary>
+        private void ChkFlashDodge_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading || App.Settings?.Current is not { } settings) return;
+            settings.ChasterFlashDodge = ChkFlashDodge.IsChecked == true;
+            App.Settings?.Save();
         }
 
         private IEnumerable<ToggleButton> LitRows() =>
@@ -1211,6 +1218,13 @@ namespace ConditioningControlPanel.Views.Tabs
                 whereRow.Children.Add(badge);
             }
             words.Children.Add(whereRow);
+            // The horizontal row measures its line at unlimited width, so the trimming never engaged
+            // and a long line ran past the column and was cut hard (German "Mantras, pro
+            // Wiederholung", bug hunt 2026-09-29, TAB-13). Capped at the column less the tier sign,
+            // it ends in "..." instead, and the whole line shows on hover.
+            var signRoom = tier > 0 ? 52.0 : 0.0;
+            words.SizeChanged += (_, e) => where.MaxWidth = Math.Max(0, e.NewSize.Width - signRoom);
+            where.SetBinding(FrameworkElement.ToolTipProperty, Bound(TabMenuCopy.WhereKey(price.Id)));
             Grid.SetColumn(words, 1);
             grid.Children.Add(words);
 
@@ -1224,6 +1238,7 @@ namespace ConditioningControlPanel.Views.Tabs
             };
             Grid.SetColumn(stamp, 2);
             grid.Children.Add(stamp);
+            WireStamp(price, stamp);
 
             var row = new ToggleButton
             {
@@ -1245,6 +1260,10 @@ namespace ConditioningControlPanel.Views.Tabs
             _priceToggles[price.Id] = row;
             return row;
         }
+
+        /// <summary>The signed figure a row books right now, as the stamp, the words and the
+        /// scene all print it.</summary>
+        internal static int ShownSeconds(string id) => TabPriceEdit.Effective(id, Overrides);
 
         private void PaintRowLit(string id, bool on)
         {
@@ -1324,7 +1343,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 var art = TabMenuCopy.ArtFor(id);
                 TrailerArt.Source = art == null ? null : new BitmapImage(new Uri("pack://application:,,,/Resources/" + art));
                 TxtTrailerFlavour.Text = Loc.Get(TabMenuCopy.FlavourKey(id));
-                TxtTrailerWhy.Text = Loc.Get(TabMenuCopy.WhyKey(id));
+                TxtTrailerWhy.Text = TabMenuCopy.Why(id, Loc.Get, ShownSeconds(id));
                 var tier = TabMenuCopy.BadgeTier(price.Gate);
                 TrailerBadgeHost.Child = tier > 0 ? new TierBadge { Tier = tier, MaxWidthOverride = 64 } : null;
                 // The saved scene, in the one shared browser; the picture stays under it as the
@@ -1332,12 +1351,13 @@ namespace ConditioningControlPanel.Views.Tabs
                 if (ChasterTrailerView.BrowserEnabled && !TrailerWeb.HasFailed)
                 {
                     TrailerWeb.Visibility = TrailerWeb.IsReady ? Visibility.Visible : Visibility.Hidden;
-                    TrailerWeb.Show(TabMenuCopy.VignetteFor(id));
+                    var (add, sub) = TabMenuCopy.SceneFigures(id, ShownSeconds);
+                    TrailerWeb.Show(TabMenuCopy.VignetteFor(id), add, sub);
                 }
                 else TrailerWeb.Visibility = Visibility.Collapsed;
                 Trailer.PlacementTarget = row;
                 _trailerShown = true;
-                FxTrailerStart(price);
+                FxTrailerStart(TabPriceEdit.Shown(price, Overrides));
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster trailer"); }
             try { Trailer.IsOpen = true; }

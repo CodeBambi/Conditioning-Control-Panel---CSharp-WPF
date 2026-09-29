@@ -12,8 +12,10 @@ using Serilog;
 namespace ConditioningControlPanel.Services.Friends;
 
 /// <summary>What one <c>poll</c> came back with: who is online, and the drained inbox.
-/// <paramref name="Leash"/> is the leash block (Leash CONTRACT), null when the key was absent.</summary>
-public sealed record FriendsPollReply(IReadOnlyList<string> Online, IReadOnlyList<InboxItem> Inbox, JObject? Leash = null);
+/// <paramref name="Leash"/> is the leash block (Leash CONTRACT), null when the key was absent.
+/// <paramref name="Receipts"/> are the sender receipts (FRIENDS-RECEIPTS.md), null or empty when none.</summary>
+public sealed record FriendsPollReply(IReadOnlyList<string> Online, IReadOnlyList<InboxItem> Inbox, JObject? Leash = null,
+    IReadOnlyList<SenderReceipt>? Receipts = null);
 
 /// <summary>The wire as the service sees it. <see cref="FriendsApi"/> is the only real one; tests hand in a fake.
 /// Nothing here throws: a fault is a null reply, <see cref="SendResult.TryLater"/> or false.</summary>
@@ -30,13 +32,29 @@ public interface IFriendsApi
     Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
         CancellationToken ct = default) => PollAsync(activity, lockDay, shared, ct);
 
+    /// <summary>The same poll carrying recipient receipts (FRIENDS-RECEIPTS.md RQ list). A null or
+    /// empty list sends nothing extra. Default: the leash poll (fakes that know nothing of receipts).</summary>
+    Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
+        JArray? receipts, CancellationToken ct = default) => PollAsync(activity, lockDay, shared, leashReport, ct);
+
     Task<AddResult> RequestAsync(string code, CancellationToken ct = default);
 
     Task<SendResult> SendAsync(string to, SendKind kind, string? poke, string? destination, string? code, WatchRef? watch,
         CancellationToken ct = default);
 
+    /// <summary>The same send, keeping the reply's <c>item_id</c> (FRIENDS-RECEIPTS v1) for the
+    /// sender's trail. Default: <see cref="SendAsync"/> with no id (fakes that know nothing of receipts).</summary>
+    async Task<SendOutcome> SendForItemAsync(string to, SendKind kind, string? poke, string? destination, string? code,
+        WatchRef? watch, CancellationToken ct = default)
+        => new(await SendAsync(to, kind, poke, destination, code, watch, ct).ConfigureAwait(true), null);
+
     /// <summary>accept, decline, cancel, remove, block, unblock, squelch, report. True only on <c>ok</c>.</summary>
     Task<bool> ActAsync(string op, string id, JObject? extra = null, CancellationToken ct = default);
+
+    /// <summary>The same op with the refusal worded. Default: <see cref="ActAsync"/> read as
+    /// Done or TryLater (fakes that know nothing of the reasons).</summary>
+    async Task<ActResult> ActForResultAsync(string op, string id, JObject? extra = null, CancellationToken ct = default)
+        => await ActAsync(op, id, extra, ct).ConfigureAwait(true) ? ActResult.Done : ActResult.TryLater;
 }
 
 /// <summary>
@@ -87,6 +105,7 @@ public sealed class FriendsApi : IFriendsApi
         PresenceActivity.Breakout => "breakout",
         PresenceActivity.Deeper => "deeper",
         PresenceActivity.Remote => "remote",
+        PresenceActivity.Chess => "chess",
         _ => null,
     };
 
@@ -103,6 +122,7 @@ public sealed class FriendsApi : IFriendsApi
         "breakout" => PresenceActivity.Breakout,
         "deeper" => PresenceActivity.Deeper,
         "remote" => PresenceActivity.Remote,
+        "chess" => PresenceActivity.Chess,
         _ => PresenceActivity.Offline,
     };
 
@@ -168,11 +188,16 @@ public sealed class FriendsApi : IFriendsApi
     public Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, CancellationToken ct = default) =>
         PollAsync(activity, lockDay, shared, null, ct);
 
+    public Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
+        CancellationToken ct = default) =>
+        PollAsync(activity, lockDay, shared, leashReport, null, ct);
+
     public async Task<FriendsPollReply?> PollAsync(PresenceActivity? activity, int? lockDay, bool shared, JObject? leashReport,
-        CancellationToken ct = default)
+        JArray? receipts, CancellationToken ct = default)
     {
         var body = new JObject { ["shared"] = shared };
         if (leashReport != null) body["leash_report"] = leashReport;
+        if (receipts is { Count: > 0 }) body["receipts"] = receipts;
         if (shared)
         {
             var wire = activity is { } a ? ActivityToWire(a) : null;
@@ -192,6 +217,10 @@ public sealed class FriendsApi : IFriendsApi
 
     public async Task<SendResult> SendAsync(string to, SendKind kind, string? poke, string? destination, string? code,
         WatchRef? watch, CancellationToken ct = default)
+        => (await SendForItemAsync(to, kind, poke, destination, code, watch, ct)).Result;
+
+    public async Task<SendOutcome> SendForItemAsync(string to, SendKind kind, string? poke, string? destination, string? code,
+        WatchRef? watch, CancellationToken ct = default)
     {
         var body = new JObject { ["to"] = to, ["kind"] = KindToWire(kind) };
         if (poke != null) body["poke"] = poke;
@@ -204,17 +233,39 @@ public sealed class FriendsApi : IFriendsApi
             body["watch"] = w;
         }
         var o = await CallAsync("send", body, ct);
-        if (o == null) return SendResult.TryLater;
-        return Ok(o) ? SendFromWire(o.Value<string?>("status")) : SendFromWire(o.Value<string?>("reason"));
+        return SendOutcomeFromReply(o);
+    }
+
+    /// <summary>A send reply worded, with its <c>item_id</c> kept only when it is a real id on a <c>sent</c>.</summary>
+    internal static SendOutcome SendOutcomeFromReply(JObject? o)
+    {
+        if (o == null) return new SendOutcome(SendResult.TryLater, null);
+        if (!Ok(o)) return new SendOutcome(SendFromWire(o.Value<string?>("reason")), null);
+        var result = SendFromWire(o.Value<string?>("status"));
+        var id = result == SendResult.Sent ? Str(o["item_id"]) : null;
+        return new SendOutcome(result, FriendReceipts.IsItemId(id) ? id : null);
     }
 
     public async Task<bool> ActAsync(string op, string id, JObject? extra = null, CancellationToken ct = default)
+        => await ActForResultAsync(op, id, extra, ct) == ActResult.Done;
+
+    public async Task<ActResult> ActForResultAsync(string op, string id, JObject? extra = null, CancellationToken ct = default)
     {
         var body = extra != null ? (JObject)extra.DeepClone() : new JObject();
         body["id"] = id;
         var o = await CallAsync(op, body, ct);
-        return o != null && Ok(o);
+        if (o == null) return ActResult.TryLater;
+        return Ok(o) ? ActResult.Done : ActFromWire(o.Value<string?>("reason"));
     }
+
+    internal static ActResult ActFromWire(string? reason) => reason switch
+    {
+        "not_found" => ActResult.NotFound,
+        "full" => ActResult.Full,
+        "too_fast" => ActResult.TooFast,
+        "bad_input" or "refused" or "blocked" => ActResult.Refused,
+        _ => ActResult.TryLater,
+    };
 
     private static bool Ok(JObject o) => o.Value<bool?>("ok") == true;
 
@@ -304,7 +355,25 @@ public sealed class FriendsApi : IFriendsApi
         if (o["me"] is JObject mo)
             me = new FriendPresence(ActivityFromWire(Str(mo["activity"])), IntOrNull(mo["lock_day"]), DateTimeOffset.MinValue);
 
-        return new FriendsSnapshot(friends, ParseRequests(o["incoming"]), ParseRequests(o["outgoing"]), Str(o["code"]) ?? "", me);
+        return new FriendsSnapshot(friends, ParseRequests(o["incoming"]), ParseRequests(o["outgoing"]), Str(o["code"]) ?? "", me)
+        {
+            Blocked = ParseBlocked(o["blocked"]),
+        };
+    }
+
+    /// <summary><c>state.blocked</c> (FRIENDS-RECEIPTS v1): <c>[{ id, name }]</c>. Null when the key is
+    /// absent (a server that predates it), so the drawer can tell "none" from "not told".</summary>
+    internal static IReadOnlyList<BlockedFriend>? ParseBlocked(JToken? t)
+    {
+        if (t is not JArray a) return null;
+        var list = new List<BlockedFriend>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var b in a)
+        {
+            if (b is not JObject bo || Str(bo["id"]) is not { Length: > 0 } id || !seen.Add(id)) continue;
+            list.Add(new BlockedFriend(id, Str(bo["name"]) is { Length: > 0 } n ? n : "?"));
+        }
+        return list;
     }
 
     private static List<FriendRequest> ParseRequests(JToken? t)
@@ -329,7 +398,7 @@ public sealed class FriendsApi : IFriendsApi
         if (o["inbox"] is JArray ia)
             foreach (var t in ia)
                 if (t is JObject io && ParseItem(io) is { } item) inbox.Add(item);
-        return new FriendsPollReply(online, inbox, o["leash"] as JObject);
+        return new FriendsPollReply(online, inbox, o["leash"] as JObject, FriendReceipts.Parse(o["receipts"]));
     }
 
     /// <summary>One inbox item, or null when it does not fit the grammar (the server should never
@@ -359,7 +428,11 @@ public sealed class FriendsApi : IFriendsApi
                 destination = Str(o["destination"]);
                 if (!InviteDestination.IsValid(destination)) return null;
                 code = Str(o["code"]);
-                if (code != null && !IsJoinCode(code)) return null;
+                if (destination == InviteDestination.Chess)
+                {
+                    if (!InviteDestination.IsChallengeId(code)) return null;
+                }
+                else if (code != null && !IsJoinCode(code)) return null;
                 life = TimeSpan.FromSeconds(InviteDestination.LifetimeSeconds);
                 break;
             case "watch":

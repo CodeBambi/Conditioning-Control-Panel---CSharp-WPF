@@ -462,9 +462,29 @@ export function createServerLobby({
           const cid = res.data.challenge_id || res.data.challengeId || null;
           if (!cid) { rejectLook('left'); return; }
           request.challengeId = String(cid);
+          // The friends drawer sends this id to the friend as an invite.
+          if (typeof options.onChallengeId === 'function') { try { options.onChallengeId(request.challengeId); } catch { /* the wait goes on */ } }
           // ...and the poll watches for him to say yes.
         })().catch((err) => { if (pending === request) rejectLook(err.message || 'left'); });
       });
+    },
+
+    /**
+     * Take up one challenge by its id, the way a friends-drawer invite hands it over. Same
+     * answer as accepting an offer: a Match once the server has seated us.
+     */
+    acceptChallenge(challengeId) {
+      if (disposed) return Promise.reject(new Error('cancelled'));
+      if (!/^c_[0-9a-f]{16}$/.test(String(challengeId || ''))) return Promise.reject(new Error('left'));
+      return (async () => {
+        await whenIdentity();
+        if (disposed) throw new Error('cancelled');
+        if (!signedIn()) throw new Error('left');
+        offered.add(String(challengeId));   // the poll must not offer it a second time
+        const m = await offer({ challenge_id: challengeId, from: {} }).accept();
+        if (!m) throw new Error('cancelled');
+        return m;
+      })();
     },
 
     cancel,

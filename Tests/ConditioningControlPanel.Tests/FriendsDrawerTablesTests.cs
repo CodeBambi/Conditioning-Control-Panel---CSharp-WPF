@@ -26,7 +26,7 @@ public partial class FriendsDrawerTests
             d.Render();
 
             // Robin is offline in the sample, but the listing says they are at a table.
-            Assert.Equal(new[] { "robin", "kit", "sam", "noor", "in:dee", "out:ash" }, d.RowIds);
+            Assert.Equal(new[] { "robin", "kit", "sam", "in:dee", "out:ash", "noor" }, d.RowIds);
             var row = d.RowFor("robin")!;
             Assert.NotNull(Find(row, "friends-table-hosting"));
             Assert.NotNull(Find(row, "friends-table-join"));
@@ -66,7 +66,7 @@ public partial class FriendsDrawerTests
             var d = NewDrawer(new FakeFriends(Sample()));
             d.Tables = () => OpenTablesReply.Empty;
             d.Render();
-            Assert.Equal(new[] { "kit", "sam", "robin", "noor", "in:dee", "out:ash" }, d.RowIds);
+            Assert.Equal(new[] { "kit", "sam", "in:dee", "out:ash", "robin", "noor" }, d.RowIds);
             foreach (var id in d.RowIds) Assert.Null(Find(d.RowFor(id)!, "friends-table-hosting"));
         });
     }

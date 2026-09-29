@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -9,6 +10,7 @@ using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services.Chaos;
 using Microsoft.Web.WebView2.Core;
+using ConditioningControlPanel.Services.Stakes;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -26,10 +28,25 @@ namespace ConditioningControlPanel.Services.PieceByPiece;
 ///
 /// <para>Protocol (the effects ramp codes against these shapes; do not widen them casually):
 /// <list type="bullet">
-/// <item>host -&gt; page, once after boot: <c>{ type: 'pbp:settings', videoHoldSec, reducedMotion }</c></item>
+/// <item>host -&gt; page, once after boot: <c>{ type: 'pbp:settings', videoHoldSec, reducedMotion, whispers }</c></item>
 /// <item>page -&gt; host: <c>{ type: 'pbp:media-request', kinds: ['image','gif','video'], count }</c></item>
 /// <item>host -&gt; page: <c>{ type: 'pbp:media', images: [url...], gifs: [...], videos: [...] }</c></item>
 /// <item>page -&gt; host: <c>{ type: 'pbp:exit' }</c> - close the window</item>
+/// <item>host -&gt; page: <c>{ type: 'pbp:escape' }</c> - an Escape the panel kept as the game's pause,
+///   played once as the page's own Escape (<see cref="PostKeptEscape"/>)</item>
+/// </list>
+/// ONLINE PICTURES (2026-09-28, PieceByPieceHostService.Media.cs) add four, all optional to the
+/// page: <c>pbp:media</c> above stays the player's own library, the online set rides beside it.
+/// <list type="bullet">
+/// <item>host -&gt; page, after boot and after each pick:
+///   <c>{ type: 'pbp:media-state', flavour, last, custom, online, appWide }</c></item>
+/// <item>page -&gt; host: <c>{ type: 'pbp:media-flavour', flavour, custom, subs, online }</c> - the
+///   picker's choice; a flavour is this window's online opt-in, <c>online:false</c> = own pictures only</item>
+/// <item>host -&gt; page, whenever the set changes:
+///   <c>{ type: 'pbp:online-media', state, subs, share, images: [url], clips: [url], have, want }</c>
+///   - the WHOLE current set; <c>state</c> is off | empty | loading | ready | error, <c>share</c>
+///   the percent of draws it takes when the local deck can answer too</item>
+/// <item>page -&gt; host: <c>{ type: 'pbp:media-more' }</c> - most of the set was shown, fetch the next wave</item>
 /// </list>
 /// <c>heartbeat</c>/<c>pong</c> and <c>boot-error</c> are the shell conventions every other host
 /// speaks, and are handled here too. Both watchdogs are guarded on the page having reported
@@ -56,7 +73,7 @@ namespace ConditioningControlPanel.Services.PieceByPiece;
 /// 1200ms <see cref="DispatcherTimer"/> the way the descent does - that timer can never tick from
 /// inside <c>App.OnExit</c>, and here it would be guarding nothing.</para>
 /// </summary>
-internal static class PieceByPieceHostService
+internal static partial class PieceByPieceHostService
 {
     /// <summary>Display name for the tier gate, the window title and log lines.</summary>
     public const string ProductName = "Piece by Piece";
@@ -122,6 +139,34 @@ internal static class PieceByPieceHostService
     /// <summary>True while the board is open.</summary>
     public static bool IsActive => _host != null;
 
+    /// <summary>True while the board window is the foreground window. The panel's panic pass lets the
+    /// page keep a first Escape as its pause while this holds (PanicPolicy.GameClaimsEscapeAsPause).</summary>
+    public static bool IsInFront => _host?.IsForeground == true;
+
+    /// <summary>True once the page has said <c>ready</c>; frames posted before that are queued.</summary>
+    public static bool IsReady => _host?.IsReady == true;
+
+    /// <summary>The frame that hands the page an Escape the panel kept as its pause. The page listens
+    /// for this exact name (ui/host-escape.js).</summary>
+    internal const string KeptEscapeType = "pbp:escape";
+
+    /// <summary>
+    /// Hand the page an Escape the panel kept as the game's pause. The board pauses on its own
+    /// keydown, which never comes while its WebView2 is out of keyboard focus; the page plays this as
+    /// its own Escape unless the real key reached it too. MainWindow asks
+    /// PanicPolicy.BoardGetsKeptEscape first. The page gets the keyboard back as well, so Enter on
+    /// Resume works without a click (the board is already in front, so nothing else moves).
+    /// </summary>
+    public static void PostKeptEscape()
+    {
+        try
+        {
+            _host?.Post(new { type = KeptEscapeType });
+            _host?.FocusWeb();
+        }
+        catch (Exception ex) { App.Logger?.Debug("PieceByPiece: kept Escape post failed: {E}", ex.Message); }
+    }
+
     /// <summary>The page's LAST boot attempt failed (it reported <c>boot-error</c>, or the host's
     /// own progress deadline fired). A LAST-attempt flag, not a session tombstone: most of what
     /// sets it is transient - a cold WebView2 runtime, a machine under load, a stalled driver - so
@@ -164,6 +209,12 @@ internal static class PieceByPieceHostService
                 // Downloaded audio packs mirror the ccp.game tree under their own origin.
                 ChaosWebViewHost.ContentMapping(),
             };
+            // Distraction's whispers fall back to these when the player has no brain drain clips
+            // of their own (PbpWhisperClips). Only mapped when the folder exists: a mapping onto a
+            // missing folder fails the whole host.
+            foreach (var (whisperHost, whisperDir) in WhisperFolders())
+                if (Directory.Exists(whisperDir))
+                    mappings.Add((whisperHost, whisperDir, CoreWebView2HostResourceAccessKind.Allow));
 
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
             {
@@ -200,6 +251,7 @@ internal static class PieceByPieceHostService
             // the board's own keys work from the first frame.
             _host.FocusWeb();
 
+            try { App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Chess); } catch (Exception ex) { Diag.Swallowed(ex); }
             App.Logger?.Information("PieceByPieceHostService: launched");
         }
         catch (Exception ex)
@@ -227,8 +279,11 @@ internal static class PieceByPieceHostService
             _identityPosted = false;
             _pinged = false;
             bool had = _host != null;
+            DisposeOnlineMedia();
             try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _host = null;
+            DropFriendIntent();
+            try { App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Chess); } catch (Exception ex) { Diag.Swallowed(ex); }
             if (had) App.Logger?.Information("PieceByPieceHostService: closed");
         }
         catch (Exception ex) { App.Logger?.Debug("PieceByPieceHostService.Close: {E}", ex.Message); }
@@ -249,6 +304,9 @@ internal static class PieceByPieceHostService
             _host?.FocusWeb();
             PostSettings();
             PostIdentity();
+            PostMediaState();
+            StartOnlineMedia();
+            PostFriendIntent();
         }
         catch (Exception ex) { App.Logger?.Warning("PieceByPieceHostService.OnPageReady: {E}", ex.Message); }
     }
@@ -308,6 +366,7 @@ internal static class PieceByPieceHostService
                 type = "pbp:settings",
                 videoHoldSec = SafeVideoHoldSec(),
                 reducedMotion = SafeReducedMotion(),
+                whispers = SafeWhisperClips(),
             });
         }
         catch (Exception ex) { App.Logger?.Debug("PieceByPiece: settings post failed: {E}", ex.Message); }
@@ -322,6 +381,15 @@ internal static class PieceByPieceHostService
         _lastProgressUtc = DateTime.UtcNow;
         try
         {
+            // PvP stakes (Services/Stakes): the shared bridge talks to /v2/stakes/* itself and
+            // books a lost time stake in C# once the match settles. Online PvP only; the page
+            // never sends these for a solo or hotseat game.
+            if (StakeBridge.Handles((string?)o["type"]))
+            {
+                _stakes ??= StakeBridge.ForApp("pbp", PostStake);
+                _ = _stakes.Handle(o);
+                return;
+            }
             switch ((string?)o["type"])
             {
                 case "heartbeat":
@@ -336,6 +404,18 @@ internal static class PieceByPieceHostService
 
                 case "pbp:net":
                     OnNetRequest(o);
+                    break;
+
+                case "pbp:media-flavour":
+                    OnMediaFlavour(o);
+                    break;
+
+                case "pbp:media-more":
+                    OnMediaMore();
+                    break;
+
+                case "pbp:friend-challenge":
+                    OnFriendChallenge(o);
                     break;
 
                 case "pbp:exit":
@@ -360,7 +440,8 @@ internal static class PieceByPieceHostService
     /// <summary>
     /// Answer <c>pbp:media-request</c> from the player's own library. Any list may come back
     /// empty and every kind is independent - a fresh install has no media at all, and the page
-    /// must survive that.
+    /// must survive that. Online pictures never ride this reply: they come as
+    /// <c>pbp:online-media</c> and the page mixes the two.
     /// </summary>
     private static void OnMediaRequest(JObject o)
     {
@@ -565,6 +646,18 @@ internal static class PieceByPieceHostService
         catch { return "Player"; }
     }
 
+    // ============================ stakes ============================
+
+    /// <summary>One bridge for the life of the app: a settle watch it started keeps running (and
+    /// books) after the window closes, and posting to a closed board is a quiet no-op.</summary>
+    private static StakeBridge? _stakes;
+
+    private static void PostStake(JObject o) => RunOnUi(() =>
+    {
+        try { _host?.Post(o); }
+        catch (Exception ex) { App.Logger?.Debug("PieceByPiece: stake post failed: {E}", ex.Message); }
+    });
+
     // ============================ window plumbing ============================
 
     /// <summary>The page's boot failed (WebGL refused, a module import threw). There is nothing to
@@ -674,6 +767,34 @@ internal static class PieceByPieceHostService
     /// <summary>The app's motion setting, capped by the OS animation switch (MotionFx owns that
     /// resolution). Reduced and Off both read as reduced motion on the page: it has no third
     /// state to offer.</summary>
+    private static (string Host, string Dir)[] WhisperFolders() => new[]
+    {
+        (PbpWhisperClips.SubAudioHost, Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio")),
+        (PbpWhisperClips.WordsHost, BackRoom.BackRoomVoice.WordsRoot()),
+    };
+
+    /// <summary>Distraction's whisper clips: the player's brain drain folder, else what the
+    /// active mod may whisper (<see cref="PbpWhisperClips"/>). Never throws; empty = no whispers.</summary>
+    private static IReadOnlyList<string> SafeWhisperClips()
+    {
+        try
+        {
+            static IEnumerable<string>? Names(string? dir)
+                => !string.IsNullOrEmpty(dir) && Directory.Exists(dir) ? Directory.GetFiles(dir).Select(Path.GetFileName)! : null;
+            var folders = WhisperFolders();
+            bool subAudio = App.Settings?.Current?.SubAudioAudible == true
+                            && ModAudioPolicy.UsesSharedSubAudio(App.Mods?.ActiveModId);
+            return PbpWhisperClips.Build(
+                Names(Path.Combine(App.EffectiveAssetsPath, PbpWhisperClips.BrainDrainFolder)),
+                subAudio, Names(folders[0].Dir), Names(folders[1].Dir));
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("PieceByPiece: whisper clips failed: {E}", ex.Message);
+            return Array.Empty<string>();
+        }
+    }
+
     private static bool SafeReducedMotion()
     {
         try { return MotionFx.Level != Models.MotionLevel.Full; }

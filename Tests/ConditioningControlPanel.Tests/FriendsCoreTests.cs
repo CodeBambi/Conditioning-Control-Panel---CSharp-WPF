@@ -34,7 +34,7 @@ public class FriendsPollRuleTests
     }
 }
 
-public class FriendsServiceTests
+public partial class FriendsServiceTests
 {
     private sealed class FakeApi : IFriendsApi
     {
