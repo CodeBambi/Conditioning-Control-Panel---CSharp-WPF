@@ -6,9 +6,8 @@
        ToolTip="..."                     -> ToolTip.Tip="..."
        helpers:EmojiTextBlock            -> TextBlock (Avalonia renders colour emoji natively)
        Image + EmojiToImageSource        -> TextBlock with the emoji
-       feat:SessionLock.Owned            -> dropped (ponytail: session-lock attached prop lives in
-                                            the WPF head; restore when the banner is ported)
-       feat:AdaptiveSideArt.CollapseBelow-> dropped (ponytail: same, the art column stays)
+       feat:SessionLock.Owned            -> sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
+       feat:AdaptiveSideArt.CollapseBelow-> dropped (ponytail: WPF-head attached prop; the art column stays)
        <Slider> (unstyled)               -> Theme="{StaticResource PinkSlider}" (the WPF theme applies
                                             PinkSlider implicitly to every Slider: Resources/Theme/MainWindow.xaml:341)
        ValueChanged= / Checked= / ...    -> wired in the constructor -->

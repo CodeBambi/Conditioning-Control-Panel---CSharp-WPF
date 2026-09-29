@@ -8,7 +8,8 @@
        LinearGradientBrush "0,0"/"1,0"   ->  "0%,0%"/"100%,0%"
        ImageBrush HeroArtBrush/SideArtBrush -> dropped (feature art not an AvaloniaResource here
                                             yet; x:Name on a brush is AVLN2000); wash stands in
-       feat:AdaptiveSideArt.CollapseBelow, feat:SessionLock.Owned -> dropped
+       feat:AdaptiveSideArt.CollapseBelow -> dropped
+       feat:SessionLock.Owned            -> sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        all event handlers                ->  wired in code-behind (porting convention) -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

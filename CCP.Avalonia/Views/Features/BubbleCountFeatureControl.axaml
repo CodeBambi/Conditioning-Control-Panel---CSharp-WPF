@@ -8,8 +8,8 @@
        Content="{loc:Str btn_test_now}"  -> a TextBlock child (Avalonia parses "_" as an access key)
        ImageBrush x:Name HeroArtBrush/SideArtBrush -> named plate Borders HeroArt/SideArt painted by
                                             ModArt.BindFeaturePlates (features/Bubble_count.png, mod override first)
-       feat:SessionLock.Owned            -> dropped (ponytail: WPF-head attached prop)
-       feat:AdaptiveSideArt.CollapseBelow-> dropped (ponytail: same)
+       feat:SessionLock.Owned            -> sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
+       feat:AdaptiveSideArt.CollapseBelow-> dropped (ponytail: WPF-head attached prop)
        LinearGradientBrush "0,1"/"0,0"   -> "0%,100%"/"0%,0%" (bare numbers are pixels here)
        <Slider> (unstyled)               -> Theme="{StaticResource PinkSlider}" (the WPF theme applies
                                             PinkSlider implicitly to every Slider: Resources/Theme/MainWindow.xaml:341)

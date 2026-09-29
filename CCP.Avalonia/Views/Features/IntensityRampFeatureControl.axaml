@@ -6,7 +6,7 @@
        helpers:EmojiTextBlock            ->  TextBlock
        Visibility="Collapsed"            ->  IsVisible="False"
        Polyline StrokeLineJoin/Start+EndLineCap -> StrokeJoin / StrokeLineCap (one cap property)
-       feat:SessionLock.Owned            ->  dropped (WPF-head attached behaviour)
+       feat:SessionLock.Owned            ->  sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        all event handlers                ->  wired in code-behind (porting convention) -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

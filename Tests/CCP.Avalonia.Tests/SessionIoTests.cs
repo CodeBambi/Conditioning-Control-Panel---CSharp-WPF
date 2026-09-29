@@ -69,18 +69,21 @@ public sealed class SessionIoTests
                 .OfType<ConditioningControlPanel.Avalonia.Views.Features.FlashFeatureControl>().Single();
             var freq = flash.FindControl<Slider>("SliderFrequency")!;
             var quiz = shell.Named<UserControl>("GradedIntakeTab")!.FindControl<Slider>("SliderPopQuizFrequency")!;
+            var haptics = shell.StudioRack!.HapticsPanel.FindControl<CheckBox>("ChkHapticsEnabled")!;
             ToolTip.SetTip(freq, "original");
 
             ConditioningControlPanel.CoreSession.IsSessionRunningProvider = () => true;
             shell.RefreshSessionFeatureLock();
             Assert.False(freq.IsEnabled);
             Assert.False(quiz.IsEnabled);
+            Assert.False(haptics.IsEnabled);
             Assert.NotEqual("original", ToolTip.GetTip(freq));
 
             ConditioningControlPanel.CoreSession.IsSessionRunningProvider = () => false;
             shell.RefreshSessionFeatureLock();
             Assert.True(freq.IsEnabled);
             Assert.True(quiz.IsEnabled);
+            Assert.True(haptics.IsEnabled);
             Assert.Equal("original", ToolTip.GetTip(freq));
         }
         finally
@@ -132,6 +135,8 @@ public sealed class SessionIoTests
                 .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             var confirm = Assert.Single(host.OwnedWindows.OfType<MessageDialog>());
+            Assert.Equal(Loc.Get("btn_delete"), Assert.IsType<TextBlock>(confirm.FindControl<Button>("BtnOk")!.Content).Text);
+            Assert.True(confirm.FindControl<Button>("BtnCancel")!.IsVisible);
             confirm.FindControl<Button>("BtnOk")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
 
@@ -141,6 +146,44 @@ public sealed class SessionIoTests
         finally
         {
             host?.Close();
+            try { Directory.Delete(root, true); } catch { }
+        }
+        return Task.CompletedTask;
+    });
+    /// <summary>WPF HandleSessionDrop: an invalid file is refused with "Invalid: ..." and nothing
+    /// is copied into CustomSessions or added to the rack.</summary>
+    [Fact]
+    public Task BadSessionDropIsRejectedAndSavesNothing() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+        LocalizationManager.Instance.SetLanguage("en");
+        var root = Path.Combine(Path.GetTempPath(), "ccp-session-bad-" + Guid.NewGuid().ToString("N"));
+        var custom = Path.Combine(root, "custom");
+        var builtIn = Path.Combine(root, "built-in");
+        Directory.CreateDirectory(custom);
+        Directory.CreateDirectory(builtIn);
+        try
+        {
+            var manager = new SessionManager(new SessionFileService(custom, builtIn));
+            manager.LoadAllSessions();
+            var bad = Path.Combine(root, "bad.session.json");
+            File.WriteAllText(bad, "{ not json");
+            var view = new PresetsTabView();
+            view.UseSessionManager(manager);
+            var before = manager.AllSessions.Count;
+
+            view.HandleSessionDrop(bad);
+
+            var status = view.FindControl<TextBlock>("DropZoneStatus")!;
+            Assert.True(status.IsVisible);
+            Assert.StartsWith("Invalid: ", status.Text);
+            Assert.Empty(Directory.GetFiles(custom));
+            Assert.Equal(before, manager.AllSessions.Count);
+        }
+        finally
+        {
             try { Directory.Delete(root, true); } catch { }
         }
         return Task.CompletedTask;

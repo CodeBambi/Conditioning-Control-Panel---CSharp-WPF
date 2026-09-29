@@ -23,9 +23,9 @@
                                              (and would un-mask the whole hero plate)
        x:FieldModifier="internal"        ->  dropped; x:Names kept (nothing on this head pokes them)
        feat:AdaptiveSideArt.CollapseBelow,
-       feat:SessionLock.Owned,
        hover:HoverPop.IsEnabled          ->  dropped (WPF-head attached behaviours; they follow
                                              their services to Core)
+       feat:SessionLock.Owned            ->  sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        ImageBrush GradedIntakeHeroBrush  ->  x:Name on a brush is AVLN2000, so the two plate
                                              Borders are named and ModArt.BindFeaturePlates paints
                                              features/lab_quiz_hero.png into both, mod override

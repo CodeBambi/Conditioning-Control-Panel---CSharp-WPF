@@ -1095,7 +1095,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
             if (await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get("title_delete_session"),
-                    Loc.GetF("msg_delete_session_confirm_0", session.Name)))
+                    Loc.GetF("msg_delete_session_confirm_0", session.Name), okText: Loc.Get("btn_delete")))
                 DeleteSession(session);
         }
 

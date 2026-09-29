@@ -11,8 +11,8 @@
        ImageBrush HeroArtBrush/SideArtBrush -> dropped: Resources/features/*.png is not an
                                             AvaloniaResource in this head yet, and x:Name on a
                                             brush is AVLN2000. The wash stands in on both plates.
-       feat:AdaptiveSideArt.CollapseBelow, feat:SessionLock.Owned -> dropped (WPF-head attached
-                                            behaviours)
+       feat:AdaptiveSideArt.CollapseBelow -> dropped (WPF-head attached behaviour)
+       feat:SessionLock.Owned            -> sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        all event handlers                ->  wired in code-behind (porting convention) -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

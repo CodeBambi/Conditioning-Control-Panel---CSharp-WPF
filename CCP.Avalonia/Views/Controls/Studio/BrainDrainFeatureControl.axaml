@@ -11,8 +11,9 @@
                                             an AvaloniaResource in this head yet and x:Name on a
                                             brush is AVLN2000. The Studio wash stands in on both
                                             plates, exactly as the SpiralFeatureControl port does.
-       feat:AdaptiveSideArt.CollapseBelow, feat:SessionLock.Owned -> dropped (WPF-head attached
-                                            behaviours; they follow the services to Core)
+       feat:AdaptiveSideArt.CollapseBelow -> dropped (WPF-head attached
+                                            behaviour; it follows the services to Core)
+       feat:SessionLock.Owned            -> sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        LinearGradientBrush "0,0"/"1,0"   ->  "0%,0%"/"100%,0%" (Avalonia points are absolute
                                             unless given as %)
        all event handlers                ->  wired in code-behind (porting convention)
