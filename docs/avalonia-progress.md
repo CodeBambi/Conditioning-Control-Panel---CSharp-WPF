@@ -834,3 +834,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   CelebrateLevelUp), off at MotionLevel Off. Profile menu Level/XP rail live.
 - Evidence: HeaderLevelLiveTests (fail-proven, incl. sign-in/logout repaint and unsubscribe); live Lvl 10, 300/994 XP, 0 binding
   errors. Rows stay stub (odometer, glow dot, chip pop, burst, bank hold, rank title). Review: FIX -> fixed.
+
+## avalonia-port/wardrobe-catalog-core: +370
+- WardrobeCatalog moved to Core (git mv); WPF keeps its image half as WardrobeArt and seeds ProgressProvider; the achievement ->
+  item map is Core AchievementRewards(). Avalonia achievement cards show reward art/silhouette and name, the Has-a-reward chip,
+  the wardrobe counter and real item names; the item-unlocked toast fires 900 ms after a gated unlock (max 3) with real art.
+- Evidence: Core WardrobeCatalogTests (3) + AchievementsTabGridTests, fail-proven; live band, silhouettes, counter 1/63, filter,
+  0 binding errors. Toast not seen live. Rows stay stub (tile FX; toast inbox/no-activate). Review: ACCEPT. Follow-up: stale
+  "WardrobeCatalog is WPF-only" notes in ProfileCustomizeDialog / WardrobeEditorDialog / ProfileWardrobe (profile unit).
