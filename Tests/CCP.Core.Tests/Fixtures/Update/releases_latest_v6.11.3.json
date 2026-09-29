@@ -1,0 +1,47 @@
+{
+  "url": "https://api.github.com/repos/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/251000001",
+  "assets_url": "https://api.github.com/repos/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/251000001/assets",
+  "upload_url": "https://uploads.github.com/repos/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/251000001/assets{?name,label}",
+  "html_url": "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/tag/v6.11.3",
+  "id": 251000001,
+  "author": {
+    "login": "CodeBambi",
+    "id": 100000001,
+    "node_id": "U_kgDOBfXXXX",
+    "avatar_url": "https://avatars.githubusercontent.com/u/100000001?v=4",
+    "html_url": "https://github.com/CodeBambi",
+    "type": "User",
+    "site_admin": false
+  },
+  "node_id": "RE_kwDOXXXXXXXXXX",
+  "tag_name": "v6.11.3",
+  "target_commitish": "main",
+  "name": "v6.11.3 - Locktober",
+  "draft": false,
+  "immutable": false,
+  "prerelease": false,
+  "created_at": "2026-09-20T18:02:11Z",
+  "updated_at": "2026-09-20T18:40:57Z",
+  "published_at": "2026-09-20T18:40:57Z",
+  "assets": [
+    {
+      "url": "https://api.github.com/repos/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/assets/290000001",
+      "id": 290000001,
+      "node_id": "RA_kwDOXXXXXXXXXX",
+      "name": "ConditioningControlPanel-6.11.3-Setup.exe",
+      "label": "",
+      "uploader": { "login": "CodeBambi", "id": 100000001, "type": "User", "site_admin": false },
+      "content_type": "application/x-msdownload",
+      "state": "uploaded",
+      "size": 412345678,
+      "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "download_count": 1234,
+      "created_at": "2026-09-20T18:35:02Z",
+      "updated_at": "2026-09-20T18:40:50Z",
+      "browser_download_url": "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/download/v6.11.3/ConditioningControlPanel-6.11.3-Setup.exe"
+    }
+  ],
+  "tarball_url": "https://api.github.com/repos/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/tarball/v6.11.3",
+  "zipball_url": "https://api.github.com/repos/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/zipball/v6.11.3",
+  "body": "v6.11.3 - Locktober\r\n\r\nNEW IN 6.11.3\r\n- Breakout on the desktop now draws its effects inside the game window."
+}

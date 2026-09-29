@@ -727,3 +727,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   place, Linux channels (user brief), updater home, profiles, signal transport.
 - Also fixed a test leak: ModChoiceTests left CoreMods pointing at its mod service, so shuffled test order made later tests
   see drone-mode active (10 consecutive green runs after the fix, no retries). Review: pending.
+
+## avalonia-port/release-feed-core: +730 (installer/updater U3)
+- Core ReleaseFeed holds the WPF updater's logic, moved verbatim: tag -> version, Setup asset pattern order + size,
+  DidUpdateSucceed, update_skip/attempt/result markers (same names, 24 h / 7 day rules), the helper .cmd text (byte goldens
+  with CRLF). WPF UpdateService forwards to it and keeps network, elevation, WebView2 cleanup and exit; its AppVersion stays
+  until U8 (it seeds CoreReleaseContent).
+- Evidence: ReleaseFeedTests (20; a v6.11.3-shaped fixture; helper goldens recorded from the pre-move code), fail-proofed.
+  Review: ACCEPT.
