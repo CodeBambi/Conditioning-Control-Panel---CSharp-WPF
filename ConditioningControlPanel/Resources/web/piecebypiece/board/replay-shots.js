@@ -26,28 +26,58 @@
  * are hidden for that panel only.
  * ==========================================================================*/
 import * as THREE from 'three';
-import { SHOT_BANK, FRAME, lensDir, fitFrame, clampLens, hides, motion, fovFor, pickShots, projectSpheres, basis }
+import { SHOT_BANK, FRAME, lensDir, fitFrame, clampLens, hides, motion, fovFor, pickShots, projectSpheres, basis, spinePoints }
   from './replay-frame.js';
 
 const HEIGHT = { p: .62, n: .8, b: .9, r: .7, q: 1.02, k: 1.15 };   // as board/pieces.js, for a man without scaleBase
 const v3 = a => [a.x, a.y, a.z];
 const CEIL_TALL = .6;   // a knight's flip and the queen's stunts get this much more headroom
+const PRESS_FLOOR = .28;   // an extreme close following a press down stops this high
 
-// A man's world column from a transform: base, top, radius.
-const qa = new THREE.Quaternion(), va = new THREE.Vector3();
-function column(obj, pos, quat, scale) {
-  const u = obj.userData || {}, h0 = u.scaleBase || HEIGHT[u.type] || .8;
-  const rest = u.artSource === 'placeholder' || !u.artSource ? h0 : 1;   // a lathe stands scaled up to its height
-  const h = h0 * Math.max(.15, scale[1] / rest), r = FRAME.manR * Math.max(.5, Math.min(1.6, scale[0] / rest));
-  va.set(0, h, 0).applyQuaternion(qa.set(quat[0], quat[1], quat[2], quat[3]));
-  return { base: pos, top: [pos[0] + va.x, pos[1] + va.y, pos[2] + va.z], r };
+// The soft-body pose a man is in: the capture pose's bend, reach and drop
+// (board/jiggle.js uniforms). `uni` is a recorded snapshot's list, in the
+// uniforms' own key order; without it, the live values.
+function poseOf(obj, uni) {
+  const u = obj.userData?.jiggleUniforms;
+  if (!u) return null;
+  const keys = Object.keys(u);
+  const at = k => {
+    const i = keys.indexOf(k);
+    if (i < 0) return null;
+    const v = uni ? uni[i] : u[k].value;
+    return typeof v === 'number' || v == null ? v : v.toArray ? v.toArray() : v;
+  };
+  const H = at('uHeight') || 1, bend = at('uBend') || [0, 0];
+  if (!(at('uAct') > .5)) return { H, bulge: 0, act: { x: bend[0], z: bend[1], lx: 0, lz: 0, stretch: 0, drop: 0 } };
+  const lag = at('uLag') || [0, 0], flex = at('uFlex') || [0, 0];
+  return { H, bulge: at('uBulge') || 0, act: { x: bend[0], z: bend[1], lx: lag[0], lz: lag[1], stretch: flex[0], drop: flex[1] } };
 }
-const liveColumn = o => column(o, v3(o.position), [o.quaternion.x, o.quaternion.y, o.quaternion.z, o.quaternion.w], v3(o.scale));
-const spheresOf = c => {
-  const m = [(c.base[0] + c.top[0]) / 2, (c.base[1] + c.top[1]) / 2, (c.base[2] + c.top[2]) / 2];
-  // the foot ball sits on the board, not half through it
-  return [[c.base[0], c.base[1] + c.r * .6, c.base[2], c.r], [...m, c.r * 1.05], [...c.top, c.r * .8]];
-};
+
+// A man's world column from a transform: base, top, radius, and the spine
+// between them as the soft body bends it.
+const qa = new THREE.Quaternion(), va = new THREE.Vector3();
+function column(obj, tr, uni = null) {
+  const u = obj.userData || {}, h0 = u.scaleBase || HEIGHT[u.type] || .8;
+  const pos = tr.slice(0, 3), quat = tr.slice(3, 7), scale = tr.slice(7, 10);
+  const rest = u.artSource === 'placeholder' || !u.artSource ? h0 : 1;   // a lathe stands scaled up to its height
+  const r = FRAME.manR * Math.max(.5, Math.min(1.6, scale[0] / rest));
+  const pose = poseOf(obj, uni);
+  if (pose && rest === 1) {
+    const pts = spinePoints(tr, pose.H, pose.act);
+    return { base: pts[0], top: pts[pts.length - 1], r, pts, bulge: pose.bulge };
+  }
+  const h = h0 * Math.max(.15, scale[1] / rest);
+  va.set(0, h, 0).applyQuaternion(qa.set(quat[0], quat[1], quat[2], quat[3]));
+  const top = [pos[0] + va.x, pos[1] + va.y, pos[2] + va.z];
+  return { base: pos, top, r, pts: [pos, [(pos[0] + top[0]) / 2, (pos[1] + top[1]) / 2, (pos[2] + top[2]) / 2], top], bulge: 0 };
+}
+const trOf = o => [o.position.x, o.position.y, o.position.z, o.quaternion.x, o.quaternion.y, o.quaternion.z, o.quaternion.w,
+  o.scale.x, o.scale.y, o.scale.z];
+const liveColumn = o => column(o, trOf(o));
+const spheresOf = c => c.pts.map((p, k) => (k === 0
+  ? [p[0], p[1] + c.r * .6, p[2], c.r]                                    // the foot ball sits on the board, not half through it
+  : k === c.pts.length - 1 ? [...p, c.r * .8 * (1 + .6 * (c.bulge || 0))]   // a swelling head is a bigger ball
+    : [...p, c.r * 1.05]));
 
 export function createReplayShots({ group, random = Math.random } = {}) {
   const at = new THREE.Vector3(), fwd = new THREE.Vector3();
@@ -63,17 +93,55 @@ export function createReplayShots({ group, random = Math.random } = {}) {
     return out;
   }
 
-  // Where the blow lands: the hit's own contact point, else the victim's square.
-  function contactOf(clip) {
-    const w = clip.hitInfo?.world;
-    return w ? [w.x, Math.max(.15, w.y), w.z] : [clip.to.x, .4, clip.to.z];
-  }
   function frameNear(clip, t) {
     let best = null, bd = Infinity;
     for (const x of clip.frames || []) { const d = Math.abs(x.t - t); if (d < bd) { bd = d; best = x; } }
     return best;
   }
-  const stateCol = (o, s) => column(o, s.tr.slice(0, 3), s.tr.slice(3, 7), s.tr.slice(7, 10));
+  const stateCol = (o, s) => column(o, s.tr, s.uni);
+  // Where the blow lands: the hit's own contact point, else the victim's square.
+  // A blow from above (a stomp, the king's head slam, the queen's bash) lands on
+  // the victim's crown: the hit reports a point part way up any man taller than a
+  // pawn, and a close lens aimed there watched the victim's middle while the head
+  // came down out of the top of the frame.
+  const contacts = new WeakMap();
+  function contactOf(clip) {
+    if (contacts.has(clip)) return contacts.get(clip);
+    const w = clip.hitInfo?.world;
+    const c = w ? [w.x, Math.max(.15, w.y), w.z] : [clip.to.x, .4, clip.to.z];
+    if (clip.hitInfo?.impact === 'squash') {
+      const f = frameNear(clip, clip.hit), s = f && clip.victim && f.states.get(clip.victim);
+      if (s && s.visible && s.inGroup) c[1] = Math.max(c[1], Math.min(1.6, stateCol(clip.victim, s).top[1]));
+    }
+    contacts.set(clip, c);
+    return c;
+  }
+  // A blow from above drives the victim into the board (the king presses the queen
+  // flat): the extreme close follows the crown down, and holds where it ended once
+  // the victim is gone, so the press stays in the frame instead of leaving an
+  // empty square in the panel for the rest of the replay.
+  const crowns = new WeakMap();
+  function crownAt(clip, t) {
+    let list = crowns.get(clip);
+    if (!list) {
+      list = [];
+      for (const f of clip.frames || []) {
+        if (f.t < clip.hit) continue;
+        const s = clip.victim && f.states.get(clip.victim);
+        if (!s || !s.visible || !s.inGroup) break;
+        list.push([f.t, stateCol(clip.victim, s).top[1]]);
+      }
+      crowns.set(clip, list);
+    }
+    if (!list.length || t <= list[0][0]) return list.length ? list[0][1] : null;
+    for (let k = 1; k < list.length; k++) {
+      const [t1, y1] = list[k];
+      if (t1 < t) continue;
+      const [t0, y0] = list[k - 1];
+      return y0 + (y1 - y0) * (t1 > t0 ? (t - t0) / (t1 - t0) : 1);
+    }
+    return list[list.length - 1][1];
+  }
 
   // The subject, as spheres, over the shot's window of the clip.
   function subjectFor(spec, clip) {
@@ -82,7 +150,7 @@ export function createReplayShots({ group, random = Math.random } = {}) {
       // the contact, plus the two heads that meet there
       const out = [[...c, FRAME.contactR]];
       const f = frameNear(clip, clip.hit);
-      for (const o of [clip.victim]) {
+      for (const o of [clip.victim, clip.attacker]) {
         const s = f && o && f.states.get(o);
         if (!s || !s.visible || !s.inGroup) continue;
         const top = stateCol(o, s).top;
@@ -105,7 +173,11 @@ export function createReplayShots({ group, random = Math.random } = {}) {
           if (!spec.flight && u > .25) continue;               // a close shot does not chase the flight
           if (Math.hypot(pos[0] - c[0], pos[2] - c[2]) > FRAME.flightReach) continue;
         }
-        for (const q of spheresOf(stateCol(o, s))) { q[1] = Math.min(q[1], ceil); out.push(q); }
+        for (const q of spheresOf(stateCol(o, s))) {
+          q[1] = Math.min(q[1], ceil);
+          if (spec.fill) q[1] = Math.max(q[1], q[3]);   // a filled frame stops at the board, not under it
+          out.push(q);
+        }
       }
     }
     if (!out.length) out.push([...c, .6]);
@@ -131,7 +203,7 @@ export function createReplayShots({ group, random = Math.random } = {}) {
     if (had && had.key === key && had.shot === shot) return had;
     const dir = lensDir(shot.el, shot.az, v3(ctx.dN), v3(ctx.perp));
     const fit = fitFrame({ spheres: subjectFor(spec, clip), dir, fov: spec.fov, aspect: cam.aspect, panel, share: spec.share,
-      centre: actionCentre(spec, clip) });
+      centre: actionCentre(spec, clip), fill: !!spec.fill });
     const entry = { key, shot, spec, fit };
     fits.set(i, entry);
     return entry;
@@ -143,7 +215,12 @@ export function createReplayShots({ group, random = Math.random } = {}) {
     const { spec, fit } = fitFor(shot, cam, ctx);
     const m = motion(spec.motion, clipT - clip.hit, shot.seed);
     const dir = lensDir(Math.min(1.4, shot.el + m.el), shot.az + m.az, v3(dN), v3(perp));
-    const d = fit.dist * m.dist, t = fit.target;
+    const d = fit.dist * m.dist;
+    let t = fit.target;
+    if (spec.subject === 'contact' && clip.hitInfo?.impact === 'squash' && clipT > clip.hit) {
+      const y = crownAt(clip, clipT);
+      if (y != null && y < t[1]) t = [t[0], Math.max(PRESS_FLOOR, y), t[2]];
+    }
     let pos = clampLens([t[0] + (dir[0] + m.drift[0]) * d, t[1] + (dir[1] + m.drift[1]) * d, t[2] + (dir[2] + m.drift[2]) * d]);
     // Never inside the attacker or the victim (they are the two men never hidden).
     for (const o of [clip.attacker, clip.victim]) {
@@ -153,6 +230,11 @@ export function createReplayShots({ group, random = Math.random } = {}) {
       if (hd < keep && pos[1] < Math.max(c.base[1], c.top[1]) + .3) {
         pos = hd > 1e-4 ? [c.base[0] + dx * keep / hd, pos[1], c.base[2] + dz * keep / hd]
           : [c.base[0] + dir[0] * keep, pos[1], c.base[2] + dir[2] * keep];
+      }
+      // nor inside the arc of a man bent over (the king's slam reaches a square out)
+      for (const p of c.pts.slice(1)) {
+        const ex = pos[0] - p[0], ey = pos[1] - p[1], ez = pos[2] - p[2], dd = Math.hypot(ex, ey, ez);
+        if (dd < keep && dd > 1e-4) pos = clampLens([p[0] + ex * keep / dd, p[1] + ey * keep / dd, p[2] + ez * keep / dd]);
       }
     }
     cam.position.set(pos[0], pos[1], pos[2]);

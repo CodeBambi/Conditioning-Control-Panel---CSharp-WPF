@@ -370,6 +370,37 @@ eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000),
   eq('low-clock handoff is shortened', handoffSeconds({ snapshot: () => ({ w: 20000, b: 60000 }) }), .2);
   handoff.dispose();
 }
+// The card after a capture replay: a full-screen replay that held the card earns the
+// short beat; a corner replay never held anyone, so it keeps the whole beat. The
+// card says it is coming in, so the replay's sound can give it the air.
+{
+  const bus = createBus(), cards = [];
+  let hold = false, active = false, ply = 0;
+  const board = { anim: { busy: () => false }, director: { holding: () => hold, active: () => active } };
+  const game = { isOnline: false, isSolo: false, isOver: () => false, plies: () => ply, clock: { snapshot: () => ({ untimed: true }) } };
+  const handoff = createTurnHandoff({ bus, game, board });
+  bus.on('turn-card', p => cards.push(p));
+  const turn = side => { ply++; bus.emit('turn', { side, ply }); };
+  bus.emit('turn', { side: 'w', ply: 0 });
+  turn('b');
+  hold = true; handoff.update(.2);                    // recording the capture
+  active = true; handoff.update(.8);                  // the trio plays out
+  hold = false; active = false; handoff.update(.3);   // done: a short beat
+  eq('after a full-screen replay the card waits a short beat', handoff.shown(), null);
+  handoff.update(.2);
+  eq('then comes in', handoff.shown()?.text, 'Black to move');
+  eq('and says so on the bus', cards.map(c => c.side).join(), 'b');
+  handoff.update(1.2);
+  turn('w');
+  hold = true; handoff.update(.2);                    // recording, a full replay allowed
+  hold = false; active = true; handoff.update(.5);    // the deck dealt a corner: nobody waits
+  handoff.update(.3);
+  eq('a corner replay keeps the whole beat (its hit is heard first)', handoff.shown(), null);
+  handoff.update(.3);
+  eq('then the card comes in over the live board', handoff.shown()?.text, 'White to move');
+  eq('one turn-card per card', cards.length, 2);
+  handoff.dispose();
+}
 
 // --- report ----------------------------------------------------------------
 function stubBoard() {
