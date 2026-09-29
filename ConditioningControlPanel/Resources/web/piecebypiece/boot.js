@@ -17,10 +17,10 @@ import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
 import { createSolo } from './game/solo.js';
 import { createTurnHandoff } from './ui/turn-handoff.js';
-import { createPauseHush } from './ui/pause-hush.js';
 import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
+import { createPauseHush } from './ui/pause-hush.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
