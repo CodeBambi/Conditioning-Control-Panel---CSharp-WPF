@@ -10,6 +10,7 @@
        all event handlers                ->  wired in code-behind (porting convention) -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Features.IntensityRampFeatureControl">
 
@@ -138,7 +139,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_curve}" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Column="1" x:Name="CmbRampCurve"
+                        <ComboBox Grid.Column="1" x:Name="CmbRampCurve" sessionLock:SessionLock.Owned="True"
                                   Height="26" MaxWidth="220" HorizontalAlignment="Right" VerticalAlignment="Center">
                             <ComboBoxItem Content="{loc:Str ramp_curve_linear}" Tag="Linear"/>
                             <ComboBoxItem Content="{loc:Str ramp_curve_ease_in}" Tag="EaseIn"/>

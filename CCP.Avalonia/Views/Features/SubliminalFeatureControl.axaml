@@ -15,6 +15,7 @@
        Checked/Unchecked/Click/...       -> wired in the constructor -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Features.SubliminalFeatureControl">
 
@@ -43,7 +44,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <CheckBox x:Name="ChkEnable"
+                        <CheckBox x:Name="ChkEnable" sessionLock:SessionLock.Owned="True"
                                   Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
@@ -73,7 +74,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str label_per_min}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderPerMin" Minimum="1" Maximum="30" Value="5"
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderPerMin" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="30" Value="5"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtPerMin" Text="5" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
@@ -88,7 +89,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str label_frames}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderFrames" Minimum="1" Maximum="10" Value="2"
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderFrames" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="10" Value="2"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtFrames" Text="2" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
@@ -103,7 +104,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="80"
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderOpacity" sessionLock:SessionLock.Owned="True" Minimum="10" Maximum="100" Value="80"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="80%" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
@@ -134,7 +135,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_audio_whispers}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkWhispers"
+                                <CheckBox Grid.Column="1" x:Name="ChkWhispers" sessionLock:SessionLock.Owned="True"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                             </Grid>
 

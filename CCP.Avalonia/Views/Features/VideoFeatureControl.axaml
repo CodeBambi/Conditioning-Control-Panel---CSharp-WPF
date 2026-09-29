@@ -13,6 +13,7 @@
        all event handlers                ->  wired in code-behind (porting convention) -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Features.VideoFeatureControl">
 
@@ -44,7 +45,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <CheckBox x:Name="ChkEnable"
+                        <CheckBox x:Name="ChkEnable" sessionLock:SessionLock.Owned="True"
                                   Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
@@ -75,7 +76,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_per_hour}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderPerHour" Minimum="1" Maximum="20" Value="2"
+                                <Slider Grid.Column="1" x:Name="SliderPerHour" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="20" Value="2"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtPerHour" Text="2" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
@@ -94,14 +95,14 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="Duration filter" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderVideoMinDur" Minimum="0" Maximum="600" Value="0"
+                                <Slider Grid.Column="1" x:Name="SliderVideoMinDur" sessionLock:SessionLock.Owned="True" Minimum="0" Maximum="600" Value="0"
                                         VerticalAlignment="Center" Margin="14,0,8,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtVideoMinDur" Text="off" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="13" FontWeight="Bold"/>
                                 <TextBlock Grid.Column="3" Text="&#x2192;" HorizontalAlignment="Center" VerticalAlignment="Center"
                                            Foreground="{StaticResource TextDimBrush}" FontSize="11"/>
-                                <Slider Grid.Column="4" x:Name="SliderVideoMaxDur" Minimum="0" Maximum="1800" Value="0"
+                                <Slider Grid.Column="4" x:Name="SliderVideoMaxDur" sessionLock:SessionLock.Owned="True" Minimum="0" Maximum="1800" Value="0"
                                         VerticalAlignment="Center" Margin="8,0,8,0"/>
                                 <TextBlock Grid.Column="5" x:Name="TxtVideoMaxDur" Text="off" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
@@ -139,7 +140,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str label_mini_game}" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkMiniGame" Theme="{StaticResource ToggleStyle}"
+                                <CheckBox Grid.Column="1" x:Name="ChkMiniGame" sessionLock:SessionLock.Owned="True" Theme="{StaticResource ToggleStyle}"
                                           HorizontalAlignment="Right" VerticalAlignment="Center"
                                           ToolTip.Tip="{loc:Str tooltip_enable_attention_check_targets}"/>
                             </Grid>
@@ -156,12 +157,12 @@
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="{loc:Str label_targets}" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                    <CheckBox x:Name="ChkRandomize" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    <CheckBox x:Name="ChkRandomize" sessionLock:SessionLock.Owned="True" Margin="8,0,0,0" VerticalAlignment="Center"
                                               ToolTip.Tip="{loc:Str tooltip_randomize_target_count_1_to_max}">
                                         <TextBlock Text="🎲" FontSize="12"/>
                                     </CheckBox>
                                 </StackPanel>
-                                <Slider Grid.Column="1" x:Name="SliderTargets" Minimum="1" Maximum="10" Value="3"
+                                <Slider Grid.Column="1" x:Name="SliderTargets" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="10" Value="3"
                                         VerticalAlignment="Center" Margin="14,0"
                                         ToolTip.Tip="{loc:Str tooltip_number_of_targets_to_click_per_video}"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtTargets" Text="3" HorizontalAlignment="Right"
@@ -177,7 +178,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_duration}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderDuration" Minimum="1" Maximum="30" Value="12"
+                                <Slider Grid.Column="1" x:Name="SliderDuration" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="30" Value="12"
                                         VerticalAlignment="Center" Margin="14,0"
                                         ToolTip.Tip="{loc:Str tooltip_seconds_each_target_stays_visible}"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtDuration" Text="12" HorizontalAlignment="Right"
@@ -193,7 +194,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderTargetSize" Minimum="30" Maximum="150" Value="70"
+                                <Slider Grid.Column="1" x:Name="SliderTargetSize" sessionLock:SessionLock.Owned="True" Minimum="30" Maximum="150" Value="70"
                                         VerticalAlignment="Center" Margin="14,0"
                                         ToolTip.Tip="{loc:Str tooltip_target_button_size_in_pixels}"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtTargetSize" Text="70" HorizontalAlignment="Right"

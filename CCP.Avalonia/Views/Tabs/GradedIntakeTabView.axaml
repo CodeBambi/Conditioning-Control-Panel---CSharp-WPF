@@ -42,6 +42,7 @@
      (MainWindow.BtnStartIntake_Click); the page only carries the launch button. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.GradedIntakeTabView">
 
@@ -281,7 +282,7 @@
                                         <TextBlock Grid.Column="0" Text="{loc:Str setting_enable_pop_up_questions}" FontSize="13"
                                                    FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"
                                                    VerticalAlignment="Center"/>
-                                        <CheckBox Grid.Column="1" x:Name="ChkPopQuizEnabled"
+                                        <CheckBox Grid.Column="1" x:Name="ChkPopQuizEnabled" sessionLock:SessionLock.Owned="True"
                                                   Theme="{StaticResource ToggleStyle}"
                                                   VerticalAlignment="Center"
                                                   IsCheckedChanged="ChkPopQuizEnabled_Changed"/>
@@ -298,7 +299,7 @@
                                         <TextBlock Grid.Column="0" Text="{loc:Str label_frequency}" FontSize="13"
                                                    FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"
                                                    VerticalAlignment="Center"/>
-                                        <Slider Grid.Column="1" x:Name="SliderPopQuizFrequency"
+                                        <Slider Grid.Column="1" x:Name="SliderPopQuizFrequency" sessionLock:SessionLock.Owned="True"
                                                 Theme="{StaticResource PinkSlider}"
                                                 Minimum="1" Maximum="100"
                                                 VerticalAlignment="Center" Margin="14,0"

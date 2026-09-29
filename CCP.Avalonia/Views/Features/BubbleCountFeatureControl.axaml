@@ -16,6 +16,7 @@
        Checked/Unchecked/Click/...       -> wired in the constructor -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Features.BubbleCountFeatureControl">
 
@@ -44,7 +45,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <CheckBox x:Name="ChkEnable"
+                        <CheckBox x:Name="ChkEnable" sessionLock:SessionLock.Owned="True"
                                   Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
@@ -74,7 +75,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_per_hour}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderFreq" Minimum="1" Maximum="10" Value="2"
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderFreq" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="10" Value="2"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtFreq" Text="2" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
@@ -90,7 +91,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_difficulty}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <ComboBox Grid.Column="1" x:Name="CmbDifficulty" Width="130"
+                                <ComboBox Grid.Column="1" x:Name="CmbDifficulty" sessionLock:SessionLock.Owned="True" Width="130"
                                           VerticalAlignment="Center"
                                           Theme="{DynamicResource DarkComboBoxStyle}">
                                     <ComboBoxItem Content="{loc:Str btn_easy}" Tag="0"/>

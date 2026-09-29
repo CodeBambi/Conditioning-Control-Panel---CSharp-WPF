@@ -138,6 +138,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var allOk = true;
             allOk &= PaintSection("ribbon", () => ApplySessionLockRibbon(locked, reason));
             allOk &= PaintSection("studio", ApplySessionLockToStudioRack);
+            allOk &= PaintSection("tabs", () => ApplySessionLockToTabs(locked, reason));
 
             // Only remember this paint if it fully succeeded, so a partial one is retried.
             _sessionLockPainted = allOk ? locked : null;
@@ -187,6 +188,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 ApplySessionLockToFeaturePopup(panel);
         }
 
+        /// <summary>WPF ApplySessionLockToTabs: the dose dials that live on ordinary tabs
+        /// (Pop Quiz, the Awareness master). Haptics is a Studio rack module here, swept above.</summary>
+        private void ApplySessionLockToTabs(bool locked, string? reason)
+        {
+            foreach (var tab in new Control?[] { Named<UserControl>("GradedIntakeTab"), Named<UserControl>("AwarenessTab") })
+            {
+                if (tab is null) continue;
+                foreach (var owned in Views.Features.SessionLock.FindOwnedControls(tab))
+                    SetToggleLock(owned, locked, reason);
+            }
+        }
+
         /// <summary>
         /// A locked feature panel: the master enable greys out and a banner names the reason
         /// above it. Both directions are applied, so a session that ends while the panel is on
@@ -201,10 +214,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var locked = IsSessionFeatureLockActive;
                 var reason = locked ? SessionFeatureLockReason : null;
 
-                // Uniform convention across every Features/*FeatureControl.axaml: the master
-                // on/off is named ChkEnable. FindControl searches the control's own namescope
-                // only, so this cannot reach a same-named control elsewhere in the app.
-                SetToggleLock(content.FindControl<CheckBox>("ChkEnable"), locked, reason);
+                // Every dial marked features:SessionLock.Owned (WPF SessionFeatureLock.cs:312).
+                foreach (var owned in Views.Features.SessionLock.FindOwnedControls(content))
+                    SetToggleLock(owned, locked, reason);
 
                 if (content.Content is Panel root)
                 {
@@ -298,17 +310,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (locked)
             {
                 control.IsEnabled = false;
-                ToolTip.SetTip(control, reason ?? Loc.Get("session_lock_reason"));
             }
             else
             {
                 control.ClearValue(global::Avalonia.Input.InputElement.IsEnabledProperty);
-                // ponytail: WPF's SessionLock.ApplyLockToolTip restores whatever tooltip the
-                // control carried before the lock. Without the attached property there is no
-                // saved original to restore, so unlocking clears the tip outright. A ported
-                // Features/SessionLock.cs would take this over.
-                ToolTip.SetTip(control, null);
             }
+            Views.Features.SessionLock.ApplyLockToolTip(control, locked, reason ?? Loc.Get("session_lock_reason"));
         }
 
         /// <summary>

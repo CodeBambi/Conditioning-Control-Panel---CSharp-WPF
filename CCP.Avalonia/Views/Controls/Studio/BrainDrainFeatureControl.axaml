@@ -21,6 +21,7 @@
      the hosting content, and into a Grid it would overlap the settings instead of stacking. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Studio.BrainDrainFeatureControl">
 
@@ -57,7 +58,7 @@
                         <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <CheckBox x:Name="ChkEnable"
+                        <CheckBox x:Name="ChkEnable" sessionLock:SessionLock.Owned="True"
                                   Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
@@ -108,7 +109,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_audio_rate}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderIntensity"
+                                <Slider Grid.Column="1" x:Name="SliderIntensity" sessionLock:SessionLock.Owned="True"
                                         Minimum="1" Maximum="100" Value="50"
                                         VerticalAlignment="Center" Margin="10,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtIntensity" Text="50%"
@@ -128,7 +129,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_blur_strength}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderBlurStrength"
+                                <Slider Grid.Column="1" x:Name="SliderBlurStrength" sessionLock:SessionLock.Owned="True"
                                         Minimum="1" Maximum="100" Value="50"
                                         VerticalAlignment="Center" Margin="10,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtBlurStrength" Text="50%"
@@ -146,7 +147,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_melt}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkMelt"
+                                <CheckBox Grid.Column="1" x:Name="ChkMelt" sessionLock:SessionLock.Owned="True"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                             </Grid>
 

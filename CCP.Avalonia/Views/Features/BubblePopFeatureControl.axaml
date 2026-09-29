@@ -12,6 +12,7 @@
        all event handlers                ->  wired in code-behind (porting convention) -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Features.BubblePopFeatureControl">
 
@@ -48,7 +49,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <CheckBox x:Name="ChkEnable"
+                        <CheckBox x:Name="ChkEnable" sessionLock:SessionLock.Owned="True"
                                   Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
@@ -79,7 +80,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str label_per_min}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderFreq" Minimum="1" Maximum="60" Value="5"
+                                <Slider Grid.Column="1" x:Name="SliderFreq" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="60" Value="5"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtFreq" Text="5" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
@@ -94,7 +95,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="Speed" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderSpeed" Minimum="0" Maximum="500" Value="0"
+                                <Slider Grid.Column="1" x:Name="SliderSpeed" sessionLock:SessionLock.Owned="True" Minimum="0" Maximum="500" Value="0"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtSpeed" Text="+0%" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"

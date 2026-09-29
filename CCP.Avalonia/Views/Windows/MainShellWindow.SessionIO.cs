@@ -31,8 +31,9 @@
 //
 //   Session lifecycle - InitializeSessionManager, OnSessionsReloaded, OnSessionAdded,
 //   OnSessionRemoved, RegisterExternallySavedSession, SyncCustomSessionsFromDisk, GetSessionById,
-//   SessionBtn_Export, SessionBtn_Delete, SessionBtn_Share,
-//   SessionContextMenu_Export, ExportSessionToFile, BtnExportSession_Click.
+//   SessionBtn_Share, SessionContextMenu_Export. RESTORED in PresetsTabView (session-io):
+//   SessionBtn_Export, BtnExportSession_Click, ExportSessionToFile, SessionBtn_Delete and
+//   HandleSessionDrop (a .session.json / .preset.json dropped on the Sessions tab).
 //   SessionBtn_Share also needs the catalogue client (App.Catalogue) and the WRITE half of
 //   MainShellWindow.CatalogueSubmissions.cs, which is out for its head-only SubmissionResult type.
 //

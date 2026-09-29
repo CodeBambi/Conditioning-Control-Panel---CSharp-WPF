@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// ponytail: needs JustDropOrdersService and the tab FX clock, wired when those move to
     /// Core. The remaining wiring points, all named in the XAML, are:
     ///   BtnRevealSpoilers / BtnSharePreset /
-    ///   BtnExportSession / BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
+    ///   BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
     ///   TxtRackSearch.TextChanged / SessionDropZone (catalogue) /
     ///   preset chip clicks and IsVisibleChanged -> OnPresetsTabVisibilityChanged (the card-sheen
@@ -58,6 +58,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnNewPreset.PointerReleased += BtnNewPreset_Click;   // WPF MouseLeftButtonUp (PresetsTabView.xaml:720)
             BtnSessionHistory.Click += BtnSessionHistory_Click;
             BtnCreateSession.Click += BtnCreateSession_Click;
+            BtnExportSession.Click += (_, _) => { if (_selectedSession is { } s) ExportSession(s); };
+            // WPF Window_Drop's Session/Preset cases (MainWindow.SessionIO.cs:1477-1484), scoped to
+            // this tab. ponytail: asset/zip/mod drops and the window-wide overlay are still WPF-only.
+            DragDrop.SetAllowDrop(this, true);
+            AddHandler(DragDrop.DropEvent, Tab_Drop);
             _startSessionLabel = BtnStartSession.Content;
             BtnStartSession.Click += (_, _) =>
                 (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnStartSession_Click(_selectedSession);
@@ -841,13 +846,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Grid.SetColumn(badges, 7);
             grid.Children.Add(badges);
 
-            // Edit is live (WPF SessionBtn_Edit); export/share/delete are not on this head yet.
+            // Edit, export and delete are live (WPF SessionBtn_Edit/_Export/_Delete).
             var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             var edit = RowAction("✎", Loc.Get("tooltip_edit_session"), danger: false);
             edit.IsEnabled = true;
             edit.Click += (_, e) => { e.Handled = true; EditSession(session); };
             actions.Children.Add(edit);
-            actions.Children.Add(RowAction("↗", Loc.Get("tooltip_export_session"), danger: false));
+            var export = RowAction("↗", Loc.Get("tooltip_export_session"), danger: false);
+            export.IsEnabled = true;
+            export.Click += (_, e) => { e.Handled = true; ExportSession(session); };
+            actions.Children.Add(export);
+            // WPF SessionIO.cs:453-457: delete only where SessionManager.DeleteSession can succeed.
+            // ponytail: the share (☁) button needs the catalogue submission write path on this head.
+            if (session.Source != SessionSource.BuiltIn)
+            {
+                var delete = RowAction("\U0001F5D1", Loc.Get("tooltip_delete_session"), danger: true);
+                delete.IsEnabled = true;
+                delete.Click += (_, e) => { e.Handled = true; ConfirmDeleteSession(session); };
+                actions.Children.Add(delete);
+            }
             // Pad out to four buttons' worth (28px wide, 3px margin) so the existing row columns
             // keep their layout if custom rows are restored later.
             actions.Margin = new Thickness(8 + (4 - actions.Children.Count) * 31, 0, 4, 0);
@@ -932,7 +949,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             SessionDetailScroller.IsVisible = true;
             SessionButtonsPanel.IsVisible = true;   // WPF SessionIO.cs:923/:971
             BtnStartSession.IsEnabled = true;
-            BtnExportSession.IsEnabled = false;
+            BtnExportSession.IsEnabled = true;   // WPF SessionIO.cs:973
             SessionSpoilerPanel.IsVisible = false;
             CornerGifOptionPanel.IsVisible = false;
 
@@ -1046,6 +1063,82 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 SelectSession(edited);
                 ShowDropZoneStatus($"Session updated: {edited.Name}", isError: false);
             }
+        }
+
+        /// <summary>WPF SessionBtn_Export / BtnExportSession_Click -> ExportSessionToFile.</summary>
+        private async void ExportSession(Session session)
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = Loc.Get("title_export_session"),
+                SuggestedFileName = SessionFileService.GetExportFileName(session),
+                DefaultExtension = ".session.json",
+                FileTypeChoices = new[] { new FilePickerFileType("Session files") { Patterns = new[] { "*.session.json" } } },
+            });
+            if (file?.TryGetLocalPath() is not { } path) return;
+            try
+            {
+                new SessionFileService().ExportSession(session, path);
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_export_complete"), Loc.GetF("msg_session_exported_to_0", path));
+                Serilog.Log.Information("Session exported: {Name} to {Path}", session.Name, path);
+            }
+            catch (Exception ex)
+            {
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_export_failed"), Loc.GetF("msg_failed_to_export_session_0", ex.Message));
+                Serilog.Log.Error(ex, "Failed to export session");
+            }
+        }
+
+        /// <summary>WPF SessionBtn_Delete: styled confirm, then DeleteSession.</summary>
+        private async void ConfirmDeleteSession(Session session)
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            if (await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get("title_delete_session"),
+                    Loc.GetF("msg_delete_session_confirm_0", session.Name)))
+                DeleteSession(session);
+        }
+
+        internal void DeleteSession(Session session)
+        {
+            var lib = SessionLibrary();
+            if (!lib.DeleteSession(lib.GetSession(session.Id) ?? session)) return;
+            var wasSelected = _selectedSession?.Id == session.Id;
+            var keep = wasSelected ? null : _selectedSession;
+            UseSessionManager(lib);
+            if (keep != null && lib.GetSession(keep.Id) is { } again) SelectSession(again);
+            if (wasSelected)
+            {
+                TxtDetailTitle.Text = Loc.Get("label_select_a_session");
+                TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_session_to_see_details");
+            }
+            ShowDropZoneStatus($"Deleted: {session.Name}", isError: false);
+        }
+
+        /// <summary>WPF HandleSessionDrop: validate, import into CustomSessions, repaint.</summary>
+        internal void HandleSessionDrop(string filePath)
+        {
+            if (!new SessionFileService().ValidateSessionFile(filePath, out var errorMessage))
+            {
+                ShowDropZoneStatus($"Invalid: {errorMessage}", isError: true);
+                return;
+            }
+            var lib = SessionLibrary();
+            var (success, message, session) = lib.ImportSession(filePath);
+            if (!success) { ShowDropZoneStatus($"Failed: {message}", isError: true); return; }
+            UseSessionManager(lib);
+            ShowDropZoneStatus($"Session loaded: {session?.Name}", isError: false);
+            Serilog.Log.Information("Session imported via drag-drop: {Name}", session?.Name);
+        }
+
+        private void Tab_Drop(object? sender, DragEventArgs e)
+        {
+            if (e.DataTransfer.TryGetFiles() is not { } files || files.Length != 1 ||
+                files[0].TryGetLocalPath() is not { } path) return;
+            if (path.EndsWith(".session.json", StringComparison.OrdinalIgnoreCase)) HandleSessionDrop(path);
+            else if (path.EndsWith(".preset.json", StringComparison.OrdinalIgnoreCase)) HandlePresetDrop(path);
+            else return;
+            e.Handled = true;
         }
 
         /// <summary>WPF's InitializeSessionManager on first use, for a view mounted without one.</summary>

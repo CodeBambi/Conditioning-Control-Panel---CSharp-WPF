@@ -16,6 +16,7 @@
        Checked/Unchecked/Click/...       -> wired in the constructor -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Features.PinkFilterFeatureControl">
 
@@ -44,7 +45,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <CheckBox x:Name="ChkEnable"
+                        <CheckBox x:Name="ChkEnable" sessionLock:SessionLock.Owned="True"
                                   Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
@@ -74,7 +75,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderOpacity" Minimum="5" Maximum="50" Value="10"
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderOpacity" sessionLock:SessionLock.Owned="True" Minimum="5" Maximum="50" Value="10"
                                         VerticalAlignment="Center" Margin="14,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="10%" HorizontalAlignment="Right"
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"

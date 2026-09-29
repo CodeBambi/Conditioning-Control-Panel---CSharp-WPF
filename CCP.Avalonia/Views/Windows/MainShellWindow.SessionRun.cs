@@ -151,6 +151,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF OnSessionLogReady + ShowSessionSummaryWhenClear: the recap opens by itself,
         /// completed or ended early. Raised on the runner's thread; hops to the UI thread.</summary>
+        private SessionCompleteWindow? _liveSessionRecap;
+
         internal void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
         {
             var log = e.Log;
@@ -159,7 +161,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try
                 {
                     var dialog = new SessionCompleteWindow(log);
-                    if (IsVisible) _ = dialog.ShowDialog(this);
+                    // WPF MainWindow.Presets.cs:1790 (#1303): under a lock card, pop quiz or Bubble
+                    // Count cover the recap opens passive - non-modal, not activated - and only one.
+                    // ponytail: videoUp is false until the head has a VideoService.IsPlaying.
+                    var passive = SessionSummaryPresentation.Decide(false, LockCardWindow.IsAnyOpen(),
+                        PopQuizWindow.IsAnyOpen(), BubbleCountWindow.IsAnyOpen()) == SessionSummaryPresentation.Mode.Passive;
+                    if (passive)
+                    {
+                        _liveSessionRecap?.Close();
+                        _liveSessionRecap = dialog;
+                        dialog.Closed += (_, _) => { if (ReferenceEquals(_liveSessionRecap, dialog)) _liveSessionRecap = null; };
+                        dialog.ShowActivated = false;
+                        if (IsVisible) dialog.Show(this); else dialog.Show();
+                    }
+                    else if (IsVisible) _ = dialog.ShowDialog(this);
                     else dialog.Show();   // shell in the tray: an owned modal needs a visible owner
                 }
                 catch (Exception ex) { Log.Error(ex, "Failed to show post-session log dialog"); }
