@@ -11,8 +11,8 @@
 //       (grepped), so restoring them would add a second spelling of a test this head already has.
 //       Whoever wires the Deeper library badge should call the catalogue pair.
 //   RecordDeeperSubmission(filePath, SubmissionResult)
-//       Blocked on its PARAMETER TYPE, not its body: SubmissionResult is
-//       ConditioningControlPanel/Services/CatalogueService.cs:518, head-only. It also ends by
+//       Was blocked on its parameter type; SubmissionResult is Core's since catalogue U1
+//       (CCP.Core/Services/Catalogue/CatalogueClient.cs). It also ends by
 //       calling ApplyDeeperFilterAndSort, which is a stub in MainShellWindow.DeeperHub.cs.
 //   CheckDeeperSubmissionStatusesAsync(force)
 //       App.Catalogue.FetchMySubmissionsAsync - a network round trip with no seam. Its three

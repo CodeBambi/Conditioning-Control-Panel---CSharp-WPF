@@ -19,9 +19,8 @@
 // THE WRITE HALF IS STILL OUT, for two different reasons:
 //   RecordCatalogueSubmission(kind, key, SubmissionResult)
 //       Its persistence body is portable line for line, but its parameter type is not:
-//       SubmissionResult is ConditioningControlPanel/Services/CatalogueService.cs:518, a head-only
-//       record hierarchy. Re-typing it to (id, status) here would be a second, divergent signature
-//       for the one call the WPF share paths make; it comes back with the catalogue client.
+//       SubmissionResult was head-only; it is Core's since catalogue U1
+//       (CCP.Core/Services/Catalogue/CatalogueClient.cs), so this is now unblocked (U3 wires it).
 //       It also ends by calling RefreshCatalogueShareBadges (MainShellWindow.PresetIO.cs, a stub).
 //   CheckCatalogueSubmissionStatusesAsync(kind, force)
 //       App.Catalogue.FetchMySubmissionsAsync / FetchMyCatalogueAssetsAsync - a network round trip
