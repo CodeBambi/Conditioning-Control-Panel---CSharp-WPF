@@ -139,11 +139,22 @@ public sealed class ModChoiceTests
     });
 
     [Fact]
-    public Task UpgraderStartupOpensThePickerWhichDownloadsShowsProgressAndActivates() => Run(async (shell, svc, server) =>
+    public Task ReturningUserStartupOpensNoPickerAndFetchesNothing() => Run(async (shell, svc, server) =>
     {
-        // Run's profile is an upgrader (Welcomed, age accepted, ModPickerShown=false): Opened shows it.
-        var picker = await Owned<ModPickerDialog>(shell);
-        Assert.True(CoreSettings.Current.ModPickerShown);   // latched before showing
+        // Run's profile is a returning user (Welcomed, age accepted, ModPickerShown=false). WPF 6.11.x
+        // removed the standalone popup (MainWindow.xaml.cs:610-611), so nothing opens or fetches.
+        for (var i = 0; i < 10; i++) { Dispatcher.UIThread.RunJobs(); await Task.Delay(50); }
+        Assert.Empty(shell.OwnedWindows.OfType<ModPickerDialog>());
+        Assert.False(CoreSettings.Current.ModPickerShown);
+        Assert.Empty(server.Requests);
+    });
+
+    [Fact]
+    public Task PickerDialogDownloadsShowsProgressAndActivates() => Run(async (shell, svc, server) =>
+    {
+        // No caller on either head (see ShowIfNeeded); the ported flow is exercised directly.
+        var picker = new ModPickerDialog(null);
+        _ = picker.ShowDialog(shell);
         var card = picker.FindControl<ItemsControl>("CardsList")!.ItemsSource!.Cast<ModPickerCard>()
             .Single(c => c.PackId == "mod-bambi");
         await WaitFor(() => card.SizeText != "" && picker.FindControl<Button>("BtnDownload")!.IsEnabled);
@@ -166,7 +177,6 @@ public sealed class ModChoiceTests
     [Fact]
     public Task ShowIfNeededFollowsTheLiveServiceRules() => Run(async (shell, svc, server) =>
     {
-        (await Owned<ModPickerDialog>(shell)).Close();   // the startup showing
         Assert.True(ModPickerDialog.HasPackService);
         Assert.False(svc.IsFullInstall);
 

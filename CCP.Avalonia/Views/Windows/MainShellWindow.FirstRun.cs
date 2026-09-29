@@ -25,8 +25,8 @@
 //     CCP.Core/Services/EmiDesk/ carries the book's layout and text, not the desk - so the HOLD
 //     has nothing to hold back on this head. Nothing talks over the wizard here either way.
 //   * `QueueEmiKnock(knockSeenVersion)`, listed as dropped in MainShellWindow.axaml.cs already.
-//   * The rest of the `else` branch (ShowWhatsNewIfNeeded / TryPresentSeasonRecap; the upgrader's
-//     ModPickerDialog IS called, see OnUpgradeShellOpened). MainShellWindow.Marquee.cs documents
+//   * The rest of the `else` branch (ShowWhatsNewIfNeeded / TryPresentSeasonRecap). Returning users
+//     get no mod popup: WPF removed it (MainWindow.xaml.cs:610-611). MainShellWindow.Marquee.cs documents
 //     why those two are still stubs: they need App.Achievements, App.Seasons and App.xaml.cs's startup-dialog queue. One
 //     consequence worth naming: LastSeenVersion is therefore only ever stamped by the first-run
 //     gate below, never on an upgrade launch. That is pre-existing and this file does not
@@ -53,13 +53,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 if (FirstRunWizard.ShouldRunAndClaim()) Opened += OnFirstRunShellOpened;
-                // WPF's else branch (MainWindow.xaml.cs:618-624): the upgrader gets the picker,
-                // pre-ticked with the mod they were running. Its own guards decide
-                // (ModPickerDialog.ShouldShow, WPF ModPickerDialog.xaml.cs:631-647).
+                // WPF's else branch (MainWindow.xaml.cs:602-612) no longer opens a mod picker:
+                // mods are offered by the first-run wizard and the Mod Manager only.
                 else if (CoreSettings.Service != null && CoreSettings.Current.Welcomed
                          && !CoreSettings.Current.HasAcceptedAgeVerification)
                     Opened += OnAgeGateShellOpened;
-                else Opened += OnUpgradeShellOpened;
             }
             catch (Exception ex)
             {
@@ -87,15 +85,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (!ok) { RequestExit(); return; }
                 CoreSettings.Current.HasAcceptedAgeVerification = true;
                 CoreSettings.Save();
-                OnUpgradeShellOpened(this, EventArgs.Empty);
             }, DispatcherPriority.Normal);
-        }
-
-        private void OnUpgradeShellOpened(object? sender, EventArgs e)
-        {
-            Opened -= OnUpgradeShellOpened;
-            Dispatcher.UIThread.Post(async () =>
-                await Dialogs.ModPickerDialog.ShowIfNeeded(this, preselectActiveMod: true), DispatcherPriority.Normal);
         }
 
         private void OnFirstRunShellOpened(object? sender, EventArgs e)
