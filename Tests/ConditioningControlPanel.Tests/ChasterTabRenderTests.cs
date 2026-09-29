@@ -51,8 +51,9 @@ public class ChasterTabRenderTests
         Assert.Equal("bubbles", TabMenuCopy.VignetteFor("natasha"));
         Assert.Equal("escape", TabMenuCopy.VignetteFor("escape"));
         // the mount script never lets a quote through to the page
-        Assert.Equal("window.__mount && window.__mount('typo')", ChasterTrailerView.MountScript("typo"));
-        Assert.DoesNotContain("'", ChasterTrailerView.MountScript("a'b").Replace("__mount('", "").Replace("')", ""));
+        Assert.Equal("window.__mount && window.__mount('typo',null,null)", ChasterTrailerView.MountScript("typo"));
+        Assert.Equal("window.__mount && window.__mount('typo',30,60)", ChasterTrailerView.MountScript("typo", 30, 60));
+        Assert.DoesNotContain("'", ChasterTrailerView.MountScript("a'b").Replace("__mount('", "").Replace("',null,null)", ""));
     }
 
     [Fact]
@@ -384,7 +385,9 @@ public class ChasterTabRenderTests
             // A popup with no window behind it may not open for real; the aim and the dressing must hold anyway.
             Assert.Equal("escape", tab.TrailerId);
             Assert.Equal(Localization.Loc.Get(TabMenuCopy.FlavourKey("escape")), tab.TxtTrailerFlavour.Text);
-            Assert.Equal(Localization.Loc.Get(TabMenuCopy.WhyKey("escape")), tab.TxtTrailerWhy.Text);
+            // the words carry the figure the row books, never a figure of their own
+            Assert.Equal(Localization.Loc.Get(TabMenuCopy.WhyKey("escape")).Replace("{0}", "3:00"), tab.TxtTrailerWhy.Text);
+            Assert.Contains("3:00", tab.TxtTrailerWhy.Text);
             Assert.NotNull(tab.TrailerArt.Source);
             Assert.Equal(Visibility.Collapsed, tab.TrailerWeb.Visibility); // no browser in the harness: the still picture is the trailer
             Assert.IsType<TierBadge>(tab.TrailerBadgeHost.Child); // Lockdown is tier 1
