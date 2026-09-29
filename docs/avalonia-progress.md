@@ -681,3 +681,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   ProgressionClear.Apply -> reset; a different account clears progression first; replies after a reset are dropped.
 - Evidence: SyncPushTests (13) + SessionRunner XP test, each fail-proofed; sandbox run with no account. Review: FIX -> r1 ->
   ACCEPT. Ledger row server-sync-contract BLOCKED: confirm the server treats absent keys as no change before merging.
+
+## avalonia-port/release-content-core: +669 (content packs L1 — WPF's download path)
+- ReleaseContentService moved to Core (pure git mv, then seam edits: Log, CoreSettings, CoreReleaseContent.AppVersion,
+  CorePaths.UserData, new UiInvoke seam); WPF delegates with the identical dispatcher rule. Linux: free space measured on the
+  mount holding content/; case-sensitive paths off Windows. PendingModChoice (settings half) in Core. CCP_CONTENT_BASE_URL
+  honoured only for literal loopback/localhost without userinfo (dev fake server).
+- Evidence: new Tests/CCP.Core.Content.Tests (20; loopback fake server that refuses other hosts: happy path, fallback cycle,
+  ranged resume, range ignored, hash retry/failure, offline, space, target escape), fail-proofed 12 ways; added to CI.
+  Nothing on the Avalonia head uses it yet (L2-L4). Review: ACCEPT.

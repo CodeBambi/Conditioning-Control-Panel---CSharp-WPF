@@ -36,6 +36,12 @@ namespace ConditioningControlPanel
         /// the app's.
         /// </summary>
         public static volatile Func<string?>? AppVersionProvider;
+
+        /// <summary>
+        /// Runs a settings write on the UI thread and blocks until it ran. Returns false while the
+        /// UI is shutting down (the action was skipped). Null = run inline (tests, headless).
+        /// </summary>
+        public static volatile Func<Action, bool>? UiInvoke;
         public static volatile Func<string?>? PatchNotesProvider;
 
         public static string AppVersion
