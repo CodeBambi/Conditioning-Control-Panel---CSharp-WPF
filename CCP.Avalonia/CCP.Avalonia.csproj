@@ -13,6 +13,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>            <!-- 'WinExe' just suppresses the console window; it is not Windows-specific -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -148,6 +149,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Webcam/wake-word/Vosk models, as WPF ConditioningControlPanel.csproj:680. -->
+    <Content Include="..\Assets\Models\**\*" Link="Resources\Models\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Awareness Engine preset packs, as WPF ConditioningControlPanel.csproj:658. -->
     <Content Include="..\Assets\AwarenessPresets\**\*" Link="Resources\AwarenessPresets\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -160,4 +167,13 @@
     <ProjectReference Include="..\CCP.Core\CCP.Core.csproj" />
   </ItemGroup>
 
+  <!-- Windows single-file publish bundles libvlc.dll and its plugins, where LibVLC cannot load them ("Dll was not
+       found"). Same fix as the WPF head (ConditioningControlPanel.csproj CopyLibVLCAfterPublish): the x64 natives go
+       loose into publish\libvlc\, which LibVlcAudio points Core.Initialize at. -->
+  <Target Name="CopyLibVLCAfterPublish" AfterTargets="Publish" Condition="$(RuntimeIdentifier.StartsWith('win'))">
+    <ItemGroup>
+      <LibVLCFiles Include="$(NuGetPackageRoot)videolan.libvlc.windows\3.0.24\build\x64\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(LibVLCFiles)" DestinationFolder="$(PublishDir)libvlc\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

@@ -171,6 +171,20 @@ namespace ConditioningControlPanel.Avalonia
                 return VideoCheck.Run(args[vc + 1], vc + 2 < args.Length ? args[vc + 2] : null);
             }
 
+            // WPF's single-instance gate: a second launch raises the running app and exits.
+            using var instance = Platform.SingleInstance.Claim(Platform.SingleInstance.SandboxSuffix(), () =>
+                global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    var w = (global::Avalonia.Application.Current?.ApplicationLifetime as
+                        global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+                    if (w is Views.Windows.MainShellWindow shell) shell.ShowFromTray(); else w?.Activate();
+                }).GetTask());
+            if (instance is null)
+            {
+                Serilog.Log.Information("Another instance is running; asked it to show its window");
+                return 0;
+            }
+
             var app = BuildAvaloniaApp();
 #if DEBUG
             // Keincheck MCP server on http://127.0.0.1:3001, Debug builds only. Kept out of
