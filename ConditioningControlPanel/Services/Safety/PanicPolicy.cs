@@ -150,6 +150,23 @@ namespace ConditioningControlPanel.Services.Safety
             => panicKeyEnabled && string.Equals(panicKey?.Trim(), "Escape", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
+        /// Whether a plain Escape from the global hook takes the focus-independent "dismiss this
+        /// video" route (d00a9ef2c) instead of reaching the panic handler. The panic wins whenever
+        /// Escape IS the panic key and the panic can run: its stop pass closes the video too, and the
+        /// safety hold, the leash's panic and stayed flashes all hang off that press. Before this,
+        /// the default install's Escape over an unfocused video closed only the video and left the
+        /// engine, flashes, bubbles and Brain Drain running (bug hunt 2026-09-29, DESK-1). A lock
+        /// card or the palette owns Escape first; a Lockdown blocks the panic key, so there the
+        /// video keeps its Escape.
+        /// </summary>
+        internal static bool EscapeDismissesVideo(bool videoWantsEscape, bool lockCardOpen, bool paletteOpen,
+            bool panicKeyEnabled, string? panicKey, bool lockdownActive)
+        {
+            if (!videoWantsEscape || lockCardOpen || paletteOpen) return false;
+            return !EscapeIsThePanicKey(panicKeyEnabled, panicKey) || lockdownActive;
+        }
+
+        /// <summary>
         /// True when <paramref name="pressed"/> is the user's optional pause-key binding. An unset
         /// (or whitespace) binding matches nothing, so the default install has no pause key at all.
         /// Compared as <c>Key.ToString()</c> text, exactly like the panic key.
