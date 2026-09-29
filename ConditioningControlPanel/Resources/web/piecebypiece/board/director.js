@@ -422,6 +422,11 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     const points = [];
     view.scene.traverseVisible(o => { if (o.isPoints) points.push(o); });
     for (const o of points) o.visible = false;
+    // The men in the fight are bent by their shader (board/silicone.js), so their
+    // meshes' bounds are the upright rest pose: a close lens on the victim culled
+    // the king's whole body while his head was in its frame. Never culled in a panel.
+    const uncull = [];
+    for (const o of clip.objs) o.traverse(m => { if (m.isMesh && m.frustumCulled) { m.frustumCulled = false; uncull.push(m); } });
     const polys = [];
     const undim = dimRest(clip, 1 - REST_DIM * clamp01(replay.t / .2) * (1 - clamp01((replay.t - replay.end) / .25)));
     const prevTarget = renderer.getRenderTarget();
@@ -470,6 +475,7 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
       }
     } finally {
       for (const [o, s] of live) applySnap(o, s, null, 0, group, true);
+      for (const m of uncull) m.frustumCulled = true;
       for (const o of points) o.visible = true;
       undim();
       renderer.setRenderTarget(prevTarget);
