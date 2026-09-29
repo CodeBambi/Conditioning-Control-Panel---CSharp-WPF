@@ -295,12 +295,13 @@ public sealed partial class ChasterService : IDisposable
 
     /// <summary>An event that names its own price (an Awareness trigger carries its minutes in
     /// the preset). Same tab, same cap, same safety hold, and the row still has to be switched
-    /// on: a toggle on the page that reads off must mean off. Only the AMOUNT skips the table.</summary>
+    /// on: a toggle on the page that reads off must mean off. Only the AMOUNT skips the table,
+    /// and so does heat: a size named by the caller is never heated, so it never warms her.</summary>
     public TabBooking NoteSeconds(string eventId, int seconds)
     {
         if (!Active(out var options) || TabPrices.NeverPriced.Contains(eventId ?? "")) return new(0, TabRefusal.Nothing);
         if (!options.Prices.Contains(eventId!)) return new(0, TabRefusal.Nothing);
-        return BookSeconds(eventId!, Math.Clamp(seconds, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds));
+        return BookSeconds(eventId!, Math.Clamp(seconds, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds), heats: false);
     }
 
     /// <summary>The jackpot. Wipes the tab, never the lock.</summary>
@@ -345,7 +346,9 @@ public sealed partial class ChasterService : IDisposable
         BookedAt?.Invoke(eventId, booking, originPx);
     }
 
-    private TabBooking BookSeconds(string eventId, int seconds, System.Windows.Point? originPx = null)
+    // heats: false for a booking heat can never price (a size the caller named), so it is not
+    // counted toward heat either and the mood never shows a factor nothing pays.
+    private TabBooking BookSeconds(string eventId, int seconds, System.Windows.Point? originPx = null, bool heats = true)
     {
         if (seconds == 0) return new(0, TabRefusal.Nothing);
         TabBooking booking;
@@ -364,7 +367,7 @@ public sealed partial class ChasterService : IDisposable
                 seconds = Math.Min(seconds, room);
             }
             booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps);
-            if (booking.AppliedSeconds > 0) { CircesTab.NoteUse(_tab, eventId, _localNow()); NoteHeat(eventId); }
+            if (booking.AppliedSeconds > 0) { CircesTab.NoteUse(_tab, eventId, _localNow()); if (heats) NoteHeat(eventId); }
             else if (booking.AppliedSeconds < 0) NoteCool();
             if (remote && booking.AppliedSeconds > 0)
             {
