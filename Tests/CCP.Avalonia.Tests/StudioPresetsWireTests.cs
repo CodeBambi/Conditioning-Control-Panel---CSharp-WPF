@@ -78,6 +78,7 @@ public sealed class StudioPresetsWireTests
         dash.IsVisible = false;
         Assert.Null(Breath(dash.ComboMindDrain));
         dash.IsVisible = true;
+        Assert.NotNull(Breath(dash.ComboMindDrain));
 
         var rack = shell.StudioRack!;
         typeof(StudioTabView).GetMethod("QuickToggle", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!

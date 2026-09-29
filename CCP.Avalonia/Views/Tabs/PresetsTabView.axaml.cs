@@ -55,7 +55,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnLoadPreset.Click += BtnLoadPreset_Click;
             BtnSaveOverPreset.Click += BtnSaveOverPreset_Click;
             BtnDeletePreset.Click += BtnDeletePreset_Click;
-            BtnNewPreset.PointerPressed += BtnNewPreset_Click;
+            BtnNewPreset.PointerReleased += BtnNewPreset_Click;   // WPF MouseLeftButtonUp (PresetsTabView.xaml:720)
             BtnSessionHistory.Click += BtnSessionHistory_Click;
             BtnCreateSession.Click += BtnCreateSession_Click;
             _startSessionLabel = BtnStartSession.Content;
@@ -438,8 +438,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     Loc.GetF("msg_preset_0_loaded", PresetNaming.DisplayName(preset)));
         }
 
-        private async void BtnNewPreset_Click(object? sender, PointerPressedEventArgs e)
+        private async void BtnNewPreset_Click(object? sender, PointerReleasedEventArgs e)
         {
+            if (e.InitialPressMouseButton != MouseButton.Left) return;
             e.Handled = true;
             if (Shell is not { } owner) return;
             var dialog = new Dialogs.InputDialog(Loc.Get("title_new_preset"),

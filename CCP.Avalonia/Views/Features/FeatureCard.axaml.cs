@@ -23,9 +23,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// so a dashboard can be written against either.
     ///
     /// FX: hover = a 1.02 lift + 150ms rim-light, active = the glow and the ring breathing on one
-    /// 3.5s clock. The WPF gates (MotionFx, PerformanceProfile, window focus, tab visibility)
-    /// live in the head, so this card always animates.
-    /// ponytail: needs MotionFx/PerformanceProfile, gate the breath when they move to Core
+    /// 3.5s clock. The breath pauses while the tile is not effectively visible (a hidden tab,
+    /// via EffectiveVisibility), which WPF does not do.
+    /// ponytail: needs MotionFx/PerformanceProfile/window focus, gate the breath when they move to Core
     /// </summary>
     public partial class FeatureCard : UserControl
     {

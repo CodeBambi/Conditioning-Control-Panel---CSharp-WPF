@@ -107,13 +107,13 @@
 //   public void UpdateBrainDrainIntensity(…)
 //   public void SetBubblesActive(…)
 //   private void HandleHyperlinkClick(…)
-//   private void LoadPreset(…)
-//   private void ReconcileRunningServices(…)
-//   internal void BtnLoadPreset_Click(…)
-//   internal void BtnNewPreset_Click(…)
-//   private void PromptSaveNewPreset(…)
-//   internal void BtnSaveOverPreset_Click(…)
-//   internal void BtnDeletePreset_Click(…)
+//   private void LoadPreset(…)                      RESTORED in PresetsTabView
+//   private void ReconcileRunningServices(…)        RESTORED as CoreEngine.Reconcile
+//   internal void BtnLoadPreset_Click(…)            RESTORED in PresetsTabView
+//   internal void BtnNewPreset_Click(…)             RESTORED in PresetsTabView
+//   private void PromptSaveNewPreset(…)             RESTORED in PresetsTabView
+//   internal void BtnSaveOverPreset_Click(…)        RESTORED in PresetsTabView
+//   internal void BtnDeletePreset_Click(…)          RESTORED in PresetsTabView
 
 // OpenStudioModule was the first member restored here, and is not blocked either: it is
 // ShowTab("studio") + StudioTab.FocusRackEntry(key), and both halves are on this head - ShowTab is
