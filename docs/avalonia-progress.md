@@ -744,3 +744,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: AppUpdaterTests (Linux never downloads, pill, pending outcome, startup dialog + 24 h skip, loopback rule),
   fail-proofed; live sandbox against a loopback fake feed: pill "UPDATE TO v99.1.0", click opens the releases URL.
   Not run: the Windows download/install path. Review: FIX -> r1 applied.
+
+## avalonia-port/linux-package: +201 (installer/updater U7)
+- packaging/linux/build-tarball.sh: self-contained linux-x64 tarball with the Vosk small model (sha256-pinned), .desktop +
+  128/256 px icons + appstream metainfo, LICENSE; app id and X11 WM_CLASS io.github.CodeBambi.ConditioningControlPanel. AUR PKGBUILD
+  (-bin, /opt, MIT) and a Flatpak manifest (GNOME 50, bundled libVLC) consume it. CI builds + smokes the tarball (artifact only).
+- Evidence: tarball smoke with the bundled model (fail-proofed by removing it); makepkg -si + --smoke in archlinux:latest;
+  WM_CLASS read live. Flatpak never built here (row linux-package-flatpak blocked: first build + WPE question). Review: FIX -> r1.
