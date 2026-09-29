@@ -42,7 +42,7 @@ namespace ConditioningControlPanel
 
         private void OnCirceBooked(string eventId, TabBooking booking)
         {
-            if (CirceLines.ForBooking(eventId, booking.AppliedSeconds) is { } moment) CirceSpeak(moment);
+            if (CirceLines.ForBooking(eventId, booking) is { } moment) CirceSpeak(moment);
         }
 
         private void OnCirceMood(CircesMood before, CircesMood after)

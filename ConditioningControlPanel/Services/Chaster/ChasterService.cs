@@ -212,8 +212,9 @@ public sealed partial class ChasterService : IDisposable
     public TabBooking Note(string eventId, int units = 1) => NoteAt(eventId, null, units);
 
     /// <summary><see cref="Note"/> with the screen point (physical px) of what caused it, so the
-    /// "+3:00" pops there rather than on the rail.</summary>
-    public TabBooking NoteAt(string eventId, System.Windows.Point? originPx, int units = 1)
+    /// "+3:00" pops there rather than on the rail. <paramref name="unprompted"/> marks a booking
+    /// no act of the player's caused (a red flash's ring ran out): see <see cref="TabBooking.Unprompted"/>.</summary>
+    public TabBooking NoteAt(string eventId, System.Windows.Point? originPx, int units = 1, bool unprompted = false)
     {
         if (!Active(out var options)) return new(0, options.Paused ? TabRefusal.Paused : TabRefusal.Nothing);
         // The first finished session after coming back forgives half of what being away cost,
@@ -226,7 +227,7 @@ public sealed partial class ChasterService : IDisposable
         var seconds = TabPrices.Resolve(eventId, options.Prices, units, options.PriceOverrides);
         if (options.Prices.Contains(TabDayEnd.HeatId) && TabDayEnd.HeatApplies(eventId))
             seconds = TabDayEnd.Heated(seconds, HeatCount(eventId));
-        var booking = BookSeconds(eventId, seconds, originPx);
+        var booking = BookSeconds(eventId, seconds, originPx, unprompted: unprompted);
         if (eventId == "session") NoteStreak(options);
         return booking;
     }
@@ -255,8 +256,9 @@ public sealed partial class ChasterService : IDisposable
                 {
                     var on = lastDay.AddDays(i + 1).AddHours(12);
                     var keep = (_tab.Day, _tab.DayAddedSeconds);
+                    // Inside the safety hold nothing adds, the days away included.
                     booked += CircesTab.Book(_tab, CircesMisses.EventId, charges[i], _utcNow(),
-                        on, _runStartUtc, safetyExit: false, options.Caps).AppliedSeconds;
+                        on, _runStartUtc, safetyExit: _utcNow() < _safetyUntilUtc, options.Caps).AppliedSeconds;
                     // A charge dated on a past day must not roll the day counter back to that day:
                     // it would zero what today already booked and hand today's cap out again.
                     if (CircesTab.DayKey(on) != keep.Day) (_tab.Day, _tab.DayAddedSeconds) = keep;
@@ -294,12 +296,13 @@ public sealed partial class ChasterService : IDisposable
 
     /// <summary>An event that names its own price (an Awareness trigger carries its minutes in
     /// the preset). Same tab, same cap, same safety hold, and the row still has to be switched
-    /// on: a toggle on the page that reads off must mean off. Only the AMOUNT skips the table.</summary>
+    /// on: a toggle on the page that reads off must mean off. Only the AMOUNT skips the table,
+    /// and so does heat: a size named by the caller is never heated, so it never warms her.</summary>
     public TabBooking NoteSeconds(string eventId, int seconds)
     {
         if (!Active(out var options) || TabPrices.NeverPriced.Contains(eventId ?? "")) return new(0, TabRefusal.Nothing);
         if (!options.Prices.Contains(eventId!)) return new(0, TabRefusal.Nothing);
-        return BookSeconds(eventId!, Math.Clamp(seconds, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds));
+        return BookSeconds(eventId!, Math.Clamp(seconds, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds), heats: false);
     }
 
     /// <summary>The jackpot. Wipes the tab, never the lock.</summary>
@@ -326,6 +329,9 @@ public sealed partial class ChasterService : IDisposable
     public void NoteSafetyExit()
     {
         lock (_gate) _safetyUntilUtc = _utcNow() + SafetyHold;
+        // The rail chip counts the hold down instead of the lock; with no lock running its clock
+        // ticks once a minute, so tell everything that paints the lock now.
+        LockChanged?.Invoke();
     }
 
     // Caller holds _gate. What an add may still book today with a Remote session open: all of it
@@ -344,7 +350,10 @@ public sealed partial class ChasterService : IDisposable
         BookedAt?.Invoke(eventId, booking, originPx);
     }
 
-    private TabBooking BookSeconds(string eventId, int seconds, System.Windows.Point? originPx = null)
+    // heats: false for a booking heat can never price (a size the caller named), so it is not
+    // counted toward heat either and the mood never shows a factor nothing pays.
+    private TabBooking BookSeconds(string eventId, int seconds, System.Windows.Point? originPx = null, bool heats = true,
+        bool unprompted = false)
     {
         if (seconds == 0) return new(0, TabRefusal.Nothing);
         TabBooking booking;
@@ -362,8 +371,9 @@ public sealed partial class ChasterService : IDisposable
                 if (room == 0) return new(0, TabRefusal.Remote);
                 seconds = Math.Min(seconds, room);
             }
-            booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps);
-            if (booking.AppliedSeconds > 0) { CircesTab.NoteUse(_tab, eventId, _localNow()); NoteHeat(eventId); }
+            booking = CircesTab.Book(_tab, eventId, seconds, now, _localNow(), _runStartUtc, safetyExit: now < _safetyUntilUtc, options.Caps)
+                with { Unprompted = unprompted };
+            if (booking.AppliedSeconds > 0) { CircesTab.NoteUse(_tab, eventId, _localNow()); if (heats) NoteHeat(eventId); }
             else if (booking.AppliedSeconds < 0) NoteCool();
             if (remote && booking.AppliedSeconds > 0)
             {

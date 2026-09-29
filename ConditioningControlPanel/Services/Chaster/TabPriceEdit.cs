@@ -16,9 +16,10 @@ namespace ConditioningControlPanel.Services.Chaster;
 /// read, so a hand-edited settings file cannot book past it, and every booking still goes
 /// through the day and backlog limits after that. Only rows booked through
 /// <see cref="TabPrices.Resolve"/> with one fixed figure take an edit: the way out never has a
-/// figure, "misses" doubles by itself, the leash and a stake name their own size, and the
-/// day-end rows are the service's own verdicts. Figures are set only while no lock runs; the
-/// page enforces that with <see cref="CanEdit"/>.</para>
+/// figure, "misses" doubles by itself, the leash and a stake name their own size, the
+/// day-end rows are the service's own verdicts, and a row with a daily use ceiling (the escape
+/// row: three a day, so 9:00 at most) keeps its figure, because that ceiling is a safety promise.
+/// Figures are set only while no lock runs; the page enforces that with <see cref="CanEdit"/>.</para>
 /// </summary>
 public static class TabPriceEdit
 {
@@ -26,11 +27,12 @@ public static class TabPriceEdit
     public const int MaxSeconds = 60 * 60;
 
     /// <summary>May this row's figure be set by the player at all: one fixed figure, never a
-    /// way out, not a day-end verdict.</summary>
+    /// way out, not a day-end verdict, and not a row whose day is capped by a count of uses.</summary>
     public static bool Editable(string? id) =>
         TabMenuCopy.HasFixedFigure(id)
         && !TabPrices.NeverPriced.Contains(id!)
-        && !TabDayEnd.ServiceRows.Contains(id!);
+        && !TabDayEnd.ServiceRows.Contains(id!)
+        && TabPrices.DailyMaxUses(id!) == null;
 
     /// <summary>Figures move only while no lock is running: not linked, or linked with no active
     /// lock. Chaster out of reach counts as a lock (it may well be one).</summary>
@@ -58,7 +60,8 @@ public static class TabPriceEdit
     /// <summary>What the player typed, as unsigned seconds. "2:30" and "1:05:00" are clock
     /// figures, a bare number is minutes ("5" is 5:00). Signs are ignored: the row keeps its own.
     /// Null for anything that does not read as a time (the edit is then dropped); empty text is
-    /// 0, which <see cref="With"/> reads as "back to the default".</summary>
+    /// 0, which <see cref="With"/> reads as "back to the default". Only empty text: a typed zero
+    /// ("0", "0:00") asks for the row as small as it goes, <see cref="MinSeconds"/>.</summary>
     public static int? Parse(string? text)
     {
         var t = (text ?? "").Trim().TrimStart('+', '-', '−').Trim();
@@ -74,6 +77,7 @@ public static class TabPriceEdit
             total = total * 60 + n;
         }
         if (parts.Length == 1) total *= 60;
+        if (total == 0) return MinSeconds;
         return total > int.MaxValue ? null : (int)total;
     }
 

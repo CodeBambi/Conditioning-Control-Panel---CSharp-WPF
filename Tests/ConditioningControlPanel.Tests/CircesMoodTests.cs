@@ -238,6 +238,35 @@ public class CircesMoodTests : IDisposable
         service.Note("attention");
         Assert.Equal(0, raised);
     }
+
+    /// <summary>TAB-5. The rows that name their own size (the leash, a lost stake, an Awareness
+    /// watcher) book through NoteSeconds and are never heated, so they must not warm her either:
+    /// the meter would read SMOKING x3 while nothing costs more.</summary>
+    [Fact]
+    public void Rows_that_name_their_own_size_never_warm_her()
+    {
+        _options = _options with
+        {
+            Prices = new HashSet<string> { "typo", "leash", "watcher", Services.Stakes.StakeRules.LossRowId, TabDayEnd.HeatId },
+            Limits = TabLimits.FromMinutes(720, 2880),
+        };
+        using var service = Make();
+        var seen = new List<(MoodLevel, MoodLevel)>();
+        service.MoodChanged += (a, b) => seen.Add((a.Level, b.Level));
+
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.Equal(900, service.NoteSeconds("leash", 900).AppliedSeconds);
+            Assert.Equal(600, service.NoteSeconds("watcher", 600).AppliedSeconds);
+            Assert.Equal(900, service.NoteSeconds(Services.Stakes.StakeRules.LossRowId, 900).AppliedSeconds);
+        }
+
+        Assert.Equal(MoodLevel.Calm, service.Mood!.Value.Level);
+        Assert.Empty(seen);
+        // A row off the table still warms her from its first slip, at its list price.
+        Assert.Equal(30, service.Note("typo").AppliedSeconds);
+        Assert.Equal(MoodLevel.Warm, service.Mood!.Value.Level);
+    }
 }
 
 /// <summary>The meter as it builds: hidden with no mood, the word and the fill for each level.</summary>
