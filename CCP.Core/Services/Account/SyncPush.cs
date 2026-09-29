@@ -48,6 +48,11 @@ namespace ConditioningControlPanel.Services
         private string? _backoffToken;
         private TimeSpan _backoffOffset;
 
+        /// <summary>WPF ProfileSyncService.IsExpectedCancellation: cancelled or disposed, directly or one level down.</summary>
+        internal static bool IsExpectedCancellation(Exception ex) =>
+            ex is OperationCanceledException or ObjectDisposedException
+            || ex.InnerException is OperationCanceledException or ObjectDisposedException;
+
         private void NoteFailureForBackoff(int? status, string? tokenUsed)
         {
             _backoffFailures++;
@@ -199,7 +204,10 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 Log.Warning(ex, "Profile sync failed");
-                NoteFailureForBackoff(null, s.AuthToken);
+                // WPF ProfileSyncService: a shutdown cancellation is not a server failure, but HttpClient.Timeout
+                // (a cancellation wrapping a TimeoutException) is a hung proxy and backs off like any other.
+                if (!IsExpectedCancellation(ex) || ex.InnerException is TimeoutException)
+                    NoteFailureForBackoff(null, s.AuthToken);
                 return false;
             }
             finally { _gate.Release(); }
