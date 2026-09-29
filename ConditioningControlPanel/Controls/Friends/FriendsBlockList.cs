@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
+using ConditioningControlPanel.Services.Friends;
 using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Controls.Friends;
@@ -10,11 +12,12 @@ namespace ConditioningControlPanel.Controls.Friends;
 public sealed record BlockedEntry(string Account, string Id, string Name, DateTimeOffset At);
 
 /// <summary>
-/// The accounts this player blocked, so the drawer can offer Unblock. The server keeps the block
-/// itself but does not list it back (its <c>state</c> reply has no blocked list yet), so this is
-/// what this PC remembers: a block made on another device is not in it. Kept per signed-in account
-/// so a shared PC never shows one account's blocks to another. Pure over a load and a save, so the
-/// suite holds it without a disk.
+/// What this PC remembers of the accounts this player blocked. Since FRIENDS-RECEIPTS v1 the
+/// server lists them back (<c>state.blocked</c>, <see cref="FriendsSnapshot.Blocked"/>) and that
+/// list is the truth; this file is only (a) the fallback for a server that predates it and (b) a
+/// one-time move (<see cref="MigrateIfDue"/>): the blocks the server lacks are sent once, then this
+/// PC's entries for that account are dropped. Kept per signed-in account so a shared PC never shows
+/// one account's blocks to another. Pure over a load and a save, so the suite holds it without a disk.
 /// </summary>
 public sealed class FriendsBlockList
 {
@@ -59,6 +62,54 @@ public sealed class FriendsBlockList
     {
         try { return _load() ?? Array.Empty<BlockedEntry>(); }
         catch { return Array.Empty<BlockedEntry>(); }
+    }
+
+    // ---- the one-time move to the server's list ----
+
+    private static readonly HashSet<string> MovedAccounts = new(StringComparer.Ordinal);
+    private static bool _moving;
+
+    /// <summary>The landing tick calls this. Once the server lists blocks for the signed-in account,
+    /// the blocks this PC remembers and the server lacks are sent once, and the account's local
+    /// entries go: from then on the file is never read for that account. An old server (no list)
+    /// leaves everything as it was.</summary>
+    internal static async void MigrateIfDue(IFriendsService svc)
+    {
+        if (_moving || svc == null) return;
+        try
+        {
+            var server = svc.Snapshot?.Blocked;
+            if (server == null) return;
+            var account = Account();
+            if (string.IsNullOrEmpty(account) || MovedAccounts.Contains(account)) return;
+            if (Shared.For(account).Count == 0) { MovedAccounts.Add(account); return; }
+            _moving = true;
+            if (await MigrateAsync(svc, Shared, account, server)) MovedAccounts.Add(account);
+        }
+        catch (Exception ex) { ConditioningControlPanel.App.Logger?.Debug("[Friends] blocked move: {E}", ex.Message); }
+        finally { _moving = false; }
+    }
+
+    /// <summary>The move itself (the suite drives it): each remembered block the server's list lacks
+    /// is sent; every entry the server now has, or will never take, is forgotten; one that hit a
+    /// network fault stays for the next try. True when nothing is left to move.</summary>
+    internal static async Task<bool> MigrateAsync(IFriendsService svc, FriendsBlockList list, string account,
+        IReadOnlyList<BlockedFriend> server)
+    {
+        var onServer = new HashSet<string>(server.Select(b => b.Id), StringComparer.Ordinal);
+        bool left = false;
+        foreach (var e in list.For(account))
+        {
+            if (!onServer.Contains(e.Id))
+            {
+                ActResult r;
+                try { r = await svc.BlockAsync(e.Id); }
+                catch { r = ActResult.TryLater; }
+                if (r is ActResult.TryLater or ActResult.TooFast) { left = true; continue; }
+            }
+            list.Remove(account, e.Id);
+        }
+        return !left;
     }
 
     // ---- the app's own store: one small file beside the settings ----

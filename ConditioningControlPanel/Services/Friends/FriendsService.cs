@@ -73,6 +73,32 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
         });
         _lockDay = lockDay ?? (() => null);
         WireFeed();
+        // The sender's trails walk forward off the same receipts the feed reads.
+        ReceiptsArrived += receipts =>
+        {
+            if (_sentBook.Apply(receipts)) RaiseSentTrails();
+        };
+    }
+
+    // ---- the sender's trails (FriendsSentBook) ----
+
+    private readonly FriendsSentBook _sentBook = new();
+
+    public event Action? SentTrailsChanged;
+
+    public SentTrail? LastSentTo(string friendId) => _sentBook.Latest(friendId, _now());
+
+    /// <summary>A send that came back sent: its trail starts at "sent".</summary>
+    private void NoteSentTrail(string friendId, SendKind kind, string? itemId, string? detail)
+    {
+        _sentBook.Note(friendId, kind, itemId, detail, _now());
+        RaiseSentTrails();
+    }
+
+    private void RaiseSentTrails()
+    {
+        try { SentTrailsChanged?.Invoke(); }
+        catch (Exception ex) { App.Logger?.Debug("Friends trail handler failed: {E}", ex.Message); }
     }
 
     /// <summary>The app's own wiring: the real wire, the account off AppSettings.</summary>
@@ -291,6 +317,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             _seenOrder.Clear();
             _lastPoke.Clear();
             _requests.Reset();
+            _sentBook.Clear();
             Publish(FriendsSnapshot.Empty);
         }
         return now != null;
@@ -394,6 +421,13 @@ public static class FriendsSnapshotEquality
             && Equals(a.Me, b.Me)
             && a.Friends.SequenceEqual(b.Friends)
             && a.Incoming.SequenceEqual(b.Incoming)
-            && a.Outgoing.SequenceEqual(b.Outgoing);
+            && a.Outgoing.SequenceEqual(b.Outgoing)
+            && SameBlocked(a.Blocked, b.Blocked);
+    }
+
+    private static bool SameBlocked(IReadOnlyList<BlockedFriend>? a, IReadOnlyList<BlockedFriend>? b)
+    {
+        if (a == null || b == null) return a == null && b == null;
+        return a.SequenceEqual(b);
     }
 }

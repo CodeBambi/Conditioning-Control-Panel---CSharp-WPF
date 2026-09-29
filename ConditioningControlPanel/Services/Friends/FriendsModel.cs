@@ -59,6 +59,11 @@ public sealed record FriendsSnapshot(
     public static readonly FriendsSnapshot Empty = new(
         Array.Empty<Friend>(), Array.Empty<FriendRequest>(), Array.Empty<FriendRequest>(), "", FriendPresence.None);
 
+    /// <summary>The accounts this account blocked, as the server lists them (<c>state.blocked</c>,
+    /// FRIENDS-RECEIPTS v1). Null when the reply had no such key: a server that predates it, where
+    /// the drawer falls back to what this PC remembers (<c>FriendsBlockList</c>).</summary>
+    public IReadOnlyList<BlockedFriend>? Blocked { get; init; }
+
     public int OnlineCount
     {
         get
@@ -69,6 +74,9 @@ public sealed record FriendsSnapshot(
         }
     }
 }
+
+/// <summary>One account on the server's blocked list: its id and its name as the server resolves it.</summary>
+public sealed record BlockedFriend(string Id, string Name);
 
 /// <summary>The three things a friend can send. There is no fourth: no text, ever.</summary>
 public enum SendKind { Poke, Invite, Watch }
@@ -112,8 +120,10 @@ public static class InviteDestination
     /// <see cref="All"/> only so an old client's invite still parses, and the landing drops it.</summary>
     public static readonly IReadOnlyList<string> Sendable = new[] { Goon, BackRoom, Ramp, Chess };
 
-    /// <summary>Seconds an invite stays answerable. Mirrored server-side.</summary>
-    public const int LifetimeSeconds = 90;
+    /// <summary>Seconds an invite stays answerable. Mirrored server-side (5 minutes since
+    /// FRIENDS-RECEIPTS v1, was 90 s). The knock card only rings for the first
+    /// <see cref="LandingRules.KnockRingSeconds"/>; its countdown carries the rest.</summary>
+    public const int LifetimeSeconds = 300;
 
     public static bool IsValid(string? id) => id != null && All.Contains(id);
 
@@ -180,6 +190,10 @@ public sealed record InboxItem(
 
 /// <summary>What a send came back with. Only <see cref="Sent"/> did anything.</summary>
 public enum SendResult { Sent, Squelched, TooFast, NotFriends, Offline, Refused, TryLater }
+
+/// <summary>A send's result plus the item id the server gave it (<c>item_id</c>, only with
+/// <c>sent</c>; null from a server that predates receipts). The id is what receipts name.</summary>
+public sealed record SendOutcome(SendResult Result, string? ItemId);
 
 /// <summary>What adding by code came back with.</summary>
 public enum AddResult { Sent, Accepted, Already, NotFound, Blocked, Self, Full, TryLater }

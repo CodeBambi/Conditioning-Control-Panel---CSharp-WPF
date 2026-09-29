@@ -148,6 +148,37 @@ internal static class FriendsDrawerRules
     /// <summary>How long a worded result stays in a friend's row. Long enough to read twice.</summary>
     public const double ResultHoldSeconds = 5;
 
+    /// <summary>The loc keys a sent trail wears under a friend's name: what it was ("your
+    /// invite") and how far it got ("seen", "not now", "no answer").</summary>
+    public static (string KindKey, string StateKey) TrailKeys(SentTrail t) => (
+        t.Kind switch
+        {
+            SendKind.Poke => "friends_trail_poke",
+            SendKind.Invite => "friends_trail_invite",
+            _ => "friends_trail_watch",
+        },
+        t.State switch
+        {
+            ReceiptState.Arrived => "friends_trail_arrived",
+            ReceiptState.Seen => "friends_trail_seen",
+            ReceiptState.Joined => "friends_trail_joined",
+            ReceiptState.Declined => "friends_trail_declined",
+            ReceiptState.Expired => "friends_trail_expired",
+            _ => "friends_trail_sent",
+        });
+
+    /// <summary>How a trail is coloured: on its way, seen, a yes, a no, or nothing came back.</summary>
+    public enum TrailTone { Going, Seen, Yes, No, Quiet }
+
+    public static TrailTone ToneOf(SentTrail t) => t.State switch
+    {
+        ReceiptState.Seen => TrailTone.Seen,
+        ReceiptState.Joined => TrailTone.Yes,
+        ReceiptState.Declined => TrailTone.No,
+        ReceiptState.Expired => TrailTone.Quiet,
+        _ => TrailTone.Going,
+    };
+
     /// <summary>Digits only, at most eight: the HT box's whole grammar.</summary>
     public static string NormaliseHtId(string? typed)
     {
