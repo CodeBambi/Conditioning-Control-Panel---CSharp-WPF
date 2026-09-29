@@ -197,7 +197,9 @@ export function createStake({ post, onMessage, store = true, later = (fn, ms) =>
   const subs = new Set();
   let poll = 0; let pollUntil = 0;
   let retried = false;   // one quiet retry per offer when the server's stake lock was held
+  let gone = null;       // { match, after, retried }: a match the door left before it started
   const send = (m) => { try { post && post(m); } catch { /* no host */ } };
+  const takeBack = (match) => send({ type: 'stake-offer', match, kind: 'none', amount: 0 });
   const emit = () => { for (const fn of [...subs]) { try { fn(state); } catch { /* keep going */ } } };
 
   function stopPoll() { if (poll) { clearInterval(poll); poll = 0; } }
@@ -220,6 +222,18 @@ export function createStake({ post, onMessage, store = true, later = (fn, ms) =>
 
   function hear(m) {
     if (!m || m.type !== 'stake') return;
+    // A match the door left before it started: its late frames light no row. An offer that was
+    // still on the wire goes first, so the take-back cannot overtake it; a take-back that met
+    // the server's stake lock goes once more (bug hunt 2026-09-29, STAKES-4).
+    if (gone && m.match === gone.match && state.match !== gone.match) {
+      if (m.op === 'offer' && gone.after) { gone.after = false; takeBack(gone.match); }
+      else if (m.op === 'offer' && m.ok !== true && m.reason === 'busy' && !gone.retried) {
+        gone.retried = true;
+        const match = gone.match;
+        later(() => takeBack(match), RETRY_MS);
+      }
+      return;
+    }
     // The server's stake lock was held for a moment: one quiet retry, then words, as the Goon row
     // does. The row stays busy meanwhile, so no second amount can go out under it.
     if (m.op === 'offer' && m.ok !== true && m.reason === 'busy' && !retried && state.busy && state.match
@@ -279,6 +293,14 @@ export function createStake({ post, onMessage, store = true, later = (fn, ms) =>
       state = { ...state, ended: String(id), pending: staked && !state.settled };
       if (staked) send({ type: 'stake-settle', match: String(id) });
       emit();
+    },
+    /** Leaving a match before it starts (Esc on the found screen), before clear(): take the ante
+     *  back, or the server holds it until its match record expires (bug hunt 2026-09-29, STAKES-4). */
+    withdraw() {
+      if (!state.enabled || !state.match || state.locked) return;
+      if (isNone(state.you) && !state.busy) return;   // nothing held and nothing on the wire
+      gone = { match: state.match, after: state.busy, retried: false };
+      if (!gone.after) takeBack(gone.match);
     },
     /** Back to the menu: forget the match (the pick stays). */
     clear() {

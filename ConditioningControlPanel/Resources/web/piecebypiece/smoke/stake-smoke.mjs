@@ -175,6 +175,52 @@ function eq(what, got, want) {
   ok('the door disables the pills while an offer is on the wire', /stake-pill[\s\S]{0,400}?\(lock \|\| s\.busy\) \? ' disabled'/.test(door));
 }
 
+// --- leaving the found screen takes the ante back (bug hunt 2026-09-29, STAKES-4).
+// A paired match that never starts held the ante until the server's match record
+// expired, up to 24 h, relaunch or not. Esc on the found screen now says 'none'.
+{
+  const sent = [];
+  const queued = [];
+  let hear = null;
+  const st = createStake({ post: (m) => sent.push(m), onMessage: (fn) => { hear = fn; return () => {}; }, store: false, later: (fn) => { queued.push(fn); return 0; } });
+  hear({ type: 'stake', op: 'limits', ok: true, enabled: true, time_ok: false });
+  const withdrawals = () => sent.filter((m) => m.type === 'stake-offer' && m.kind === 'none').map((m) => m.match);
+  const A = 'm_aaaaaaaaaaaaaaaa', B = 'm_bbbbbbbbbbbbbbbb', C = 'm_cccccccccccccccc', D = 'm_dddddddddddddddd';
+  // the door's order on Esc: withdraw, then clear
+  st.begin(A);
+  st.withdraw(); st.clear();
+  eq('nothing held and nothing on the wire: nothing to take back', withdrawals(), []);
+
+  st.begin(B);
+  st.choose('sp', 10);
+  hear({ type: 'stake', op: 'offer', match: B, ok: true, stake: { kind: 'sp', amount: 10 }, sp: 90 });
+  st.withdraw(); st.clear();
+  eq('a held ante is taken back', withdrawals(), [B]);
+  hear({ type: 'stake', op: 'offer', match: B, ok: false, reason: 'offline' });
+  eq('a refused take-back lights nothing: the pick waits for the next match', st.state.pick, { kind: 'sp', amount: 10 });
+
+  st.begin(C);                                   // the pick is offered at once to the next pairing
+  st.withdraw(); st.clear();
+  eq('an offer still on the wire goes first, so the take-back cannot overtake it', withdrawals(), [B]);
+  hear({ type: 'stake', op: 'offer', match: C, ok: true, stake: { kind: 'sp', amount: 10 }, sp: 80 });
+  eq('then the ante it took is taken back', withdrawals(), [B, C]);
+  eq('and its late reply lights nothing', st.state.you, null);
+  hear({ type: 'stake', op: 'offer', match: C, ok: false, reason: 'busy' });
+  eq('a take-back that met the stake lock is queued once more', queued.length, 1);
+  queued.shift()();
+  hear({ type: 'stake', op: 'offer', match: C, ok: false, reason: 'busy' });
+  eq('and sent, once', [withdrawals(), queued.length], [[B, C, C], 0]);
+
+  st.begin(D);
+  hear({ type: 'stake', op: 'state', match: D, ok: true, you: { kind: 'sp', amount: 10 }, them: null, locked: true, settled: null });
+  st.withdraw();
+  eq('a locked stake is the game\'s, not the door\'s', withdrawals(), [B, C, C]);
+  st.dispose();
+
+  const door = readFileSync(new URL('../door/door.js', import.meta.url), 'utf8');
+  ok('Esc on the found screen takes the ante back before it forgets the match', /screen === 'found'\) \{[^\n]*stake\.withdraw\(\); stake\.clear\(\);/.test(door));
+}
+
 if (failures.length) {
   console.error(`stake-smoke: ${failures.length} failed, ${passed} passed`);
   for (const f of failures) console.error('  FAIL ' + f);

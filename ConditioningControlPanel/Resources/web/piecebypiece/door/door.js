@@ -599,7 +599,7 @@ export function createDoor(opts = {}) {
     if (screen === 'menu') return;                  // boot posts pbp:exit
     e.stopImmediatePropagation();
     e.preventDefault();
-    if (screen === 'found') { if (countTimer) { clearTimeout(countTimer); timers.delete(countTimer); countTimer = null; } current = null; stake.clear(); show('lobby'); return; }
+    if (screen === 'found') { if (countTimer) { clearTimeout(countTimer); timers.delete(countTimer); countTimer = null; } current = null; stake.withdraw(); stake.clear(); show('lobby'); return; }
     if (screen === 'end') { toMenu(); return; }
     if (screen === 'replay') { show('games'); return; }
     show('menu');
