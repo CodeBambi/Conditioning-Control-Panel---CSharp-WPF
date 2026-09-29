@@ -25,6 +25,25 @@ public class FlashStayRuleTests
     public void Applies(bool on, bool clickable, bool pointFired, bool expected)
         => Assert.Equal(expected, FlashStayRule.Applies(on, clickable, pointFired));
 
+    /// <summary>HYGIENE-5. "Needs clickable flashes" means a flash the mouse can pop. In Solid mode
+    /// with the compositor off the shared host is click-through, so a flash there keeps its normal
+    /// lifetime and cap instead of sitting ten minutes out of reach, forty at a time.</summary>
+    [Theory]
+    [InlineData(false, true, false)] // compositor off, Solid mode: the click-through shared host
+    [InlineData(true, true, true)]   // compositor on: Solid mode is not the path taken
+    [InlineData(false, false, true)] // compositor off, own windows: clickable
+    public void A_flash_stays_only_where_the_mouse_can_pop_it(bool compositor, bool solidMode, bool stays)
+    {
+        var s = new AppSettings { FlashClickable = true, FlashStayUntilPopped = true, FlashSolidMode = solidMode };
+        var solidHost = !compositor && solidMode;
+
+        Assert.Equal(stays, FlashService.StayUntilPopped(s, pointFired: false, compositor));
+        Assert.Equal(stays, FlashService.MouseClickable(s.FlashClickable, solidHost));
+        if (solidHost)
+            Assert.Equal(FlashService.ResolveFlashCap(false, true),
+                FlashStayRule.Cap(FlashService.ResolveFlashCap(false, true), FlashService.StayUntilPopped(s, false, compositor), sharedHost: true));
+    }
+
     [Fact]
     public void CapIsFortyOnTheSharedHostOnly()
     {

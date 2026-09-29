@@ -82,7 +82,14 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Does a flash spawned now stay until popped? See <see cref="FlashStayRule"/>.</summary>
         private static bool StayUntilPopped(AppSettings settings, bool pointFired)
-            => FlashStayRule.Applies(settings.FlashStayUntilPopped, settings.FlashClickable, pointFired);
+            => StayUntilPopped(settings, pointFired, UseCompositor);
+
+        /// <summary>Pure half of the stay decision. Only a flash the mouse can pop stays: in Solid
+        /// mode with the compositor off the shared host is click-through, so there a flash keeps
+        /// its normal lifetime and cap instead of sitting ten minutes out of reach.</summary>
+        internal static bool StayUntilPopped(AppSettings settings, bool pointFired, bool compositor)
+            => FlashStayRule.Applies(settings.FlashStayUntilPopped,
+                MouseClickable(settings.FlashClickable, solidHost: !compositor && settings.FlashSolidMode), pointFired);
 
         /// <summary>
         /// Floor for an animated flash's per-frame delay, in milliseconds. A 4x multiplier on a GIF
