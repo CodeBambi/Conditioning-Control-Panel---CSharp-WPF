@@ -101,7 +101,7 @@ public sealed partial class AccountSeedTests : IDisposable
     }
 
     [Fact]
-    public void Logout_ClearsTokensAndIdentity_ButNotProgression_AndRestoreBringsTheIdBack()
+    public async Task Logout_ClearsTokensIdentityAndProgression_AndRestoreBringsTheIdBack()
     {
         var s = CoreSettings.Current;
         var (oldId, oldName, oldLevel, oldXp) = (s.UnifiedId, s.UserDisplayName, s.PlayerLevel, s.PlayerXP);
@@ -116,7 +116,7 @@ public sealed partial class AccountSeedTests : IDisposable
             AccountSeed.RestoreSession(); // WPF App.xaml.cs:2267
             Assert.Equal("u-1", CoreAccount.UnifiedUserId);
 
-            AccountSeed.Logout();
+            await AccountSeed.Logout();
 
             Assert.False(CoreAccount.IsLoggedIn);
             Assert.Null(CoreAccount.UnifiedUserId);
@@ -125,15 +125,15 @@ public sealed partial class AccountSeedTests : IDisposable
             Assert.Null(s.AuthToken);
             Assert.False(s.HasLinkedDiscord || s.HasLinkedPatreon);
             Assert.All(new[] { "patreon_auth", "discord_auth", "substar_auth" }, n => Assert.Null(_secrets.GetValueOrDefault(n)));
-            // Progression stays until unit 7 ships the clear with the push.
-            Assert.Equal(12, s.PlayerLevel);
-            Assert.Equal(345, s.PlayerXP);
+            // Unit 7c: the progression clear ships with the push (WPF ClearProgressionData).
+            Assert.Equal(1, s.PlayerLevel);
+            Assert.Equal(0, s.PlayerXP);
         }
         finally { (s.UnifiedId, s.UserDisplayName, s.PlayerLevel, s.PlayerXP) = (oldId, oldName, oldLevel, oldXp); }
     }
 
     [Fact]
-    public void Logout_WhoseKeyringClearFails_IsReported_AndASuccessfulOneResetsIt()
+    public async Task Logout_WhoseKeyringClearFails_IsReported_AndASuccessfulOneResetsIt()
     {
         var (sandboxed, notRemembered) = (SecretStore.Sandboxed, SecretStore.NotRemembered);
         var clearsWork = false;
@@ -146,11 +146,11 @@ public sealed partial class AccountSeedTests : IDisposable
             Assert.True(AccountSeed.Seed(Make, p => new DiscordAccount(() => p, () => new AppSettings())));
             SecretStore.Store("patreon_auth", "{}");
 
-            AccountSeed.Logout();
+            await AccountSeed.Logout();
             Assert.True(SecretStore.ClearFailed);
 
             clearsWork = true;
-            AccountSeed.Logout();
+            await AccountSeed.Logout();
             Assert.False(SecretStore.ClearFailed);
         }
         finally

@@ -188,7 +188,9 @@ public sealed class SessionRunnerTests : IDisposable
     {
         var old = CoreProgression.AddXPProvider;
         double banked = 0;
-        CoreProgression.AddXPProvider = (xp, _) => banked += xp;
+        var oldXp = CoreSettings.Current.PlayerXP;
+        // A bank that really banks: XPEarned is the ledger's gain, not the award handed over.
+        CoreProgression.AddXPProvider = (xp, _) => { banked += xp; CoreSettings.Current.PlayerXP += xp; };
         try
         {
             var session = OneMinute();
@@ -215,6 +217,22 @@ public sealed class SessionRunnerTests : IDisposable
             Assert.NotEqual(SessionXp.Compute(800, 0, level, TimeSpan.FromSeconds(60)), expected);
             Assert.Equal(expected, _ready!.XPEarned);
             Assert.Equal(expected, banked);
+        }
+        finally { CoreProgression.AddXPProvider = old; CoreSettings.Current.PlayerXP = oldXp; }
+    }
+
+    [Fact]
+    public void AGateThatRefusesTheAward_LogsZeroBanked()
+    {
+        var old = CoreProgression.AddXPProvider;
+        CoreProgression.AddXPProvider = (_, _) => { };   // e.g. signed out: ProgressionBank's login gate
+        try
+        {
+            var session = OneMinute();
+            session.BonusXP = 800;
+            _runner.Start(session);
+            _runner.Tick(TimeSpan.FromSeconds(61));
+            Assert.Equal(0, _ready!.XPEarned);
         }
         finally { CoreProgression.AddXPProvider = old; }
     }

@@ -2322,9 +2322,7 @@ namespace ConditioningControlPanel.Services
                             // phone's smaller gains vanish until the next restart. So: any positive
                             // server lead is adopted on a clean ledger; the band stands only when
                             // local has unsynced progress of its own.
-                            var adoptWatermark = ActiveXpWatermark(settings);
-                            var ledgerClean = adoptWatermark > 0 && localTotalXp <= adoptWatermark + 0.01;
-                            var adoptBand = ledgerClean ? 0 : 5000;
+                            var adoptBand = ProfileAdopt.ServerAheadBand(settings, localTotalXp);
 
                             if (serverTotalXp > localTotalXp + adoptBand)
                             {
@@ -4873,14 +4871,8 @@ namespace ConditioningControlPanel.Services
         /// refusal is exercisable directly in the suite.</para>
         /// </summary>
         internal static bool RefuseDescentEraLevelReset(
-            string? serverSeason, string? localSeason, bool migrationCompleted, DateTime nowUtc)
-        {
-            if (migrationCompleted) return true;
-            if (nowUtc >= DescentEpochs.SeasonsEndUtc) return true;
-            if (DescentEpochs.IsPostDescentSeasonKey(serverSeason)) return true;
-            if (DescentEpochs.IsPostDescentSeasonKey(localSeason)) return true;
-            return false;
-        }
+            string? serverSeason, string? localSeason, bool migrationCompleted, DateTime nowUtc) =>
+            ProfileAdopt.RefuseDescentEraLevelReset(serverSeason, localSeason, migrationCompleted, nowUtc);
 
         /// <summary>
         /// Settle a submit. THE ACK IS THE ONLY THING THAT MAY WRITE

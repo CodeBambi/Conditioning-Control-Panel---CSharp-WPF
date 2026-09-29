@@ -82,6 +82,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!confirmed || !ReferenceEquals(runner.CurrentSession, session)) return;
             Log.Information("Session stop confirmed by the user");
             runner.Stop(completed: false);
+            Platform.AccountSeed.Sync?.Nudge("session end");   // explicit end: the runner no longer counts as running
         }
 
         /// <summary>WPF BtnPauseSession_Click: resume at once; a pause asks first (it costs 100 XP)
