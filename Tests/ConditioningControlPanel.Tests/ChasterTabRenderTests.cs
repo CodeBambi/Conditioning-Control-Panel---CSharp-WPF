@@ -157,6 +157,46 @@ public class ChasterTabRenderTests
         });
     }
 
+    /// <summary>TAB-13: a where line longer than its column ends in "..." inside the column, with the
+    /// whole line on hover. The horizontal row around it measured it at unlimited width, so the
+    /// trimming never engaged and the column cut it hard (German "Mantras, pro Wiederholung").</summary>
+    [Fact]
+    public void A_long_where_line_trims_inside_its_column_and_shows_whole_on_hover()
+    {
+        var loc = Localization.LocalizationManager.Instance;
+        var previous = loc.CurrentLanguage;
+        try
+        {
+            loc.SetLanguage("de");
+            WpfRenderHarness.OnStaThread(() =>
+            {
+                var tab = new ChasterTabView();
+                tab.LinkedPanel.Visibility = Visibility.Visible;
+                tab.BuildMenu();
+                Realize(tab, 1000, 2400);
+
+                var squeezed = new List<string>();
+                foreach (var row in Rows(tab))
+                {
+                    var id = (string)row.Tag;
+                    var text = Localization.Loc.Get(TabMenuCopy.WhereKey(id));
+                    var where = Descendants(row).OfType<TextBlock>().First(t => t.Text == text);
+                    var words = (FrameworkElement)VisualTreeHelper.GetParent(VisualTreeHelper.GetParent(where));
+                    // the line's own width, measured on a twin: the row's line is capped by now
+                    var twin = new TextBlock { Text = text, FontSize = where.FontSize, FontFamily = where.FontFamily, FontWeight = where.FontWeight };
+                    twin.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    if (twin.DesiredSize.Width > words.ActualWidth) squeezed.Add(id);
+                    Assert.True(where.ActualWidth <= words.ActualWidth + 0.5,
+                        $"{id}: the where line is {where.ActualWidth:0} wide in a {words.ActualWidth:0} column");
+                    Assert.Equal(text, where.ToolTip as string);
+                }
+                // the row the hunt saw cut, or this proves nothing
+                Assert.Contains("mantra", squeezed);
+            });
+        }
+        finally { loc.SetLanguage(previous); }
+    }
+
     [Fact]
     public void Every_row_with_a_picture_points_at_a_png_that_ships()
     {

@@ -1225,6 +1225,13 @@ namespace ConditioningControlPanel.Views.Tabs
                 whereRow.Children.Add(badge);
             }
             words.Children.Add(whereRow);
+            // The horizontal row measures its line at unlimited width, so the trimming never engaged
+            // and a long line ran past the column and was cut hard (German "Mantras, pro
+            // Wiederholung", bug hunt 2026-09-29, TAB-13). Capped at the column less the tier sign,
+            // it ends in "..." instead, and the whole line shows on hover.
+            var signRoom = tier > 0 ? 52.0 : 0.0;
+            words.SizeChanged += (_, e) => where.MaxWidth = Math.Max(0, e.NewSize.Width - signRoom);
+            where.SetBinding(FrameworkElement.ToolTipProperty, Bound(TabMenuCopy.WhereKey(price.Id)));
             Grid.SetColumn(words, 1);
             grid.Children.Add(words);
 
