@@ -131,9 +131,11 @@ $FixedStamp = [DateTimeOffset]::new(2000, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
 # ---------------------------------------------------------------------------------------------
 # Pack definitions (docs/CONTENT_PACKS_PLAN.md section 1)
 #
-#   Folders : @{ Path = <dir relative to ConditioningControlPanel\>; Ext = <extensions> }
+#   Folders : @{ Path = <INSTALL-relative dir>; Ext = <extensions> }
 #             Recursive. Only the listed extensions are taken, so manifests (*.json, *.js) and
-#             art that stays in-box are never swept up by accident.
+#             art that stays in-box are never swept up by accident. The source lives in the
+#             shared <repo>\Assets root (see Get-SourcePath); the zip entry and the installer
+#             deletion stay install-relative, so neither changed when the art moved.
 #   Files   : @{ Path = <file relative to ConditioningControlPanel\>; Entry = <path inside zip> }
 # ---------------------------------------------------------------------------------------------
 $AudioExt = @('.mp3', '.wav', '.ogg', '.m4a')
@@ -246,12 +248,20 @@ function Get-Sha256([string]$Path) {
     } finally { $sha.Dispose() }
 }
 
-# Resolves a pack spec to a sorted list of @{ Source; Entry } with '/' entry separators.
+# Install-relative spec path -> source path. Every head links <repo>\Assets\X as Resources\X
+# (Assets/README.md), so Resources\X is read from Assets\X; anything else (the .ccpmod archives)
+# still sits under $ProjectDir.
+function Get-SourcePath([string]$Rel) {
+    if ($Rel.StartsWith('Resources\')) { return Join-Path $RepoRoot ('Assets\' + $Rel.Substring('Resources\'.Length)) }
+    return Join-Path $ProjectDir $Rel
+}
+
+# Resolves a pack spec to a sorted list of @{ Source; Entry; InstallRel } with '/' entry separators.
 function Resolve-PackFiles($spec) {
     $result = New-Object System.Collections.Generic.List[object]
 
     foreach ($folder in $spec.Folders) {
-        $abs = Join-Path $ProjectDir $folder.Path
+        $abs = Get-SourcePath $folder.Path
         if (-not (Test-Path -LiteralPath $abs)) {
             throw "Pack '$($spec.Id)': source folder missing: $abs`n" +
                   "       Shipping an empty pack would silently break the feature. Fix the path in `$PackSpecs."
@@ -265,11 +275,13 @@ function Resolve-PackFiles($spec) {
             throw "Pack '$($spec.Id)': no files matched $($folder.Ext -join ',') under $abs"
         }
         foreach ($f in $found) {
-            $rel = $f.FullName.Substring($ProjectDir.Length).TrimStart('\')
+            # Install-relative = spec path + path under the source folder. Never Substring($ProjectDir):
+            # the source is in <repo>\Assets now, which would yield '../Assets/...' entries.
+            $rel = $folder.Path + '\' + $f.FullName.Substring($abs.Length).TrimStart('\', '/').Replace('/', '\')
             # Kind='folder' = swept out of the source tree by a csproj strip glob, and therefore
             # subject to the drift self-check. Kind='file' = the .ccpmod archives, which left the
             # build by deleting their <Content> item, not by an exclude glob.
-            $result.Add([pscustomobject]@{ Source = $f.FullName; Entry = $rel.Replace('\', '/'); Kind = 'folder' })
+            $result.Add([pscustomobject]@{ Source = $f.FullName; Entry = $rel.Replace('\', '/'); InstallRel = $rel; Kind = 'folder' })
         }
     }
 
@@ -278,7 +290,7 @@ function Resolve-PackFiles($spec) {
         if (-not (Test-Path -LiteralPath $abs)) {
             throw "Pack '$($spec.Id)': source file missing: $abs"
         }
-        $result.Add([pscustomobject]@{ Source = $abs; Entry = $file.Entry; Kind = 'file' })
+        $result.Add([pscustomobject]@{ Source = $abs; Entry = $file.Entry; InstallRel = $file.Path; Kind = 'file' })
     }
 
     # Deterministic ordering. This MUST be ORDINAL. Sort-Object collates with the CURRENT CULTURE,
@@ -515,12 +527,12 @@ function Assert-NoStripPackDrift($Resolved) {
 $ExtraDirIfEmpty = @('Resources\web\dtrh\assets\vn\vo')
 
 function Write-InstallerDeletions($Resolved, [string]$Path) {
-    # Install-relative source paths, both kinds: loose audio AND the two .ccpmod archives
-    # ($f.Source is always under $ProjectDir; $f.Entry is the ZIP path, wrong for ccpmods).
+    # Install-relative paths, both kinds: loose audio AND the .ccpmod archives
+    # ($f.Entry is the ZIP path, wrong for ccpmods; $f.Source is under <repo>\Assets for audio).
     $rels = New-Object System.Collections.Generic.List[string]
     foreach ($id in $Resolved.Keys) {
         foreach ($f in @($Resolved[$id])) {
-            $rels.Add($f.Source.Substring($ProjectDir.Length).TrimStart('\'))
+            $rels.Add($f.InstallRel)
         }
     }
     $files = $rels.ToArray()
