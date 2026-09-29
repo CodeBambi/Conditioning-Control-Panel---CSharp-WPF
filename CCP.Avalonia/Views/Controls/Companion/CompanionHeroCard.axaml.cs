@@ -174,6 +174,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(ApplyAvatarArt); return; }
 
+            ViewModel?.Sync();   // WPF: CompanionHeroRuntimeVm.Sync() first - name, mod chip, flavour
             try
             {
                 // WPF's CompanionHeroRuntimeVm.LoadPortrait, minus the head types: the pose file
@@ -186,11 +187,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 var name = set == 1 ? "avatar_pose1.png" : $"avatar{set}_pose1.png";
 
                 if (ViewModel is { } vm) vm.Portrait = ModArt.TryLoad(name);
-
-                // ponytail: the REST of Sync() - her name, mod chip and flavour - needs
-                // ConditioningControlPanel/Views/Controls/Companion/Runtime/CompanionHeroRuntimeVm.cs,
-                // which reads App.Companion, App.AvatarWindow and CompanionRuntimeContext.Navigator:
-                // head navigation, not a mod lookup, so it cannot cross to Core as it stands.
                 CentrePortrait();
             }
             catch (Exception ex)
@@ -314,46 +310,105 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
     /// <summary>
     /// The view's data contract, in one concrete class: compiled bindings need one, and the WPF
-    /// <c>ICompanionHeroCardVm</c> / <c>MockCompanionHeroCardVm</c> live in the head and cannot
-    /// cross. Seeded with the mock's <c>Default()</c> exhibit: AI live, awareness on, mood token
-    /// still dormant (pre-Train 4), header entitled. Every string comes through CCP.Core's
-    /// <see cref="Loc"/> by the key the WPF mock/runtime uses, so a missing key shows as itself.
+    /// <c>ICompanionHeroCardVm</c> lives in the head and cannot cross. The body is WPF's
+    /// <c>CompanionHeroRuntimeVm</c> (Views/Controls/Companion/Runtime/CompanionHeroRuntimeVm.cs):
+    /// <see cref="Sync"/> re-reads settings, the active companion's progress and the mod; the
+    /// quick actions go through the shell's room writes and the room's navigator, then re-sync.
     /// </summary>
     public sealed class CompanionHeroCardViewModel : INotifyPropertyChanged
     {
-        private bool _isMuted;
-        private bool _isCompanionShown = true;
+        private string _name = string.Empty, _modName = string.Empty, _flavor = string.Empty;
+        private bool _isCompanionEnabled = true, _isAiLive, _isAiLocked, _isAwarenessOpen, _isMuted, _isCompanionShown = true;
+        private string _aiPillText = string.Empty, _awarenessPillText = string.Empty;
+        private int _level = 1;
+        private double _xpFraction;
+        private string _xpLabel = string.Empty, _nextLevelLabel = string.Empty, _chatShortcutHint = string.Empty;
 
         public CompanionHeroCardViewModel()
         {
-            ChatCommand = new RelayCommand(() => { });
-            SwitchCommand = new RelayCommand(() => { });
+            ChatCommand = AvatarTube.AvatarTubeWindow.OpenChatCommand;   // WPF App.AvatarWindow?.OpenChatInput()
+            SwitchCommand = new RelayCommand(() => Navigator?.RevealWorkshop(CompanionRoomAnchors.WorkshopRosterCell));
             DetachCommand = new RelayCommand(() =>
             {
                 CoreBark.NotifyUiAction("detach_companion");   // WPF MainWindow.Patreon.cs:1278
                 AvatarTube.AvatarTubeWindow.ToggleDetachedSink?.Invoke();
             });
-            ToggleMuteCommand = new RelayCommand(() => IsMuted = !IsMuted);
-            ToggleShownCommand = new RelayCommand(() => IsCompanionShown = !IsCompanionShown);
-            OpenEngineRoomCommand = new RelayCommand(() => { });
-            FocusAwarenessCommand = new RelayCommand(() => { });
-            WakeCommand = new RelayCommand(() => { });
-            Header = new CompanionHeaderViewModel();
-            // ponytail: every command above is a no-op; they deep-link into the Companion room
-            // (Engine Room, Workshop roster, awareness cell, chat) which is head-owned navigation
-            // with no Avalonia counterpart yet.
+            ToggleMuteCommand = new RelayCommand(() => { Shell?.SetAvatarMuted(!IsMuted); Sync(); });
+            ToggleShownCommand = new RelayCommand(() => { Shell?.SetAvatarEnabled(!IsCompanionShown); Sync(); });
+            WakeCommand = new RelayCommand(() => { Shell?.SetAvatarEnabled(true); Sync(); });
+            OpenEngineRoomCommand = new RelayCommand(() => Navigator?.RevealEngineRoom());
+            FocusAwarenessCommand = new RelayCommand(() => Navigator?.FocusAwareness());
+            Header = new CompanionHeaderViewModel(this);
+            Sync();
+        }
+
+        /// <summary>The control the room seats this card in: the shell and the navigator are
+        /// resolved through it, as WPF's CompanionRuntimeContext resolves its window.</summary>
+        internal global::Avalonia.Visual? Host { get; set; }
+        internal Windows.MainShellWindow? Shell => Host == null ? null : TopLevel.GetTopLevel(Host) as Windows.MainShellWindow;
+        private ICompanionRoomNavigator? Navigator => Host as ICompanionRoomNavigator;
+
+        /// <summary>WPF CompanionHeroRuntimeVm.SyncCore, minus the portrait (the view's
+        /// <see cref="CompanionHeroCard.ApplyAvatarArt"/> owns that).</summary>
+        public void Sync()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                var def = CompanionDefinition.GetById(s.ActiveCompanionId);
+                var display = def.GetDisplayName(s.SlutModeEnabled);
+                var neutral = CoreMods.IsCCPDefault ? CoreMods.ActiveModPackage?.Manifest.Identity?.CompanionName : null;
+                Name = !string.IsNullOrWhiteSpace(neutral) ? neutral! : CoreMods.MakeModAware(display);
+                ModName = CoreMods.ActiveModPackage?.Manifest.Name ?? string.Empty;
+                Flavor = CoreMods.MakeModAware(def.Description);
+
+                // CompanionService.GetProgress, read-only: an absent entry is a fresh level-1 companion.
+                var p = s.CompanionProgressData.TryGetValue(s.ActiveCompanionId, out var saved)
+                    ? saved : CompanionProgress.CreateNew((CompanionId)s.ActiveCompanionId);
+                Level = p.Level;
+                XpFraction = p.IsMaxLevel ? 1.0 : Math.Clamp(p.LevelProgress, 0, 1);
+                XpLabel = p.IsMaxLevel ? Loc.Get("companion_hero_xp_complete") : $"{p.CurrentXP:F0} / {p.XPForNextLevel:F0} XP";
+                NextLevelLabel = p.IsMaxLevel ? Loc.Get("companion_hero_max_level") : Loc.GetF("companion_hero_next_level_fmt", p.Level + 1);
+
+                IsCompanionShown = s.AvatarEnabled;
+                IsCompanionEnabled = IsCompanionShown;
+                IsMuted = s.AvatarMuted;
+                ChatShortcutHint = AvatarTube.AvatarTubeWindow.FormatChatShortcut();
+
+                bool aiOn = s.AiChatEnabled;
+                bool entitled = Header!.Sync();
+                var provider = s.CompanionPrompt?.AiProvider ?? AiProviderType.Cloud;
+                IsAiLocked = aiOn && provider == AiProviderType.Cloud && !entitled;
+                IsAiLive = aiOn && !IsAiLocked;
+                AiPillText = !aiOn ? Loc.Get("companion_hero_pill_ai_off")
+                    : IsAiLocked ? Loc.Get("companion_hero_pill_ai_locked")
+                    : provider switch
+                    {
+                        AiProviderType.Local => Loc.Get("label_ai_status_pill_local"),
+                        AiProviderType.OpenAiCompatible => Loc.Get("label_ai_status_pill_custom"),
+                        _ => Loc.Get("companion_hero_pill_ai_cloud")
+                    };
+
+                IsAwarenessOpen = s.AwarenessModeEnabled;
+                AwarenessPillText = Loc.Get(IsAwarenessOpen ? "companion_hero_pill_eyes_broad" : "companion_hero_pill_eyes_closed");
+            }
+            catch (Exception ex)
+            {
+                // WPF CompanionRuntimeContext.Guarded: a failed read never takes the tab down.
+                Log.Warning(ex, "Companion hero: sync failed");
+            }
         }
 
         // ---- identity ----
-        public string Name { get; init; } = "Bambi";
-        public string ModName { get; init; } = "BAMBI SLEEP";
-        public string Flavor { get; init; } = "Gains bonus XP from Pink Filter intensity. Currently plotting something.";
+        public string Name { get => _name; private set => Set(ref _name, value); }
+        public string ModName { get => _modName; private set => Set(ref _modName, value); }
+        public string Flavor { get => _flavor; private set => Set(ref _flavor, value); }
         private IImage? _portrait;
 
         /// <summary>
-        /// Companion bust. Null renders the gradient placeholder disc. Settable and notifying, not
-        /// <c>init</c>: the view re-resolves it from the mod layer on Loaded and on every
-        /// <see cref="CoreMods.ModChanged"/>, and the change is what re-runs the optical centring.
+        /// Companion bust. Null renders the gradient placeholder disc. The view re-resolves it
+        /// from the mod layer on Loaded, on tab show and on every <see cref="CoreMods.ModChanged"/>,
+        /// and the change is what re-runs the optical centring.
         /// </summary>
         public IImage? Portrait
         {
@@ -362,41 +417,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         }
 
         // ---- state ----
-        public bool IsCompanionEnabled { get; init; } = true;
-        public bool IsAiLive { get; init; } = true;
-        public bool IsAiLocked { get; init; }
-        public bool IsAwarenessOpen { get; init; } = true;
-        public string AiPillText { get; init; } = Loc.Get("companion_hero_pill_ai_cloud");
-        public string AwarenessPillText { get; init; } = Loc.Get("companion_hero_pill_eyes_broad");
-        public string AsleepCopy { get; init; } = Loc.Get("companion_hero_asleep_copy");
+        public bool IsCompanionEnabled { get => _isCompanionEnabled; private set => Set(ref _isCompanionEnabled, value); }
+        public bool IsAiLive { get => _isAiLive; private set => Set(ref _isAiLive, value); }
+        public bool IsAiLocked { get => _isAiLocked; private set => Set(ref _isAiLocked, value); }
+        public bool IsAwarenessOpen { get => _isAwarenessOpen; private set => Set(ref _isAwarenessOpen, value); }
+        public string AiPillText { get => _aiPillText; private set => Set(ref _aiPillText, value); }
+        public string AwarenessPillText { get => _awarenessPillText; private set => Set(ref _awarenessPillText, value); }
+        public string AsleepCopy => Loc.Get("companion_hero_asleep_copy");
 
-        // ---- daily mood token (Train 4) ----
-        public bool IsMoodLive { get; init; }
-        public string MoodGlyph { get; init; } = "✧";
-        public string MoodWord { get; init; } = Loc.Get("companion_hero_mood_asleep");
-        public string MoodCaption { get; init; } = Loc.Get("companion_hero_mood_caption_dormant");
+        // ---- daily mood token (Train 4): dormant on WPF too ----
+        public bool IsMoodLive => false;
+        public string MoodGlyph => "✧";
+        public string MoodWord => Loc.Get("companion_hero_mood_asleep");
+        public string MoodCaption => Loc.Get("companion_hero_mood_caption_dormant");
 
-        // ---- progression (placeholder numbers = the WPF mock's artboard) ----
-        public int Level { get; init; } = 41;
-        public double XpFraction { get; init; } = 0.62;
-        /// <summary>Interpolated in the runtime VM too, never a loc key.</summary>
-        public string XpLabel { get; init; } = "341 / 550 XP";
-        public string NextLevelLabel { get; init; } = Loc.GetF("companion_hero_next_level_fmt", 42);
+        // ---- progression ----
+        public int Level { get => _level; private set => Set(ref _level, value); }
+        public double XpFraction { get => _xpFraction; private set => Set(ref _xpFraction, value); }
+        public string XpLabel { get => _xpLabel; private set => Set(ref _xpLabel, value); }
+        public string NextLevelLabel { get => _nextLevelLabel; private set => Set(ref _nextLevelLabel, value); }
 
         // ---- quick actions ----
-        public string ChatShortcutHint { get; init; } = "Ctrl+T";
-
-        public bool IsMuted
-        {
-            get => _isMuted;
-            set => Set(ref _isMuted, value);
-        }
-
-        public bool IsCompanionShown
-        {
-            get => _isCompanionShown;
-            set => Set(ref _isCompanionShown, value);
-        }
+        public string ChatShortcutHint { get => _chatShortcutHint; private set => Set(ref _chatShortcutHint, value); }
+        public bool IsMuted { get => _isMuted; private set => Set(ref _isMuted, value); }
+        public bool IsCompanionShown { get => _isCompanionShown; private set => Set(ref _isCompanionShown, value); }
 
         public ICommand ChatCommand { get; }
         public ICommand SwitchCommand { get; }
@@ -408,7 +452,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public ICommand WakeCommand { get; }
 
         /// <summary>Z0 band. Null collapses it, for a host that draws its own page header.</summary>
-        public CompanionHeaderViewModel? Header { get; init; }
+        public CompanionHeaderViewModel? Header { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -421,33 +465,48 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     }
 
     /// <summary>
-    /// Z0 — the header band: title, subtitle, tutorial chip and the AI-entitlement plate. The
-    /// shape of the WPF <c>ICompanionHeaderVm</c>, seeded from <c>MockCompanionHeaderVm.Entitled()</c>.
+    /// Z0 — the header band: title, subtitle, tutorial chip and the AI-entitlement plate. WPF's
+    /// <c>CompanionHeaderRuntimeVm</c>.
     /// </summary>
     public sealed class CompanionHeaderViewModel : INotifyPropertyChanged
     {
-        public CompanionHeaderViewModel()
+        private bool _hasAiAccess;
+
+        public CompanionHeaderViewModel(CompanionHeroCardViewModel hero)
         {
+            // ponytail: the tutorial chip needs the Companion tutorial (WPF BtnCompanionTutorial_Click),
+            // which the shell's TutorialOverlay does not script yet; no-op until it does.
             TutorialCommand = new RelayCommand(() => { });
-            OpenPatreonCommand = new RelayCommand(() => { });
-            // ponytail: no-ops — the tutorial and the Patreon tab are head-owned navigation.
+            OpenPatreonCommand = new RelayCommand(() => hero.Shell?.ShowTab("patreon"));
         }
 
-        public string Title { get; init; } = Loc.Get("companion_header_title");
-        public string Subtitle { get; init; } = Loc.Get("companion_header_subtitle");
-        public string TutorialLabel { get; init; } = Loc.Get("companion_header_tutorial");
-        public bool HasAiAccess { get; init; } = true;
-        public string AiPlateLabel { get; init; } = Loc.Get("companion_header_plate_ai");
-        public string NextTierPlateLabel { get; init; } = Loc.Get("companion_header_plate_next");
-        public string TeaserRibbonLabel { get; init; } = Loc.Get("companion_header_teaser");
+        public string Title => Loc.Get("companion_header_title");
+        public string Subtitle => Loc.Get("companion_header_subtitle");
+        public string TutorialLabel => Loc.Get("companion_header_tutorial");
+        public string AiPlateLabel => Loc.Get("companion_header_plate_ai");
+        public string NextTierPlateLabel => Loc.Get("companion_header_plate_next");
+        public string TeaserRibbonLabel => Loc.Get("companion_header_teaser");
+
+        public bool HasAiAccess
+        {
+            get => _hasAiAccess;
+            private set
+            {
+                if (_hasAiAccess == value) return;
+                _hasAiAccess = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasAiAccess)));
+            }
+        }
+
+        /// <summary>WPF: <c>App.Patreon?.HasAiAccess == true || App.HasCloudIdentity</c>.</summary>
+        internal bool Sync() => HasAiAccess = CoreAccount.HasPremiumAccess || !string.IsNullOrEmpty(CoreAccount.UnifiedUserId);
 
         public ICommand TutorialCommand { get; }
         public ICommand OpenPatreonCommand { get; }
 
-        public event PropertyChangedEventHandler? PropertyChanged { add { } remove { } }
+        public event PropertyChangedEventHandler? PropertyChanged;
     }
 
-    /// <summary>The one command shape these placeholders need: run a delegate, always enabled.</summary>
     // RelayCommand: the one AwarenessPrivacyView declares in this namespace (a lower layer of the
     // stack) is a superset of the one this file carried, so this file uses it.
 }
