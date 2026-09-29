@@ -177,6 +177,16 @@ namespace ConditioningControlPanel.Avalonia
                 // startup validate runs on the UI thread as WPF's does (App.xaml.cs OnStartup).
                 if (Platform.AccountSeed.Seed())
                 {
+                    // Unit 7c, with the logout clear: the push, XP banking and its two triggers (WPF
+                    // MainWindow OnLevelUp -> sync, ProfileSyncService.AttachXpNudge outside sessions).
+                    var sync = Platform.AccountSeed.Sync = new SyncPush(
+                        () => Achievements?.Progress?.UnlockedAchievements, () => Sessions?.IsRunning == true);
+                    CoreProgression.AddXPProvider = ProgressionBank.Add;
+                    ProgressionBank.LevelUp += level => sync.PushAsync($"level-up {level}");
+                    ProgressionBank.Awarded += (amount, source) =>
+                    {
+                        if (amount > 0 && Sessions?.IsRunning != true) sync.Nudge($"xp:{source}");
+                    };
                     Platform.AccountSeed.RestoreSession();
                     Dispatcher.UIThread.Post(async () =>
                     {
@@ -397,6 +407,11 @@ namespace ConditioningControlPanel.Avalonia
             // Restore any app we ducked; a pending Unduck would otherwise die with the process.
             try { Platform.LibVlcAudio.Instance?.Shutdown(); } catch { }
             try { Platform.LayeredAudio.Instance?.Shutdown(); } catch { }
+
+            // WPF App.OnExit: a best-effort final push, capped at 2 s (off the UI thread, as WPF's Task.Run).
+            try { if (Platform.AccountSeed.Sync is { Loaded: true } sync) System.Threading.Tasks.Task.Run(() => sync.PushAsync("shutdown")).Wait(TimeSpan.FromSeconds(2)); }
+            catch { /* never block exit */ }
+            Platform.AccountSeed.Sync?.StopHeartbeat();
 
             // Flush while the dispatcher is still usable. In particular, a serialize retry from a
             // background save must not see the shutdown-safe drop provider below.

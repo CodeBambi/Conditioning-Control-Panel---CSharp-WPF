@@ -140,6 +140,66 @@ namespace ConditioningControlPanel.Services
                     settings.PlayerLevel, (int)localTotalXp, user.Level, user.Xp);
         }
 
+        /// <summary>WPF ProfileSyncService.RefuseDescentEraLevelReset: no season reset is legitimate after the Descent
+        /// (migrated account, clock past the epoch, or either season key post-Descent). Rationale stays on the WPF delegate.</summary>
+        public static bool RefuseDescentEraLevelReset(string? serverSeason, string? localSeason, bool migrationCompleted, DateTime nowUtc) =>
+            migrationCompleted || nowUtc >= DescentEpochs.SeasonsEndUtc
+            || DescentEpochs.IsPostDescentSeasonKey(serverSeason) || DescentEpochs.IsPostDescentSeasonKey(localSeason);
+
+        /// <summary>WPF sync merge: any server lead is adopted on a clean ledger (local at or under the watermark);
+        /// otherwise only a lead over 5000 XP.</summary>
+        public static double ServerAheadBand(AppSettings settings, double localTotalXp)
+        {
+            var watermark = ActiveXpWatermark(settings);
+            return watermark > 0 && localTotalXp <= watermark + 0.01 ? 0 : 5000;
+        }
+
+        /// <summary>
+        /// The <c>/v2/user/sync</c> response rules a head that only knows level/xp/season acts on, in WPF's order
+        /// (ProfileSyncService.SyncProfileAsync): curve epoch, season forward, then <c>level_reset</c> (with the
+        /// Descent refusal) or the server-ahead adopt, then the agreed watermark. Everything else is ignored.
+        /// ponytail: no anti-cheat clamp (a downward write; skipping it errs safe), no skills union, recap or
+        /// SeasonResetPending on level_reset - add each with its feature. Does not save.
+        /// </summary>
+        public static void ApplySyncResponse(AppSettings settings, JObject response, DateTime nowUtc)
+        {
+            if (response["user"] is not JObject node) return;
+            var user = node.ToObject<V2User>()!;
+            ApplyCurveEpoch(settings, user.CurveEpoch);
+            if (ShouldAdoptServerSeason(user.CurrentSeason, settings.CurrentSeason))
+            {
+                Log.Information("V2 Sync: season key advanced {Old} -> {New}", settings.CurrentSeason ?? "(none)", user.CurrentSeason);
+                settings.CurrentSeason = user.CurrentSeason;
+                ClearXpWatermark(settings, "season rollover");
+            }
+            if (response["level_reset"]?.Type == JTokenType.Boolean && response.Value<bool>("level_reset"))
+            {
+                if (RefuseDescentEraLevelReset(user.CurrentSeason, settings.CurrentSeason, settings.DescentMigrationCompleted, nowUtc))
+                    Log.Warning("[Descent] REFUSED a server level_reset. KEEPING Level {Level}; the server offered Level {ServerLevel} / XP {ServerXp}",
+                        settings.PlayerLevel, user.Level, user.Xp);
+                else
+                {
+                    ClearXpWatermark(settings, "admin level_reset");
+                    Log.Information("V2 Sync: Level reset by admin — forcing Level {Level}, XP {Xp}", user.Level, user.Xp);
+                    settings.PlayerLevel = user.Level;
+                    settings.PlayerXP = XpCurve.GetCurrentLevelXP(user.Level, user.Xp, Epoch(settings));
+                    settings.HighestLevelEver = user.HighestLevelEver;
+                }
+            }
+            else if (user.Level > 0)
+            {
+                var localTotalXp = TotalXp(settings);
+                if (user.Xp > localTotalXp + ServerAheadBand(settings, localTotalXp))
+                {
+                    Log.Information("V2 Sync: Server XP higher — adopting Level {ServerLevel} XP {ServerXp} (local was {LocalXp})",
+                        user.Level, user.Xp, (int)localTotalXp);
+                    settings.PlayerLevel = user.Level;
+                    settings.PlayerXP = XpCurve.GetCurrentLevelXP(user.Level, user.Xp, Epoch(settings));
+                }
+            }
+            RecordAgreedServerXp(settings, user.Xp, TotalXp(settings), "V2 sync");
+        }
+
         /// <summary>
         /// The read-before-write adopt (WPF ProfileSyncService.ReadServerProfileBeforePushAsync) after the curve
         /// epoch: level/XP take-higher, the season key forward only (clearing the watermark), and the watermark

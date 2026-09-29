@@ -711,10 +711,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         internal void Succeed(V2AuthService.V2User user, string? authToken, string? provider, bool legacy)
         {
+            // WPF MainWindow.Login.cs:110-141: a PROVEN different account never inherits the last one's progression.
+            var previousId = CoreSettings.Current.UnifiedId;
+            if (!string.IsNullOrEmpty(previousId) && !string.IsNullOrEmpty(user.UnifiedId) && previousId != user.UnifiedId)
+            {
+                ProgressionClear.Apply(CoreSettings.Current);
+                App.Achievements?.Reset();
+                AccountSeed.Sync?.Reset();
+            }
             ProfileAdopt.ApplyUserData(CoreSettings.Current, user, authToken, DateTime.UtcNow);
             CoreSettings.Save();
+            CoreAccount.UnifiedUserId = user.UnifiedId; // before the load: its push is gated on signed in
             ProfileLoad = AccountSeed.LoadProfileAsync(); // WPF MainWindow.Login.cs:170
-            CoreAccount.UnifiedUserId = user.UnifiedId;
 
             // WPF UpdateServiceProperties
             if (provider == "patreon" && AccountSeed.Patreon is { } p) { p.UnifiedUserId = user.UnifiedId; p.DisplayName = user.DisplayName; }

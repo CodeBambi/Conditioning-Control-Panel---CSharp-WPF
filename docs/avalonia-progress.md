@@ -671,3 +671,13 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   WPF's hidden quiz button, as in WPF.
 - Evidence: QuizCategoryEditorTests (validation, template, create/edit/delete round trip vs the golden JSON keys),
   fail-proofed 4 ways. Review: ACCEPT.
+
+## avalonia-port/avalonia-sync-push: +785 (auth unit 7c — HIGH RISK; server contract unconfirmed)
+- Avalonia pushes /v2/user/sync with only unified_id/xp/level/descent_epoch/achievements (server ∪ local; omitted if the
+  profile lacked them); gates: loaded this session + signed in + 30 s cooldown (429/409) + XP watermark. Triggers: after load,
+  level-up, XP nudge, session stop, pre-logout, exit (2 s cap). WPF's response rules (level_reset + Descent refusal, adopt,
+  watermark) moved to Core. Heartbeat (WPF's four fields) every 120 s after a load. Core ProgressionBank banks XP (no
+  multipliers; passive sources skipped until an idle tracker exists). Logout: pre-sync -> heartbeat stop -> identity ->
+  ProgressionClear.Apply -> reset; a different account clears progression first; replies after a reset are dropped.
+- Evidence: SyncPushTests (13) + SessionRunner XP test, each fail-proofed; sandbox run with no account. Review: FIX -> r1 ->
+  ACCEPT. Ledger row server-sync-contract BLOCKED: confirm the server treats absent keys as no change before merging.
