@@ -605,4 +605,22 @@ public class PanicPolicyTests
     [InlineData(null, true, false, false)]
     public void EverythingElse_StaysAPanic(string? key, bool inFront, bool engineRunning, bool lockCard)
         => Assert.False(GameClaimsEscapeAsPause(key, inFront, engineRunning, lockCard, null, T0));
+
+    // ---- Piece by Piece rides the same rule (owner, 2026-09-29) ----
+    // Without it the first Escape of a chess game closed the board, so its pause card was unreachable
+    // with the default panic key. The board's own half (the pause goes quiet, Escape on the card
+    // leaves) is pinned by piecebypiece/smoke/pause-hush-smoke.mjs.
+
+    [Fact]
+    public void ChessInFront_IsAGameInFrontForTheEscapePause()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private bool TryRacePauseOnEscape()", StringComparison.Ordinal);
+        Assert.True(start >= 0, "TryRacePauseOnEscape was renamed - update this test with it");
+        var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
+        var body = end > start ? source[start..end] : source[start..];
+        Assert.Contains("PieceByPieceHostService.IsInFront", body);
+        Assert.Contains("CaucusHostService.IsInFront", body);
+    }
 }
