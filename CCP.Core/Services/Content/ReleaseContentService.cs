@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -49,7 +50,7 @@ namespace ConditioningControlPanel.Services
     ///
     /// Design points (see <c>docs/CONTENT_PACKS_PLAN.md</c> §2, §3, §9-B):
     /// <list type="bullet">
-    /// <item>The download URL is DERIVED from <see cref="UpdateService.AppVersion"/> — no GitHub API
+    /// <item>The download URL is DERIVED from <see cref="CoreReleaseContent.AppVersion"/> — no GitHub API
     /// call, so no rate limits and no token.</item>
     /// <item>Packs are plain zips. This service deliberately does NOT reuse
     /// <see cref="ContentPackService"/>'s encryption (machine-bound AES + obfuscated filenames would
@@ -85,6 +86,30 @@ namespace ConditioningControlPanel.Services
 
         private const string ReleaseBaseUrlFormat =
             "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/download/{0}/";
+
+        private readonly string _baseUrlFormat;
+
+        /// <summary>
+        /// <c>CCP_CONTENT_BASE_URL</c> (sandbox runs against a local fake server) replaces the GitHub
+        /// release root, but only for a loopback http(s) host: an environment variable must never be
+        /// able to point a user's install at someone else's server. Tags go under it as on GitHub.
+        /// </summary>
+        internal static string ResolveBaseUrlFormat(string? overrideUrl)
+        {
+            if (string.IsNullOrWhiteSpace(overrideUrl)) return ReleaseBaseUrlFormat;
+            if (Uri.TryCreate(overrideUrl, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                && uri.IsLoopback
+                && (uri.HostNameType is UriHostNameType.IPv4 or UriHostNameType.IPv6 || uri.Host == "localhost")
+                && string.IsNullOrEmpty(uri.UserInfo))
+            {
+                var baseUrl = uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+                Log.Information("ReleaseContentService: using loopback content server {Url}", baseUrl);
+                return baseUrl + "/{0}/";
+            }
+            Log.Warning("ReleaseContentService: CCP_CONTENT_BASE_URL ignored - only a loopback http(s) host without user info is honoured");
+            return ReleaseBaseUrlFormat;
+        }
         private const string ManifestFileName = "content-manifest.json";
 
         /// <summary>Relative path (under the app's base dir) whose presence means "full install — nothing to fetch".</summary>
@@ -157,7 +182,7 @@ namespace ConditioningControlPanel.Services
         public string CycleTag { get; }
 
         /// <summary>Release asset base URL for <see cref="CycleTag"/> (trailing slash included).</summary>
-        public string BaseUrl => string.Format(ReleaseBaseUrlFormat, CycleTag);
+        public string BaseUrl => string.Format(_baseUrlFormat, CycleTag);
 
         /// <summary>
         /// True when the bundled (pre-modularization) audio is still present next to the exe — a dev
@@ -173,20 +198,23 @@ namespace ConditioningControlPanel.Services
 
         public event EventHandler<ReleaseContentState>? StateChanged;
 
-        public ReleaseContentService()
+        public ReleaseContentService() : this(ResolveBaseUrlFormat(Environment.GetEnvironmentVariable("CCP_CONTENT_BASE_URL")), null) { }
+
+        /// <param name="baseUrlFormat">Release base URL with <c>{0}</c> for the cycle tag.</param>
+        /// <param name="handler">Test transport; null = the default one.</param>
+        internal ReleaseContentService(string baseUrlFormat, HttpMessageHandler? handler)
         {
-            _httpClient = new HttpClient
-            {
-                // Packs run to ~380 MB; the ranged-resume loop handles drops, but give a slow line room.
-                Timeout = TimeSpan.FromMinutes(30)
-            };
+            _baseUrlFormat = baseUrlFormat;
+            _httpClient = handler == null ? new HttpClient() : new HttpClient(handler);
+            // Packs run to ~380 MB; the ranged-resume loop handles drops, but give a slow line room.
+            _httpClient.Timeout = TimeSpan.FromMinutes(30);
             try
             {
-                _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
+                _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{CoreReleaseContent.AppVersion}");
             }
             catch { /* header parsing is best-effort */ }
 
-            CycleTag = DeriveCycleTag(UpdateService.AppVersion);
+            CycleTag = DeriveCycleTag(CoreReleaseContent.AppVersion);
             IsFullInstall = DetectFullInstall();
 
             if (IsFullInstall)
@@ -194,7 +222,7 @@ namespace ConditioningControlPanel.Services
                 State = ReleaseContentState.FullInstall;
             }
 
-            App.Logger?.Information(
+            Log.Information(
                 "ReleaseContentService: cycle {Cycle}, contentRoot {Root}, fullInstall {Full}",
                 CycleTag, ContentRoot, IsFullInstall);
         }
@@ -275,7 +303,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ReleaseContentService: full-install probe failed: {Error}", ex.Message);
+                Log.Debug("ReleaseContentService: full-install probe failed: {Error}", ex.Message);
                 return false;
             }
         }
@@ -299,9 +327,9 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                if (App.Settings?.Current?.OfflineMode == true)
+                if (CoreSettings.Service?.Current?.OfflineMode == true)
                 {
-                    App.Logger?.Information("ReleaseContentService: offline mode — skipping manifest fetch");
+                    Log.Information("ReleaseContentService: offline mode — skipping manifest fetch");
                     SetState(ReleaseContentState.Unavailable);
                     return null;
                 }
@@ -314,7 +342,7 @@ namespace ConditioningControlPanel.Services
 
                 foreach (var tag in tags)
                 {
-                    var baseUrl = string.Format(ReleaseBaseUrlFormat, tag);
+                    var baseUrl = string.Format(_baseUrlFormat, tag);
                     var url = baseUrl + ManifestFileName;
                     try
                     {
@@ -327,13 +355,13 @@ namespace ConditioningControlPanel.Services
                         using var response = await _httpClient.GetAsync(url, timeoutCts.Token).ConfigureAwait(false);
                         if (response.StatusCode == HttpStatusCode.NotFound)
                         {
-                            App.Logger?.Information(
+                            Log.Information(
                                 "ReleaseContentService: no content manifest on {Tag} (404) — trying older cycle if any", tag);
                             continue;
                         }
                         if (!response.IsSuccessStatusCode)
                         {
-                            App.Logger?.Warning("ReleaseContentService: manifest fetch for {Tag} returned {Status}",
+                            Log.Warning("ReleaseContentService: manifest fetch for {Tag} returned {Status}",
                                 tag, response.StatusCode);
                             continue;
                         }
@@ -342,7 +370,7 @@ namespace ConditioningControlPanel.Services
                         var packs = ParseManifest(json);
                         if (packs == null || packs.Count == 0)
                         {
-                            App.Logger?.Warning("ReleaseContentService: manifest for {Tag} parsed to zero packs", tag);
+                            Log.Warning("ReleaseContentService: manifest for {Tag} parsed to zero packs", tag);
                             continue;
                         }
 
@@ -350,7 +378,7 @@ namespace ConditioningControlPanel.Services
                         _resolvedBaseUrl = baseUrl;
                         _manifestUnavailableThisSession = false;
                         SetState(ReleaseContentState.Idle);
-                        App.Logger?.Information("ReleaseContentService: manifest OK from {Tag} ({Count} packs)",
+                        Log.Information("ReleaseContentService: manifest OK from {Tag} ({Count} packs)",
                             tag, packs.Count);
                         return packs;
                     }
@@ -363,23 +391,23 @@ namespace ConditioningControlPanel.Services
                     {
                         // Our own 45s bound, not the caller's token — treat it as a dead endpoint and
                         // move on to the previous cycle / the offline state.
-                        App.Logger?.Warning("ReleaseContentService: manifest fetch for {Tag} timed out after {Seconds}s",
+                        Log.Warning("ReleaseContentService: manifest fetch for {Tag} timed out after {Seconds}s",
                             tag, (int)ManifestTimeout.TotalSeconds);
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Warning("ReleaseContentService: manifest fetch for {Tag} failed: {Error}", tag, ex.Message);
+                        Log.Warning("ReleaseContentService: manifest fetch for {Tag} failed: {Error}", tag, ex.Message);
                     }
                 }
 
                 _manifestUnavailableThisSession = true;
                 SetState(ReleaseContentState.Unavailable);
-                App.Logger?.Information("ReleaseContentService: no content manifest available this session — retrying next launch");
+                Log.Information("ReleaseContentService: no content manifest available this session — retrying next launch");
                 return null;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "ReleaseContentService: FetchManifestAsync failed unexpectedly");
+                Log.Error(ex, "ReleaseContentService: FetchManifestAsync failed unexpectedly");
                 SetState(ReleaseContentState.Unavailable);
                 return null;
             }
@@ -406,7 +434,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("ReleaseContentService: could not parse content manifest: {Error}", ex.Message);
+                Log.Warning("ReleaseContentService: could not parse content manifest: {Error}", ex.Message);
                 return null;
             }
         }
@@ -425,7 +453,7 @@ namespace ConditioningControlPanel.Services
         {
             get
             {
-                var map = App.Settings?.Current?.InstalledContentPacks;
+                var map = CoreSettings.Service?.Current?.InstalledContentPacks;
                 if (map == null) return new Dictionary<string, InstalledPackStamp>();
                 return map;
             }
@@ -471,7 +499,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ReleaseContentService: IsInstalled({Pack}) failed: {Error}", packId, ex.Message);
+                Log.Debug("ReleaseContentService: IsInstalled({Pack}) failed: {Error}", packId, ex.Message);
                 return false;
             }
         }
@@ -495,7 +523,7 @@ namespace ConditioningControlPanel.Services
                 var root = Path.GetFullPath(ContentRoot).TrimEnd(Path.DirectorySeparatorChar);
                 var full = Path.GetFullPath(target).TrimEnd(Path.DirectorySeparatorChar);
 
-                if (!string.Equals(full, root, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(full, root, PathComparison))
                 {
                     // A real sub-folder target: its existence with any content is proof enough.
                     return Directory.Exists(full) && Directory.EnumerateFileSystemEntries(full).Any();
@@ -522,7 +550,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ReleaseContentService: payload probe for {Pack} failed: {Error}", info.Id, ex.Message);
+                Log.Debug("ReleaseContentService: payload probe for {Pack} failed: {Error}", info.Id, ex.Message);
                 return true;
             }
         }
@@ -587,7 +615,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ReleaseContentService: RequestPackAsync({Pack}) failed to start", packId);
+                Log.Warning(ex, "ReleaseContentService: RequestPackAsync({Pack}) failed to start", packId);
                 return Task.FromResult(false);
             }
         }
@@ -607,7 +635,7 @@ namespace ConditioningControlPanel.Services
                 }
                 if (GetPackInfo(packId) == null)
                 {
-                    App.Logger?.Information("ReleaseContentService: pack {Pack} not in manifest — nothing to fetch", packId);
+                    Log.Information("ReleaseContentService: pack {Pack} not in manifest — nothing to fetch", packId);
                     return false;
                 }
                 if (IsInstalled(packId) && !NeedsUpdate(packId)) return true;
@@ -635,17 +663,17 @@ namespace ConditioningControlPanel.Services
             var info = GetPackInfo(packId);
             if (info == null)
             {
-                App.Logger?.Warning("ReleaseContentService: DownloadPackAsync({Pack}) — no manifest entry", packId);
+                Log.Warning("ReleaseContentService: DownloadPackAsync({Pack}) — no manifest entry", packId);
                 return false;
             }
             if (string.IsNullOrWhiteSpace(info.File))
             {
-                App.Logger?.Warning("ReleaseContentService: manifest entry {Pack} has no file name", packId);
+                Log.Warning("ReleaseContentService: manifest entry {Pack} has no file name", packId);
                 return false;
             }
-            if (App.Settings?.Current?.OfflineMode == true)
+            if (CoreSettings.Service?.Current?.OfflineMode == true)
             {
-                App.Logger?.Information("ReleaseContentService: offline mode — pack {Pack} download skipped", packId);
+                Log.Information("ReleaseContentService: offline mode — pack {Pack} download skipped", packId);
                 return false;
             }
             if (!HasRoomForPack(info))
@@ -679,13 +707,13 @@ namespace ConditioningControlPanel.Services
                         var actual = await ComputeSha256Async(partialPath, ct).ConfigureAwait(false);
                         if (!string.Equals(actual, info.Sha256, StringComparison.OrdinalIgnoreCase))
                         {
-                            App.Logger?.Warning(
+                            Log.Warning(
                                 "ReleaseContentService: sha256 mismatch for {Pack} (expected {Expected}, got {Actual}) — pass {Pass}",
                                 packId, info.Sha256, actual, pass);
                             TryDeleteFile(partialPath);
                             if (pass == 2)
                             {
-                                App.Logger?.Error("ReleaseContentService: pack {Pack} failed verification twice — giving up", packId);
+                                Log.Error("ReleaseContentService: pack {Pack} failed verification twice — giving up", packId);
                                 SetState(ReleaseContentState.Idle);
                                 return false;
                             }
@@ -702,7 +730,7 @@ namespace ConditioningControlPanel.Services
                 var target = ResolveTargetDirectory(info);
                 if (target == null)
                 {
-                    App.Logger?.Error("ReleaseContentService: pack {Pack} has an unsafe targetRoot '{Root}' — refusing to install",
+                    Log.Error("ReleaseContentService: pack {Pack} has an unsafe targetRoot '{Root}' — refusing to install",
                         packId, info.TargetRoot);
                     TryDeleteDirectory(extractPath);
                     TryDeleteFile(partialPath);
@@ -733,7 +761,7 @@ namespace ConditioningControlPanel.Services
                     {
                         // Real-time antivirus holds freshly written files open for a beat, which is
                         // the common way a download that arrived intact still fails to install.
-                        App.Logger?.Warning(
+                        Log.Warning(
                             "ReleaseContentService: install of {Pack} failed on attempt {Attempt}/{Max} ({Error}) — retrying in {Seconds}s",
                             packId, attempt, MaxInstallAttempts, ex.Message, (int)InstallRetryDelay.TotalSeconds);
                         await Task.Delay(InstallRetryDelay, ct).ConfigureAwait(false);
@@ -752,7 +780,7 @@ namespace ConditioningControlPanel.Services
 
                 RecordInstalled(info);
 
-                App.Logger?.Information("ReleaseContentService: installed pack {Pack} (v{Version}) into {Target}",
+                Log.Information("ReleaseContentService: installed pack {Pack} (v{Version}) into {Target}",
                     packId, info.ContentVersion, target);
 
                 SetState(ReleaseContentState.Idle);
@@ -763,13 +791,13 @@ namespace ConditioningControlPanel.Services
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 // Leave the .partial in place — the next attempt resumes from it.
-                App.Logger?.Information("ReleaseContentService: pack {Pack} download cancelled", packId);
+                Log.Information("ReleaseContentService: pack {Pack} download cancelled", packId);
                 SetState(ReleaseContentState.Idle);
                 return false;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "ReleaseContentService: failed to install pack {Pack}", packId);
+                Log.Error(ex, "ReleaseContentService: failed to install pack {Pack}", packId);
                 TryDeleteDirectory(extractPath);
                 SetState(ReleaseContentState.Idle);
                 return false;
@@ -800,7 +828,7 @@ namespace ConditioningControlPanel.Services
                         if (totalBytes > 0 && resumeFrom > totalBytes)
                         {
                             // Longer than advertised — the asset changed under us. Start clean.
-                            App.Logger?.Warning("ReleaseContentService: partial for {Pack} is larger than the manifest size — restarting",
+                            Log.Warning("ReleaseContentService: partial for {Pack} is larger than the manifest size — restarting",
                                 info.Id);
                             TryDeleteFile(partialPath);
                             resumeFrom = 0;
@@ -813,7 +841,7 @@ namespace ConditioningControlPanel.Services
                         }
                         else if (resumeFrom > 0)
                         {
-                            App.Logger?.Information("ReleaseContentService: resuming {Pack} from byte {Byte} (attempt {Attempt})",
+                            Log.Information("ReleaseContentService: resuming {Pack} from byte {Byte} (attempt {Attempt})",
                                 info.Id, resumeFrom, attempt);
                         }
                     }
@@ -831,12 +859,12 @@ namespace ConditioningControlPanel.Services
                     if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
                     {
                         // The server thinks we already hold the whole file. Verify upstream.
-                        App.Logger?.Information("ReleaseContentService: server reports {Pack} range complete", info.Id);
+                        Log.Information("ReleaseContentService: server reports {Pack} range complete", info.Id);
                         return true;
                     }
                     if (response.StatusCode == HttpStatusCode.NotFound)
                     {
-                        App.Logger?.Warning("ReleaseContentService: pack asset 404 for {Pack} at {Host}", info.Id, Logging.UrlLog.Host(url));
+                        Log.Warning("ReleaseContentService: pack asset 404 for {Pack} at {Host}", info.Id, Logging.UrlLog.Host(url));
                         return false;
                     }
                     if (response.StatusCode != HttpStatusCode.OK && response.StatusCode != HttpStatusCode.PartialContent)
@@ -848,7 +876,7 @@ namespace ConditioningControlPanel.Services
                     var serverHonouredRange = response.StatusCode == HttpStatusCode.PartialContent;
                     if (resumeFrom > 0 && !serverHonouredRange)
                     {
-                        App.Logger?.Information("ReleaseContentService: server ignored Range for {Pack} — restarting download", info.Id);
+                        Log.Information("ReleaseContentService: server ignored Range for {Pack} — restarting download", info.Id);
                         resumeFrom = 0;
                     }
 
@@ -893,7 +921,7 @@ namespace ConditioningControlPanel.Services
                     }
 
                     ReportProgress(info.Id, 100, finalSize, totalBytes > 0 ? totalBytes : finalSize, progress);
-                    App.Logger?.Information("ReleaseContentService: downloaded {Pack} ({Bytes} bytes)", info.Id, finalSize);
+                    Log.Information("ReleaseContentService: downloaded {Pack} ({Bytes} bytes)", info.Id, finalSize);
                     return true;
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -904,7 +932,7 @@ namespace ConditioningControlPanel.Services
                                            && (ex is HttpRequestException || ex is TaskCanceledException || ex is IOException))
                 {
                     var currentSize = File.Exists(partialPath) ? new FileInfo(partialPath).Length : 0;
-                    App.Logger?.Warning(
+                    Log.Warning(
                         "ReleaseContentService: {Pack} attempt {Attempt}/{Max} failed at {Bytes} bytes: {Error}",
                         info.Id, attempt, MaxDownloadAttempts, currentSize, ex.Message);
 
@@ -914,12 +942,12 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Error(ex, "ReleaseContentService: {Pack} download failed permanently", info.Id);
+                    Log.Error(ex, "ReleaseContentService: {Pack} download failed permanently", info.Id);
                     return false;
                 }
             }
 
-            App.Logger?.Warning("ReleaseContentService: {Pack} exhausted {Max} download attempts", info.Id, MaxDownloadAttempts);
+            Log.Warning("ReleaseContentService: {Pack} exhausted {Max} download attempts", info.Id, MaxDownloadAttempts);
             return false;
         }
 
@@ -969,8 +997,8 @@ namespace ConditioningControlPanel.Services
                 var full = Path.GetFullPath(Path.Combine(root, rel));
 
                 var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
-                if (!full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(full, root, StringComparison.OrdinalIgnoreCase))
+                if (!full.StartsWith(rootWithSep, PathComparison)
+                    && !string.Equals(full, root, PathComparison))
                 {
                     return null;
                 }
@@ -1055,13 +1083,13 @@ namespace ConditioningControlPanel.Services
                 // hiding the gutted pack from ResolveMissingActiveModPack's media probe. Drop
                 // the stamp so the rolled-back state reads as what it is: not installed.
                 DropInstallStamp(packId);
-                App.Logger?.Warning(
+                Log.Warning(
                     "ReleaseContentService: rolled back the failed {Pack} install — removed {Removed} merged file(s) so the next launch re-fetches",
                     packId, removed);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ReleaseContentService: rollback of the failed {Pack} install did not complete", packId);
+                Log.Warning(ex, "ReleaseContentService: rollback of the failed {Pack} install did not complete", packId);
             }
         }
 
@@ -1076,7 +1104,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var settings = App.Settings?.Current;
+                var settings = CoreSettings.Service?.Current;
                 if (settings == null) return;
 
                 void Apply()
@@ -1084,25 +1112,29 @@ namespace ConditioningControlPanel.Services
                     try
                     {
                         if (settings.InstalledContentPacks.Remove(packId))
-                            App.Settings?.Save();
+                            CoreSettings.Service?.Save();
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Warning(ex, "ReleaseContentService: could not drop install stamp for {Pack}", packId);
+                        Log.Warning(ex, "ReleaseContentService: could not drop install stamp for {Pack}", packId);
                     }
                 }
 
-                var dispatcher = System.Windows.Application.Current?.Dispatcher;
-                if (dispatcher == null) { Apply(); return; }
-                if (dispatcher.HasShutdownStarted) return;
-
-                if (dispatcher.CheckAccess()) Apply();
-                else dispatcher.Invoke(Apply);
+                OnUi(Apply);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ReleaseContentService: could not drop install stamp for {Pack}", packId);
+                Log.Warning(ex, "ReleaseContentService: could not drop install stamp for {Pack}", packId);
             }
+        }
+
+        /// <summary>Runs <paramref name="apply"/> through <see cref="CoreReleaseContent.UiInvoke"/>
+        /// (inline when unseeded). False = the UI is shutting down and it did not run.</summary>
+        private static bool OnUi(Action apply)
+        {
+            var ui = CoreReleaseContent.UiInvoke;
+            if (ui == null) { apply(); return true; }
+            return ui(apply);
         }
 
         /// <summary>
@@ -1119,7 +1151,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var settings = App.Settings?.Current;
+                var settings = CoreSettings.Service?.Current;
                 if (settings == null) return;
 
                 var stamp = new InstalledPackStamp
@@ -1133,37 +1165,27 @@ namespace ConditioningControlPanel.Services
                     try
                     {
                         settings.InstalledContentPacks[info.Id] = stamp;
-                        App.Settings?.Save();
+                        CoreSettings.Service?.Save();
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Warning(ex, "ReleaseContentService: could not persist install stamp for {Pack}", info.Id);
+                        Log.Warning(ex, "ReleaseContentService: could not persist install stamp for {Pack}", info.Id);
                     }
                 }
 
-                var dispatcher = System.Windows.Application.Current?.Dispatcher;
-                if (dispatcher == null)
-                {
-                    Apply();   // no WPF app (tests/headless) — nothing to marshal onto
-                    return;
-                }
-                if (dispatcher.HasShutdownStarted)
+                if (!OnUi(Apply))
                 {
                     // Shutting down: skip the stamp rather than race the serializer. The bytes are on
                     // disk; next launch's IsInstalled/NeedsUpdate pass re-verifies (worst case, one
                     // re-download).
-                    App.Logger?.Information(
+                    Log.Information(
                         "ReleaseContentService: dispatcher shutting down — install stamp for {Pack} skipped, it will be re-verified next launch",
                         info.Id);
-                    return;
                 }
-
-                if (dispatcher.CheckAccess()) Apply();
-                else dispatcher.Invoke(Apply);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ReleaseContentService: could not persist install stamp for {Pack}", info.Id);
+                Log.Warning(ex, "ReleaseContentService: could not persist install stamp for {Pack}", info.Id);
             }
         }
 
@@ -1195,7 +1217,18 @@ namespace ConditioningControlPanel.Services
             {
                 if (info.SizeBytes <= 0) return true;
 
-                var driveRoot = Path.GetPathRoot(Path.GetFullPath(ContentRoot));
+                var contentRoot = Path.GetFullPath(ContentRoot);
+                string? driveRoot;
+                if (OperatingSystem.IsWindows())
+                {
+                    driveRoot = Path.GetPathRoot(contentRoot);
+                }
+                else
+                {
+                    // GetPathRoot is always "/" here, which is the wrong mount whenever /home (or
+                    // wherever the profile lives) is its own partition.
+                    driveRoot = MountFor(contentRoot, DriveInfo.GetDrives().Select(d => d.Name));
+                }
                 if (string.IsNullOrEmpty(driveRoot)) return true;
 
                 var drive = new DriveInfo(driveRoot);
@@ -1204,17 +1237,29 @@ namespace ConditioningControlPanel.Services
                 var available = drive.AvailableFreeSpace;
                 if (HasEnoughFreeSpace(info.SizeBytes, available)) return true;
 
-                App.Logger?.Error(
+                Log.Error(
                     "ReleaseContentService: not enough free space for pack {Pack} on {Drive} — needs {Required} bytes ({Factor}x its {Size}-byte zip for partial + extract + merged copies), {Available} available",
                     info.Id, drive.Name, RequiredFreeBytes(info.SizeBytes), InstallFreeSpaceFactor, info.SizeBytes, available);
                 return false;
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ReleaseContentService: free-space probe for {Pack} failed: {Error}", info.Id, ex.Message);
+                Log.Debug("ReleaseContentService: free-space probe for {Pack} failed: {Error}", info.Id, ex.Message);
                 return true;
             }
         }
+
+        /// <summary>Mount point holding <paramref name="path"/>: the longest mount that prefixes it.</summary>
+        internal static string? MountFor(string path, IEnumerable<string> mounts)
+            => mounts
+                .Where(m => !string.IsNullOrEmpty(m) && (m == "/" || path == m.TrimEnd('/')
+                            || path.StartsWith(m.TrimEnd('/') + "/", StringComparison.Ordinal)))
+                .OrderByDescending(m => m.Length)
+                .FirstOrDefault();
+
+        /// <summary>Windows paths are case-insensitive; Linux ones are not.</summary>
+        private static readonly StringComparison PathComparison =
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
         private static bool TryCreateDirectory(string path)
         {
@@ -1225,7 +1270,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ReleaseContentService: could not create {Path}", path);
+                Log.Warning(ex, "ReleaseContentService: could not create {Path}", path);
                 return false;
             }
         }
@@ -1257,7 +1302,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (IsFullInstall)
                 {
-                    App.Logger?.Information("ReleaseContentService: full install detected (bundled audio present) — no packs needed");
+                    Log.Information("ReleaseContentService: full install detected (bundled audio present) — no packs needed");
                     return;
                 }
                 if (System.Diagnostics.Debugger.IsAttached)
@@ -1266,28 +1311,28 @@ namespace ConditioningControlPanel.Services
                     // IsFullInstall is false and a plain `dotnet run` would pull the whole cycle's
                     // packs off GitHub. Only the AUTOMATIC fetch is suppressed — an explicit download
                     // from the picker or the Mod Manager still works.
-                    App.Logger?.Information("ReleaseContentService: debugger attached — skipping the automatic startup fetch (explicit downloads still work)");
+                    Log.Information("ReleaseContentService: debugger attached — skipping the automatic startup fetch (explicit downloads still work)");
                     return;
                 }
-                if (App.Settings?.Current?.OfflineMode == true)
+                if (CoreSettings.Service?.Current?.OfflineMode == true)
                 {
-                    App.Logger?.Information("ReleaseContentService: offline mode — baseline check skipped");
+                    Log.Information("ReleaseContentService: offline mode — baseline check skipped");
                     return;
                 }
 
                 // audio-base is Bambi Sleep's flash voice; no other mod plays it, so nobody else
                 // downloads it (owner pivot 2026-09-25). Switching to Bambi Sleep asks again.
-                var needsBaseline = ModAudioPolicy.UsesBaselineVoicePack(App.Settings?.Current?.ActiveModId)
+                var needsBaseline = ModAudioPolicy.UsesBaselineVoicePack(CoreSettings.Service?.Current?.ActiveModId)
                     && !(GetStamp(PackAudioBase) != null && IsInstalled(PackAudioBase));
                 var activeModPack = ResolveMissingActiveModPack();
 
                 if (!needsBaseline && activeModPack == null)
                 {
-                    App.Logger?.Debug("ReleaseContentService: baseline audio already installed, active mod has its media");
+                    Log.Debug("ReleaseContentService: baseline audio already installed, active mod has its media");
                     return;
                 }
 
-                App.Logger?.Information(
+                Log.Information(
                     "ReleaseContentService: startup content check — baseline {Baseline}, active-mod pack {Pack} — fetching manifest",
                     needsBaseline ? "MISSING" : "ok", activeModPack ?? "(none needed)");
 
@@ -1299,14 +1344,14 @@ namespace ConditioningControlPanel.Services
 
                 if (activeModPack != null)
                 {
-                    App.Logger?.Information(
+                    Log.Information(
                         "ReleaseContentService: auto-fetching {Pack} for the active mod (plan §5 upgrade convergence)", activeModPack);
                     await RequestPackAsync(activeModPack, null, ct).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ReleaseContentService: EnsureBaselineAsync failed — content stays absent this session");
+                Log.Warning(ex, "ReleaseContentService: EnsureBaselineAsync failed — content stays absent this session");
             }
         }
 
@@ -1324,7 +1369,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var modId = App.Settings?.Current?.ActiveModId;
+                var modId = CoreSettings.Service?.Current?.ActiveModId;
                 if (string.IsNullOrWhiteSpace(modId)) return null;
 
                 // ModService owns the id↔pack map (ModPackCatalog carries the same four rows for the UI).
@@ -1338,7 +1383,7 @@ namespace ConditioningControlPanel.Services
 
                 if (HasModMediaOnDisk(modId!))
                 {
-                    App.Logger?.Information(
+                    Log.Information(
                         "ReleaseContentService: active mod {Mod} still has its media on disk — not re-fetching {Pack}", modId, packId);
                     return null;
                 }
@@ -1347,7 +1392,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ReleaseContentService: active-mod pack check failed: {Error}", ex.Message);
+                Log.Debug("ReleaseContentService: active-mod pack check failed: {Error}", ex.Message);
                 return null;
             }
         }
@@ -1393,7 +1438,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 // 1) Extracted .ccpmod payload, under the root ModService.PrepareBuiltInMod fills.
-                var extractDir = Path.Combine(App.UserDataPath, "builtin_mods", modId);
+                var extractDir = Path.Combine(CorePaths.UserData, "builtin_mods", modId);
                 if (Directory.Exists(extractDir))
                 {
                     count = CountMediaFiles(SafeEnumerateFiles(extractDir), MinModMediaFiles);
@@ -1422,13 +1467,13 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Information(
+                Log.Information(
                     "ReleaseContentService: mod-media probe for {Mod} failed ({Error}) — treating it as missing so the pack re-fetches",
                     modId, ex.Message);
                 return false;
             }
 
-            App.Logger?.Information(
+            Log.Information(
                 "ReleaseContentService: mod {Mod} has only {Count} media file(s) on disk (floor {Floor}) — queueing a pack re-fetch",
                 modId, count, MinModMediaFiles);
             return false;
@@ -1439,7 +1484,7 @@ namespace ConditioningControlPanel.Services
             try { return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories); }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ReleaseContentService: could not enumerate {Dir}: {Error}", dir, ex.Message);
+                Log.Debug("ReleaseContentService: could not enumerate {Dir}: {Error}", dir, ex.Message);
                 return Array.Empty<string>();
             }
         }
