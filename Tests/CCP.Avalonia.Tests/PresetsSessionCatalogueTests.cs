@@ -57,7 +57,7 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.False(start!.IsEnabled);
                 Assert.False(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
                 Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
-                Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);
+                Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);   // nothing selected yet
                 Assert.True(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
                 Assert.True(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
                 Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
@@ -342,7 +342,7 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.True(view.FindControl<Button>("BtnStartSession")!.IsEnabled);   // a selected session can start (WPF SessionIO.cs:923/:971)
                 Assert.True(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
                 Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
-                Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnExportSession")!.IsEnabled);   // WPF SessionIO.cs:973
                 Assert.True(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
                 Assert.True(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
                 Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
@@ -356,8 +356,10 @@ public sealed class PresetsSessionCatalogueTests
                 {
                     var rowGrid = Assert.IsType<Grid>(row.Child);
                     var actions = Assert.IsType<StackPanel>(rowGrid.Children[8]);
-                    Assert.Equal(2, actions.Children.Count);
-                    Assert.Equal(new[] { true, false }, actions.Children.OfType<Button>().Select(button => button.IsEnabled));
+                    // WPF SessionIO.cs:451-457: edit + export everywhere, delete off the built-ins.
+                    var builtIn = (row.Tag as Session)!.Source == SessionSource.BuiltIn;
+                    Assert.Equal(builtIn ? 2 : 3, actions.Children.Count);
+                    Assert.All(actions.Children.OfType<Button>(), button => Assert.True(button.IsEnabled));
                 });
 
                 LocalizationManager.Instance.SetLanguage("zh-CN");
@@ -576,18 +578,18 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
                 Assert.Equal(fallbackSource, CoreSettings.Current.SessionRackSourceFilter);
 
-                // Search and sort are live views; drop/CRUD and the other row actions remain deliberately unavailable.
+                // Search and sort are live views; row edit/export/delete are live (share is not).
                 Assert.True(view.FindControl<Button>("BtnStartSession")!.IsEnabled);   // a selected session can start (WPF SessionIO.cs:923/:971)
                 Assert.True(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
                 Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
-                Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnExportSession")!.IsEnabled);   // WPF SessionIO.cs:973
                 Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
                 Assert.True(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
                 Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
                 Assert.All(panel.Children.OfType<Border>(), row =>
                 {
                     var actions = Assert.IsType<StackPanel>(Assert.IsType<Grid>(row.Child).Children[8]);
-                    Assert.Equal(new[] { true, false }, actions.Children.OfType<Button>().Select(button => button.IsEnabled));
+                    Assert.All(actions.Children.OfType<Button>(), button => Assert.True(button.IsEnabled));
                 });
             }
             finally

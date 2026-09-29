@@ -805,3 +805,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   CoreQuests (provider verifying, streak shield, perfect-week bonus, program verifier, completion sound/haptics, camera/mic probes);
   timers post to the UI thread; WPF seeds the seam in App's static ctor and behaves the same. Avalonia tab wiring is next.
 - Evidence: QuestServiceTests (roll, reroll, progress+completion; 4 fail-proofs); full gate; WPF tests compile-only here. Review: ACCEPT.
+
+## avalonia-port/session-io: +508
+- Sessions: per-row export, delete for custom sessions (Delete/Cancel confirm like WPF), export strip enabled on selection,
+  .session.json/.preset.json drop import with WPF validation. SessionLock.Owned ported: 47 of 53 WPF markers greyed during a
+  session incl. Haptics (row stays stub: ribbon pulse, program reason line, 6 markers). SessionSummaryPresentation moved to Core
+  (git mv); the recap opens passively while a lock card/quiz/bubble count is up.
+- Evidence: SessionIoTests (4, fail-proven); live: custom-row delete, lock during Morning Drift, 0 binding errors. Review: FIX -> fixed.

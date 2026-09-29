@@ -23,9 +23,9 @@
                                              (and would un-mask the whole hero plate)
        x:FieldModifier="internal"        ->  dropped; x:Names kept (nothing on this head pokes them)
        feat:AdaptiveSideArt.CollapseBelow,
-       feat:SessionLock.Owned,
        hover:HoverPop.IsEnabled          ->  dropped (WPF-head attached behaviours; they follow
                                              their services to Core)
+       feat:SessionLock.Owned            ->  sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        ImageBrush GradedIntakeHeroBrush  ->  x:Name on a brush is AVLN2000, so the two plate
                                              Borders are named and ModArt.BindFeaturePlates paints
                                              features/lab_quiz_hero.png into both, mod override
@@ -42,6 +42,7 @@
      (MainWindow.BtnStartIntake_Click); the page only carries the launch button. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.GradedIntakeTabView">
 
@@ -281,7 +282,7 @@
                                         <TextBlock Grid.Column="0" Text="{loc:Str setting_enable_pop_up_questions}" FontSize="13"
                                                    FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"
                                                    VerticalAlignment="Center"/>
-                                        <CheckBox Grid.Column="1" x:Name="ChkPopQuizEnabled"
+                                        <CheckBox Grid.Column="1" x:Name="ChkPopQuizEnabled" sessionLock:SessionLock.Owned="True"
                                                   Theme="{StaticResource ToggleStyle}"
                                                   VerticalAlignment="Center"
                                                   IsCheckedChanged="ChkPopQuizEnabled_Changed"/>
@@ -298,7 +299,7 @@
                                         <TextBlock Grid.Column="0" Text="{loc:Str label_frequency}" FontSize="13"
                                                    FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"
                                                    VerticalAlignment="Center"/>
-                                        <Slider Grid.Column="1" x:Name="SliderPopQuizFrequency"
+                                        <Slider Grid.Column="1" x:Name="SliderPopQuizFrequency" sessionLock:SessionLock.Owned="True"
                                                 Theme="{StaticResource PinkSlider}"
                                                 Minimum="1" Maximum="100"
                                                 VerticalAlignment="Center" Margin="14,0"

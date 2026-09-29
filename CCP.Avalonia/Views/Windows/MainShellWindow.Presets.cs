@@ -88,7 +88,7 @@
 //   private DateTime _suppressSessionSummaryUntil
 //   internal void SuppressNextSessionSummary(…)
 //   private void OnSessionLogReady(…)              RESTORED in SessionRun.cs
-//   private SessionCompleteWindow? _liveSessionRecap
+//   private SessionCompleteWindow? _liveSessionRecap  RESTORED in SessionRun.cs (passive recap)
 //   private bool _liveSessionRecapTeardownHooked
 //   private void CloseLiveSessionRecap(…)
 //   private void ShowSessionSummaryWhenClear(…)    RESTORED in SessionRun.cs

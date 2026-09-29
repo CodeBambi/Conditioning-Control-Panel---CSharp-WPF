@@ -9,10 +9,12 @@
        LinearGradientBrush "0,0"/"1,0"   ->  "0%,0%"/"100%,0%"
        ImageBrush HeroArtBrush/SideArtBrush -> dropped (feature art not an AvaloniaResource here
                                             yet; x:Name on a brush is AVLN2000); wash stands in
-       feat:AdaptiveSideArt.CollapseBelow, feat:SessionLock.Owned -> dropped
+       feat:AdaptiveSideArt.CollapseBelow -> dropped
+       feat:SessionLock.Owned            -> sessionLock:SessionLock.Owned (Views/Features/SessionLock.cs)
        all event handlers                ->  wired in code-behind (porting convention) -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sessionLock="using:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Features.BouncingTextFeatureControl">
 
@@ -51,7 +53,7 @@
                             <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextSecondaryBrush}"
                                        VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <CheckBox x:Name="ChkEnable"
+                            <CheckBox x:Name="ChkEnable" sessionLock:SessionLock.Owned="True"
                                       Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
@@ -83,7 +85,7 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{loc:Str setting_speed}" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                    <Slider Grid.Column="1" x:Name="SliderSpeed" Minimum="1" Maximum="10" Value="5"
+                                    <Slider Grid.Column="1" x:Name="SliderSpeed" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="10" Value="5"
                                             VerticalAlignment="Center" Margin="10,0"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtSpeed" Text="5" HorizontalAlignment="Right"
                                                VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
@@ -99,7 +101,7 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                    <Slider Grid.Column="1" x:Name="SliderSize" Minimum="50" Maximum="300" Value="100"
+                                    <Slider Grid.Column="1" x:Name="SliderSize" sessionLock:SessionLock.Owned="True" Minimum="50" Maximum="300" Value="100"
                                             VerticalAlignment="Center" Margin="10,0"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtSize" Text="100%" HorizontalAlignment="Right"
                                                VerticalAlignment="Center" FontSize="13" FontWeight="Bold"

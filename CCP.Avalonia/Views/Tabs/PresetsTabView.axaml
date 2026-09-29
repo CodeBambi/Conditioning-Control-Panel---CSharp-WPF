@@ -718,9 +718,9 @@
                             <!-- Export of the SELECTED session. It says "Export session", not
                                  "Export" (#961): sharing a strip with the Takeaway chips made a
                                  bare "Export" read as "export this takeaway", which it can never
-                                 do. It remains disabled until the head owns session export. -->
+                                 do. Enabled by SelectSession, as in WPF. -->
                             <Button DockPanel.Dock="Right" x:Name="BtnExportSession"
-                                    IsEnabled="False" Opacity="0.5" Theme="{StaticResource OutlineButton}"
+                                    IsEnabled="False" Theme="{StaticResource OutlineButton}"
                                     Padding="12,5" FontSize="11" Margin="0,0,7,0" VerticalAlignment="Center"
                                     ToolTip.Tip="{loc:Str tooltip_export_session}">
                                 <TextBlock Text="{loc:Str btn_export_session}"/>
