@@ -261,7 +261,9 @@ namespace ConditioningControlPanel.Avalonia
                     version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
                 // WPF App.xaml.cs:490/2549: the ? box's daily-free rotation that TierGate ORs in.
                 // Pure ctor; the override fetch is fire-and-forget and falls back to the seeded pick.
-                var dailyFree = new DailyFreeService();
+                // A sandbox never reaches the real proxy (the SkipStartupFetch rule); the seeded pick still works.
+                var dailyFree = new DailyFreeService(
+                    fetchOverride: string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")));
                 _ = dailyFree.RefreshAsync();
                 CoreEntitlement.IsFreeTodayProvider = dailyFree.IsFreeToday;
                 // After the version seed (the proxy client's headers carry it). Fail closed; the
