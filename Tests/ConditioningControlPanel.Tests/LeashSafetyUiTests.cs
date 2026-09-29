@@ -259,15 +259,5 @@ public class LeashSafetyUiTests
         Assert.True(AppLeashTaskHost.HasEnabledPhrase(new Dictionary<string, bool> { ["a"] = false, ["b"] = true }));
     }
 
-    private static string LangDir()
-    {
-        var dir = AppContext.BaseDirectory;
-        for (var i = 0; i < 8 && dir != null; i++)
-        {
-            var probe = System.IO.Path.Combine(dir, "ConditioningControlPanel", "Localization", "Languages");
-            if (System.IO.Directory.Exists(probe)) return probe;
-            dir = System.IO.Path.GetDirectoryName(dir);
-        }
-        throw new InvalidOperationException("language folder not found");
-    }
+    private static string LangDir() => SourceRoots.LanguagesDirectory;
 }

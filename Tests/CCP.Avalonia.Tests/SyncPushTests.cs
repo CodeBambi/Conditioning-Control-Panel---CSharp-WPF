@@ -33,6 +33,7 @@ public sealed partial class AccountSeedTests
         public HttpStatusCode SyncStatus = HttpStatusCode.OK;
         public string SyncReply = "{\"success\":true}";
         public TaskCompletionSource? Hold;   // a sync answer that waits until released
+        public readonly Queue<(HttpStatusCode, string)> Next = new();   // one-shot sync answers, then SyncStatus
         // A snapshot under the lock: the heartbeat LoadProfile starts can still be adding while a test reads.
         public IEnumerable<JObject> Syncs { get { lock (Seen) return Seen.Where(r => r.Path == "POST /v2/user/sync").Select(r => r.Body!).ToList(); } }
 
@@ -46,7 +47,7 @@ public sealed partial class AccountSeedTests
                     : new(HttpStatusCode.OK) { Content = new StringContent(Profile) };
             if (path == "POST /v2/user/sync")
             {
-                var (status, reply) = (SyncStatus, SyncReply);
+                var (status, reply) = Next.Count > 0 ? Next.Dequeue() : (SyncStatus, SyncReply);
                 if (Hold is { } hold) await hold.Task;
                 return new(status) { Content = new StringContent(reply) };
             }
@@ -279,6 +280,40 @@ public sealed partial class AccountSeedTests
         local.Add("linux_only");
         Assert.True(await AccountSeed.LoadProfileAsync());
         Assert.Null(Assert.Single(wire.Syncs)["achievements"]);
+    });
+
+    [Fact]
+    public void AFailedSync_BacksOff_UntilTheDelayOrANewToken() => WithFreshInstall(async () =>
+    {
+        // release/6.11.5 (WPF ProfileSyncService.NoteSyncFailureForBackoff): a refused sync no longer
+        // leaves the door open for every trigger; 30 s first, reopened at once by a new token.
+        var (wire, sync, _) = SignIn("u1", L40Profile("u1"));
+        wire.SyncStatus = HttpStatusCode.InternalServerError;
+        Assert.True(await AccountSeed.LoadProfileAsync());
+        Assert.Single(wire.Syncs);
+        wire.SyncStatus = HttpStatusCode.OK;
+        sync.UtcNow = () => T0.AddSeconds(10);
+        Assert.False(await sync.PushAsync("level-up"));
+        Assert.Single(wire.Syncs);
+        CoreSettings.Current.AuthToken = "tok-2";
+        Assert.True(await sync.PushAsync("level-up"));
+        Assert.Equal(2, wire.Syncs.Count());
+    });
+
+    [Fact]
+    public void AClockSkewRefusal_LearnsTheServerClock_AndResignsOnce() => WithFreshInstall(async () =>
+    {
+        var (wire, sync, _) = SignIn("u1", L40Profile("u1"));
+        var server = DateTimeOffset.UtcNow.AddHours(1);
+        wire.Next.Enqueue((HttpStatusCode.Forbidden,
+            $"{{\"reason\":\"clock_skew\",\"server_time\":{server.ToUnixTimeMilliseconds()}}}"));
+        try
+        {
+            Assert.True(await AccountSeed.LoadProfileAsync());
+            Assert.Equal(2, wire.Syncs.Count());
+            Assert.InRange(ServerClock.Offset.TotalMinutes, 59, 61);
+        }
+        finally { ServerClock.ResetForTests(); }
     });
 
     [Fact]

@@ -893,3 +893,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   and the merged-account reply hook are passed in (WPF passes the same BackRoomApi/MergedAccountRecovery values). FriendsService
   (DispatcherTimer + App.Settings) and all friends/inbox UI stay in WPF for now.
 - Evidence: FriendsApiCoreTests (6, fake HTTP), fail-proven. No UI change. Review: ACCEPT.
+
+## main sync #3: avalonia-port/main-20260929 + -compat (+231)
+- Merge of origin/release/6.11.5 (185 commits, 6.11.4 + 6.11.5 "Locktober"); hand edits vs git's automatic merge are exactly the
+  14 declared files (conflicts + compile fixes: FriendEvent/FriendReceipts/FriendsSentBook moved to Core, one logger swap, two
+  WPF test paths, the update-button key). Every release line added to a file the stack had moved is present at its new path.
+- Compat: ServerClock/SyncFailureBackoff to Core; signed requests use the server clock; SyncPush learns the clock, re-signs once on
+  clock skew and backs off after failures (not on shutdown cancellations, as WPF); refused Patreon/Discord refresh tokens are not
+  resent (as the release). 15 new ledger rows (12 missing, 3 wired). Evidence: new tests fail-proven; full gate green.

@@ -373,13 +373,22 @@ namespace ConditioningControlPanel.Services
         /// <param name="expiresAtUtc">Tells a revoked grant from a proxy outage (<see cref="PatreonGrantHealth"/>).</param>
         private async Task<bool> RefreshTokensAsync(string refreshToken, DateTime? expiresAtUtc)
         {
+            // Patreon: a grant already refused this session is not asked about again (release/6.11.5,
+            // WPF PatreonService.RefreshTokensAsync); the Reconnect row is already lit.
+            if (_patreon && DeadRefreshTokens.IsDead(refreshToken))
+            {
+                Log.Debug("{Provider} token refresh skipped - this grant was refused earlier this session", _label);
+                return NoteRefresh(PatreonRefreshOutcome.Refused, refreshToken);
+            }
             try
             {
                 var response = await Http.PostAsJsonAsync($"/{_prefix}/refresh", new { refresh_token = refreshToken });
                 if (!response.IsSuccessStatusCode)
                 {
+                    string? body = null;
+                    try { body = await response.Content.ReadAsStringAsync(); } catch { /* verdict from status alone */ }
                     Log.Warning("{Provider} token refresh failed with status {Status}", _label, response.StatusCode);
-                    return NoteRefresh(PatreonGrantHealth.Classify(response.StatusCode, null, threw: false, expiresAtUtc, DateTime.UtcNow));
+                    return NoteRefresh(PatreonGrantHealth.Classify(response.StatusCode, null, threw: false, expiresAtUtc, DateTime.UtcNow, body), refreshToken);
                 }
 
                 var tokenResponse = await response.Content.ReadFromJsonAsync<PatreonTokenResponse>();
@@ -389,7 +398,8 @@ namespace ConditioningControlPanel.Services
                     // A missing body is no verdict; an OAuth error field is a refusal wearing a 200.
                     return NoteRefresh(tokenResponse == null
                         ? PatreonRefreshOutcome.Unavailable
-                        : PatreonGrantHealth.Classify(response.StatusCode, tokenResponse.Error, threw: false, expiresAtUtc, DateTime.UtcNow));
+                        : PatreonGrantHealth.Classify(response.StatusCode, tokenResponse.Error, threw: false, expiresAtUtc, DateTime.UtcNow),
+                        refreshToken);
                 }
 
                 StoreTokens(tokenResponse.AccessToken, tokenResponse.RefreshToken, DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn));
@@ -403,11 +413,16 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        /// <summary>Refusal raises <see cref="GrantLooksDead"/>, success lowers it, an outage leaves it (Patreon only).</summary>
-        private bool NoteRefresh(PatreonRefreshOutcome outcome)
+        /// <summary>Refusal raises <see cref="GrantLooksDead"/> and puts the token on <see cref="DeadRefreshTokens"/>,
+        /// success lowers it, an outage leaves it (Patreon only).</summary>
+        private bool NoteRefresh(PatreonRefreshOutcome outcome, string? refreshToken = null)
         {
             if (_patreon && outcome == PatreonRefreshOutcome.Refreshed) GrantLooksDead = false;
-            else if (_patreon && PatreonGrantHealth.MarksGrantDead(outcome)) GrantLooksDead = true;
+            else if (_patreon && PatreonGrantHealth.MarksGrantDead(outcome))
+            {
+                GrantLooksDead = true;
+                DeadRefreshTokens.MarkDead(refreshToken);
+            }
             return outcome == PatreonRefreshOutcome.Refreshed;
         }
 

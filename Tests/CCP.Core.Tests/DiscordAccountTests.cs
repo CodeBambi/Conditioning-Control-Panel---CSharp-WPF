@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -30,6 +31,7 @@ public sealed class DiscordAccountTests : IDisposable
         CoreSecrets.StoreProvider = (n, v) => _secrets[n] = v;
         _settings.AuthToken = "ccp-tok";
         _patreon = new ProviderSubscription("patreon", () => _settings, _proxy);
+        DeadRefreshTokens.ResetForTests();   // process-global: a refused "refresh-1" must not leak between tests
     }
 
     public void Dispose()
@@ -39,6 +41,7 @@ public sealed class DiscordAccountTests : IDisposable
         CoreAccount.UnifiedUserId = null;
         V2AuthService.MergedRecovery = null;
         _patreon.Dispose();
+        DeadRefreshTokens.ResetForTests();
     }
 
     private sealed class Proxy : HttpMessageHandler
@@ -129,6 +132,24 @@ public sealed class DiscordAccountTests : IDisposable
         Assert.DoesNotContain(_proxy.Seen, s => s.Contains("/validate"));
         Assert.NotNull(_secrets["discord_auth"]);
         AssertNothingGranted(d);
+    }
+
+    [Fact]
+    public async Task ARefusedGrant_IsNotAskedAgainThisSession_ButANewTokenIs()
+    {
+        // release/6.11.5 (WPF DiscordService.RefreshTokensAsync): invalid_grant is final, so the same
+        // refresh token never goes out twice; signing in again stores a new one, which is asked.
+        Tokens(DateTime.UtcNow.AddHours(-1));
+        _proxy.Routes["/discord/refresh"] = (HttpStatusCode.BadRequest, "{\"error\":\"invalid_grant\"}");
+        using var d = Make();
+        await d.ValidateAndRefreshUserAsync(forceRefresh: true);
+        await d.ValidateAndRefreshUserAsync(forceRefresh: true);
+        Assert.Single(_proxy.Seen, s => s.Contains("/discord/refresh"));
+
+        _secrets["discord_auth"] = JsonConvert.SerializeObject(new DiscordTokenData
+        { AccessToken = "access-9", RefreshToken = "refresh-9", ExpiresAt = DateTime.UtcNow.AddHours(-1) });
+        await d.ValidateAndRefreshUserAsync(forceRefresh: true);
+        Assert.Equal(2, _proxy.Seen.Count(s => s.Contains("/discord/refresh")));
     }
 
     [Fact]

@@ -208,13 +208,39 @@ namespace ConditioningControlPanel.Services
 
         private async Task<bool> RefreshTokensAsync(string refreshToken)
         {
+            // A grant Discord already refused this session is not asked about again (release/6.11.5,
+            // WPF DiscordService.RefreshTokensAsync): the proxy answers the same invalid_grant every time.
+            if (DeadRefreshTokens.IsDead(refreshToken))
+            {
+                Log.Debug("Discord token refresh skipped - this grant was refused earlier this session");
+                return false;
+            }
             try
             {
                 var response = await Http.PostAsJsonAsync("/discord/refresh", new { refresh_token = refreshToken });
-                if (!response.IsSuccessStatusCode) { Log.Warning("Discord token refresh failed with status {Status}", response.StatusCode); return false; }
+                if (!response.IsSuccessStatusCode)
+                {
+                    string? body = null;
+                    try { body = await response.Content.ReadAsStringAsync(); } catch { /* status alone */ }
+                    var code = (int)response.StatusCode;
+                    if ((code >= 400 && code < 500 && code != 408 && code != 429) || PatreonGrantHealth.BodySaysGrantDead(body))
+                    {
+                        DeadRefreshTokens.MarkDead(refreshToken);
+                        Log.Warning("Discord token refresh refused ({Status}): the grant is dead, sign in with Discord again to repair it", response.StatusCode);
+                        return false;
+                    }
+                    Log.Warning("Discord token refresh failed with status {Status}", response.StatusCode);
+                    return false;
+                }
 
                 var t = await response.Content.ReadFromJsonAsync<DiscordTokenResponse>();
-                if (t == null || !string.IsNullOrEmpty(t.Error)) { Log.Warning("Discord token refresh error: {Error}", t?.ErrorDescription); return false; }
+                if (t == null || !string.IsNullOrEmpty(t.Error))
+                {
+                    Log.Warning("Discord token refresh error: {Error}", t?.ErrorDescription);
+                    // An OAuth error field is the refusal wearing a 200.
+                    if (!string.IsNullOrEmpty(t?.Error)) DeadRefreshTokens.MarkDead(refreshToken);
+                    return false;
+                }
 
                 StoreTokens(t.AccessToken, t.RefreshToken, DateTime.UtcNow.AddSeconds(t.ExpiresIn));
                 Log.Information("Discord tokens refreshed successfully");

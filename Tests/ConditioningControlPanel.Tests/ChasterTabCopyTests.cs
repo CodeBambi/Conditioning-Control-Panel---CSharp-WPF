@@ -28,7 +28,7 @@ public class ChasterTabCopyTests
     }
 
     private static JObject Lang(string lang) =>
-        JObject.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", lang + ".json")));
+        JObject.Parse(File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, lang + ".json")));
 
     [Fact]
     public void Every_fixed_figure_row_says_its_figure_through_the_mark_in_every_language()
@@ -86,7 +86,7 @@ public class ChasterTabCopyTests
     [InlineData("escape")]
     public void A_scene_totals_the_mounted_figures_never_a_written_time(string scene)
     {
-        var html = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "web", "chaster", "trailers.html"));
+        var html = File.ReadAllText(Path.Combine(SourceRoots.RepoRoot, "Assets", "web", "chaster", "trailers.html"));
         var start = html.IndexOf("V." + scene + "=async function(s){", StringComparison.Ordinal);
         Assert.True(start >= 0, $"scene {scene} is missing");
         var end = html.IndexOf("\n};", start, StringComparison.Ordinal);
