@@ -50,6 +50,53 @@ public class ChasterTabCopyTests
         }
     }
 
+    /// <summary>Bug hunt 2026-09-29 (TAB-3): the trailer prints a row's flavour line right over its
+    /// why line, and flavour lines still named their own time ("Fat fingers. Fifteen seconds a
+    /// typo." over "adds 0:30"), three more going stale after a price edit. The figure lives in the
+    /// why line and on the stamp; a flavour line never names a time.</summary>
+    [Fact]
+    public void No_flavour_line_names_a_time()
+    {
+        var clock = new Regex(@"\d+:\d\d");
+        var amount = new Regex(
+            @"\b(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|" +
+            @"seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|half|quarter)" +
+            @"([\s-]+(a|an|of|and|one|two|three|four|five|six|seven|eight|nine))*[\s-]+(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b",
+            RegexOptions.IgnoreCase);
+        var lines = Lang("en").Properties()
+            .Where(p => p.Name.StartsWith("chaster_flavour_", StringComparison.Ordinal))
+            .Select(p => (Key: p.Name, Text: (string?)p.Value ?? ""))
+            .ToList();
+        Assert.Contains(lines, l => l.Key == TabMenuCopy.FlavourKey("typo"));
+        var bad = lines.Where(l => clock.IsMatch(l.Text) || amount.IsMatch(l.Text)).Select(l => $"{l.Key}: {l.Text}").ToList();
+        Assert.True(bad.Count == 0, "a flavour line names a time:\n" + string.Join("\n", bad));
+        // the check itself bites
+        Assert.Matches(amount, "Fat fingers. Fifteen seconds a typo.");
+        Assert.Matches(amount, "Typed it clean. Half a minute back.");
+        Assert.Matches(clock, "Melted. +5:00.");
+        Assert.DoesNotMatch(amount, "Every second of it, to the end.");
+    }
+
+    /// <summary>Bug hunt 2026-09-29 (DESK-4): the "Day skipped" / "Day done" scene flew the live
+    /// figures and then totalled them with written times (a "-5:00" pill under a "+30:00" flyer),
+    /// and the Lockdown scene's timer jumped to a written 15:00 whatever the row's figure. A scene
+    /// totals the figures the host mounts (CT.figs), never a time written into the scene.</summary>
+    [Theory]
+    [InlineData("program")]
+    [InlineData("escape")]
+    public void A_scene_totals_the_mounted_figures_never_a_written_time(string scene)
+    {
+        var html = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "web", "chaster", "trailers.html"));
+        var start = html.IndexOf("V." + scene + "=async function(s){", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"scene {scene} is missing");
+        var end = html.IndexOf("\n};", start, StringComparison.Ordinal);
+        Assert.True(end > start, $"scene {scene} has no end");
+        var body = html[start..end];
+        var written = new Regex(@"textContent\s*=\s*[^;]*(\d:\d\d|':00')");
+        Assert.False(written.IsMatch(body), $"{scene}: a total is written as a time: {written.Match(body).Value}");
+        Assert.Contains("CT.figs", body);
+    }
+
     [Fact]
     public void Why_fills_the_mark_with_the_unsigned_figure()
     {
