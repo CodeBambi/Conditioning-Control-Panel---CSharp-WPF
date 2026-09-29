@@ -32,6 +32,7 @@ import { SHOT_BANK, FRAME, lensDir, fitFrame, clampLens, hides, motion, fovFor, 
 const HEIGHT = { p: .62, n: .8, b: .9, r: .7, q: 1.02, k: 1.15 };   // as board/pieces.js, for a man without scaleBase
 const v3 = a => [a.x, a.y, a.z];
 const CEIL_TALL = .6;   // a knight's flip and the queen's stunts get this much more headroom
+const PRESS_FLOOR = .28;   // an extreme close following a press down stops this high
 
 // The soft-body pose a man is in: the capture pose's bend, reach and drop
 // (board/jiggle.js uniforms). `uni` is a recorded snapshot's list, in the
@@ -115,6 +116,32 @@ export function createReplayShots({ group, random = Math.random } = {}) {
     contacts.set(clip, c);
     return c;
   }
+  // A blow from above drives the victim into the board (the king presses the queen
+  // flat): the extreme close follows the crown down, and holds where it ended once
+  // the victim is gone, so the press stays in the frame instead of leaving an
+  // empty square in the panel for the rest of the replay.
+  const crowns = new WeakMap();
+  function crownAt(clip, t) {
+    let list = crowns.get(clip);
+    if (!list) {
+      list = [];
+      for (const f of clip.frames || []) {
+        if (f.t < clip.hit) continue;
+        const s = clip.victim && f.states.get(clip.victim);
+        if (!s || !s.visible || !s.inGroup) break;
+        list.push([f.t, stateCol(clip.victim, s).top[1]]);
+      }
+      crowns.set(clip, list);
+    }
+    if (!list.length || t <= list[0][0]) return list.length ? list[0][1] : null;
+    for (let k = 1; k < list.length; k++) {
+      const [t1, y1] = list[k];
+      if (t1 < t) continue;
+      const [t0, y0] = list[k - 1];
+      return y0 + (y1 - y0) * (t1 > t0 ? (t - t0) / (t1 - t0) : 1);
+    }
+    return list[list.length - 1][1];
+  }
 
   // The subject, as spheres, over the shot's window of the clip.
   function subjectFor(spec, clip) {
@@ -188,7 +215,12 @@ export function createReplayShots({ group, random = Math.random } = {}) {
     const { spec, fit } = fitFor(shot, cam, ctx);
     const m = motion(spec.motion, clipT - clip.hit, shot.seed);
     const dir = lensDir(Math.min(1.4, shot.el + m.el), shot.az + m.az, v3(dN), v3(perp));
-    const d = fit.dist * m.dist, t = fit.target;
+    const d = fit.dist * m.dist;
+    let t = fit.target;
+    if (spec.subject === 'contact' && clip.hitInfo?.impact === 'squash' && clipT > clip.hit) {
+      const y = crownAt(clip, clipT);
+      if (y != null && y < t[1]) t = [t[0], Math.max(PRESS_FLOOR, y), t[2]];
+    }
     let pos = clampLens([t[0] + (dir[0] + m.drift[0]) * d, t[1] + (dir[1] + m.drift[1]) * d, t[2] + (dir[2] + m.drift[2]) * d]);
     // Never inside the attacker or the victim (they are the two men never hidden).
     for (const o of [clip.attacker, clip.victim]) {
