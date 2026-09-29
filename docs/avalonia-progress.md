@@ -887,3 +887,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   CoreSettings.ServiceProvider (#1915), which flaked ShellTray/Quests/Awareness tests in full runs; restored in finally.
 - Evidence: ExclusivesVaultTests, rail stars, DailyFreeSandboxTests, all fail-proven; full Avalonia suite 5x green; live vault.
   Rows stay stub (motion, sheens, tier plates). Review: ACCEPT + notes fixed.
+
+## avalonia-port/inbox-friends-core: +93
+- Friends wire (FriendsApi), models and notice/landing/poll/sfx rules git-mv'd into CCP.Core/Services/Friends; identity, base URL
+  and the merged-account reply hook are passed in (WPF passes the same BackRoomApi/MergedAccountRecovery values). FriendsService
+  (DispatcherTimer + App.Settings) and all friends/inbox UI stay in WPF for now.
+- Evidence: FriendsApiCoreTests (6, fake HTTP), fail-proven. No UI change. Review: ACCEPT.
