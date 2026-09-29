@@ -33,7 +33,7 @@ public partial class FriendsDrawerTests
             "friends_confirm_yes_remove", "friends_confirm_keep", "friends_unblocked_done", "friends_section_blocked",
             "friends_blocked_title", "friends_blocked_empty", "friends_unblock",
         };
-        var dir = System.IO.Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
             var json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(System.IO.Path.Combine(dir, lang + ".json")));

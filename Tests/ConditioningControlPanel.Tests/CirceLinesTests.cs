@@ -129,14 +129,7 @@ public class CirceLinesTests
 
     // ---------------- the copy ----------------
 
-    private static string LanguagesDir()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "ConditioningControlPanel.csproj")))
-            dir = dir.Parent;
-        return Path.Combine(dir?.FullName ?? throw new InvalidOperationException("repo root not found"),
-            "ConditioningControlPanel", "Localization", "Languages");
-    }
+    private static string LanguagesDir() => SourceRoots.LanguagesDirectory;
 
     [Fact]
     public void Every_line_is_in_all_nine_languages()
