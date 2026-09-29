@@ -320,6 +320,11 @@ namespace ConditioningControlPanel.Avalonia
                 Achievements.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+                // WPF ProgressionService.cs:285 (level-up celebrates) and App.xaml.cs:3174 (retroactive, silent).
+                ProgressionBank.LevelUp += level => Achievements?.CheckLevelAchievements(level);
+                Achievements.SuppressPopups = true;
+                try { Achievements.CheckLevelAchievements(CoreSettings.Current.PlayerLevel); }
+                finally { Achievements.SuppressPopups = false; }
 
                 // CoreProgram: its patreon, pack-video and roadmap providers stay unseeded - this head
                 // has no PatreonService, ContentPackService or RoadmapService, so it answers "no
