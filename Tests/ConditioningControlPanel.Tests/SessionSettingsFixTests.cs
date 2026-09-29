@@ -144,8 +144,9 @@ namespace ConditioningControlPanel.Tests
         [InlineData("localhost:12345", "ws://localhost:12345")]
         [InlineData(" ws://127.0.0.1:12345 ", "ws://127.0.0.1:12345")]
         [InlineData("http://localhost:12345", "ws://localhost:12345")]
-        [InlineData("ws://192.168.1.20", "ws://192.168.1.20")]
-        [InlineData("ws://intiface.local", "ws://intiface.local")]
+        [InlineData("ws://192.168.1.20", "ws://192.168.1.20:12345")]
+        [InlineData("ws://intiface.local", "ws://intiface.local:12345")]
+        [InlineData("wss://intiface.example", "wss://intiface.example")]
         [InlineData("", ButtplugUrl.Default)]
         [InlineData(null, ButtplugUrl.Default)]
         public void TypedAddressesAreCleanedUp(string? typed, string expected)
@@ -158,10 +159,30 @@ namespace ConditioningControlPanel.Tests
         [InlineData("ftp://localhost:12345")]
         [InlineData("local host:12345")]
         [InlineData("ws://")]
+        // A slash typo leaves the scheme behind as the host: "ws", port 80.
+        [InlineData("ws:/localhost:12345")]
+        [InlineData("ws//localhost:12345")]
+        [InlineData("wss:/localhost:12345")]
+        [InlineData("http:/localhost:12345")]
         public void UnusableAddressesComeBackWithAReason(string typed)
         {
             Assert.Null(ButtplugUrl.Normalize(typed, out var error));
             Assert.False(string.IsNullOrEmpty(error));
+        }
+
+        /// <summary>No port used to mean ws's port 80, where Intiface never listens, and a bare
+        /// number was read as the IPv4 address 0.0.48.57.</summary>
+        [Theory]
+        [InlineData("12345", "ws://127.0.0.1:12345")]
+        [InlineData("localhost", "ws://localhost:12345")]
+        [InlineData("127.0.0.1", "ws://127.0.0.1:12345")]
+        [InlineData("ws://localhost", "ws://localhost:12345")]
+        [InlineData("ws://localhost/", "ws://localhost:12345/")]
+        public void AMissingPortIsIntifacesOwn(string typed, string expected)
+        {
+            Assert.Equal(expected, ButtplugUrl.Normalize(typed, out var error));
+            Assert.Null(error);
+            Assert.Equal(12345, new Uri(expected).Port);
         }
 
         [Fact]

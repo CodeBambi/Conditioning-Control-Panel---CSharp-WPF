@@ -1563,17 +1563,19 @@ namespace ConditioningControlPanel.Services
         private DateTime? _syncBlockedUntilUtc;
         private string? _syncBackoffToken;
         private TimeSpan _syncBackoffOffset;
+        private int _syncSuccesses;   // syncs that reached the server; see SyncBeforeRetryAsync
 
         /// <summary>
         /// Arm the failure backoff. Keyed to the auth token and clock offset this attempt used, so a
-        /// sign-in, a 401 heal or a learned server clock opens the gate again at once.
+        /// sign-in, a 401 heal or a learned server clock opens the gate again at once. Pass
+        /// <paramref name="tokenUsed"/> when the token may have changed since the request went out.
         /// </summary>
-        private void NoteSyncFailureForBackoff(int? status)
+        private void NoteSyncFailureForBackoff(int? status, string? tokenUsed = null)
         {
             _syncBackoffFailures++;
             var wait = SyncFailureBackoff.Delay(_syncBackoffFailures);
             _syncBlockedUntilUtc = DateTime.UtcNow + wait;
-            _syncBackoffToken = App.Settings?.Current?.AuthToken;
+            _syncBackoffToken = tokenUsed ?? App.Settings?.Current?.AuthToken;
             _syncBackoffOffset = ServerClock.Offset;
             App.Logger?.Warning("Profile sync backing off {Seconds:F0}s after failure #{Count} (status {Status})",
                 wait.TotalSeconds, _syncBackoffFailures, status?.ToString() ?? "none");
@@ -1602,6 +1604,8 @@ namespace ConditioningControlPanel.Services
             }
 
             var syncSucceeded = false;
+            // Set by the cooldown and backoff skips below: no request went out, so nothing failed.
+            var skipped = false;
 
             // Progression as it stood before this call could rewrite it, plus a label for the log
             // line. Declared out here so the finally can compare against it on EVERY exit path —
@@ -1618,6 +1622,7 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("Profile sync skipped - cooldown active ({Remaining}s remaining)",
                     Math.Ceiling((SyncCooldown - (DateTime.Now - LastSyncTime.Value)).TotalSeconds));
+                skipped = true;
                 return false;
             }
 
@@ -1627,6 +1632,7 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("Profile sync skipped - backing off after {Failures} failure(s), {Remaining}s left",
                     _syncBackoffFailures, Math.Ceiling((_syncBlockedUntilUtc!.Value - DateTime.UtcNow).TotalSeconds));
+                skipped = true;
                 return false;
             }
 
@@ -1938,6 +1944,9 @@ namespace ConditioningControlPanel.Services
                             // data — the exact loss the deferral exists to prevent.
                             return false;
                         }
+                        // The token this attempt was refused with: a 401 heal below may store a
+                        // new one, and the backoff must not hold the new one to the old refusal.
+                        var tokenUsed = App.Settings?.Current?.AuthToken;
                         await HandleUnauthorizedAsync(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
                         // Status + size only: the error body echoes fields from the profile we
@@ -1945,7 +1954,7 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)",
                             (int)v2Response.StatusCode, error?.Length ?? 0);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
-                        NoteSyncFailureForBackoff((int)v2Response.StatusCode);
+                        NoteSyncFailureForBackoff((int)v2Response.StatusCode, tokenUsed);
                         // Settle a deferred streak break only on a DEFINITIVE rejection (4xx) —
                         // retrying cannot change those answers. A 5xx is transient like the 429
                         // above: leave it to the retry/timeout window rather than deciding the
@@ -2752,7 +2761,10 @@ namespace ConditioningControlPanel.Services
                 else
                     App.Logger?.Error(ex, "Failed to sync profile to cloud");
                 LastSyncError = ex.Message;
-                if (!IsExpectedCancellation(ex)) NoteSyncFailureForBackoff(null);
+                // HttpClient.Timeout is a TaskCanceledException wrapping a TimeoutException: a proxy
+                // that hangs, not the app shutting down, so it backs off like any other failure.
+                if (!IsExpectedCancellation(ex) || ex.InnerException is TimeoutException)
+                    NoteSyncFailureForBackoff(null);
                 // Mobile streak parity: the cloud is unreachable, so a deferred streak break
                 // gets the pre-parity behavior now instead of waiting out the full timeout.
                 App.Achievements?.Progress?.ResolveDeferredStreakBreak("sync failed");
@@ -2764,6 +2776,7 @@ namespace ConditioningControlPanel.Services
                 // Track sync health — only count actual failures, not skips (cooldown, gate, offline)
                 if (syncSucceeded)
                 {
+                    _syncSuccesses++;
                     _syncBackoffFailures = 0;
                     _syncBlockedUntilUtc = null;
                     if (ConsecutiveSyncFailures > 0)
@@ -2772,7 +2785,7 @@ namespace ConditioningControlPanel.Services
                         SyncHealthChanged?.Invoke(this, 0);
                     }
                 }
-                else if (LastSyncError != null)
+                else if (!skipped && LastSyncError != null)
                 {
                     ConsecutiveSyncFailures++;
                     SyncHealthChanged?.Invoke(this, ConsecutiveSyncFailures);
@@ -4061,6 +4074,24 @@ namespace ConditioningControlPanel.Services
         public Task<(bool success, string? error)> PurchaseSkillAsync(string skillId)
             => PurchaseSkillAsync(skillId, afterSync: false);
 
+        /// <summary>
+        /// One real sync before a balance refusal is asked again (#1300). Waits for a sync already
+        /// running (the level up fires one; if it landed, the server has heard), and inside the 30 s
+        /// cooldown, which the server enforces too, waits out the rest of it once. True only when a
+        /// sync reached the server.
+        /// </summary>
+        private async Task<bool> SyncBeforeRetryAsync()
+        {
+            var landed = _syncSuccesses;
+            if (!await _syncGate.WaitAsync(SyncCooldown)) return false;
+            _syncGate.Release();
+            if (_syncSuccesses != landed || await SyncProfileAsync()) return true;
+            var left = LastSyncTime.HasValue ? SyncCooldown - (DateTime.Now - LastSyncTime.Value) : TimeSpan.Zero;
+            if (left <= TimeSpan.Zero || left > SyncCooldown) return false;
+            await Task.Delay(left + TimeSpan.FromMilliseconds(250));
+            return await SyncProfileAsync();
+        }
+
         private async Task<(bool success, string? error)> PurchaseSkillAsync(string skillId, bool afterSync)
         {
             var settings = App.Settings?.Current;
@@ -4159,11 +4190,16 @@ namespace ConditioningControlPanel.Services
                         // milestones it has not seen yet, then ask again (#1300). Only a refusal
                         // that survives the sync lowers the wallet.
                         var step = SparklePoints.AfterBalanceRefusal(settings.SkillPoints, result.SkillPoints, refusedSkill.Cost, afterSync);
-                        if (step == SparklePoints.RefusalStep.SyncAndRetry && await SyncProfileAsync())
+                        if (step == SparklePoints.RefusalStep.SyncAndRetry)
                         {
-                            App.Logger?.Information("Skill purchase: balance refusal at {Server} vs local {Local}, synced, asking again",
-                                result.SkillPoints, settings.SkillPoints);
-                            return await PurchaseSkillAsync(skillId, afterSync: true);
+                            if (await SyncBeforeRetryAsync())
+                            {
+                                App.Logger?.Information("Skill purchase: balance refusal at {Server} vs local {Local}, synced, asking again",
+                                    result.SkillPoints, settings.SkillPoints);
+                                return await PurchaseSkillAsync(skillId, afterSync: true);
+                            }
+                            // No sync reached the server: keep the wallet, the next sync settles it.
+                            return (false, result.Error ?? "Purchase failed");
                         }
                         var adopted = SparklePoints.AdoptAfterRefusal(settings.SkillPoints, result.SkillPoints, refusedSkill.Cost);
                         if (adopted.HasValue)
@@ -4665,6 +4701,9 @@ namespace ConditioningControlPanel.Services
             nameof(AppSettings.CustomAssetsPath),
             nameof(AppSettings.DiscordWebhookUrl),
             nameof(AppSettings.LastSeenUtc), // Local-only greeting timestamp — must never leave the device.
+            // Documented local only: a restore on another PC must not switch presence sharing on.
+            nameof(AppSettings.FriendsPresenceShared),
+            nameof(AppSettings.ModPersonalityPreset),
         };
 
         /// <summary>
@@ -4701,6 +4740,8 @@ namespace ConditioningControlPanel.Services
             restored.CustomAssetsPath = current.CustomAssetsPath;
             restored.DiscordWebhookUrl = current.DiscordWebhookUrl;
             restored.LastSeenUtc = current.LastSeenUtc;
+            restored.FriendsPresenceShared = current.FriendsPresenceShared;
+            restored.ModPersonalityPreset = current.ModPersonalityPreset; // the setter copies
             // A backup over budget leaves out the per-file asset lists (SettingsBackupBudget), so
             // an empty list in the restore may just mean "not carried": keep this PC's own.
             if (restored.DisabledAssetPaths.Count == 0 && current.DisabledAssetPaths.Count > 0)

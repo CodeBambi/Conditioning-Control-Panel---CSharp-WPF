@@ -88,7 +88,8 @@ namespace ConditioningControlPanel.Services
             if (code >= 400 && BodySaysGrantDead(responseBody)) return PatreonRefreshOutcome.Refused;
 
             // A fixed proxy names its own trouble (500 provider_config = our secret, 502/503
-            // provider_busy = Patreon down). That is never the grant, however stale the expiry.
+            // provider_busy = Patreon down, 502 provider_unavailable = Patreon unreachable, 500
+            // server_error = Redis or a bug). That is never the grant, however stale the expiry.
             if (code >= 500 && BodySaysProviderTrouble(responseBody)) return PatreonRefreshOutcome.Unavailable;
 
             // Answers that mean "later" by definition, whatever else is going on.
@@ -132,7 +133,9 @@ namespace ConditioningControlPanel.Services
         {
             if (string.IsNullOrEmpty(body)) return false;
             return body.IndexOf("provider_config", StringComparison.OrdinalIgnoreCase) >= 0
-                || body.IndexOf("provider_busy", StringComparison.OrdinalIgnoreCase) >= 0;
+                || body.IndexOf("provider_busy", StringComparison.OrdinalIgnoreCase) >= 0
+                || body.IndexOf("provider_unavailable", StringComparison.OrdinalIgnoreCase) >= 0
+                || body.IndexOf("server_error", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>

@@ -151,8 +151,49 @@ public class SyncFloodGuardsTests
         var obj = BigLibrary(20000);
         var r = SettingsBackupBudget.Encode(obj, budget: 200_000);
         Assert.True(r.Base64.Length <= 200_000);
-        Assert.Equal(new[] { "ActiveAssetPaths", "AssetPresets", "DisabledAssetPaths" }, r.Trimmed);
+        // The empty legacy list was dropped on the way and fits back; both big lists stay out.
+        Assert.Equal(new[] { "DisabledAssetPaths", "AssetPresets" }, r.Trimmed);
+        Assert.NotNull(obj["ActiveAssetPaths"]);
         Assert.NotNull(obj["MasterVolume"]);
+    }
+
+    private static JArray Paths(int n, int seed)
+    {
+        var rng = new Random(seed);
+        return new JArray(Enumerable.Range(0, n).Select(_ => $"library/{rng.Next():x8}/{rng.Next():x8}{rng.Next():x8}.jpg"));
+    }
+
+    private static JArray Presets(params int[] pathCounts) => new(pathCounts.Select((n, i) =>
+        new JObject { ["Name"] = $"preset {i}", ["DisabledAssetPaths"] = Paths(n, 100 + i) }));
+
+    [Fact]
+    public void Backup_SmallPresets_AreKept_WhenThePathListIsTheBulk()
+    {
+        var obj = new JObject { ["PlayerLevel"] = 42, ["AssetPresets"] = Presets(20, 20), ["DisabledAssetPaths"] = Paths(40_000, 3) };
+        var r = SettingsBackupBudget.Encode(obj);
+        Assert.True(r.Fits);
+        Assert.Equal(new[] { "DisabledAssetPaths" }, r.Trimmed);
+        Assert.NotNull(obj["AssetPresets"]);
+    }
+
+    [Fact]
+    public void Backup_EitherAloneFits_ThePresetsStay()
+    {
+        var obj = new JObject { ["AssetPresets"] = Presets(4_000), ["DisabledAssetPaths"] = Paths(4_000, 3) };
+        var alone = SettingsBackupBudget.Encode(new JObject { ["DisabledAssetPaths"] = Paths(4_000, 3) }).Base64.Length;
+        var r = SettingsBackupBudget.Encode(obj, budget: alone + alone / 2);
+        Assert.Equal(new[] { "DisabledAssetPaths" }, r.Trimmed);
+        Assert.NotNull(obj["AssetPresets"]);
+    }
+
+    [Fact]
+    public void Backup_PresetsAreTheBulk_ThePathListComesBack()
+    {
+        var obj = new JObject { ["AssetPresets"] = Presets(20_000, 20_000), ["DisabledAssetPaths"] = Paths(100, 3) };
+        var r = SettingsBackupBudget.Encode(obj, budget: 200_000);
+        Assert.True(r.Fits);
+        Assert.Equal(new[] { "AssetPresets" }, r.Trimmed);
+        Assert.NotNull(obj["DisabledAssetPaths"]);
     }
 
     [Fact]
@@ -190,6 +231,8 @@ public class SyncFloodGuardsTests
     [Theory]
     [InlineData(HttpStatusCode.InternalServerError, "{\"reason\":\"provider_config\"}")]
     [InlineData(HttpStatusCode.ServiceUnavailable, "{\"reason\":\"provider_busy\",\"retry_after\":30}")]
+    [InlineData(HttpStatusCode.BadGateway, "{\"error\":\"Provider unavailable\",\"reason\":\"provider_unavailable\"}")]
+    [InlineData(HttpStatusCode.InternalServerError, "{\"error\":\"Internal server error\",\"reason\":\"server_error\"}")]
     public void ProviderTrouble_IsNeverTheGrant_HoweverStale(HttpStatusCode status, string body)
     {
         var outcome = PatreonGrantHealth.Classify(status, null, false, Now.AddDays(-30), Now, body);

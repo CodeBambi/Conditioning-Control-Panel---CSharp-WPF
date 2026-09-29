@@ -33,12 +33,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public const int MaxEncodedBytes = 660_000;
 
-        /// <summary>Dropped in this order, only while the backup is still over budget.</summary>
+        /// <summary>Dropped in this order, only while the backup is still over budget. The named
+        /// presets go last: they carry names and settings as well as a path list.</summary>
         public static readonly IReadOnlyList<string> TrimOrder = new[]
         {
             "ActiveAssetPaths",      // legacy whitelist, superseded by DisabledAssetPaths
-            "AssetPresets",          // each preset carries its own copy of a path list
             "DisabledAssetPaths",
+            "AssetPresets",          // each preset carries its own copy of a path list
         };
 
         public sealed class Result
@@ -56,6 +57,7 @@ namespace ConditioningControlPanel.Services
         public static Result Encode(JObject settings, int budget = MaxEncodedBytes)
         {
             var trimmed = new List<string>();
+            var removed = new List<JProperty>();
             var (gz, b64) = Pack(settings);
             foreach (var key in TrimOrder)
             {
@@ -64,8 +66,18 @@ namespace ConditioningControlPanel.Services
                     .FirstOrDefault(p => string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase));
                 if (prop == null) continue;
                 prop.Remove();
+                removed.Add(prop);
                 trimmed.Add(prop.Name);
                 (gz, b64) = Pack(settings);
+            }
+            // Put back whatever still fits: only the last list dropped is known to be too big, so a
+            // library whose presets are the bulk keeps its own path lists. The server keeps one copy.
+            for (int i = removed.Count - 2; i >= 0 && b64.Length <= budget; i--)
+            {
+                settings.Add(removed[i]);
+                var (g, b) = Pack(settings);
+                if (b.Length <= budget) { (gz, b64) = (g, b); trimmed.Remove(removed[i].Name); }
+                else removed[i].Remove();
             }
             return new Result { Compressed = gz, Base64 = b64, Trimmed = trimmed };
         }
