@@ -370,6 +370,7 @@ public class LeashUiTests
         foreach (var k in Enum.GetValues<RewardKind>()) keys.Add(LeashUiRules.Key(k));
         foreach (var k in Enum.GetValues<LeashIntensity>()) keys.Add(LeashUiRules.Key(k));
         foreach (var s in Enum.GetValues<LeashSendStatus>()) keys.Add(LeashUiRules.ResultKey(s));
+        foreach (var s in Enum.GetValues<LeashStep>()) keys.Add(LeashUiRules.StepKey(s));
         foreach (var e in Enum.GetValues<LeashEventKind>())
             foreach (var acc in new bool?[] { true, false })
                 foreach (var rk in Enum.GetValues<RewardKind>())
