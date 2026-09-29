@@ -98,12 +98,16 @@ public static class TabPrices
     /// <summary>The seconds to book for one event, or 0 when it books nothing: unknown id, a
     /// row the player has not switched on, or a way-out id. <paramref name="units"/> only counts
     /// on per-unit rows.</summary>
-    public static int Resolve(string id, ISet<string>? enabledIds, int units = 1)
+    public static int Resolve(string id, ISet<string>? enabledIds, int units = 1,
+        IReadOnlyDictionary<string, int>? overrides = null)
     {
         if (string.IsNullOrEmpty(id) || NeverPriced.Contains(id)) return 0;
         var price = Find(id);
         if (price == null || enabledIds == null || !enabledIds.Contains(id)) return 0;
         var n = price.PerUnit ? Math.Clamp(units, 0, 1000) : 1;
-        return (int)Math.Clamp((long)price.Seconds * n, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds);
+        // The player's own figure (TabPriceEdit) replaces the default, sign kept and size
+        // clamped; the day and backlog limits still apply when it books.
+        var seconds = TabPriceEdit.Effective(price, overrides);
+        return (int)Math.Clamp((long)seconds * n, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds);
     }
 }

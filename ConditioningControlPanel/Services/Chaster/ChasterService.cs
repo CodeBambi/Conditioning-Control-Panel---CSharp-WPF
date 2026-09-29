@@ -14,7 +14,8 @@ namespace ConditioningControlPanel.Services.Chaster;
 /// <paramref name="RelockPastEnd"/> is the player's opt-in to lock again when the timer has run out.
 /// <paramref name="Paused"/> is the page's pause button: nothing books and nothing is pushed.</summary>
 public sealed record ChasterOptions(bool TabEnabled, string? LockId, ISet<string> Prices, TabLimits? Limits = null,
-    bool RemoteOpen = false, bool PanicArmed = true, bool RelockPastEnd = false, bool Paused = false)
+    bool RemoteOpen = false, bool PanicArmed = true, bool RelockPastEnd = false, bool Paused = false,
+    IReadOnlyDictionary<string, int>? PriceOverrides = null)
 {
     public TabLimits Caps => Limits ?? TabLimits.Default;
 
@@ -221,7 +222,7 @@ public sealed partial class ChasterService : IDisposable
         if (eventId == CircesMisses.EventId) return new(0, TabRefusal.Nothing);
         // The day-end rows and the streak are the service's own verdicts; no caller books them.
         if (TabDayEnd.ServiceRows.Contains(eventId)) return new(0, TabRefusal.Nothing);
-        var seconds = TabPrices.Resolve(eventId, options.Prices, units);
+        var seconds = TabPrices.Resolve(eventId, options.Prices, units, options.PriceOverrides);
         if (options.Prices.Contains(TabDayEnd.HeatId) && TabDayEnd.HeatApplies(eventId))
             seconds = TabDayEnd.Heated(seconds, HeatCount(eventId));
         var booking = BookSeconds(eventId, seconds, originPx);

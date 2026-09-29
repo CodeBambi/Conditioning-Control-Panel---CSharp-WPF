@@ -319,6 +319,8 @@
   "chaster_costs_header": "Kostet Zeit",
   "chaster_earns_header": "Bringt sie zurück",
   "chaster_each": "je {0}",
+  "chaster_price_edit_tip": "Klicken, um deine eigene Zeit festzulegen. Leer lassen für {0}.",
+  "chaster_price_edit_locked": "Zeiten lassen sich ändern, solange kein Schloss aktiv ist.",
   "chaster_bill_header": "Diese Runde",
   "chaster_bill_empty": "Noch nichts.",
   "chaster_bill_pushed": "Ans Schloss geschickt: {0}",

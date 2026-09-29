@@ -168,6 +168,7 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             RefreshHero();
             if (App.Chaster?.IsLinked == true) RefreshNumbers(animate: false);
+            PaintStamps();
         }));
 
         private void Refresh()
@@ -1237,6 +1238,7 @@ namespace ConditioningControlPanel.Views.Tabs
             };
             Grid.SetColumn(stamp, 2);
             grid.Children.Add(stamp);
+            WireStamp(price, stamp);
 
             var row = new ToggleButton
             {
@@ -1261,7 +1263,7 @@ namespace ConditioningControlPanel.Views.Tabs
 
         /// <summary>The signed figure a row books right now, as the stamp, the words and the
         /// scene all print it.</summary>
-        internal static int ShownSeconds(string id) => TabPrices.Find(id)?.Seconds ?? 0;
+        internal static int ShownSeconds(string id) => TabPriceEdit.Effective(id, Overrides);
 
         private void PaintRowLit(string id, bool on)
         {
@@ -1355,7 +1357,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 else TrailerWeb.Visibility = Visibility.Collapsed;
                 Trailer.PlacementTarget = row;
                 _trailerShown = true;
-                FxTrailerStart(price);
+                FxTrailerStart(TabPriceEdit.Shown(price, Overrides));
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster trailer"); }
             try { Trailer.IsOpen = true; }
