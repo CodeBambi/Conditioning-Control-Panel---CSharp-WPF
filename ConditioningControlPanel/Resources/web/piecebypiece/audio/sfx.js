@@ -90,7 +90,9 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   let lowClock = false;      // the mover is under lowClockMs
   const log = [];
   const settings = () => (win && win.PBP && win.PBP.settings) || {};
+  let hushed = false;        // the Esc pause: every voice this page makes goes quiet (hush())
   const volume = () => {
+    if (hushed) return 0;
     const v = settings().sfxVolume;
     return clamp01(v === undefined ? TUNING.volume : v);
   };
@@ -429,7 +431,17 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       meter, wet: +wetLevel.toFixed(3), drift: Math.round(drift), lowClock, room: !!wet,
     }),
     setMeter,
-    setVolume(v) { if (v <= 0) crowd.cancel(); settings().sfxVolume = clamp01(v); if (master) master.gain.value = doc && doc.hidden ? 0 : clamp01(v); },
+    setVolume(v) { if (v <= 0) crowd.cancel(); settings().sfxVolume = clamp01(v); if (master) master.gain.value = doc && doc.hidden ? 0 : volume(); },
+    /** The Esc pause. On: everything on the master (sfx, crowd, the Distraction bed and whispers) fades out
+     *  in about 0.1 s. Off: it comes back slowly (about 3.5 s to full), so a trance bed never snaps back. */
+    hush(on) {
+      hushed = !!on;
+      if (hushed) crowd.cancel();
+      if (!master || !ctx) return;
+      const to = doc && doc.hidden ? 0 : volume();
+      try { master.gain.cancelScheduledValues(ctx.currentTime); master.gain.setTargetAtTime(to, ctx.currentTime, hushed ? 0.03 : 1.2); } catch { master.gain.value = to; }
+    },
+    isHushed: () => hushed,
     dispose() {
       disposed = true;
       crowd.dispose();

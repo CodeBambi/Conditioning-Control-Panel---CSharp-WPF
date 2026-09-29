@@ -20,6 +20,7 @@ import { createTurnHandoff } from './ui/turn-handoff.js';
 import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
+import { createPauseHush } from './ui/pause-hush.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
@@ -259,7 +260,7 @@ function main() {
     feelLate.push((dt) => board.motes.update(dt, view.camera, view.renderer));
   }).catch((e) => console.warn('[pbp] motes missing', e));
   import('./board/turn-spiral.js').then(m => {
-    board.turnSpiral = m.createTurnSpiral({ view, game, bus, menuOpen: () => !!window.PBP.door?.isUp() });
+    board.turnSpiral = m.createTurnSpiral({ view, game, bus, menuOpen: () => !!window.PBP.door?.isUp() || !!window.PBP.isPaused?.() });
     feelLate.push(dt => board.turnSpiral.update(dt));
     const dispose = view.dispose;
     view.dispose = () => { board.turnSpiral.dispose(); dispose(); };
@@ -268,6 +269,9 @@ function main() {
   // Esc on the menu closes the board; Esc in a game pauses it (owner, 2026-09-27). Never mid-drag, where it
   // is "put the piece back". A local game holds its clock and the computer's reply; an online clock belongs to
   // the server, so the card says it keeps running.
+  // The pause is also the first half of a panic press (the panel lets the board keep a first Escape as its
+  // pause; a second within 2 s closes it), so it goes quiet at once (ui/pause-hush.js), and an Escape on the
+  // pause card LEAVES, whatever the gap: Esc, Esc is always the way out. Resume is the focused button.
   const pauseCard = document.createElement('div');
   pauseCard.className = 'pbp-pause';
   pauseCard.hidden = true;
@@ -285,8 +289,10 @@ function main() {
     const online = onlineSeat();
     pauseCard.querySelector('.pbp-pause-note').hidden = !online;
     if (!online) { const clock = window.PBP.game?.clock; if (p) clock?.pause?.(); else clock?.resume?.(); }
+    pauseHush.set(p);
     if (p) pauseCard.querySelector('[data-pause="resume"]').focus();
   }
+  const pauseHush = createPauseHush({ board, ramp: () => window.PBP.ramp, isPaused: () => pausedGame });
   window.PBP.pause = setGamePaused;
   bus.on('gameover', () => setGamePaused(false));   // the result card owns the screen now
   window.PBP.isPaused = () => pausedGame;
@@ -294,11 +300,11 @@ function main() {
     const b = e.target.closest('[data-pause]');
     if (!b) return;
     if (b.dataset.pause === 'resume') setGamePaused(false);
-    else { setGamePaused(false); postToHost({ type: 'pbp:exit' }); }
+    else postToHost({ type: 'pbp:exit' });   // leave hushed, the window closes
   });
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || drag.isDragging()) return;
-    if (pausedGame) { setGamePaused(false); return; }
+    if (pausedGame) { postToHost({ type: 'pbp:exit' }); return; }   // still hushed: nothing comes back on the way out
     const inGame = !window.PBP.door?.isUp() && window.PBP.game && !window.PBP.game.isOver();
     if (inGame) setGamePaused(true);
     else postToHost({ type: 'pbp:exit' });

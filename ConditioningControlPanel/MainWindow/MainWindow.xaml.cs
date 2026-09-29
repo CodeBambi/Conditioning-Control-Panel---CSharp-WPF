@@ -1451,22 +1451,27 @@ namespace ConditioningControlPanel
         /// page hears the same key and brakes on its own; this only keeps the panic pass from closing
         /// the game under it. Every condition is in <see cref="Services.Safety.PanicPolicy.GameClaimsEscapeAsPause"/>,
         /// including the one that matters most: a second Escape within 2 s is a full panic.
+        ///
+        /// <para>Piece by Piece rides the same rule (owner, 2026-09-29): without it the first Escape of a
+        /// chess game closed the board, so its own pause card could never be reached. The board's pause
+        /// goes quiet at once (ui/pause-hush.js) and an Escape on the pause card leaves.</para>
         /// </summary>
         private bool TryRacePauseOnEscape()
         {
             try
             {
                 var now = DateTime.UtcNow;
+                bool raceInFront = Services.Chaos.CaucusHostService.IsInFront;
                 bool claim = Services.Safety.PanicPolicy.GameClaimsEscapeAsPause(
                     App.Settings?.Current?.PanicKey,
-                    gameInFront: Services.Chaos.CaucusHostService.IsInFront,
+                    gameInFront: raceInFront || Services.PieceByPiece.PieceByPieceHostService.IsInFront,
                     engineRunning: _isRunning,
                     lockCardOpen: LockCardWindow.IsAnyOpen(),
                     lastClaimUtc: _lastRaceEscapeClaimUtc,
                     nowUtc: now);
                 if (!claim) { _lastRaceEscapeClaimUtc = null; return false; }
                 _lastRaceEscapeClaimUtc = now;
-                VideoDiag.Log("PANIC", "Escape kept by Racing Thoughts as its pause (again within 2 s = full panic)");
+                VideoDiag.Log("PANIC", $"Escape kept by {(raceInFront ? "Racing Thoughts" : "Piece by Piece")} as its pause (again within 2 s = full panic)");
                 return true;
             }
             catch (Exception ex)
