@@ -820,3 +820,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   sync push. Payout maths is one Core method (QuestService.ScaledQuestXp). Progress sources: flash images, XP awards.
 - Evidence: QuestsTabLiveTests (fail-proven); live board and both rerolls. Rows stay stub (FX burst, stamps, art, punch card,
   streak fix, animations). Review: FIX -> fixed.
+
+## avalonia-port/achievements-tab-live: +493
+- Achievements tab card grid on Core (WPF order, hidden skipped, blurred/???/requirement, progress bars, Patreon chip,
+  All/Unlocked/Locked); built once, one card redrawn per unlock (bursts combined), in-place refresh on show, cached 150 px badges.
+  CheckLevelAchievements moved into Core AchievementEngine (WPF delegates); the head runs it on LevelUp plus a silent startup pass.
+- Evidence: AchievementsTabGridTests + LevelUp->unlock test, fail-proven; live: session levelled 9->10, "Plastic Initiation" popup
+  and card. Rows stay stub (rewards need WardrobeCatalog, tile animations, sound, passive toast). Review: FIX -> fixed.
