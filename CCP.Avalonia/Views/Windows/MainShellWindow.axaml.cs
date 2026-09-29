@@ -144,7 +144,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var dialog = new Dialogs.ModManagerDialog();
                 await dialog.ShowDialog(this);
-                if (dialog.ModWasChanged) ApplyActiveModChange();
+                // Install/uninstall of a non-active mod still changes the combo's rows.
+                if (dialog.ModWasChanged) ApplyActiveModChange(); else InitializeModSelector();
             }
             catch (Exception ex) { Serilog.Log.Warning(ex, "[ModManager] failed to open"); }
         }

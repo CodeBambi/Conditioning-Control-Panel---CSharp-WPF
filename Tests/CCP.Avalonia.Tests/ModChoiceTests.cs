@@ -37,6 +37,7 @@ public sealed class ModChoiceTests
         PendingModChoice.Record(BuiltInMods.BambiSleepId, BuiltInMods.CCPDefaultId);
 
         combo.SelectedItem = shell.AvailableMods.Single(i => i.Id == BuiltInMods.DronificationId);
+        Dispatcher.UIThread.RunJobs();   // the repaint is posted out of SelectionChanged
 
         Assert.Equal(BuiltInMods.DronificationId, AvApp.Mods!.ActiveModId);
         Assert.Equal(BuiltInMods.DronificationId, CoreSettings.Current.ActiveModId);   // saved
@@ -48,6 +49,40 @@ public sealed class ModChoiceTests
         Assert.Equal(BuiltInMods.DronificationId, ((ModSelectorItem)combo.SelectedItem!).Id);
         Assert.Equal(BuiltInMods.DronificationId, (combo.SelectionBoxItem as ModSelectorItem)?.Id);   // chip not blank
         await Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task UninstallingANonActiveModRefreshesTheComboAndTheChipKeepsItsName() => Run(async (shell, svc, server) =>
+    {
+        // A user mod, installed before the shell is built, so it is one of the combo's rows.
+        shell.Close();
+        var scratch = Directory.CreateTempSubdirectory("ccp-choice-").FullName;
+        var ccpmod = Path.Combine(scratch, "t.ccpmod");
+        using (var zip = ZipFile.Open(ccpmod, ZipArchiveMode.Create))
+        using (var w = new StreamWriter(zip.CreateEntry("mod.json").Open()))
+            w.Write(Newtonsoft.Json.JsonConvert.SerializeObject(new ModManifest { Id = "choice-test-mod", Name = "Choice Test", Version = "1.0.0", Author = "tests" }));
+        Assert.True((await AvApp.Mods!.InstallModAsync(ccpmod)).Success);
+        shell = new MainShellWindow();
+        shell.Show();
+        Assert.Contains(shell.AvailableMods, i => i.Id == "choice-test-mod");
+
+        shell.FindControl<Button>("BtnManageMods")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var manager = await Owned<ConditioningControlPanel.Avalonia.Views.Dialogs.ModManagerDialog>(shell);
+        var list = manager.FindControl<ListBox>("ModList")!;
+        list.SelectedItem = list.Items.OfType<ListBoxItem>().Single(i => (string)i.Tag! == "choice-test-mod");
+        manager.FindControl<Button>("BtnUninstall")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var confirm = await Owned<ConditioningControlPanel.Avalonia.Views.Dialogs.MessageDialog>(manager);
+        confirm.FindControl<Button>("BtnOk")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await WaitFor(() => !AvApp.Mods.InstalledMods.ContainsKey("choice-test-mod"));
+        manager.Close();
+        await WaitFor(() => shell.AvailableMods.All(i => i.Id != "choice-test-mod"));   // refreshed on close
+
+        var combo = shell.FindControl<ComboBox>("ModSelectorCombo")!;
+        combo.SelectedItem = shell.AvailableMods.Single(i => i.Id == BuiltInMods.DronificationId);
+        await WaitFor(() => AvApp.Mods.ActiveModId == BuiltInMods.DronificationId);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(BuiltInMods.DronificationId, (combo.SelectionBoxItem as ModSelectorItem)?.Id);   // chip not blank
+        shell.Close();
     });
 
     [Fact]
@@ -118,6 +153,12 @@ public sealed class ModChoiceTests
 
     private static void Next(FirstRunWizard w) =>
         w.FindControl<Button>("BtnNext")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+    private static async Task<T> Owned<T>(Window owner) where T : Window
+    {
+        await WaitFor(() => owner.OwnedWindows.OfType<T>().Any());
+        return owner.OwnedWindows.OfType<T>().Single();
+    }
 
     private static async Task WaitFor(Func<bool> condition)
     {

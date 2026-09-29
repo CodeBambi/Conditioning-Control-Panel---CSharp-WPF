@@ -42,6 +42,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (AvApp.Mods is not { } mods) return;   // headless render: keep the sample chip
             _modSwitchHost = this;
+            Closed += (_, _) => { if (_modSwitchHost == this) _modSwitchHost = null; };
             InitializeModSelector();
             RefreshThemeAwareElements();
             if (_hookedMods != mods)
@@ -95,7 +96,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (AvApp.Mods == null || AvApp.Mods.ActiveModId == item.Id) return;
 
             AvApp.Mods.ActivateMod(item.Id);
-            ApplyActiveModChange();
+            // Deferred: rebuilding the combo's items from inside its own SelectionChanged leaves the
+            // closed chip blank on Avalonia, so the whole repaint runs after this handler returns.
+            Dispatcher.UIThread.Post(() => ApplyActiveModChange(), DispatcherPriority.Normal);
         }
 
         /// <summary>WPF ActivateChosenMod: the first-run / picker choice through the same two steps.</summary>
@@ -139,6 +142,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (ModAudioPolicy.UsesBaselineVoicePack(mods.ActiveModId) && AvApp.ReleaseContent is { } releaseContent)
                 _ = System.Threading.Tasks.Task.Run(() => releaseContent.EnsureBaselineAsync());
 
+            // WPF App.KeywordPresets.NotifyVisibilityChanged: themed presets show only under their mod.
+            Named<Tabs.AwarenessTabView>("AwarenessTab")?.RefreshAwarenessPresetCards();
+
             InitializeModSelector();
             RefreshThemeAwareElements();
 
@@ -146,7 +152,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF InitializeModSelector: stock mods in canonical order, then user mods A-Z.</summary>
-        private void InitializeModSelector()
+        internal void InitializeModSelector()
         {
             if (AvApp.Mods is not { } mods) return;
             _suppressModSelectorChange = true;
