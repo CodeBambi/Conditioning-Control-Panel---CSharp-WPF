@@ -121,6 +121,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (host == null) return false;
                 host.Source = new Uri(url);
                 Log.Information("Browser navigated to {Url}", url);
+                TriggerCatalogueLookupForNavigation(url);   // WPF: on NavigationCompleted (see DeeperTab)
                 return true;
             }
             catch (Exception ex)

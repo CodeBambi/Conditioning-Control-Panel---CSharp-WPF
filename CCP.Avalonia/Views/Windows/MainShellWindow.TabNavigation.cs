@@ -196,6 +196,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // MainShellWindow.ProfileFx.cs / .ProfileVat.cs. EnsureProfileMeFirst is here.
                     case "discord": UpdateProfileSharingSummary(); ProfilePage?.EnsureProfileMeFirst(); break;
 
+                    // WPF MainWindow.TabNavigation.cs:292/367: throttled share-status polls on tab open.
+                    case "presets":
+                        _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindPresets);
+                        _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindSessions);
+                        break;
+                    case "deeper": _ = CheckDeeperSubmissionStatusesAsync(); break;
+
                     // WPF MainWindow.TabNavigation.cs:429: every show re-fetches the board (read-only).
                     case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;
 

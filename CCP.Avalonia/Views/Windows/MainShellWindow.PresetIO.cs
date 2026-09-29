@@ -6,8 +6,9 @@
 // Views/Controls/AppSettings/DataSettingsSection.axaml.cs.
 //
 // Still head-side: BtnSharePreset_Click / SharePresetToCatalogueAsync / ShareSessionToCatalogueAsync
-// (App.Catalogue.SubmitCatalogueAssetAsync, App.UserDisplayName, MainShellWindow.CatalogueSubmissions.cs)
-// and the share status badges that read GetCatalogueRecord from the same partial.
+// (App.Catalogue.SubmitCatalogueAssetAsync, App.UserDisplayName, MainShellWindow.CatalogueSubmissions.cs),
+// split out of catalogue U4. The share status badges are live: CreateCatalogueStatusBadge is in
+// MainShellWindow.CatalogueStatus.cs, painted by PresetsTabView (preset detail + session rack rows).
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {

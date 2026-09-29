@@ -38,15 +38,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    tile the WPF original also shows is what draws.
     ///  - <see cref="CatalogueEntry"/> is the Core record (CCP.Core/Services/Catalogue/CatalogueLookup.cs).
     ///
-    /// <para><b>No opener yet, and the blocker is the CALLER.</b> WPF reaches this from
-    /// <c>MainWindow.OpenCataloguePickerDialog</c> (MainWindow.DeeperTab.cs:1025), itself the
-    /// "pick one" action on a toast raised by <c>ShowCatalogueLookupToast</c> after
-    /// <c>RunCatalogueLookupAsync</c> matched the browser's current HypnoTube video. Both ends are
-    /// head-side — <c>App.CatalogueLookup</c> (Services/CatalogueLookupService.cs) for the lookup
-    /// AND the download, <c>App.Notifications</c> for the toast — and the dialog exists only to
-    /// feed <c>DownloadAndOpenCatalogueEntryAsync</c>. Opening it with entries nobody can fetch and
-    /// a selection nobody can download would be a picker that picks nothing. It arrives with the
-    /// lookup service, which is the same wait MainShellWindow.DeeperTab.cs records.</para>
+    /// <para>Opened by <c>MainShellWindow.OpenCataloguePickerDialog</c> (MainShellWindow.DeeperTab.cs),
+    /// the "pick one" action on the lookup toast; the selection is downloaded through Core
+    /// <c>CatalogueLookup</c> and opened in the player. The lookup fires from NavigateBrowser with the
+    /// requested URL only: WebHost exposes no live URL, so on this head no in-page HT navigation
+    /// reaches it yet.</para>
     /// </summary>
     public partial class CataloguePickerDialog : Window
     {

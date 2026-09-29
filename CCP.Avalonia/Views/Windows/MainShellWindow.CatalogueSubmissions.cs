@@ -8,25 +8,13 @@
 // AppSettings.cs:2347-2375), which CoreSettings.Current hands over. Nothing here touches a control,
 // so the x:Name hazard does not apply to this partial at all.
 //
-// Nothing on this head CALLS these yet, and that is the point of restoring them now: three ported
-// files name this file as what blocks their share-status badge -
-//   MainShellWindow.PresetIO.cs        CreateCatalogueStatusBadge (wants IsCatalogueAcceptedStatus),
-//                                      UpdatePresetShareStatusBadge (wants GetCatalogueRecord)
-//   MainShellWindow.SessionIO.cs       the session rack pill (CanonicalCataloguePathKey + record)
-//   Views/Dialogs/ModManagerDialog.axaml.cs:258  the per-row pill (kind "mods" + mod.Id)
-// - and none of those files is owned by this layer. They can now be wired without a Core change.
+// Callers: MainShellWindow.CatalogueStatus.cs (CreateCatalogueStatusBadge, the /mine polls), which
+// paints the preset detail pill and session rack pill (PresetsTabView) and the Mod Manager row pill.
 //
-// THE WRITE HALF: RecordCatalogueSubmission is ported (catalogue U3; its callers, the preset/session/
-// mod Share buttons, land with U4). Still out:
-//   CheckCatalogueSubmissionStatusesAsync(kind, force)
-//       App.Catalogue.FetchMySubmissionsAsync / FetchMyCatalogueAssetsAsync - a network round trip
-//       with no seam. Its three throttle members (CatalogueCheckThrottle, _lastCatalogueCheckUtc,
-//       _catalogueChecksInFlight) exist only to pace that call and are left out with it.
-//   NotifyCatalogueSubmissionAccepted / ResolveCatalogueDisplayName
-//       App.Notifications.ShowSticky (ConditioningControlPanel/Services/Notifications/
-//       NotificationService.cs), which this head does not ship. ResolveCatalogueDisplayName itself
-//       would compile - UserPresets is in Core and CoreMods.InstalledMods answers the mod name -
-//       but its only caller is the toast above it, so it waits for the toast.
+// THE WRITE HALF: RecordCatalogueSubmission is ported (catalogue U3). Its callers, the preset/session/
+// mod Share buttons, are split out of U4 and not wired yet; whoever wires them repaints through
+// RefreshCatalogueShareBadges (MainShellWindow.CatalogueStatus.cs) as WPF does. The status polls, accepted toast
+// (15 s, not WPF's sticky one) and ResolveCatalogueDisplayName are in MainShellWindow.CatalogueStatus.cs.
 //
 // Checked and NOT the blocker: CoreReleaseContent. It answers pack ids, install stamps and pack
 // info; the catalogue submission flow reads none of those.
@@ -91,8 +79,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF MainWindow.CatalogueSubmissions.cs:63: remember a share's server id/status. Only
-        /// Success/Duplicate carry one; other outcomes are no-ops. The badge refresh WPF ends with
-        /// (RefreshCatalogueShareBadges) belongs to the share pills, which are not built on this head.</summary>
+        /// Success/Duplicate carry one; other outcomes are no-ops. WPF ends with RefreshCatalogueShareBadges
+        /// (MainShellWindow.CatalogueStatus.cs, instance); the Share caller does that when it lands.</summary>
         internal static void RecordCatalogueSubmission(string kind, string key, SubmissionResult result)
         {
             try

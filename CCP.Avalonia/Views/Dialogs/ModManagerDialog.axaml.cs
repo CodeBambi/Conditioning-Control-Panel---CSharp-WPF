@@ -37,8 +37,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    <c>DecodeToWidth</c>); <c>OpenFileDialog</c>/<c>SaveFileDialog</c> -> the
     ///    <c>StorageProvider</c> pickers.
     ///  - <c>MessageBox.Show</c> becomes <c>MessageDialog.ConfirmAsync</c>, this head's message box.
-    ///  - <c>MainWindow.CreateCatalogueStatusBadge</c> lives in the WPF head, so the share-status
-    ///    pill is omitted from the list row (stubbed, see <see cref="RefreshModList"/>).
+    ///  - The share-status pill comes from <c>MainShellWindow.CreateCatalogueStatusBadge</c>.
     ///  - Handlers are wired in the constructor rather than in markup, per the porting convention.
     /// </summary>
     public partial class ModManagerDialog : Window
@@ -358,8 +357,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     VerticalAlignment = VerticalAlignment.Center
                 });
 
-                // ponytail: needs MainWindow.GetCatalogueRecord/CreateCatalogueStatusBadge, wired
-                // when the catalogue client moves to Core. WPF appended a share-status pill here.
+                // Catalogue share status pill (user mods the owner has shared).
+                var badge = Windows.MainShellWindow.CreateCatalogueStatusBadge(
+                    Windows.MainShellWindow.GetCatalogueRecord(Windows.MainShellWindow.CatalogueKindMods, mod.Id));
+                if (badge != null) row.Children.Add(badge);
 
                 // "media not downloaded yet" marker for built-ins on a modular install.
                 if (ModPickerCatalog.NeedsDownload(mod.Id))

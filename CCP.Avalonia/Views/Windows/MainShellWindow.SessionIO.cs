@@ -3,15 +3,8 @@
 // BtnCreateSession_Click are restored in PresetsTabView (EditSession / BtnCreateSession_Click) over
 // Core SessionManager + SessionFileService; the rest is below.
 //
-// FIRST, A LEAD THAT DOES NOT APPLY TO THIS HEAD. MainShellWindow.CatalogueSubmissions.cs restored
-// its read half (CatalogueKindSessions, CanonicalCataloguePathKey, GetCatalogueRecord,
-// IsCatalogueAcceptedStatus) and named "the session rack pill" here as one of three surfaces it
-// unblocked. On WPF that pill is four lines inside BuildSessionRackRow
-// (MainWindow.SessionIO.cs:517-522). There is no pill to wire HERE, because there is no row: the
-// whole rack builder is unported, and the badge factory those four lines call,
-// CreateCatalogueStatusBadge, lives in MainShellWindow.PresetIO.cs, which this layer does not own.
-// The lead is correct about the DEPENDENCY and wrong about the work being small. It becomes true
-// the moment BuildSessionRackRow exists.
+// FIRST: the session rack pill (WPF MainWindow.SessionIO.cs:432-435) is live in PresetsTabView's
+// rack row builder, over CreateCatalogueStatusBadge (MainShellWindow.CatalogueStatus.cs).
 //
 // SECOND: Services.SessionManager, SessionFileService and AssetImportService are now in Core
 // (CCP.Core/Services/Session, CCP.Core/Services/Content). SessionManager owns AllSessions, the

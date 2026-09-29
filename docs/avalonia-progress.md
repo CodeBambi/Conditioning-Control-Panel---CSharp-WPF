@@ -773,3 +773,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   WPF; CCP_CATALOGUE_BASE_URL loopback-only, sandbox without it sends nothing (WPF unaffected).
 - Evidence: CatalogueSubmitWireTests (signed in/out) + base-URL theory, fail-proofed; live signed-out: 0 requests, 0 binding errors.
   Signed-in submit not live (no sandbox token). Review: ACCEPT.
+
+## avalonia-port/catalogue-picker-pill: +549 (catalogue U4)
+- WPF HT lookup chain on Core CatalogueLookup (toast -> picker or direct download -> opens in the player, UI-thread opener),
+  triggered at WPF's point with the requested URL (WebHost has no live-URL hook, so no user path yet: row stub). /mine share-status
+  polls at startup, Presets/Deeper tab open (90 s throttle) and Manage Mods; pills on the preset pane, session rack and Mod Manager.
+- Evidence: CatalogueShellTests (fake handler, fail-proofed); live: Mod Manager pill "Rejected", 0 binding errors. Review: ACCEPT.

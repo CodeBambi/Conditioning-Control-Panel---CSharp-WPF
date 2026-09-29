@@ -3,10 +3,11 @@
 // MainWindow.DeeperSubmissions.cs:36-80 (RecordDeeperSubmission). The client is Core CatalogueClient
 // (App.Catalogue), so every head submits through the same code.
 //
-// Still out: CheckDeeperSubmissionStatusesAsync (the /mine poll) and NotifyDeeperSubmissionAccepted
-// (a sticky toast with a View action; this head's NotificationService has no sticky/action toast),
-// and the library's submission badge. WPF's IsAcceptedStatus / CanonicalSubmissionKey copies are the
-// catalogue pair one file over (byte-identical bodies).
+// The status side lives in MainShellWindow.CatalogueStatus.cs: CheckDeeperSubmissionStatusesAsync
+// (the /api/enhancements/mine poll) and the one-time accepted toast with a View action (15 s, not
+// WPF's sticky one). Still out: the library's submission badge (no library list on this head).
+// WPF's IsAcceptedStatus / CanonicalSubmissionKey copies are the catalogue pair one file over
+// (byte-identical bodies).
 
 using System;
 using System.Threading.Tasks;
