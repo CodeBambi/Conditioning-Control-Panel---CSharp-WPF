@@ -2756,7 +2756,10 @@ namespace ConditioningControlPanel.Services
                 else
                     App.Logger?.Error(ex, "Failed to sync profile to cloud");
                 LastSyncError = ex.Message;
-                if (!IsExpectedCancellation(ex)) NoteSyncFailureForBackoff(null);
+                // HttpClient.Timeout is a TaskCanceledException wrapping a TimeoutException: a proxy
+                // that hangs, not the app shutting down, so it backs off like any other failure.
+                if (!IsExpectedCancellation(ex) || ex.InnerException is TimeoutException)
+                    NoteSyncFailureForBackoff(null);
                 // Mobile streak parity: the cloud is unreachable, so a deferred streak break
                 // gets the pre-parity behavior now instead of waiting out the full timeout.
                 App.Achievements?.Progress?.ResolveDeferredStreakBreak("sync failed");
