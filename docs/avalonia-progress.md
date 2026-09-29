@@ -827,3 +827,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   CheckLevelAchievements moved into Core AchievementEngine (WPF delegates); the head runs it on LevelUp plus a silent startup pass.
 - Evidence: AchievementsTabGridTests + LevelUp->unlock test, fail-proven; live: session levelled 9->10, "Plastic Initiation" popup
   and card. Rows stay stub (rewards need WardrobeCatalog, tile animations, sound, passive toast). Review: FIX -> fixed.
+
+## avalonia-port/header-xp-live: +270
+- Header level chip, LVL label, XP readout and XP bar live from Core progression (CoreSettings + XpCurve); repaint on XP awards,
+  level-ups, sign-in, profile load, logout and menu open. Bar fill slides 0.6 s and flashes on level-up (WPF FillXpBarTo /
+  CelebrateLevelUp), off at MotionLevel Off. Profile menu Level/XP rail live.
+- Evidence: HeaderLevelLiveTests (fail-proven, incl. sign-in/logout repaint and unsubscribe); live Lvl 10, 300/994 XP, 0 binding
+  errors. Rows stay stub (odometer, glow dot, chip pop, burst, bank hold, rank title). Review: FIX -> fixed.
