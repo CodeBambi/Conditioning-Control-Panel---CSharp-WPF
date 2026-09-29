@@ -21,9 +21,9 @@ public class WardrobeCatalogTests
     [InlineData("bambi/../../secrets")]
     public void UnknownIdsHaveNoArtAndNoItem(string? id)
     {
-        Assert.Null(WardrobeCatalog.GetImage(id));
+        Assert.Null(WardrobeArt.GetImage(id));
         Assert.Null(WardrobeCatalog.Find(id));
-        Assert.False(WardrobeCatalog.HasArt(id));
+        Assert.False(WardrobeArt.HasArt(id));
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public class WardrobeCatalogTests
     public void InvalidateIsSafeAndReloads()
     {
         var before = WardrobeCatalog.Items.Count;
-        WardrobeCatalog.Invalidate();
+        WardrobeArt.Invalidate();
         Assert.Equal(before, WardrobeCatalog.Items.Count);
     }
 }

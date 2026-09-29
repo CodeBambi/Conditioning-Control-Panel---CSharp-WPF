@@ -347,6 +347,8 @@ namespace ConditioningControlPanel.Avalonia
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
                 Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
                 Achievements.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
+                Achievements.Unlocked += (_, a) => ShowWardrobeRewardToasts(a);
+                WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
                 SeedLevelAchievements(Achievements);
@@ -465,8 +467,7 @@ namespace ConditioningControlPanel.Avalonia
         }
 
         /// <summary>WPF App.OnAchievementUnlocked (App.xaml.cs:3815): one popup per unlock, shown at once.
-        /// ponytail: no ItemUnlockedPopup - the reward map (WardrobeCatalog) is head-side in WPF;
-        /// no sound, no Discord webhook - neither service exists on this head.</summary>
+        /// ponytail: no sound, no Discord webhook - neither service exists on this head.</summary>
         /// <summary>WPF ProgressionService.cs:285 (a level-up celebrates) and App.xaml.cs:3174 (retroactive,
         /// silent). Returns the LevelUp handler so a test can detach it.</summary>
         internal static Action<int> SeedLevelAchievements(AchievementEngine engine)
@@ -478,6 +479,26 @@ namespace ConditioningControlPanel.Avalonia
             try { engine.CheckLevelAchievements(CoreSettings.Current.PlayerLevel); }
             finally { engine.SuppressPopups = was; }
             return onLevel;
+        }
+
+        /// <summary>WPF App.ShowWardrobeRewardToasts (App.xaml.cs:3987): every item gated on this achievement gets an
+        /// ItemUnlockedPopup 900ms after the achievement popup, at most three, stacked upward.
+        /// ponytail: shown directly - WPF routes the column through StartupLadder.PresentOrInbox in the quiet
+        /// window, and this head has no startup ladder or inbox yet.</summary>
+        internal static void ShowWardrobeRewardToasts(Models.Achievement a)
+        {
+            var rewards = WardrobeCatalog.Items
+                .Where(i => string.Equals(i.RequiredAchievementId, a.Id, StringComparison.OrdinalIgnoreCase)).Take(3).ToList();
+            if (rewards.Count == 0) return;
+            Serilog.Log.Information("Achievement '{Id}' unlocked {Count} wardrobe item(s); queuing item toast(s)", a.Id, rewards.Count);
+            Dispatcher.UIThread.Post(() => DispatcherTimer.RunOnce(() =>
+            {
+                for (int i = 0; i < rewards.Count; i++)
+                {
+                    try { new Views.Windows.ItemUnlockedPopup(rewards[i], i).Show(); }
+                    catch (Exception ex) { Serilog.Log.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id); }
+                }
+            }, TimeSpan.FromMilliseconds(900)));
         }
 
         internal static void ShowAchievementPopup(Models.Achievement a)

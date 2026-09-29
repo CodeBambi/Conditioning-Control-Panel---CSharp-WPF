@@ -144,7 +144,7 @@ namespace ConditioningControlPanel
             {
                 if (!string.IsNullOrWhiteSpace(_draft.AvatarDeco))
                 {
-                    var art = WardrobeCatalog.GetImage(_draft.AvatarDeco);
+                    var art = WardrobeArt.GetImage(_draft.AvatarDeco);
                     var item = WardrobeCatalog.Find(_draft.AvatarDeco);
                     if (art != null)
                         AddSprite("deco", isDeco: true, 0,
@@ -154,7 +154,7 @@ namespace ConditioningControlPanel
                 for (var i = 0; i < _draft.Charms.Count && i < ProfileCosmetics.MaxCharms; i++)
                 {
                     var id = _draft.Charms[i];
-                    var art = WardrobeCatalog.GetImage(id);
+                    var art = WardrobeArt.GetImage(id);
                     var item = WardrobeCatalog.Find(id);
                     if (art != null)
                         AddSprite(id, isDeco: false, i, item?.Name ?? id, art);

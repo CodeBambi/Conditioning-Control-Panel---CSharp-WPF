@@ -256,24 +256,13 @@ namespace ConditioningControlPanel
                                     _achievementCards.Count, _achievementRewards.Count);
         }
 
-        /// <summary>
-        /// achievement id → wardrobe item, reversed out of the registry's item → achievement gates.
-        /// Walked in REGISTRY order (not the gate dictionary's) so "first wins" is deterministic:
-        /// two items gated on one achievement always resolve to the same one across launches.
-        /// </summary>
+        /// <summary>achievement id → wardrobe item: <see cref="Services.WardrobeCatalog.AchievementRewards"/> (Core).</summary>
         private void BuildAchievementRewardMap()
         {
             try
             {
-                var gates = Services.WardrobeCatalog.AchievementGates();
-                if (gates == null || gates.Count == 0) return;
-
-                foreach (var item in Services.WardrobeCatalog.Items)
-                {
-                    var gate = item.RequiredAchievementId;
-                    if (string.IsNullOrEmpty(gate)) continue;
-                    if (!_achievementRewards.ContainsKey(gate!)) _achievementRewards[gate!] = item;
-                }
+                foreach (var (id, item) in Services.WardrobeCatalog.AchievementRewards())
+                    _achievementRewards[id] = item;
             }
             catch (Exception ex)
             {
@@ -674,7 +663,7 @@ namespace ConditioningControlPanel
             {
                 if (unlocked)
                 {
-                    var art = Services.WardrobeCatalog.GetImage(reward.Id);
+                    var art = Services.WardrobeArt.GetImage(reward.Id);
                     if (art == null) return null;
                     return new Image
                     {

@@ -566,7 +566,7 @@ namespace ConditioningControlPanel
         {
             foreach (var item in items)
             {
-                var art = WardrobeCatalog.GetImage(item.Id);
+                var art = WardrobeArt.GetImage(item.Id);
                 if (art == null) continue;           // art never shipped - not on offer
                 host.Children.Add(BuildWardrobeTile(item, art));
             }
