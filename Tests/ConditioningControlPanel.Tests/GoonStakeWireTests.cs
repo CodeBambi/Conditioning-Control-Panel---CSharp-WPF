@@ -29,7 +29,7 @@ public class GoonStakeWireTests
     [Fact]
     public void EveryStakeFrameThePageSendsIsOneTheBridgeHandles()
     {
-        var js = Read("Resources", "web", "goon", "ui", "stake.js");
+        var js = File.ReadAllText(Path.Combine(SourceRoots.RepoRoot, "Assets", "web", "goon", "ui", "stake.js"));
         var sent = Regex.Matches(js, @"type:\s*'(stake-[a-z]+)'")
             .Select(m => m.Groups[1].Value).Distinct().ToList();
 
@@ -55,7 +55,7 @@ public class GoonStakeWireTests
     [Fact]
     public void ThePageSettlesOnlyOffTheLedgerClaimAndLocksAtCountdown()
     {
-        var boot = Read("Resources", "web", "goon", "boot.js");
+        var boot = File.ReadAllText(Path.Combine(SourceRoots.RepoRoot, "Assets", "web", "goon", "boot.js"));
         Assert.Contains("submitClaim(", boot);
         Assert.Contains("stake.lock(code)", boot);
         Assert.Contains("GoonMatchPhase.Countdown", boot);

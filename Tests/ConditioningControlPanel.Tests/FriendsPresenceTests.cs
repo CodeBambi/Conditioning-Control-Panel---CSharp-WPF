@@ -237,7 +237,7 @@ public partial class FriendsDrawerTests
             "friends_presence_toggle_tip", "friends_presence_setting", "friends_presence_setting_hint",
             "friends_activity_chess",
         };
-        var dir = System.IO.Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
             var json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(System.IO.Path.Combine(dir, lang + ".json")));
