@@ -203,6 +203,7 @@ public sealed partial class FriendsDrawer : Border
         if (_subscribed || _svc == null) return;
         _svc.SnapshotChanged += OnSnapshot;
         _svc.Sent += OnSent;
+        _svc.SentTrailsChanged += OnTrailsChanged;
         _subscribed = true;
     }
 
@@ -212,6 +213,7 @@ public sealed partial class FriendsDrawer : Border
         if (!_subscribed || _svc == null) { _subscribed = false; return; }
         _svc.SnapshotChanged -= OnSnapshot;
         _svc.Sent -= OnSent;
+        _svc.SentTrailsChanged -= OnTrailsChanged;
         _subscribed = false;
         StopTables();
     }
@@ -498,6 +500,8 @@ public sealed partial class FriendsDrawer : Border
         }
         mid.Children.Add(nameLine);
         mid.Children.Add(table != null ? HostingLine() : ActivityLine(f));
+        // What you last sent them and how far it got (sent, arrived, seen, answered).
+        if (TrailLine(f) is { } trail) mid.Children.Add(trail);
         Grid.SetColumn(mid, 1);
         top.Children.Add(mid);
 
@@ -711,6 +715,8 @@ public sealed partial class FriendsDrawer : Border
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         if (incoming)
         {
+            // Drawn in an open drawer: the one who asked may hear it was seen (once per request).
+            if (_isOpen) FriendsSeen.Shared.RequestSeen(_svc, r);
             var accept = FriendsLook.Pill(Loc.Get("friends_request_accept"), FriendsLook.MintBrush, FriendsLook.MintInkBrush,
                 FriendsLook.MintBrush, 8, new Thickness(9, 3, 9, 3), FriendsLook.MintBrush);
             accept.FontSize = 12;

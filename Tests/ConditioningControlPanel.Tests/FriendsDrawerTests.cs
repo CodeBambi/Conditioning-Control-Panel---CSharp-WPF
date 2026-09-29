@@ -478,5 +478,13 @@ public partial class FriendsDrawerTests
         public Task<ActResult> ReportAsync(string friendId, string reason) => Act("report_" + reason, friendId);
         public void SetActivity(PresenceActivity activity) { }
         public void SetDrawerOpen(bool open) { }
+
+        // ---- receipts (lane F1): the sender's trails and the recipient's reports ----
+        public Dictionary<string, SentTrail> Trails { get; } = new();
+        public SentTrail? LastSentTo(string friendId) => Trails.TryGetValue(friendId, out var t) ? t : null;
+        public event Action? SentTrailsChanged;
+        public void MoveTrail(SentTrail t) { Trails[t.FriendId] = t; SentTrailsChanged?.Invoke(); }
+        public List<ReceiptReport> Reports { get; } = new();
+        public void ReportReceipt(ReceiptReport report) => Reports.Add(report);
     }
 }
