@@ -28,7 +28,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // A one-time Bounds read at Loaded — a value, not a binding. SizeChanged owns it from here.
             Loaded += (_, _) => ApplyShelfLayout(Bounds.Width);
             SizeChanged += (_, e) => { if (e.WidthChanged) ApplyShelfLayout(e.NewSize.Width); };
-
+            // WPF CompanionRuntimeContext: the hero reaches the shell and this navigator through us.
+            if (HeroZone.ViewModel is { } hero) hero.Host = this;
         }
 
         // =====================================================================================
@@ -78,8 +79,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             }
         }
 
-        // ponytail: ICompanionRoomVm (Hero/Chat/Memory/... zone interfaces + Navigator) lives in the
-        // WPF head; each ported zone seeds its own viewmodel. ViewModel/Claim return when it moves.
+        // ponytail: ICompanionRoomVm (Chat/Memory/... zone interfaces) lives in the WPF head; the hero
+        // is real, the other zones seed their own viewmodels until their runtime (AI/brain) crosses.
 
         /// <summary>
         /// True while the shelf is one column. Exposed for the tests and the preview harness — the
@@ -101,6 +102,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             try
             {
+                // WPF CompanionTabView.IsVisibleChanged -> CompanionRoom.Sync(): the hero re-reads
+                // what changed while the tab was hidden (level, mute, awareness, AI pill, mod art).
+                HeroZone.ApplyAvatarArt();
                 HeroZone.RefreshAmbientState();
                 // The zone re-reads its own state rather than being told what to do: it may well
                 // have changed while the tab was hidden, and a resume that restored the state at
