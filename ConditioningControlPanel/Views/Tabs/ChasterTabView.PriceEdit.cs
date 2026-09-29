@@ -50,6 +50,7 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             foreach (var id in _stamps.Keys) PaintStamp(id);
             if (_editingId != null && !FiguresEditable()) CancelPriceEdit();
+            PaintMenuHelp();
         }
 
         private void PaintStamp(string id)
@@ -152,6 +153,7 @@ namespace ConditioningControlPanel.Views.Tabs
                         TabPriceEdit.Effective(id, settings.ChasterPriceOverrides));
             }
             PaintStamp(id);
+            PaintMenuHelp();
             // The words and the scene read the figure too.
             if (_trailerShown && _trailerRow?.Tag as string == id) OpenTrailer(_trailerRow);
         }
