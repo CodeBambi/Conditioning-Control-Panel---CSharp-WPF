@@ -57,6 +57,12 @@ const listeners = [];     // fn(msg)
 const internals = [];     // fn(msg), bridge-owned, never buffered - see the pump
 const preBuffer = [];     // messages that arrived before any listener existed
 let heartbeat = 0;        // setInterval handle, 0 when not beating
+// The host sends these once per boot, right at `ready`, and boot.js says ready before the HUD
+// (Options > Pictures) and the ramp's media pool have landed from their async imports. The
+// pre-buffer only holds frames while NO listener exists, so the latest of each is kept here and
+// handed to a listener that joins late (bug hunt 2026-09-29, CHESS-9).
+const REPLAYED = new Set(['pbp:settings', 'pbp:media-state']);
+const lastFrames = new Map();   // type -> the latest delivered frame of a REPLAYED type
 
 if (webview) {
   webview.addEventListener('message', (e) => {
@@ -76,6 +82,7 @@ if (webview) {
 }
 
 function deliver(m) {
+  if (REPLAYED.has(m.type)) lastFrames.set(m.type, m);
   for (const fn of listeners) {
     try { fn(m); } catch (err) { console.warn('[pbp] host message handler threw', err); }
   }
@@ -92,7 +99,8 @@ export function postToHost(msg) {
 
 /**
  * Listen for host -> page messages. Returns an unsubscribe function.
- * The first listener to register drains anything that arrived before it.
+ * The first listener to register drains anything that arrived before it; a
+ * later one is handed the latest pbp:settings and pbp:media-state, if any.
  */
 export function onHostMessage(fn) {
   if (typeof fn !== 'function') return () => {};
@@ -100,11 +108,21 @@ export function onHostMessage(fn) {
   if (preBuffer.length) {
     const queued = preBuffer.splice(0, preBuffer.length);
     for (const m of queued) deliver(m);
+  } else {
+    for (const m of [...lastFrames.values()]) {
+      try { fn(m); } catch (err) { console.warn('[pbp] host message handler threw', err); }
+    }
   }
   return () => {
     const i = listeners.indexOf(fn);
     if (i >= 0) listeners.splice(i, 1);
   };
+}
+
+/** The latest pbp:settings or pbp:media-state the host sent, or null. For a module that
+ *  listens on the webview itself (ramp/media.js) and so cannot be handed the replay. */
+export function lastHostFrame(type) {
+  return lastFrames.get(type) || null;
 }
 
 /**
