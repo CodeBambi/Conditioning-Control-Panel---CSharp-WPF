@@ -362,7 +362,7 @@ V.escape=async function(s){
   await s.wait(240);s.shake(sc,4);
   s.cost('+3:00',160,176,'add',30);
   await s.wait(650);
-  t+=180;tm.textContent='15:00';tm.classList.add('hot');
+  t+=CT.figs.add!=null?CT.figs.add:180;tm.textContent=mmss(t);tm.classList.add('hot');
   s.anim(tm,[{scale:'1.5'},{scale:'1'}],{duration:320,easing:POP,fill:'none'});s.spark(160,64,'add',12);
   await s.wait(1600);
 };
@@ -509,12 +509,14 @@ V.levelup=async function(s){
   await s.wait(1700);
 };
 
-/* PROGRAM: a day done is -10:00. A day skipped is +15:00 */
+/* PROGRAM: a day done takes time off, a day skipped adds it. The pill totals the mounted figures */
 V.program=async function(s){
   var days=[],tick='<svg width="20" height="20" viewBox="0 0 20 20"><path d="M3.5 10.5l4.5 4.5 8.5-10" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   s.add('<div class="p-line" style="left:23px;top:132px;width:274px;height:3px;opacity:.6"></div>');
   for(var i=0;i<7;i++){var d=s.add('<div class="va-day"><u>'+(i+1)+'</u>'+tick+'</div>',23+i*40,74);if(i>2)d.style.opacity=.5;days.push(d)}
   var sum=s.add('<div class="va-sum">0:00</div>');
+  var off=CT.figs.sub!=null?CT.figs.sub:600,on=CT.figs.add!=null?CT.figs.add:900,net=0;
+  function total(){sum.textContent=(net>0?'+':net<0?'−':'')+CT.fmt(Math.abs(net));sum.style.color=net>0?CT.COL.add:CT.COL.sub}
   await s.wait(400);
   for(i=0;i<2;i++){
     var cx=40+i*40;days[i].classList.add('now');s.anim(days[i],[{scale:'1'},{scale:'1.1'},{scale:'1'}],{duration:300,fill:'none'});
@@ -522,7 +524,7 @@ V.program=async function(s){
     days[i].classList.remove('now');days[i].classList.add('ok');s.spark(cx,106,'sub',8);
     await s.wait(260);
     var c=s.cost('−10:00',Math.max(cx,46),48,'sub',22);
-    sum.textContent='−'+(i+1)*10+':00';sum.style.color='#4dffc3';s.anim(sum,[{scale:'1.2'},{scale:'1'}],{duration:220,fill:'none'});
+    net-=off;total();s.anim(sum,[{scale:'1.2'},{scale:'1'}],{duration:220,fill:'none'});
     await s.wait(800);s.floatAway(c);
   }
   days[2].classList.add('now');s.anim(days[2],[{scale:'1'},{scale:'1.1'},{scale:'1'}],{duration:300,fill:'none'});
@@ -532,7 +534,7 @@ V.program=async function(s){
   s.shake(days[2],4);s.flash(days[2],'add',2);s.spark(120,106,'add',8);
   await s.wait(300);
   s.cost('+15:00',120,46,'add',28);
-  sum.textContent='−5:00';s.anim(sum,[{scale:'1.2'},{scale:'1'}],{duration:220,fill:'none'});s.flash(sum,'add',2);
+  net+=on;total();s.anim(sum,[{scale:'1.2'},{scale:'1'}],{duration:220,fill:'none'});s.flash(sum,'add',2);
   await s.wait(1700);
 };
 

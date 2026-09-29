@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Services.Chaster;
+using ConditioningControlPanel.Services.Safety;
 using ConditioningControlPanel.Views.Tabs;
 using Xunit;
 
@@ -370,6 +371,48 @@ public class ChasterTabRenderTests
         });
     }
 
+    /// <summary>Bug hunt 2026-09-29 (TAB-10): the rubber stamp sat over the end of the tag's own
+    /// line ("on its way to the lo" with the rest under UNPAID; the backlog split lost "0 later").
+    /// For every stamp word in every language and every line the tag can show, the stamp, tilt
+    /// included, stays clear of the line's box and reaches no higher than the empty foot of the
+    /// amount's line.</summary>
+    [Fact]
+    public void The_paper_tag_stamp_never_covers_the_tags_own_line()
+    {
+        var langs = new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" }
+            .Select(lang => Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(System.IO.Path.Combine(
+                RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", lang + ".json"))))
+            .ToList();
+        var words = langs.SelectMany(json => new[] { "chaster_tag_unpaid", "chaster_tag_clear", "chaster_tag_credit" }
+            .Select(k => (string)json[k]!)).ToList();
+        var lines = langs.SelectMany(json => new[] { "chaster_tag_lands", "chaster_tag_credit_lands", "chaster_tag_paused",
+                "chaster_tag_nolock", "chaster_tag_tomorrow", "chaster_tag_split" }
+            .Select(k => ((string)json[k]!).Replace("{0}", "15:00").Replace("{1}", "45:00"))).ToList();
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            tab.LinkedPanel.Visibility = Visibility.Visible;
+            tab.PaperTag.Visibility = Visibility.Visible;
+            Realize(tab, 1000, 1400);
+            tab.RefreshTag(750);
+            foreach (var word in words)
+            foreach (var line in lines)
+            {
+                tab.TxtTagStamp.Text = word;
+                tab.TxtTagLands.Text = line;
+                tab.UpdateLayout();
+                var lands = tab.TxtTagLands.TransformToAncestor(tab.PaperTag).TransformBounds(new Rect(tab.TxtTagLands.RenderSize));
+                var amount = tab.TxtTagAmount.TransformToAncestor(tab.PaperTag).TransformBounds(new Rect(tab.TxtTagAmount.RenderSize));
+                var stamp = tab.TagStamp.TransformToAncestor(tab.PaperTag).TransformBounds(new Rect(tab.TagStamp.RenderSize));
+                Assert.True(lands.Height > 0 && stamp.Width > 0, "the tag's line or stamp did not lay out");
+                Assert.True(stamp.Left >= lands.Right - 0.5 || stamp.Top >= lands.Bottom - 0.5,
+                    $"{word} stamp ({stamp.Left:0.0},{stamp.Top:0.0}) covers '{line}' (right {lands.Right:0.0}, bottom {lands.Bottom:0.0})");
+                Assert.True(stamp.Top >= amount.Bottom - 6.5,
+                    $"{word} stamp top {stamp.Top:0.0} reaches the amount (bottom {amount.Bottom:0.0}) beside '{line}'");
+            }
+        });
+    }
+
     [Fact]
     public void Clicking_the_figure_opens_a_box_only_on_rows_with_one_fixed_figure()
     {
@@ -395,6 +438,53 @@ public class ChasterTabRenderTests
             Assert.False(tab.BeginPriceEdit(TabDayEnd.StreakEventId));
             Assert.Null(tab.StampFor("panic"));
             Assert.Null(tab.EditingPriceId);
+        });
+    }
+
+    /// <summary>Bug hunt 2026-09-29 (TAB-8 / DESK-3): "Esc drops it". The panic key is Escape on a
+    /// fresh install and the global hook sees every Escape, so the open box is a surface that takes
+    /// its own Escape: the press drops the edit and never reaches the panic (no session pause, no
+    /// safety hold, no step toward quitting). The row's stamp, outside the box, takes nothing.</summary>
+    [Fact]
+    public void Escape_in_the_open_price_box_belongs_to_the_box_not_the_panic_key()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            tab.LinkedPanel.Visibility = Visibility.Visible;
+            tab.BuildMenu();
+            Realize(tab, 1000, 2400);
+
+            var stamp = tab.StampFor("typo")!;
+            Assert.False(EscapeClaim.InASurface(stamp));
+            Assert.True(tab.BeginPriceEdit("typo"));
+            var box = ((Grid)stamp.Parent).Children.OfType<TextBox>().Single();
+            Assert.True(EscapeClaim.InASurface(box));
+
+            var fresh = new ConditioningControlPanel.Models.AppSettings();
+            Assert.True(PanicPolicy.SurfaceTakesEscape(fresh.PanicKeyEnabled, fresh.PanicKey, lockCardOpen: false,
+                ccpInFront: true, surfaceHasTheKeyboard: EscapeClaim.InASurface(box), takenPressOnItsWay: false));
+            // with the box gone the next Escape is a panic again
+            tab.CancelPriceEdit();
+            Assert.False(EscapeClaim.InASurface(stamp));
+        });
+    }
+
+    [Fact]
+    public void Only_an_element_inside_a_marked_surface_has_its_escape()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var inner = new TextBox();
+            var surface = new Border { Child = new StackPanel { Children = { inner } } };
+            var elsewhere = new TextBox();
+            _ = new Grid { Children = { surface, elsewhere } };
+            Assert.False(EscapeClaim.InASurface(inner));
+            EscapeClaim.Mark(surface);
+            Assert.True(EscapeClaim.InASurface(inner));
+            Assert.True(EscapeClaim.InASurface(surface));
+            Assert.False(EscapeClaim.InASurface(elsewhere));
+            Assert.False(EscapeClaim.InASurface(null));
         });
     }
 

@@ -441,8 +441,9 @@
                                 </TransformGroup>
                             </Grid.RenderTransform>
                             <!-- the string up to the lock -->
-                            <Line X1="0" Y1="0" X2="0" Y2="26" Stroke="#B0F3EAD9" StrokeThickness="1.4" HorizontalAlignment="Center" VerticalAlignment="Top"/>
-                            <Border Width="164" Margin="0,24,0,0" Background="#FFF3EAD9" CornerRadius="4" Padding="12,10,12,10">
+                            <!-- 12 px shorter since the stamp moved beside the line (TAB-10): the tag grew a line, the top stays put -->
+                            <Line X1="0" Y1="0" X2="0" Y2="14" Stroke="#B0F3EAD9" StrokeThickness="1.4" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                            <Border Width="164" Margin="0,12,0,0" Background="#FFF3EAD9" CornerRadius="4" Padding="12,10,12,10">
                                 <Border.Effect>
                                     <DropShadowEffect Color="#000000" BlurRadius="14" ShadowDepth="4" Opacity="0.45"/>
                                 </Border.Effect>
@@ -455,19 +456,28 @@
                                         </StackPanel>
                                         <TextBlock x:Name="TxtTagAmount" Text="0:00" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="30"
                                                    FontWeight="Bold" Foreground="#FFC8244A" Margin="0,2,0,0" RenderTransformOrigin="0,1"/>
-                                        <TextBlock x:Name="TxtTagLands" FontFamily="Consolas, Courier New" FontSize="9.5" Foreground="#FF241A2E"
-                                                   Opacity="0.75" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        <!-- the line and the rubber stamp share a row and the line wraps short of the stamp, so the
+                                             stamp never sits on it (bug hunt 2026-09-29, TAB-10); the tilt only reaches the empty
+                                             foot of the amount's line -->
+                                        <Grid Margin="0,2,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="TxtTagLands" FontFamily="Consolas, Courier New" FontSize="9.5" Foreground="#FF241A2E"
+                                                       Opacity="0.75" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                            <!-- the rubber stamp -->
+                                            <Border x:Name="TagStamp" Grid.Column="1" VerticalAlignment="Bottom" Margin="6,5,-6,-2"
+                                                    BorderBrush="#FFC8244A" BorderThickness="2" CornerRadius="3" Padding="5,1" Opacity="0.85"
+                                                    RenderTransformOrigin="0.5,0.5">
+                                                <Border.RenderTransform>
+                                                    <RotateTransform Angle="-14"/>
+                                                </Border.RenderTransform>
+                                                <TextBlock x:Name="TxtTagStamp" Text="UNPAID" FontFamily="Consolas, Courier New" FontSize="12"
+                                                           FontWeight="Bold" Foreground="#FFC8244A"/>
+                                            </Border>
+                                        </Grid>
                                     </StackPanel>
-                                    <!-- the rubber stamp -->
-                                    <Border x:Name="TagStamp" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-6,-2"
-                                            BorderBrush="#FFC8244A" BorderThickness="2" CornerRadius="3" Padding="5,1" Opacity="0.85"
-                                            RenderTransformOrigin="0.5,0.5">
-                                        <Border.RenderTransform>
-                                            <RotateTransform Angle="-14"/>
-                                        </Border.RenderTransform>
-                                        <TextBlock x:Name="TxtTagStamp" Text="UNPAID" FontFamily="Consolas, Courier New" FontSize="12"
-                                                   FontWeight="Bold" Foreground="#FFC8244A"/>
-                                    </Border>
                                 </Grid>
                             </Border>
                         </Grid>

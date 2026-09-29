@@ -95,6 +95,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 ToolTip = stamp.ToolTip,
             };
             Grid.SetColumn(box, Grid.GetColumn(stamp));
+            // Esc here drops the edit, it is not the panic key's press (bug hunt 2026-09-29, TAB-8).
+            Services.Safety.EscapeClaim.Mark(box);
             box.PreviewKeyDown += PriceBox_PreviewKeyDown;
             box.LostKeyboardFocus += (_, _) => { if (ReferenceEquals(_stampEditor, box)) CommitPriceEdit(); };
             stamp.Visibility = Visibility.Collapsed;
@@ -117,6 +119,7 @@ namespace ConditioningControlPanel.Views.Tabs
                     break;
                 case Key.Escape:
                     e.Handled = true;
+                    Services.Safety.EscapeClaim.Taken();
                     CancelPriceEdit();
                     break;
                 case Key.Space:

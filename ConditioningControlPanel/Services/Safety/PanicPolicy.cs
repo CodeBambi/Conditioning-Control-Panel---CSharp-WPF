@@ -167,6 +167,24 @@ namespace ConditioningControlPanel.Services.Safety
         }
 
         /// <summary>
+        /// Whether a CCP surface that drops or closes on Escape takes this press instead of the panic
+        /// (bug hunt 2026-09-29, TAB-8 / DESK-3): Escape in Circe's Tab price box ("Esc drops it")
+        /// also paused the session, armed the ten minute safety hold, and a second one inside 2 s
+        /// quit CCP. Asked by the global hook before the key reaches any window, so the element with
+        /// the keyboard is the one the press lands on, and a press it takes arms nothing a panic arms.
+        ///
+        /// <para>Only while Escape IS the panic key (a rebound key is always a real panic), never
+        /// while a Lock Card is open (it outranks every hand-off), only when the press goes to a CCP
+        /// window, and one press at a time: while a taken press has not reached its surface yet (a
+        /// stalled UI), the next Escape is a real panic. Decided per press, so the Escape after the
+        /// one that dropped the edit is a panic again.</para>
+        /// </summary>
+        internal static bool SurfaceTakesEscape(bool panicKeyEnabled, string? panicKey, bool lockCardOpen,
+            bool ccpInFront, bool surfaceHasTheKeyboard, bool takenPressOnItsWay)
+            => EscapeIsThePanicKey(panicKeyEnabled, panicKey) && !lockCardOpen && ccpInFront
+               && surfaceHasTheKeyboard && !takenPressOnItsWay;
+
+        /// <summary>
         /// True when <paramref name="pressed"/> is the user's optional pause-key binding. An unset
         /// (or whitespace) binding matches nothing, so the default install has no pause key at all.
         /// Compared as <c>Key.ToString()</c> text, exactly like the panic key.
