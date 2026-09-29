@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ConditioningControlPanel.Services.Leash;
@@ -55,4 +56,20 @@ public interface ILeashService
 
     /// <summary>True while this client holds a "will not play" mark on the punishment.</summary>
     bool IsUnplayable(string pid) => false;
+
+    // Receipts (CONTRACT "Receipts"). Defaults keep a service that predates them quiet.
+
+    /// <summary>Leashed side: the item with this id (an offer's id, a pid, an aid, a reward's or a
+    /// tug's event id) is on screen right now. Reported <c>seen</c> once, on the next poll.</summary>
+    void NoteShown(string? id) { }
+
+    /// <summary>Holder side: what this account sent <paramref name="leashedId"/> lately, newest
+    /// first, with how far each got.</summary>
+    IReadOnlyList<LeashSentItem> SentTo(string leashedId) => Array.Empty<LeashSentItem>();
+
+    /// <summary>True once the server has shown it speaks receipts. False = draw no steps at all.</summary>
+    bool ReceiptsSupported => false;
+
+    /// <summary>Raised on the UI thread when a receipt, a send or an ending moved a sent item.</summary>
+    event Action? ReceiptsChanged { add { } remove { } }
 }
