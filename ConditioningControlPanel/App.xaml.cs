@@ -2853,7 +2853,15 @@ namespace ConditioningControlPanel
             // immediately: Start() reads the cached timestamp, finds none on every install today,
             // and returns without arming a timer or issuing a request. It must exist before
             // MainWindow so the header spark can subscribe during construction.
-            DescentCountdown = new Services.Descent.DescentCountdownService();
+            DescentCountdown = new Services.Descent.DescentCountdownService
+            {
+                Speaker = line =>
+                {
+                    if (AvatarWindow is not { } avatar) return false;
+                    avatar.GigglePriority(line, playSound: false, aiGenerated: false);
+                    return true;
+                },
+            };
             DescentCountdown.Start();
             // THE ZERO SHOW. Armed on the same line as the clock it watches, and SYNCHRONOUSLY:
             // when a launch owes the catch-up crack, Arm() takes the ceremony's offer hold before

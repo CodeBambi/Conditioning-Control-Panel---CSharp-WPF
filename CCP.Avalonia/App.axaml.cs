@@ -34,6 +34,8 @@ namespace ConditioningControlPanel.Avalonia
 
         /// <summary>The one session runner (WPF MainWindow._sessionEngine), or null on the headless render path.</summary>
         internal static SessionRunner? Sessions { get; set; }
+        /// <summary>THE FUSE (WPF App.DescentCountdown). Built before the shell so its spark can subscribe.</summary>
+        internal static Services.Descent.DescentCountdownService? DescentCountdown { get; private set; }
 
         /// <summary>The Core quest board (WPF App.Quests), built by StartQuests before the shell.</summary>
         internal static QuestService? Quests { get; set; }
@@ -268,12 +270,17 @@ namespace ConditioningControlPanel.Avalonia
                 CoreEntitlement.IsFreeTodayProvider = dailyFree.IsFreeToday;
                 // After the version seed (the proxy client's headers carry it). Fail closed; the
                 // startup validate runs on the UI thread as WPF's does (App.xaml.cs OnStartup).
+                // WPF App.xaml.cs:2856. Start() arms nothing without a cached ceremony timestamp.
+                // ponytail: no Speaker - the tube's speech coupling is not ported, so phase lines stay unsaid.
+                DescentCountdown = new Services.Descent.DescentCountdownService();
+                DescentCountdown.Start();
                 if (Platform.AccountSeed.Seed())
                 {
                     // Unit 7c, with the logout clear: the push, XP banking and its two triggers (WPF
                     // MainWindow OnLevelUp -> sync, ProfileSyncService.AttachXpNudge outside sessions).
                     var sync = Platform.AccountSeed.Sync = new SyncPush(
-                        () => Achievements?.Progress?.UnlockedAchievements, () => Sessions?.IsRunning == true);
+                        () => Achievements?.Progress?.UnlockedAchievements, () => Sessions?.IsRunning == true)
+                        { Countdown = DescentCountdown };
                     CoreProgression.AddXPProvider = ProgressionBank.Add;
                     ProgressionBank.LevelUp += level => sync.PushAsync($"level-up {level}");
                     ProgressionBank.Awarded += (amount, source) =>
