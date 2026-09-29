@@ -89,6 +89,26 @@ export function impactWords(impact, random = Math.random) {
 }
 
 /**
+ * Paint order of the panels, pictures and ink alike: the panel taking its hit on
+ * top of its neighbours, the rest by index. board/director.js gives each picture
+ * quad this rank and hangs each panel's ink in the same order.
+ */
+export const panelRank = (i, lit) => (lit ? 10 : i);
+
+/**
+ * Each panel's ink, bottom first, with the panels painted above it. A panel's
+ * seam is masked by every panel above it (owner, 2026-09-29): a panel swinging
+ * past its seat on the way in, pulling back on the way out or shaking on a hit
+ * slides UNDER its neighbour, so its edge never draws across that neighbour's
+ * picture. It used to, for about a tenth of a second on every slide.
+ * polys: [{ i, lit }] -> [{ poly, over: [poly...] }]
+ */
+export function inkLayers(polys) {
+  const order = [...polys].sort((a, b) => panelRank(a.i, a.lit) - panelRank(b.i, b.lit));
+  return order.map((poly, k) => ({ poly, over: order.slice(k + 1) }));
+}
+
+/**
  * A hand-inked seam boils: each corner jitters a pixel or two, a dozen times a
  * second. Keyed on the corner's SEATED position, so a corner two panels share
  * boils the same way in both and the gutters stay closed.
