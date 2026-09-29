@@ -13,6 +13,7 @@
  *   D  the one Escape the panel keeps as the pause pauses the game wherever it
  *      lands: with Options open, with the promotion picker up, or mid-drag
  *      (bug hunt 2026-09-29, CHESS-1).
+ *   E  Backspace / Z take nothing back under the pause card (CHESS-10).
  *
  *   node smoke/pause-hush-smoke.mjs        (no server, no browser)
  * ==========================================================================*/
@@ -172,6 +173,15 @@ function expect(cond, name) {
   const optionKey = hud.match(/const optionKey = e => \{[\s\S]*?\n  \};/);
   expect(!!optionKey && /closeOptions\(\)[\s\S]*escapePause/.test(optionKey[0]), 'Escape with Options open closes it and pauses');
   expect(/if \(key === 'escape'\) \{ close\(\); window\.PBP\?\.escapePause\?\.\(\); return; \}/.test(promote), 'Escape with the promotion picker up closes it and pauses');
+}
+
+/* ---- E: the pause card holds the position -------------------------------------- */
+// Backspace and Z took moves back behind the card, and a take-back credits clock time
+// back (bug hunt 2026-09-29, CHESS-10).
+{
+  const drag = readFileSync(new URL('../board/drag.js', import.meta.url), 'utf8');
+  const takeBack = drag.match(/ev\.key === 'Backspace'[\s\S]*?game\.takeBack\(\)/);
+  expect(!!takeBack && /window\.PBP\?\.isPaused\?\.\(\)\) return;/.test(takeBack[0]), 'no take-back while the game is paused');
 }
 
 console.log(`\npause hush smoke: ${passed} passed, ${failed} failed`);

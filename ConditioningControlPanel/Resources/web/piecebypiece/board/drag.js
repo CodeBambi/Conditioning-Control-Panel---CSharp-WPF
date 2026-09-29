@@ -487,6 +487,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     if (!held && (ev.key === 'Backspace' || ev.key === 'z' || ev.key === 'Z')) {
       ev.preventDefault();
       if (!game.takeBack) return;
+      if (window.PBP?.isPaused?.()) return;   // the pause card holds the game (bug hunt 2026-09-29, CHESS-10)
       clearSelection();
       if (!game.takeBack()) cue('boing');   // nothing to take back, or too soon
       return;
