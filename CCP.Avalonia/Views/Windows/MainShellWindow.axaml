@@ -1697,7 +1697,7 @@
                         </TextBlock>
                     </Viewbox>
                     <Border Grid.Column="2" Background="{DynamicResource PinkBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,20,0">
-                        <TextBlock x:Name="TxtLevel" Text="{loc:Str label_lvl_1}" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                        <TextBlock x:Name="TxtLevel" Foreground="White" FontWeight="Bold" FontSize="12"/>
                     </Border>
                     <TextBlock Grid.Column="3" x:Name="TxtHeaderVersion" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="10" FontWeight="Normal"
                                VerticalAlignment="Bottom" Margin="4,0,0,3"/>
@@ -2154,7 +2154,7 @@
                                         </Grid>
                                         <Border Background="#1A1A2E" BorderBrush="#3D3D60" BorderThickness="1"
                                                 CornerRadius="4" Height="8">
-                                            <Grid>
+                                            <Grid x:Name="ProfileMenuXpRail">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="0*"/>
                                                     <ColumnDefinition Width="1*"/>
@@ -2269,7 +2269,7 @@
                     <!-- Velvet Kit 2 (FX lane B): the LVL chip owns a scale+rotate rig so a level-up
                          can pop it. Named transforms, animated from MainWindow.HeroFx.cs via
                          BeginAnimation - nothing else drives this TextBlock's RenderTransform. -->
-                    <TextBlock x:Name="TxtLevelLabel" Grid.Column="1" Text="{loc:Str label_lvl_1_2}" Foreground="{DynamicResource PinkBrush}"
+                    <TextBlock x:Name="TxtLevelLabel" Grid.Column="1" Foreground="{DynamicResource PinkBrush}"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"
                                RenderTransformOrigin="0.5,0.5">
                         <TextBlock.RenderTransform>
@@ -2336,7 +2336,7 @@
                             </Border>
                         </Grid>
                     </Border>
-                    <TextBlock x:Name="TxtXP" Grid.Column="3" Text="{loc:Str label_0_70_xp}" Foreground="{StaticResource TextMutedBrush}"
+                    <TextBlock x:Name="TxtXP" Grid.Column="3" Foreground="{StaticResource TextMutedBrush}"
                                FontSize="11" VerticalAlignment="Center" Margin="0,0,15,0"/>
                 </Grid>
 

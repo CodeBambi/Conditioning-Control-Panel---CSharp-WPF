@@ -31,7 +31,8 @@
 //   FormatFileSize - its only callers are the assets-folder rows, which are not ported.
 //
 // STILL OUT, by blocker:
-//   App.Progression / the XP bar - UpdateLevelDisplay, UpdateXPBarLoginState, UpdateStatPills,
+//   (UpdateLevelDisplay's header half is live in MainShellWindow.HeroFx.cs.)
+//   App.Progression / the XP bar - UpdateXPBarLoginState, UpdateStatPills,
 //     RefreshXPBarBonuses, GetBonusChipTooltip, StartStatPillUpdateTimer, XPBarTrack_ToolTipOpening,
 //     RefreshAccountChip and the three AccountChip* brushes. CoreProgression is a seam, but the
 //     chip and the pills read App.Account / App.Patreon tier state on top of it, and a chip that
