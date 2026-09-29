@@ -488,6 +488,7 @@ namespace ConditioningControlPanel
             CoreEntitlement.HasPremiumProvider = () => Patreon?.HasPremiumAccess == true;
             CoreEntitlement.HasLabProvider = () => Patreon?.HasLabAccess == true;
             CoreEntitlement.IsFreeTodayProvider = key => DailyFree?.IsFreeToday(key) == true;
+            CoreEntitlement.IntakePassAvailableProvider = () => IntakePass?.IsPassAvailable == true;
             CoreEntitlement.ShowDeniedHandler = verdict =>
             {
                 try

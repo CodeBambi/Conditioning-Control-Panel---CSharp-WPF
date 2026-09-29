@@ -87,7 +87,7 @@ namespace ConditioningControlPanel.Models
 
         /// <summary>
         /// Entitlement probe. Null means the default premium gate
-        /// (App.Patreon.HasPremiumAccess). Evaluated on every refresh.
+        /// (CoreEntitlement.HasPremium, seeded from PatreonService.HasPremiumAccess). Evaluated on every refresh.
         /// </summary>
         public Func<ExclusiveGateState>? Gate { get; init; }
 
@@ -96,7 +96,7 @@ namespace ConditioningControlPanel.Models
             try
             {
                 if (Gate != null) return Gate();
-                return App.Patreon?.HasPremiumAccess == true
+                return CoreEntitlement.HasPremium
                     ? ExclusiveGateState.Unlocked
                     : ExclusiveGateState.Locked;
             }
@@ -106,6 +106,15 @@ namespace ConditioningControlPanel.Models
                 return ExclusiveGateState.Locked;
             }
         }
+
+        /// <summary>
+        /// True when this exclusive is today's daily free unlock AND the account does not already
+        /// own it (premium owns the whole pool, so it never wears the gift tag).
+        /// </summary>
+        public bool IsFreeToday(ExclusiveGateState state) =>
+            state == ExclusiveGateState.Locked
+            && DailyFreeKey != null
+            && CoreEntitlement.IsFreeToday(DailyFreeKey);
 
         /// <summary>
         /// The roster, in shelf order. The first entry is additionally the spotlight
@@ -187,8 +196,8 @@ namespace ConditioningControlPanel.Models
                 // whose door is legitimately open without premium.
                 Gate = () =>
                 {
-                    if (App.Patreon?.HasLabAccess == true) return ExclusiveGateState.Unlocked;
-                    if (App.IntakePass?.IsPassAvailable == true) return ExclusiveGateState.PassReady;
+                    if (CoreEntitlement.HasLab) return ExclusiveGateState.Unlocked;
+                    if (CoreEntitlement.IsIntakePassAvailable) return ExclusiveGateState.PassReady;
                     return ExclusiveGateState.Locked;
                 },
             },

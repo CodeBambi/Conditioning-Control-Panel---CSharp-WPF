@@ -211,9 +211,7 @@ namespace ConditioningControlPanel
         /// only ever means "open to you today, and only today".
         /// </summary>
         private static bool IsExclusiveFreeToday(ExclusiveFeature feature, ExclusiveGateState state) =>
-            state == ExclusiveGateState.Locked
-            && feature.DailyFreeKey != null
-            && App.DailyFree?.IsFreeToday(feature.DailyFreeKey) == true;
+            feature.IsFreeToday(state);
 
         /// <summary>Spotlight = the first registry entry (the newest exclusive).</summary>
         internal void OpenExclusiveSpotlight() => OpenExclusiveFeature(ExclusiveFeature.All[0]);
