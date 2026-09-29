@@ -9,7 +9,8 @@ namespace ConditioningControlPanel
     /// <see cref="CoreProgression.AddXPProvider"/> with <see cref="Add"/>: the login gate, the XP add and the
     /// level loop with <c>HighestLevelEver</c>.
     /// ponytail: no skill/Cycle multipliers (skill-tree owners are under-awarded, which errs safe), no skill
-    /// points, companion XP, quests or achievements - each lands with its ported feature.
+    /// points, companion XP or achievements - each lands with its ported feature. Quests listen to <see cref="Awarded"/>
+    /// (the Avalonia head feeds it to QuestService.TrackXPEarned, as WPF AddXP:120 does).
     /// </summary>
     public static class ProgressionBank
     {

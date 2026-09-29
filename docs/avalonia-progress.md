@@ -812,3 +812,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   session incl. Haptics (row stays stub: ribbon pulse, program reason line, 6 markers). SessionSummaryPresentation moved to Core
   (git mv); the recap opens passively while a lock card/quiz/bubble count is up.
 - Evidence: SessionIoTests (4, fail-proven); live: custom-row delete, lock during Morning Drift, 0 binding errors. Review: FIX -> fixed.
+
+## avalonia-port/quests-tab-live: +486
+- Avalonia builds and seeds the Core QuestService: definitions, provider-verifying hooks, completion chime through CoreAudio, real
+  camera (/dev/video*) and Pulse mic probes (fail-open like WPF); SkillTree/Programs hooks unseeded. Quests tab and daily cards
+  show the live board, weekly card, stats, streak and month calendar; rerolls spend the budget; completion banner, popup and
+  sync push. Payout maths is one Core method (QuestService.ScaledQuestXp). Progress sources: flash images, XP awards.
+- Evidence: QuestsTabLiveTests (fail-proven); live board and both rerolls. Rows stay stub (FX burst, stamps, art, punch card,
+  streak fix, animations). Review: FIX -> fixed.
