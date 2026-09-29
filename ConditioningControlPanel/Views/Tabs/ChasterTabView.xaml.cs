@@ -1259,6 +1259,10 @@ namespace ConditioningControlPanel.Views.Tabs
             return row;
         }
 
+        /// <summary>The signed figure a row books right now, as the stamp, the words and the
+        /// scene all print it.</summary>
+        internal static int ShownSeconds(string id) => TabPrices.Find(id)?.Seconds ?? 0;
+
         private void PaintRowLit(string id, bool on)
         {
             if (_rowDims.TryGetValue(id, out var dim)) dim.Opacity = on ? 0 : 0.62;
@@ -1337,7 +1341,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 var art = TabMenuCopy.ArtFor(id);
                 TrailerArt.Source = art == null ? null : new BitmapImage(new Uri("pack://application:,,,/Resources/" + art));
                 TxtTrailerFlavour.Text = Loc.Get(TabMenuCopy.FlavourKey(id));
-                TxtTrailerWhy.Text = Loc.Get(TabMenuCopy.WhyKey(id));
+                TxtTrailerWhy.Text = TabMenuCopy.Why(id, Loc.Get, ShownSeconds(id));
                 var tier = TabMenuCopy.BadgeTier(price.Gate);
                 TrailerBadgeHost.Child = tier > 0 ? new TierBadge { Tier = tier, MaxWidthOverride = 64 } : null;
                 // The saved scene, in the one shared browser; the picture stays under it as the
@@ -1345,7 +1349,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 if (ChasterTrailerView.BrowserEnabled && !TrailerWeb.HasFailed)
                 {
                     TrailerWeb.Visibility = TrailerWeb.IsReady ? Visibility.Visible : Visibility.Hidden;
-                    TrailerWeb.Show(TabMenuCopy.VignetteFor(id));
+                    var (add, sub) = TabMenuCopy.SceneFigures(id, ShownSeconds);
+                    TrailerWeb.Show(TabMenuCopy.VignetteFor(id), add, sub);
                 }
                 else TrailerWeb.Visibility = Visibility.Collapsed;
                 Trailer.PlacementTarget = row;

@@ -88,7 +88,7 @@ Stage.prototype={
     return pr.then(function(){n.style.transform=tf(b);n.style.opacity=b.o})},
   set:function(n,p){n._t={x:p.x||0,y:p.y||0,s:p.s==null?1:p.s,r:p.r||0,o:p.o==null?1:p.o};n.style.transform='translate('+n._t.x+'px,'+n._t.y+'px) rotate('+n._t.r+'deg) scale('+n._t.s+')';n.style.opacity=n._t.o;return n},
   /* cost(text,x,y,kind[,size]): THE flashing number. kind add (red) | sub (green) | bet (gold). x,y = its centre. Pops, flashes 3 times, stays. */
-  cost:function(text,x,y,kind,size){var n=this.add('<div class="cost '+(kind||'add')+'"></div>');n.textContent=text;n.style.left=x+'px';n.style.top=y+'px';n.style.fontSize=(size||22)+'px';
+  cost:function(text,x,y,kind,size,raw){if(!raw)text=CT.live(text,kind);var n=this.add('<div class="cost '+(kind||'add')+'"></div>');n.textContent=text;n.style.left=x+'px';n.style.top=y+'px';n.style.fontSize=(size||22)+'px';
     n.animate([{transform:'translate(-50%,-50%) scale(.2)',opacity:0},{transform:'translate(-50%,-50%) scale(1.35)',opacity:1,offset:.6},{transform:'translate(-50%,-50%) scale(1)',opacity:1}],{duration:260,easing:'cubic-bezier(.2,1.5,.4,1)'});
     n.animate([{opacity:1,filter:'brightness(1)'},{opacity:.15,filter:'brightness(2.5)'},{opacity:1,filter:'brightness(1)'}],{duration:170,iterations:3,delay:260});return n},
   /* floatAway(node): rise and fade, then remove */
@@ -110,6 +110,11 @@ Stage.prototype={
 };
 
 /* run(wrap,id): mounts a stage and loops its vignette forever */
+/* The live price the row books (unsigned seconds per side, null = keep the scene's own).
+   The host passes it with __mount so the scene can never show one time and the stamp another. */
+CT.figs={add:null,sub:null};
+CT.fmt=function(sec){sec=Math.max(0,Math.round(sec));return sec>=6000?Math.floor(sec/3600)+':'+('0'+Math.floor(sec/60)%60).slice(-2)+':'+('0'+sec%60).slice(-2):Math.floor(sec/60)+':'+('0'+sec%60).slice(-2)};
+CT.live=function(text,kind){var f=CT.figs&&CT.figs[kind];if(f==null||!/^[+\u2212-]?\d+:\d\d$/.test(String(text)))return text;return(kind==='add'?'+':'\u2212')+CT.fmt(f)};
 CT.run=function(wrap,id){
   var s=new Stage(wrap,id);
   (async function(){
@@ -414,8 +419,9 @@ V.mantra=async function(s){
   links.forEach(function(l){l.remove()});
   pills.forEach(function(p,k){p.style.filter='grayscale(.7) brightness(.7)';s.anim(p,[{transform:'translate(0,0) rotate(0)',opacity:1},{transform:'translate('+((k-2.5)*9)+'px,'+(70+Math.random()*30)+'px) rotate('+((k%2?1:-1)*(40+k*14))+'deg)',opacity:0}],{duration:620+k*40,delay:k*35,easing:'cubic-bezier(.5,0,.9,.6)'})});
   await s.wait(520);
-  s.cost('+1:00',160,138,'add',32);
-  var lab=s.add('<div class="p-txt" style="left:0;right:0;text-align:center;top:160px;font-size:12px;color:#ff9db3">6 × 0:10</div>');
+  var each=CT.figs.add!=null?CT.figs.add:10;
+  s.cost('+'+CT.fmt(6*each),160,138,'add',32,true);
+  var lab=s.add('<div class="p-txt" style="left:0;right:0;text-align:center;top:160px;font-size:12px;color:#ff9db3">6 × '+CT.fmt(each)+'</div>');
   s.anim(lab,[{opacity:0},{opacity:1}],300);
   await s.wait(1700);
 };
@@ -1067,8 +1073,9 @@ V.goon=async function(s){
   /* the receipt glyph the mantra scene asks for; the mockup defined it in its app block */
   CT.I.receipt='<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/>';
   var wrap=document.getElementById('wrap'),live=null;
-  window.__mount=function(id){
+  window.__mount=function(id,add,sub){
     try{
+      CT.figs={add:typeof add==='number'?add:null,sub:typeof sub==='number'?sub:null};
       if(live){live.dead=true;}
       wrap.innerHTML='';
       live=CT.run(wrap,String(id||''));
