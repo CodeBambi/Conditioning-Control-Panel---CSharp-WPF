@@ -74,8 +74,23 @@ here record where and why the port chose something, and who advised.
 - Choice: (c). Native Wayland would conflict with the X11 override-redirect overlays, so it is out of scope for this port.
 - Advisor: supervisor, with the user's own reproduction.
 
+## 2026-09-30: Entitlement lapse: startup write deferred
+- Question: WPF's EnforceEntitlementLapse (MainWindow.Patreon.cs:92) runs at startup through UpdatePatreonUI and saves. `HapticSettings.Enabled` defaults to true, so every free user's first launch writes settings.json. On this head that breaks the "startup does not write settings" contract (`Tests/CCP.Avalonia.Language.Tests/LanguageSelectorTests.cs:117`).
+- Options: (a) lapse only on entitlement events; (b) full parity, and change the Language test; (c) clear in memory at startup and on navigation, write on the next real save or on an entitlement event.
+- Choice: (c). The flag pass (`CCP.Core/Services/EntitlementLapse.cs`) runs from the first frame, so a free user can never run a lapsed premium feature. `MainShellWindow.RefreshEntitlementVeils(persist)` saves only on a tier change, a day change or a sign-in/out, as WPF does. The effective state matches WPF; only the startup write is deferred. Proof: `Tests/CCP.Avalonia.Tests/PremiumGatesTests.cs` `LapsePass_ClearsInMemory_AndOnlyAnEntitlementEventWrites`, fail-proven both ways.
+- Advisor: supervisor.
+
 ## 2026-09-29: profile cosmetics save skipped by the sync cooldown
 - Question: WPF drops a cosmetics push that lands inside the 30 s sync cooldown. Keep that?
 - Options: (a) drop like WPF; (b) keep it pending and send it with the next push.
 - Choice: (b). The user saved on purpose; losing it silently is a WPF bug, and the pending push is cleared on logout.
 - Advisor: reviewer (profile-wardrobe-live), supervisor.
+
+## 2026-09-29: awareness consent guard tests after the lapse move to Core
+- Question: moving the flag half of EnforceEntitlementLapse into Core (#1917) tripped the WPF consent guard tests, which pin the
+  lapse door to MainWindow.Patreon.cs and say a move must fail loudly for re-review. Re-reviewed: is the new door still safe?
+- Finding: Core EntitlementLapse is the only new writer and only ever writes false; WPF still stops the awareness engine for the
+  reported key and logs it; MainWindow.Patreon.cs no longer writes the flag at all.
+- Choice: retarget the three tests to the new location with the same assertions; drop MainWindow.Patreon.cs from the allow list
+  (narrower than before).
+- Advisor: supervisor (reviewer on #1917 accepted the Core move).

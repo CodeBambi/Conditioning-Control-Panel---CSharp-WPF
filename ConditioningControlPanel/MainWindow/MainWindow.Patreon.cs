@@ -95,102 +95,21 @@ namespace ConditioningControlPanel
             {
                 var settings = App.Settings?.Current;
                 if (settings == null) return;
-                var premium = App.Patreon?.HasPremiumAccess == true;
-                var changed = false;
-
-                // Awareness (keyword triggers + screen OCR) - keeps its own keyboard hook and OCR
-                // scanner alive. Mirrors ChkAwarenessMaster_Changed's OFF branch.
-                if (settings.KeywordTriggersEnabled && !premium
-                    && App.DailyFree?.IsFreeToday("awareness") != true)
+                // The flag half is Core (CCP.Core/Services/EntitlementLapse.cs), shared with every
+                // head; the engines each cleared flag kept alive are stopped here.
+                var cleared = Services.EntitlementLapse.Enforce(settings);
+                var changed = cleared.Count > 0;
+                if (cleared.Contains("awareness"))
                 {
-                    settings.KeywordTriggersEnabled = false;
                     App.KeywordTriggers?.Stop();
                     App.ScreenOcr?.Stop();
                     if (settings.PanicKeyEnabled != true) _keyboardHook?.Stop();
-                    changed = true;
-                    App.Logger?.Information("Entitlement lapsed: Awareness switched off");
                 }
-
-                // Awareness MODE - the companion's eyes: the v2 observer's one-second foreground poll
-                // and its 30-day on-disk ledger, plus the legacy 1.5s window-title watcher. A separate
-                // flag from KeywordTriggersEnabled above and NOT covered by #267, which is how #1047
-                // happened: the tab wore the padlock while the engine kept observing, and because the
-                // engine's own predicate read four settings and no entitlement there was nothing to
-                // stop it. Stop() on the legacy service chains the observer's Stop(), which flushes
-                // and closes the ledger.
-                //
-                // AwarenessConsentGiven is deliberately left ALONE. It records an answer the user gave,
-                // not a switch; clearing it would make a returning subscriber re-consent to something
-                // they already agreed to. Every readout treats "enabled AND consented" as on, so
-                // clearing the enable is enough for the state to be honest.
-                if (settings.AwarenessModeEnabled && !premium
-                    && App.DailyFree?.IsFreeToday("awareness") != true)
-                {
-                    settings.AwarenessModeEnabled = false;
-                    App.WindowAwareness?.Stop();
-                    changed = true;
-                    App.Logger?.Information("Entitlement lapsed: Awareness Mode switched off");
-                }
-
-                // Bambi Takeover (autonomy).
-                if (settings.AutonomyModeEnabled && !premium
-                    && App.DailyFree?.IsFreeToday("takeover") != true)
-                {
-                    settings.AutonomyModeEnabled = false;
-                    App.Autonomy?.Stop();
-                    changed = true;
-                    App.Logger?.Information("Entitlement lapsed: Bambi Takeover switched off");
-                }
-
-                // She's Listening (spoken mantras). No background engine of its own to stop -
-                // the flag is what the speech pipeline consults.
-                if (settings.SpokenMantrasEnabled && !premium
-                    && App.DailyFree?.IsFreeToday("voice") != true)
-                {
-                    settings.SpokenMantrasEnabled = false;
-                    changed = true;
-                    App.Logger?.Information("Entitlement lapsed: She's Listening switched off");
-                }
-
-                // She's Listening - the MICROPHONE half. SpokenMantrasEnabled above is the speaking
-                // half; these two are the listening half, they persist, and AutonomyService
-                // .RefreshVoiceInputModes re-arms them from settings on every launch. #267 cleared the
-                // mouth and left the ear, so a lapsed account restarted straight back into an open
-                // wake-word loop under a veil covering its own disarm controls. Clearing the flags is
-                // what makes the Settings > Devices chips honest; the Refresh call is what actually
-                // closes the mic in this session.
-                if ((settings.SpeechWakeWordEnabled || settings.SpeechPushToTalkEnabled) && !premium
-                    && App.DailyFree?.IsFreeToday("voice") != true)
-                {
-                    settings.SpeechWakeWordEnabled = false;
-                    settings.SpeechPushToTalkEnabled = false;
-                    App.Autonomy?.RefreshVoiceInputModes();
-                    changed = true;
-                    App.Logger?.Information("Entitlement lapsed: She's Listening mic modes disarmed");
-                }
-
-                // Mantra Chant - her voice on a loop, armed from the Takeover tab underneath the same
-                // veil. #685 already stops it surviving a RELAUNCH (App.OnStartup clears the flag), so
-                // what is left is the mid-session lapse: the loop keeps chanting behind a padlock that
-                // covers the toggle. Stop() releases the output device as well as ending the loop.
-                if (settings.MantraChantEnabled && !premium
-                    && App.DailyFree?.IsFreeToday("takeover") != true)
-                {
-                    settings.MantraChantEnabled = false;
-                    App.MantraChant?.Stop();
-                    changed = true;
-                    App.Logger?.Information("Entitlement lapsed: Mantra Chant switched off");
-                }
-
-                // Haptics. The mixer already self-mutes live (HapticMixer.IsGateOpen), so this is
-                // about the master toggle not sitting ON underneath the veil.
-                if (settings.Haptics?.Enabled == true && !premium
-                    && App.DailyFree?.IsFreeToday("haptics") != true)
-                {
-                    settings.Haptics.Enabled = false;
-                    changed = true;
-                    App.Logger?.Information("Entitlement lapsed: Haptics switched off");
-                }
+                if (cleared.Contains("awareness-mode")) App.WindowAwareness?.Stop();
+                if (cleared.Contains("takeover")) App.Autonomy?.Stop();
+                if (cleared.Contains("voice-mic")) App.Autonomy?.RefreshVoiceInputModes();
+                if (cleared.Contains("mantra-chant")) App.MantraChant?.Stop();
+                foreach (var f in cleared) App.Logger?.Information("Entitlement lapsed: {Feature} switched off", f);
 
                 // The Arcademy. Not a setting at all - a live T2 window with its own WebView2, its
                 // own XP payouts and its own progression writes, which the veil pass cannot cover

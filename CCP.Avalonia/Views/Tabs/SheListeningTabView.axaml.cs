@@ -56,7 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnSL_Calibrate.Click += (_, _) => { };          // mw.SL_Calibrate_Click(...)
             BtnSL_TestMantra.Click += (_, _) => { };         // mw.BtnTestVoice_Click(...)
             BtnSL_RevokeConsent.Click += (_, _) => { };      // mw.SL_RevokeMicConsent_Click(...)
-            BtnSL_GateUnlock.Click += (_, _) => { };         // mw.BtnGateUnlock_Click(...)
+            BtnSL_GateUnlock.Click += (s, e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(s, e);
             ChkSL_Mantras.IsCheckedChanged += (_, _) => { }; // mw.SL_Mantras_Changed(...) - consent gate
 
             // MainWindow.SheListening.cs:419, both halves. The readout uses Math.Round, not a

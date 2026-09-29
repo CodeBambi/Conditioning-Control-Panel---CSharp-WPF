@@ -259,6 +259,11 @@ namespace ConditioningControlPanel.Avalonia
                 var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 CoreReleaseContent.AppVersionProvider = () =>
                     version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
+                // WPF App.xaml.cs:490/2549: the ? box's daily-free rotation that TierGate ORs in.
+                // Pure ctor; the override fetch is fire-and-forget and falls back to the seeded pick.
+                var dailyFree = new DailyFreeService();
+                _ = dailyFree.RefreshAsync();
+                CoreEntitlement.IsFreeTodayProvider = dailyFree.IsFreeToday;
                 // After the version seed (the proxy client's headers carry it). Fail closed; the
                 // startup validate runs on the UI thread as WPF's does (App.xaml.cs OnStartup).
                 if (Platform.AccountSeed.Seed())
@@ -354,10 +359,10 @@ namespace ConditioningControlPanel.Avalonia
                 SeedLevelAchievements(Achievements);
                 StartQuests();
 
-                // CoreProgram: its patreon, pack-video and roadmap providers stay unseeded - this head
-                // has no PatreonService, ContentPackService or RoadmapService, so it answers "no
-                // premium, no pack videos, no roadmap". NotifyProvider is seeded below, once the
-                // shell's toast host exists. HasPremium false still refuses a premium enrolment.
+                // CoreProgram: its pack-video and roadmap providers stay unseeded - this head has no
+                // ContentPackService or RoadmapService, so it answers "no pack videos, no roadmap".
+                // HasPremiumProvider is seeded by AccountSeed.Seed(); NotifyProvider below, once the
+                // shell's toast host exists.
 
                 // CoreAccount and CoreEntitlement are seeded by Platform.AccountSeed.Seed() (the
                 // Patreon/SubscribeStar gates, WPF App.xaml.cs:487-488). If the providers cannot be
@@ -406,6 +411,12 @@ namespace ConditioningControlPanel.Avalonia
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
                         Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
+                // WPF MainWindow.xaml.cs:484 (the ? box rolled over or its override landed) and
+                // OnPatreonTierChanged: both move the veils, the Play bands and the lapse pass.
+                void RepaintVeils() => Dispatcher.UIThread.Post(() => shell.RefreshEntitlementVeils(persist: true));
+                dailyFree.TodayChanged += RepaintVeils;
+                if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
+                if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
                 // WPF RequestExit (MainWindow.Launcher.cs:126) stops the engine first: the lock-card

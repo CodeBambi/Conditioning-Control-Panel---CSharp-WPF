@@ -26,7 +26,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// and so it does not matter which XAML loader each tab view happened to use.</para>
         ///
         /// </summary>
-        internal void UpdateQuickLoginUI()
+        /// <param name="accountChanged">A real sign-in/out: the lapse pass saves, as WPF's does.</param>
+        internal void UpdateQuickLoginUI(bool accountChanged = false)
         {
             try
             {
@@ -48,6 +49,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // Sign-in, startup restore and logout all land here; WPF repaints the header on
                 // each (Login.cs:198 UpdateLevelDisplay, OnProfileLoaded).
                 UpdateLevelDisplay();
+                // WPF UpdatePatreonUI -> RefreshEntitlementVeils: an account change moves every veil.
+                RefreshEntitlementVeils(persist: accountChanged);
             }
             catch (Exception ex)
             {
@@ -64,7 +67,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var dialog = new LoginDialog();
             if (await dialog.ShowDialog<bool>(this) && dialog.Result is not null)
             {
-                UpdateQuickLoginUI();
+                UpdateQuickLoginUI(accountChanged: true);
                 if (SecretStore.NotRemembered && !_notRememberedShown)
                 {
                     _notRememberedShown = true;
@@ -80,7 +83,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal async void Logout()
         {
             await AccountSeed.Logout();
-            UpdateQuickLoginUI();
+            UpdateQuickLoginUI(accountChanged: true);
             if (SecretStore.ClearFailed)
                 await MessageDialog.ShowAsync(this, Loc.Get("title_error"), Loc.Get("logout_not_complete_body"));
         }
