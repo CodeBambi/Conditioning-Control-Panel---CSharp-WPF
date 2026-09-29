@@ -712,3 +712,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: ModChoiceTests (5, fail-proofed); live sandbox against a local fake server: CCP Default -> Dronification re-themes
   with the chip named, a pending Bambi choice auto-activated after its download. Not repainted yet (noted): logo/feature art,
   achievements, skill tree, BambiCloud radio, per-mod presets. Review: FIX -> r1 applied.
+
+## avalonia-port/packs-mod-picker: +227 (content packs L4)
+- The mod picker dialog is ported with the live pack service (WPF's show rules, sequential downloads with per-card progress,
+  PendingModChoice). The release/6.11.3 WPF removed the returning-user auto-open, so neither head opens it (decision row 31
+  superseded); mods are offered via the first-run wizard and Mod Manager. No unprompted manifest fetch in sandboxed runs.
+- Evidence: ModChoiceTests (dialog download -> activate; returning-user startup opens nothing and fetches nothing), fail-proofed.
+  Review: FIX -> r1 applied.
