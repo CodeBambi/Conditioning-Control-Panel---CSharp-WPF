@@ -20,13 +20,27 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.11.4";
+        public const string AppVersion = "6.11.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.11.4 - Locktober
+        public const string CurrentPatchNotes = @"v6.11.5 - Locktober
+
+NEW IN 6.11.5
+- opening CCP goes straight to the launcher. the panel no longer flashes up for a second first, and the launcher keeps the focus.
+- everything new since 6.10.3 now reads in your language: German, Spanish, French, Japanese, Korean, Brazilian Portuguese, Russian and Chinese.
+- the launcher no longer shows English with a language tag in front of it (""[DE] The panel"") in those languages.
+- Circe's tab: the lock card row says what it really does. every finished card takes time off, and typos cost on their own row.
+- Circe's tab: a line that does not fit its row ends in ""..."" and shows whole when you hover it.
+- Circe's tab explains itself: a How it works card, and each key shows the most it can add in a month. most months add far less.
+- Circe's tab: the menu says how to change a time, or that times stay fixed while a lock runs. Reset times puts every edited time back.
+- Circe's tab: the red flash switch says what it does and what it costs, and asks for Natasha's favourite first.
+- Piece by Piece: Distraction never shows the same picture twice at once. with fewer pictures to hand, it shows fewer.
+- Piece by Piece: in Distraction, the video in a red frame over the middle of the board is now a picture across the whole screen. it fades in and out, and the board stays readable through it.
+- Piece by Piece: Esc pauses the game even after you clicked the window's title bar, and Enter then works on Resume.
+- Piece by Piece: holding Esc down pauses once. it used to pause and then leave.
 
 NEW IN 6.11.4
 
@@ -235,7 +249,7 @@ FIXES
 - Racing Thoughts: Esc pauses instead of closing the game, and a BambiCloud level opens behind the game and starts when you press play.
 - the log says why Lovense or the local AI failed.
 
-full nerd changelog in pull requests 1501 through 1898.";
+full nerd changelog in pull requests 1501 through 1907.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
