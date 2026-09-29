@@ -279,6 +279,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     accessToken = sub.GetAccessToken();
                 }
 
+                // Closed while the browser was open: a late consent must not sign in (or clear progression) behind the user's back.
+                if (_closed) { AccountSeed.LogoutProvider(provider); return; }
+
                 if (string.IsNullOrEmpty(accessToken))
                 {
                     ShowProviderSelection();
@@ -715,6 +718,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         internal void Succeed(V2AuthService.V2User user, string? authToken, string? provider, bool legacy)
         {
+            if (_closed) { Log.Warning("Sign-in finished after the login dialog closed; ignored"); return; }
             // WPF MainWindow.Login.cs:110-141: a PROVEN different account never inherits the last one's progression.
             var previousId = CoreSettings.Current.UnifiedId;
             if (!string.IsNullOrEmpty(previousId) && !string.IsNullOrEmpty(user.UnifiedId) && previousId != user.UnifiedId)
