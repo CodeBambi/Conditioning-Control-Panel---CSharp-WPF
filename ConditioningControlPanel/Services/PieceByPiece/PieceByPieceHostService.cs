@@ -123,6 +123,10 @@ internal static partial class PieceByPieceHostService
     /// <summary>True while the board is open.</summary>
     public static bool IsActive => _host != null;
 
+    /// <summary>True while the board window is the foreground window. The panel's panic pass lets the
+    /// page keep a first Escape as its pause while this holds (PanicPolicy.GameClaimsEscapeAsPause).</summary>
+    public static bool IsInFront => _host?.IsForeground == true;
+
     /// <summary>The page's LAST boot attempt failed (it reported <c>boot-error</c>, or the host's
     /// own progress deadline fired). A LAST-attempt flag, not a session tombstone: most of what
     /// sets it is transient - a cold WebView2 runtime, a machine under load, a stalled driver - so
