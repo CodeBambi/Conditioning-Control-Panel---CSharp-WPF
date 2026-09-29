@@ -4701,6 +4701,9 @@ namespace ConditioningControlPanel.Services
             nameof(AppSettings.CustomAssetsPath),
             nameof(AppSettings.DiscordWebhookUrl),
             nameof(AppSettings.LastSeenUtc), // Local-only greeting timestamp — must never leave the device.
+            // Documented local only: a restore on another PC must not switch presence sharing on.
+            nameof(AppSettings.FriendsPresenceShared),
+            nameof(AppSettings.ModPersonalityPreset),
         };
 
         /// <summary>
@@ -4737,6 +4740,8 @@ namespace ConditioningControlPanel.Services
             restored.CustomAssetsPath = current.CustomAssetsPath;
             restored.DiscordWebhookUrl = current.DiscordWebhookUrl;
             restored.LastSeenUtc = current.LastSeenUtc;
+            restored.FriendsPresenceShared = current.FriendsPresenceShared;
+            restored.ModPersonalityPreset = current.ModPersonalityPreset; // the setter copies
             // A backup over budget leaves out the per-file asset lists (SettingsBackupBudget), so
             // an empty list in the restore may just mean "not carried": keep this PC's own.
             if (restored.DisabledAssetPaths.Count == 0 && current.DisabledAssetPaths.Count > 0)

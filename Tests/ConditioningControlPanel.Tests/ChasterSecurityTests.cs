@@ -93,6 +93,28 @@ public class ChasterSecurityTests
         Assert.False(restored.ChasterLadderShowName);
     }
 
+    /// <summary>Both are documented as local only: a restore on another PC must not switch presence
+    /// sharing on there, and must not wipe this PC's per-mod personality picks.</summary>
+    [Fact]
+    public void Presence_sharing_and_personality_picks_stay_on_this_machine()
+    {
+        Assert.True(ProfileSyncService.IsExcludedFromBackup(nameof(AppSettings.FriendsPresenceShared)));
+        Assert.True(ProfileSyncService.IsExcludedFromBackup(nameof(AppSettings.ModPersonalityPreset)));
+
+        var current = new AppSettings
+        {
+            FriendsPresenceShared = false,
+            ModPersonalityPreset = new Dictionary<string, string> { ["mod-bambi"] = "pushy" },
+        };
+        var restored = new AppSettings { FriendsPresenceShared = true };
+
+        ProfileSyncService.PreserveLocalOnlyFields(current, restored);
+
+        Assert.False(restored.FriendsPresenceShared);
+        Assert.Equal("pushy", restored.ModPersonalityPreset["mod-bambi"]);
+        Assert.NotSame(current.ModPersonalityPreset, restored.ModPersonalityPreset);
+    }
+
     [Fact]
     public void A_landed_catch_up_counts_on_the_ceiling_and_the_ladder_but_not_the_tab()
     {
