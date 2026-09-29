@@ -73,3 +73,9 @@ here record where and why the port chose something, and who advised.
 - Finding: a bare 20-line undecorated Avalonia 12 window (no CCP code) shows the same line on KWin 6.7.5 over XWayland at 1.79x scaling.
 - Choice: (c). Native Wayland would conflict with the X11 override-redirect overlays, so it is out of scope for this port.
 - Advisor: supervisor, with the user's own reproduction.
+
+## 2026-09-30: Entitlement lapse: startup write deferred
+- Question: WPF's EnforceEntitlementLapse (MainWindow.Patreon.cs:92) runs at startup through UpdatePatreonUI and saves. `HapticSettings.Enabled` defaults to true, so every free user's first launch writes settings.json. On this head that breaks the "startup does not write settings" contract (`Tests/CCP.Avalonia.Language.Tests/LanguageSelectorTests.cs:117`).
+- Options: (a) lapse only on entitlement events; (b) full parity, and change the Language test; (c) clear in memory at startup and on navigation, write on the next real save or on an entitlement event.
+- Choice: (c). The flag pass (`CCP.Core/Services/EntitlementLapse.cs`) runs from the first frame, so a free user can never run a lapsed premium feature. `MainShellWindow.RefreshEntitlementVeils(persist)` saves only on a tier change, a day change or a sign-in/out, as WPF does. The effective state matches WPF; only the startup write is deferred. Proof: `Tests/CCP.Avalonia.Tests/PremiumGatesTests.cs` `LapsePass_ClearsInMemory_AndOnlyAnEntitlementEventWrites`, fail-proven both ways.
+- Advisor: supervisor.

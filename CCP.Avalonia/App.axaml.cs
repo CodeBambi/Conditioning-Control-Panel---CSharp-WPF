@@ -411,6 +411,12 @@ namespace ConditioningControlPanel.Avalonia
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
                         Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
+                // WPF MainWindow.xaml.cs:484 (the ? box rolled over or its override landed) and
+                // OnPatreonTierChanged: both move the veils, the Play bands and the lapse pass.
+                void RepaintVeils() => Dispatcher.UIThread.Post(() => shell.RefreshEntitlementVeils(persist: true));
+                dailyFree.TodayChanged += RepaintVeils;
+                if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
+                if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
                 // WPF RequestExit (MainWindow.Launcher.cs:126) stops the engine first: the lock-card

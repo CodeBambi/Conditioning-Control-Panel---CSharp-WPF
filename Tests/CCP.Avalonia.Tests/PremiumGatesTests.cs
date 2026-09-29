@@ -23,6 +23,47 @@ public sealed class PremiumGatesTests
     private static readonly string[] Bands =
         { "PlayLockGaze", "PlayLockFocusGaze", "PlayLockRemote", "PlayLockLockdown", "PlayLockBlink", "PlayLockFyp", "PlayLockDtrh", "PlayLockArcademy" };
 
+    /// <summary>Decision "Entitlement lapse: startup write deferred": navigation/startup clears a lapsed
+    /// flag in memory and leaves settings.json alone; the next entitlement event writes it.</summary>
+    [Fact]
+    public void LapsePass_ClearsInMemory_AndOnlyAnEntitlementEventWrites()
+    {
+        AvaloniaTestDispatcher.Run(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var oldSeam = (CoreEntitlement.HasPremiumProvider, CoreEntitlement.IsFreeTodayProvider, CoreSettings.ServiceProvider);
+            var service = new ConditioningControlPanel.Services.SettingsService();
+            CoreSettings.ServiceProvider = () => service;
+            var path = System.IO.Path.Combine(CorePaths.UserData, "settings.json");
+            var shell = new MainShellWindow();
+            try
+            {
+                shell.Show();
+                service.Current.AutonomyModeEnabled = true;
+                service.SaveImmediate();
+                var before = System.IO.File.ReadAllText(path);
+                (CoreEntitlement.HasPremiumProvider, CoreEntitlement.IsFreeTodayProvider) = (() => false, null);
+
+                shell.ShowTab("play");   // navigation: in memory only
+                System.Threading.Thread.Sleep(900);   // past the 500 ms save debounce
+                Assert.False(service.Current.AutonomyModeEnabled);
+                Assert.Equal(before, System.IO.File.ReadAllText(path));
+
+                shell.RefreshEntitlementVeils(persist: true);   // a tier/day/sign-in event
+                System.Threading.Thread.Sleep(900);
+                Assert.Contains("\"AutonomyModeEnabled\": false", System.IO.File.ReadAllText(path));
+            }
+            finally
+            {
+                (CoreEntitlement.HasPremiumProvider, CoreEntitlement.IsFreeTodayProvider, CoreSettings.ServiceProvider) = oldSeam;
+                shell.Close();
+            }
+        });
+    }
+
     [Fact]
     public void FlippingTheSeam_UnlocksEveryVeilAndLockband()
     {
@@ -33,6 +74,8 @@ public sealed class PremiumGatesTests
                     .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                     .SetupWithoutStarting();
             var old = (CoreEntitlement.HasPremiumProvider, CoreEntitlement.HasLabProvider, CoreEntitlement.IsFreeTodayProvider);
+            var s = CoreSettings.Current;
+            var oldFlags = (s.AutonomyModeEnabled, s.KeywordTriggersEnabled);
             var shell = new MainShellWindow();
             shell.Show();
             try
@@ -58,9 +101,21 @@ public sealed class PremiumGatesTests
                 Assert.True(Veiled("LockdownTab", "LockdownGate"));
                 Assert.True(Banded("PlayLockFyp"));
 
-                // Tier 1: every premium veil and band down, the Lab bands stay up.
+                // The other three pool keys lift their own veils (WPF RefreshEntitlementVeils).
+                CoreEntitlement.IsFreeTodayProvider = k => k is "takeover" or "voice" or "haptics";
+                Show("play");
+                Assert.False(Veiled("BambiTakeoverTab", "BambiTakeoverGate"));
+                Assert.False(Veiled("SheListeningTab", "SheListeningGate"));
+                Assert.False(HapticsVeiled());
+                Assert.True(Veiled("AwarenessTab", "AwarenessGate"));
+
+                // An account change repaints without a navigation (WPF UpdatePatreonUI).
                 CoreEntitlement.IsFreeTodayProvider = null;
                 CoreEntitlement.HasPremiumProvider = () => true;
+                shell.UpdateQuickLoginUI();
+                Assert.False(Veiled("LockdownTab", "LockdownGate"));
+
+                // Tier 1: every premium veil and band down, the Lab bands stay up.
                 Show("play");
                 foreach (var (t, g) in Veils) Assert.False(Veiled(t, g), g);
                 Assert.False(HapticsVeiled());
@@ -71,10 +126,23 @@ public sealed class PremiumGatesTests
                 CoreEntitlement.HasLabProvider = () => true;
                 Show("play");
                 foreach (var b in Bands) Assert.False(Banded(b), b);
+
+                // Lapse (WPF EnforceEntitlementLapse): a free account's premium flag goes off on the
+                // next repaint, and the Awareness master box bounces (WPF MainWindow.Awareness.cs:395).
+                (CoreEntitlement.HasPremiumProvider, CoreEntitlement.HasLabProvider) = (() => false, null);
+                s.AutonomyModeEnabled = true;
+                shell.RefreshEntitlementVeils();
+                Assert.False(s.AutonomyModeEnabled);
+                s.KeywordTriggersEnabled = false;
+                var master = shell.Named<Control>("AwarenessTab")!.FindControl<CheckBox>("ChkAwarenessMaster")!;
+                master.IsChecked = true;
+                Assert.False(master.IsChecked);
+                Assert.False(s.KeywordTriggersEnabled);
             }
             finally
             {
                 (CoreEntitlement.HasPremiumProvider, CoreEntitlement.HasLabProvider, CoreEntitlement.IsFreeTodayProvider) = old;
+                (s.AutonomyModeEnabled, s.KeywordTriggersEnabled) = oldFlags;
                 shell.Close();
             }
         });

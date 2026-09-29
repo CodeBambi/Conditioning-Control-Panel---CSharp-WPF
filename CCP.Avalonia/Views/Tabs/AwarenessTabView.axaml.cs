@@ -105,7 +105,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// The settings half of MainWindow.SyncAwarenessTabUI, plus RefreshAwarenessAppScopeUi and
         /// SyncAwarenessHighlightSwatchUi, which it calls. Paints, never writes back.
         /// </summary>
-        private void SyncAwarenessTabUi()
+        internal void SyncAwarenessTabUi()
         {
             try
             {
@@ -187,9 +187,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 var on = ChkAwarenessMaster.IsChecked == true;
 
-                // ponytail: WPF gates ON behind KeywordTriggerService.HasAccess() and bounces the
-                // box with a Patreon message box. Both are head-side (cloud identity + a dialog);
-                // no Core seam, so this head lets the toggle through.
+                // WPF MainWindow.Awareness.cs:395: ON needs premium or the awareness free day
+                // (KeywordTriggerService.HasAccess); the box bounces back. TierGate's toast stands
+                // in for WPF's message box.
+                if (on && !ConditioningControlPanel.Services.TierGate.DemandPremium(ConditioningControlPanel.Localization.Loc.Get("tab_awareness"), "awareness"))
+                {
+                    _isLoading = true;
+                    try { ChkAwarenessMaster.IsChecked = false; }
+                    finally { _isLoading = false; }
+                    return;
+                }
 
                 CoreSettings.Current.KeywordTriggersEnabled = on;
 
