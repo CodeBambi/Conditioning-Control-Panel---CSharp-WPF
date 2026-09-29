@@ -39,10 +39,11 @@ L (me, the leashed side) = {
 H (one leashed friend, the holder side) = {
   who: P, online, intensity, since, day, dnd_until, video_max,
   report: R | null, week: [W x7], pending: [PUN], assignment: A | null, punished_today }
-O (an offer to me) = { from: P, at, expires_at }
+O (an offer to me) = { id, from: P, at, expires_at }   (id: see Receipts; absent on older servers)
 P = { id, name, avatar }                       (resolved like friends F; never client-sent)
 E = { id, kind, from: P, at, ... }            (delivered once, then dropped)
   kind: tug | reward | punish | assign | answered | ended | assign_done | assign_missed | punish_done
+      | punish_skipped (holder side: { punishment: { pid, kind, size }, reason: "unplayable" })
 R = { day:"yyyymmdd", minutes, quests_done, quests_total, streak,
       chaster_linked, lock_left_s | null, tab_s | null, assign_done, at }
 W = { day:"yyyymmdd", c }   c: g (did the work) | x (idle) | r (punished) | t (today)
@@ -98,9 +99,60 @@ client hides those rows on the holder side (never greyed).
 | `tug` | holder | `{ who }` | `{ ok, status }` `sent` `too_fast` `dnd` |
 | `complete` | leashed | `{ pid }` | `{ ok }` (the gate is done; the holder gets `punish_done` with `punishment: { pid, kind, size }` when it was really pending) |
 | `pardon` | leashed | `{ pid }` | `{ ok, status }` `pardoned` `none_left` |
+| `punish_skip` | leashed | `{ pid, reason: "unplayable" }` | `{ ok, status }` `skipped` `not_found` `refused` `cap` (a pending `video` punishment that will not play; 3 a UTC day; no pardon spent; the holder gets `punish_skipped`) |
 
 `who` / `to` / `from` are unified ids. `dnd` replies carry `dnd_until` so the holder's card can
-say until when.
+say until when. With receipts, `offer` answers `offer_id` and `tug` / `reward` answer `item_id`
+alongside `sent` (see Receipts).
+
+## Receipts (mirrored from `proxy/FRIENDS-RECEIPTS.md` in CCP-Server)
+
+The leash items a player receives tell the one who sent them how far they got: `arrived` when the
+leashed side's friends poll first carries the item, `seen` when that client reports it. Nothing
+else (`joined` / `declined` are refused on leash kinds). They ride the friends poll's `receipts`
+both ways (`Services/Friends/FriendReceipts.cs`); the leash block `B` only gains the offer id.
+Automatic items (the `good` sticker for a done assignment) carry none.
+
+| item | receipt kind | id the leashed side reports | `ref` |
+|---|---|---|---|
+| offer `O` | `leash_offer` | `O.id` | - |
+| punishment (event `punish`) | `leash_punish` | the event id, which EQUALS `PUN.pid` | pid |
+| assignment (event `assign`) | `leash_assign` | the event id, which EQUALS `A.aid` | aid |
+| reward (event `reward`) | `leash_reward` | the event id | - |
+| tug (event `tug`) | `leash_tug` | the event id | - |
+
+```
+O.id           first 16 hex of sha256("leash_offer|<holder>|<at>"): stable while that offer
+               stands, new when the holder offers again
+offer reply    { ok, status: "sent", offer_id }     (offer_id only with "sent")
+tug reply      { ok, status: "sent", item_id }      (item_id only with "sent")
+reward reply   { ok, status: "sent", item_id }      (item_id only with "sent")
+punish/assign  reply unchanged; the pid / aid reach the holder in H.pending / H.assignment
+poll body      receipts: [ { id, state: "seen" } ]                  (leashed side; 50 read at most)
+poll reply     receipts: [ RC ]   RC = { id, kind, to, to_name, state, at, ref? }
+               state: arrived | seen for the leash kinds
+```
+
+Every id is 16 lower-case hex. Sender receipts come oldest first and are drained once; one drain
+can carry `arrived` then `seen` for the same id, and the client keeps the furthest. The server
+keeps a leash item's record 4 days. A block ends the leash and no receipt passes between the pair
+afterwards.
+
+The client:
+
+- The leashed side reports `seen` only for what was on screen: the ask card or the drawer's offer
+  row (an offer), the gate (a punishment), its own card in the drawer (today's task), the toast
+  while the panel is up (a punishment, task, reward or tug), and a tug's wobble on the launcher. An
+  item that lands while nothing shows it waits (6 at most) and is told, quietly, when the panel is
+  back; only then is it reported. Each id is reported once a session.
+- The holder keeps a log per leashed friend (the newest 12, 4 days): sent, arrived, seen, then
+  done, accepted, declined, skipped or missed. A worded refusal is a row that never left; a network
+  fault, `off` and `already` leave nothing. A punishment or a task learns its id from the next
+  poll's `H` (the oldest unmatched send of the same kind); a Chaster punishment, which never
+  queues, from its first receipt. The card lists the newest 4 under "Sent lately".
+- An older server sends no ids and no receipts: nothing is drawn and every line reads as before.
+  The steps switch on once the server shows it speaks receipts (an id in a send reply, any leash
+  receipt, or a `punish_skipped`).
 
 ## Rules (server-enforced; the client mirrors what it can)
 

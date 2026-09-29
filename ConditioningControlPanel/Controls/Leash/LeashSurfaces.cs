@@ -25,8 +25,15 @@ public static class LeashSurfaces
     private static Func<Window?> _owner = () => null;
     private static readonly HashSet<string> SeenOffers = new();
     private static readonly List<LeashOffer> WaitingAsks = new();
+    private static readonly List<LeashEvent> HeldNotices = new();
     private static LeashOverlayWindow? _overlay;
     private static bool _iCut;
+
+    /// <summary>True while the panel (where toasts draw) is up and not minimised. The suite swaps it.</summary>
+    internal static Func<bool> PanelShowing = () => _owner() is MainWindow;
+
+    /// <summary>Notices that landed while nothing showed them, oldest first (the suite reads it).</summary>
+    internal static IReadOnlyList<LeashEvent> Held => HeldNotices;
 
     /// <summary>Offers this client sent that nobody has answered yet (the Offer chip reads "offered").
     /// The wire has no outgoing-offer list, so this lives for the session.</summary>
@@ -58,6 +65,7 @@ public static class LeashSurfaces
             }
             _svc = next;
             SeenOffers.Clear();
+            HeldNotices.Clear();
             if (_svc != null)
             {
                 _svc.SnapshotChanged += OnSnapshot;
@@ -66,7 +74,32 @@ public static class LeashSurfaces
             }
         }
         TryShowWaitingAsk();
+        FlushHeldNotices();
     }
+
+    /// <summary>The panel is back: say what landed while it was away (quietly, the sounds already
+    /// played) and only now report those items <c>seen</c>.</summary>
+    internal static void FlushHeldNotices()
+    {
+        if (HeldNotices.Count == 0) return;
+        bool panel;
+        try { panel = PanelShowing(); } catch { panel = false; }
+        if (!panel) return;
+        var held = HeldNotices.ToList();
+        HeldNotices.Clear();
+        foreach (var e in held)
+        {
+            try
+            {
+                if (LeashUiRules.EventKey(e) is { } key) Toast(Loc.GetF(key, e.From.Name), NoticeType(e));
+                _svc?.NoteShown(e.Id);
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Leash] held notice failed: {E}", ex.Message); }
+        }
+    }
+
+    private static NotificationType NoticeType(LeashEvent e) =>
+        e.Kind is LeashEventKind.Punish or LeashEventKind.AssignMissed ? NotificationType.Warning : NotificationType.Info;
 
     private static void OnSnapshot(LeashSnapshot snap)
     {
@@ -130,9 +163,24 @@ public static class LeashSurfaces
                 case LeashEventKind.PunishDone:
                     LeashFx.Done();
                     break;
+                case LeashEventKind.PunishSkipped:
+                    // Holder side: their video would not play, so the punishment went back.
+                    LeashFx.Refused();
+                    break;
             }
+            bool panel, wobbles;
+            try { panel = PanelShowing(); } catch { panel = false; }
+            // A tug is on screen wherever its wobble plays (the panel or the launcher), never with motion off.
+            try { wobbles = _owner() != null && LeashFx.Amount > 0; } catch { wobbles = false; }
+            var (toast, seen, hold) = LeashUiRules.EventNotice(e.Kind, panel, wobbles);
             var key = LeashUiRules.EventKey(e);
-            if (key != null) Toast(Loc.GetF(key, e.From.Name), e.Kind is LeashEventKind.Punish or LeashEventKind.AssignMissed ? NotificationType.Warning : NotificationType.Info);
+            if (toast && key != null) Toast(Loc.GetF(key, e.From.Name), NoticeType(e));
+            if (seen) _svc?.NoteShown(e.Id);
+            if (hold)
+            {
+                HeldNotices.Add(e);
+                while (HeldNotices.Count > LeashUiRules.HeldNotices) HeldNotices.RemoveAt(0);
+            }
         }
         catch (Exception ex) { App.Logger?.Debug("[Leash] event {K} failed: {E}", e.Kind, ex.Message); }
     }
@@ -163,6 +211,12 @@ public static class LeashSurfaces
         card.Dismissed += CloseOverlay;
         Open(card, () => card.Dismiss());
         LeashFx.Ask();
+        // The ask card is up: the offer is on screen.
+        if (_overlay != null)
+        {
+            try { LeashLocator.Service()?.NoteShown(offer.Id); }
+            catch (Exception ex) { App.Logger?.Debug("[Leash] ask seen note failed: {E}", ex.Message); }
+        }
     }
 
     public static void ShowSnap(LeashPerson holder, LeashPerson leashed)

@@ -95,6 +95,7 @@ public static class LeashParse
         "assign_done" => LeashEventKind.AssignDone,
         "assign_missed" => LeashEventKind.AssignMissed,
         "punish_done" => LeashEventKind.PunishDone,
+        "punish_skipped" => LeashEventKind.PunishSkipped,
         _ => null,
     };
 
@@ -286,7 +287,44 @@ public static class LeashParse
     {
         if (t is not JObject o || Person(o["from"]) is not { } from) return null;
         var at = Time(o["at"]) ?? DateTimeOffset.MinValue;
-        return new LeashOffer(from, at, Time(o["expires_at"]) ?? at.AddDays(7));
+        return new LeashOffer(from, at, Time(o["expires_at"]) ?? at.AddDays(7)) { Id = ReceiptId(o["id"]) };
+    }
+
+    /// <summary>A receipt id (16 lower-case hex), or null.</summary>
+    public static string? ReceiptId(JToken? t) => Str(t) is { } s && LeashSteps.IsId(s) ? s : null;
+
+    /// <summary>The bare <c>{ pid, kind, size }</c> that <c>punish_done</c> and <c>punish_skipped</c>
+    /// carry. A video one has no <c>watch</c> here, so the full grammar check does not apply.</summary>
+    public static PunishRef? BarePunishment(JToken? t)
+    {
+        if (t is not JObject o || Str(o["pid"]) is not { Length: > 0 } pid) return null;
+        var kind = PunishFromWire(Str(o["kind"]));
+        if (kind == null) return null;
+        return new PunishRef(pid, kind.Value, Math.Max(0, Int(o["size"]) ?? 0));
+    }
+
+    /// <summary>One sender receipt (<c>RC</c>) of a leash kind, or null: a friends kind, an
+    /// unknown state or a malformed entry is not the leash's (the friends drawer reads those).</summary>
+    public static LeashReceipt? Receipt(JToken? t)
+    {
+        if (t is not JObject o) return null;
+        var kind = LeashSteps.KindFromWire(Str(o["kind"]));
+        var state = LeashSteps.StateFromWire(Str(o["state"]));
+        var id = ReceiptId(o["id"]);
+        var to = Str(o["to"]);
+        if (kind == null || state == null || id == null || string.IsNullOrEmpty(to)) return null;
+        return new LeashReceipt(id, kind.Value, to, Str(o["to_name"]), state.Value,
+            Time(o["at"]) ?? DateTimeOffset.MinValue, Str(o["ref"]));
+    }
+
+    /// <summary>The poll reply's <c>receipts</c> array, leash kinds only, oldest first as sent.</summary>
+    public static IReadOnlyList<LeashReceipt> Receipts(JToken? t)
+    {
+        var list = new List<LeashReceipt>();
+        if (t is JArray a)
+            foreach (var x in a)
+                if (Receipt(x) is { } r) list.Add(r);
+        return list;
     }
 
     /// <summary>
@@ -321,6 +359,13 @@ public static class LeashParse
                 return new LeashEvent(id, kind.Value, from, at.Value, Reward: r, StickerOrPoke: token, Size: size);
             case LeashEventKind.Answered:
                 return new LeashEvent(id, kind.Value, from, at.Value, Accepted: o.Value<bool?>("accepted"));
+            case LeashEventKind.PunishDone:
+                return new LeashEvent(id, kind.Value, from, at.Value) { Given = BarePunishment(o["punishment"]) };
+            case LeashEventKind.PunishSkipped:
+                // Only a named punishment can be skipped: without it the holder has nothing to be told.
+                var given = BarePunishment(o["punishment"]);
+                return given == null ? null
+                    : new LeashEvent(id, kind.Value, from, at.Value, Size: given.Size) { Given = given, Reason = Str(o["reason"]) };
             default:
                 return new LeashEvent(id, kind.Value, from, at.Value);
         }
