@@ -1,0 +1,59 @@
+name: content-packs
+
+# The pack script and its installer deletion list: Windows-only (\\?\ long paths), so it runs only when
+# its inputs change, not on every PR.
+on:
+  pull_request:
+    paths:
+      - 'Assets/**'
+      - 'ConditioningControlPanel/Scripts/build-content-packs.ps1'
+      - 'ContentPackSounds.props'
+      - 'ConditioningControlPanel/ConditioningControlPanel.csproj'
+      - 'installer-content-deletions.iss'
+      - '.github/workflows/content-packs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  content-packs:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      GIT_LFS_SKIP_SMUDGE: 1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer deletions unchanged
+        shell: pwsh
+        run: |
+          ./ConditioningControlPanel/Scripts/build-content-packs.ps1 -DeletionsOnly
+          git diff --exit-code installer-content-deletions.iss
+      # One-time proof that the Assets move changed no pack bytes (run it by hand from the Actions tab).
+      # It copies today's script onto the pinned move commit, so it goes red on the first real $PackSpecs
+      # change: delete this step then (the deletions check above is the lasting guard).
+      - name: Packs identical across the Assets move
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
+          $move = '2f7f55a60af962e6bf93781a4e93057a163d11e8'; $pre = 'db1d0c4dcf8c32383a1c5345d401ad6b8e18904b'
+          git config --global core.longpaths true
+          git fetch --no-tags --depth 1 origin $move $pre
+          $o = "$env:RUNNER_TEMP\o"; $n = "$env:RUNNER_TEMP\n"
+          git worktree add --detach $o $pre; git worktree add --detach $n $move
+          Copy-Item ConditioningControlPanel/Scripts/build-content-packs.ps1 "$n/ConditioningControlPanel/Scripts/" -Force
+          foreach ($w in $o, $n) {
+            & "$w/ConditioningControlPanel/Scripts/build-content-packs.ps1" -Version 0.0.0 -OutputDir "$w-out"
+            if (-not $?) { throw "pack build failed in $w" }
+          }
+          $bad = 0
+          foreach ($z in Get-ChildItem "$o-out" -Filter *.zip) {
+            $a = (Get-FileHash $z.FullName).Hash; $b = (Get-FileHash "$n-out/$($z.Name)").Hash
+            "$($z.Name) $a $b"; if ($a -ne $b) { $bad++ }
+          }
+          if (@(Get-ChildItem "$o-out" -Filter *.zip).Count -ne 7) { throw 'expected seven zips' }
+          $m = foreach ($w in $o, $n) { $j = Get-Content "$w-out/content-manifest.json" -Raw | ConvertFrom-Json; $j.PSObject.Properties.Remove('generatedUtc'); $j | ConvertTo-Json -Depth 6 }
+          if ($m[0] -ne $m[1]) { $bad++; 'manifest differs' }
+          if ($bad) { throw "$bad pack artefact(s) differ across the Assets move" }
+

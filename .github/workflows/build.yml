@@ -164,42 +164,6 @@ jobs:
   # (b) Today's script on the Assets-move commit must zip byte-for-byte what the old script zipped
   #     on its parent. .ccpmod files are LFS pointers on both sides (no LFS pull), so those three
   #     zips prove the entry layout, not the archive bytes.
-  content-packs:
-    runs-on: windows-latest
-    timeout-minutes: 45
-    env:
-      GIT_LFS_SKIP_SMUDGE: 1
-    steps:
-      - uses: actions/checkout@v4
-      - name: Installer deletions unchanged
-        shell: pwsh
-        run: |
-          ./ConditioningControlPanel/Scripts/build-content-packs.ps1 -DeletionsOnly
-          git diff --exit-code installer-content-deletions.iss
-      - name: Packs identical across the Assets move
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $move = '2f7f55a60af962e6bf93781a4e93057a163d11e8'; $pre = 'db1d0c4dcf8c32383a1c5345d401ad6b8e18904b'
-          git config --global core.longpaths true
-          git fetch --no-tags --depth 1 origin $move $pre
-          $o = "$env:RUNNER_TEMP\o"; $n = "$env:RUNNER_TEMP\n"
-          git worktree add --detach $o $pre; git worktree add --detach $n $move
-          Copy-Item ConditioningControlPanel/Scripts/build-content-packs.ps1 "$n/ConditioningControlPanel/Scripts/" -Force
-          foreach ($w in $o, $n) {
-            & "$w/ConditioningControlPanel/Scripts/build-content-packs.ps1" -Version 0.0.0 -OutputDir "$w-out"
-            if (-not $?) { throw "pack build failed in $w" }
-          }
-          $bad = 0
-          foreach ($z in Get-ChildItem "$o-out" -Filter *.zip) {
-            $a = (Get-FileHash $z.FullName).Hash; $b = (Get-FileHash "$n-out/$($z.Name)").Hash
-            "$($z.Name) $a $b"; if ($a -ne $b) { $bad++ }
-          }
-          if (@(Get-ChildItem "$o-out" -Filter *.zip).Count -ne 7) { throw 'expected seven zips' }
-          $m = foreach ($w in $o, $n) { $j = Get-Content "$w-out/content-manifest.json" -Raw | ConvertFrom-Json; $j.PSObject.Properties.Remove('generatedUtc'); $j | ConvertTo-Json -Depth 6 }
-          if ($m[0] -ne $m[1]) { $bad++; 'manifest differs' }
-          if ($bad) { throw "$bad pack artefact(s) differ across the Assets move" }
-
   # Greps the compiler cannot do: APIs that compile fine in a net10.0 library and only fail at
   # runtime, plus the XAML clr-namespace tripwire. See the script for what and why.
   core-guards:
