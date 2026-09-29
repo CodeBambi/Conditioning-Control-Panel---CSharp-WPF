@@ -74,21 +74,48 @@ public class AnimatedWebpGifDisposalTests
         Assert.True(IsGold(decoded!.Value.Frames[Frames - 1], SquareX(1)));
     }
 
+    // ---- #1829 frame rate: the GIF callers' caps (FIXES-6) ----
+
+    /// <summary>A full-screen Blink Trainer tile asked for 1280 px and kept 20 of these 60 frames
+    /// (27 fit the 24 MB budget, then every third was taken).</summary>
+    [Fact]
+    public void AFullScreenBlinkTile_KeepsEveryFrameOfA60FrameGif()
+    {
+        var gif = Gif(Enumerable.Repeat(1, 60).ToArray(), width: 640, height: 360);
+        var decoded = AnimatedWebp.DecodeFrames(new MemoryStream(gif),
+            BlinkTrainerService.GifDecodeDim(1280), AnimatedWebp.GifMaxFrames, maxMemoryMb: 24.0);
+
+        Assert.NotNull(decoded);
+        Assert.Equal(60, decoded!.Value.Frames.Count);
+        Assert.Equal(100, decoded.Value.FrameDelay.TotalMilliseconds);
+    }
+
+    /// <summary>A small cascade tile kept 45 of these 90 frames under the old 48 cap.</summary>
+    [Fact]
+    public void ACascadeTile_KeepsEveryFrameOfA90FrameGif()
+    {
+        var decoded = AnimatedWebp.DecodeFrames(new MemoryStream(Gif(Enumerable.Repeat(1, 90).ToArray())),
+            maxDim: 200, AnimatedWebp.GifMaxFrames, maxMemoryMb: 24.0);
+
+        Assert.NotNull(decoded);
+        Assert.Equal(90, decoded!.Value.Frames.Count);
+    }
+
     // ---- a tiny GIF89a writer ----
 
     private static readonly byte[] Palette = { 40, 10, 60, 255, 105, 180, 255, 215, 0, 0, 0, 0 };
     private const int SquareY = 6;
 
     // Frame 0 is the whole background (index 0); frame f >= 1 is a 2x2 gold square (index 2).
-    private static int SquareX(int frame) => 2 * (frame - 1);
+    private static int SquareX(int frame) => 2 * (frame - 1) % (Size - 2);
 
-    private static byte[] Gif(int[] disposals)
+    private static byte[] Gif(int[] disposals, int width = Size, int height = Size)
     {
         var ms = new MemoryStream();
         void U16(int v) { ms.WriteByte((byte)v); ms.WriteByte((byte)(v >> 8)); }
 
         ms.Write(Encoding.ASCII.GetBytes("GIF89a"));
-        U16(Size); U16(Size);
+        U16(width); U16(height);
         ms.WriteByte(0xF1); // global colour table of 4 entries
         ms.WriteByte(0);
         ms.WriteByte(0);
@@ -100,7 +127,7 @@ public class AnimatedWebpGifDisposalTests
         for (int f = 0; f < disposals.Length; f++)
         {
             int x = f == 0 ? 0 : SquareX(f), y = f == 0 ? 0 : SquareY;
-            int w = f == 0 ? Size : 2, h = f == 0 ? Size : 2;
+            int w = f == 0 ? width : 2, h = f == 0 ? height : 2;
             ms.Write(new byte[] { 0x21, 0xF9, 0x04, (byte)(disposals[f] << 2), 10, 0, 0, 0 });
             ms.WriteByte(0x2C);
             U16(x); U16(y); U16(w); U16(h);

@@ -89,6 +89,13 @@ internal static class AnimatedWebp
     internal const int DECODE_CEILING = 600;
 
     /// <summary>
+    /// Frame cap for the GIF cascade and the Blink Trainer, whose GIFs came here from
+    /// XamlAnimatedGif (which streamed every frame) in #1829. Twice the default 48: a clip's kept
+    /// frames cost at most twice what they did, and the 24 MB budget still bounds the worst case.
+    /// </summary>
+    internal const int GifMaxFrames = 96;
+
+    /// <summary>
     /// Frame-selection plan: how many frames are decoded, which of them are KEPT, and the
     /// stride the per-frame delay is multiplied by so the kept set still spans the clip's real
     /// wall-clock duration. Pure and image-free so #683 stays regression-tested without needing

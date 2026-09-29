@@ -366,7 +366,7 @@ public sealed class ChaosGifCascadeOverlay : Window
                 // thread: with the render thread busy the UI thread hung inside
                 // Animator.RenderFrameAsync (ccp-bugs #1295 / #1310 stacks). A keyframe swap of
                 // frozen bitmaps never waits on the render thread. Detached with the faller.
-                Services.AnimatedWebp.AttachAnimation(img, path, (int)_gifSize);
+                Services.AnimatedWebp.AttachAnimation(img, path, (int)_gifSize, Services.AnimatedWebp.GifMaxFrames);
             }
             else
             {
