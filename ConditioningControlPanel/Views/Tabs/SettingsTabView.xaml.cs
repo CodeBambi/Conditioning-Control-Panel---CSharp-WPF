@@ -14,6 +14,8 @@ namespace ConditioningControlPanel.Views.Tabs
         public SettingsTabView()
         {
             InitializeComponent();
+            // Esc in the click-choice popup closes it, it is not the panic key's press (TAB-8).
+            Services.Safety.EscapeClaim.Mark(ClickChoiceBody);
             _clickChoiceClose.Tick += (_, _) =>
             {
                 _clickChoiceClose.Stop();
@@ -100,6 +102,7 @@ namespace ConditioningControlPanel.Views.Tabs
         private void ClickChoiceKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key != Key.Escape) return;
+            Services.Safety.EscapeClaim.Taken();
             ClickChoicePopup.IsOpen = false;
             e.Handled = true;
             ClickChoiceAnchor.Focus();

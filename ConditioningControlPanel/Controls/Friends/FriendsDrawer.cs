@@ -149,6 +149,8 @@ public sealed partial class FriendsDrawer : Border
         _root.Children.Add(_fx);
         Child = _root;
 
+        // Esc in here closes a box, the picker or the drawer, not the panic key's press (TAB-8).
+        Services.Safety.EscapeClaim.Mark(this);
         PreviewKeyDown += OnKey;
         BuildAddBox();
         Render();
@@ -240,6 +242,7 @@ public sealed partial class FriendsDrawer : Border
     private void OnKey(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Escape) return;
+        Services.Safety.EscapeClaim.Taken();
         if (e.OriginalSource is TextBox && _addBox.Visibility == Visibility.Visible && _codeBox?.IsKeyboardFocused == true)
         {
             _addBox.Visibility = Visibility.Collapsed;

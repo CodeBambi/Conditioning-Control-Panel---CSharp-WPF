@@ -286,6 +286,71 @@ public class PanicPolicyTests
         Assert.False(EscapeDismissesVideo(true, false, false, fresh.PanicKeyEnabled, fresh.PanicKey, false));
     }
 
+    // ---- 4b. an Escape a surface takes (bug hunt 2026-09-29, TAB-8 / DESK-3) ----
+
+    /// <summary>Escape in Circe's Tab price box ("Esc drops it") was a full panic on a fresh
+    /// install: the session paused, the ten minute safety hold armed, and a second Escape inside
+    /// 2 s quit CCP. With a surface that drops or closes on Escape holding the keyboard, the press
+    /// is that surface's and never reaches the panic handler.</summary>
+    [Fact]
+    public void AnEscapeInTheFocusedPriceBox_IsNotAPanicPress_OnAFreshInstall()
+    {
+        var fresh = new AppSettings();
+        Assert.True(SurfaceTakesEscape(fresh.PanicKeyEnabled, fresh.PanicKey, lockCardOpen: false,
+            ccpInFront: true, surfaceHasTheKeyboard: true, takenPressOnItsWay: false));
+    }
+
+    [Theory]
+    //          panicOn key         card   front  kbd    onItsWay -> the surface's?
+    [InlineData(true,  "Escape",   false, true,  true,  false,    true)]
+    [InlineData(true,  " escape ", false, true,  true,  false,    true)]
+    [InlineData(true,  "F8",       false, true,  true,  false,    false)] // rebound panic: F8 stays a real panic, Esc is only Esc
+    [InlineData(false, "Escape",   false, true,  true,  false,    false)] // panic key off: nothing to take it from
+    [InlineData(true,  "Escape",   true,  true,  true,  false,    false)] // a Lock Card outranks every hand-off
+    [InlineData(true,  "Escape",   false, false, true,  false,    false)] // the press goes to another app: a panic
+    [InlineData(true,  "Escape",   false, true,  false, false,    false)] // no surface has the keyboard: a panic
+    [InlineData(true,  "Escape",   false, true,  true,  true,     false)] // the last taken press has not landed (a stalled UI): a panic
+    public void ASurfaceTakesAnEscape_OnlyWhenThePressIsItsOwn(
+        bool panicOn, string key, bool card, bool front, bool keyboard, bool onItsWay, bool expected)
+        => Assert.Equal(expected, SurfaceTakesEscape(panicOn, key, card, front, keyboard, onItsWay));
+
+    /// <summary>A taken press covers itself and nothing else: while it is on its way to the surface
+    /// the next Escape is a panic, once it lands the surface may take the next one, and a press that
+    /// never landed lapses so the surfaces cannot be switched off by it.</summary>
+    [Fact]
+    public void ATakenPress_CoversOnlyItself()
+    {
+        var t0 = new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+        EscapeClaim.Taken();
+        Assert.False(EscapeClaim.OnItsWay(t0));
+        EscapeClaim.Claimed(t0);
+        Assert.True(EscapeClaim.OnItsWay(t0.AddMilliseconds(150)));
+        EscapeClaim.Taken();
+        Assert.False(EscapeClaim.OnItsWay(t0.AddMilliseconds(200)));
+        EscapeClaim.Claimed(t0);
+        Assert.True(EscapeClaim.OnItsWay(t0 + EscapeClaim.OnItsWayFor - TimeSpan.FromMilliseconds(1)));
+        Assert.False(EscapeClaim.OnItsWay(t0 + EscapeClaim.OnItsWayFor));
+        Assert.False(EscapeClaim.OnItsWay(t0.AddSeconds(-1))); // a clock step backwards never holds it
+        EscapeClaim.Taken();
+    }
+
+    /// <summary>The hook asks the surfaces after the held-key filter and before the panic check:
+    /// every down reaches the held-key filter first, so a press a surface takes still counts as the
+    /// key going down and its repeats are swallowed, never fresh panic presses (DESK-5).</summary>
+    [Fact]
+    public void TheHookAsksTheSurfacesAfterTheHeldKeyFilterAndBeforeThePanic()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private void OnGlobalKeyPressed(Key key)", StringComparison.Ordinal);
+        Assert.True(start >= 0, "OnGlobalKeyPressed was renamed - update this test with it");
+        var held = source.IndexOf("if (LeashHoldSwallows(key)) return;", start, StringComparison.Ordinal);
+        var taken = source.IndexOf("EscapeTakenBySurface(settings)) return;", start, StringComparison.Ordinal);
+        var panic = source.IndexOf("if (settings.PanicKeyEnabled)", start, StringComparison.Ordinal);
+        Assert.True(held > start && taken > held && panic > taken,
+            $"order in OnGlobalKeyPressed: held-key filter {held}, surface claim {taken}, panic {panic}");
+    }
+
     // ---- 5. the optional pause key ----
 
     [Fact]

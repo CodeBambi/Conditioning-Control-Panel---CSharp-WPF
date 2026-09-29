@@ -161,6 +161,21 @@ public partial class FriendsDrawerTests
         });
     }
 
+    /// <summary>Bug hunt 2026-09-29 (TAB-8): Escape in the drawer closes a box, the picker or the
+    /// drawer, so with the panic key on Escape (a fresh install) that press is the drawer's, not
+    /// a panic press. Every row inside it is in the surface.</summary>
+    [Fact]
+    public void Escape_in_the_drawer_belongs_to_the_drawer_not_the_panic_key()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var d = NewDrawer(new FakeFriends(Sample()));
+            Assert.True(ConditioningControlPanel.Services.Safety.EscapeClaim.InASurface(d));
+            Assert.True(ConditioningControlPanel.Services.Safety.EscapeClaim.InASurface(d.RowFor("sam")!));
+            Assert.False(ConditioningControlPanel.Services.Safety.EscapeClaim.InASurface(new Button()));
+        });
+    }
+
     [Fact]
     public void Signed_out_draws_no_rows()
     {

@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Services.Chaster;
+using ConditioningControlPanel.Services.Safety;
 using ConditioningControlPanel.Views.Tabs;
 using Xunit;
 
@@ -395,6 +396,53 @@ public class ChasterTabRenderTests
             Assert.False(tab.BeginPriceEdit(TabDayEnd.StreakEventId));
             Assert.Null(tab.StampFor("panic"));
             Assert.Null(tab.EditingPriceId);
+        });
+    }
+
+    /// <summary>Bug hunt 2026-09-29 (TAB-8 / DESK-3): "Esc drops it". The panic key is Escape on a
+    /// fresh install and the global hook sees every Escape, so the open box is a surface that takes
+    /// its own Escape: the press drops the edit and never reaches the panic (no session pause, no
+    /// safety hold, no step toward quitting). The row's stamp, outside the box, takes nothing.</summary>
+    [Fact]
+    public void Escape_in_the_open_price_box_belongs_to_the_box_not_the_panic_key()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            tab.LinkedPanel.Visibility = Visibility.Visible;
+            tab.BuildMenu();
+            Realize(tab, 1000, 2400);
+
+            var stamp = tab.StampFor("typo")!;
+            Assert.False(EscapeClaim.InASurface(stamp));
+            Assert.True(tab.BeginPriceEdit("typo"));
+            var box = ((Grid)stamp.Parent).Children.OfType<TextBox>().Single();
+            Assert.True(EscapeClaim.InASurface(box));
+
+            var fresh = new ConditioningControlPanel.Models.AppSettings();
+            Assert.True(PanicPolicy.SurfaceTakesEscape(fresh.PanicKeyEnabled, fresh.PanicKey, lockCardOpen: false,
+                ccpInFront: true, surfaceHasTheKeyboard: EscapeClaim.InASurface(box), takenPressOnItsWay: false));
+            // with the box gone the next Escape is a panic again
+            tab.CancelPriceEdit();
+            Assert.False(EscapeClaim.InASurface(stamp));
+        });
+    }
+
+    [Fact]
+    public void Only_an_element_inside_a_marked_surface_has_its_escape()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var inner = new TextBox();
+            var surface = new Border { Child = new StackPanel { Children = { inner } } };
+            var elsewhere = new TextBox();
+            _ = new Grid { Children = { surface, elsewhere } };
+            Assert.False(EscapeClaim.InASurface(inner));
+            EscapeClaim.Mark(surface);
+            Assert.True(EscapeClaim.InASurface(inner));
+            Assert.True(EscapeClaim.InASurface(surface));
+            Assert.False(EscapeClaim.InASurface(elsewhere));
+            Assert.False(EscapeClaim.InASurface(null));
         });
     }
 

@@ -941,6 +941,10 @@ namespace ConditioningControlPanel
             // The leash's hold-to-cut: while leashed, a held panic key is ONE press (its repeats are
             // swallowed here, or two of them would quit the app) and five seconds of it asks to cut.
             if (LeashHoldSwallows(key)) return;
+            // An Escape aimed at a CCP surface that drops or closes on it (Circe's Tab price box, the
+            // friends drawer, the dashboard's click-choice popup) is that surface's, not a panic press
+            // (bug hunt 2026-09-29, TAB-8 / DESK-3). Decided here, before the key reaches any window.
+            if (key == Key.Escape && EscapeTakenBySurface(settings)) return;
             if (settings.PanicKeyEnabled)
             {
                 var panicKey = settings.PanicKey;
@@ -980,6 +984,40 @@ namespace ConditioningControlPanel
                     try { App.Video?.TryGracePauseFromPanic(fromPanicKey: false); }
                     catch (Exception ex) { App.Logger?.Warning("Pause key: grace pause failed: {Error}", ex.Message); }
                 });
+            }
+        }
+
+        /// <summary>
+        /// Runs inside the hook callback on the UI thread, before the key is posted, so it only reads
+        /// state: the element with the keyboard now is the one this press lands on. True = the
+        /// surface's own Escape handler drops or closes it and nothing a panic arms is armed
+        /// (PanicPolicy.SurfaceTakesEscape).
+        /// </summary>
+        private static bool EscapeTakenBySurface(AppSettings settings)
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                var fg = GetForegroundWindow();
+                uint fgPid = 0;
+                if (fg != IntPtr.Zero) GetWindowThreadProcessId(fg, out fgPid);
+                if (!Services.Safety.PanicPolicy.SurfaceTakesEscape(
+                        panicKeyEnabled: settings.PanicKeyEnabled,
+                        panicKey: settings.PanicKey,
+                        lockCardOpen: LockCardWindow.IsAnyOpen(),
+                        ccpInFront: fgPid != 0 && fgPid == (uint)Environment.ProcessId,
+                        surfaceHasTheKeyboard: Services.Safety.EscapeClaim.KeyboardInASurface(),
+                        takenPressOnItsWay: Services.Safety.EscapeClaim.OnItsWay(now)))
+                    return false;
+                Services.Safety.EscapeClaim.Claimed(now);
+                VideoDiag.Log("PANIC", "Escape left to the surface with the keyboard (it drops an edit or closes a popup) - not a panic press");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // A panic press must never be lost to this question.
+                App.Logger?.Warning("Escape claim check failed: {Error}", ex.Message);
+                return false;
             }
         }
 
