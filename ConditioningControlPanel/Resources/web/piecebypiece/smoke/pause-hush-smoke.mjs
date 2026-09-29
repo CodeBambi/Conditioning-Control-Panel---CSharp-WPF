@@ -62,6 +62,20 @@ function expect(cond, name) {
   calls.length = 0; paused = false; hush.set(false); paused = true; fire();
   expect(!calls.includes('ramp:true'), 'a return that lands while paused again stays off');
 
+  // The slow-turn spiral board waits out the same window (bug hunt 2026-09-29, CHESS-2):
+  // it used to come straight back at full strength the frame the pause ended.
+  paused = false; hush.set(false); fire();
+  expect(hush.returning() === false, 'at rest nothing is on its way back');
+  paused = true; hush.set(true);
+  expect(hush.returning() === false, 'a pause is not a return');
+  paused = false; hush.set(false);
+  expect(hush.returning() === true, 'after a resume the effects are on their way back');
+  fire();
+  expect(hush.returning() === false, 'and back once RETURN_MS is up');
+  hush.set(false); paused = true; hush.set(true);
+  expect(hush.returning() === false, 'a pause inside the window ends the return');
+  paused = false;
+
   const loud = [];
   const broken = createPauseHush({
     board: { sfx: { hush: () => { throw new Error('boom'); } }, director: { skip: () => loud.push('skip') } },
@@ -136,6 +150,10 @@ function expect(cond, name) {
   expect(!/if \(pausedGame\) \{ setGamePaused\(false\)/.test(boot), 'no Escape path un-hushes on the way out');
   expect(/pauseHush\.set\(p\)/.test(boot), 'every pause and resume goes through the hush');
   expect(/menuOpen: \(\) => [^\n]*isPaused/.test(boot), 'the slow-turn spiral board drops while paused');
+  expect(/menuOpen: \(\) => [^\n]*isPaused[^\n]*isReturning/.test(boot), 'and stays down while the other effects wait to come back');
+  expect(/window\.PBP\.isReturning = \(\) => pauseHush\.returning\(\)/.test(boot), 'boot hands the spiral the hush\'s return window');
+  const spiral = readFileSync(new URL('../board/turn-spiral.js', import.meta.url), 'utf8');
+  expect(/menuOpen\(\)\) \{ clear\(\); back = 0; return; \}/.test(spiral) && /alpha = turn\.alpha \* back;/.test(spiral), 'then the spiral eases in, never popping back at full strength');
 }
 
 /* ---- D: one Escape pauses wherever it lands ------------------------------------ */

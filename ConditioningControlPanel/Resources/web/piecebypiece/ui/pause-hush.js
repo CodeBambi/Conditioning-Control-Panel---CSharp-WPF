@@ -12,7 +12,8 @@
  *        spiral board reads isPaused() and drops on its own.
  *   off  the sound comes back slowly (sfx.hush eases it in over ~3.5 s) and the
  *        Distraction layers only come back RETURN_MS later, so a resume never
- *        lands the player straight back in a full trance.
+ *        lands the player straight back in a full trance. The spiral board reads
+ *        returning() and waits out the same window, then eases in.
  *
  * Every part is optional: Classic has no ramp, an older board has no director
  * and sfx loads late. A part that throws never stops the rest going quiet.
@@ -38,5 +39,6 @@ export function createPauseHush({ board = {}, ramp = () => null, isPaused = () =
     }, RETURN_MS);
   }
 
-  return { set };
+  // True from a resume until the layers are due back: the slow-turn spiral board waits it out too.
+  return { set, returning: () => !!back };
 }

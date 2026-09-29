@@ -55,6 +55,7 @@ export function createTurnSpiral({ view, game, bus, menuOpen = () => false }) {
 
   let localSeed = String(Math.random()), key = null, recipe = null;
   let alpha = 0, fade = -1, fadeAlpha = 0, phaseMs = 0, paintedMs = -Infinity, wasStill = false;
+  let back = 1;   // 0..1: after a menu or a pause the board eases back in, never at full strength at once
   let disposed = false;
   const off = bus.on('newgame', () => { localSeed = String(Math.random()); clear(); });
   function clear() {
@@ -78,7 +79,8 @@ export function createTurnSpiral({ view, game, bus, menuOpen = () => false }) {
   function update(dt) {
     if (disposed) return;
     const pref = presentation(), still = pref.reducedMotion;
-    if (pref.experience !== 'distraction' || menuOpen()) { clear(); return; }
+    if (pref.experience !== 'distraction' || menuOpen()) { clear(); back = 0; return; }
+    back = Math.min(1, back + dt / TURN_LOOM.fadeSec);
     const turn = readTurn(game, localSeed);
     const nextKey = turn?.key || null;
     if (key !== null && nextKey !== key) startFade(still);
@@ -103,7 +105,7 @@ export function createTurnSpiral({ view, game, bus, menuOpen = () => false }) {
         key = nextKey; recipe = turnRecipe(key); kit.setRecipe('chess-turn', recipe);
         erase.value = 0; paintedMs = -Infinity;
       }
-      alpha = turn.alpha;
+      alpha = turn.alpha * back;
       phaseMs = turn.ageMs;
     } else alpha = 0;
 

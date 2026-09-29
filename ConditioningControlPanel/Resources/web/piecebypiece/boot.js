@@ -273,7 +273,7 @@ function main() {
     feelLate.push((dt) => board.motes.update(dt, view.camera, view.renderer));
   }).catch((e) => console.warn('[pbp] motes missing', e));
   import('./board/turn-spiral.js').then(m => {
-    board.turnSpiral = m.createTurnSpiral({ view, game, bus, menuOpen: () => !!window.PBP.door?.isUp() || !!window.PBP.isPaused?.() });
+    board.turnSpiral = m.createTurnSpiral({ view, game, bus, menuOpen: () => !!window.PBP.door?.isUp() || !!window.PBP.isPaused?.() || !!window.PBP.isReturning?.() });
     feelLate.push(dt => board.turnSpiral.update(dt));
     const dispose = view.dispose;
     view.dispose = () => { board.turnSpiral.dispose(); dispose(); };
@@ -309,6 +309,7 @@ function main() {
   window.PBP.pause = setGamePaused;
   bus.on('gameover', () => setGamePaused(false));   // the result card owns the screen now
   window.PBP.isPaused = () => pausedGame;
+  window.PBP.isReturning = () => pauseHush.returning();   // a resume's effects are still on their way back
   pauseCard.addEventListener('click', (e) => {
     const b = e.target.closest('[data-pause]');
     if (!b) return;
