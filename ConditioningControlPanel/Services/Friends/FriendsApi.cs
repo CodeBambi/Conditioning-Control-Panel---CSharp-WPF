@@ -374,7 +374,11 @@ public sealed class FriendsApi : IFriendsApi
                 destination = Str(o["destination"]);
                 if (!InviteDestination.IsValid(destination)) return null;
                 code = Str(o["code"]);
-                if (code != null && !IsJoinCode(code)) return null;
+                if (destination == InviteDestination.Chess)
+                {
+                    if (!InviteDestination.IsChallengeId(code)) return null;
+                }
+                else if (code != null && !IsJoinCode(code)) return null;
                 life = TimeSpan.FromSeconds(InviteDestination.LifetimeSeconds);
                 break;
             case "watch":

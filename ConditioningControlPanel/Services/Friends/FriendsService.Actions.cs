@@ -24,7 +24,11 @@ public sealed partial class FriendsService
         // Remote is still wire grammar (an old client may send one) but never offered or sent (owner, 2026-09-28).
         if (!InviteDestination.IsSendable(destination)) return Task.FromResult(SendResult.Refused);
         bool wantsCode = destination == InviteDestination.Goon;
-        if (wantsCode)
+        if (destination == InviteDestination.Chess)
+        {
+            if (!InviteDestination.IsChallengeId(code)) return Task.FromResult(SendResult.Refused);
+        }
+        else if (wantsCode)
         {
             if (code == null || !FriendsApi.IsJoinCode(code)) return Task.FromResult(SendResult.Refused);
         }

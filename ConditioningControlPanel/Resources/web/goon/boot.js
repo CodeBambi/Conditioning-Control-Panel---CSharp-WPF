@@ -98,6 +98,7 @@ import { needsMediaSetup } from './ui/screens/mediaSetup.js';
 import { readMediaInit, readOnlineFrame, mediaFlavourFrame, sameMediaState } from './ui/flavours.js';
 import { clampNoiseSet } from './core/noiseSets.js';
 import * as lobbyScreen from './ui/screens/lobby.js';
+import { createStakeClient, stakeEligible, submitClaim } from './ui/stake.js';
 import * as draftScreen from './ui/screens/draft.js';
 import * as countdownScreen from './ui/screens/countdown.js';
 import * as recapScreen from './ui/screens/recap.js';
@@ -618,6 +619,21 @@ bridge.on('host-now', () => {
 });
 
 bridge.on('end-run', () => finishExit('end-run'));
+
+/* PVP STAKES (2026-09-28, ui/stake.js). One client per page; the host answers every
+ * stake-* ask with a `stake` frame. Only a hosted page with a signed-in account, a
+ * real room and no practice bot ever asks (stakeCode). */
+const stake = createStakeClient({ send: (m) => bridge.send(m), logger });
+bridge.on('stake', (m) => stake.receive(m));
+
+/** The room code a stake would ride on, or '' when this match cannot carry one. */
+function stakeCode() {
+  try {
+    const code = (session.room && session.room.code) || (currentTransport && currentTransport.code) || '';
+    return stakeEligible({ hosted: session.hosted, practice: !!soloPair, identity: session.identity, code: String(code) })
+      ? String(code) : '';
+  } catch (_e) { return ''; }
+}
 
 // Reserved: the host does not post this yet (caps.haptics is false until the
 // haptics-v2 overhaul merges). Wired now so the toy HUD has a seam on day one.
@@ -1564,6 +1580,27 @@ function attachMatch(match, transport) {
     } catch (_e) { /* ignore */ }
   }));
   phaseUnsubs.push(match.onResultFinalized(() => forceRecap('finalized', false)));
+  /* PVP STAKES. The row locks at Countdown (the server locks too). At the end both
+   * pages post their claim to the ledger, which is what the server settles on, and
+   * the host is asked to watch a staked match until it settles. A pre-Live cancel
+   * never reaches the ledger, and practice never has a stakeCode. */
+  const stakeLock = (p) => {
+    const code = stakeCode();
+    if (code && p >= GoonMatchPhase.Countdown) stake.lock(code);
+  };
+  phaseUnsubs.push(match.onPhaseChanged(stakeLock));
+  stakeLock(match.phase);
+  phaseUnsubs.push(match.onMatchEnded(() => {
+    const code = stakeCode();
+    if (code) stake.finish(code);
+  }));
+  phaseUnsubs.push(match.onResultFinalized(() => {
+    try {
+      if (!stakeCode()) return;
+      void submitClaim({ session, result: match.result, post: (p, b) => bridge.postNet(p, b) })
+        .then((r) => { if (!r.ok) logger.warn('stake claim not recorded (status ' + r.status + ')'); });
+    } catch (e) { logger.warn('stake claim threw: ' + ((e && e.message) || e)); }
+  }));
   onPhase(match.phase);
   paintProbe();
 }
@@ -2834,6 +2871,9 @@ function buildApp() {
     /** Game Night: the rivalry record, and whether this match is practice (never booked). */
     rivalry,
     isPractice: () => !!soloPair,
+    /** PvP stakes: the client, and the code of the room a stake can ride on ('' = none). */
+    stake,
+    stakeCode,
   };
 
   router = createRouter({

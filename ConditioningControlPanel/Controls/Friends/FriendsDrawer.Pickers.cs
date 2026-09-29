@@ -68,6 +68,7 @@ public sealed partial class FriendsDrawer
         (InviteDestination.Goon, "features/goon_game_tile.png"),
         (InviteDestination.BackRoom, "features/backroom.png"),
         (InviteDestination.Ramp, "features/Phrase_Lock.png"),
+        (InviteDestination.Chess, "features/piecebypiece.png"),
     };
 
     private FrameworkElement BuildInvitePicker(Friend f)
@@ -93,6 +94,7 @@ public sealed partial class FriendsDrawer
             {
                 Pop(tile, FriendsLook.Lilac);
                 if (id == InviteDestination.Goon) await InviteToGoonAsync(f.Id);
+                else if (id == InviteDestination.Chess) await InviteToChessAsync(f.Id);
                 else await InviteAsync(f.Id, id, code);
             };
             grid.Children.Add(tile);
@@ -152,6 +154,27 @@ public sealed partial class FriendsDrawer
             code = opened.Code;
         }
         return await InviteAsync(friendId, InviteDestination.Goon, code);
+    }
+
+    private bool _openingChess;
+
+    /// <summary>The chess tile: open the board on a challenge to this friend, then send the
+    /// challenge id as the invite. One tap. Internal for the suite.</summary>
+    internal async Task<SendResult?> InviteToChessAsync(string friendId)
+    {
+        if (_openingChess) return null;   // a second tap while the board opens costs nothing
+        _openingChess = true;
+        ShowNote(friendId, "friends_invite_chess_opening");
+        string? challenge;
+        try { challenge = await InviteCodes.ChallengeFriend(friendId, TimeSpan.FromSeconds(45)); }
+        catch { challenge = null; }
+        finally { _openingChess = false; }
+        if (!InviteDestination.IsChallengeId(challenge))
+        {
+            ShowNote(friendId, "friends_invite_chess_failed", good: false, timed: true);
+            return null;
+        }
+        return await InviteAsync(friendId, InviteDestination.Chess, challenge);
     }
 
     internal async Task<SendResult> InviteAsync(string friendId, string destination, string? code)
@@ -413,6 +436,11 @@ public static class InviteCodes
     /// <summary>Opens (or reuses) a Goon room and returns its code; Busy = a match is on.</summary>
     public static Func<TimeSpan, Task<(string? Code, bool Busy)>> OpenGoonRoom { get; set; }
         = GoonHostService.OpenRoomForInviteAsync;
+
+    /// <summary>Opens the chess board on a challenge to a friend (by the friend's id) and returns
+    /// the server's challenge id, else null.</summary>
+    public static Func<string, TimeSpan, Task<string?>> ChallengeFriend { get; set; }
+        = ConditioningControlPanel.Services.PieceByPiece.PieceByPieceHostService.ChallengeFriendAsync;
 
     /// <summary>The code to send with an invite, and the loc key of the reason the tile is
     /// disabled (null when it can be sent).</summary>

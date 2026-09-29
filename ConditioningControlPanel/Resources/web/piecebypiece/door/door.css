@@ -112,6 +112,42 @@
 .door-pill:active { transform: scale(0.95); }
 .door-pill:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
 .door-item.leaving { animation: door-leave 180ms ease both; }
+
+/* --- the stake row: one line of small pills, the pick lit; online games only --- */
+.stake-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.stake-k { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.55; margin-right: 4px; }
+.stake-pill {
+  cursor: pointer; padding: 6px 10px; border-radius: 999px; color: var(--pbp-ink);
+  background: rgba(245, 230, 200, 0.05); border: 1px solid rgba(245, 230, 200, 0.2);
+  font: 10px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase;
+  transition: transform 140ms cubic-bezier(.2, 1.5, .4, 1), background-color 140ms ease, border-color 140ms ease;
+}
+.stake-pill:hover { border-color: rgba(255, 105, 180, 0.5); }
+.stake-pill:active { transform: scale(0.95); }
+.stake-pill.on { color: var(--pbp-pink); background: rgba(255, 105, 180, 0.16); border-color: rgba(255, 105, 180, 0.7); }
+.stake-pill:disabled { cursor: default; opacity: 0.45; transform: none; }
+.stake-pill.on:disabled { opacity: 0.8; }
+.stake-pill:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
+.stake-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11px; letter-spacing: 0.1em; }
+.stake-chip { padding: 4px 9px; border-radius: 999px; background: rgba(245, 230, 200, 0.08); opacity: 0.85; }
+.stake-chip b, .stake-live b { font-weight: 500; color: var(--pbp-cream); }
+.stake-note { opacity: 0.55; text-transform: lowercase; }
+.door-found .stake-slot { align-self: stretch; }
+.door-found .stake-row { justify-content: center; }
+.door-found .stake-meta { justify-content: center; }
+.stake-result { margin: 0; font-size: 13px; letter-spacing: 0.08em; color: var(--pbp-pink); }
+.stake-result:empty { display: none; }
+/* over the board while an online game with a stake runs */
+.stake-live {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; pointer-events: none;
+  display: flex; gap: 12px; padding: 6px 12px; border-radius: 999px;
+  background: rgba(20, 20, 46, 0.62); border: 1px solid rgba(245, 230, 200, 0.14);
+  font: 10px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pbp-ink);
+}
+.stake-live[hidden] { display: none; }
+.stake-live .lock { opacity: 0.55; }
+/* narrow: the two clock chips take the top, so the stake sits above the focus line */
+@media (max-width: 760px) { .stake-live { top: auto; bottom: 140px; } }
 @keyframes door-leave { to { opacity: 0; transform: translateX(10px); } }
 .door-empty { padding: 18px 4px; font-size: 12px; letter-spacing: 0.12em; opacity: 0.55; text-transform: lowercase; display: flex; align-items: center; gap: 10px; }
 /* the waiting dot: on the lobby it is the screen's BREATH instead of the button (there is no primary while you wait) */

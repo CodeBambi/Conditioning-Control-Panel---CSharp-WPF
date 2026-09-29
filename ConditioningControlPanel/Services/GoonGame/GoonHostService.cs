@@ -12,6 +12,7 @@ using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Services.Chaos;
+using ConditioningControlPanel.Services.Stakes;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -673,9 +674,27 @@ namespace ConditioningControlPanel.Services.GoonGame
         //     about the user who did not ask for it, and it can never carry free text or a name.
         //   * last-opponent-clear — deletes local state and one cached file. Strictly destructive
         //     of the app's own data, so there is nothing to abuse.
+        //
+        // WHY THE STAKE VERBS ARE ADMISSIBLE (PvP stakes, 2026-09-28; stake-limits / stake-offer /
+        // stake-state / stake-settle). They go to the shared Services/Stakes bridge and nowhere
+        // else. The page names a stake from a fixed table (StakeRules.Normalise refuses anything
+        // off it) and a room code; the bridge calls /v2/stakes/* with the account token itself and
+        // the page never sees the token. Nothing here reaches a panic verb, a lock, a session or
+        // an overlay. The one thing a stake can DO locally, booking a lost TIME stake on the
+        // player's own Chaster tab, happens only off a server-settled `lost` (both pages' ledger
+        // claims agreeing on a match that ran to the clock), only for a time stake the player
+        // picked themself, and through ChasterService's own gates (safety hold after panic, day
+        // and backlog limits, the Remote cap). Mercy / Esc / abandon settle as void: leaving never
+        // costs anything.
         // =====================================================================================
         private static void OnPageMessage(JObject o)
         {
+            if (StakeBridge.Handles((string?)o["type"]))
+            {
+                _stakes ??= StakeBridge.ForApp("goon", PostStake);
+                _ = _stakes.Handle(o);
+                return;
+            }
             switch ((string?)o["type"])
             {
                 case "heartbeat":
@@ -782,6 +801,28 @@ namespace ConditioningControlPanel.Services.GoonGame
                     break;
                 }
             }
+        }
+
+        // ============================ stakes ============================
+
+        /// <summary>One bridge for the life of the app: a settle watch it started keeps running
+        /// (and books) after the duel window closes; posting to a closed window is a quiet no-op.</summary>
+        private static StakeBridge? _stakes;
+
+        /// <summary>A <c>stake</c> frame back to the page, on the UI thread (WebView2 is thread-affine).</summary>
+        private static void PostStake(JObject o)
+        {
+            try
+            {
+                var disp = Application.Current?.Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+                disp.BeginInvoke(() =>
+                {
+                    try { _host?.Post(o); }
+                    catch (Exception ex) { App.Logger?.Debug("GoonHostService: stake post failed: {E}", ex.Message); }
+                });
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService: stake post dispatch: {E}", ex.Message); }
         }
 
         // ============================ received-artifact inbox ============================

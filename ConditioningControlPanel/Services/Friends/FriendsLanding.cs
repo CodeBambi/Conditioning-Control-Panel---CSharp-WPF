@@ -175,6 +175,7 @@ public static class FriendsLanding
     {
         InviteDestination.Goon => Str("friends_land_dest_goon", "the Goon Game"),
         InviteDestination.Ramp => Str("friends_land_dest_ramp", "a Ramp link"),
+        InviteDestination.Chess => Str("friends_land_dest_chess", "a game of chess"),
         _ => Str("friends_land_dest_backroom", "the Back Room"),
     };
 
@@ -482,6 +483,13 @@ public static class FriendsLanding
             case InviteDestination.BackRoom:
                 try { BackRoom.BackRoomHostService.Launch(); }
                 catch (Exception ex) { App.Logger?.Warning(ex, "[Friends] back room launch failed"); }
+                return;
+
+            case InviteDestination.Chess:
+                // The code is the friend's challenge: the board opens and takes it up at once.
+                if (!InviteDestination.IsChallengeId(item.Code)) return;
+                try { ConditioningControlPanel.Services.PieceByPiece.PieceByPieceHostService.JoinFriendChallenge(item.Code!); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "[Friends] chess launch failed"); }
                 return;
 
             case InviteDestination.Ramp:

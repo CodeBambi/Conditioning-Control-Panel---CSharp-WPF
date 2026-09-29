@@ -241,6 +241,45 @@ public partial class FriendsDrawerTests
     }
 
     [Fact]
+    public void Chess_invite_opens_the_board_on_a_challenge_then_sends_its_id()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var challenge = InviteCodes.ChallengeFriend;
+            try
+            {
+                var asked = new List<string>();
+                InviteCodes.ChallengeFriend = (id, _) => { asked.Add(id); return Task.FromResult<string?>("c_0123456789abcdef"); };
+                var svc = new FakeFriends(Sample()) { NextSend = SendResult.Sent };
+                var d = NewDrawer(svc);
+                d.OpenPickerFor("sam", "invite");
+                Assert.True(((Button)Find(d.RowFor("sam")!, "friends-invite:chess")!).IsEnabled);
+                Assert.Equal(SendResult.Sent, d.InviteToChessAsync("sam").GetAwaiter().GetResult());
+                Assert.Equal(new[] { "sam" }, asked);
+                Assert.Equal(("sam", "chess", "c_0123456789abcdef"), svc.Invites.Single());
+
+                // No challenge from the board: nothing is sent, and the row says why.
+                InviteCodes.ChallengeFriend = (_, _) => Task.FromResult<string?>(null);
+                Assert.Null(d.InviteToChessAsync("sam").GetAwaiter().GetResult());
+                Assert.Single(svc.Invites);
+                Assert.Equal(Loc.Get("friends_invite_chess_failed"), d.ResultTextFor("sam"));
+            }
+            finally { InviteCodes.ChallengeFriend = challenge; }
+        });
+    }
+
+    [Fact]
+    public void Chess_invite_code_is_a_challenge_id_and_nothing_else()
+    {
+        Assert.True(InviteDestination.IsValid(InviteDestination.Chess));
+        Assert.True(InviteDestination.IsChallengeId("c_0123456789abcdef"));
+        Assert.False(InviteDestination.IsChallengeId("c_0123456789ABCDEF"));
+        Assert.False(InviteDestination.IsChallengeId("c_0123"));
+        Assert.False(InviteDestination.IsChallengeId("ABC123"));
+        Assert.False(InviteDestination.IsChallengeId(null));
+    }
+
+    [Fact]
     public void Goon_invite_opens_a_room_then_sends_its_code()
     {
         WpfRenderHarness.OnStaThread(() =>

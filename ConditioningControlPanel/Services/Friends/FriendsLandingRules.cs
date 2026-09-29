@@ -195,6 +195,7 @@ public static class LandingRules
             {
                 InviteDestination.Goon => "features/goon_game_tile.png",
                 InviteDestination.Ramp => "features/Phrase_Lock.png",
+                InviteDestination.Chess => "features/piecebypiece.png",
                 _ => "features/backroom.png",
             };
         return item.Watch?.Kind == WatchKind.Flavour ? "features/backroom.png" : "features/deeper.png";
