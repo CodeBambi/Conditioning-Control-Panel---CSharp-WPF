@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private const string ServerUrl = "https://codebambi-proxy.vercel.app";
         private static readonly HttpClient Http = new();
         private CancellationTokenSource? _checkCts;
+        private bool _closed;
         private string? _firstProviderToken;
 
         // Track which provider was tried first
@@ -209,6 +210,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // the service and is stubbed below, so _checkCts is what is left to cancel.
             Closed += (_, _) =>
             {
+                _closed = true;
                 _checkCts?.Cancel();
                 _checkCts?.Dispose();
                 _checkCts = null;
@@ -276,6 +278,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     await sub.SignInAsync(open);
                     accessToken = sub.GetAccessToken();
                 }
+
+                // Closed while the browser was open: a late consent must not sign in (or clear progression) behind the user's back.
+                if (_closed) { AccountSeed.LogoutProvider(provider); return; }
 
                 if (string.IsNullOrEmpty(accessToken))
                 {
@@ -700,6 +705,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private async Task ShowError(string message)
         {
+            // A 5-minute OAuth timeout can land after the dialog closed; a dialog on a closed owner throws and kills the app.
+            if (_closed) { Log.Warning("Login error after the dialog closed: {Message}", message); return; }
             await MessageDialog.ShowAsync(this, Loc.Get("title_error"), message);
             ShowProviderSelection();
         }
@@ -711,6 +718,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         internal void Succeed(V2AuthService.V2User user, string? authToken, string? provider, bool legacy)
         {
+            if (_closed) { Log.Warning("Sign-in finished after the login dialog closed; ignored"); return; }
             // WPF MainWindow.Login.cs:110-141: a PROVEN different account never inherits the last one's progression.
             var previousId = CoreSettings.Current.UnifiedId;
             if (!string.IsNullOrEmpty(previousId) && !string.IsNullOrEmpty(user.UnifiedId) && previousId != user.UnifiedId)

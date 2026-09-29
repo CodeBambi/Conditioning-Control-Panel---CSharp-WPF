@@ -20,10 +20,10 @@
 //   OnSourceInitialized                    -> OnOpened (the first point at which there is a
 //                                             platform window to ask which screen it is on)
 //   OnDpiChanged + dispatcher coalescing   -> ScalingChanged. There is no modal move loop and no
-//                                             WM_DPICHANGED ping-pong to break here, so the
-//                                             coalescing, the drag deferral and the 4-fit burst cap
-//                                             are all dropped; the idempotence early-out below is
-//                                             what stops a loop.
+//                                             WM_DPICHANGED ping-pong to break here. The drag
+//                                             deferral is back as a 300 ms settle timer (fitting
+//                                             mid-drag bounced the window between monitors); the
+//                                             4-fit burst cap stays dropped.
 //
 // Members dropped: RunWorkAreaFitDeferredByMove / QueueWorkAreaFitAfterDpiChange /
 // RunQueuedWorkAreaFit and their five coalescing fields - all of them exist only to tame
@@ -158,17 +158,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 EnsureDesignFloorsCaptured();
                 FitToCurrentMonitorWorkArea("opened");
-                ScalingChanged += (_, __) => FitToCurrentMonitorWorkArea("scaling-changed");
                 // Screen change: dragged onto another monitor, or the topology itself changed.
                 // Either way the floors must fit THAT work area or they veto the resize.
                 _fitScreen = Screens?.ScreenFromWindow(this);
-                PositionChanged += (_, __) =>
+                // Wait until the move settles: fitting mid-drag fights the window manager and bounces
+                // the window between monitors, flashing thin lines.
+                var settle = new global::Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+                var scalingPending = false;
+                settle.Tick += (_, __) =>
                 {
+                    settle.Stop();
                     var now = Screens?.ScreenFromWindow(this);
-                    if (now is null || now.Bounds == _fitScreen?.Bounds) return;
-                    _fitScreen = now;
-                    FitToCurrentMonitorWorkArea("screen-changed");
+                    var moved = now is not null && now.Bounds != _fitScreen?.Bounds;
+                    if (moved) _fitScreen = now;
+                    if (moved || scalingPending) FitToCurrentMonitorWorkArea(moved ? "screen-changed" : "scaling-changed");
+                    scalingPending = false;
                 };
+                PositionChanged += (_, __) => { settle.Stop(); settle.Start(); };
+                ScalingChanged += (_, __) => { scalingPending = true; settle.Stop(); settle.Start(); };
                 if (Screens is { } screens) screens.Changed += (_, __) => FitToCurrentMonitorWorkArea("screens-changed");
             }
             catch (Exception ex)

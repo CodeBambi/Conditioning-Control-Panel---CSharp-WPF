@@ -62,6 +62,8 @@ internal static class SecretStore
             ClearFailed = true;
             return;
         }
+        // A sandbox is memory-only on purpose, not a missing Secret Service: no warning, no "no secret store" notice.
+        if (Sandboxed) return;
         Log.Warning("No usable secret store: {Name} is kept in memory for this run only", name);
         NotRemembered = true;
     }

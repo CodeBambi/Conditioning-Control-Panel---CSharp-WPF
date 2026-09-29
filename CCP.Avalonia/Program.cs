@@ -194,6 +194,16 @@ namespace ConditioningControlPanel.Avalonia
             // BuildAvaloniaApp so the XAML previewer does not start a second server.
             app = app.UseMcpServer();
 #endif
+            // SIGTERM (logout, systemd, kill) is not handled by Avalonia's X11 backend: the app ignored it and needed kill -9.
+            // Shut down through the lifetime instead, so settings flush exactly as on tray Exit.
+            using var term = System.Runtime.InteropServices.PosixSignalRegistration.Create(
+                System.Runtime.InteropServices.PosixSignal.SIGTERM, ctx =>
+                {
+                    ctx.Cancel = true;
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        (global::Avalonia.Application.Current?.ApplicationLifetime
+                            as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.Shutdown());
+                });
             app.StartWithClassicDesktopLifetime(args);
             return 0;
         }
