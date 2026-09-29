@@ -751,3 +751,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   (-bin, /opt, MIT) and a Flatpak manifest (GNOME 50, bundled libVLC) consume it. CI builds + smokes the tarball (artifact only).
 - Evidence: tarball smoke with the bundled model (fail-proofed by removing it); makepkg -si + --smoke in archlinux:latest;
   WM_CLASS read live. Flatpak never built here (row linux-package-flatpak blocked: first build + WPE question). Review: FIX -> r1.
+
+## avalonia-port/linux-inapp-deps: +222 (user Linux brief, in-app)
+- Distro-aware missing-package message (dlopen probe + /etc/os-release -> pacman/apt/dnf command, library list fallback) as a startup
+  notice and in the web view panel, with Copy command; portal Registry.Register with the app id before the panic-key bind.
+- Evidence: LinuxDependenciesTests (fail-proofed); dbus-monitor: KDE files the shortcut under our id once the .desktop is
+  installed. Not live: a really missing library. Review: ACCEPT.
