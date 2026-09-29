@@ -1,0 +1,56 @@
+# Flatpak for the own-repo channel (docs/avalonia-linux-install.md). Consumes the tarball from
+# packaging/linux/build-tarball.sh: copy it next to this file as ConditioningControlPanel-linux-x64.tar.gz.
+# A release swaps `path:` for `url:` + `sha256:` of the uploaded asset. Not submitted to Flathub.
+# GNOME 50 already ships webkit2gtk-4.1, libsecret, libXi and libpulse; libVLC is bundled below.
+# WPE WebKit is NOT bundled: WebHost only needs the GTK3 NativeControlHost engine.
+app-id: io.github.CodeBambi.ConditioningControlPanel
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: conditioning-control-panel
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11            # overlays and the X11 panic key need X11/XWayland, not fallback-x11
+  - --socket=pulseaudio     # LibVLC output and the parec mic
+  - --device=dri
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.secrets
+modules:
+  # ponytail: minimal libVLC (audio/video decode + pulse/xcb/gl output), no GUI or Lua; add modules when a format fails.
+  - name: vlc
+    config-opts:
+      - --disable-lua
+      - --disable-qt
+      - --disable-skins2
+      - --disable-ncurses
+      - --disable-vlc
+      - --disable-a52
+      - --disable-nls
+      - --disable-srt
+      - --disable-chromecast
+      - --disable-dbus
+      - --enable-avcodec
+      - --enable-avformat
+      - --enable-swscale
+      - --enable-pulse
+    cleanup:
+      - /bin
+      - /include
+      - /share/man
+    sources:
+      - type: archive
+        url: https://download.videolan.org/pub/videolan/vlc/3.0.21/vlc-3.0.21.tar.xz
+        sha256: 24dbbe1d7dfaeea0994d5def0bbde200177347136dbfe573f5b6a4cee25afbb0
+  - name: conditioning-control-panel
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib/ccp && cp -a . /app/lib/ccp/
+      - mkdir -p /app/bin && printf '#!/bin/sh\nexec /app/lib/ccp/CCP.Avalonia "$@"\n' > /app/bin/conditioning-control-panel
+      - chmod 755 /app/bin/conditioning-control-panel
+      - install -Dm644 io.github.CodeBambi.ConditioningControlPanel.desktop -t /app/share/applications
+      - install -Dm644 io.github.CodeBambi.ConditioningControlPanel.png -t /app/share/icons/hicolor/128x128/apps
+    sources:
+      - type: archive
+        path: ConditioningControlPanel-linux-x64.tar.gz

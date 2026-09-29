@@ -71,6 +71,15 @@ namespace ConditioningControlPanel.Avalonia
                 Check("LibVLC plays a clip: started then finished within 2 s", ok, audio);
             }
             catch (Exception ex) { Check("LibVLC plays a clip: started then finished within 2 s", false, ex.Message); }
+            // The Linux tarball ships the Vosk model in the install folder (packaging/linux/build-tarball.sh);
+            // the packaging runs set this so a tarball without a loadable model fails. ModelStatus never touches the mic.
+            if (Environment.GetEnvironmentVariable("CCP_SMOKE_BUNDLED_VOSK") == "1")
+            {
+                var status = new ConditioningControlPanel.Services.Speech.SpeechEngine(null!,
+                    new[] { ConditioningControlPanel.Services.Speech.SpeechEngine.DefaultModelRoots[0] }).ModelStatus;
+                Check("bundled Vosk model loads from the install folder",
+                    status == ConditioningControlPanel.Services.Speech.SpeechModelStatus.Ok, status.ToString());
+            }
             Console.WriteLine();
             Console.WriteLine(failures == 0
                 ? "Linux head can produce every value it renders."

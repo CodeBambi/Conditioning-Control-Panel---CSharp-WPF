@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Conditioning Control Panel
+Comment=A visual conditioning application with gamification features
+Exec=conditioning-control-panel
+Icon=io.github.CodeBambi.ConditioningControlPanel
+Terminal=false
+Categories=Utility;

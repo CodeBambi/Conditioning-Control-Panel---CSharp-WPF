@@ -56,13 +56,18 @@ jobs:
       # --smoke plays a clip through LibVLC (dummy output); Linux uses the system libvlc.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvlc-dev vlc-plugin-base
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --smoke
-      # The shipped shape (Properties/PublishProfiles/linux-x64.pubxml): self-contained, loose files.
-      # Never a release; nothing here uploads the publish folder.
-      - name: Publish linux-x64 and smoke the published app
+      # The shipped shape: the linux-x64 tarball (publish profile + Vosk model + .desktop + icon) that the
+      # Flatpak manifest and the AUR PKGBUILD consume, extracted and smoked with the bundled model required.
+      # A workflow artifact only - never a release.
+      - name: Build the linux-x64 tarball and smoke it extracted
         run: |
-          dotnet publish CCP.Avalonia/CCP.Avalonia.csproj -c Release -p:PublishProfile=linux-x64
-          test -f CCP.Avalonia/bin/publish/linux-x64/libvosk.so
-          CCP.Avalonia/bin/publish/linux-x64/CCP.Avalonia --smoke
+          tar=$(bash packaging/linux/build-tarball.sh)
+          bash packaging/linux/smoke-tarball.sh "$tar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-tarball
+          path: packaging/linux/out/*.tar.gz
+          retention-days: 7
       # Consent runs in its own testhost: CorePaths is process-global and the headless Avalonia
       # lifetime must not share state with the language/notification/scheduler suites.
       - run: dotnet test Tests/CCP.Avalonia.Consent.Tests/CCP.Avalonia.Consent.Tests.csproj -c Release
