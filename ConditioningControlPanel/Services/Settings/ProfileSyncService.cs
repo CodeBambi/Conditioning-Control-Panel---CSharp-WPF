@@ -1602,6 +1602,8 @@ namespace ConditioningControlPanel.Services
             }
 
             var syncSucceeded = false;
+            // Set by the cooldown and backoff skips below: no request went out, so nothing failed.
+            var skipped = false;
 
             // Progression as it stood before this call could rewrite it, plus a label for the log
             // line. Declared out here so the finally can compare against it on EVERY exit path —
@@ -1618,6 +1620,7 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("Profile sync skipped - cooldown active ({Remaining}s remaining)",
                     Math.Ceiling((SyncCooldown - (DateTime.Now - LastSyncTime.Value)).TotalSeconds));
+                skipped = true;
                 return false;
             }
 
@@ -1627,6 +1630,7 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("Profile sync skipped - backing off after {Failures} failure(s), {Remaining}s left",
                     _syncBackoffFailures, Math.Ceiling((_syncBlockedUntilUtc!.Value - DateTime.UtcNow).TotalSeconds));
+                skipped = true;
                 return false;
             }
 
@@ -2772,7 +2776,7 @@ namespace ConditioningControlPanel.Services
                         SyncHealthChanged?.Invoke(this, 0);
                     }
                 }
-                else if (LastSyncError != null)
+                else if (!skipped && LastSyncError != null)
                 {
                     ConsecutiveSyncFailures++;
                     SyncHealthChanged?.Invoke(this, ConsecutiveSyncFailures);
