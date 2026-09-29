@@ -901,3 +901,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Compat: ServerClock/SyncFailureBackoff to Core; signed requests use the server clock; SyncPush learns the clock, re-signs once on
   clock skew and backs off after failures (not on shutdown cancellations, as WPF); refused Patreon/Discord refresh tokens are not
   resent (as the release). 15 new ledger rows (12 missing, 3 wired). Evidence: new tests fail-proven; full gate green.
+
+## avalonia-port/emidesk-live: +518
+- Head EmiDeskService (WPF Toggle/Summon/Dismiss/EnsureWindow/mute prompt) owns whether EMI is out; dock chip, hover x and the
+  settings switch route through it; she closes with the shell. Mute silences the tube (WPF Speech.cs:461). EmiState and the
+  mute rule (EmiMuteRule) moved to Core, both heads use them; WPF behaviour identical, exit flush kept.
+- Evidence: EmiDeskSummonTests (5, fail-proven); live summon/mute/dismiss. Rows stay stub (ring, codex, book, options, chord
+  hotkey, face/voice, RefreshOutfit, StopPresentation). Review: FIX -> fixed, ACCEPT.
