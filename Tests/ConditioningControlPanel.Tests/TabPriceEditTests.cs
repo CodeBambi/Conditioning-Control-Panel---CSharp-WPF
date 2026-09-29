@@ -74,6 +74,22 @@ public class TabPriceEditTests
         }
     }
 
+    /// <summary>TAB-11. Only an EMPTY box means "back to the default". A typed zero asks for the
+    /// row as small as it goes, the 0:05 minimum, never for the full default back.</summary>
+    [Theory]
+    [InlineData("0")]
+    [InlineData("0:00")]
+    [InlineData("0:00:00")]
+    [InlineData("-0")]
+    public void A_typed_zero_is_the_smallest_figure_and_only_an_empty_box_is_the_default(string text)
+    {
+        Assert.Equal(TabPriceEdit.MinSeconds, TabPriceEdit.Parse(text));
+        var small = TabPriceEdit.With(null, "program_skipped", TabPriceEdit.Parse(text));
+        Assert.Equal(TabPriceEdit.MinSeconds, TabPriceEdit.Effective("program_skipped", small));
+        var back = TabPriceEdit.With(small, "program_skipped", TabPriceEdit.Parse(""));
+        Assert.Equal(TabPrices.Find("program_skipped")!.Seconds, TabPriceEdit.Effective("program_skipped", back));
+    }
+
     [Fact]
     public void An_edit_keeps_the_rows_sign_and_is_clamped_on_every_read()
     {

@@ -60,7 +60,8 @@ public static class TabPriceEdit
     /// <summary>What the player typed, as unsigned seconds. "2:30" and "1:05:00" are clock
     /// figures, a bare number is minutes ("5" is 5:00). Signs are ignored: the row keeps its own.
     /// Null for anything that does not read as a time (the edit is then dropped); empty text is
-    /// 0, which <see cref="With"/> reads as "back to the default".</summary>
+    /// 0, which <see cref="With"/> reads as "back to the default". Only empty text: a typed zero
+    /// ("0", "0:00") asks for the row as small as it goes, <see cref="MinSeconds"/>.</summary>
     public static int? Parse(string? text)
     {
         var t = (text ?? "").Trim().TrimStart('+', '-', '−').Trim();
@@ -76,6 +77,7 @@ public static class TabPriceEdit
             total = total * 60 + n;
         }
         if (parts.Length == 1) total *= 60;
+        if (total == 0) return MinSeconds;
         return total > int.MaxValue ? null : (int)total;
     }
 
