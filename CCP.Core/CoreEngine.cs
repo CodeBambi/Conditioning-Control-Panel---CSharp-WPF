@@ -75,6 +75,17 @@ namespace ConditioningControlPanel
             finally { _stopInProgress = false; }
         }
 
+        /// <summary>WPF ReconcileRunningServices (MainWindow.Presets.cs:2245, #872): after a preset
+        /// load, stop every running service whose flag is now off. One-way: never starts one.</summary>
+        public static void Reconcile()
+        {
+            var s = CoreSettings.Current;
+            if (!s.FlashEnabled) ApplyLive("flash", false);
+            if (!s.SubliminalEnabled) ApplyLive("subliminal", false);
+            if (!s.LockCardEnabled) ApplyLive("lockcard", false);
+            if (!s.BouncingTextEnabled) ApplyLive("bouncingtext", false);
+        }
+
         /// <summary>A card or wall toggle already wrote its flag; start or stop the matching
         /// service only while running (WPF FlashFeatureControl.xaml.cs:268, SetWallFeature).</summary>
         public static void ApplyLive(string key, bool on)

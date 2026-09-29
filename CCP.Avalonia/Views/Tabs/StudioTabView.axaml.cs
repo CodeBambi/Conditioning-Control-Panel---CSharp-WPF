@@ -51,9 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// in one place.</para>
     ///
     /// <para><b>What is stubbed, and why.</b> Everything the WPF code-behind reaches into the app
-    /// head for: <c>MainWindow.ToggleWallFeature</c> (the eleven wall modules' quick-toggle, which
-    /// owns the session-lock refusal and the per-feature service start/stop),
-    /// <c>PerimeterCometAdorner</c> (the active tile's comet) and the detail crossfade. Each is
+    /// head for: <c>PerimeterCometAdorner</c> (the active tile's comet) and the detail crossfade. Each is
     /// marked <c>ponytail:</c> at its site. The FeatureOpened bark is no longer among them - it
     /// crosses on <see cref="CoreBark"/>.</para>
     ///
@@ -1096,16 +1094,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         };
 
         /// <summary>
-        /// ponytail: needs <c>MainWindow.ToggleWallFeature(key)</c> for the eleven wall modules —
-        /// it owns the session-lock refusal, the per-feature service start/stop and the Save — and,
-        /// for the three that predate the wall (Haptics, Scheduler, Ramp), a flip of the panel's
-        /// own master checkbox so the panel's real handler and its premium gate run with it.
-        /// ToggleWallFeature is a WPF-head path with no Core seam; the Haptics half is now blocked
-        /// one level nearer, on <c>HapticsTabView.ChkHapticsEnabled_Changed</c> being a stub. An
-        /// unknown key is a quiet no-op over there, so a typo costs a dead gesture, never a wrong
-        /// write.
+        /// WPF StudioTabView.xaml.cs:1231: the eleven wall modules go through the shell's
+        /// <c>ToggleWallFeature</c> (session-lock refusal, Save, <c>CoreEngine.ApplyLive</c>).
+        /// ponytail: the Haptics half is blocked on <c>HapticsTabView.ChkHapticsEnabled_Changed</c>
+        /// being a stub.
         /// </summary>
-        private static void QuickToggle(string key) => _ = WallToggleKeys.Contains(key);
+        private void QuickToggle(string key) =>
+            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ToggleWallFeature(key);
 
         /// <summary>
         /// Shows exactly one module. Idempotent, and safe to call for the already-selected key —

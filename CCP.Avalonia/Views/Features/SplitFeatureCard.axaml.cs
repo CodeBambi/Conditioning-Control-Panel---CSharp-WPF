@@ -110,6 +110,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// drops the animated value and the seam snaps to the old target before the new sweep.</summary>
         private readonly DoubleTransition _splitTransition = new() { Property = SplitProgressProperty };
         private CancellationTokenSource? _breath;
+        private IDisposable? _visibilityWatch;
         private bool _hovered;
         /// <summary>Which half the pointer has committed the card to: true = A, false = B, null = neither.</summary>
         private bool? _halfHover;
@@ -147,8 +148,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             PointerExited += (_, _) => { ApplyHover(false); SetHalfHover(null); };
             PointerMoved += (_, e) => SetHalfHover(IsInHalfA(e.GetPosition(_contentRoot)));
             PointerReleased += OnPointerReleased;
-            Unloaded += (_, _) => { ApplyActiveBreath(false); ResetSplit(); };
-            Loaded += (_, _) => ApplyActiveState(); // re-arm the breath after a detach/re-attach (tab switch)
+            Unloaded += (_, _) => { _visibilityWatch?.Dispose(); _visibilityWatch = null; ApplyActiveBreath(false); ResetSplit(); };
+            Loaded += (_, _) =>
+            {
+                // Improvement over WPF: the breath parks while a hidden tab holds the tile.
+                _visibilityWatch = global::ConditioningControlPanel.Avalonia.Controls.EffectiveVisibility.Watch(this, ApplyActiveState);
+                ApplyActiveState(); // re-arm the breath after a detach/re-attach (tab switch)
+            };
             Transitions = new Transitions { _splitTransition };
         }
 
@@ -388,7 +394,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _breath = null;
             _activeRingA.Opacity = 1;
             _activeRingB.Opacity = 1;
-            if (!active) { _activeGlow.Opacity = 0; return; }
+            if (!active || !IsEffectivelyVisible) { _activeGlow.Opacity = 0; return; }
 
             _breath = new CancellationTokenSource();
             _ = Breathe(DropShadowEffect.OpacityProperty, ActiveGlowMinOpacity, ActiveGlowMaxOpacity).RunAsync(_activeGlow, _breath.Token);
