@@ -359,13 +359,11 @@ namespace ConditioningControlPanel.Avalonia
                 // premium, no pack videos, no roadmap". NotifyProvider is seeded below, once the
                 // shell's toast host exists. HasPremium false still refuses a premium enrolment.
 
-                // CoreAccount is deliberately left unseeded, and this one is a constraint rather
-                // than a gap. PatreonService owns an HttpListener OAuth callback; the token store
-                // (Platform/SecretStore, seeded above) exists, but no sign-in flow uses it yet.
-                // Signed out and NOT entitled is therefore the
-                // literal truth here, not a placeholder - and it is the only safe unseeded answer,
-                // because an entitlement seam that failed open would hand every Linux user the
-                // paid tier.
+                // CoreAccount and CoreEntitlement are seeded by Platform.AccountSeed.Seed() (the
+                // Patreon/SubscribeStar gates, WPF App.xaml.cs:487-488). If the providers cannot be
+                // built, Seed() returns false and both seams stay unseeded: signed out and NOT
+                // entitled, because an entitlement seam that failed open would hand every Linux
+                // user the paid tier.
                 //
                 // CoreSpeech is deliberately left unseeded: there is no speech engine on this head
                 // yet, and the seam's unseeded answers (no mic, empty device list, NotProbed) are

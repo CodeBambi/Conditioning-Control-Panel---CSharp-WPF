@@ -842,3 +842,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: Core WardrobeCatalogTests (3) + AchievementsTabGridTests, fail-proven; live band, silhouettes, counter 1/63, filter,
   0 binding errors. Toast not seen live. Rows stay stub (tile FX; toast inbox/no-activate). Review: ACCEPT. Follow-up: stale
   "WardrobeCatalog is WPF-only" notes in ProfileCustomizeDialog / WardrobeEditorDialog / ProfileWardrobe (profile unit).
+
+## avalonia-port/lab-awareness-live: +701
+- FIX (cross-cutting): Avalonia AccountSeed now seeds CoreEntitlement.HasPremiumProvider/HasLabProvider like WPF; paying users had
+  no premium anywhere on Avalonia. AccountSeedTests fail-proven.
+- Blink Trainer camera-free half: settings, demo loop (art moved to /Assets, WPF path unchanged), premium gate, Core
+  BlinkTrainerState status row (WPF delegates), folder library, editors; consent manage/revoke; camera buttons disabled with a
+  tooltip. Play card opens it. Rows stay stub (camera, session, calibration). Review: FIX -> fixed.
