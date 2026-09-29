@@ -373,13 +373,7 @@ public class AchievementService : IDisposable
     /// <summary>
     /// Check and unlock level-based achievements
     /// </summary>
-    public void CheckLevelAchievements(int level)
-    {
-        foreach (var (id, milestone) in LevelMilestones)
-        {
-            if (level >= milestone) TryUnlock(id);
-        }
-    }
+    public void CheckLevelAchievements(int level) => _engine.CheckLevelAchievements(level);
     
     /// <summary>
     /// Check streak achievements (Daily Maintenance at 7 days, Thirty-Day Doll at 30).
