@@ -4,7 +4,7 @@ A friend holds your leash. They see your day, set a task, reward or punish. You 
 time with one click. No free text anywhere: every value is a preset id the server validates.
 This file is the authority for both halves: `proxy/leash.js` + `proxy/leash-routes.js` in
 CC-Labs-llc/CCP-Server and `Services/Leash/*` here. The Friends wire
-(`Services/Friends/CONTRACT.md`) is the base; read it first.
+(`CCP.Core/Services/Friends/CONTRACT.md`) is the base; read it first.
 
 v1 = offer, answer, cut, pause, intensity, report, assign, punish, reward, tug. The one-click
 remote is v2 (section "v2 remote", not built yet). Collar tag / anniversaries are v3.
