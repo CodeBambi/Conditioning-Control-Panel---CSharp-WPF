@@ -453,9 +453,9 @@ export async function mount(ctx) {
       case 'wall':
         shutdownCover?.remove();shutdownCover=null;
         if(s.iris || s.stats.walls===4) au('warmIrisVoice');
-        if (cue('wall')) au('wallCleared');
+        if (!d.skipped && cue('wall')) au('wallCleared');   // a skipped board is not a clear: no chime, no wash
         setSp(Number(d.sp) || s.stats.sp || 0);
-        onWall(Number(d.walls) || s.stats.walls || 0, d.mantra);
+        onWall(Number(d.walls) || s.stats.walls || 0, d.mantra, d.skipped);
         break;
       case 'crack': if (cue('crack', 2000)) { au('crack'); host.crack(); } break;
       case 'word': if (d.fired && d.key !== 'BLANK') au('word', d.key, d.fx || d); if (s.state === 'colour' && Math.random() < 0.5) say(d.word); break;
@@ -481,9 +481,9 @@ export async function mount(ctx) {
     return { x: r.left + a.x, y: r.top + a.y, w: b.x - a.x, h: b.y - a.y };
   }
   /** Every wall: the wash; a mantra wall: the sub rule; every third wall or after a source change: fresh pictures. */
-  function onWall(n, mantra) {
+  function onWall(n, mantra, skipped = false) {
     const colour = game.snapshot().state === 'colour';    // grey is payload-free: no host picture, no sub
-    if (!colour) { /* noop */ }
+    if (!colour || skipped) { /* noop: a skipped board is not a clear, so no wash (the desktop pays XP for one) */ }
     else if (mantra) { const w = media.words.find(x => x.text === mantra); host.mantra(w ? w.key : null); }
     else host.wall(n, pick());
     if (sourceChanged || (n > 0 && n % REDEAL_WALLS === 0)) {

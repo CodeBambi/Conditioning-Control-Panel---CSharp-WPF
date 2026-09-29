@@ -279,7 +279,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     } else if (name === 'split') {
       drifters.push({ x: d.x, y: d.y, at: 0, life: 2.2, r: 8 });
       P.burst(d.x, d.y, PINK, 18, 140, 0.6);
-    } else if (name === 'wall') {
+    } else if (name === 'wall' && !d.skipped) {                             // Skip this board is not a clear
       flash = Math.max(flash, 0.2);                                       // the SP chip in the DOM strip pops; no second counter here
       if (colour && rungs(3)) {                                           // two beats: the clear, then the echo
         P.burst(W / 2, H * 0.35, GOLD, 40, 260, 0.9);

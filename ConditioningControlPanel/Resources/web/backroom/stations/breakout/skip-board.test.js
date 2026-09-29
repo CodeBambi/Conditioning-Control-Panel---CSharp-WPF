@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createGame} from './game.js';
 import {checkpointFromSnapshot} from './endless-save.js';
+import {planPulse} from './haptics.js';
 
 // Skip this board runs from the pause menu, and the frame loop that moves the Endless
 // checkpoint (syncEndless) is held while paused. "Save and menu" or closing the game then
@@ -27,4 +28,27 @@ test('the skip moves the saved checkpoint at once, while the game is still pause
   const skip = block.indexOf('game?.skipBoard()');
   const sync = block.indexOf('syncEndless(game.snapshot())');
   assert.ok(skip >= 0 && sync > skip, 'the skip handler syncs the checkpoint right after skipBoard()');
+});
+
+// A skip is not a clear: it fired the whole wall-cleared show, the pink wash with a
+// picture (which pays picture XP on the desktop), the chime, the haptic pulse and the
+// canvas bursts, and could be repeated from the pause menu (bug hunt 2026-09-29, CHESS-5).
+
+test('a skipped board gets no haptic pulse; a cleared one still does', () => {
+  const colour = {state: 'colour', sat: .8};
+  assert.equal(planPulse('wall', {skipped: true}, colour), null);
+  assert.ok(planPulse('wall', {}, colour).level >= .75);
+});
+
+test('a skipped board gets no chime, no host wash and no canvas bursts', () => {
+  const station = readFileSync(new URL('./station.js', import.meta.url), 'utf8');
+  const wall = station.slice(station.indexOf("case 'wall':"), station.indexOf("case 'crack':"));
+  assert.match(wall, /!d\.skipped && cue\('wall'\)\) au\('wallCleared'\)/);
+  assert.match(wall, /onWall\([^\n]*d\.skipped\)/);
+  const onWall = station.slice(station.indexOf('function onWall('), station.indexOf('/* ---', station.indexOf('function onWall(')));
+  assert.match(onWall, /function onWall\(n, mantra, skipped = false\)/);
+  assert.match(onWall, /if \(!colour \|\| skipped\)/);
+  assert.match(onWall, /media\.redeal\(\)/, 'the picture redeal still runs on a skip');
+  const render = readFileSync(new URL('./render.js', import.meta.url), 'utf8');
+  assert.match(render, /\} else if \(name === 'wall' && !d\.skipped\) \{/);
 });
