@@ -20,7 +20,7 @@
        PreviewKeyDown="Window_PreviewKeyDown"   -> KeyDownEvent added with RoutingStrategies.Tunnel
        Click="..."                              -> wired in the constructor
        RenderOptions.BitmapScalingMode          -> RenderOptions.BitmapInterpolationMode
-       hover:HoverPop.IsEnabled="True"          -> dropped; see the ponytail note on the art frame
+       hover:HoverPop.IsEnabled="True"          -> kept (Controls/HoverPop.cs)
 
      Button captions are TextBlock children rather than Content: Avalonia parses "_" in Content as
      an access key. See the porting notes in CLAUDE.md.
