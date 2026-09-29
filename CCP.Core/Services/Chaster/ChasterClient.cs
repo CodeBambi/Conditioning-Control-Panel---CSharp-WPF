@@ -254,7 +254,7 @@ public sealed class ChasterClient : IDisposable
             var status = api ? MapApi(res.StatusCode, write) : Map(res.StatusCode);
             if (status != ChasterStatus.Ok)
             {
-                App.Logger?.Debug("[Chaster] {Path} answered {Code}", req.RequestUri?.AbsolutePath.Split('/').ElementAtOrDefault(1), (int)res.StatusCode);
+                Serilog.Log.Debug("[Chaster] {Path} answered {Code}", req.RequestUri?.AbsolutePath.Split('/').ElementAtOrDefault(1), (int)res.StatusCode);
                 return new(status, default);
             }
             var body = res.Content == null ? "" : await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
