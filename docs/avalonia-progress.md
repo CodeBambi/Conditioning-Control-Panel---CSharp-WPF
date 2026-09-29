@@ -869,3 +869,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Question: Keincheck hit_test in tab content returned the window template Panel. Answer: not an app bug. Keincheck answers
   from the last drawn frame; the live shell was Minimized (first-run window active), so no new frames. Real input reaches the
   controls: ContentHitTestTests (Studio/Presets/Awareness/Quests, hit test + headless press on every visible button), fail-proven.
+
+## avalonia-port/premium-gates-audit: +404
+- Premium gates audited against WPF now that entitlement is seeded (#1913). Fixed: the six tab veils were always hidden (free
+  users saw premium tabs unlocked) and the eight Play lockbands always shown (patrons saw them locked); unlock buttons were dead;
+  the daily free feature and program premium check were never seeded; the Awareness master toggle had no gate. Veils repaint on
+  tab switch, sign-in/out, tier change and day rollover. WPF EnforceEntitlementLapse flag half moved to Core EntitlementLapse
+  (WPF delegates); startup clears in memory, events save (decision logged).
+- Evidence: PremiumGatesTests, EntitlementLapseTests, lapse write test, all fail-proven; live Awareness veil for a free user.
+  Rows stay stub (veil FX, Intake band, FREE TODAY stamps). Review: ACCEPT + P2s fixed.
