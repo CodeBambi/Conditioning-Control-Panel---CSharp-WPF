@@ -319,6 +319,8 @@
   "chaster_costs_header": "Стоит времени",
   "chaster_earns_header": "Возвращает его",
   "chaster_each": "{0} за раз",
+  "chaster_price_edit_tip": "Нажми, чтобы задать своё время. Оставь пустым для {0}.",
+  "chaster_price_edit_locked": "Время можно менять, пока нет активного замка.",
   "chaster_bill_header": "Этот заход",
   "chaster_bill_empty": "Пока ничего.",
   "chaster_bill_pushed": "Отправлено на замок: {0}",

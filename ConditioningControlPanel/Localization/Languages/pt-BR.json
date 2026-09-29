@@ -319,6 +319,8 @@
   "chaster_costs_header": "Custa tempo",
   "chaster_earns_header": "Devolve tempo",
   "chaster_each": "{0} cada",
+  "chaster_price_edit_tip": "Clique para definir seu próprio tempo. Deixe vazio para {0}.",
+  "chaster_price_edit_locked": "Os tempos podem ser mudados enquanto nenhum cadeado estiver ativo.",
   "chaster_bill_header": "Esta rodada",
   "chaster_bill_empty": "Nada ainda.",
   "chaster_bill_pushed": "Enviado ao cadeado: {0}",

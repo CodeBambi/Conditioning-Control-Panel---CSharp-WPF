@@ -371,6 +371,34 @@ public class ChasterTabRenderTests
     }
 
     [Fact]
+    public void Clicking_the_figure_opens_a_box_only_on_rows_with_one_fixed_figure()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            tab.LinkedPanel.Visibility = Visibility.Visible;
+            tab.BuildMenu();
+            Realize(tab, 1000, 2400);
+
+            // no account linked: no lock runs, so a figure can move
+            Assert.True(tab.BeginPriceEdit("typo"));
+            Assert.Equal("typo", tab.EditingPriceId);
+            Assert.Equal(Visibility.Collapsed, tab.StampFor("typo")!.Visibility);
+            tab.CancelPriceEdit();
+            Assert.Null(tab.EditingPriceId);
+            Assert.Equal(Visibility.Visible, tab.StampFor("typo")!.Visibility);
+            Assert.Contains("+0:30", tab.StampFor("typo")!.Text);
+
+            // sizes picked elsewhere never open a box; the way out has no stamp at all
+            Assert.False(tab.BeginPriceEdit("leash"));
+            Assert.False(tab.BeginPriceEdit(CircesMisses.EventId));
+            Assert.False(tab.BeginPriceEdit(TabDayEnd.StreakEventId));
+            Assert.Null(tab.StampFor("panic"));
+            Assert.Null(tab.EditingPriceId);
+        });
+    }
+
+    [Fact]
     public void The_trailer_dresses_itself_for_the_row_it_is_aimed_at_and_closes_clean()
     {
         WpfRenderHarness.OnStaThread(() =>

@@ -319,6 +319,8 @@
   "chaster_costs_header": "時間が増える",
   "chaster_earns_header": "時間が戻る",
   "chaster_each": "1回 {0}",
+  "chaster_price_edit_tip": "クリックして自分の時間を設定。空欄なら{0}。",
+  "chaster_price_edit_locked": "有効なロックがない間は時間を変更できます。",
   "chaster_bill_header": "今回",
   "chaster_bill_empty": "まだ何もありません。",
   "chaster_bill_pushed": "ロックへ送信: {0}",

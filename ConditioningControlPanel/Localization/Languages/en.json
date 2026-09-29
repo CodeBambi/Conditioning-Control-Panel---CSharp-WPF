@@ -457,6 +457,8 @@
   "chaster_costs_header": "Costs time",
   "chaster_earns_header": "Earns it back",
   "chaster_each": "{0} each",
+  "chaster_price_edit_tip": "Click to set your own time. Leave it empty for {0}.",
+  "chaster_price_edit_locked": "Times can be changed while no lock is running.",
   "chaster_bill_header": "This run",
   "chaster_bill_empty": "Nothing yet.",
   "chaster_bill_pushed": "Sent to the lock: {0}",
