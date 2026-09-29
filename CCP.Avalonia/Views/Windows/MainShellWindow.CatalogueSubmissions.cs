@@ -8,20 +8,15 @@
 // AppSettings.cs:2347-2375), which CoreSettings.Current hands over. Nothing here touches a control,
 // so the x:Name hazard does not apply to this partial at all.
 //
-// Nothing on this head CALLS these yet, and that is the point of restoring them now: three ported
-// files name this file as what blocks their share-status badge -
-//   MainShellWindow.PresetIO.cs        CreateCatalogueStatusBadge (wants IsCatalogueAcceptedStatus),
-//                                      UpdatePresetShareStatusBadge (wants GetCatalogueRecord)
-//   MainShellWindow.SessionIO.cs       the session rack pill (CanonicalCataloguePathKey + record)
-//   Views/Dialogs/ModManagerDialog.axaml.cs:258  the per-row pill (kind "mods" + mod.Id)
-// - and none of those files is owned by this layer. They can now be wired without a Core change.
+// Callers: MainShellWindow.CatalogueStatus.cs (CreateCatalogueStatusBadge, the /mine polls), which
+// paints the preset detail pill and session rack pill (PresetsTabView) and the Mod Manager row pill.
 //
-// THE WRITE HALF IS STILL OUT, for two different reasons:
+// THE WRITE HALF IS STILL OUT:
 //   RecordCatalogueSubmission(kind, key, SubmissionResult)
 //       Its persistence body is portable line for line, but its parameter type is not:
 //       SubmissionResult was head-only; it is Core's since catalogue U1
 //       (CCP.Core/Services/Catalogue/CatalogueClient.cs), so this is now unblocked (U3 wires it).
-//       It also ends by calling RefreshCatalogueShareBadges (MainShellWindow.PresetIO.cs, a stub).
+//       It also ends by calling RefreshCatalogueShareBadges (MainShellWindow.CatalogueStatus.cs).
 //   (The status polls - CheckCatalogueSubmissionStatusesAsync, the accepted toast and the badge -
 //   are in MainShellWindow.CatalogueStatus.cs.)
 //

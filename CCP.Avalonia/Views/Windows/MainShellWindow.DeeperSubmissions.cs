@@ -14,15 +14,9 @@
 //       Was blocked on its parameter type; SubmissionResult is Core's since catalogue U1
 //       (CCP.Core/Services/Catalogue/CatalogueClient.cs). It also ends by
 //       calling ApplyDeeperFilterAndSort, which is a stub in MainShellWindow.DeeperHub.cs.
-//   CheckDeeperSubmissionStatusesAsync(force)
-//       App.Catalogue.FetchMySubmissionsAsync - a network round trip with no seam. Its three
-//       pacing members (_lastSubmissionCheckUtc, SubmissionCheckThrottle, _submissionCheckInFlight)
-//       exist only to throttle that call and go with it.
-//   NotifyDeeperSubmissionAccepted(catalogueId, canonicalPath)
-//       App.Notifications.ShowSticky, which this head does not ship, plus _deeperAllEntries and
-//       SwitchToDeeperLibraryTab (both stubs, MainShellWindow.DeeperHub.cs / DeeperTab.cs). Its
-//       loc keys are real and portable: deeper_submission_accepted_toast_fmt via Loc.GetF, and
-//       deeper_submission_accepted_action_view for the View action.
+//   CheckDeeperSubmissionStatusesAsync / NotifyDeeperSubmissionAccepted
+//       Ported into MainShellWindow.CatalogueStatus.cs (/api/enhancements/mine poll, one-time
+//       accepted toast with a View action; not sticky - this head has no ShowSticky).
 //
 // Checked and NOT the blocker: CoreReleaseContent. Pack ids, install stamps and pack info are not
 // read anywhere in this flow.

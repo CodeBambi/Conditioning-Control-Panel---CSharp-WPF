@@ -70,8 +70,9 @@ public sealed class CatalogueShellTests
                       "{\"id\":\"b\",\"title\":\"Beta\",\"file_url\":\"http://127.0.0.1:9/b\"}]}"
                     : bundle,
             };
-            var oldLookup = AppA.CatalogueLookup;
+            var (oldLookup, oldClient) = (AppA.CatalogueLookup, AppA.Catalogue);
             AppA.CatalogueLookup = new CatalogueLookup(() => lib, "test", AppA.OnUiThread, fake);
+            AppA.Catalogue = new CatalogueClient(() => null, () => null, "test", fake);   // startup poll never leaves the process
             var host = new StackPanel();
             AppA.Notifications.AttachHost(host);
             var shell = new MainShellWindow();   // registers the player opener
@@ -100,7 +101,7 @@ public sealed class CatalogueShellTests
             {
                 foreach (var w in shell.OwnedWindows.ToArray()) w.Close();
                 shell.Close();
-                AppA.CatalogueLookup = oldLookup;
+                (AppA.CatalogueLookup, AppA.Catalogue) = (oldLookup, oldClient);
                 Directory.Delete(lib, true);
             }
         });
