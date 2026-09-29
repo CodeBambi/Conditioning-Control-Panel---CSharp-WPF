@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -26,10 +27,23 @@ namespace ConditioningControlPanel.Services.PieceByPiece;
 ///
 /// <para>Protocol (the effects ramp codes against these shapes; do not widen them casually):
 /// <list type="bullet">
-/// <item>host -&gt; page, once after boot: <c>{ type: 'pbp:settings', videoHoldSec, reducedMotion }</c></item>
+/// <item>host -&gt; page, once after boot: <c>{ type: 'pbp:settings', videoHoldSec, reducedMotion, whispers }</c></item>
 /// <item>page -&gt; host: <c>{ type: 'pbp:media-request', kinds: ['image','gif','video'], count }</c></item>
 /// <item>host -&gt; page: <c>{ type: 'pbp:media', images: [url...], gifs: [...], videos: [...] }</c></item>
 /// <item>page -&gt; host: <c>{ type: 'pbp:exit' }</c> - close the window</item>
+/// </list>
+/// ONLINE PICTURES (2026-09-28, PieceByPieceHostService.Media.cs) add four, all optional to the
+/// page: <c>pbp:media</c> above stays the player's own library, the online set rides beside it.
+/// <list type="bullet">
+/// <item>host -&gt; page, after boot and after each pick:
+///   <c>{ type: 'pbp:media-state', flavour, last, custom, online, appWide }</c></item>
+/// <item>page -&gt; host: <c>{ type: 'pbp:media-flavour', flavour, custom, subs, online }</c> - the
+///   picker's choice; a flavour is this window's online opt-in, <c>online:false</c> = own pictures only</item>
+/// <item>host -&gt; page, whenever the set changes:
+///   <c>{ type: 'pbp:online-media', state, subs, share, images: [url], clips: [url], have, want }</c>
+///   - the WHOLE current set; <c>state</c> is off | empty | loading | ready | error, <c>share</c>
+///   the percent of draws it takes when the local deck can answer too</item>
+/// <item>page -&gt; host: <c>{ type: 'pbp:media-more' }</c> - most of the set was shown, fetch the next wave</item>
 /// </list>
 /// <c>heartbeat</c>/<c>pong</c> and <c>boot-error</c> are the shell conventions every other host
 /// speaks, and are handled here too. Both watchdogs are guarded on the page having reported
@@ -56,7 +70,7 @@ namespace ConditioningControlPanel.Services.PieceByPiece;
 /// 1200ms <see cref="DispatcherTimer"/> the way the descent does - that timer can never tick from
 /// inside <c>App.OnExit</c>, and here it would be guarding nothing.</para>
 /// </summary>
-internal static class PieceByPieceHostService
+internal static partial class PieceByPieceHostService
 {
     /// <summary>Display name for the tier gate, the window title and log lines.</summary>
     public const string ProductName = "Piece by Piece";
@@ -164,6 +178,12 @@ internal static class PieceByPieceHostService
                 // Downloaded audio packs mirror the ccp.game tree under their own origin.
                 ChaosWebViewHost.ContentMapping(),
             };
+            // Distraction's whispers fall back to these when the player has no brain drain clips
+            // of their own (PbpWhisperClips). Only mapped when the folder exists: a mapping onto a
+            // missing folder fails the whole host.
+            foreach (var (whisperHost, whisperDir) in WhisperFolders())
+                if (Directory.Exists(whisperDir))
+                    mappings.Add((whisperHost, whisperDir, CoreWebView2HostResourceAccessKind.Allow));
 
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
             {
@@ -227,6 +247,7 @@ internal static class PieceByPieceHostService
             _identityPosted = false;
             _pinged = false;
             bool had = _host != null;
+            DisposeOnlineMedia();
             try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _host = null;
             if (had) App.Logger?.Information("PieceByPieceHostService: closed");
@@ -249,6 +270,8 @@ internal static class PieceByPieceHostService
             _host?.FocusWeb();
             PostSettings();
             PostIdentity();
+            PostMediaState();
+            StartOnlineMedia();
         }
         catch (Exception ex) { App.Logger?.Warning("PieceByPieceHostService.OnPageReady: {E}", ex.Message); }
     }
@@ -308,6 +331,7 @@ internal static class PieceByPieceHostService
                 type = "pbp:settings",
                 videoHoldSec = SafeVideoHoldSec(),
                 reducedMotion = SafeReducedMotion(),
+                whispers = SafeWhisperClips(),
             });
         }
         catch (Exception ex) { App.Logger?.Debug("PieceByPiece: settings post failed: {E}", ex.Message); }
@@ -338,6 +362,14 @@ internal static class PieceByPieceHostService
                     OnNetRequest(o);
                     break;
 
+                case "pbp:media-flavour":
+                    OnMediaFlavour(o);
+                    break;
+
+                case "pbp:media-more":
+                    OnMediaMore();
+                    break;
+
                 case "pbp:exit":
                     // Page-initiated (Esc with no drag in flight). Nothing to wind down, so this
                     // IS the close - marshalled, because tearing a window down is UI-thread work.
@@ -360,7 +392,8 @@ internal static class PieceByPieceHostService
     /// <summary>
     /// Answer <c>pbp:media-request</c> from the player's own library. Any list may come back
     /// empty and every kind is independent - a fresh install has no media at all, and the page
-    /// must survive that.
+    /// must survive that. Online pictures never ride this reply: they come as
+    /// <c>pbp:online-media</c> and the page mixes the two.
     /// </summary>
     private static void OnMediaRequest(JObject o)
     {
@@ -674,6 +707,34 @@ internal static class PieceByPieceHostService
     /// <summary>The app's motion setting, capped by the OS animation switch (MotionFx owns that
     /// resolution). Reduced and Off both read as reduced motion on the page: it has no third
     /// state to offer.</summary>
+    private static (string Host, string Dir)[] WhisperFolders() => new[]
+    {
+        (PbpWhisperClips.SubAudioHost, Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio")),
+        (PbpWhisperClips.WordsHost, BackRoom.BackRoomVoice.WordsRoot()),
+    };
+
+    /// <summary>Distraction's whisper clips: the player's brain drain folder, else what the
+    /// active mod may whisper (<see cref="PbpWhisperClips"/>). Never throws; empty = no whispers.</summary>
+    private static IReadOnlyList<string> SafeWhisperClips()
+    {
+        try
+        {
+            static IEnumerable<string>? Names(string? dir)
+                => !string.IsNullOrEmpty(dir) && Directory.Exists(dir) ? Directory.GetFiles(dir).Select(Path.GetFileName)! : null;
+            var folders = WhisperFolders();
+            bool subAudio = App.Settings?.Current?.SubAudioAudible == true
+                            && ModAudioPolicy.UsesSharedSubAudio(App.Mods?.ActiveModId);
+            return PbpWhisperClips.Build(
+                Names(Path.Combine(App.EffectiveAssetsPath, PbpWhisperClips.BrainDrainFolder)),
+                subAudio, Names(folders[0].Dir), Names(folders[1].Dir));
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("PieceByPiece: whisper clips failed: {E}", ex.Message);
+            return Array.Empty<string>();
+        }
+    }
+
     private static bool SafeReducedMotion()
     {
         try { return MotionFx.Level != Models.MotionLevel.Full; }

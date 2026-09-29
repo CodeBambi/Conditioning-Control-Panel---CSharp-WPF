@@ -1,5 +1,6 @@
 import { identity, onIdentity } from './bridge.js';
 import { presentation, setPresentation, onPresentation } from './game/preferences.js';
+import { attachPictures } from './ui/pictures.js';
 
 /* ============================================================================
  * hud.js - the screen furniture: two clocks, one status line, the tally, and
@@ -400,6 +401,14 @@ export function createHud(opts = {}) {
   click(menuButton, () => { if (online && !over) return; closeOptions(); bus?.emit('menu-request'); });
   const soundChange = () => setPresentation({ volume: sound.checked ? .6 : 0 });
   const motionChange = () => setPresentation({ reducedMotion: motion.checked });
+  const follow = pick('game-follow');
+  const replays = pick('game-replays');
+  const followChange = () => setPresentation({ followCam: follow.checked });
+  const replaysChange = () => setPresentation({ replays: replays.checked });
+  follow?.addEventListener('change', followChange);
+  replays?.addEventListener('change', replaysChange);
+  undom.push(() => { follow?.removeEventListener('change', followChange); replays?.removeEventListener('change', replaysChange); });
+  for (const button of root.querySelectorAll('[data-turncard]')) click(button, () => setPresentation({ turnCard: button.dataset.turncard }));
   sound?.addEventListener('change', soundChange);
   motion?.addEventListener('change', motionChange);
   undom.push(() => { sound?.removeEventListener('change', soundChange); motion?.removeEventListener('change', motionChange); });
@@ -412,13 +421,20 @@ export function createHud(opts = {}) {
   undom.push(() => document.removeEventListener('keydown', optionKey));
   document.addEventListener('pointerdown', outside);
   undom.push(() => document.removeEventListener('pointerdown', outside));
+  const pictures = attachPictures(pick('game-pictures'));
+  undom.push(() => pictures?.dispose?.());
   const preferenceOff = onPresentation(p => {
     if (el.intensity) el.intensity.hidden = p.experience !== 'distraction';
+    pictures?.setVisible?.(p.experience === 'distraction');
     for (const button of root.querySelectorAll('[data-experience]')) button.setAttribute('aria-pressed', String(button.dataset.experience === p.experience));
     const copy = pick('experience-description');
     if (copy) copy.textContent = p.experience === 'classic' ? 'The board, animated captures and sound.' : 'Media and effects build as the match progresses.';
     if (sound) { sound.checked = p.volume > 0; sound.disabled = p.soundLocked; }
     if (motion) { motion.checked = p.reducedMotion; motion.disabled = p.motionLocked; }
+    // Reduced motion keeps the camera at the seat and drops the replay; the boxes say so.
+    if (follow) { follow.checked = p.followCam && !p.reducedMotion; follow.disabled = p.reducedMotion; }
+    if (replays) { replays.checked = p.replays && !p.reducedMotion; replays.disabled = p.reducedMotion; }
+    for (const button of root.querySelectorAll('[data-turncard]')) button.setAttribute('aria-pressed', String(button.dataset.turncard === p.turnCard));
     const note = pick('game-preference-note');
     if (note) { note.hidden = !p.motionLocked && !p.soundLocked; note.textContent = 'App and system preferences stay in effect.'; }
     setMeter(p.experience === 'classic' ? 0 : meter);

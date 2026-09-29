@@ -11,6 +11,8 @@
  * the pool it wears a generated pink noise tile instead of vanishing.
  * ==========================================================================*/
 
+import { dressBox, undressBox } from './clip.js';
+
 const REDRESS_MS = 6500;   // how often the overlay swaps its picture
 
 export function createOverlay(ctx) {
@@ -28,8 +30,8 @@ export function createOverlay(ctx) {
 
   function dress() {
     if (!el || disposed) return;
-    const url = ctx.tile();
-    try { if (url) el.style.backgroundImage = `url("${url}")`; } catch { /* gone */ }
+    // an online gif is a clip and plays as a <video> child; a still stays a background
+    dressBox(ctx, el, ctx.tile(), ctx.image);
   }
 
   function arm() {
@@ -42,7 +44,7 @@ export function createOverlay(ctx) {
     if (disposed) return;
     const want = !!(spec && spec.on);
     const alpha = want ? Math.min(1, Math.max(0, spec.alpha || 0)) : 0;
-    if (want && !el) { ensure(); dress(); }
+    if (want && (!el || !on)) { ensure(); dress(); }
     if (want) arm();
     if (!el) return;
     try {
@@ -55,11 +57,14 @@ export function createOverlay(ctx) {
   function clear() {
     on = false;
     if (el) { try { el.style.opacity = '0'; el.classList.remove('is-on'); } catch { /* gone */ } }
+    // a clip stops once the 900ms fade is over, so it never pops out mid-fade
+    setTimeout(() => { if (!on && !disposed) undressBox(el); }, 950);
   }
 
   function dispose() {
     disposed = true;
     if (timer) { clearInterval(timer); timer = 0; }
+    undressBox(el);
     if (el) { try { el.remove(); } catch { /* gone */ } el = null; }
   }
 

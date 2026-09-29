@@ -11,6 +11,8 @@
  * rather than nothing, so an empty library still rains.
  * ==========================================================================*/
 
+import { isClip, makeClip, stillOr, stopClip } from './clip.js';
+
 export function createGifRain(ctx) {
   const t = (ctx.tuning && ctx.tuning.gifRain) || { maxLive: 12, fallMsMin: 2400, fallMsMax: 3900 };
   let live = 0;
@@ -20,9 +22,11 @@ export function createGifRain(ctx) {
   function fire(opts = {}) {
     if (disposed || !ctx.hasRoot() || live >= t.maxLive) return;
     const heat = Math.min(1, Math.max(0, opts.heat == null ? 0.5 : opts.heat));
-    const url = ctx.tile();
+    // an online gif is a clip: it falls as a muted looping <video>, or as a still once the cap is full
+    const url = stillOr(ctx.tile(), ctx.image);
     if (!url) return;
-    const img = ctx.el('img', 'pbp-rain');
+    const clip = isClip(url);
+    const img = clip ? makeClip(ctx, url, 'pbp-rain') : ctx.el('img', 'pbp-rain');
     if (!img) return;
     // hotter rain falls faster and lands bigger; the left lane is free choice
     const fall = Math.round(ctx.rand(t.fallMsMax, t.fallMsMin) - heat * 500);
@@ -32,15 +36,15 @@ export function createGifRain(ctx) {
     img.style.setProperty('--pbp-size', (11 + heat * 10).toFixed(1) + 'vmin');
     img.style.setProperty('--pbp-peak', (0.5 + heat * 0.4).toFixed(2));
     img.style.setProperty('--pbp-spin', ctx.rand(-24, 24).toFixed(1) + 'deg');
-    img.decoding = 'async';
-    img.src = url;
+    if (!clip) { img.decoding = 'async'; img.src = url; }
 
     live += 1;
     nodes.add(img);
     const kill = () => {
       if (!nodes.delete(img)) return;
       live = Math.max(0, live - 1);
-      try { img.remove(); } catch { /* already gone */ }
+      if (clip) stopClip(img);
+      else try { img.remove(); } catch { /* already gone */ }
     };
     img.addEventListener('animationend', kill, { once: true });
     img.addEventListener('error', kill, { once: true });
@@ -49,7 +53,7 @@ export function createGifRain(ctx) {
   }
 
   function clear() {
-    for (const n of [...nodes]) { nodes.delete(n); try { n.remove(); } catch { /* gone */ } }
+    for (const n of [...nodes]) { nodes.delete(n); if (n.tagName === 'VIDEO') stopClip(n); else try { n.remove(); } catch { /* gone */ } }
     live = 0;
   }
 
