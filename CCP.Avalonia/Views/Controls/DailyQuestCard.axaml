@@ -9,7 +9,7 @@
        Style="{StaticResource OutlineButton}" -> Theme="{StaticResource OutlineButton}"
        Visibility="Collapsed"                 -> IsVisible="False"
        helpers:EmojiTextBlock                 -> TextBlock (Avalonia draws colour emoji natively)
-       hover:HoverPop.IsEnabled               -> dropped; the behaviour lives in the WPF head
+       hover:HoverPop.IsEnabled               -> unchanged (Controls/HoverPop.cs)
        DropShadowEffect ShadowDepth="2"       -> OffsetX/OffsetY (Avalonia has no ShadowDepth)
        RenderTransformOrigin="0.5,0.5"        -> "50%,50%"  (a bare pair parses as ABSOLUTE px)
        LinearGradientBrush 0,0 -> 0,1         -> 0%,0% -> 0%,100%  (same reason: the scrim would
@@ -28,6 +28,7 @@
      original either - every one is set from code by MainWindow - so there is no {loc:Str} here. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              x:Class="ConditioningControlPanel.Avalonia.Views.Controls.DailyQuestCard"
              MaxWidth="257" MaxHeight="320">
 
@@ -43,7 +44,7 @@
             <Border Grid.Row="0" MinHeight="240" Background="{DynamicResource DarkerBgBrush}"
                     CornerRadius="11,11,0,0" ClipToBounds="True">
                 <Grid>
-                    <Image x:Name="Art" Stretch="UniformToFill"/>
+                    <Image hover:HoverPop.IsEnabled="True" x:Name="Art" Stretch="UniformToFill"/>
 
                     <!-- Bottom scrim. It carries the whole caption, so it reaches high and lands
                          nearly opaque: most shipped quest art has the quest's own name baked into

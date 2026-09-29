@@ -17,7 +17,7 @@
                                             an access key and every loc key here is snake_case
                                             (trap 1)
        ToolTip="..."                     -> ToolTip.Tip="..."
-       hover:HoverPop.IsEnabled          -> dropped; the behaviour lives in the WPF head
+       hover:HoverPop.IsEnabled          -> unchanged (Controls/HoverPop.cs)
        RenderOptions.BitmapScalingMode   -> dropped for now; the Avalonia twin is
                                             RenderOptions.BitmapInterpolationMode, worth setting on
                                             the two <Image>s once real feature icons resolve there
@@ -56,6 +56,7 @@
      panels hidden until the later enrollment/session layer supplies real state. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -203,7 +204,7 @@
                                                              to match the chip: the art does not fall off to pure
                                                              black at its edges, so a square Rectangle paints a
                                                              faint accent SQUARE inside the round host. -->
-                                                        <Rectangle Width="66" Height="66"
+                                                        <Rectangle hover:HoverPop.IsEnabled="True" Width="66" Height="66"
                                                                    RadiusX="33" RadiusY="33" Opacity="0.8"
                                                                    Fill="{Binding AccentBrush}"
                                                                    OpacityMask="{Binding ArtMask}"/>
@@ -1050,7 +1051,7 @@
                                                          already shows this exact set full-colour under
                                                          every mod. With no feature behind the task, the
                                                          status glyph carries the slot instead. -->
-                                                    <Image Grid.Column="0" Grid.RowSpan="2" Width="38" Height="38"
+                                                    <Image hover:HoverPop.IsEnabled="True" Grid.Column="0" Grid.RowSpan="2" Width="38" Height="38"
                                                            Margin="0,0,12,0" VerticalAlignment="Center"
                                                            Source="{Binding Icon}"
                                                            IsVisible="{Binding IconVisible}"/>

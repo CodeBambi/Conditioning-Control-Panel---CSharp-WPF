@@ -79,3 +79,9 @@ here record where and why the port chose something, and who advised.
 - Options: (a) lapse only on entitlement events; (b) full parity, and change the Language test; (c) clear in memory at startup and on navigation, write on the next real save or on an entitlement event.
 - Choice: (c). The flag pass (`CCP.Core/Services/EntitlementLapse.cs`) runs from the first frame, so a free user can never run a lapsed premium feature. `MainShellWindow.RefreshEntitlementVeils(persist)` saves only on a tier change, a day change or a sign-in/out, as WPF does. The effective state matches WPF; only the startup write is deferred. Proof: `Tests/CCP.Avalonia.Tests/PremiumGatesTests.cs` `LapsePass_ClearsInMemory_AndOnlyAnEntitlementEventWrites`, fail-proven both ways.
 - Advisor: supervisor.
+
+## 2026-09-29: profile cosmetics save skipped by the sync cooldown
+- Question: WPF drops a cosmetics push that lands inside the 30 s sync cooldown. Keep that?
+- Options: (a) drop like WPF; (b) keep it pending and send it with the next push.
+- Choice: (b). The user saved on purpose; losing it silently is a WPF bug, and the pending push is cleared on logout.
+- Advisor: reviewer (profile-wardrobe-live), supervisor.

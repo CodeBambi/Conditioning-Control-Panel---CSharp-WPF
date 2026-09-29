@@ -28,13 +28,14 @@
        TextBox placeholder VisualBrush  ->  Watermark (native; the Text="" trigger has no Avalonia
                                             equivalent and needs none)
        MouseLeftButtonUp="…"            ->  PointerReleased="…"
-       hover:HoverPop.IsEnabled         ->  dropped; the behaviour lives in the WPF head
+       hover:HoverPop.IsEnabled         ->  unchanged (Controls/HoverPop.cs)
        FontFamily="/Fonts/#Fredoka, …"  ->  dropped; this head ships Inter
        pack:// Image Source             ->  dropped; this head ships no Resources/ and the six stat
                                             badges are repainted by the mod resolver anyway
        x:FieldModifier="internal"       ->  dropped; x:Names kept and reached with FindControl -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -217,7 +218,7 @@
                                             <!-- AdornedAvatar owns avatar + decoration + presence
                                                  dot. It deliberately does not clip: a hat has to
                                                  overflow the portrait. -->
-                                            <ctrl:AdornedAvatar x:Name="ProfileHeroAvatar"
+                                            <ctrl:AdornedAvatar hover:HoverPop.IsEnabled="True" x:Name="ProfileHeroAvatar"
                                                                 AvatarSize="104"
                                                                 HorizontalAlignment="Left" VerticalAlignment="Top"
                                                                 Margin="6,6,0,0"/>
@@ -669,7 +670,7 @@
                                         <Border x:Name="ProfilePatreonTierBanner" IsVisible="False"
                                                 Width="146" Height="84" CornerRadius="8" Margin="0,12,0,0"
                                                 HorizontalAlignment="Right" ClipToBounds="True">
-                                            <Image x:Name="ImgPatreonTierBanner" Stretch="Uniform"/>
+                                            <Image hover:HoverPop.IsEnabled="True" x:Name="ImgPatreonTierBanner" Stretch="Uniform"/>
                                         </Border>
 
                                     </StackPanel>
@@ -829,7 +830,7 @@
                                                     <!-- The 7px margin is the pop's headroom: 6% of a
                                                          74px badge is ~4px, so the zoom stays inside
                                                          the rounded plate without needing a clip. -->
-                                                    <Image Source="{Binding Image}" Stretch="Uniform" Margin="7"/>
+                                                    <Image hover:HoverPop.IsEnabled="True" Source="{Binding Image}" Stretch="Uniform" Margin="7"/>
                                                 </Border>
                                                 <TextBlock Text="★" Foreground="#FFD700" FontSize="14"
                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -890,7 +891,7 @@
                                                             Background="{DynamicResource PanelAccentBrush}" ToolTip.Tip="{Binding Name}"
                                                             Cursor="Hand"
                                                             PointerReleased="ProfileAchievementTile_Click">
-                                                        <Image Source="{Binding Image}" Stretch="Uniform" Margin="3"/>
+                                                        <Image hover:HoverPop.IsEnabled="True" Source="{Binding Image}" Stretch="Uniform" Margin="3"/>
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

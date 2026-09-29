@@ -35,13 +35,15 @@ public sealed class PremiumGatesTests
                     .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                     .SetupWithoutStarting();
             var oldSeam = (CoreEntitlement.HasPremiumProvider, CoreEntitlement.IsFreeTodayProvider, CoreSettings.ServiceProvider);
+            // The shell is built on the suite's settings first: built under the private service below it
+            // would carry that profile's mod into later tests.
+            var shell = new MainShellWindow();
+            shell.Show();
             var service = new ConditioningControlPanel.Services.SettingsService();
             CoreSettings.ServiceProvider = () => service;
             var path = System.IO.Path.Combine(CorePaths.UserData, "settings.json");
-            var shell = new MainShellWindow();
             try
             {
-                shell.Show();
                 service.Current.AutonomyModeEnabled = true;
                 service.SaveImmediate();
                 var before = System.IO.File.ReadAllText(path);

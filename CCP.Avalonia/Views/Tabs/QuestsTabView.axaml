@@ -12,7 +12,7 @@
        helpers:EmojiTextBlock            -> TextBlock  (Avalonia draws colour emoji natively)
        Image + EmojiToImageSource        -> TextBlock  (same reason; the converter exists only
                                             because WPF cannot draw COLR/CPAL faces)
-       hover:HoverPop.IsEnabled          -> dropped; the behaviour lives in the WPF head
+       hover:HoverPop.IsEnabled          -> unchanged (Controls/HoverPop.cs)
        ToolTip="..."                     -> ToolTip.Tip="..."
        ToolTipService.ShowOnDisabled     -> ToolTip.ShowOnDisabled
        DropShadowEffect ShadowDepth="2"  -> OffsetX/OffsetY (Avalonia has no ShadowDepth)
@@ -29,6 +29,7 @@
      access key. See the porting notes in CLAUDE.md. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              xmlns:ctrl="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.QuestsTabView">
@@ -344,7 +345,7 @@
                       <Border Grid.Row="0" Height="256" Background="{DynamicResource DarkerBgBrush}"
                               CornerRadius="9,9,0,0" ClipToBounds="True">
                         <Grid>
-                          <Image x:Name="ImgWeeklyQuest" Stretch="UniformToFill"/>
+                          <Image hover:HoverPop.IsEnabled="True" x:Name="ImgWeeklyQuest" Stretch="UniformToFill"/>
 
                           <!-- Scrim, ramped to near-opaque at the bottom: the shipped art has the
                                quest's name set into that band and it would print under the

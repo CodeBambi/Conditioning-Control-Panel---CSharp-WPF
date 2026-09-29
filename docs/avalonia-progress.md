@@ -849,3 +849,23 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Blink Trainer camera-free half: settings, demo loop (art moved to /Assets, WPF path unchanged), premium gate, Core
   BlinkTrainerState status row (WPF delegates), folder library, editors; consent manage/revoke; camera buttons disabled with a
   tooltip. Play card opens it. Rows stay stub (camera, session, calibration). Review: FIX -> fixed.
+
+## avalonia-port/profile-wardrobe-live: +716
+- Trainer Card wears the real decoration and charms (own card, board row, lookup), re-placed on resize; Customize opens from the
+  hero, its wardrobe section and the Wardrobe editor use Core art; WardrobeStageGeometry moved to Core (git mv).
+- Saving pushes the loadout like WPF PersistOwnCosmetics (SyncPush.PushCosmeticsAsync: cosmetics only on this push; empty = WPF's
+  clear; a save skipped by the 30 s cooldown rides the next push instead of being dropped - deviation, logged).
+- Evidence: ProfileWardrobeTests + ProfileCosmeticsSyncTests, fail-proven (6 breaks); live card/dialogs/editor screenshots. Rows
+  stay stub (HoverPop, banners/presets/pins need CosmeticsCatalog, no WPF side-by-side). Review: FIX -> fixed.
+
+## avalonia-port/hover-pop-behavior: +303
+- WPF HoverPop ported (Controls/HoverPop.cs: 1.06 back-ease, 4-key wobble, leave ride-home, MotionLevel Off snap, rig on first
+  hover) and attached on 16 of 17 WPF sites (Lockdown art absent here); FeatureCard drives it from ApplyHover like WPF.
+- Evidence: HoverPopTests (Full/Off, real pointer enter/leave), fail-proven. Live hover not shown: Keincheck hit-test lands on the
+  window template Panel in the content area (investigating separately). Rows wired: behavior-hover-pop, shell-profile-wardrobe,
+  views-adorned-avatar. Review: ACCEPT.
+
+## avalonia-port/content-hit-test: +82
+- Question: Keincheck hit_test in tab content returned the window template Panel. Answer: not an app bug. Keincheck answers
+  from the last drawn frame; the live shell was Minimized (first-run window active), so no new frames. Real input reaches the
+  controls: ContentHitTestTests (Studio/Presets/Awareness/Quests, hit test + headless press on every visible button), fail-proven.

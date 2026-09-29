@@ -26,7 +26,7 @@
        Image Source="{Binding url-string}"  -> Source="{Binding …Image}" (IImage; a string does not
                                                convert, and pack:// is WPF-only). Null placeholders.
        pack://…/Resources/discord.png       -> a text glyph; this head ships no image assets yet
-       hover:HoverPop.IsEnabled             -> dropped (the behavior is not ported)
+       hover:HoverPop.IsEnabled             -> unchanged (Controls/HoverPop.cs)
        ScrollBar restyle in .Resources      -> dropped; Fluent's scrollbars draw, and a full ScrollBar
                                                ControlTheme belongs in Theme/, which this layer owns none of
        GridSplitter                         -> same control, ResizeDirection stated explicitly
@@ -36,6 +36,7 @@
                                                MainWindow (see the code-behind for the list) -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.AssetsTabView"
@@ -282,11 +283,11 @@
                                                     Background="{DynamicResource DarkerBgBrush}">
                                                 <Grid>
                                                     <!-- Rotating preview image from pack content (installed packs with loaded previews) -->
-                                                    <Image Source="{Binding CurrentPreviewImage}"
+                                                    <Image hover:HoverPop.IsEnabled="True" Source="{Binding CurrentPreviewImage}"
                                                            Stretch="UniformToFill" RenderOptions.BitmapInterpolationMode="HighQuality"
                                                            IsVisible="{Binding HasPreviewImages}"/>
                                                     <!-- Static preview image (fallback when no dynamic previews) -->
-                                                    <Image Source="{Binding PreviewImage}"
+                                                    <Image hover:HoverPop.IsEnabled="True" Source="{Binding PreviewImage}"
                                                            Stretch="UniformToFill" RenderOptions.BitmapInterpolationMode="HighQuality"
                                                            IsVisible="{Binding !HasPreviewImages}"/>
                                                     <!-- "No Preview" text shows only when no dynamic or static preview exists -->
@@ -598,7 +599,7 @@
                                                                            HorizontalAlignment="Center" Margin="0,4,0,0"/>
                                                             </StackPanel>
                                                             <!-- Image thumbnail (for images, or video if we had one) -->
-                                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                            <Image hover:HoverPop.IsEnabled="True" Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
                                                             <!-- Loading indicator -->
                                                             <TextBlock Text="⏳" FontSize="14"
                                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
