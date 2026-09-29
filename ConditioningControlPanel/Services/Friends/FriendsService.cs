@@ -62,7 +62,9 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
         _api = api;
         _account = account;
         _foreground = foreground ?? AnyAppWindowActive;
-        _now = now ?? (() => DateTimeOffset.UtcNow);
+        // The server's clock: invites, receipts and trails carry server times (a fast PC clock
+        // would age a trail out at its first receipt). Tests hand in their own clock.
+        _now = now ?? (() => ServerClock.UtcNow);
         _readShared = readShared ?? (() => App.Settings?.Current?.FriendsPresenceShared == true);
         _writeShared = writeShared ?? (v =>
         {

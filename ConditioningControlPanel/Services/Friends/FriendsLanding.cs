@@ -56,11 +56,13 @@ public static class FriendsLanding
                 _router?.Dispose();
                 _router = current == null
                     ? null
-                    : new FriendsLandingRouter(current, ReadWorld, () => DateTimeOffset.UtcNow, TheSink);
+                    // The server's clock: an invite's at / expires_at are server times, and a
+                    // PC running fast must not drop a fresh invite or shorten its countdown.
+                    : new FriendsLandingRouter(current, ReadWorld, () => ServerClock.UtcNow, TheSink);
             }
             _router?.Release();
 
-            // A notice already up when a lockdown, Strict Lock or program session starts goes on the next tick.
+            // A notice already up when a lockdown or a session starts goes on the next tick.
             if (FriendNotices.AnyUp && ReadWorld().Holding) FriendNotices.CloseAll(fold: true);
             // So does a knock card, unanswered: it waits in the Inbox while the invite still lives.
             if (KnockCard.AnyUp && ReadWorld().Holding) KnockCard.FoldAll();
@@ -100,7 +102,8 @@ public static class FriendsLanding
             ProgramSession: program,
             PanelVisible: panel,
             LauncherVisible: launcher,
-            GameHostActive: ActiveGameWindow() != null);
+            GameHostActive: ActiveGameWindow() != null,
+            SessionRunning: session);
     }
 
     private static Window? LauncherWindow()
@@ -260,10 +263,10 @@ public static class FriendsLanding
                 Line = KnockLine(item),
                 AvatarUrl = item.FromAvatarUrl,
                 ActionLabel = GoLabel(item),
-                Act = p => { if (p is InboxItem i && !i.IsExpired(DateTimeOffset.UtcNow)) OnKnockDone(i, KnockOutcome.Go); },
+                Act = p => { if (p is InboxItem i && !i.IsExpired(ServerClock.UtcNow)) OnKnockDone(i, KnockOutcome.Go); },
                 Open = p => OpenDrawer((p as InboxItem)?.FromId),
                 // Still answerable after the toast goes: it waits in the Inbox, where it reopens as a card.
-                Left = p => { if (p is InboxItem i && !i.IsExpired(DateTimeOffset.UtcNow)) Inbox(i); },
+                Left = p => { if (p is InboxItem i && !i.IsExpired(ServerClock.UtcNow)) Inbox(i); },
             });
             FriendsSeen.Shared.Seen(App.Friends, item.Id);
         }
@@ -457,7 +460,7 @@ public static class FriendsLanding
     /// <summary>An Inbox row opened later: the card again while it is still answerable.</summary>
     private static void Reopen(InboxItem item)
     {
-        if (item.IsExpired(DateTimeOffset.UtcNow))
+        if (item.IsExpired(ServerClock.UtcNow))
         {
             EmiSays(Str("friends_land_too_late", "that one already left"), ";_;");
             return;
@@ -485,7 +488,7 @@ public static class FriendsLanding
 
     private static void OnKnockDone(InboxItem item, KnockOutcome outcome)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = ServerClock.UtcNow;
         switch (outcome)
         {
             case KnockOutcome.Later:

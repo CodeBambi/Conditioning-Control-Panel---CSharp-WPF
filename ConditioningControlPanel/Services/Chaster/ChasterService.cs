@@ -201,6 +201,19 @@ public sealed partial class ChasterService : IDisposable
         lock (_gate) return _utcNow() >= _safetyUntilUtc && RemoteRoom(options) > 0 && CircesTab.UseLeft(_tab, eventId, _localNow());
     }
 
+    /// <summary>Would a leash's Chaster time land at all: an account linked, the tab on and the
+    /// player's own "leash" row switched on (no preset carries it, and nothing switches it on for
+    /// them). The leash reports this as <c>chaster_linked</c>, so a holder is only offered Chaster
+    /// time that books. The page's pause and the daily limits still apply at booking time.</summary>
+    public bool TakesLeashTime
+    {
+        get
+        {
+            var options = _options() ?? ChasterOptions.Off;
+            return options.TabEnabled && IsLinked && options.Prices.Contains("leash");
+        }
+    }
+
     private bool Active(out ChasterOptions options)
     {
         options = _options() ?? ChasterOptions.Off;

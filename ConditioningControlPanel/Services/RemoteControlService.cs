@@ -1439,8 +1439,9 @@ namespace ConditioningControlPanel.Services
                             {
                                 MainWindowRef.StartSessionFromRemote(session);
                             }
+                            // The same reading the leash screen used: one check, never a looser second one.
                             if (leashVerdict != Leash.LeashRemoteVerdict.StripStrict
-                                && parameters?["strict_lock"]?.Value<bool>() == true)
+                                && Leash.LeashRemoteRule.AsksStrictLock(parameters))
                             {
                                 if (App.Settings?.Current != null)
                                 {

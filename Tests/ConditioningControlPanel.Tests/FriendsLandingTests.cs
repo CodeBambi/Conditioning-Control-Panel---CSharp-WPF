@@ -142,6 +142,23 @@ public class FriendsLandingTests
     }
 
     [Fact]
+    public void AnOrdinarySessionHoldsThenReleases()
+    {
+        // DESK-RUN 34: nothing knocks over a session, Strict Lock or not, program or not.
+        var world = PanelUp with { SessionRunning = true };
+        var (svc, sink, router) = Rig(() => world);
+        svc.Deliver(Poke("a"));
+        svc.Deliver(Invite("i"));
+        Assert.True(world.Holding);
+        Assert.Empty(sink.Calls);
+        Assert.Equal(2, router.Held);
+
+        world = PanelUp;
+        router.Release();
+        Assert.Equal(new[] { "poke:a:False", "knock:i:False" }, sink.Calls);
+    }
+
+    [Fact]
     public void HeldItemsThatExpireAreDroppedOnRelease()
     {
         var world = PanelUp with { Lockdown = true };

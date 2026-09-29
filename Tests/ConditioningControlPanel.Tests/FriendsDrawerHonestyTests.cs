@@ -67,7 +67,8 @@ public partial class FriendsDrawerTests
             Assert.NotNull(Find(row, "friends-decline"));
             Assert.NotNull(Find(row, "friends-request-more"));
             var sub = (System.Windows.Controls.TextBlock)Find(row, "friends-request-sub")!;
-            Assert.Contains(Loc.GetF("friends_seen_minutes", 15), sub.Text);
+            // The age leads (short, "15m"), so the trimming takes the words, never the age.
+            Assert.StartsWith(Loc.GetF("friends_notice_minutes", 15), sub.Text);
         });
     }
 
@@ -137,11 +138,13 @@ public partial class FriendsDrawerTests
     // ---- pure ---------------------------------------------------------------------------
 
     [Fact]
-    public void Request_age_reads_like_last_seen_and_skips_an_unknown_time()
+    public void Request_age_reads_short_and_skips_an_unknown_time()
     {
         var now = new DateTimeOffset(2026, 9, 28, 12, 0, 0, TimeSpan.Zero);
-        Assert.Equal(("friends_seen_hours", (int?)3), FriendsDrawerRules.RequestAgo(now.AddHours(-3), now));
-        Assert.Equal("friends_seen_now", FriendsDrawerRules.RequestAgo(now.AddMinutes(5), now).Key);   // a fast server clock
+        Assert.Equal(("friends_notice_minutes", (int?)15), FriendsDrawerRules.RequestAgo(now.AddMinutes(-15), now));
+        Assert.Equal(("friends_notice_hours", (int?)3), FriendsDrawerRules.RequestAgo(now.AddHours(-3), now));
+        Assert.Equal(("friends_feed_days", (int?)2), FriendsDrawerRules.RequestAgo(now.AddDays(-2), now));
+        Assert.Equal("friends_notice_now", FriendsDrawerRules.RequestAgo(now.AddMinutes(5), now).Key);   // a fast server clock
         Assert.Null(FriendsDrawerRules.RequestAgo(DateTimeOffset.MinValue, now).Key);
     }
 

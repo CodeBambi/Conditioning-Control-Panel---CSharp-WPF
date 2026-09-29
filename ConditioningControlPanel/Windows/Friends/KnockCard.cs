@@ -61,10 +61,22 @@ internal sealed class KnockCard : Window
         _item = item;
         _done = done;
         _shown = shown;
-        var now = DateTimeOffset.UtcNow;
+        var now = ServerClock.UtcNow;
         _start = LandingRules.KnockStarts(item, now);
         _end = LandingRules.KnockEnds(item, now);
         _shownAt = now;
+
+        // The clock (countdown and ring) sits beside the name, so no button label, in any language,
+        // can push it off the card. The line under the name keeps the whole width.
+        var clock = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) };
+        _countdown.FontFamily = new FontFamily("Consolas, Courier New");
+        _countdown.FontSize = 11;
+        _countdown.Foreground = LandingChrome.Brush(LandingChrome.Muted);
+        _countdown.VerticalAlignment = VerticalAlignment.Center;
+        _countdown.Margin = new Thickness(0, 0, 6, 0);
+        clock.Children.Add(_countdown);
+        clock.Children.Add(BuildRing());
+        DockPanel.SetDock(clock, Dock.Right);
 
         var top = new Grid();
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -72,7 +84,9 @@ internal sealed class KnockCard : Window
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         top.Children.Add(LandingChrome.Avatar(item.FromName, item.FromAvatarUrl, 28));
         var words = new StackPanel { Margin = new Thickness(8, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
-        words.Children.Add(new TextBlock
+        var head = new DockPanel();
+        head.Children.Add(clock);
+        head.Children.Add(new TextBlock
         {
             Text = item.FromName,
             FontFamily = LandingChrome.Display,
@@ -81,7 +95,9 @@ internal sealed class KnockCard : Window
             Foreground = LandingChrome.Brush(LandingChrome.Text),
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxWidth = CardWidth - 84,
+            VerticalAlignment = VerticalAlignment.Center,
         });
+        words.Children.Add(head);
         var lineText = new TextBlock
         {
             Text = line,
@@ -131,16 +147,6 @@ internal sealed class KnockCard : Window
         DockPanel.SetDock(notNow, Dock.Left);
         buttons.Children.Add(go);
         buttons.Children.Add(notNow);
-        var clock = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        _countdown.FontFamily = new FontFamily("Consolas, Courier New");
-        _countdown.FontSize = 11;
-        _countdown.Foreground = LandingChrome.Brush(LandingChrome.Muted);
-        _countdown.VerticalAlignment = VerticalAlignment.Center;
-        _countdown.Margin = new Thickness(0, 0, 6, 0);
-        clock.Children.Add(_countdown);
-        clock.Children.Add(BuildRing());
-        DockPanel.SetDock(clock, Dock.Right);
-        buttons.Children.Add(clock);
         stack.Children.Add(buttons);
 
         _card = new Border
@@ -168,7 +174,7 @@ internal sealed class KnockCard : Window
         MouseEnter += (_, _) => { _hovered = true; ApplyTuck(); };
         MouseLeave += (_, _) => { _hovered = false; ApplyTuck(); };
         SizeChanged += (_, _) => Restack();
-        UpdateCountdown(DateTimeOffset.UtcNow);
+        UpdateCountdown(ServerClock.UtcNow);
     }
 
     private static Button MakeButton(string label, bool primary)
@@ -220,7 +226,7 @@ internal sealed class KnockCard : Window
         _arc.StrokeStartLineCap = PenLineCap.Round;
         _arc.StrokeEndLineCap = PenLineCap.Round;
         grid.Children.Add(_arc);
-        DrawArc(LandingRules.RingFraction(_start, _end, DateTimeOffset.UtcNow));
+        DrawArc(LandingRules.RingFraction(_start, _end, ServerClock.UtcNow));
         return grid;
     }
 
@@ -255,7 +261,7 @@ internal sealed class KnockCard : Window
 
     private void Advance()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = ServerClock.UtcNow;
         var f = LandingRules.RingFraction(_start, _end, now);
         DrawArc(f);
         UpdateCountdown(now);
@@ -299,7 +305,7 @@ internal sealed class KnockCard : Window
 
     private void Enter()
     {
-        _shownAt = DateTimeOffset.UtcNow;
+        _shownAt = ServerClock.UtcNow;
         if (MotionFx.Level != MotionLevel.Off)
         {
             var dur = TimeSpan.FromMilliseconds(MotionFx.Level == MotionLevel.Full ? 250 : 125);
