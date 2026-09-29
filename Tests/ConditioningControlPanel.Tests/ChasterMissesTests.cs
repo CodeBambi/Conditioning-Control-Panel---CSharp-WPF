@@ -170,4 +170,25 @@ public class ChasterMissesTests : IDisposable
         Assert.Equal(0, service.NoteSeen());
         Assert.False(File.Exists(Path.Combine(_dir, "tab.json")));
     }
+
+    /// <summary>TAB-7. "After a panic press or an emergency exit, nothing adds" for ten minutes,
+    /// and that covers the misses row too: a panic in the first minute after coming back holds
+    /// the days away exactly like it holds a typo.</summary>
+    [Fact]
+    public void A_panic_before_the_first_tick_holds_the_misses_too()
+    {
+        _options = _options with { Prices = new HashSet<string> { CircesMisses.EventId, "typo" } };
+        using (var before = Make()) before.NoteSeen();
+        _local = _local.AddDays(4); // three full days away
+
+        using var service = Make();
+        var seen = new List<string>();
+        service.Booked += (id, _) => seen.Add(id);
+        service.NoteSafetyExit();
+
+        Assert.Equal(TabRefusal.SafetyExit, service.Note("typo").Refusal);
+        Assert.Equal(0, service.NoteSeen()); // the first tick, a minute after launch
+        Assert.Equal(0, service.BalanceSeconds);
+        Assert.Empty(seen);
+    }
 }

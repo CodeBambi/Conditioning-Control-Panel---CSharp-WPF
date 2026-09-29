@@ -255,8 +255,9 @@ public sealed partial class ChasterService : IDisposable
                 {
                     var on = lastDay.AddDays(i + 1).AddHours(12);
                     var keep = (_tab.Day, _tab.DayAddedSeconds);
+                    // Inside the safety hold nothing adds, the days away included.
                     booked += CircesTab.Book(_tab, CircesMisses.EventId, charges[i], _utcNow(),
-                        on, _runStartUtc, safetyExit: false, options.Caps).AppliedSeconds;
+                        on, _runStartUtc, safetyExit: _utcNow() < _safetyUntilUtc, options.Caps).AppliedSeconds;
                     // A charge dated on a past day must not roll the day counter back to that day:
                     // it would zero what today already booked and hand today's cap out again.
                     if (CircesTab.DayKey(on) != keep.Day) (_tab.Day, _tab.DayAddedSeconds) = keep;
