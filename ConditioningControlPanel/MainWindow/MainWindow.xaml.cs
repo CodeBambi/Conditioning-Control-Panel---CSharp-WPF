@@ -4031,6 +4031,7 @@ namespace ConditioningControlPanel
         private const int WM_ENTERSIZEMOVE = 0x0231;
         private const int WM_EXITSIZEMOVE = 0x0232;
         private const int WM_DPICHANGED_MAIN = 0x02E0;
+        private const int WM_SIZE_MAIN = 0x0005;
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct POINT { public int X; public int Y; }
@@ -4071,7 +4072,17 @@ namespace ConditioningControlPanel
                     Services.UI.DisplayChangeCoordinator.EndInteractiveMove();
                     App.AvatarWindow?.NotifyParentInteractiveMove(false);
                     RunWorkAreaFitDeferredByMove();
+                    QueueLayoutDriftCheck("move-end");
                 }
+                catch { /* never let a hook throw */ }
+                return IntPtr.Zero;
+            }
+            if (msg == WM_SIZE_MAIN)
+            {
+                // Any resize, from any source (the tube's make-room posts SWP_ASYNCWINDOWPOS from its
+                // own thread): check afterwards that WPF's layout still covers the window. Coalesced
+                // and skipped mid-drag - see MainWindow.WorkAreaFit.cs, LAYOUT DRIFT.
+                try { QueueLayoutDriftCheck("size"); }
                 catch { /* never let a hook throw */ }
                 return IntPtr.Zero;
             }
