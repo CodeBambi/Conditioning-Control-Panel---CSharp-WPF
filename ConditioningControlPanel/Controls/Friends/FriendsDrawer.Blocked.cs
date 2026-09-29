@@ -47,8 +47,26 @@ public sealed partial class FriendsDrawer
 
     partial void OnBlocked(string id, string name)
     {
+        // A server that lists blocks remembers them on every device; only an old one needs this PC to.
+        if (_last.Blocked != null) return;
         try { FriendsBlockList.Shared.Add(FriendsBlockList.Account(), id, name, DateTimeOffset.UtcNow); }
         catch (Exception ex) { App.Logger?.Debug("[Friends] remember block: {E}", ex.Message); }
+    }
+
+    /// <summary>Who shows under Blocked: the server's list when it sends one (the truth, every
+    /// device), else what this PC remembers (a server that predates the list).</summary>
+    internal IReadOnlyList<BlockedEntry> BlockedRows()
+    {
+        var server = _last.Blocked;
+        if (server != null)
+        {
+            var account = FriendsBlockList.Account() ?? "";
+            var rows = new List<BlockedEntry>(server.Count);
+            foreach (var b in server) rows.Add(new BlockedEntry(account, b.Id, b.Name, DateTimeOffset.MinValue));
+            return rows;
+        }
+        try { return FriendsBlockList.Shared.For(FriendsBlockList.Account()); }
+        catch { return Array.Empty<BlockedEntry>(); }
     }
 
     /// <summary>A menu's Remove or Block: the card opens on that friend with the question in it.</summary>
@@ -174,13 +192,13 @@ public sealed partial class FriendsDrawer
     partial void AddListExtras()
     {
         if (!_showBlocked) return;
-        IReadOnlyList<BlockedEntry> blocked;
-        try { blocked = FriendsBlockList.Shared.For(FriendsBlockList.Account()); }
-        catch { blocked = Array.Empty<BlockedEntry>(); }
+        var blocked = BlockedRows();
         AddSection("friends_section_blocked", blocked.Count);
         if (blocked.Count == 0)
         {
-            var t = FriendsLook.Label(Loc.Get("friends_blocked_empty"), 11.5, FriendsLook.MutedBrush);
+            // The server's list covers every device; the old per-PC one had to say it did not.
+            var t = FriendsLook.Label(Loc.Get(_last.Blocked != null ? "friends_blocked_none" : "friends_blocked_empty"),
+                11.5, FriendsLook.MutedBrush);
             t.TextWrapping = TextWrapping.Wrap;
             t.TextTrimming = TextTrimming.None;
             t.Margin = new Thickness(10, 4, 10, 8);

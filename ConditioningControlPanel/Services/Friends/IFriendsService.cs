@@ -81,6 +81,17 @@ public interface IFriendsService
     /// the two things that put the poll on its fast cadence (the other is a friend online).</summary>
     void SetDrawerOpen(bool open);
 
+    // ---- the sender's side of receipts (lane F1) ----
+
+    /// <summary>The latest poke, invite or watch this account sent <paramref name="friendId"/> and
+    /// how far it got (sent, arrived, seen, answered or no answer), or null when there is nothing
+    /// recent to show. The default knows nothing, for fakes.</summary>
+    SentTrail? LastSentTo(string friendId) => null;
+
+    /// <summary>Raised on the UI thread when a trail moved (a send, or receipts that walked one
+    /// forward). Never raised by the default, for fakes.</summary>
+    event Action? SentTrailsChanged { add { } remove { } }
+
     // ---- receipts and the feed (CCP-Server proxy/FRIENDS-RECEIPTS.md v1) ----
 
     /// <summary>Queue a recipient receipt for the next poll: an item reached seen, joined or declined,

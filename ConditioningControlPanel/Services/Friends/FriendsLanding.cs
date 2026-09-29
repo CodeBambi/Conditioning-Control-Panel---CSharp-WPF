@@ -62,6 +62,11 @@ public static class FriendsLanding
 
             // A notice already up when a lockdown, Strict Lock or program session starts goes on the next tick.
             if (FriendNotices.AnyUp && ReadWorld().Holding) FriendNotices.CloseAll(fold: true);
+            // So does a knock card, unanswered: it waits in the Inbox while the invite still lives.
+            if (KnockCard.AnyUp && ReadWorld().Holding) KnockCard.FoldAll();
+
+            // The server lists blocks now: carry this PC's old list over once (FriendsBlockList).
+            if (current != null) Controls.Friends.FriendsBlockList.MigrateIfDue(current);
 
             // The notice window is unowned: it must not hold OnLastWindowClose once the panel closes.
             // Stop, not only CloseAll: a delivery landing mid-shutdown must not open a fresh window.
@@ -220,6 +225,8 @@ public static class FriendsLanding
                 // Ran out unseen (or pushed off the stack): it waits in the Inbox instead of vanishing.
                 Missed = p => { if (p is InboxItem i) Inbox(i); },
             });
+            // On screen now: the sender's trail may say seen.
+            FriendsSeen.Shared.Seen(App.Friends, item.Id);
             if (game != null) return;
             EmiSays(string.Format(Str("friends_land_emi_poke", "{0} says {1}"), item.FromName, word),
                 LandingRules.PokeFace(item.PokeId));
@@ -239,8 +246,16 @@ public static class FriendsLanding
                         ? Str("friends_land_emi_knock", "someone wants you")
                         : Str("friends_land_emi_present", "a present"),
                     item.Kind == SendKind.Invite ? "o_o" : "^_~");
-            var kind = item.Kind == SendKind.Invite ? NoticeKind.Invite : NoticeKind.Watch;
-            FriendNotices.Show(anchor, Notice(kind, item.FromId, item.FromName, item, item.At), new NoticeLook
+            if (item.Kind == SendKind.Invite)
+            {
+                // An invite knocks with a card that counts down to the invite's own expiry (five
+                // minutes): Join, Not now (the sender hears it), or the x to answer later.
+                KnockCard.Show(anchor, item, KnockLine(item), GoLabel(item),
+                    Str("friends_land_not_now", "Not now"), Str("friends_land_answer_later", "Answer later"),
+                    OnKnockDone, shown: i => FriendsSeen.Shared.Seen(App.Friends, i.Id));
+                return;
+            }
+            FriendNotices.Show(anchor, Notice(NoticeKind.Watch, item.FromId, item.FromName, item, item.At), new NoticeLook
             {
                 Line = KnockLine(item),
                 AvatarUrl = item.FromAvatarUrl,
@@ -250,6 +265,7 @@ public static class FriendsLanding
                 // Still answerable after the toast goes: it waits in the Inbox, where it reopens as a card.
                 Left = p => { if (p is InboxItem i && !i.IsExpired(DateTimeOffset.UtcNow)) Inbox(i); },
             });
+            FriendsSeen.Shared.Seen(App.Friends, item.Id);
         }
 
         public void Inbox(InboxItem item)
@@ -298,6 +314,7 @@ public static class FriendsLanding
                 Act = p => { if (p is FriendRequest r) Accept(r); },
                 Open = _ => OpenDrawer(null),
             });
+            FriendsSeen.Shared.RequestSeen(App.Friends, request);
         }
 
         public void RequestCue()
@@ -338,6 +355,9 @@ public static class FriendsLanding
                     Act = _ => OpenDrawer(null),
                     Open = _ => OpenDrawer(null),
                 });
+            // One request by name on screen is seen; "3 friend requests waiting" names nobody, so
+            // those wait for their rows in the drawer.
+            if (waiting.Count == 1) FriendsSeen.Shared.RequestSeen(App.Friends, newest);
         }
 
         public void SentBeat(SendKind kind, Friend to)
@@ -443,6 +463,13 @@ public static class FriendsLanding
             return;
         }
         if (item.Kind == SendKind.Poke) TheSink.Poke(item, inGame: false);
+        else if (item.Kind == SendKind.Invite && Anchor() is { } anchor)
+        {
+            // Opened by hand: the card comes up whatever the bell says (the bell only silences arrivals).
+            KnockCard.Show(anchor, item, KnockLine(item), GoLabel(item),
+                Str("friends_land_not_now", "Not now"), Str("friends_land_answer_later", "Answer later"),
+                OnKnockDone, shown: i => FriendsSeen.Shared.Seen(App.Friends, i.Id));
+        }
         else TheSink.Knock(item, inGame: false);
     }
 
@@ -458,14 +485,32 @@ public static class FriendsLanding
 
     private static void OnKnockDone(InboxItem item, KnockOutcome outcome)
     {
-        if (outcome == KnockOutcome.Later) return;
-        if (outcome == KnockOutcome.RanOut)
+        var now = DateTimeOffset.UtcNow;
+        switch (outcome)
         {
-            // A watch keeps for a day on the server: it folds into the Inbox rather than vanishing.
-            if (item.Kind == SendKind.Watch && !item.IsExpired(DateTimeOffset.UtcNow)) TheSink.Inbox(item);
-            return;
+            case KnockOutcome.Later:
+                // Put away unanswered: it waits in the Inbox while it can still be answered.
+                if (!item.IsExpired(now)) TheSink.Inbox(item);
+                return;
+            case KnockOutcome.RanOut:
+                // A watch keeps for a day on the server: it folds into the Inbox rather than vanishing.
+                // An invite that ran out says nothing here; the server tells the sender "no answer".
+                if (item.Kind == SendKind.Watch && !item.IsExpired(now)) TheSink.Inbox(item);
+                return;
+            case KnockOutcome.NotNow:
+                // The sender hears "not now" instead of waiting out the five minutes.
+                FriendsSeen.Shared.Report(App.Friends, ReceiptReport.Item(item.Id, ReceiptState.Declined));
+                App.StartupLadder?.RemoveRow("friends:" + item.Id);
+                FriendsSfx.Dismiss();
+                return;
         }
-        if (item.Kind == SendKind.Invite) { FriendsSfx.Join(); Join(item); }
+        App.StartupLadder?.RemoveRow("friends:" + item.Id);
+        if (item.Kind == SendKind.Invite)
+        {
+            FriendsSeen.Shared.Report(App.Friends, ReceiptReport.Item(item.Id, ReceiptState.Joined));
+            FriendsSfx.Join();
+            Join(item);
+        }
         else if (item.Watch != null) Watch(item.Watch);
     }
 

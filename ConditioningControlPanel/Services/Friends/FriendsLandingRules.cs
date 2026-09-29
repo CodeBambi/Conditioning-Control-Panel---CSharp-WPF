@@ -81,14 +81,43 @@ public static class LandingRules
         return sent < floor ? floor : sent;
     }
 
-    /// <summary>When the knock card folds: an invite at its own expiry (90 s from At), a watch
-    /// after <see cref="WatchCardSeconds"/> from now or its expiry, whichever is first.</summary>
+    /// <summary>How long an invite's knock card RINGS: full size with its picture, right after it
+    /// lands. An invite lives five minutes, and a card that shouts for five minutes is wrong, so
+    /// after this the card tucks down to a small strip (name, countdown, Join / Not now) that
+    /// carries the long tail quietly until the invite runs out.</summary>
+    public const int KnockRingSeconds = 45;
+
+    /// <summary>True once a knock card shown at <paramref name="shownAt"/> has rung its
+    /// <see cref="KnockRingSeconds"/> and should sit tucked.</summary>
+    public static bool KnockTucked(DateTimeOffset shownAt, DateTimeOffset now)
+        => now - shownAt >= TimeSpan.FromSeconds(KnockRingSeconds);
+
+    /// <summary>The countdown a knock card wears: "4:05", "0:09", never negative.</summary>
+    public static string Countdown(DateTimeOffset end, DateTimeOffset now)
+    {
+        var s = SecondsLeft(end, now);
+        return (s / 60).ToString(System.Globalization.CultureInfo.InvariantCulture) + ":"
+            + (s % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Where the ring's clock starts: the invite's send time, so a card reopened from the
+    /// Inbox three minutes in shows three minutes spent. A send time in the future (a fast server
+    /// clock) or missing starts it now.</summary>
+    public static DateTimeOffset KnockStarts(InboxItem item, DateTimeOffset now)
+        => item.At == DateTimeOffset.MinValue || item.At > now ? now : item.At;
+
+    /// <summary>When the knock card folds: an invite at its own expiry (five minutes from At), a watch
+    /// after <see cref="WatchCardSeconds"/> from now or its expiry, whichever is first. An invite
+    /// never shows more than its lifetime from now: a server clock ahead of this PC's puts At in the
+    /// future, and the countdown must not read 7:00 for a five minute invite.</summary>
     public static DateTimeOffset KnockEnds(InboxItem item, DateTimeOffset now)
     {
         if (item.Kind == SendKind.Invite)
         {
             var fromAt = item.At.AddSeconds(InviteDestination.LifetimeSeconds);
-            return fromAt < item.ExpiresAt ? fromAt : item.ExpiresAt;
+            var end = fromAt < item.ExpiresAt ? fromAt : item.ExpiresAt;
+            var cap = now.AddSeconds(InviteDestination.LifetimeSeconds);
+            return end < cap ? end : cap;
         }
         var card = now.AddSeconds(WatchCardSeconds);
         return card < item.ExpiresAt ? card : item.ExpiresAt;
