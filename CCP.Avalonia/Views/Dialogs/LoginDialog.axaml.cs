@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private const string ServerUrl = "https://codebambi-proxy.vercel.app";
         private static readonly HttpClient Http = new();
         private CancellationTokenSource? _checkCts;
+        private bool _closed;
         private string? _firstProviderToken;
 
         // Track which provider was tried first
@@ -209,6 +210,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // the service and is stubbed below, so _checkCts is what is left to cancel.
             Closed += (_, _) =>
             {
+                _closed = true;
                 _checkCts?.Cancel();
                 _checkCts?.Dispose();
                 _checkCts = null;
@@ -700,6 +702,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private async Task ShowError(string message)
         {
+            // A 5-minute OAuth timeout can land after the dialog closed; a dialog on a closed owner throws and kills the app.
+            if (_closed) { Log.Warning("Login error after the dialog closed: {Message}", message); return; }
             await MessageDialog.ShowAsync(this, Loc.Get("title_error"), message);
             ShowProviderSelection();
         }

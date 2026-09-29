@@ -70,9 +70,11 @@ public sealed class SecretStoreTests
     public void ASandboxedProfileIsMemoryOnly()
     {
         Assert.True(SecretStore.Sandboxed);   // first: a broken flag must fail before anything reaches a keyring
+        SecretStore.NotRemembered = false;
         SecretStore.Store("sandbox_probe", "v");
         Assert.Equal("v", SecretStore.Retrieve("sandbox_probe"));
-        Assert.True(SecretStore.NotRemembered);
+        // Memory-only by design, not a missing Secret Service: no "no secret store" notice.
+        Assert.False(SecretStore.NotRemembered);
     }
 
     [Fact]

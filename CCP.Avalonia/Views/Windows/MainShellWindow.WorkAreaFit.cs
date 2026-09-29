@@ -162,13 +162,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // Screen change: dragged onto another monitor, or the topology itself changed.
                 // Either way the floors must fit THAT work area or they veto the resize.
                 _fitScreen = Screens?.ScreenFromWindow(this);
-                PositionChanged += (_, __) =>
+                // Wait until the move settles: fitting mid-drag fights the window manager and bounces
+                // the window between monitors, flashing thin lines.
+                var settle = new global::Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+                settle.Tick += (_, __) =>
                 {
+                    settle.Stop();
                     var now = Screens?.ScreenFromWindow(this);
                     if (now is null || now.Bounds == _fitScreen?.Bounds) return;
                     _fitScreen = now;
                     FitToCurrentMonitorWorkArea("screen-changed");
                 };
+                PositionChanged += (_, __) => { settle.Stop(); settle.Start(); };
                 if (Screens is { } screens) screens.Changed += (_, __) => FitToCurrentMonitorWorkArea("screens-changed");
             }
             catch (Exception ex)
