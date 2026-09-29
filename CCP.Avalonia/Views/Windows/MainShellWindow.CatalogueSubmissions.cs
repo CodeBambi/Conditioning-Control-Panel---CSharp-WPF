@@ -22,15 +22,8 @@
 //       SubmissionResult was head-only; it is Core's since catalogue U1
 //       (CCP.Core/Services/Catalogue/CatalogueClient.cs), so this is now unblocked (U3 wires it).
 //       It also ends by calling RefreshCatalogueShareBadges (MainShellWindow.PresetIO.cs, a stub).
-//   CheckCatalogueSubmissionStatusesAsync(kind, force)
-//       App.Catalogue.FetchMySubmissionsAsync / FetchMyCatalogueAssetsAsync - a network round trip
-//       with no seam. Its three throttle members (CatalogueCheckThrottle, _lastCatalogueCheckUtc,
-//       _catalogueChecksInFlight) exist only to pace that call and are left out with it.
-//   NotifyCatalogueSubmissionAccepted / ResolveCatalogueDisplayName
-//       App.Notifications.ShowSticky (ConditioningControlPanel/Services/Notifications/
-//       NotificationService.cs), which this head does not ship. ResolveCatalogueDisplayName itself
-//       would compile - UserPresets is in Core and CoreMods.InstalledMods answers the mod name -
-//       but its only caller is the toast above it, so it waits for the toast.
+//   (The status polls - CheckCatalogueSubmissionStatusesAsync, the accepted toast and the badge -
+//   are in MainShellWindow.CatalogueStatus.cs.)
 //
 // Checked and NOT the blocker: CoreReleaseContent. It answers pack ids, install stamps and pack
 // info; the catalogue submission flow reads none of those.

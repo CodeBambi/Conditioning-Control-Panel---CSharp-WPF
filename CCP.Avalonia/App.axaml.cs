@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
@@ -19,6 +20,17 @@ namespace ConditioningControlPanel.Avalonia
 
         /// <summary>In-app corner toasts (WPF App.Notifications). Queues until the shell attaches it.</summary>
         public static Helpers.NotificationService Notifications { get; } = new();
+
+        /// <summary>The cclabs catalogue client (WPF App.Catalogue). Settable so tests inject a fake handler.</summary>
+        internal static CatalogueClient Catalogue { get; set; } = new(
+            () => CoreSettings.Current.AuthToken, () => CoreAccount.UnifiedUserId, CoreReleaseContent.AppVersion);
+
+        /// <summary>HT-URL lookup + download (WPF App.CatalogueLookup). The shell registers the opener.</summary>
+        internal static CatalogueLookup CatalogueLookup { get; set; } = new(
+            () => Services.Deeper.DeeperLocalLibrary.DefaultFolder, CoreReleaseContent.AppVersion, OnUiThread);
+
+        /// <summary>The lookup resumes off the UI thread (ConfigureAwait(false)); its opener builds a window.</summary>
+        internal static Task<bool> OnUiThread(Func<bool> open) => Dispatcher.UIThread.InvokeAsync(open).GetTask();
 
         /// <summary>The achievement engine (achievements.json), or null on the headless render path.
         /// Local-only: no sync, no streak writes, no ResetProgress on this head (oracle-achievements.md).</summary>

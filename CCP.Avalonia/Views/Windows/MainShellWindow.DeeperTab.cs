@@ -40,10 +40,8 @@
 //   The tutorial - StartDeeperTabTutorial, BtnDeeperTutorial_Click, BtnDeeperWelcomeTour_Click.
 //   StartTutorial(TutorialType.Deeper) is not on this head.
 //   The rail pulse - StartDeeperTabPulse / StopDeeperTabPulse, a WPF storyboard on BtnDeeper.
-//   The catalogue - TriggerCatalogueLookupForNavigation, RunCatalogueLookupAsync,
-//   OpenCataloguePickerDialog, DownloadAndOpenCatalogueEntryAsync, SubmitDeeperLibraryEntryAsync,
-//   ShowCatalogueLookupToast, ShowCatalogueSubmissionResultToast, IsCatalogueEligible. App.Catalogue
-//   plus App.Notifications, the same pair MainShellWindow.CatalogueSubmissions.cs left out.
+//   The catalogue SUBMIT side - SubmitDeeperLibraryEntryAsync, ShowCatalogueSubmissionResultToast,
+//   IsCatalogueEligible (catalogue U3). The LOOKUP side is restored at the bottom of this file.
 //   IsImportableEnhancementPath is pure and would compile, and is held back with
 //   ImportEnhancementFiles, its only caller.
 //   SwitchToDeeperLibraryTab, MaybePromptMandatoryVideoEnhancement, BtnDeeperOpenPlayer_Click,
@@ -57,6 +55,9 @@
 
 using System;
 using Avalonia.Controls;
+using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -170,6 +171,123 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 CoreSettings.Save();
             }
             UpdateDeeperWelcomeCardVisibility();
+        }
+
+        // ============ the catalogue lookup (WPF MainWindow.DeeperTab.cs:1017-1204) ============
+        // Fired from NavigateBrowser with the URL we ASKED for: WPF fires on WebView2's
+        // NavigationCompleted (MainWindow.Browser.cs:158) with the live URL, which WebHost does not
+        // expose, so in-page navigation never looks anything up here.
+        private System.Threading.CancellationTokenSource? _catalogueLookupCts;
+        private string? _currentCatalogueHtVideoId;
+
+        internal void TriggerCatalogueLookupForNavigation(string url)
+        {
+            try
+            {
+                if (!HtUrlHelper.IsEligibleHtUrl(url)) return;
+                try { _catalogueLookupCts?.Cancel(); } catch { /* idempotent */ }
+                _catalogueLookupCts?.Dispose();
+                var cts = new System.Threading.CancellationTokenSource();
+                _catalogueLookupCts = cts;
+                _ = RunCatalogueLookupAsync(url, cts.Token);
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Catalogue] TriggerCatalogueLookupForNavigation threw"); }
+        }
+
+        internal async System.Threading.Tasks.Task RunCatalogueLookupAsync(string url, System.Threading.CancellationToken ct)
+        {
+            LookupResult result;
+            try { result = await App.CatalogueLookup.LookupForUrlAsync(url, ct); }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex) { Log.Warning(ex, "[Catalogue] Lookup threw unexpectedly"); return; }
+            if (ct.IsCancellationRequested) return;
+            // None / InvalidUrl / NetworkError: silent by design.
+            if (result is LookupResult.Success s) ShowCatalogueLookupToast(url, s.Entries);
+        }
+
+        private void ShowCatalogueLookupToast(string url, System.Collections.Generic.List<CatalogueEntry> entries)
+        {
+            if (entries == null || entries.Count == 0) return;
+            var videoId = HtUrlHelper.TryExtractHtVideoId(url);
+            _currentCatalogueHtVideoId = videoId;
+            var one = entries.Count == 1;
+            App.Notifications.Show(
+                one ? Loc.Get("catalogue_lookup_toast_one") : string.Format(Loc.Get("catalogue_lookup_toast_many_fmt"), entries.Count),
+                Helpers.NotificationType.Info, TimeSpan.FromSeconds(10),
+                Loc.Get(one ? "catalogue_lookup_action_use_one" : "catalogue_lookup_action_pick_one"),
+                () =>
+                {
+                    // Stale-toast guard: the user navigated away before clicking.
+                    if (!string.Equals(_currentCatalogueHtVideoId, videoId, StringComparison.Ordinal))
+                    {
+                        Log.Information("[Catalogue] Toast action ignored (user navigated away)");
+                        return;
+                    }
+                    if (one) _ = DownloadAndOpenCatalogueEntryAsync(entries[0]);
+                    else OpenCataloguePickerDialog(entries, videoId);
+                });
+        }
+
+        private async void OpenCataloguePickerDialog(System.Collections.Generic.List<CatalogueEntry> entries, string? videoId)
+        {
+            try
+            {
+                var dlg = new Dialogs.CataloguePickerDialog(entries, videoId);
+                await dlg.ShowDialog<bool>(this);
+                if (dlg.SelectedEntry != null) await DownloadAndOpenCatalogueEntryAsync(dlg.SelectedEntry);
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Catalogue] Picker dialog threw"); }
+        }
+
+        internal async System.Threading.Tasks.Task DownloadAndOpenCatalogueEntryAsync(CatalogueEntry entry)
+        {
+            DownloadResult result;
+            try { result = await App.CatalogueLookup.DownloadAndOpenAsync(entry, default); }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[Catalogue] Download flow threw");
+                result = new DownloadResult.NetworkError();
+            }
+            var n = App.Notifications;
+            switch (result)
+            {
+                case DownloadResult.Success:
+                    n.Show(string.Format(Loc.Get("catalogue_lookup_toast_loaded_fmt"), entry.Title), Helpers.NotificationType.Info, TimeSpan.FromSeconds(6));
+                    break;
+                case DownloadResult.NetworkError:
+                    n.Show(Loc.Get("catalogue_lookup_toast_download_failed"), Helpers.NotificationType.Error, TimeSpan.FromSeconds(8));
+                    break;
+                case DownloadResult.InvalidFile:
+                    n.Show(Loc.Get("catalogue_lookup_toast_invalid_file"), Helpers.NotificationType.Error, TimeSpan.FromSeconds(8));
+                    break;
+                case DownloadResult.SaveError:
+                    n.Show(Loc.Get("catalogue_lookup_toast_save_failed"), Helpers.NotificationType.Error, TimeSpan.FromSeconds(8));
+                    break;
+                case DownloadResult.OpenError oe:
+                    n.Show(string.Format(Loc.Get("catalogue_lookup_toast_open_failed_fmt"), oe.LocalFilename),
+                        Helpers.NotificationType.Warning, TimeSpan.FromSeconds(10),
+                        Loc.Get("catalogue_lookup_action_open_library"), () => ShowTab("deeper"));
+                    break;
+            }
+        }
+
+        /// <summary>WPF's opener (MainWindow.xaml.cs:674): a downloaded enhancement auto-plays in
+        /// the player, tagged "catalogue". False on a parse failure -> the OpenError toast.</summary>
+        // ponytail: a new player window per open; WPF's ShowOrActivate reuses one. Add a
+        // single-instance guard when the player gets one on this head.
+        private bool OpenCatalogueEnhancement(string path)
+        {
+            try
+            {
+                var enhancement = ConditioningControlPanel.Services.Deeper.EnhancementSerializer.LoadFromFile(path);
+                new Views.Deeper.EnhancementPlayerWindow(enhancement, "catalogue").Show(this);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[Catalogue] Player open failed for {Path}", path);
+                return false;
+            }
         }
     }
 }

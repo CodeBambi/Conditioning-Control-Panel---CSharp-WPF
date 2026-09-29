@@ -336,7 +336,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtDetailAdvanced.Text = $"Bubbles: {(preset.BubblesEnabled ? "Yes" : "No")} | Lock Card: {(preset.LockCardEnabled ? "Yes" : "No")}";
 
             BtnExportPreset.IsEnabled = true;
+            UpdatePresetShareStatusBadge(preset);
             RefreshSessionRackSelection();
+        }
+
+        /// <summary>WPF UpdatePresetShareStatusBadge (MainWindow.PresetIO.cs:332).</summary>
+        private void UpdatePresetShareStatusBadge(Preset preset)
+        {
+            PresetShareStatusHost.Children.Clear();
+            var badge = Windows.MainShellWindow.CreateCatalogueStatusBadge(
+                Windows.MainShellWindow.GetCatalogueRecord(Windows.MainShellWindow.CatalogueKindPresets, preset.Id));
+            if (badge == null) return;
+            badge.Margin = new Thickness(0);
+            PresetShareStatusHost.Children.Add(badge);
+        }
+
+        /// <summary>After a share-status poll: the preset pill and the rack rows (WPF RefreshCatalogueShareBadges).</summary>
+        internal void RefreshCatalogueBadges()
+        {
+            if (_selectedPreset != null) UpdatePresetShareStatusBadge(_selectedPreset);
+            RepaintSessionRack();
         }
 
         /// <summary>WPF's BtnExportPreset_Click (MainWindow.PresetIO.cs), save picker via StorageProvider.</summary>
@@ -704,6 +723,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             var badges = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             badges.Children.Add(Pill(Loc.Get(srcKey), srcWash, srcSolid, "SdRackBadgeText"));
+            var sessRec = string.IsNullOrEmpty(session.SourceFilePath) ? null : Windows.MainShellWindow.GetCatalogueRecord(
+                Windows.MainShellWindow.CatalogueKindSessions, Windows.MainShellWindow.CanonicalCataloguePathKey(session.SourceFilePath));
+            if (Windows.MainShellWindow.CreateCatalogueStatusBadge(sessRec) is { } statusBadge) badges.Children.Add(statusBadge);
             Grid.SetColumn(badges, 7);
             grid.Children.Add(badges);
 

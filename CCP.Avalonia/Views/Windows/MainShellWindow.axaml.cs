@@ -109,6 +109,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
             Opened += (_, _) => { if (CoreSettings.Current.AvatarEnabled) InitializeAvatarTube(); };
             Closed += (_, _) => _avatarTubeWindow?.Close();
+            // WPF MainWindow.xaml.cs:674: catalogue downloads open in the player.
+            App.CatalogueLookup.SetOpener(OpenCatalogueEnhancement);
+            // WPF MainWindow.xaml.cs:3531-3535: one forced share-status poll per launch.
+            Opened += (_, _) => PollCatalogueStatuses(force: true);
         }
 
         /// <summary>Uses an already-loaded catalogue without making the parameterless shell open
@@ -140,6 +144,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // WPF MainWindow.xaml.cs:2910: a switch made in the manager repaints through the one path.
         private async void BtnManageMods_Click(object? sender, RoutedEventArgs e)
         {
+            // Refresh share badges shown in the dialog (throttled poll).
+            _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindMods);
             try
             {
                 var dialog = new Dialogs.ModManagerDialog();
