@@ -22,6 +22,7 @@ import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
 import { createPauseHush } from './ui/pause-hush.js';
+import { createHostEscape, HOST_ESCAPE } from './ui/host-escape.js';
 import { presentation } from './game/preferences.js';
 
 const dom = {
@@ -41,6 +42,10 @@ function fail(message) {
 }
 
 function main() {
+  // The panel keeps a first Escape as the game's pause and hands it over as pbp:escape: with this page out
+  // of keyboard focus the real key never lands here (ui/host-escape.js). Made first, so it hears every real
+  // Escape before any part of the page keeps one for itself (the promotion picker, the door).
+  const hostEscape = createHostEscape();
   const bus = createBus();
   let view;
   try {
@@ -322,13 +327,16 @@ function main() {
   // nothing pauses at all (bug hunt 2026-09-29, CHESS-1).
   window.PBP.escapePause = () => { if (!pausedGame && inGameNow()) setGamePaused(true); };
   window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
+    // A held Escape is one press (the panel counts it once too); its key repeats must not leave the pause.
+    if (e.key !== 'Escape' || e.repeat) return;
     if (pausedGame) { postToHost({ type: 'pbp:exit' }); return; }   // still hushed: nothing comes back on the way out
     if (drag.isDragging()) { drag.drop(); window.PBP.escapePause(); return; }
     const inGame = inGameNow();
     if (inGame) setGamePaused(true);
     else postToHost({ type: 'pbp:exit' });
   });
+  // The kept press plays through the listener above (and every other Escape listener), once.
+  onHostMessage((m) => { if (m.type === HOST_ESCAPE) hostEscape.kept(); });
   // --- Q: a capture animation is never a hostage ---
   // A tap on the board or a Space/Enter while the bishop is mid-whip lands
   // everything at once: no animation debt, the next move is already yours.

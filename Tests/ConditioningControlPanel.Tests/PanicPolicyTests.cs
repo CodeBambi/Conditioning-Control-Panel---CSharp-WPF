@@ -708,4 +708,55 @@ public class PanicPolicyTests
         Assert.Contains("PieceByPieceHostService.IsInFront", body);
         Assert.Contains("CaucusHostService.IsInFront", body);
     }
+
+    // ---- The board is handed the Escape it kept (6.11.5) ----
+    // The board pauses on its own keydown, which never comes while its WebView2 is out of keyboard
+    // focus (the title bar clicked): the panel kept the press, so nothing paused and nothing panicked.
+    // The page's half (played once, dropped when the real key came too) is pinned by
+    // piecebypiece/smoke/host-escape-smoke.mjs.
+
+    [Fact]
+    public void BoardKeptTheEscape_ThePageIsHandedIt()
+        => Assert.True(BoardGetsKeptEscape(claimed: true, raceInFront: false, boardInFront: true, boardReady: true));
+
+    [Theory]
+    [InlineData(false, false, true, true)]  // not kept: a full panic, which closes the board
+    [InlineData(true, true, false, true)]   // the race kept it: it brakes on its own key, unchanged
+    [InlineData(true, true, true, true)]    // the race wins a tie, as the claim's log line reads
+    [InlineData(true, false, false, true)]  // the board is not in front
+    [InlineData(true, false, true, false)]  // still booting: the frame would queue and land after ready
+    public void EverythingElse_HandsTheBoardNothing(bool claimed, bool raceInFront, bool boardInFront, bool boardReady)
+        => Assert.False(BoardGetsKeptEscape(claimed, raceInFront, boardInFront, boardReady));
+
+    [Fact]
+    public void TheKeptEscape_IsPostedOnlyOnceThePressWasKept()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private bool TryRacePauseOnEscape()", StringComparison.Ordinal);
+        Assert.True(start >= 0, "TryRacePauseOnEscape was renamed - update this test with it");
+        var end = source.IndexOf("private void HandlePanicKeyPress()", start, StringComparison.Ordinal);
+        var body = end > start ? source[start..end] : source[start..];
+        var kept = body.IndexOf("_lastRaceEscapeClaimUtc = now;", StringComparison.Ordinal);
+        var gate = body.IndexOf("PanicPolicy.BoardGetsKeptEscape(claim", StringComparison.Ordinal);
+        var post = body.IndexOf("PieceByPieceHostService.PostKeptEscape()", StringComparison.Ordinal);
+        Assert.True(kept >= 0 && gate > kept, "the board must be handed the press only once it was kept");
+        Assert.True(post > gate, "PostKeptEscape must sit behind BoardGetsKeptEscape");
+        Assert.Contains("PieceByPieceHostService.IsReady", body);
+    }
+
+    [Fact]
+    public void ThePageListensForTheFrameTheHostPosts()
+    {
+        var page = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "web",
+            "piecebypiece", "ui", "host-escape.js"));
+        Assert.Contains("export const HOST_ESCAPE = '"
+            + ConditioningControlPanel.Services.PieceByPiece.PieceByPieceHostService.KeptEscapeType + "';", page);
+        // The page drops the frame when a real Escape came this long before it. The panel never keeps
+        // two presses closer than GamePauseDoubleTap, so a longer look-back could eat the next press.
+        var m = System.Text.RegularExpressions.Regex.Match(page, @"export const LOOK_BACK_MS = (\d+);");
+        Assert.True(m.Success, "LOOK_BACK_MS moved - update this test with it");
+        Assert.True(int.Parse(m.Groups[1].Value) < GamePauseDoubleTap.TotalMilliseconds,
+            "the page's look-back must stay inside the panel's double tap");
+    }
 }

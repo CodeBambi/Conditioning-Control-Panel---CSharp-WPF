@@ -18,6 +18,11 @@
  * makes it flush its queued settings frame), a `heartbeat` every couple of
  * seconds, and a `pong` answer to its `ping`.
  *
+ * An Escape the panel kept as the game's pause is handed over as well, and
+ * played once as the page's own Escape (ui/host-escape.js):
+ *
+ *   host -> page   { type: 'pbp:escape' }
+ *
  * ONLINE PLAY adds three more, and they are a set: one that hands the page an
  * identity, and a request/reply pair that carries HTTP for it.
  *

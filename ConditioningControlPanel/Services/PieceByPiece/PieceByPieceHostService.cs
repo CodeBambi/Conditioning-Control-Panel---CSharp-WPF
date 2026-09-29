@@ -32,6 +32,8 @@ namespace ConditioningControlPanel.Services.PieceByPiece;
 /// <item>page -&gt; host: <c>{ type: 'pbp:media-request', kinds: ['image','gif','video'], count }</c></item>
 /// <item>host -&gt; page: <c>{ type: 'pbp:media', images: [url...], gifs: [...], videos: [...] }</c></item>
 /// <item>page -&gt; host: <c>{ type: 'pbp:exit' }</c> - close the window</item>
+/// <item>host -&gt; page: <c>{ type: 'pbp:escape' }</c> - an Escape the panel kept as the game's pause,
+///   played once as the page's own Escape (<see cref="PostKeptEscape"/>)</item>
 /// </list>
 /// ONLINE PICTURES (2026-09-28, PieceByPieceHostService.Media.cs) add four, all optional to the
 /// page: <c>pbp:media</c> above stays the player's own library, the online set rides beside it.
@@ -140,6 +142,30 @@ internal static partial class PieceByPieceHostService
     /// <summary>True while the board window is the foreground window. The panel's panic pass lets the
     /// page keep a first Escape as its pause while this holds (PanicPolicy.GameClaimsEscapeAsPause).</summary>
     public static bool IsInFront => _host?.IsForeground == true;
+
+    /// <summary>True once the page has said <c>ready</c>; frames posted before that are queued.</summary>
+    public static bool IsReady => _host?.IsReady == true;
+
+    /// <summary>The frame that hands the page an Escape the panel kept as its pause. The page listens
+    /// for this exact name (ui/host-escape.js).</summary>
+    internal const string KeptEscapeType = "pbp:escape";
+
+    /// <summary>
+    /// Hand the page an Escape the panel kept as the game's pause. The board pauses on its own
+    /// keydown, which never comes while its WebView2 is out of keyboard focus; the page plays this as
+    /// its own Escape unless the real key reached it too. MainWindow asks
+    /// PanicPolicy.BoardGetsKeptEscape first. The page gets the keyboard back as well, so Enter on
+    /// Resume works without a click (the board is already in front, so nothing else moves).
+    /// </summary>
+    public static void PostKeptEscape()
+    {
+        try
+        {
+            _host?.Post(new { type = KeptEscapeType });
+            _host?.FocusWeb();
+        }
+        catch (Exception ex) { App.Logger?.Debug("PieceByPiece: kept Escape post failed: {E}", ex.Message); }
+    }
 
     /// <summary>The page's LAST boot attempt failed (it reported <c>boot-error</c>, or the host's
     /// own progress deadline fired). A LAST-attempt flag, not a session tombstone: most of what
