@@ -28,7 +28,10 @@ namespace ConditioningControlPanel.Controls.Leash;
 /// A PUNISHMENT window cannot be closed: a close shakes it and says whose punishment it is. It
 /// ends when the video ends or its time cap is reached (the runner decides), when the leash is
 /// cut, or on a panic press, which always works. A TASK window (a video assignment) closes
-/// normally. The way out is told up front in the explainer, so there is no cut button here.
+/// normally. The way out sits in the head from the first frame (2026-09-28): a Cut leash button
+/// that is always enabled, and the "hold the panic key 5 s" line. A page that fails to load, or a
+/// local file that will not decode, raises <see cref="PlaybackFailed"/> so the runner can give up
+/// instead of leaving an empty cage.
 /// </summary>
 internal sealed class LeashPunishWindow : Window
 {
@@ -37,11 +40,16 @@ internal sealed class LeashPunishWindow : Window
     /// <summary>The page's video reached its end.</summary>
     public static event Action? VideoEnded;
 
+    /// <summary>The page could not load (an HTTP error, no network) or the local video would not decode.</summary>
+    public static event Action? PlaybackFailed;
+
     private const string LocalHost = "leash-video.ccp";
 
     private readonly bool _locked;
     private readonly string _holder;
     private readonly TextBlock _title;
+    private readonly TextBlock _hint;
+    private bool _failed;
     private readonly Border _head;
     private readonly Grid _root;
     private WebView2? _web;
@@ -87,14 +95,35 @@ internal sealed class LeashPunishWindow : Window
         var head = new Grid { Margin = new Thickness(14, 6, 8, 6) };
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         _title = FriendsLook.Label(TitleText(), 13.5, FriendsLook.TextBrush, FriendsLook.Display, FontWeights.SemiBold);
-        head.Children.Add(_title);
+        words.Children.Add(_title);
+        // The way out, told from the first frame (it used to show only after a refused close).
+        _hint = FriendsLook.Label(HintText(), 11.5, FriendsLook.MutedBrush);
+        _hint.Tag = "leash-punish-hint";
+        _hint.Margin = new Thickness(0, 1, 0, 0);
+        words.Children.Add(_hint);
+        head.Children.Add(words);
+
+        var cut = FriendsLook.Pill(Loc.Get("leash_cut"), FriendsLook.ButtonBrush, FriendsLook.MintBrush,
+            FriendsLook.MintBrush, 8, new Thickness(10, 3, 10, 3), FriendsLook.ButtonHoverBrush);
+        cut.Tag = "leash-punish-cut";
+        cut.ToolTip = Loc.Get("leash_cut_tip");
+        cut.Focusable = false;
+        cut.Margin = new Thickness(8, 0, 6, 0);
+        cut.VerticalAlignment = VerticalAlignment.Center;
+        cut.Click += (_, _) => CutFromWindow();
+        Grid.SetColumn(cut, 1);
+        head.Children.Add(cut);
+
         var fs = FriendsLook.Pill(Loc.Get("leash_punish_fullscreen"), FriendsLook.ButtonBrush, FriendsLook.TextBrush,
             FriendsLook.Line2Brush, 8, new Thickness(10, 3, 10, 3), FriendsLook.ButtonHoverBrush);
-        fs.ToolTip = "F11";
+        fs.ToolTip = Loc.Get("leash_punish_fullscreen_key");
         fs.Focusable = false;
+        fs.VerticalAlignment = VerticalAlignment.Center;
         fs.Click += (_, _) => ToggleFullscreen();
-        Grid.SetColumn(fs, 1);
+        Grid.SetColumn(fs, 2);
         head.Children.Add(fs);
         _head = new Border { Background = FriendsLook.HeadBrush, Child = head };
         _root.Children.Add(_head);
@@ -105,6 +134,19 @@ internal sealed class LeashPunishWindow : Window
     }
 
     private string TitleText() => Loc.GetF(_locked ? "leash_punish_title" : "leash_task_title", _holder);
+
+    private string HintText() => _locked
+        ? Loc.GetF("leash_punish_hold", LeashHoldToCut.KeyLabel(App.Settings?.Current?.PanicKey))
+        : Loc.Get("leash_task_close_hint");
+
+    /// <summary>The head's Cut leash: the same one-click cut as the drawer card. The window goes
+    /// first so nothing is left caged while the service works.</summary>
+    private void CutFromWindow()
+    {
+        App.Logger?.Information("Leash: cut from the video window");
+        CloseNow();
+        LeashSurfaces.Cut();
+    }
 
     // ---- open / close ------------------------------------------------------------------------
 
@@ -156,7 +198,8 @@ internal sealed class LeashPunishWindow : Window
     private static string LocalPage(string src) =>
         "<!doctype html><html><head><meta charset=\"utf-8\"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}"
         + "video{width:100vw;height:100vh;object-fit:contain;background:#000}</style></head><body>"
-        + "<video autoplay playsinline src=\"" + WebUtility.HtmlEncode(src) + "\"></video></body></html>";
+        + "<video autoplay playsinline onerror=\"try{chrome.webview.postMessage('leash-error')}catch(e){}\" src=\""
+        + WebUtility.HtmlEncode(src) + "\"></video></body></html>";
 
     // ---- the browser -------------------------------------------------------------------------
 
@@ -190,6 +233,13 @@ internal sealed class LeashPunishWindow : Window
                 string? msg = null;
                 try { msg = e.TryGetWebMessageAsString(); } catch { }
                 if (msg == "leash-ended") VideoEnded?.Invoke();
+                else if (msg == "leash-error") Fail("media error");
+            };
+            core.NavigationCompleted += (_, e) =>
+            {
+                // A navigation this window refused (off the page) reports as cancelled: not a failure.
+                if (e.IsSuccess || e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled) return;
+                Fail($"navigation {e.WebErrorStatus} http {e.HttpStatusCode}");
             };
             await core.AddScriptToExecuteOnDocumentCreatedAsync(CageScript);
             go(core);
@@ -198,6 +248,21 @@ internal sealed class LeashPunishWindow : Window
         {
             App.Logger?.Warning("Leash video window failed: {E}", ex.Message);
         }
+    }
+
+    /// <summary>Once per window: the video cannot play here.</summary>
+    private void Fail(string why)
+    {
+        if (_failed || _allowClose) return;
+        _failed = true;
+        App.Logger?.Information("Leash video window: will not play ({Why})", why);
+        // Posted: the handler closes this window, which must not happen inside a WebView2 callback.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!ReferenceEquals(Current, this)) return;
+            try { PlaybackFailed?.Invoke(); }
+            catch (Exception ex) { App.Logger?.Debug("Leash playback-failed handler failed: {E}", ex.Message); }
+        }));
     }
 
     /// <summary>The panel browser's own profile (its cookies carry the Hypnotube age check) with
@@ -279,9 +344,9 @@ internal sealed class LeashPunishWindow : Window
     /// it ends, for a few seconds.</summary>
     private void Refuse()
     {
-        _title.Text = Loc.GetF("leash_punish_no_close", _holder) + "  " +
-            Loc.GetF("leash_punish_hold", LeashHoldToCut.KeyLabel(App.Settings?.Current?.PanicKey));
+        _title.Text = Loc.GetF("leash_punish_no_close", _holder);
         _title.Foreground = FriendsLook.GoldBrush;
+        _hint.Foreground = FriendsLook.GoldBrush;
         _refuseTimer?.Stop();
         _refuseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _refuseTimer.Tick += (_, _) =>
@@ -289,6 +354,7 @@ internal sealed class LeashPunishWindow : Window
             _refuseTimer?.Stop();
             _title.Text = TitleText();
             _title.Foreground = FriendsLook.TextBrush;
+            _hint.Foreground = FriendsLook.MutedBrush;
         };
         _refuseTimer.Start();
         LeashFx.Denied();

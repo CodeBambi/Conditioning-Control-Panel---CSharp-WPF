@@ -607,7 +607,10 @@ public class BubbleService : IDisposable
         if (!hit) return false;
         var disp = Application.Current?.Dispatcher;
         if (disp == null || disp.HasShutdownStarted) return false;
-        disp.BeginInvoke(new Action(() => PopTopmostAt(px)));
+        // Read on the hook thread, BEFORE this press's own button-up can arrive: a red bubble held
+        // through a swallowed press knows it was let go when the count moves past this.
+        var upSeq = Interlocked.Read(ref PointerUpSeq);
+        disp.BeginInvoke(new Action(() => PopTopmostAt(px, upSeq)));
         // Live hold-to-defuse bubbles must NOT swallow: the channel reads the held button via
         // GetAsyncKeyState, which never sees a swallowed low-level click (→ instant detonate). Let the
         // click pass through for those; instant-pop bubbles swallow cleanly (one click, no desktop leak).
@@ -616,13 +619,42 @@ public class BubbleService : IDisposable
 
     /// <summary>UI THREAD: pop the front-most live clickable bubble under a physical-px point (last
     /// spawned = drawn on top = checked first). Routes through OnPlayerPress like a real click.</summary>
-    private void PopTopmostAt(Point px)
+    private void PopTopmostAt(Point px, long upSeq)
     {
         for (int i = _bubbles.Count - 1; i >= 0; i--)
         {
             var b = _bubbles[i];
             // UsesHost guards against hook-popping a per-window bubble (which owns a WPF click handler).
-            if (b.UsesHost && b.HostHitClickable && b.ContainsPx(px)) { b.HostHookPop(); return; }
+            if (b.UsesHost && b.HostHitClickable && b.ContainsPx(px)) { b.HostHookPop(upSeq); return; }
+        }
+    }
+
+    /// <summary>Button-ups seen by the ambient hook (either button). The hook swallows a press on a
+    /// host bubble, and a swallowed press never reaches GetAsyncKeyState, so a red bubble held
+    /// through the hook watches this count to learn it was let go. Hook thread writes, UI reads.</summary>
+    internal static long PointerUpSeq;
+
+    /// <summary>Either mouse button down right now (a per-window press is never swallowed).</summary>
+    internal static bool AnyPointerButtonHeld() =>
+        ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0;
+
+    /// <summary>The cursor in physical px, for a red bubble judging whether the press slid off it.</summary>
+    internal static bool TryCursorPx(out Point px)
+    {
+        if (GetCursorPos(out var cur)) { px = new Point(cur.X, cur.Y); return true; }
+        px = default;
+        return false;
+    }
+
+    /// <summary>The one place a red bubble's end books (Natasha's favourite). Only a pop the player
+    /// caused books +5:00; a held one books the credit; a companion, chain, sweep or clear books
+    /// nothing, and floating away never reaches here.</summary>
+    internal static void NoteNatashaEnd(Bubble bubble)
+    {
+        switch (Chaster.NatashasFavourite.RowFor(bubble.IsNatasha, bubble.NatashaCause))
+        {
+            case Chaster.NatashasFavourite.EventId: App.Chaster?.NoteAt("natasha", bubble.CenterPx); break;
+            case Chaster.NatashasFavourite.HeldEventId: App.Chaster?.NoteAt("natasha_held", bubble.CenterPx); break;
         }
     }
 
@@ -655,7 +687,7 @@ public class BubbleService : IDisposable
         for (int i = _bubbles.Count - 1; i >= 0; i--)
         {
             var b = _bubbles[i];
-            if (b.RolledForEgg || !b.IsAmbientEffectBubble || b.AgeMs <= AVATAR_EGG_AGE_MS) continue;
+            if (b.RolledForEgg || !b.IsAmbientEffectBubble || b.AgeMs <= AVATAR_EGG_AGE_MS || b.IsResisting) continue;
             // Never claim fullscreen-takeover payloads (#628): popping a "video"/"htlink" bubble opens a
             // fullscreen LibVLC/browser window mid-choreography, hanging the render thread.
             if (!IsEggClaimableEffect(b.EffectKindId)) continue;
@@ -812,7 +844,10 @@ public class BubbleService : IDisposable
             _ambientHook = new Services.GlobalMouseHook
             {
                 LeftDown = px => !_chaosActive && OnSharedHostLeftDown(px),
-                RightDown = px => !_chaosActive && OnSharedHostLeftDown(px)
+                RightDown = px => !_chaosActive && OnSharedHostLeftDown(px),
+                // A held red bubble learns it was let go from these (see PointerUpSeq).
+                LeftUp = _ => Interlocked.Increment(ref PointerUpSeq),
+                RightUp = _ => Interlocked.Increment(ref PointerUpSeq),
             };
             _ambientHook.Start();
         }
@@ -1046,8 +1081,9 @@ public class BubbleService : IDisposable
         // Track for achievement
         App.Achievements?.TrackBubblePopped();
 
-        // Natasha's favourite: the red one popped. +3:00 on the tab (inert unless the row is on).
-        if (bubble.IsNatasha) App.Chaster?.NoteAt("natasha", bubble.CenterPx);
+        // Natasha's favourite: the red one popped. +5:00 on the tab, but only when the player popped
+        // it (inert unless the row is on). The companion's egg, chains and sweeps book nothing.
+        NoteNatashaEnd(bubble);
 
         // Haptic feedback with combo system
         _ = App.Haptics?.BubblePopAsync();
@@ -2606,9 +2642,16 @@ internal class Bubble
     private bool _hasVariantSprite;   // a per-variant sprite replaced the tinted bubble.png
     private bool _isDrainBubble;      // Bubbles v2 Brain Drain bubble: breathes, glows violet
     private bool _isMagnetBubble;     // Bubbles v2 Magnet bubble: homes on the cursor, pulses steel blue
-    private bool _isNatasha;          // Natasha's favourite: faint red halo, blinks red now and then, +3:00 on pop
+    private bool _isNatasha;          // Natasha's favourite: faint red halo, blinks red now and then, +5:00 when the player pops it
     private System.Windows.Shapes.Ellipse? _natashaWash;
     private DropShadowEffect? _natashaGlow;   // per-window path only: the halo, flared on the blink
+    // Natasha's favourite, pop / hold / let go: who ended it, and the press being held on it.
+    private Chaster.NatashasFavourite.PopCause _natashaCause = Chaster.NatashasFavourite.PopCause.Programmatic;
+    private bool _isResisting;        // a press is down on the red bubble, the mint ring filling
+    private long _resistStartMs;      // Environment.TickCount64 at the press
+    private long _resistUpSeq = -1;   // hook path: BubbleService.PointerUpSeq at the press; -1 = read the buttons
+    private double _resistProgress;   // 0..1, the ring
+    private System.Windows.Shapes.Path? _resistRing;   // WPF paths (per-window + Canvas host); the layer draws its own
     private double _magnetLifeMs;     // its full treat life, the denominator of the early window
     private Chaos.MagnetBubble.Velocity _magnetV;   // its free velocity, DIPs per frame
     private readonly bool _isAmbientTrigger;        // a dashboard trigger bubble (payload or not)
@@ -2749,6 +2792,120 @@ internal class Bubble
 
     internal bool IsNatasha => _isNatasha;
 
+    /// <summary>Who ended this red bubble; read by <see cref="BubbleService.NoteNatashaEnd"/>.</summary>
+    internal Chaster.NatashasFavourite.PopCause NatashaCause => _natashaCause;
+
+    /// <summary>A press is being held on this red bubble right now.</summary>
+    internal bool IsResisting => _isResisting;
+
+    /// <summary>The player pressed the red bubble: start the hold. <paramref name="upSeq"/> is the
+    /// hook's button-up count at the press (host path, where the press was swallowed), or -1 for a
+    /// per-window press, which reads the buttons instead.</summary>
+    private void BeginResist(long upSeq)
+    {
+        if (!_isAlive || _isPopping || _isResisting) return;
+        _isResisting = true;
+        _resistStartMs = Environment.TickCount64;
+        _resistUpSeq = upSeq;
+        _resistProgress = 0;
+        if (!_useLayer) EnsureResistRing();
+    }
+
+    /// <summary>One anim tick of the hold: fill the ring, or end it (pop, resist, or slid off).</summary>
+    private void TickResist()
+    {
+        double heldMs = Environment.TickCount64 - _resistStartMs;
+        bool released = _resistUpSeq >= 0
+            ? Interlocked.Read(ref BubbleService.PointerUpSeq) != _resistUpSeq
+            : !BubbleService.AnyPointerButtonHeld();
+        bool onBubble = !BubbleService.TryCursorPx(out var cur) || ContainsPx(cur);
+        switch (Chaster.NatashasFavourite.StepHold(heldMs, released, onBubble))
+        {
+            case Chaster.NatashasFavourite.HoldStep.Holding:
+                _resistProgress = Chaster.NatashasFavourite.HoldProgress(heldMs);
+                _channelScale = 1.0 - Chaster.NatashasFavourite.HoldShrink * _resistProgress;
+                if (_resistRing != null) _resistRing.Data = RingArc(_size, _resistProgress);
+                break;
+            case Chaster.NatashasFavourite.HoldStep.Popped:
+                EndResist();
+                PopByClick();
+                break;
+            case Chaster.NatashasFavourite.HoldStep.Resisted:
+                CompleteResist();
+                break;
+            default:
+                EndResist();   // slid off: nothing happens, it floats on
+                break;
+        }
+    }
+
+    private void EndResist()
+    {
+        _isResisting = false;
+        _resistProgress = 0;
+        _channelScale = 1.0;
+        if (_resistRing != null) _resistRing.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>The ring filled: it shrinks away (the defuse deflate, no burst, no XP, no payload)
+    /// and books the credit.</summary>
+    private void CompleteResist()
+    {
+        _isResisting = false;
+        _resistProgress = 0;
+        if (_resistRing != null) _resistRing.Visibility = Visibility.Collapsed;
+        if (!_isAlive || _isPopping) return;
+        _isPopping = true;
+        _isDeflating = true;
+        _natashaCause = Chaster.NatashasFavourite.PopCause.Resisted;
+        BubbleService.NoteNatashaEnd(this);
+    }
+
+    private void EnsureResistRing()
+    {
+        if (_resistRing == null)
+        {
+            _resistRing = new System.Windows.Shapes.Path
+            {
+                Width = _size,
+                Height = _size,
+                Stroke = new SolidColorBrush(Color.FromRgb(Chaster.NatashasFavourite.MintR,
+                    Chaster.NatashasFavourite.MintG, Chaster.NatashasFavourite.MintB)),
+                StrokeThickness = 5,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                IsHitTestVisible = false,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            try { _grid.Children.Add(_resistRing); } catch (Exception ex) { Diag.Swallowed(ex, "natasha ring"); }
+        }
+        _resistRing.Data = RingArc(_size, 0);
+        _resistRing.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>The mint ring as a clockwise arc from twelve o'clock, <paramref name="progress"/> of
+    /// the way round, just inside a <paramref name="size"/> box.</summary>
+    internal static Geometry RingArc(double size, double progress)
+    {
+        double c = size / 2.0, r = Math.Max(1, size / 2.0 - 3);
+        progress = Math.Clamp(progress, 0, 1);
+        Geometry g;
+        if (progress >= 0.999) g = new EllipseGeometry(new Point(c, c), r, r);
+        else
+        {
+            double a = progress * 2 * Math.PI;
+            var fig = new PathFigure { StartPoint = new Point(c, c - r), IsClosed = false };
+            fig.Segments.Add(new ArcSegment(new Point(c + r * Math.Sin(a), c - r * Math.Cos(a)),
+                new Size(r, r), 0, progress > 0.5, SweepDirection.Clockwise, true));
+            var path = new PathGeometry();
+            path.Figures.Add(fig);
+            g = path;
+        }
+        g.Freeze();
+        return g;
+    }
+
     /// <summary>Deal this bubble to Natasha. Called right after construction, so the draw
     /// state may already exist on either render path: the halo is added to whichever is up.
     /// Never replaces a glow the bubble already wears (a lucky gold, a magnet blue).</summary>
@@ -2880,7 +3037,7 @@ internal class Bubble
 
     /// <summary>Pop this bubble from a shared-host hook click (UI thread) — routes exactly like a
     /// real press (tease/brittle/channel/benign all handled by OnPlayerPress).</summary>
-    internal void HostHookPop() => OnPlayerPress();
+    internal void HostHookPop(long upSeq = -1) => OnPlayerPress(upSeq);
 
     // ---- Compositor BubbleLayer bridge (see Services/Compositor/BubbleLayer.cs) ----
 
@@ -2973,6 +3130,7 @@ internal class Bubble
         it.Angle = (float)_angle;
         it.Opacity = (float)opacity;
         it.RedWash = _isNatasha && !_isPopping ? (float)Chaster.NatashasFavourite.BubbleWashAt(_timeAlive, MotionFx.AllowAmbientLoops) : 0f;
+        it.HoldRing = _isResisting && !_isPopping ? (float)_resistProgress : 0f;
 
         if (_fuseRing != null)
         {
@@ -3582,6 +3740,12 @@ internal class Bubble
             TickChannel();
             if (!_isAlive || _isDestroyed) return;
         }
+        // Natasha's favourite: a press held on the red bubble fills the mint ring.
+        if (_isResisting && !_isPopping)
+        {
+            TickResist();
+            if (!_isAlive || _isDestroyed) return;
+        }
 
         // Frozen field (freeze-bubble power-up): a chaos bubble that isn't mid-pop holds its
         // position + fuse, but still falls through to the visual block so its aura keeps pulsing.
@@ -3665,7 +3829,7 @@ internal class Bubble
                 return;
             }
         }
-        else if (frozen || _isChanneling || _claimedByAvatar)
+        else if (frozen || _isChanneling || _claimedByAvatar || _isResisting)
         {
             // Held in place — no motion, no fuse tick. The visual block below still runs so the
             // blue freeze aura pulses and the impact shudder plays.
@@ -4323,11 +4487,19 @@ internal class Bubble
     /// trance pauses, the bubble shrinks under the hold, and only a completed hold defuses.
     /// A press without the focus to pay triggers the bubble in your grip.
     /// </summary>
-    private void OnPlayerPress()
+    private void OnPlayerPress(long upSeq = -1)
     {
         // Claimed by the companion mid-easter-egg: the user can't pop it out from under her;
         // only her scripted PopByAvatar gets through (see the Pop() guard).
         if (_claimedByAvatar) return;
+
+        // Natasha's favourite is a choice: a press starts the hold. Let go early and it pops like a
+        // click (+5:00); hold it until the mint ring fills and it is resisted (a credit).
+        if (_isNatasha)
+        {
+            BeginResist(upSeq);
+            return;
+        }
 
         // The Tease: ANY mouse-down is the mistake — click or attempted hold, it triggers.
         // (Hovering never counts; this only runs on a real press.)
@@ -4454,7 +4626,10 @@ internal class Bubble
     private void PopByClick()
     {
         bool wasPopping = _isPopping;
+        var priorCause = _natashaCause;
+        _natashaCause = Chaster.NatashasFavourite.PopCause.Player;
         Pop();
+        if (wasPopping || !_isPopping) _natashaCause = priorCause;   // it did not land: nothing was the player's
         if (!wasPopping && _isPopping && _spec != null)
         {
             _onClickPop?.Invoke(this);
@@ -4463,6 +4638,17 @@ internal class Bubble
             // lives never learn here — their lesson is the completed hold (CompleteDefuse).
             if (!_spec.IsLive) Chaos.ChaosBubbleHints.MarkLearned(Chaos.ChaosBubbleHints.KeyFor(_spec));
         }
+    }
+
+    /// <summary>A stare-to-pop (Focus Gaze): the player's own pop, so a red bubble books like a
+    /// click. Chains, sweeps and the companion call <see cref="Pop"/> and book nothing.</summary>
+    internal void PopByGaze()
+    {
+        bool wasPopping = _isPopping;
+        var priorCause = _natashaCause;
+        _natashaCause = Chaster.NatashasFavourite.PopCause.Player;
+        Pop();
+        if (wasPopping || !_isPopping) _natashaCause = priorCause;
     }
 
     public void Pop()
@@ -5248,7 +5434,7 @@ internal class Bubble
     /// Live chaos bubbles are excluded (2026-06-11 verb rework): defusing is a HELD channel
     /// paid in focus — a gaze dwell would be a free instant snap around the whole economy.
     /// </summary>
-    public bool CanGazePop => _isAlive && !_isPopping && !_isDestroyed && _isClickable && !_claimedByAvatar
+    public bool CanGazePop => _isAlive && !_isPopping && !_isDestroyed && _isClickable && !_claimedByAvatar && !_isResisting
                               && (_spec == null || (!_spec.IsLive && !_spec.IsTease && !_spec.IsBrittle));
 
     /// <summary>

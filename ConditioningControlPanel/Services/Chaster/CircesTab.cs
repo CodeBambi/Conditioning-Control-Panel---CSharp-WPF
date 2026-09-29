@@ -68,6 +68,8 @@ public sealed class TabState
     /// the heat rule (<see cref="TabDayEnd.Heated"/>).</summary>
     [JsonProperty("heat_day")] public string? HeatDay { get; set; }
     [JsonProperty("heat")] public Dictionary<string, int>? Heat { get; set; }
+    /// <summary>Steps a credit cooled today (<see cref="CircesMood.Cool"/>). Resets with <see cref="HeatDay"/>.</summary>
+    [JsonProperty("heat_cool")] public int HeatCool { get; set; }
 
     /// <summary>The last daily-quest board seen: its day and how many dailies were still open.
     /// Judged once its day is over (the dailies-left row).</summary>
@@ -85,6 +87,10 @@ public sealed class TabState
     /// <summary>The same adds, for one UTC month ("yyyy-MM"). The ladder reads this.</summary>
     [JsonProperty("added_month")] public string? AddedMonth { get; set; }
     [JsonProperty("added_month_s")] public int AddedMonthSeconds { get; set; }
+
+    /// <summary>The raffle's day ledger: per UTC day, what CCP booked and what it put on the lock,
+    /// sent with the raffle verify. See <see cref="ChasterLadder.Claims"/>.</summary>
+    [JsonProperty("ladder")] public LadderLedger? Ladder { get; set; }
 }
 
 public enum TabRefusal
@@ -114,13 +120,17 @@ public enum TabRefusal
 public readonly record struct TabBooking(int AppliedSeconds, TabRefusal Refusal)
 {
     public bool Booked => AppliedSeconds != 0;
+
+    /// <summary>Nobody did anything to cause it: a red flash's ring ran out. Circe's lines stay
+    /// quiet for it (her "popped" lines would blame a pop the player never made).</summary>
+    public bool Unprompted { get; init; }
 }
 
 public enum TabPushKind { None, Add, Remove }
 
 /// <summary>What one settle sends. <paramref name="Seconds"/> is the priced part, off the tab.
-/// <paramref name="CatchUp"/> is a relock catch-up riding the SAME write (never on the tab, never
-/// widens the floor, but counts against the day's push ceiling and the ladder like any add).</summary>
+/// <paramref name="CatchUp"/> is always 0 now (the relock catch-up is gone, see LockRelock); it
+/// stays so a pending mark written by an older build still resolves the way it was sent.</summary>
 public readonly record struct TabPush(TabPushKind Kind, int Seconds, int CatchUp = 0)
 {
     /// <summary>What goes on the wire: the price plus the catch-up.</summary>
@@ -231,24 +241,6 @@ public static class CircesTab
             if (take > 0) return new(TabPushKind.Remove, take);
         }
         return new(TabPushKind.None, 0);
-    }
-
-    /// <summary>
-    /// Fold a relock catch-up into a planned add (security pass 3, 2026-09-26). The catch-up rides
-    /// the priced write, so it only ever reaches the lock when the price does, and a run of failed
-    /// pushes can never stack catch-ups. It counts against the day's push ceiling: the catch-up and
-    /// the price together never pass what is left of the daily limit today. When the catch-up alone
-    /// would leave no room for a price, it is dropped (a partial catch-up still lands in the past,
-    /// so it would buy nothing but lock time).
-    /// </summary>
-    public static TabPush WithCatchUp(TabPush plan, int catchUpSeconds, TabState state, TabLimits limits, DateTime localNow)
-    {
-        if (plan.Kind != TabPushKind.Add || plan.Seconds <= 0) return plan;
-        var catchUp = Math.Min(Math.Max(0, catchUpSeconds), LockRelock.MaxCatchUpSeconds + LockRelock.MarginSeconds);
-        if (catchUp == 0) return plan with { CatchUp = 0 };
-        var room = Math.Max(0, limits.DailySeconds - PushedToday(state, localNow));
-        if (catchUp >= room) return plan with { CatchUp = 0 };
-        return new TabPush(TabPushKind.Add, Math.Min(plan.Seconds, room - catchUp), catchUp);
     }
 
     /// <summary>Call only after Chaster said yes. A failed push changes nothing, so the balance

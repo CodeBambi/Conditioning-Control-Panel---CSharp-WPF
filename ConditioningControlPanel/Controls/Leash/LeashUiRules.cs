@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using ConditioningControlPanel.Services.Leash;
 
 namespace ConditioningControlPanel.Controls.Leash;
@@ -196,7 +197,126 @@ public static class LeashUiRules
         LeashEventKind.AssignDone => "leash_evt_assign_done",
         LeashEventKind.AssignMissed => "leash_evt_assign_missed",
         LeashEventKind.PunishDone => "leash_evt_punish_done",
+        LeashEventKind.PunishSkipped => "leash_evt_punish_skipped",
         _ => null,
+    };
+
+    // ---- receipts (CONTRACT "Receipts") ---------------------------------------------------
+
+    /// <summary>The items that carry receipts back to the holder: only these report <c>seen</c>.</summary>
+    public static bool CarriesReceipt(LeashEventKind k) =>
+        k is LeashEventKind.Punish or LeashEventKind.Assign or LeashEventKind.Reward or LeashEventKind.Tug;
+
+    /// <summary>What the leashed side does with an event as it lands. <paramref name="panelShowing"/> =
+    /// the panel (where toasts draw) is up and not minimised; <paramref name="tugWobbles"/> = the panel
+    /// or the launcher is up with motion on, so a tug's wobble plays there. A receipt item is only
+    /// reported <c>seen</c> when it really was on screen; one that landed while nothing showed it
+    /// waits and is told when the panel returns.</summary>
+    public static (bool Toast, bool Seen, bool Hold) EventNotice(LeashEventKind k, bool panelShowing, bool tugWobbles)
+    {
+        if (!CarriesReceipt(k)) return (true, false, false);
+        if (panelShowing) return (true, true, false);
+        if (k == LeashEventKind.Tug && tugWobbles) return (false, true, false);
+        return (false, false, true);
+    }
+
+    /// <summary>Notices that wait for the panel to come back; older ones are dropped (and stay unseen).</summary>
+    public const int HeldNotices = 6;
+
+    /// <summary>Rows the holder card lists under "Sent lately".</summary>
+    public const int SentRows = 4;
+
+    /// <summary>The dots an item's strip draws: sent, arrived, seen, and one for the ending when
+    /// the item has one (offers, punishments and tasks do; rewards and tugs end at seen).</summary>
+    public static int Dots(LeashItemKind k) => k is LeashItemKind.Reward or LeashItemKind.Tug ? 3 : 4;
+
+    /// <summary>Which dots are lit: sent (unless it never left), arrived, seen, then the ending.</summary>
+    public static bool[] Lit(LeashSentItem i)
+    {
+        var lit = new bool[Dots(i.Kind)];
+        if (i.Step == LeashStep.Refused) return lit;
+        lit[0] = true;
+        lit[1] = i.Reached;
+        lit[2] = i.WasSeen;
+        if (lit.Length > 3) lit[3] = LeashSteps.IsEnding(i.Step);
+        return lit;
+    }
+
+    /// <summary>The Offer chip's step while the offer waits: arrived or seen, once the server
+    /// speaks receipts; null otherwise (the chip then reads as it always did). <paramref name="sent"/>
+    /// is newest first, as <c>SentTo</c> gives it.</summary>
+    public static LeashStep? OfferStep(bool supported, IEnumerable<LeashSentItem> sent)
+    {
+        if (!supported) return null;
+        var item = sent.FirstOrDefault(i => i.Kind == LeashItemKind.Offer);
+        return item != null && LeashSteps.Rank(item.Step) is 1 or 2 ? item.Step : null;
+    }
+
+    /// <summary>The word for where an item got to, as a loc key.</summary>
+    public static string StepKey(LeashStep s) => "leash_step_" + s.ToString().ToLowerInvariant();
+
+    /// <summary>Good, neutral or bad, for the step word's colour: 1 = done or accepted,
+    /// -1 = declined, missed or refused, 0 = on its way (or skipped, which is nobody's fault).</summary>
+    public static int Tone(LeashStep s) => s switch
+    {
+        LeashStep.Done or LeashStep.Accepted => 1,
+        LeashStep.Declined or LeashStep.Missed or LeashStep.Refused => -1,
+        _ => 0,
+    };
+
+    /// <summary>When a step happened, in the viewer's local time: "14:05" today, "28.09 14:05" before.</summary>
+    public static string StepTime(DateTimeOffset at, DateTimeOffset now)
+    {
+        var l = at.ToLocalTime();
+        return l.Date == now.ToLocalTime().Date
+            ? l.ToString("HH:mm", CultureInfo.InvariantCulture)
+            : l.ToString("dd.MM HH:mm", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>What was sent, in a few words: "Lines 5", "Sticker: Star", "Task: 30 min", "Tug".
+    /// An item known only from a receipt reads "A punishment" / "A task". <paramref name="loc"/>
+    /// resolves a loc key (the card passes <c>Loc.Get</c>, the suite the key itself).</summary>
+    public static string ItemText(LeashSentItem i, Func<string, string> loc)
+    {
+        string F(string key, object arg) => string.Format(CultureInfo.InvariantCulture, loc(key), arg);
+        return i.Kind switch
+        {
+            LeashItemKind.Punish when i.Punish is { } k => loc(Key(k)) + " " + SizeText(k, i.Size ?? 0),
+            LeashItemKind.Punish => loc("leash_item_punish"),
+            LeashItemKind.Assign when i.Assign is { } a => F("leash_item_task", F(AssignSizeKey(a), i.Size ?? 0)),
+            LeashItemKind.Assign => loc("leash_item_task_any"),
+            LeashItemKind.Reward when i.Reward == RewardKind.Sticker && i.Token != null
+                => loc(Key(RewardKind.Sticker)) + ": " + loc("leash_rew_sticker_" + i.Token),
+            LeashItemKind.Reward when i.Reward == RewardKind.Praise && i.Token != null
+                => loc(Key(RewardKind.Praise)) + ": " + loc("leash_praise_" + i.Token),
+            LeashItemKind.Reward when i.Reward == RewardKind.Credit => loc(Key(RewardKind.Credit)) + " -" + Clock(i.Size ?? 0),
+            LeashItemKind.Reward when i.Reward is { } r => loc(Key(r)),
+            LeashItemKind.Reward => loc("leash_btn_reward"),
+            LeashItemKind.Tug => loc("leash_btn_tug"),
+            _ => loc("leash_item_offer"),
+        };
+    }
+
+    /// <summary>Every step with its time, for the row's tooltip: "sent 14:02  ·  arrived 14:03  ·
+    /// seen 14:05  ·  done 14:30". A refused send says what the server said; a skipped one why.</summary>
+    public static string Timeline(LeashSentItem i, DateTimeOffset now, Func<string, string> loc)
+    {
+        if (i.Step == LeashStep.Refused)
+            return loc(StepKey(LeashStep.Refused)) + ": " + loc(ResultKey(i.Refusal ?? LeashSendStatus.Refused));
+        var parts = new List<string> { loc(StepKey(LeashStep.Sent)) + " " + StepTime(i.SentAt, now) };
+        if (i.ArrivedAt is { } a) parts.Add(loc(StepKey(LeashStep.Arrived)) + " " + StepTime(a, now));
+        if (i.SeenAt is { } s) parts.Add(loc(StepKey(LeashStep.Seen)) + " " + StepTime(s, now));
+        if (LeashSteps.IsEnding(i.Step)) parts.Add(loc(StepKey(i.Step)) + " " + StepTime(i.StepAt, now));
+        var line = string.Join("  ·  ", parts);
+        return i.Step == LeashStep.Skipped ? line + "\n" + loc("leash_skip_unplayable") : line;
+    }
+
+    /// <summary>The "{0} min" / "{0} quests" / "a video" key of a task size.</summary>
+    public static string AssignSizeKey(AssignKind k) => k switch
+    {
+        AssignKind.Minutes => "leash_assign_minutes_n",
+        AssignKind.Quests => "leash_assign_quests_n",
+        _ => "leash_assign_video_n",
     };
 
     /// <summary>"until 18:30" style wording for a DND end, in the viewer's local time.</summary>
@@ -221,4 +341,28 @@ public static class LeashUiRules
 
     /// <summary>After a panic press the gate stands back this long, then returns at the next idle moment.</summary>
     public static readonly TimeSpan PanicSnooze = TimeSpan.FromMinutes(10);
+
+    /// <summary>The line the panel says when the runner stopped by itself, as a loc key taking
+    /// the holder's name. <paramref name="skip"/> is what became of a video that will not play.</summary>
+    public static string StopKey(LeashTaskStopped s, PunishKind? kind, LeashSkipResult? skip = null)
+    {
+        if (s.Assignment)
+            return s.Reason == LeashTaskStop.Unplayable ? "leash_assign_stop_unplayable" : "leash_assign_stop_closed";
+        return s.Reason switch
+        {
+            LeashTaskStop.Unplayable => skip switch
+            {
+                LeashSkipResult.Skipped => "leash_stop_unplayable_skipped",
+                LeashSkipResult.Marked => "leash_stop_unplayable_marked",
+                _ => "leash_stop_video",
+            },
+            LeashTaskStop.CouldNotContinue => "leash_stop_no_phrases",
+            _ => kind switch
+            {
+                PunishKind.Bubbles => "leash_stop_bubbles",
+                PunishKind.Video => "leash_stop_video",
+                _ => "leash_stop_session",
+            },
+        };
+    }
 }

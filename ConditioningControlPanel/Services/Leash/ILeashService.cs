@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ConditioningControlPanel.Services.Leash;
@@ -26,14 +27,17 @@ public interface ILeashService
 
     // Holder side.
     Task<LeashSendResult> OfferAsync(string friendId);
-    Task ReleaseAsync(string leashedId);
+    /// <summary>The holder lets go. True when the server took it.</summary>
+    Task<bool> ReleaseAsync(string leashedId);
     Task<LeashSendResult> AssignAsync(string leashedId, AssignKind kind, int size, LeashWatch? watch = null);
     Task<LeashSendResult> PunishAsync(string leashedId, PunishKind kind, int size, LeashWatch? watch = null);
     Task<LeashSendResult> RewardAsync(string leashedId, RewardKind kind, string? stickerOrPoke = null, int? size = null);
     Task<LeashSendResult> TugAsync(string leashedId);
 
     // Leashed side.
-    Task<bool> AnswerAsync(string holderId, bool accept, LeashIntensity intensity);
+    /// <summary>Only <see cref="LeashAnswerResult.Done"/> is a success; the ask card keeps itself
+    /// open and says why on anything else.</summary>
+    Task<LeashAnswerResult> AnswerAsync(string holderId, bool accept, LeashIntensity intensity);
     /// <summary>Never refused, never priced, never gated. Works offline-first: the local state
     /// drops the leash at once and the call is retried until the server has it.</summary>
     Task CutAsync();
@@ -44,4 +48,28 @@ public interface ILeashService
     Task SetVideoMaxAsync(int minutes);
     Task CompleteAsync(string pid);
     Task<bool> PardonAsync(string pid);
+
+    /// <summary>A punishment video that will not play: ask the server to drop it (<c>punish_skip</c>,
+    /// reason <c>unplayable</c>). When it cannot, the punishment stays pending but this client
+    /// leaves it off the gate for a day and says so.</summary>
+    Task<LeashSkipResult> SkipUnplayableAsync(string pid) => Task.FromResult(LeashSkipResult.Marked);
+
+    /// <summary>True while this client holds a "will not play" mark on the punishment.</summary>
+    bool IsUnplayable(string pid) => false;
+
+    // Receipts (CONTRACT "Receipts"). Defaults keep a service that predates them quiet.
+
+    /// <summary>Leashed side: the item with this id (an offer's id, a pid, an aid, a reward's or a
+    /// tug's event id) is on screen right now. Reported <c>seen</c> once, on the next poll.</summary>
+    void NoteShown(string? id) { }
+
+    /// <summary>Holder side: what this account sent <paramref name="leashedId"/> lately, newest
+    /// first, with how far each got.</summary>
+    IReadOnlyList<LeashSentItem> SentTo(string leashedId) => Array.Empty<LeashSentItem>();
+
+    /// <summary>True once the server has shown it speaks receipts. False = draw no steps at all.</summary>
+    bool ReceiptsSupported => false;
+
+    /// <summary>Raised on the UI thread when a receipt, a send or an ending moved a sent item.</summary>
+    event Action? ReceiptsChanged { add { } remove { } }
 }

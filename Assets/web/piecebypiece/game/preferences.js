@@ -13,10 +13,17 @@ const clamp = value => Math.max(0, Math.min(1, value));
 export function presentation() {
   const volume = Number.isFinite(saved.volume) ? clamp(saved.volume) : hostVolume;
   return {
-    experience: saved.experience === 'distraction' ? 'distraction' : 'classic',
+    // Distraction is the default (2026-09-28). Only a saved explicit 'classic' keeps
+    // Classic: setPresentation writes `experience` only when a button asks for it,
+    // so nobody was ever saved as classic by default.
+    experience: saved.experience === 'classic' ? 'classic' : 'distraction',
     volume: Math.min(volume, hostVolume),
     reducedMotion: !!saved.reducedMotion || hostReduced || !!osMotion?.matches,
     motionLocked: hostReduced || !!osMotion?.matches,
+    // Camera (owner, 2026-09-28): follow the move, replay captures, and the turn card's look.
+    followCam: saved.followCam !== false,
+    replays: saved.replays !== false,
+    turnCard: ['slam', 'ribbon', 'tag'].includes(saved.turnCard) ? saved.turnCard : 'slam',
     soundLocked: hostVolume === 0,
   };
 }
@@ -31,6 +38,9 @@ export function setPresentation(patch) {
   if (['classic', 'distraction'].includes(patch.experience)) saved.experience = patch.experience;
   if (typeof patch.reducedMotion === 'boolean') saved.reducedMotion = patch.reducedMotion;
   if (Number.isFinite(patch.volume)) saved.volume = clamp(patch.volume);
+  if (typeof patch.followCam === 'boolean') saved.followCam = patch.followCam;
+  if (typeof patch.replays === 'boolean') saved.replays = patch.replays;
+  if (['slam', 'ribbon', 'tag'].includes(patch.turnCard)) saved.turnCard = patch.turnCard;
   try { globalThis.localStorage?.setItem(KEY, JSON.stringify(saved)); } catch { /* session only */ }
   return apply();
 }

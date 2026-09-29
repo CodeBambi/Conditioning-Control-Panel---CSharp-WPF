@@ -5,6 +5,6 @@
        CoreReleaseContent.AppVersion and every mod's MinAppVersion check then agree on every head.
        A release bumps this and UpdateService.AppVersion (see ConditioningControlPanel/CLAUDE.md). -->
   <PropertyGroup>
-    <Version>6.11.3</Version>
+    <Version>6.11.5</Version>
   </PropertyGroup>
 </Project>

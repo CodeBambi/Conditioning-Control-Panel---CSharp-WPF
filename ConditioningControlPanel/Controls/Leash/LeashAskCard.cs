@@ -127,7 +127,29 @@ public sealed class LeashAskCard : Border
         acts.Children.Add(no);
         acts.Children.Add(yes);
         _body.Children.Add(acts);
+
+        _error = LeashLook.Wrap(FriendsLook.Label("", 12, FriendsLook.GoldBrush, null, FontWeights.SemiBold));
+        _error.Margin = new Thickness(2, 10, 2, 0);
+        _error.TextAlignment = TextAlignment.Center;
+        _error.Visibility = Visibility.Collapsed;
+        _error.Tag = "leash-ask-error";
+        _body.Children.Add(_error);
     }
+
+    private TextBlock? _error;
+    private bool _gone;
+
+    /// <summary>The reason the last answer did not go through, or null.</summary>
+    internal string? ErrorShown => _error?.Visibility == Visibility.Visible ? _error.Text : null;
+
+    /// <summary>What the card says when an answer did not go through. Null = it went through.</summary>
+    internal static string? ErrorKey(LeashAnswerResult r) => r switch
+    {
+        LeashAnswerResult.Done => null,
+        LeashAnswerResult.Gone => "leash_ask_err_gone",
+        LeashAnswerResult.Off => "leash_ask_err_off",
+        _ => "leash_ask_err_failed",
+    };
 
     /// <summary>Four pictures with a few words each, and two plain lines. Placeholder until the
     /// explain lane lands; it holds the same room the real explainer will.</summary>
@@ -213,19 +235,35 @@ public sealed class LeashAskCard : Border
                 if (c is Border b && b.Tag is string s && s.EndsWith(":on")) LeashFx.Pop(b);
     }
 
+    /// <summary>Sends the answer. Only a reply the server really took closes the card: anything
+    /// else keeps it open and says why (it used to close silently and read as a decline). An offer
+    /// that is gone leaves "Not now" as a plain close.</summary>
     internal async Task AnswerAsync(bool accept)
     {
         if (_busy) return;
+        if (_gone) { Dismissed?.Invoke(); return; }
         _busy = true;
         bool wasEnabled = PutItOnButton?.IsEnabled ?? true;
         if (PutItOnButton != null) PutItOnButton.IsEnabled = false;
-        bool ok = false;
-        try { if (_svc() is { } s) ok = await s.AnswerAsync(_offer.From.Id, accept, _level); }
+        var result = LeashAnswerResult.Failed;
+        try { if (_svc() is { } s) result = await s.AnswerAsync(_offer.From.Id, accept, _level); }
         catch (Exception ex) { App.Logger?.Debug("[Leash] answer failed: {E}", ex.Message); }
         _busy = false;
-        if (PutItOnButton != null) PutItOnButton.IsEnabled = wasEnabled;
-        if (ok) Explain.LeashAskIntro.Answered();
-        Answered?.Invoke(_offer, accept && ok, _level);
+        if (PutItOnButton != null) PutItOnButton.IsEnabled = wasEnabled && result != LeashAnswerResult.Gone;
+        if (ErrorKey(result) is { } key)
+        {
+            App.Logger?.Information("[Leash] answer to {From} did not go through: {R}", _offer.From.Id, result);
+            _gone = result == LeashAnswerResult.Gone;
+            if (_error != null)
+            {
+                _error.Text = Loc.GetF(key, _offer.From.Name);
+                _error.Visibility = Visibility.Visible;
+            }
+            LeashFx.Denied();
+            return;
+        }
+        Explain.LeashAskIntro.Answered();
+        Answered?.Invoke(_offer, accept, _level);
     }
 
     internal void Dismiss() => Dismissed?.Invoke();

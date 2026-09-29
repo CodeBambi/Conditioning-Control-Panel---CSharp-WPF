@@ -3,8 +3,10 @@ using System;
 namespace ConditioningControlPanel.Services.Chaster;
 
 /// <summary>
-/// Natasha's favourite: about one ambient bubble in ten and one flash in ten wears a faint red.
-/// Pop that bubble, or see that flash, and 5:00 goes on the tab (owner, 2026-09-26: it is the
+/// Natasha's favourite: about one ambient bubble in ten (and, with the dodge setting on, one
+/// flash in ten) wears a faint red. Pop that bubble yourself, or let that flash's ring run out,
+/// and 5:00 goes on the tab. Hold the bubble instead and it is 1:00 off (see "pop, hold, let go"
+/// and "the flash dodge" below) (owner, 2026-09-26: it is the
 /// one price that meets everyday use, so it should sting, and the red should hide better). The cue is meant to mix in
 /// with the others (a thin red halo, and every couple of seconds a short red blink across the
 /// picture), visible to someone who knows, easy to miss for someone who does not.
@@ -42,6 +44,73 @@ public static class NatashasFavourite
 
     public static bool Roll(Random rng) => rng.Next(OneIn) == 0;
 
+    // ============================== pop, hold, let go ==============================
+    // Tier-2 feedback (2026-09-29): red "feels like RNG, I didn't do anything to deserve that".
+    // So the red bubble is a choice now. A quick click pops it (+5:00, as before). Press and HOLD
+    // it for HoldMs and a mint ring fills round it: it shrinks away and books a small credit.
+    // Letting it float past books nothing, and so does any pop the player did not cause.
+
+    /// <summary>The credit row for a held red bubble.</summary>
+    public const string HeldEventId = "natasha_held";
+
+    /// <summary>How long a press must stay down on the red bubble to resist it.</summary>
+    public const int HoldMs = 1200;
+
+    /// <summary>-1:00, the credit a resisted red bubble books.</summary>
+    public const int HeldSeconds = -60;
+
+    /// <summary>Where a press on the red bubble stands after one tick.</summary>
+    public enum HoldStep
+    {
+        /// <summary>Still down, still on it: the ring keeps filling.</summary>
+        Holding,
+        /// <summary>Let go before the ring filled: it pops, like a click.</summary>
+        Popped,
+        /// <summary>The ring filled: resisted.</summary>
+        Resisted,
+        /// <summary>The pointer slid off it while down: nothing happens, it floats on.</summary>
+        SlidOff,
+    }
+
+    /// <summary>One tick of a held press. A full ring wins even on the tick the button comes up,
+    /// so a hold that reached 1.2 s is never read as a click.</summary>
+    public static HoldStep StepHold(double heldMs, bool released, bool onBubble)
+    {
+        if (heldMs >= HoldMs) return HoldStep.Resisted;
+        if (released) return HoldStep.Popped;
+        if (!onBubble) return HoldStep.SlidOff;
+        return HoldStep.Holding;
+    }
+
+    /// <summary>0..1, how full the mint ring is.</summary>
+    public static double HoldProgress(double heldMs) =>
+        double.IsNaN(heldMs) ? 0 : Math.Clamp(heldMs / HoldMs, 0, 1);
+
+    /// <summary>The ring's mint (the house mint, #5FFFD0).</summary>
+    public const byte MintR = 0x5F, MintG = 0xFF, MintB = 0xD0;
+
+    /// <summary>How far the bubble shrinks inside the ring over a full hold.</summary>
+    public const double HoldShrink = 0.2;
+
+    /// <summary>Who ended a red bubble.</summary>
+    public enum PopCause
+    {
+        /// <summary>The app did it: the companion, a chain, a sweep, a clear. Never books.</summary>
+        Programmatic,
+        /// <summary>The player's own click or stare.</summary>
+        Player,
+        /// <summary>The player held it until the ring filled.</summary>
+        Resisted,
+    }
+
+    /// <summary>The row a bubble's end books, or null. Only a red bubble books, and only when the
+    /// player caused it.</summary>
+    public static string? RowFor(bool isNatasha, PopCause cause) =>
+        !isNatasha ? null
+        : cause == PopCause.Player ? EventId
+        : cause == PopCause.Resisted ? HeldEventId
+        : null;
+
     /// <summary>0..1 envelope of the blink at <paramref name="aliveSec"/>: two 90 ms triangles,
     /// then dark until the next period. Multiply by <see cref="WashPeak"/> for the alpha.</summary>
     public static double BlinkAt(double aliveSec)
@@ -60,6 +129,38 @@ public static class NatashasFavourite
         BubbleWashBase + (animate ? WashAlphaAt(aliveSec) : 0);
 
     public static double WashAlphaAt(double aliveSec) => WashPeak * BlinkAt(aliveSec);
+
+    // ============================== the flash dodge ==============================
+    // A red flash used to book +5:00 the moment it showed: nothing to do, nothing to learn. Now it
+    // is a setting (AppSettings.ChasterFlashDodge, off by default: off means no red flashes at
+    // all). On, a red flash shows a 4 s ring; click it or fling it away before the ring empties
+    // and nothing books, let the ring empty and it is +5:00.
+
+    /// <summary>How long the ring gives the player.</summary>
+    public const int DodgeMs = 4000;
+
+    /// <summary>A red flash is only dealt to someone who touched the mouse or keyboard within
+    /// this many seconds: a player who walked away cannot dodge, so they are never dealt one.</summary>
+    public const int DodgeIdleSec = 60;
+
+    /// <summary>A red flash stays up at least this long, so a short flash duration can never
+    /// fade it out from under the ring (that would be a free dodge nobody made).</summary>
+    public const int DodgeMinLifetimeMs = DodgeMs + 600;
+
+    /// <summary>Whether a flash may be dealt red at all (the roll itself still decides). Only a
+    /// flash the player can dodge: a click-through flash (Clickable off, a session that turns it
+    /// off, Solid mode on the shared host) can be neither clicked nor flung, so its ring would
+    /// always run out and book +5:00.</summary>
+    public static bool FlashMayRoll(bool dodgeOn, bool clickable, int idleSeconds) =>
+        dodgeOn && clickable && idleSeconds >= 0 && idleSeconds < DodgeIdleSec;
+
+    /// <summary>1..0, how much ring is left <paramref name="elapsedMs"/> after the flash showed.</summary>
+    public static double DodgeLeft(double elapsedMs) =>
+        double.IsNaN(elapsedMs) ? 1 : 1 - Math.Clamp(elapsedMs / DodgeMs, 0, 1);
+
+    /// <summary>At the ring's end: book +5:00 only if the flash is still up and no hand or stare
+    /// dismissed or flung it. A flash the app cleared (panic, stop) is not up, so it books nothing.</summary>
+    public static bool DodgeBooks(bool stillUp, bool dodged) => stillUp && !dodged;
 
     private static double Pulse(double t)
     {

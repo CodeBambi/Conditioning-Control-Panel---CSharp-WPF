@@ -208,7 +208,7 @@ export async function mount(ctx) {
       <p class="bo-ghost-hint" hidden></p>
       <button class="bo-pause-button" type="button" aria-label="Pause game">&#9208; Pause</button>
       <div class="bo-paused" hidden><div class="bo-pause-card"><h2>PAUSED</h2><p class="bo-best" hidden></p><button type="button" data-menu="resume">Resume</button><button type="button" data-menu="save-menu" hidden>Save and menu</button><p class="bo-save-note" hidden>Continue restarts this board with its starting colour. Best combo kept.</p><button type="button" data-menu="options">Options</button></div></div>
-      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><fieldset class="bo-pictures" hidden><legend>Pictures</legend><div class="bo-pic-tabs" role="group" aria-label="Flavour"></div><div class="bo-pic-niches" aria-label="Niches inside"></div><form class="bo-pic-add"><span aria-hidden="true">r/</span><input type="text" aria-label="Add a niche" placeholder="add a niche" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" maxlength="60"><button type="submit">Add</button></form><p class="bo-pic-note" aria-live="polite"></p></fieldset><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><label class="bo-lock-row"><span><input type="checkbox" data-mouselock>Capture the mouse while playing</span></label><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>A click captures the mouse; Escape frees it and pauses.</p><button type="button" data-menu="close-options">Back</button></div></section>
+      <section class="bo-options" hidden role="dialog" aria-modal="true" aria-labelledby="bo-options-title"><div class="bo-pause-card"><h2 id="bo-options-title">Options</h2><label>Ball pace<select class="bo-option-pace"><option value="0.4">Gentle</option><option value="0.55">Normal</option><option value="0.8">Fast</option></select></label><fieldset class="bo-pictures" hidden><legend>Pictures</legend><div class="bo-pic-tabs" role="group" aria-label="Flavour"></div><div class="bo-pic-niches" aria-label="Niches inside"></div><form class="bo-pic-add"><span aria-hidden="true">r/</span><input type="text" aria-label="Add a niche" placeholder="add a niche" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" maxlength="60"><button type="submit">Add</button></form><p class="bo-pic-note" aria-live="polite"></p></fieldset><fieldset class="bo-audio-options"><legend>Audio</legend>${[['music','Music'],['sfx','Game sounds'],['sub','Voice and word cues']].map(([key,label])=>`<label>${label}<span><input type="range" data-audio="${key}" min="0" max="1" step="0.01"><output></output></span></label>`).join('')}</fieldset><label class="bo-lock-row"><span><input type="checkbox" data-mouselock>Capture the mouse while playing</span></label><button type="button" data-menu="skip-board" class="bo-skip-board" hidden>Skip this board</button><p>Mouse, drag, arrows or A / D to steer. Space to launch.<br>A click captures the mouse; Escape frees it and pauses.</p><button type="button" data-menu="close-options">Back</button></div></section>
       <button class="bo-gear" type="button" aria-label="${t('br_breakout_dev', 'dev toggles')}" aria-expanded="false"></button>
       <div class="bo-dev" hidden>
         <div class="bo-dev-header"><strong>Developer tools</strong><button type="button" data-do="performance">Performance</button><button type="button" data-do="hide-tools">Hide all (F2)</button></div>
@@ -453,9 +453,9 @@ export async function mount(ctx) {
       case 'wall':
         shutdownCover?.remove();shutdownCover=null;
         if(s.iris || s.stats.walls===4) au('warmIrisVoice');
-        if (cue('wall')) au('wallCleared');
+        if (!d.skipped && cue('wall')) au('wallCleared');   // a skipped board is not a clear: no chime, no wash
         setSp(Number(d.sp) || s.stats.sp || 0);
-        onWall(Number(d.walls) || s.stats.walls || 0, d.mantra);
+        onWall(Number(d.walls) || s.stats.walls || 0, d.mantra, d.skipped);
         break;
       case 'crack': if (cue('crack', 2000)) { au('crack'); host.crack(); } break;
       case 'word': if (d.fired && d.key !== 'BLANK') au('word', d.key, d.fx || d); if (s.state === 'colour' && Math.random() < 0.5) say(d.word); break;
@@ -481,9 +481,9 @@ export async function mount(ctx) {
     return { x: r.left + a.x, y: r.top + a.y, w: b.x - a.x, h: b.y - a.y };
   }
   /** Every wall: the wash; a mantra wall: the sub rule; every third wall or after a source change: fresh pictures. */
-  function onWall(n, mantra) {
+  function onWall(n, mantra, skipped = false) {
     const colour = game.snapshot().state === 'colour';    // grey is payload-free: no host picture, no sub
-    if (!colour) { /* noop */ }
+    if (!colour || skipped) { /* noop: a skipped board is not a clear, so no wash (the desktop pays XP for one) */ }
     else if (mantra) { const w = media.words.find(x => x.text === mantra); host.mantra(w ? w.key : null); }
     else host.wall(n, pick());
     if (sourceChanged || (n > 0 && n % REDEAL_WALLS === 0)) {
@@ -742,9 +742,14 @@ export async function mount(ctx) {
         optionsFrom=button;if(!menuOpen)setPaused(true);
         pace.value=String(game.snapshot().speedScale);
         for(const slider of options.querySelectorAll('[data-audio]')){slider.value=audioLevels[slider.dataset.audio];slider.nextElementSibling.value=Math.round(Number(slider.value)*100)+'%';}
+        options.querySelector('[data-menu="skip-board"]').hidden=!(activeEndless&&!menuOpen);
         openPictures();options.hidden=false;pace.focus();
       }
       if(action==='close-options'){options.hidden=true;closePictures();optionsFrom?.focus();}
+      if(action==='skip-board'&&activeEndless&&!menuOpen&&game?.skipBoard()){   // the next board, no reward; Resume plays it
+        syncEndless(game.snapshot());   // the frame loop that moves the checkpoint is held while paused, and Save and menu writes it
+        options.hidden=true;closePictures();ui.paused.querySelector('[data-menu="resume"]')?.focus();
+      }
     });
     for(const slider of options.querySelectorAll('[data-audio]')){
       on(slider,'input',()=>{const value=Number(slider.value);slider.nextElementSibling.value=Math.round(value*100)+'%';applyAudioLevel(slider.dataset.audio,value);});

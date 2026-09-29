@@ -3,14 +3,16 @@ using System;
 namespace ConditioningControlPanel.Services.Leash;
 
 /// <summary>
-/// Hold the panic key for five seconds to cut the leash (owner, 2026-09-26). The global hook only
-/// reports key DOWNS, and a held key auto-repeats about thirty times a second, so without this
-/// every repeat would be a fresh panic press and two of those in a row quit the app. While the
-/// account is leashed a held panic key is ONE press: the first down runs the panic as always,
-/// the repeats only feed this clock, and at <see cref="Hold"/> it asks once whether to cut.
+/// Hold the panic key for five seconds to cut the leash (owner, 2026-09-26). The global hook
+/// reports key downs, and a held key auto-repeats about thirty times a second, so without this
+/// every repeat would be a fresh panic press and two of those in a row quit the app. A held panic
+/// key is ONE press for everyone (bug hunt 2026-09-29, DESK-5: not leashed, holding it quit CCP
+/// about half a second in): the first down runs the panic as always and the repeats are
+/// swallowed. While the account is leashed the repeats also feed this clock, and at
+/// <see cref="Hold"/> it asks once whether to cut.
 /// A repeat is a down that arrives within <see cref="RepeatGap"/> of the last one with no key-up
 /// in between, so a lost key-up can never swallow the next real press (a real press always comes
-/// later than any keyboard's repeat delay). Not leashed = no state, every down is a press. Pure.
+/// later than any keyboard's repeat delay). Pure.
 /// </summary>
 public sealed class LeashHoldToCut
 {
@@ -29,15 +31,15 @@ public sealed class LeashHoldToCut
     /// <summary>How long the current hold has run, or null when none is timed.</summary>
     public TimeSpan? HeldFor(DateTime now) => _since is { } s ? now - s : null;
 
-    /// <summary>A key-down of the panic key. <c>Repeat</c> = swallow it (not a new press);
-    /// <c>Due</c> = the hold just reached five seconds, ask now (true once per hold).</summary>
+    /// <summary>A key-down of the panic key. <c>Repeat</c> = swallow it (not a new press), leashed
+    /// or not; <c>Due</c> = the hold just reached five seconds while leashed, ask now (true once
+    /// per hold).</summary>
     public (bool Repeat, bool Due) Down(DateTime now, bool leashed)
     {
-        if (!leashed) { Up(); return (false, false); }
         var repeat = _since != null && now - _last <= RepeatGap && now >= _last;
         if (!repeat) { _since = now; _asked = false; }
         _last = now;
-        var due = !_asked && now - _since!.Value >= Hold;
+        var due = leashed && !_asked && now - _since!.Value >= Hold;
         if (due) _asked = true;
         return (repeat, due);
     }

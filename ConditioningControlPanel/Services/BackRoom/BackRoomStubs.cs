@@ -54,7 +54,7 @@ public sealed class NullBackRoomMedia : IBackRoomMedia
     }
 }
 
-/// <summary>Speaks nothing and says so, which sends the page back to its own speechSynthesis.
+/// <summary>Speaks nothing and says so; the word stays silent.
 /// What the dev rig and the tests run on.</summary>
 public sealed class NullBackRoomVoice : IBackRoomVoice
 {

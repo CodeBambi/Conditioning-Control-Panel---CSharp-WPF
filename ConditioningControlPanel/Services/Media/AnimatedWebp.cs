@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -23,8 +24,8 @@ namespace ConditioningControlPanel.Services;
 ///
 /// Despite the name, SKCodec is format-agnostic: since the #486 native-OOM fix these same
 /// entry points also decode animated GIFs (FlashService.LoadGifFrames, chaos wash, tease
-/// bubbles), replacing GDI+/XamlAnimatedGif's uncapped native-resolution decodes. Note GIF's
-/// rare "restore previous" disposal isn't modeled (WebP has none) — acceptable for effects.
+/// bubbles), replacing GDI+/XamlAnimatedGif's uncapped native-resolution decodes. GIF's
+/// "restore previous" disposal (WebP has none) is handled in DecodeFramesCore.
 ///
 /// Two consumption shapes:
 ///  - <see cref="DecodeFrames"/> → frozen frame list + delay for FlashService's heartbeat
@@ -86,6 +87,13 @@ internal static class AnimatedWebp
     // Hard CPU ceiling on frames decoded for pathological files (composition is sequential,
     // so this bounds work even when only a handful of frames are kept).
     internal const int DECODE_CEILING = 600;
+
+    /// <summary>
+    /// Frame cap for the GIF cascade and the Blink Trainer, whose GIFs came here from
+    /// XamlAnimatedGif (which streamed every frame) in #1829. Twice the default 48: a clip's kept
+    /// frames cost at most twice what they did, and the 24 MB budget still bounds the worst case.
+    /// </summary>
+    internal const int GifMaxFrames = 96;
 
     /// <summary>
     /// Frame-selection plan: how many frames are decoded, which of them are KEPT, and the
@@ -190,15 +198,39 @@ internal static class AnimatedWebp
 
         var frames = new List<BitmapSource>();
         long durationTotalMs = 0; int durationSamples = 0;
+        // GIF "restore to previous" (disposal 3): a frame shown that way can never be the prior
+        // frame (SKCodec answers InvalidParameters, which used to stop the loop at frame 2). So keep
+        // a copy of the last frame that can, taken only when the next one will be undone, and put it
+        // back for each frame that follows an undone one. WebP never uses this disposal.
+        byte[]? restore = null;
+        int restoreIndex = -1;
         for (int i = 0; i < decodeCount && frames.Count < plan.MaxKeep; i++)
         {
-            // WebP has no restore-previous disposal, so the canvas (holding frame i-1) always
-            // satisfies a dependent frame's RequiredFrame; independent frames decode standalone.
-            var opts = i > 0 && frameInfos[i].RequiredFrame >= 0
-                ? new SKCodecOptions(i, i - 1)
-                : new SKCodecOptions(i);
+            // Otherwise the canvas (holding frame i-1) satisfies a dependent frame's RequiredFrame;
+            // independent frames decode standalone.
+            int prior = -1;
+            if (i > 0 && frameInfos[i].RequiredFrame >= 0)
+            {
+                if (frameInfos[i - 1].DisposalMethod != SKCodecAnimationDisposalMethod.RestorePrevious)
+                    prior = i - 1;
+                else if (restore != null && restoreIndex >= frameInfos[i].RequiredFrame)
+                {
+                    Marshal.Copy(restore, 0, pixels, restore.Length);
+                    prior = restoreIndex;
+                }
+            }
+            var opts = prior >= 0 ? new SKCodecOptions(i, prior) : new SKCodecOptions(i);
             var res = codec.GetPixels(canvasInfo, pixels, opts);
             if (res != SKCodecResult.Success && res != SKCodecResult.IncompleteInput) break;
+
+            if (i + 1 < decodeCount
+                && frameInfos[i].DisposalMethod != SKCodecAnimationDisposalMethod.RestorePrevious
+                && frameInfos[i + 1].DisposalMethod == SKCodecAnimationDisposalMethod.RestorePrevious)
+            {
+                restore ??= new byte[canvas.ByteCount];
+                canvas.GetPixelSpan().CopyTo(restore);
+                restoreIndex = i;
+            }
 
             if (i % step != 0) continue;
             frames.Add(ToFrozenBitmapSource(canvas, tw, th));

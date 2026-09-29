@@ -56,7 +56,7 @@ export function planPulse(name, d, s) {
     case 'word': return d.fired ? P(0.5, 260, 2, 'word') : null;
     case 'jackpot': return P(0.85, 600, 3, 'jackpot');
     case 'lastBrick': return P(0.75, 350, 3, 'lastBrick');
-    case 'wall': return P(0.9, 800, 3, 'wall');
+    case 'wall': return d.skipped ? null : P(0.9, 800, 3, 'wall');   // Skip this board is not a clear
     case 'shatterWall': return P(0.9, 900, 3, 'shatterWall');
     case 'relapseStart': case 'relapse': return P(0.7, 450, 3, 'thud');
     case 'breakoutStart': return P(0.35, 140, 3, 'rise');

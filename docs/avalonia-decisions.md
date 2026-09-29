@@ -94,3 +94,13 @@ here record where and why the port chose something, and who advised.
 - Choice: retarget the three tests to the new location with the same assertions; drop MainWindow.Patreon.cs from the allow list
   (narrower than before).
 - Advisor: supervisor (reviewer on #1917 accepted the Core move).
+
+## 2026-09-29: main sync #3 from release/6.11.5
+- Question: which branch does main sync #3 take? GitHub's `main` is still 0ff4583 (already merged in #1762).
+- Finding: all of the user's work now lands on `release/6.11.5`, where 6.11.4 and 6.11.5 ("Locktober") landed: 185 commits ahead.
+- Choice: sync from `origin/release/6.11.5` (the newest release branch). `avalonia-port/main-20260929` is one merge commit with the
+  conflict resolutions and the minimal compile fixes; `avalonia-port/main-20260929-compat` ports the release's behaviour changes to
+  code the stack had moved to Core: ServerClock + SyncFailureBackoff moved to Core; SyncBody signs with the server clock; SyncPush
+  learns the clock, retries once on clock_skew and backs off after failures; DiscordAccount and ProviderSubscription (Patreon)
+  honour DeadRefreshTokens. New WPF surfaces are ledger rows under "main-sync-3 additions".
+- Advisor: supervisor.

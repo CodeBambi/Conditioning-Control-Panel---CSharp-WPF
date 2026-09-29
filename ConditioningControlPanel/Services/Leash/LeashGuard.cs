@@ -77,6 +77,8 @@ public static class LeashRemoteRule
             {
                 case Newtonsoft.Json.Linq.JTokenType.Boolean: return token.Value<bool>();
                 case Newtonsoft.Json.Linq.JTokenType.Integer: return token.Value<long>() != 0;
+                // 1.0 is what Value<bool>() reads as true: a float counts like any other number.
+                case Newtonsoft.Json.Linq.JTokenType.Float: return token.Value<double>() != 0;
                 case Newtonsoft.Json.Linq.JTokenType.String:
                     return bool.TryParse(token.Value<string>(), out var b) && b;
                 default: return false;

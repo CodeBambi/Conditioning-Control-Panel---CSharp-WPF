@@ -33,6 +33,7 @@ import { burst, centreOf, countUp, isCalm, play, popIn, squash, staggerIn } from
 import { buildShareData, cardKey, FLAVOUR_TINTS } from '../shareWords.js';
 import { renderCard, copyCard, saveCard, canvasBlob, cardFileName } from '../shareCard.js';
 import { THUD_EASE, staggerDelays } from '../juice.js';
+import { resultLine } from '../stake.js';
 
 const COLLAPSE_AT = 6;
 const GRACEFUL_MS = 8 * 60 * 1000;
@@ -741,6 +742,25 @@ export function mount(container, ctx) {
     })();
   }
 
+  /* ---------------------------------------------------------- stake line
+   * PvP stakes (ui/stake.js): one line under the verdict, only when WE staked.
+   * The node outlives paint() so a settle landing between repaints is never lost;
+   * the interval is what turns a server that never answers into "stake returned". */
+  const stakeCodeNow = typeof ctx.stakeCode === 'function' ? ctx.stakeCode() : '';
+  const stakeLine = el('p', { class: 'gg-stake-result', text: '', hidden: true, role: 'status' });
+  function paintStake() {
+    if (!stakeCodeNow || !ctx.stake) { stakeLine.hidden = true; return; }
+    const line = resultLine(ctx.stake.settledFor(stakeCodeNow), ctx.stake.get(stakeCodeNow).you);
+    stakeLine.hidden = !line;
+    if (!line) return;
+    stakeLine.textContent = line.text;
+    stakeLine.className = 'gg-stake-result is-' + line.tone;
+  }
+  if (stakeCodeNow && ctx.stake) {
+    ledger.sub(ctx.stake.onChange(paintStake));
+    ledger.interval(paintStake, 5000);
+  }
+
   /* --------------------------------------------------------------- paint */
 
   function paint() {
@@ -765,7 +785,9 @@ export function mount(container, ctx) {
       el('h1', { class: 'gg-recap-verdict gg-grad', text: v.hero }),
       v.line ? el('p', { class: 'gg-recap-reason', text: v.line }) : null,
       badge ? el('span', { class: 'gg-badge ' + badge.cls, text: badge.text }) : null,
+      stakeLine,
     ]);
+    paintStake();
     /* --- THE PLATES: two faces under the verdict.
      * This is also the moment the HOST writes the last-opponent record (it fires
      * on `match-result` and already holds the peer card) — the page does nothing

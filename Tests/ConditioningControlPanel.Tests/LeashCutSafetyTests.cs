@@ -179,6 +179,9 @@ public class LeashCutSafetyTests
     [InlineData("{\"strict_lock\":\"yes\"}", false)]
     [InlineData("{\"strict_lock\":1}", true)]
     [InlineData("{\"strict_lock\":0}", false)]
+    [InlineData("{\"strict_lock\":1.0}", true)]
+    [InlineData("{\"strict_lock\":0.5}", true)]
+    [InlineData("{\"strict_lock\":0.0}", false)]
     [InlineData("{\"strict_lock\":{\"a\":1}}", false)]
     [InlineData("{}", false)]
     public void AsksStrictLock_ReadsTolerantly(string json, bool expected)
@@ -188,6 +191,17 @@ public class LeashCutSafetyTests
 
     [Fact]
     public void AsksStrictLock_NullParameters_IsFalse() => Assert.False(LeashRemoteRule.AsksStrictLock(null));
+
+    /// <summary>start_session reads the flag with the same check, so a float 1.0 (which
+    /// Value&lt;bool&gt;() reads as true) is screened, never slipped past the leash.</summary>
+    [Fact]
+    public void Leashed_AFloatStrictLockFlag_IsStripped()
+    {
+        var p = JObject.Parse("{\"session_id\":\"x\",\"strict_lock\":1.0}");
+        Assert.True(p["strict_lock"]!.Value<bool>());
+        Assert.Equal(LeashRemoteVerdict.StripStrict,
+            LeashRemoteRule.Screen("start_session", LeashRemoteRule.AsksStrictLock(p), leashed: true));
+    }
 
     [Fact]
     public void RemoteDoor_ScreensBeforeAnyCommandRuns_AndStripsTheStartSessionFlag()
@@ -201,6 +215,9 @@ public class LeashCutSafetyTests
 
         var start = Between(src, "case \"start_session\":", "case \"pause_session\":");
         Assert.Contains("leashVerdict != Leash.LeashRemoteVerdict.StripStrict", start);
+        // One reading of the flag for the screen and for the switch: never a second, looser one.
+        Assert.Contains("Leash.LeashRemoteRule.AsksStrictLock(parameters)", start);
+        Assert.DoesNotContain("Value<bool>()", start);
     }
 
     // ============================ the guard ============================

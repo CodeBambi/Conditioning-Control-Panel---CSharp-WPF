@@ -45,6 +45,7 @@ namespace ConditioningControlPanel.Services;
                 Text = "Conditioning Control Panel",
                 Visible = false
             };
+            Friends.FriendsFeedTray.Attach(_notifyIcon); // the tooltip gains "N new from friends" while the feed has unread lines
 
             Icon? icon = null;
 

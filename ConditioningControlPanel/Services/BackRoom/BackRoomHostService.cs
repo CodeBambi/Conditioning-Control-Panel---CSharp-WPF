@@ -352,9 +352,9 @@ internal static class BackRoomHostService
                 w.Activated += (_, _) => OnWindowActivated();
             }
             App.Logger?.Information("BackRoomHostService: launched");
-            App.Friends?.SetActivity(_breakoutPage
-                ? ConditioningControlPanel.Services.Friends.PresenceActivity.Breakout
-                : ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom);
+            // One window, two faces: whichever page it opened on is the activity, the other is not.
+            App.Friends?.LeaveActivity(_breakoutPage ? ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom : ConditioningControlPanel.Services.Friends.PresenceActivity.Breakout);
+            App.Friends?.EnterActivity(_breakoutPage ? ConditioningControlPanel.Services.Friends.PresenceActivity.Breakout : ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom);
         }
         catch (Exception ex)
         {
@@ -734,7 +734,8 @@ internal static class BackRoomHostService
             // sweep still clears anything a crash left behind.
             _panicSuspended = _minimised = false;
             App.Logger?.Information("BackRoomHostService: closed");
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
+            App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom);
+            App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Breakout);
         }
         finally { _disposing = false; }
     }

@@ -61,12 +61,14 @@ public sealed partial class FriendsDrawer
 
     // ---- invite -----------------------------------------------------------------------
 
-    private static readonly (string Id, string Art)[] InviteTiles =
+    /// <summary>The invite tiles, one per <see cref="InviteDestination.Sendable"/>. Remote is gone
+    /// (owner, 2026-09-28): its PIN never travelled, so a Remote invite was a dead end.</summary>
+    internal static readonly (string Id, string Art)[] InviteTiles =
     {
         (InviteDestination.Goon, "features/goon_game_tile.png"),
         (InviteDestination.BackRoom, "features/backroom.png"),
-        (InviteDestination.Remote, "features/remote_control.png"),
         (InviteDestination.Ramp, "features/Phrase_Lock.png"),
+        (InviteDestination.Chess, "features/piecebypiece.png"),
     };
 
     private FrameworkElement BuildInvitePicker(Friend f)
@@ -92,6 +94,7 @@ public sealed partial class FriendsDrawer
             {
                 Pop(tile, FriendsLook.Lilac);
                 if (id == InviteDestination.Goon) await InviteToGoonAsync(f.Id);
+                else if (id == InviteDestination.Chess) await InviteToChessAsync(f.Id);
                 else await InviteAsync(f.Id, id, code);
             };
             grid.Children.Add(tile);
@@ -153,9 +156,30 @@ public sealed partial class FriendsDrawer
         return await InviteAsync(friendId, InviteDestination.Goon, code);
     }
 
+    private bool _openingChess;
+
+    /// <summary>The chess tile: open the board on a challenge to this friend, then send the
+    /// challenge id as the invite. One tap. Internal for the suite.</summary>
+    internal async Task<SendResult?> InviteToChessAsync(string friendId)
+    {
+        if (_openingChess) return null;   // a second tap while the board opens costs nothing
+        _openingChess = true;
+        ShowNote(friendId, "friends_invite_chess_opening");
+        string? challenge;
+        try { challenge = await InviteCodes.ChallengeFriend(friendId, TimeSpan.FromSeconds(45)); }
+        catch { challenge = null; }
+        finally { _openingChess = false; }
+        if (!InviteDestination.IsChallengeId(challenge))
+        {
+            ShowNote(friendId, "friends_invite_chess_failed", good: false, timed: true);
+            return null;
+        }
+        return await InviteAsync(friendId, InviteDestination.Chess, challenge);
+    }
+
     internal async Task<SendResult> InviteAsync(string friendId, string destination, string? code)
     {
-        if (_svc == null || !InviteDestination.IsValid(destination)) return SendResult.Refused;
+        if (_svc == null || !InviteDestination.IsSendable(destination)) return SendResult.Refused;
         SendResult r;
         try { r = await _svc.InviteAsync(friendId, destination, code); }
         catch { r = SendResult.TryLater; }
@@ -320,12 +344,7 @@ public sealed partial class FriendsDrawer
                 {
                     var sub = MenuItem("report_" + reason);
                     var rr = reason;
-                    sub.Click += async (_, _) =>
-                    {
-                        FriendsSfx.Click();
-                        try { if (_svc != null) await _svc.ReportAsync(f.Id, rr); } catch { }
-                        ShowNote(f.Id, "friends_report_done");
-                    };
+                    sub.Click += async (_, _) => await ReportAsync(f.Id, f.Id, rr);
                     mi.Items.Add(sub);
                 }
             }
@@ -351,21 +370,36 @@ public sealed partial class FriendsDrawer
         };
     }
 
-    /// <summary>Runs one menu line. Internal for the suite.</summary>
+    /// <summary>Runs one menu line. Remove and Block ask first when the confirm step is built
+    /// (<see cref="AskFirst"/>); otherwise they run here. Internal for the suite.</summary>
     internal async Task RunMenuAsync(Friend f, string what)
     {
         if (_svc == null) return;
+        if (what is "remove" or "block")
+        {
+            bool asked = false;
+            AskFirst(f, what, ref asked);
+            if (!asked) await RemoveOrBlockAsync(f.Id, f.Name, what);
+            return;
+        }
+        ActResult r = ActResult.TryLater;
         try
         {
             switch (what)
             {
-                case "squelch": await _svc.SetSquelchAsync(f.Id, true); break;
-                case "unsquelch": await _svc.SetSquelchAsync(f.Id, false); break;
-                case "remove": await _svc.RemoveAsync(f.Id); _openId = null; break;
-                case "block": FriendsSfx.Dismiss(); await _svc.BlockAsync(f.Id); _openId = null; break;
+                case "squelch": r = await _svc.SetSquelchAsync(f.Id, true); break;
+                case "unsquelch": r = await _svc.SetSquelchAsync(f.Id, false); break;
+                default: return;
             }
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] menu {What} failed: {E}", what, ex.Message); }
+        if (r == ActResult.Done)
+        {
+            FriendsSfx.Click();
+            ShowTimed(f.Id, Loc.Get(what == "squelch" ? "friends_squelch_done" : "friends_unsquelch_done"), true,
+                TimeSpan.FromSeconds(FriendsDrawerRules.ResultHoldSeconds));
+        }
+        else ShowActResult(f.Id, r);
         await SafeRefreshAsync();
         Render();
     }
@@ -373,7 +407,12 @@ public sealed partial class FriendsDrawer
     /// <summary>A worded note in the row that is not a send result (a report went through).</summary>
     private void ShowNote(string friendId, string key, bool good = true, bool timed = false)
     {
-        if (timed) { ShowTimed(friendId, Loc.Get(key), good, TimeSpan.FromSeconds(4)); return; }
+        if (timed)
+        {
+            ShowTimed(friendId, Loc.Get(key), good, TimeSpan.FromSeconds(FriendsDrawerRules.ResultHoldSeconds));
+            TellOutside(Loc.Get(key), good);   // the Goon room opening can take the screen and fold the drawer
+            return;
+        }
         if (_resultTimers.TryGetValue(friendId, out var old)) { old.Stop(); _resultTimers.Remove(friendId); }
         _results[friendId] = (Loc.Get(key), good);
         Render();
@@ -381,11 +420,10 @@ public sealed partial class FriendsDrawer
 }
 
 /// <summary>
-/// Where the Goon and Remote invite tiles get their live join code. Remote reads the running
-/// session; the Goon Game page reports the room it is hosting (<c>room-code</c>) and
-/// <see cref="GoonHostService.RoomCode"/> holds it. With no room yet the Goon tile opens one
-/// (<see cref="OpenGoonRoom"/>) and sends its code, so it is only disabled for an account
-/// that cannot host. Backroom and Ramp carry no code.
+/// Where the Goon invite tile gets its live join code: the Goon Game page reports the room it is
+/// hosting (<c>room-code</c>) and <see cref="GoonHostService.RoomCode"/> holds it. With no room yet
+/// the tile opens one (<see cref="OpenGoonRoom"/>) and sends its code, so it is only disabled for
+/// an account that cannot host. Backroom and Ramp carry no code.
 /// </summary>
 public static class InviteCodes
 {
@@ -399,16 +437,10 @@ public static class InviteCodes
     public static Func<TimeSpan, Task<(string? Code, bool Busy)>> OpenGoonRoom { get; set; }
         = GoonHostService.OpenRoomForInviteAsync;
 
-    /// <summary>The live Remote Control session code, else null.</summary>
-    public static Func<string?> RemoteCode { get; set; } = () =>
-    {
-        try
-        {
-            var rc = App.RemoteControl;
-            return rc != null && rc.IsActive && !string.IsNullOrEmpty(rc.SessionCode) ? rc.SessionCode : null;
-        }
-        catch { return null; }
-    };
+    /// <summary>Opens the chess board on a challenge to a friend (by the friend's id) and returns
+    /// the server's challenge id, else null.</summary>
+    public static Func<string, TimeSpan, Task<string?>> ChallengeFriend { get; set; }
+        = ConditioningControlPanel.Services.PieceByPiece.PieceByPieceHostService.ChallengeFriendAsync;
 
     /// <summary>The code to send with an invite, and the loc key of the reason the tile is
     /// disabled (null when it can be sent).</summary>
@@ -421,9 +453,6 @@ public static class InviteCodes
                 if (!string.IsNullOrEmpty(g)) return (g, null);
                 // No room yet: the tile opens one, unless this account cannot host at all.
                 return CanHostGoon() ? (null, null) : (null, "friends_invite_goon_prime");
-            case InviteDestination.Remote:
-                var r = RemoteCode();
-                return string.IsNullOrEmpty(r) ? (null, "friends_invite_needs_remote") : (r, null);
             default:
                 return (null, null);
         }

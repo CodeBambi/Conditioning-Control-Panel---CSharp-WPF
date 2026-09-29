@@ -861,8 +861,17 @@ namespace ConditioningControlPanel
             // are side-effect free — deliberately NOT SettingsPaletteWindow.TryConsumeEscape(), which
             // CLOSES the palette just by asking and would burn the grace window HandlePanicKeyPress
             // depends on.
-            if (key == Key.Escape && App.Video?.WantsGlobalEscape == true
-                && !LockCardWindow.IsAnyOpen() && !SettingsPaletteWindow.IsOpen)
+            //
+            // When Escape IS the panic key and the panic can run, the press is a panic press and
+            // falls through to HandlePanicKeyPress, whose stop pass closes the video as well
+            // (PanicPolicy.EscapeDismissesVideo, bug hunt 2026-09-29 DESK-1).
+            if (key == Key.Escape && Services.Safety.PanicPolicy.EscapeDismissesVideo(
+                    videoWantsEscape: App.Video?.WantsGlobalEscape == true,
+                    lockCardOpen: LockCardWindow.IsAnyOpen(),
+                    paletteOpen: SettingsPaletteWindow.IsOpen,
+                    panicKeyEnabled: App.Settings?.Current?.PanicKeyEnabled == true,
+                    panicKey: App.Settings?.Current?.PanicKey,
+                    lockdownActive: App.Lockdown?.IsActive == true))
             {
                 // Never run teardown inside the WH_KEYBOARD_LL callback — it is delivered on this
                 // thread's message pump and must return well inside LowLevelHooksTimeout. Same
@@ -929,9 +938,14 @@ namespace ConditioningControlPanel
             
             // Check if panic key is enabled and pressed
             var settings = App.Settings.Current;
-            // The leash's hold-to-cut: while leashed, a held panic key is ONE press (its repeats are
-            // swallowed here, or two of them would quit the app) and five seconds of it asks to cut.
+            // A held panic key is ONE press, leashed or not: its repeats are swallowed here, or two of
+            // them would quit the app (bug hunt 2026-09-29, DESK-5). While leashed, five seconds of it
+            // asks to cut. Every down comes through here first, a press a surface takes included.
             if (LeashHoldSwallows(key)) return;
+            // An Escape aimed at a CCP surface that drops or closes on it (Circe's Tab price box, the
+            // friends drawer, the dashboard's click-choice popup) is that surface's, not a panic press
+            // (bug hunt 2026-09-29, TAB-8 / DESK-3). Decided here, before the key reaches any window.
+            if (key == Key.Escape && EscapeTakenBySurface(settings)) return;
             if (settings.PanicKeyEnabled)
             {
                 var panicKey = settings.PanicKey;
@@ -971,6 +985,40 @@ namespace ConditioningControlPanel
                     try { App.Video?.TryGracePauseFromPanic(fromPanicKey: false); }
                     catch (Exception ex) { App.Logger?.Warning("Pause key: grace pause failed: {Error}", ex.Message); }
                 });
+            }
+        }
+
+        /// <summary>
+        /// Runs inside the hook callback on the UI thread, before the key is posted, so it only reads
+        /// state: the element with the keyboard now is the one this press lands on. True = the
+        /// surface's own Escape handler drops or closes it and nothing a panic arms is armed
+        /// (PanicPolicy.SurfaceTakesEscape).
+        /// </summary>
+        private static bool EscapeTakenBySurface(AppSettings settings)
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                var fg = GetForegroundWindow();
+                uint fgPid = 0;
+                if (fg != IntPtr.Zero) GetWindowThreadProcessId(fg, out fgPid);
+                if (!Services.Safety.PanicPolicy.SurfaceTakesEscape(
+                        panicKeyEnabled: settings.PanicKeyEnabled,
+                        panicKey: settings.PanicKey,
+                        lockCardOpen: LockCardWindow.IsAnyOpen(),
+                        ccpInFront: fgPid != 0 && fgPid == (uint)Environment.ProcessId,
+                        surfaceHasTheKeyboard: Services.Safety.EscapeClaim.KeyboardInASurface(),
+                        takenPressOnItsWay: Services.Safety.EscapeClaim.OnItsWay(now)))
+                    return false;
+                Services.Safety.EscapeClaim.Claimed(now);
+                VideoDiag.Log("PANIC", "Escape left to the surface with the keyboard (it drops an edit or closes a popup) - not a panic press");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // A panic press must never be lost to this question.
+                App.Logger?.Warning("Escape claim check failed: {Error}", ex.Message);
+                return false;
             }
         }
 
@@ -1451,22 +1499,34 @@ namespace ConditioningControlPanel
         /// page hears the same key and brakes on its own; this only keeps the panic pass from closing
         /// the game under it. Every condition is in <see cref="Services.Safety.PanicPolicy.GameClaimsEscapeAsPause"/>,
         /// including the one that matters most: a second Escape within 2 s is a full panic.
+        ///
+        /// <para>Piece by Piece rides the same rule (owner, 2026-09-29): without it the first Escape of a
+        /// chess game closed the board, so its own pause card could never be reached. The board's pause
+        /// goes quiet at once (ui/pause-hush.js) and an Escape on the pause card leaves.</para>
         /// </summary>
         private bool TryRacePauseOnEscape()
         {
             try
             {
                 var now = DateTime.UtcNow;
+                bool raceInFront = Services.Chaos.CaucusHostService.IsInFront;
+                bool boardInFront = Services.PieceByPiece.PieceByPieceHostService.IsInFront;
                 bool claim = Services.Safety.PanicPolicy.GameClaimsEscapeAsPause(
                     App.Settings?.Current?.PanicKey,
-                    gameInFront: Services.Chaos.CaucusHostService.IsInFront,
+                    gameInFront: raceInFront || boardInFront,
                     engineRunning: _isRunning,
                     lockCardOpen: LockCardWindow.IsAnyOpen(),
                     lastClaimUtc: _lastRaceEscapeClaimUtc,
                     nowUtc: now);
                 if (!claim) { _lastRaceEscapeClaimUtc = null; return false; }
                 _lastRaceEscapeClaimUtc = now;
-                VideoDiag.Log("PANIC", "Escape kept by Racing Thoughts as its pause (again within 2 s = full panic)");
+                VideoDiag.Log("PANIC", $"Escape kept by {(raceInFront ? "Racing Thoughts" : "Piece by Piece")} as its pause (again within 2 s = full panic)");
+                // The board pauses on its own keydown, which never comes while its WebView2 is out of
+                // keyboard focus, so it is handed the kept press too; the page drops it when the real
+                // key reached it as well (ui/host-escape.js).
+                if (Services.Safety.PanicPolicy.BoardGetsKeptEscape(claim, raceInFront, boardInFront,
+                        boardReady: Services.PieceByPiece.PieceByPieceHostService.IsReady))
+                    Services.PieceByPiece.PieceByPieceHostService.PostKeptEscape();
                 return true;
             }
             catch (Exception ex)
@@ -3088,6 +3148,10 @@ namespace ConditioningControlPanel
 
             RefreshHypnotubeLinksUI();
             _avatarTubeWindow?.UpdateQuickMenuState();
+
+            // The personality picked in this mod comes back, like the look does (tester, 6.11.3).
+            try { App.Personality?.RestoreForActiveMod(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Mod switch: personality restore failed"); }
 
             // Last: the user's per-mod default presets (Customise window), if they picked any.
             ApplyModDefaultPresets(App.Mods.ActiveModId);

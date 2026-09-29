@@ -487,6 +487,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     if (!held && (ev.key === 'Backspace' || ev.key === 'z' || ev.key === 'Z')) {
       ev.preventDefault();
       if (!game.takeBack) return;
+      if (window.PBP?.isPaused?.()) return;   // the pause card holds the game (bug hunt 2026-09-29, CHESS-10)
       clearSelection();
       if (!game.takeBack()) cue('boing');   // nothing to take back, or too soon
       return;
@@ -565,6 +566,8 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     selection: () => selSquare,
     /** Let go of him, from anywhere. */
     deselect: () => clearSelection(),
+    /** Esc mid-drag: a man in hand springs back to his square, a waiting one is let go. */
+    drop() { onCancel(); clearSelection(); },
     // The height of the plane the cursor is dragging along. The screenshot
     // harness aims its release with this, because board level is no longer
     // where the held man is.

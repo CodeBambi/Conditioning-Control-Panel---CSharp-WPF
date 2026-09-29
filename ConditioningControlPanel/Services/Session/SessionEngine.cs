@@ -215,7 +215,13 @@ namespace ConditioningControlPanel.Services
             {
                 ShowCornerGif(session.Settings);
             }
-            
+
+            // The session owns Mind Wipe, like every other feature it prescribes (#1304). The
+            // engine starts ahead of the session with the user's GLOBAL Mind Wipe, and
+            // StartSession below returns early on a running service, so a session without Mind
+            // Wipe played the global one anyway and a session with it never escalated.
+            App.MindWipe?.Stop();
+
             // Start Mind Wipe if enabled (escalating frequency)
             if (session.Settings.MindWipeEnabled)
             {
@@ -250,7 +256,7 @@ namespace ConditioningControlPanel.Services
 
             // Fire started event
             SessionStarted?.Invoke(this, EventArgs.Empty);
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Session);
+            App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Session);
 
             // EMI Desk: reset the per-session latches, then announce.
             _emiRampStep = 0;
@@ -394,7 +400,7 @@ namespace ConditioningControlPanel.Services
             
             // Fire events
             SessionStopped?.Invoke(this, EventArgs.Empty);
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
+            App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Session);
 
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();

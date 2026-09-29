@@ -62,11 +62,14 @@ namespace ConditioningControlPanel.Controls
 
         public static string Url => "https://" + VirtualHost + PagePath;
 
-        /// <summary>The script that swaps the scene. Pure, so the id escaping is testable.</summary>
-        internal static string MountScript(string vignetteId)
+        /// <summary>The script that swaps the scene. Pure, so the id escaping is testable. The two
+        /// figures (unsigned seconds, null = the scene's own) are the live price the row books, so
+        /// the scene's flashing number matches the stamp.</summary>
+        internal static string MountScript(string vignetteId, int? add = null, int? sub = null)
         {
             var safe = (vignetteId ?? "").Replace("\\", "").Replace("'", "").Replace("\"", "").Replace("<", "").Replace(">", "");
-            return "window.__mount && window.__mount('" + safe + "')";
+            static string Num(int? v) => v is { } n ? n.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null";
+            return "window.__mount && window.__mount('" + safe + "'," + Num(add) + "," + Num(sub) + ")";
         }
 
         /// <summary>Create the browser and navigate. Only the first call does anything.</summary>
@@ -79,21 +82,24 @@ namespace ConditioningControlPanel.Controls
 
         /// <summary>Play a scene. Before the page is ready the last asked-for scene waits and
         /// mounts on arrival; after a failure this is a no-op.</summary>
-        public void Show(string vignetteId)
+        public void Show(string vignetteId, int? add = null, int? sub = null)
         {
             if (_disposed || _failed) return;
             _pending = vignetteId;
+            _pendingFigures = (add, sub);
             Start();
-            if (IsReady) _ = MountAsync(vignetteId);
+            if (IsReady) _ = MountAsync(vignetteId, add, sub);
         }
 
-        private async Task MountAsync(string vignetteId)
+        private (int? Add, int? Sub) _pendingFigures;
+
+        private async Task MountAsync(string vignetteId, int? add = null, int? sub = null)
         {
             try
             {
                 var core = _web?.CoreWebView2;
                 if (core == null) return;
-                await core.ExecuteScriptAsync(MountScript(vignetteId)).ConfigureAwait(true);
+                await core.ExecuteScriptAsync(MountScript(vignetteId, add, sub)).ConfigureAwait(true);
             }
             catch (Exception ex) { App.Logger?.Debug("[Chaster] trailer mount: {E}", ex.Message); }
         }
@@ -178,7 +184,7 @@ namespace ConditioningControlPanel.Controls
             string? mounted = null;
             while (_pending is { } next && next != mounted && !_disposed && !_failed)
             {
-                await MountAsync(next).ConfigureAwait(true);
+                await MountAsync(next, _pendingFigures.Add, _pendingFigures.Sub).ConfigureAwait(true);
                 mounted = next;
             }
             if (_disposed || _failed) return;

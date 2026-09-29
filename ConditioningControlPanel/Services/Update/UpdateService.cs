@@ -20,13 +20,116 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.11.3";
+        public const string AppVersion = "6.11.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.11.3 - Locktober
+        public const string CurrentPatchNotes = @"v6.11.5 - Locktober
+
+NEW IN 6.11.5
+- opening CCP goes straight to the launcher. the panel no longer flashes up for a second first, and the launcher keeps the focus.
+- everything new since 6.10.3 now reads in your language: German, Spanish, French, Japanese, Korean, Brazilian Portuguese, Russian and Chinese.
+- the launcher no longer shows English with a language tag in front of it (""[DE] The panel"") in those languages.
+- Circe's tab: the lock card row says what it really does. every finished card takes time off, and typos cost on their own row.
+- Circe's tab: a line that does not fit its row ends in ""..."" and shows whole when you hover it.
+- Circe's tab explains itself: a How it works card, and each key shows the most it can add in a month. most months add far less.
+- Circe's tab: the menu says how to change a time, or that times stay fixed while a lock runs. Reset times puts every edited time back.
+- Circe's tab: the red flash switch says what it does and what it costs, and asks for Natasha's favourite first.
+- Piece by Piece: Distraction never shows the same picture twice at once. with fewer pictures to hand, it shows fewer.
+- Piece by Piece: in Distraction, the video in a red frame over the middle of the board is now a picture across the whole screen. it fades in and out, and the board stays readable through it.
+- Piece by Piece: Esc pauses the game even after you clicked the window's title bar, and Enter then works on Resume.
+- Piece by Piece: holding Esc down pauses once. it used to pause and then leave.
+
+NEW IN 6.11.4
+
+STAKES
+- online chess and Goon Game can be played for stakes. pick one before the match: lock time (15 or 30 min, needs Chaster linked and Circe's tab on) or Sparkles (5, 10 or 25).
+- you stake against the house, never against the other player. win a Sparkle stake and you get it back doubled. win a time stake and you get 5 or 10 Sparkles.
+- lose a time stake and the time goes on your own lock, through Circe's tab. picking a time stake switches that row on.
+- resigning counts as a loss. closing the game, a draw, a dropped connection or a very short game hands the stake back. so does Mercy in Goon Game.
+- three staked matches a day, one of them with the same player. the house pays up to 30 Sparkles a day; after that a win hands your stake back.
+- a finished match spends your pick. the next one starts at Off.
+- only against real players, never against the computer.
+
+PIECE BY PIECE
+- invite a friend to a game from the friends drawer.
+- the camera follows each move. move it yourself and it stays put until the next move.
+- captures play back as comic panels. click, tap or press any key to skip. on a short clock it keeps to one small panel, or none.
+- the turn card comes in three looks (Slam, Ribbon, Tag). pick one in Options > Camera, next to the follow and replay switches.
+- Distraction is the default now, and it draws pictures from Scrolller like Breakout does. pick a flavour, or keep your own pictures.
+- Distraction is easier to read: pictures fade out as they reach the middle, and the sound slides from the game into a heartbeat, a hum, then whispers.
+- Esc pauses a game and everything goes quiet. Esc again leaves. online, the clock keeps running while you pause.
+- with a session running, Esc is a full panic, as always.
+
+CIRCE'S TAB
+- red bubbles give you a choice. click one quickly and it pops: +5:00. press and hold it for a moment to resist: 1:00 off. let it float away: nothing.
+- only a pop you cause counts. a red bubble that pops by itself never adds time.
+- red flashes are off unless you switch them on. switched on, only flashes you can click turn red, and each one gives you 4 seconds to close or fling it before it adds 5:00, only while you are at the keyboard.
+- Circe's mood shows on the tab: calm, warm, hot, smoking. the hotter she is, the more a slip-up costs, up to three times. any time you earn back cools her one step.
+- Circe talks now, in small text bubbles: when you resist, pop, land a bill or change her mood.
+- click a price to set your own time, anywhere from 0:05 to 60:00, while no lock is running. a cost stays a cost, and your daily limit still applies.
+- each row's words now say the same time as its stamp.
+
+THE RAFFLE
+- the raffle counts every minute CCP added to your lock, even the part you earned back the same day, up to 3 hours a day. a day counts once some of CCP's time really landed on your lock.
+
+FRIENDS
+- an invite knocks with a card: who, where, Join or Not now, and 5 minutes to answer. after 45 seconds it tucks into a small strip. the sender hears back: joined, not now, or no answer.
+- under each friend you see how your last poke, invite or watch is doing: sent, arrived, seen, then the answer.
+- a What happened list in the drawer keeps what friends did and said back. new lines get a dot, and the friends button and the tray say how many.
+- blocked players stay blocked on every PC you sign in to.
+- choose at any time whether friends see what you are doing: tap the status line at the top of the drawer, or use Settings > Account.
+- friends see when you host a Goon room or play chess.
+- requests have Accept and Decline. requests that came in while you were away arrive as one notice.
+- Remove and Block ask first. blocked players get their own list, with Unblock.
+- nothing celebrates before the server says yes. when something fails, it says why.
+- a Goon invite's Join brings the room code with it.
+- with the bell off, nothing makes a sound.
+- nothing knocks during a session. invites and notices wait for it to end.
+- the Remote invite is gone for now.
+
+THE LEASH
+- panic always works on a leash. it stops a running task, closes its window, and the task waits 10 minutes before it asks again.
+- the blink stop works on a leash too.
+- when the other side ends the leash, its task ends and its window unlocks.
+- a leash video that will not play is skipped instead of looping.
+- every leash window has a Cut button, always there.
+- hold the panic key and a countdown shows before the leash comes off.
+- letting go of someone asks first.
+- Watch it starts an open video task from your own card.
+- the holder sees how each item is doing: sent, arrived, seen, then how it ended. seen only counts once it was really on the other screen.
+- the holder can only give Chaster time when your own leash row on Circe's tab is on. nothing switches it on for you.
+
+FLASHES AND BRAIN DRAIN
+- Brain Drain can keep pictures clear: flashes, videos, lock cards, words and bubbles stay sharp over the blur. off by default.
+- flashes can stay up until you pop them (10 minutes at most, 40 on screen). off by default, needs clickable flashes.
+- a popped flash leaves with a little animation: pop, TV off, spiral, melt or glitch, mixed by default. Just vanish keeps the old way.
+
+EVERYTHING ELSE
+- Breakout Endless: skip a board you do not like. it pays nothing.
+- the launcher has rounded corners and a pink edge that glints.
+- Customise remembers the companion personality for each mod, like the look.
+- with page titles allowed in Awareness, the companion can mention the page you are on.
+
+FIXES
+- Esc over a mandatory video is a full panic again. it had only closed the video since 6.10.
+- Circe's tab never restarts a lock whose timer already ran out, unless you switched on ""Lock again"", and then it no longer adds the late time on top.
+- signed out while leashed, the leash's task stops coming back, and a cut made while signed out reaches the server when you sign in again.
+- holding the panic key down counts as one press. it used to quit CCP about half a second in.
+- Esc in the friends drawer or the dashboard's Left or right? popup only closes it. the next Esc is the panic, as always.
+- a PC clock that runs fast no longer drops friend invites early.
+- chess remembers Reduce motion after a restart.
+- Mind Wipe stops when you switch it off, not only when everything stops.
+- a session paused by panic or the blink stop can always be resumed, in Lockdown too.
+- the 6-blink stop no longer cuts through Strict Lock, panic off or Lockdown, and it ignores blinks during Blink Trainer.
+- the Intiface address fixes itself (a missing ws:// or port, a dot before the port, or just a port number), and a bad one says so.
+- Brain Parasite no longer saves your settings every 2 seconds, which could slow the app down.
+- buying a skill right after a level up works: if the server has not heard about it yet, the app syncs first and asks again.
+- nothing is ever read out in a computer voice. a word with no recording stays silent.
+- a burst of lucky XP no longer freezes the app, and two GIF overlays no longer stall it.
+- the app backs off when a sync fails, uses the server's clock when your PC clock is off, and keeps its settings backup under the size limit.
 
 NEW IN 6.11.3
 - Breakout on the desktop now draws its effects inside the game window, like on the web: washes, pictures, the spiral and the subliminal words stay in the game instead of covering every screen.
@@ -146,7 +249,7 @@ FIXES
 - Racing Thoughts: Esc pauses instead of closing the game, and a BambiCloud level opens behind the game and starts when you press play.
 - the log says why Lovense or the local AI failed.
 
-full nerd changelog in pull requests 1501 through 1760.";
+full nerd changelog in pull requests 1501 through 1907.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

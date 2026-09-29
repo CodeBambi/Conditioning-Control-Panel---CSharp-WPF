@@ -42,6 +42,27 @@ namespace ConditioningControlPanel.Services
         /// <summary>Tests only.</summary>
         public Func<DateTime> UtcNow = () => DateTime.UtcNow;
 
+        // Failure backoff (release/6.11.5, WPF ProfileSyncService.NoteSyncFailureForBackoff). Touched only inside _gate.
+        private int _backoffFailures;
+        private DateTime? _blockedUntilUtc;
+        private string? _backoffToken;
+        private TimeSpan _backoffOffset;
+
+        /// <summary>WPF ProfileSyncService.IsExpectedCancellation: cancelled or disposed, directly or one level down.</summary>
+        internal static bool IsExpectedCancellation(Exception ex) =>
+            ex is OperationCanceledException or ObjectDisposedException
+            || ex.InnerException is OperationCanceledException or ObjectDisposedException;
+
+        private void NoteFailureForBackoff(int? status, string? tokenUsed)
+        {
+            _backoffFailures++;
+            var wait = SyncFailureBackoff.Delay(_backoffFailures);
+            _blockedUntilUtc = UtcNow() + wait;
+            (_backoffToken, _backoffOffset) = (tokenUsed, ServerClock.Offset);
+            Log.Warning("Profile sync backing off {Seconds:F0}s after failure #{Count} (status {Status})",
+                wait.TotalSeconds, _backoffFailures, status?.ToString() ?? "none");
+        }
+
         public bool Loaded { get; private set; }
         public DateTime? LastSyncTime { get; private set; }
 
@@ -51,7 +72,7 @@ namespace ConditioningControlPanel.Services
         public SyncPush(Func<IEnumerable<string>?> localAchievements, Func<bool> inSession, HttpMessageHandler? handler = null)
         {
             (_localAchievements, _inSession, _handler) = (localAchievements, inSession, handler);
-            _http = V2AuthService.Configure(handler == null ? new HttpClient() : new HttpClient(handler));
+            _http = V2AuthService.Configure(new HttpClient(handler ?? new ServerClockHandler()));   // learns the server clock (release/6.11.5)
         }
 
         /// <summary>The profile load succeeded: the baseline pushes are allowed against.</summary>
@@ -106,6 +127,11 @@ namespace ConditioningControlPanel.Services
             try
             {
                 if (LastSyncTime is { } last && UtcNow() - last < Cooldown) { Log.Debug("Profile sync skipped - cooldown active"); return false; }
+                if (SyncFailureBackoff.ShouldSkip(UtcNow(), _blockedUntilUtc, _backoffToken, s.AuthToken, _backoffOffset, ServerClock.Offset))
+                {
+                    Log.Debug("Profile sync skipped - backing off after {Failures} failure(s)", _backoffFailures);
+                    return false;
+                }
                 var totalXp = ProfileAdopt.TotalXp(s);
                 var watermark = ProfileAdopt.ActiveXpWatermark(s);
                 if (watermark > 0 && totalXp < watermark)
@@ -118,13 +144,32 @@ namespace ConditioningControlPanel.Services
                 var server = _serverAchievements;
                 var cosmetics = _pendingCosmetics;
                 var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics));
-                using var request = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/sync");
-                if (!string.IsNullOrEmpty(s.AuthToken)) request.Headers.Add("X-Auth-Token", s.AuthToken);
-                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-                SyncBody.SignRequest(request, id, body);
+                var tokenUsed = s.AuthToken;
+                HttpRequestMessage NewRequest()
+                {
+                    var r = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/sync");
+                    if (!string.IsNullOrEmpty(tokenUsed)) r.Headers.Add("X-Auth-Token", tokenUsed);
+                    r.Content = new StringContent(body, Encoding.UTF8, "application/json");
+                    SyncBody.SignRequest(r, id, body);
+                    return r;
+                }
                 Log.Information("Syncing profile ({Reason}) - Level: {Level}, TotalXP: {Xp}", reason, s.PlayerLevel, (int)totalXp);
-                using var response = await _http.SendAsync(request);
+                using var request = NewRequest();
+                var response = await _http.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
+                // A 403 for clock skew: the signature was right, our timestamp was not. Learn the
+                // server's time from the body and re-sign ONCE (release/6.11.5).
+                if (response.StatusCode == HttpStatusCode.Forbidden
+                    && string.Equals(ServerClock.ParseRefusal(json, out var serverTime), "clock_skew", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (serverTime != null) ServerClock.Observe(serverTime, DateTimeOffset.UtcNow);
+                    Log.Warning("V2 Profile sync refused for clock skew; re-signing with server offset {Seconds:F0}s and retrying once", ServerClock.Offset.TotalSeconds);
+                    response.Dispose();
+                    using var retry = NewRequest();
+                    response = await _http.SendAsync(retry);
+                    json = await response.Content.ReadAsStringAsync();
+                }
+                using var _ = response;
                 // Signed out (or into another account) while this was in flight: the answer is not ours to apply.
                 if (!Loaded || !string.Equals(s.UnifiedId, id, StringComparison.Ordinal))
                 {
@@ -143,9 +188,11 @@ namespace ConditioningControlPanel.Services
                         return false;
                     }
                     Log.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)", (int)response.StatusCode, json.Length);
+                    NoteFailureForBackoff((int)response.StatusCode, tokenUsed);
                     return false;
                 }
                 LastSyncTime = UtcNow();
+                (_backoffFailures, _blockedUntilUtc) = (0, null);
                 // Delivered (the clear included); a newer save made meanwhile stays pending.
                 if (cosmetics != null) Interlocked.CompareExchange(ref _pendingCosmetics, null, cosmetics);
                 Log.Information("V2 Profile synced successfully ({Bytes} bytes)", json.Length);
@@ -157,6 +204,10 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 Log.Warning(ex, "Profile sync failed");
+                // WPF ProfileSyncService: a shutdown cancellation is not a server failure, but HttpClient.Timeout
+                // (a cancellation wrapping a TimeoutException) is a hung proxy and backs off like any other.
+                if (!IsExpectedCancellation(ex) || ex.InnerException is TimeoutException)
+                    NoteFailureForBackoff(null, s.AuthToken);
                 return false;
             }
             finally { _gate.Release(); }

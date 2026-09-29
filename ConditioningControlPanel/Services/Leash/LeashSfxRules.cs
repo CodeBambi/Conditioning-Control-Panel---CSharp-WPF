@@ -70,4 +70,17 @@ public static class LeashHoldTick
         if (s < 1 || s <= lastTicked || s > (int)LeashHoldToCut.Hold.TotalSeconds) return null;
         return s;
     }
+
+    /// <summary>The number the hold-to-cut ring shows: 5 at the start of a hold, down to 1 in the
+    /// last second. Never 0 (at five seconds the question is asked instead).</summary>
+    public static int SecondsLeft(TimeSpan held)
+    {
+        var total = LeashHoldToCut.Hold.TotalSeconds;
+        var left = (int)Math.Ceiling(total - Math.Max(0, held.TotalSeconds));
+        return Math.Clamp(left, 1, (int)total);
+    }
+
+    /// <summary>How far round the ring is, 0..1.</summary>
+    public static double Fraction(TimeSpan held) =>
+        Math.Clamp(held.TotalSeconds / LeashHoldToCut.Hold.TotalSeconds, 0, 1);
 }

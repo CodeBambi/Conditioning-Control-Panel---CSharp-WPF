@@ -6,6 +6,23 @@ namespace ConditioningControlPanel.Services.Leash;
 /// <summary>One sample of a playing leash video.</summary>
 public readonly record struct LeashWatchSample(double CurrentSeconds, double DurationSeconds, bool Visible);
 
+/// <summary>Why the runner went idle on its own (never for a <c>Cancel</c> or <c>Park</c> the host asked for).</summary>
+public enum LeashTaskStop
+{
+    /// <summary>The thing behind the task stopped: the player ended the session, switched the
+    /// bubbles off, or closed the task's video window.</summary>
+    ActivityStopped,
+    /// <summary>The task could not go on: the next lock card would not open (no phrases enabled).</summary>
+    CouldNotContinue,
+    /// <summary>The video never played (nothing playable within <see cref="LeashPlayability.Deadline"/>,
+    /// a 404, an age wall) or the page reported a playback error.</summary>
+    Unplayable,
+}
+
+/// <summary>The runner stopped by itself. <paramref name="Id"/> is the pid, or the aid for a
+/// video assignment (<paramref name="Assignment"/> true).</summary>
+public sealed record LeashTaskStopped(string Id, bool Assignment, LeashTaskStop Reason);
+
 /// <summary>
 /// The app features a gate task drives. <see cref="AppLeashTaskHost"/> is the real one; tests
 /// hand in a fake. Nothing here may enable Strict Lock or touch the panic key.
@@ -15,7 +32,7 @@ public interface ILeashTaskHost
     /// <summary>Lifetime count of finished lock cards (test cards never count).</summary>
     int LockCardsCompleted { get; }
     bool LockCardOpen { get; }
-    /// <summary>Put one lock card up. False when it could not.</summary>
+    /// <summary>Put one lock card up. False when it could not (no phrases enabled, no service).</summary>
     bool ShowLockCard();
 
     bool SessionRunning { get; }
@@ -29,6 +46,8 @@ public interface ILeashTaskHost
     /// then stops them when it is done).</summary>
     bool StartBubbles();
     void StopBubbles();
+    /// <summary>True while bubbles float (the player's own or the task's).</summary>
+    bool BubblesRunning { get; }
 
     /// <summary>Open the video. False when it cannot be opened here (a catalogue id with no file).</summary>
     bool OpenWatch(LeashWatch watch);
@@ -36,7 +55,30 @@ public interface ILeashTaskHost
     LeashWatchSample? SampleWatch(LeashWatch watch);
     /// <summary>A catalogue enhancement played through (its own completion, no sampling).</summary>
     event Action<LeashWatch>? WatchFinished;
+    /// <summary>The page said the video cannot play (a failed load, a 404, a media error).</summary>
+    event Action<LeashWatch>? WatchFailed;
+    /// <summary>False once the watch's window is gone (closed by the player, not by <see cref="EndWatch"/>).
+    /// True while it is up, and whenever this host cannot tell.</summary>
+    bool WatchOpen { get; }
+    /// <summary>True when the watch plays in the sampled cage (a Hypnotube page or a local file),
+    /// so "nothing ever played" can be judged. False for the Deeper player.</summary>
+    bool WatchCaged { get; }
     void EndWatch();
+}
+
+/// <summary>When a caged leash video counts as one that will not play. Pure.</summary>
+public static class LeashPlayability
+{
+    /// <summary>No playing video by this long after the window opened = it will not play.</summary>
+    public static readonly TimeSpan Deadline = TimeSpan.FromSeconds(20);
+
+    /// <summary>A sample of a real, running video: a known length and a position past zero.</summary>
+    public static bool Playing(LeashWatchSample s) =>
+        double.IsFinite(s.DurationSeconds) && s.DurationSeconds > 0
+        && double.IsFinite(s.CurrentSeconds) && s.CurrentSeconds > 0;
+
+    public static bool GiveUp(DateTimeOffset openedAt, DateTimeOffset now, bool everPlayed) =>
+        !everPlayed && now - openedAt >= Deadline;
 }
 
 /// <summary>
@@ -49,8 +91,11 @@ public interface ILeashTaskHost
 /// <para>Units: lines and bubbles count items, sessions count whole minutes, a video counts percent
 /// (0..100).</para>
 ///
-/// <para>Merge seam: the UI lane's <c>Controls.Leash.ILeashTaskRunner</c> has exactly this public
-/// shape; this class implements it once both lanes merge (one line on the declaration).</para>
+/// <para>No limbo (2026-09-28): when the thing behind a task stops (the session ended, the bubbles
+/// went off, the window closed, the next lock card would not open, the video never played) the
+/// runner goes idle by itself and says so through <see cref="Stopped"/>; the task stays pending and
+/// the gate comes back. A stop, and a <see cref="Park"/> (panic), keep the progress: a later
+/// <see cref="Start"/> of the same punishment carries on from there. <see cref="Cancel"/> forgets it.</para>
 /// </summary>
 public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.ILeashTaskRunner
 {
@@ -59,6 +104,10 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
 
     /// <summary>A lock card is put up again at most this often while the task waits for the next.</summary>
     public static readonly TimeSpan LockCardRetry = TimeSpan.FromSeconds(3);
+
+    /// <summary>How long a started session or bubbles may take to show up before their absence
+    /// counts as "stopped".</summary>
+    public static readonly TimeSpan StartGrace = TimeSpan.FromSeconds(10);
 
     private readonly ILeashTaskHost _host;
     private readonly Func<DateTimeOffset> _now;
@@ -74,8 +123,17 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
     private double _sessionSeconds;
     private DateTimeOffset _lastTick;
     private DateTimeOffset _lastShow = DateTimeOffset.MinValue;
+    private DateTimeOffset _startedAt;
+    private DateTimeOffset _watchOpenedAt;
+    private bool _everPlayed;
+    private bool _sawActivity;
     private bool _startedBubbles;
     private int _lastDone = -1;
+    private bool _resetting;
+
+    /// <summary>Progress kept for a punishment that was parked or stopped (one at a time).</summary>
+    private sealed record Kept(string Pid, int Count, double SessionSeconds, LeashWatchMeter? Meter);
+    private Kept? _kept;
 
     public LeashTaskRunner(ILeashTaskHost host, Func<DateTimeOffset>? now = null)
     {
@@ -83,17 +141,24 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
         _now = now ?? (() => DateTimeOffset.UtcNow);
         _host.BubblePopped += OnBubblePopped;
         _host.WatchFinished += OnWatchFinished;
+        _host.WatchFailed += OnWatchFailed;
     }
 
     public bool IsRunning => _task != null || _watchAssignment != null;
 
     public string? RunningPid => _task?.Pid;
 
+    /// <summary>The open video assignment being watched, or null.</summary>
+    public string? RunningAid => _watchAssignment?.Aid;
+
     /// <summary>(pid, done, total).</summary>
     public event Action<string, int, int>? Progress;
 
     /// <summary>The task is done; the gate host posts <c>complete</c>.</summary>
     public event Action<string>? Completed;
+
+    /// <summary>The runner went idle by itself; the task (or assignment) is still open.</summary>
+    public event Action<LeashTaskStopped>? Stopped;
 
     /// <inheritdoc />
     public bool LastCompletionCapped { get; private set; }
@@ -110,26 +175,39 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
         if (_watchAssignment != null) return false;
         if (_task != null && _task.Pid != p.Pid) return false;
         var resume = _task?.Pid == p.Pid;
-        if (!resume) Reset();
+        if (!resume) Reset(keep: false);
+        var kept = !resume && _kept?.Pid == p.Pid ? _kept : null;
         _task = p;
         _lastTick = _now();
+        _startedAt = _lastTick;
+        _sawActivity = false;
         bool ok;
         switch (p.Kind)
         {
             case PunishKind.Lines:
-                if (!resume) _baseline = _host.LockCardsCompleted;
+                if (!resume)
+                {
+                    _count = kept?.Count ?? 0;
+                    _baseline = _host.LockCardsCompleted - _count;
+                }
                 ok = _host.LockCardOpen || ShowCard();
                 break;
             case PunishKind.Pink:
             case PunishKind.Detention:
+                if (kept != null) _sessionSeconds = kept.SessionSeconds;
                 ok = _host.SessionRunning || _host.StartSession(p.Kind, p.Size);
                 break;
             case PunishKind.Bubbles:
-                if (!resume) _startedBubbles = _host.StartBubbles();
+                if (!resume)
+                {
+                    _count = kept?.Count ?? 0;
+                    _startedBubbles = _host.StartBubbles();
+                }
                 ok = true;
                 break;
             case PunishKind.Video:
-                ok = p.Watch != null && OpenWatch(p.Watch, resume, LeashVideoCap.Clamp(p.Size));
+                if (kept?.Meter != null) _meter = kept.Meter;
+                ok = p.Watch != null && OpenWatch(p.Watch, resume || kept?.Meter != null, LeashVideoCap.Clamp(p.Size));
                 break;
             default:
                 ok = false;
@@ -137,9 +215,10 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
         }
         if (!ok)
         {
-            if (!resume) Reset();
+            if (!resume) Reset(keep: kept != null);
             return false;
         }
+        _kept = null;
         EnsureTimer();
         Report();
         return true;
@@ -152,16 +231,27 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
         if (_task != null) return false;
         var resume = _watchAssignment?.Aid == a.Aid;
         if (_watchAssignment != null && !resume) return false;
-        if (!resume) Reset();
+        if (!resume) Reset(keep: false);
         _watchAssignment = a;
-        if (!OpenWatch(a.Watch, resume)) { if (!resume) Reset(); return false; }
+        _lastTick = _now();
+        _startedAt = _lastTick;
+        if (!OpenWatch(a.Watch, resume)) { if (!resume) Reset(keep: false); return false; }
         EnsureTimer();
         return true;
     }
 
-    /// <summary>Stop tracking. Anything the runner started for bubbles is stopped; a session the
-    /// player is in keeps running (it is theirs now).</summary>
-    public void Cancel() => Reset();
+    /// <summary>Stop tracking and forget the progress (a cut, the leash ended, the task went
+    /// away). Anything the runner started for bubbles is stopped; a session the player is in
+    /// keeps running (it is theirs now).</summary>
+    public void Cancel()
+    {
+        Reset(keep: false);
+        _kept = null;
+    }
+
+    /// <summary>Stop tracking but keep the progress for this punishment (a panic press): the
+    /// window closes, bubbles the task started stop, and nothing comes back by itself.</summary>
+    public void Park() => Reset(keep: true);
 
     /// <summary>One step. The app's timer calls it every second; tests call it by hand.</summary>
     public void Tick()
@@ -172,31 +262,51 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
 
         if (_watchAssignment is { } a)
         {
-            if (StepWatch(a.Watch!))
+            if (StepWatch(a.Watch!, now) is { } stop) { StopSelf(a.Aid, true, stop); return; }
+            if (_meter?.IsComplete == true || _watchFinished)
             {
                 var aid = a.Aid;
-                Reset();
+                Reset(keep: false);
                 AssignmentWatched?.Invoke(aid);
             }
             return;
         }
 
         if (_task is not { } p) return;
+        LeashTaskStop? stopped = null;
         switch (p.Kind)
         {
             case PunishKind.Lines:
                 _count = Math.Max(0, _host.LockCardsCompleted - _baseline);
-                if (_count < p.Size && !_host.LockCardOpen && now - _lastShow >= LockCardRetry) ShowCard();
+                if (_count < p.Size && !_host.LockCardOpen && now - _lastShow >= LockCardRetry && !ShowCard())
+                    stopped = LeashTaskStop.CouldNotContinue;
                 break;
             case PunishKind.Pink:
             case PunishKind.Detention:
-                if (_host.SessionRunning) _sessionSeconds += dt;
+                if (_host.SessionRunning) { _sessionSeconds += dt; _sawActivity = true; }
+                else if (Gone(now)) stopped = LeashTaskStop.ActivityStopped;
+                break;
+            case PunishKind.Bubbles:
+                if (_host.BubblesRunning) _sawActivity = true;
+                else if (Gone(now)) stopped = LeashTaskStop.ActivityStopped;
                 break;
             case PunishKind.Video:
-                StepWatch(p.Watch!);
+                stopped = StepWatch(p.Watch!, now);
                 break;
         }
+        // Count what was done up to now first: the last card or minute may have just landed.
         Report();
+        if (stopped is { } why && _task?.Pid == p.Pid) StopSelf(p.Pid, false, why);
+    }
+
+    /// <summary>True when the activity was seen and is gone, or never showed up within the grace.</summary>
+    private bool Gone(DateTimeOffset now) => _sawActivity || now - _startedAt >= StartGrace;
+
+    private void StopSelf(string id, bool assignment, LeashTaskStop why)
+    {
+        Reset(keep: !assignment);
+        try { Stopped?.Invoke(new LeashTaskStopped(id, assignment, why)); }
+        catch (Exception ex) { App.Logger?.Debug("Leash stop handler failed: {E}", ex.Message); }
     }
 
     private bool ShowCard()
@@ -209,25 +319,35 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
     {
         if (!resume || _meter == null)
         {
-            _watch = w;
             _meter = new LeashWatchMeter { CapSeconds = capMinutes > 0 ? capMinutes * 60 : null };
             _watchFinished = false;
         }
+        _watch = w;
+        _watchOpenedAt = _now();
+        _everPlayed = false;
         return _host.OpenWatch(w);
     }
 
-    /// <summary>True when the watch is done.</summary>
-    private bool StepWatch(LeashWatch w)
+    /// <summary>One sample. Null = carry on; a value = the watch cannot go on.</summary>
+    private LeashTaskStop? StepWatch(LeashWatch w, DateTimeOffset now)
     {
-        if (_watchFinished) return true;
-        if (_host.SampleWatch(w) is { } s) _meter?.Sample(s.CurrentSeconds, s.DurationSeconds, s.Visible);
-        return _meter?.IsComplete == true;
+        if (_watchFinished) return null;
+        if (_host.SampleWatch(w) is { } s)
+        {
+            if (LeashPlayability.Playing(s)) _everPlayed = true;
+            _meter?.Sample(s.CurrentSeconds, s.DurationSeconds, s.Visible);
+        }
+        if (_meter?.IsComplete == true) return null;
+        if (!_host.WatchOpen) return LeashTaskStop.ActivityStopped;
+        if (_host.WatchCaged && LeashPlayability.GiveUp(_watchOpenedAt, now, _everPlayed)) return LeashTaskStop.Unplayable;
+        return null;
     }
 
     private void OnBubblePopped()
     {
         if (_task?.Kind != PunishKind.Bubbles) return;
         _count++;
+        _sawActivity = true;
         Report();
     }
 
@@ -237,6 +357,13 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
         _watchFinished = true;
         if (_watchAssignment != null) Tick();
         else Report();
+    }
+
+    private void OnWatchFailed(LeashWatch w)
+    {
+        if (_watch == null || w.Kind != _watch.Kind || w.Id != _watch.Id || _watchFinished || _everPlayed) return;
+        if (_watchAssignment is { } a) StopSelf(a.Aid, true, LeashTaskStop.Unplayable);
+        else if (_task is { } p) StopSelf(p.Pid, false, LeashTaskStop.Unplayable);
     }
 
     private (int Done, int Total) Measure(Punishment p) => p.Kind switch
@@ -267,27 +394,40 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
         {
             var pid = p.Pid;
             LastCompletionCapped = p.Kind == PunishKind.Video && _meter?.CapReached == true;
-            Reset();
+            Reset(keep: false);
+            if (_kept?.Pid == pid) _kept = null;
             Completed?.Invoke(pid);
         }
     }
 
-    private void Reset()
+    private void Reset(bool keep)
     {
-        if (_startedBubbles) { try { _host.StopBubbles(); } catch { } }
-        if (_watch != null) { try { _host.EndWatch(); } catch { } }
-        _task = null;
-        _watchAssignment = null;
-        _watch = null;
-        _meter = null;
-        _watchFinished = false;
-        _baseline = 0;
-        _count = 0;
-        _sessionSeconds = 0;
-        _startedBubbles = false;
-        _lastDone = -1;
-        _lastShow = DateTimeOffset.MinValue;
-        _timer?.Stop();
+        // EndWatch closes the window, which can call back in (a closed window, a failed page).
+        if (_resetting) return;
+        _resetting = true;
+        try
+        {
+            if (keep && _task is { } p) _kept = new Kept(p.Pid, _count, _sessionSeconds, _meter);
+            var endWatch = _watch != null;
+            var stopBubbles = _startedBubbles;
+            _task = null;
+            _watchAssignment = null;
+            _watch = null;
+            _meter = null;
+            _watchFinished = false;
+            _baseline = 0;
+            _count = 0;
+            _sessionSeconds = 0;
+            _startedBubbles = false;
+            _sawActivity = false;
+            _everPlayed = false;
+            _lastDone = -1;
+            _lastShow = DateTimeOffset.MinValue;
+            _timer?.Stop();
+            if (stopBubbles) { try { _host.StopBubbles(); } catch { } }
+            if (endWatch) { try { _host.EndWatch(); } catch { } }
+        }
+        finally { _resetting = false; }
     }
 
     private void EnsureTimer()

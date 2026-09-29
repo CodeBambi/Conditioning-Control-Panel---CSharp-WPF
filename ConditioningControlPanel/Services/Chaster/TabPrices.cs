@@ -34,9 +34,11 @@ public static class TabPrices
         new TabPrice("typo", 30, TabPriceGate.Free, PerUnit: true),
         new TabPrice("lockcard", -60, TabPriceGate.Free),
         new TabPrice("attention", 300, TabPriceGate.Free),
-        // About one bubble in ten and one flash in ten wears red; that bubble popped, or that
-        // flash seen, is 3:00. The roll and the cue live in NatashasFavourite.
+        // About one bubble in ten and one flash in ten wears red; that bubble popped by the
+        // player, or that flash seen, is 5:00. Held until the ring fills, the bubble is 1:00
+        // off instead. The roll, the hold and the cue live in NatashasFavourite.
         new TabPrice(NatashasFavourite.EventId, NatashasFavourite.Seconds, TabPriceGate.Free),
+        new TabPrice(NatashasFavourite.HeldEventId, NatashasFavourite.HeldSeconds, TabPriceGate.Free),
         new TabPrice("mantra", 30, TabPriceGate.Free, PerUnit: true),
         new TabPrice("session", -600, TabPriceGate.Free),
         new TabPrice("quest", -300, TabPriceGate.Free),
@@ -66,6 +68,10 @@ public static class TabPrices
         // Both book through NoteSeconds, so the player's own switches and limits still decide.
         new TabPrice("leash", 900, TabPriceGate.Free),
         new TabPrice("leash_credit", -900, TabPriceGate.Free),
+        // PvP stakes (chess, the Goon Game). A TIME stake that is lost books its own size (15:00 or
+        // 30:00) through NoteSeconds; picking a time stake is the consent and switches this row
+        // on. Leaving a match mid-way never reaches it: the server voids that match.
+        new TabPrice(Stakes.StakeRules.LossRowId, 900, TabPriceGate.Free),
     };
 
     /// <summary>The way out never costs. These ids are refused even if a settings file names
@@ -92,12 +98,16 @@ public static class TabPrices
     /// <summary>The seconds to book for one event, or 0 when it books nothing: unknown id, a
     /// row the player has not switched on, or a way-out id. <paramref name="units"/> only counts
     /// on per-unit rows.</summary>
-    public static int Resolve(string id, ISet<string>? enabledIds, int units = 1)
+    public static int Resolve(string id, ISet<string>? enabledIds, int units = 1,
+        IReadOnlyDictionary<string, int>? overrides = null)
     {
         if (string.IsNullOrEmpty(id) || NeverPriced.Contains(id)) return 0;
         var price = Find(id);
         if (price == null || enabledIds == null || !enabledIds.Contains(id)) return 0;
         var n = price.PerUnit ? Math.Clamp(units, 0, 1000) : 1;
-        return (int)Math.Clamp((long)price.Seconds * n, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds);
+        // The player's own figure (TabPriceEdit) replaces the default, sign kept and size
+        // clamped; the day and backlog limits still apply when it books.
+        var seconds = TabPriceEdit.Effective(price, overrides);
+        return (int)Math.Clamp((long)seconds * n, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds);
     }
 }
