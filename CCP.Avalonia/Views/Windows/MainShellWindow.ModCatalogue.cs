@@ -6,7 +6,7 @@
 //
 // What each member needs, exactly:
 //   ShareModToCatalogueAsync - App.Catalogue.SubmitCatalogueAssetAsync
-//                              (ConditioningControlPanel/Services/CatalogueService.cs), the auth
+//                              (Core CatalogueClient since catalogue U1), the auth
 //                              token from AppSettings.AuthToken (reachable) plus App.UserDisplayName
 //                              (not), App.Notifications.Show
 //                              (…/Services/Notifications/NotificationService.cs) for all four
